@@ -1,4 +1,5 @@
 import { ItemView, WorkspaceLeaf } from 'obsidian';
+import { CHATGPT_VIEW_STYLE } from './style';
 
 export default class ChatGPTView extends ItemView {
   constructor(leaf: WorkspaceLeaf) {
@@ -28,6 +29,10 @@ export default class ChatGPTView extends ItemView {
   // Render the chat interface and add event listeners
   async onOpen() {
     this.containerEl.empty();
+    // Add the chat interface CSS styles
+    this.containerEl.createEl('style', {
+      text: CHATGPT_VIEW_STYLE,
+    });
 
     // Create the chat interface HTML
     const container = this.containerEl.createDiv({ cls: 'chat-container' });
@@ -35,31 +40,42 @@ export default class ChatGPTView extends ItemView {
     const chatMessages = container.createDiv({ cls: 'chat-messages' });
     const chatInputContainer = container.createDiv({ cls: 'chat-input-container' });
 
-    const chatInput = chatInputContainer.createEl('input', { type: 'text', placeholder: 'Type your message here...' });
+    const chatInput = chatInputContainer.createEl('textarea', { placeholder: 'Type your message here...' });
     const chatSendButton = chatInputContainer.createEl('button', { text: 'Send' });
 
     // Add event listeners
     chatSendButton.addEventListener('click', () => {
-      this.handleSendMessage(chatInput as HTMLInputElement, chatMessages as HTMLDivElement);
+      this.handleSendMessage(chatInput as HTMLTextAreaElement, chatMessages as HTMLDivElement);
     });
 
-    chatInput.addEventListener('keypress', (event) => {
-      if (event.key === 'Enter') {
-        this.handleSendMessage(chatInput as HTMLInputElement, chatMessages as HTMLDivElement);
+    chatInput.addEventListener('keydown', (event) => {
+      // Check if the 'shift' key is pressed and the 'enter' key is pressed
+      if (event.shiftKey && event.key === 'Enter') {
+        // Prevent the default behavior of 'Enter' key press
+        event.preventDefault();
+        // Create a new line
+        chatInput.value += '\n';
+        return;
       }
+      if (event.key === 'Enter') {
+        this.handleSendMessage(chatInput as HTMLTextAreaElement, chatMessages as HTMLDivElement);
+      }
+    });
+
+    chatInput.addEventListener('input', () => {
+      this.autosize(chatInput as HTMLTextAreaElement);
     });
   }
 
   // Create a message element and append it to the chatMessages div
   appendMessage(chatMessages: HTMLDivElement, message: string, sender: string) {
     const messageEl = chatMessages.createDiv({ cls: `chat-message ${sender}` });
-    messageEl.createEl('span', { text: message });
+    messageEl.innerHTML = message.replace(/\n/g, '<br>');
   }
 
   // Add a method to handle sending messages to ChatGPT
-  handleSendMessage(chatInput: HTMLInputElement, chatMessages: HTMLDivElement) {
+  handleSendMessage(chatInput: HTMLTextAreaElement, chatMessages: HTMLDivElement) {
     const message = chatInput.value;
-    chatInput.value = '';
 
     // Append the user's message to the chat interface
     this.appendMessage(chatMessages, message, 'user');
@@ -71,5 +87,16 @@ export default class ChatGPTView extends ItemView {
     // Replace this with the actual response from the API
     const chatGPTResponse = 'This is a sample response from ChatGPT';
     this.appendMessage(chatMessages, chatGPTResponse, 'chatgpt');
+
+    // Clear the textarea content after sending the message with a slight delay
+    setTimeout(() => {
+      chatInput.value = '';
+      this.autosize(chatInput); // Reset the textarea height after clearing its value
+    }, 10);
+  }
+
+  autosize(textarea: HTMLTextAreaElement) {
+    textarea.style.height = 'auto';
+    textarea.style.height = textarea.scrollHeight + 'px';
   }
 }
