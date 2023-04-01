@@ -6,3 +6,78 @@ available in the app when your plugin is enabled.
 If your plugin does not need CSS, delete this file.
 
 */
+
+.chat-container {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+  }
+.bottom-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  width: 100%;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+}
+.chat-icons-container {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  padding: 8px 8px 0;
+}
+.chat-icons-container .icon {
+  cursor: pointer;
+  margin-right: 8px;
+  width: 24px;
+  height: 24px;
+}
+.chat-icons-container .icon:last-child {
+  margin-right: 0;
+}
+.chat-input-container {
+  display: flex;
+  padding: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.chat-input-container textarea {
+  flex-grow: 1;
+  margin-right: 8px;
+  margin-bottom: 32px;
+  max-height: 200px;
+  resize: vertical;
+  overflow: auto;
+  width: 100%;
+  min-height: 50px; /* Add this line */
+}
+.chat-messages {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+.chat-message.user {
+  background-color: #3a3a3a;
+  color: #ffffff;
+  border-radius: 5px;
+  padding: 8px;
+  margin-bottom: 8px;
+  width: 100%;
+}
+.chat-message.chatgpt {
+  border-radius: 5px;
+  padding: 8px;
+  margin-bottom: 8px;
+  width: 100%;
+}

@@ -1,6 +1,6 @@
-import { ItemView, WorkspaceLeaf } from 'obsidian';
-import { CHATGPT_VIEW_STYLE } from './style';
+import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
 import { SharedState } from './sharedState';
+
 
 const MODEL = 'chatgpt';
 
@@ -35,27 +35,31 @@ export default class ChatGPTView extends ItemView {
   // Render the chat interface and add event listeners
   async onOpen() {
     // Check if the chat interface is already created
-    if (this.containerEl.querySelector('.chat-container')) {
-      return;
+    if (!this.containerEl.querySelector('.chat-container')) {
+      this.createChatInterface();
     }
-    this.createChatInterface();
+  }
+
+  async onClose() {
   }
 
   // Create the chat interface
   createChatInterface() {
     this.containerEl.empty();
-    // Create a container element for the chat interface
-    // Add the chat interface CSS styles
-    this.containerEl.createEl('style', {
-      text: CHATGPT_VIEW_STYLE,
-    });
 
     // Create the chat interface HTML
     const container = this.containerEl.createDiv({ cls: 'chat-container' });
 
     const chatMessages = container.createDiv({ cls: 'chat-messages' });
-    const chatInputContainer = container.createDiv({ cls: 'chat-input-container' });
+    const bottomContainer = this.containerEl.createDiv({ cls: 'bottom-container' });
 
+    // const chatIconsContainer = bottomContainer.createDiv({ cls: 'chat-icons-container' });
+
+    // const refreshIcon = this.containerEl.createEl('i', { cls: 'icon' });
+    // setIcon(refreshIcon, 'refresh-cw');
+    // chatIconsContainer.appendChild(refreshIcon);
+
+    const chatInputContainer = bottomContainer.createDiv({ cls: 'chat-input-container' });
     const chatInput = chatInputContainer.createEl('textarea', { placeholder: 'Type your message here...' });
     const chatSendButton = chatInputContainer.createEl('button', { text: 'Send' });
 
@@ -95,6 +99,8 @@ export default class ChatGPTView extends ItemView {
     const messageEl = chatMessages.createDiv({ cls: `chat-message ${sender}` });
     // Add response message formatting here
     messageEl.innerHTML = message.replace(/\n/g, '<br>');
+    // Scroll to the bottom of the chatMessages container
+    chatMessages.scrollTop = chatMessages.scrollHeight;
   }
 
   // Add a method to handle sending messages to ChatGPT
@@ -111,7 +117,7 @@ export default class ChatGPTView extends ItemView {
 
     // After receiving a response from the ChatGPT API, append it to the chat interface
     // Replace this with the actual response from the API
-    const chatGPTResponse = 'This is a sample response from ChatGPT';
+    const chatGPTResponse = 'This is a sample response from ChatGPT AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
     this.appendMessage(chatMessages, chatGPTResponse, MODEL);
     // Store the response in the chat history
     this.sharedState.addMessage({ message: chatGPTResponse, sender: MODEL });
