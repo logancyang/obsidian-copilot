@@ -1,9 +1,15 @@
 import { ItemView, WorkspaceLeaf } from 'obsidian';
 import { CHATGPT_VIEW_STYLE } from './style';
+import { SharedState } from './sharedState';
+
+const MODEL = 'chatgpt';
 
 export default class ChatGPTView extends ItemView {
-  constructor(leaf: WorkspaceLeaf) {
+  sharedState: SharedState;
+
+  constructor(leaf: WorkspaceLeaf, sharedState: SharedState) {
     super(leaf);
+    this.sharedState = sharedState;
   }
 
   // Return a unique identifier for this view
@@ -28,7 +34,17 @@ export default class ChatGPTView extends ItemView {
 
   // Render the chat interface and add event listeners
   async onOpen() {
+    // Check if the chat interface is already created
+    if (this.containerEl.querySelector('.chat-container')) {
+      return;
+    }
+    this.createChatInterface();
+  }
+
+  // Create the chat interface
+  createChatInterface() {
     this.containerEl.empty();
+    // Create a container element for the chat interface
     // Add the chat interface CSS styles
     this.containerEl.createEl('style', {
       text: CHATGPT_VIEW_STYLE,
@@ -65,11 +81,19 @@ export default class ChatGPTView extends ItemView {
     chatInput.addEventListener('input', () => {
       this.autosize(chatInput as HTMLTextAreaElement);
     });
+
+    // Load the chat history
+    const chatHistory = this.sharedState.getMessages();
+    console.log('chatHistory', chatHistory);
+    for (const { message, sender } of chatHistory) {
+      this.appendMessage(chatMessages, message, sender);
+    }
   }
 
   // Create a message element and append it to the chatMessages div
   appendMessage(chatMessages: HTMLDivElement, message: string, sender: string) {
     const messageEl = chatMessages.createDiv({ cls: `chat-message ${sender}` });
+    // Add response message formatting here
     messageEl.innerHTML = message.replace(/\n/g, '<br>');
   }
 
@@ -79,6 +103,8 @@ export default class ChatGPTView extends ItemView {
 
     // Append the user's message to the chat interface
     this.appendMessage(chatMessages, message, 'user');
+    // Store the user's message in the chat history
+    this.sharedState.addMessage({ message, sender: 'user' });
 
     // Your ChatGPT API interaction logic here
     console.log(`Sending message: ${message}`);
@@ -86,7 +112,9 @@ export default class ChatGPTView extends ItemView {
     // After receiving a response from the ChatGPT API, append it to the chat interface
     // Replace this with the actual response from the API
     const chatGPTResponse = 'This is a sample response from ChatGPT';
-    this.appendMessage(chatMessages, chatGPTResponse, 'chatgpt');
+    this.appendMessage(chatMessages, chatGPTResponse, MODEL);
+    // Store the response in the chat history
+    this.sharedState.addMessage({ message: chatGPTResponse, sender: MODEL });
 
     // Clear the textarea content after sending the message with a slight delay
     setTimeout(() => {

@@ -1,5 +1,6 @@
 import { App, Editor, MarkdownView, Modal, Notice, WorkspaceLeaf, Plugin, PluginSettingTab, Setting } from 'obsidian';
-import ChatGPTView from './ChatGPTView';
+import ChatGPTView from './chatGPTView';
+import { SharedState } from './sharedState';
 
 const CHATGPT_VIEWTYPE = 'chat-gpt-view';
 
@@ -13,11 +14,16 @@ const DEFAULT_SETTINGS: CopilotPluginSettings = {
 
 export default class CopilotPlugin extends Plugin {
   settings: CopilotPluginSettings;
+  // A chat history that stores the messages sent and received
+  // Only reset when the user explicitly clicks "New Chat"
+  sharedState: SharedState;
 
   async onload() {
     await this.loadSettings();
+    this.sharedState = new SharedState();
+
     // Register your custom View class
-    this.registerView('chat-gpt-view', (leaf) => new ChatGPTView(leaf));
+    this.registerView('chat-gpt-view', (leaf) => new ChatGPTView(leaf, this.sharedState));
 
     this.addRibbonIcon('message-square', 'ChatGPT', (evt: MouseEvent) => {
       // open or close the chatgpt view

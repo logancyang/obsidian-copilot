@@ -5,6 +5,10 @@ export const CHATGPT_VIEW_STYLE = `
     height: 100%;
   }
   .chat-messages {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
     flex-grow: 1;
     overflow-y: auto;
     padding: 8px;
@@ -17,8 +21,6 @@ export const CHATGPT_VIEW_STYLE = `
     margin-bottom: 8px;
   }
   .chat-message.chatgpt {
-    background-color: #e6e6e6;
-    color: #333333;
     border-radius: 5px;
     padding: 8px;
     margin-bottom: 8px;
