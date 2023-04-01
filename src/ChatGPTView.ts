@@ -49,9 +49,9 @@ export default class ChatGPTView extends ItemView {
 
     // Create the chat interface HTML
     const container = this.containerEl.createDiv({ cls: 'chat-container' });
-
     const chatMessages = container.createDiv({ cls: 'chat-messages' });
-    const bottomContainer = this.containerEl.createDiv({ cls: 'bottom-container' });
+
+    const bottomContainer = container.createDiv({ cls: 'bottom-container' });
 
     // const chatIconsContainer = bottomContainer.createDiv({ cls: 'chat-icons-container' });
 

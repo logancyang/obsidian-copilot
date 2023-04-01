@@ -12,7 +12,9 @@ If your plugin does not need CSS, delete this file.
     flex-direction: column;
     width: 100%;
     height: 100%;
-  }
+    overflow: hidden;  /* Fix overflow and can't scroll up */
+}
+
 .bottom-container {
   display: flex;
   flex-direction: column;
@@ -22,27 +24,32 @@ If your plugin does not need CSS, delete this file.
   flex: 0 0 auto;
   box-sizing: border-box;
 }
+
 .chat-icons-container {
   display: flex;
   justify-content: flex-end;
   width: 100%;
   padding: 8px 8px 0;
 }
+
 .chat-icons-container .icon {
   cursor: pointer;
   margin-right: 8px;
   width: 24px;
   height: 24px;
 }
+
 .chat-icons-container .icon:last-child {
   margin-right: 0;
 }
+
 .chat-input-container {
   display: flex;
   padding: 8px;
   width: 100%;
   box-sizing: border-box;
 }
+
 .chat-input-container textarea {
   flex-grow: 1;
   margin-right: 8px;
@@ -53,6 +60,7 @@ If your plugin does not need CSS, delete this file.
   width: 100%;
   min-height: 50px; /* Add this line */
 }
+
 .chat-messages {
   display: flex;
   flex-direction: column;
@@ -66,7 +74,9 @@ If your plugin does not need CSS, delete this file.
   overflow-wrap: break-word;
   font-size: 14px;
   box-sizing: border-box;
+  scroll-behavior: smooth;
 }
+
 .chat-message.user {
   background-color: #3a3a3a;
   color: #ffffff;
@@ -75,6 +85,7 @@ If your plugin does not need CSS, delete this file.
   margin-bottom: 8px;
   width: 100%;
 }
+
 .chat-message.chatgpt {
   border-radius: 5px;
   padding: 8px;
