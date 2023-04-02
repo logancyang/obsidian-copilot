@@ -4,9 +4,6 @@ import CopilotPlugin from "./main";
 import axios from 'axios';
 
 
-// TODO: Add a dropdown menu to select the model in iconsContainer
-const MODEL = '';
-
 export default class ChatGPTView extends ItemView {
   sharedState: SharedState;
   plugin: CopilotPlugin;
@@ -16,7 +13,8 @@ export default class ChatGPTView extends ItemView {
     super(leaf);
     this.sharedState = plugin.sharedState;
     this.plugin = plugin;
-    this.model = MODEL || this.plugin.settings.defaultModel;
+    // TODO: Add a dropdown menu to select the model in iconsContainer
+    this.model = this.plugin.settings.defaultModel;
   }
 
   // Return a unique identifier for this view

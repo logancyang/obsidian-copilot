@@ -1,4 +1,4 @@
-import { App, Editor, MarkdownView, Modal, Notice, WorkspaceLeaf, Plugin, addIcon } from 'obsidian';
+import { App, Modal, Plugin } from 'obsidian';
 import { CopilotSettingTab } from "./settings";
 import ChatGPTView from './chatGptView';
 import { SharedState } from './sharedState';
