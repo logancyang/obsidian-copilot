@@ -158,8 +158,30 @@ export default class ChatGPTView extends ItemView {
     // Your ChatGPT API interaction logic here
     console.log(`Sending message: ${message}`);
 
+    // Create a loading message
+    const loadingMessageEl = this.createLoadingMessage(chatMessages);
+
+    // Display the running "..." effect when waiting for a response.
+    let dotCount = 0;
+    const maxDots = 4;
+    const dotInterval = setInterval(() => {
+      if (dotCount >= maxDots) {
+        dotCount = 0;
+        loadingMessageEl.innerHTML = '';
+      } else {
+        loadingMessageEl.innerHTML += '.';
+        dotCount++;
+      }
+    }, 500);
+
     // After receiving a response from the ChatGPT API, append it to the chat interface
+    // const chatGPTResponse = "Hello! I'm a chatbot. Ask me a question.";
     const chatGPTResponse = await this.getChatGPTResponse(message);
+    clearInterval(dotInterval); // Stop the running "..." effect
+    if (loadingMessageEl.parentElement) {
+      loadingMessageEl.parentElement.remove();
+    }
+
     this.appendMessage(chatMessages, chatGPTResponse, this.model);
     this.scrollToBottom(chatMessages);
     // Store the response in the chat history
@@ -218,8 +240,15 @@ export default class ChatGPTView extends ItemView {
     });
   }
 
-  autosize(textarea: HTMLTextAreaElement) {
+  private autosize(textarea: HTMLTextAreaElement) {
     textarea.style.height = 'auto';
     textarea.style.height = textarea.scrollHeight + 'px';
+  }
+
+  private createLoadingMessage(chatMessages: HTMLDivElement): HTMLDivElement {
+    const messageEl = chatMessages.createDiv({ cls: 'chat-message loading' });
+    const messageContent = messageEl.createDiv({ cls: 'chat-message-content' });
+    messageContent.innerHTML = '';
+    return messageContent;
   }
 }
