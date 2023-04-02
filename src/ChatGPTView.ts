@@ -1,15 +1,22 @@
 import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
 import { SharedState } from './sharedState';
+import CopilotPlugin from "./main";
+import axios from 'axios';
 
 
-const MODEL = 'chatgpt';
+// TODO: Add a dropdown menu to select the model in iconsContainer
+const MODEL = '';
 
 export default class ChatGPTView extends ItemView {
   sharedState: SharedState;
+  plugin: CopilotPlugin;
+  model: string;
 
-  constructor(leaf: WorkspaceLeaf, sharedState: SharedState) {
+  constructor(leaf: WorkspaceLeaf, plugin: CopilotPlugin) {
     super(leaf);
-    this.sharedState = sharedState;
+    this.sharedState = plugin.sharedState;
+    this.plugin = plugin;
+    this.model = MODEL || this.plugin.settings.defaultModel;
   }
 
   // Return a unique identifier for this view
@@ -140,7 +147,7 @@ export default class ChatGPTView extends ItemView {
   }
 
   // Add a method to handle sending messages to ChatGPT
-  handleSendMessage(chatInput: HTMLTextAreaElement, chatMessages: HTMLDivElement) {
+  async handleSendMessage(chatInput: HTMLTextAreaElement, chatMessages: HTMLDivElement) {
     const message = chatInput.value;
 
     // Append the user's message to the chat interface
@@ -152,12 +159,11 @@ export default class ChatGPTView extends ItemView {
     console.log(`Sending message: ${message}`);
 
     // After receiving a response from the ChatGPT API, append it to the chat interface
-    // Replace this with the actual response from the API
-    const chatGPTResponse = 'This is a sample response from ChatGPT AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-    this.appendMessage(chatMessages, chatGPTResponse, MODEL);
+    const chatGPTResponse = await this.getChatGPTResponse(message);
+    this.appendMessage(chatMessages, chatGPTResponse, this.model);
     this.scrollToBottom(chatMessages);
     // Store the response in the chat history
-    this.sharedState.addMessage({ message: chatGPTResponse, sender: MODEL });
+    this.sharedState.addMessage({ message: chatGPTResponse, sender: this.model });
 
     // Clear the textarea content after sending the message with a slight delay
     setTimeout(() => {
@@ -166,7 +172,47 @@ export default class ChatGPTView extends ItemView {
     }, 10);
   }
 
-  scrollToBottom(chatMessages: HTMLDivElement) {
+  // Get a response from the ChatGPT API
+  async getChatGPTResponse(message: string): Promise<string> {
+    const apiKey = this.plugin.settings.openAiApiKey;
+
+    if (!apiKey) {
+      console.error('API key is not set.');
+      return 'Error: API key is not set.';
+    }
+    if (!this.model) {
+      console.error('Model is not set.');
+      return 'Error: Model is not set.';
+    }
+
+    try {
+      const response = await axios.post(
+        'https://api.openai.com/v1/chat/completions',
+        {
+          model: this.model,
+          // TODO: Add support for more chat history as context
+          messages: [
+            { role: 'system', content: 'You are a helpful assistant.' },
+            { role: 'user', content: message },
+          ],
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+        }
+      );
+
+      const responseMessage = response.data.choices[0].message.content;
+      return responseMessage
+    } catch (error) {
+      console.error('Failed to get response from OpenAI API:', error);
+      return 'Error: Failed to get response from OpenAI API.';
+    }
+  }
+
+  private scrollToBottom(chatMessages: HTMLDivElement) {
     window.requestAnimationFrame(() => {
       chatMessages.scrollTop = chatMessages.scrollHeight;
     });
