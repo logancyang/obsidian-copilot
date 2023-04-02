@@ -88,10 +88,10 @@ export default class ChatGPTView extends ItemView {
 
     // Load the chat history
     const chatHistory = this.sharedState.getMessages();
-    console.log('chatHistory', chatHistory);
     for (const { message, sender } of chatHistory) {
       this.appendMessage(chatMessages, message, sender);
     }
+    this.scrollToBottom(chatMessages);
   }
 
   // Create a message element and append it to the chatMessages div
@@ -99,8 +99,6 @@ export default class ChatGPTView extends ItemView {
     const messageEl = chatMessages.createDiv({ cls: `chat-message ${sender}` });
     // Add response message formatting here
     messageEl.innerHTML = message.replace(/\n/g, '<br>');
-    // Scroll to the bottom of the chatMessages container
-    chatMessages.scrollTop = chatMessages.scrollHeight;
   }
 
   // Add a method to handle sending messages to ChatGPT
@@ -119,6 +117,7 @@ export default class ChatGPTView extends ItemView {
     // Replace this with the actual response from the API
     const chatGPTResponse = 'This is a sample response from ChatGPT AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
     this.appendMessage(chatMessages, chatGPTResponse, MODEL);
+    this.scrollToBottom(chatMessages);
     // Store the response in the chat history
     this.sharedState.addMessage({ message: chatGPTResponse, sender: MODEL });
 
@@ -127,6 +126,12 @@ export default class ChatGPTView extends ItemView {
       chatInput.value = '';
       this.autosize(chatInput); // Reset the textarea height after clearing its value
     }, 10);
+  }
+
+  scrollToBottom(chatMessages: HTMLDivElement) {
+    window.requestAnimationFrame(() => {
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    });
   }
 
   autosize(textarea: HTMLTextAreaElement) {
