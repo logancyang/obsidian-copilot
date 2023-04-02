@@ -50,14 +50,25 @@ export default class ChatGPTView extends ItemView {
     // Create the chat interface HTML
     const container = this.containerEl.createDiv({ cls: 'chat-container' });
     const chatMessages = container.createDiv({ cls: 'chat-messages' });
-
     const bottomContainer = container.createDiv({ cls: 'bottom-container' });
 
-    // const chatIconsContainer = bottomContainer.createDiv({ cls: 'chat-icons-container' });
+    const chatIconsContainer = bottomContainer.createDiv({ cls: 'chat-icons-container' });
 
-    // const refreshIcon = this.containerEl.createEl('i', { cls: 'icon' });
-    // setIcon(refreshIcon, 'refresh-cw');
-    // chatIconsContainer.appendChild(refreshIcon);
+    const refreshIcon = this.containerEl.createEl('i', { cls: 'icon' });
+    setIcon(refreshIcon, 'refresh-cw');
+    // Create the 'Regenerate Response' button
+    const regenerateButton = chatIconsContainer.createEl('button', { cls: 'regenerate-button' });
+    const regenerateButtonText = document.createTextNode('\u00A0Regenerate Response');
+    regenerateButton.appendChild(refreshIcon);
+    regenerateButton.appendChild(regenerateButtonText);
+
+    const newChatIcon = this.containerEl.createEl('i', { cls: 'icon' });
+    setIcon(newChatIcon, 'refresh-ccw');
+    const newChatButton = chatIconsContainer.createEl(
+      'button',
+      { cls: 'icon-only-button new-chat-button', title: 'New Chat' }
+    );
+    newChatButton.appendChild(newChatIcon);
 
     const chatInputContainer = bottomContainer.createDiv({ cls: 'chat-input-container' });
     const chatInput = chatInputContainer.createEl('textarea', { placeholder: 'Type your message here...' });
@@ -97,8 +108,35 @@ export default class ChatGPTView extends ItemView {
   // Create a message element and append it to the chatMessages div
   appendMessage(chatMessages: HTMLDivElement, message: string, sender: string) {
     const messageEl = chatMessages.createDiv({ cls: `chat-message ${sender}` });
-    // Add response message formatting here
-    messageEl.innerHTML = message.replace(/\n/g, '<br>');
+
+    // Create message content div
+    const messageContent = messageEl.createDiv({ cls: 'chat-message-content' });
+
+    // Create clipboard icon and button
+    const clipboardIcon = this.containerEl.createEl('i', { cls: 'icon' });
+    setIcon(clipboardIcon, 'clipboard');
+    const clipboardButton = messageEl.createEl(
+      'button',
+      { cls: 'icon-only-button clipboard-button', title: 'Copy to clipboard' });
+
+    // Append icon to button
+    clipboardButton.appendChild(clipboardIcon);
+
+    // Add response message formatting
+    messageContent.innerHTML = message.replace(/\n/g, '<br>');
+
+    // Append clipboard button to message element
+    messageEl.insertAdjacentElement('beforeend', clipboardButton);
+
+    // Add event listener to the clipboard button
+    clipboardButton.addEventListener('click', async () => {
+      try {
+        // Use the Clipboard API to write the text to the clipboard
+        await navigator.clipboard.writeText(message);
+      } catch (err) {
+        console.error('Failed to copy the message to the clipboard:', err);
+      }
+    });
   }
 
   // Add a method to handle sending messages to ChatGPT

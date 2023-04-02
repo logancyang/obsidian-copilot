@@ -27,7 +27,8 @@ If your plugin does not need CSS, delete this file.
 
 .chat-icons-container {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
+  align-items: center;
   width: 100%;
   padding: 8px 8px 0;
 }
@@ -35,11 +36,44 @@ If your plugin does not need CSS, delete this file.
 .chat-icons-container .icon {
   cursor: pointer;
   margin-right: 8px;
-  width: 24px;
-  height: 24px;
 }
 
 .chat-icons-container .icon:last-child {
+  margin-right: 0;
+}
+
+.regenerate-button {
+  display: flex;
+  align-items: center;
+  background-color: transparent;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 12px;
+  margin-right: 12px;
+}
+
+.regenerate-button .icon {
+  margin-right: 8px;
+}
+
+.icon-only-button {
+  display: flex;
+  align-items: center;
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  margin-right: 12px;
+}
+
+.icon-only-button .icon {
+  color: #ffffff;
+  margin-right: 8px;
+}
+
+.icon-only-button:last-child .icon {
   margin-right: 0;
 }
 
@@ -91,4 +125,33 @@ If your plugin does not need CSS, delete this file.
   padding: 8px;
   margin-bottom: 8px;
   width: 100%;
+}
+
+.chat-message {
+  position: relative;
+}
+
+.chat-message-content {
+  display: inline;
+}
+
+.clipboard-button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 4px;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.clipboard-button .icon {
+  transform: scale(0.7);
+}
+
+.chat-message:hover .clipboard-button {
+  opacity: 1;
 }
