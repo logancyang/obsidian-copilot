@@ -4,7 +4,7 @@ import CopilotPlugin from "./main";
 import axios from 'axios';
 
 
-export default class ChatGPTView extends ItemView {
+export default class CopilotChatView extends ItemView {
   sharedState: SharedState;
   plugin: CopilotPlugin;
   model: string;
@@ -32,7 +32,7 @@ export default class ChatGPTView extends ItemView {
 
   // Return a unique identifier for this view
   getViewType(): string {
-    return 'chat-gpt-view';
+    return 'copilot-chat-view';
   }
 
   // Return an icon for this view
@@ -42,12 +42,12 @@ export default class ChatGPTView extends ItemView {
 
   // Return a title for this view
   getTitle(): string {
-    return 'ChatGPT';
+    return 'Copilot Chat';
   }
 
   // Implement the getDisplayText method
   getDisplayText(): string {
-    return 'ChatGPT';
+    return 'Copilot Chat';
   }
 
   // Render the chat interface and add event listeners
@@ -180,14 +180,14 @@ export default class ChatGPTView extends ItemView {
     // Your ChatGPT API interaction logic here
     console.log(`Sending message: ${message}`);
 
-    const {loadingMessageEl, dotInterval} = this.createLoadingDots(chatMessages);
+    // const {loadingMessageEl, dotInterval} = this.createLoadingDots(chatMessages);
     // Get a response from the ChatGPT API
     const chatGPTResponse = await this.getChatGPTResponse(message);
     // Stop the running "..." effect
-    clearInterval(dotInterval);
-    if (loadingMessageEl.parentElement) {
-      loadingMessageEl.parentElement.remove();
-    }
+    // clearInterval(dotInterval);
+    // if (loadingMessageEl.parentElement) {
+    //   loadingMessageEl.parentElement.remove();
+    // }
     // After receiving a response from the ChatGPT API, append it to the chat interface
     this.appendMessage(chatMessages, chatGPTResponse, this.model);
     this.scrollToBottom(chatMessages);

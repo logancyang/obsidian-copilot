@@ -118,17 +118,13 @@ If your plugin does not need CSS, delete this file.
   background-color: rgba(58, 58, 58, 0.8);
   color: #ffffff;
   border-radius: 5px;
-  padding: 8px;
-  margin-top: 4px;
-  margin-bottom: 4px;
+  padding: 4px;
   width: 100%;
 }
 
 .chat-message.chatgpt {
   border-radius: 5px;
-  padding: 8px;
-  margin-top: 4px;
-  margin-bottom: 4px;
+  padding: 4px;
   width: 100%;
 }
 
@@ -139,7 +135,7 @@ If your plugin does not need CSS, delete this file.
 
 .chat-message-content {
   display: inline;
-  line-height: 1.2;
+  line-height: 1.3;
 }
 
 .clipboard-button {
