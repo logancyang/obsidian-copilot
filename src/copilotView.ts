@@ -181,14 +181,14 @@ export default class CopilotChatView extends ItemView {
     // Your ChatGPT API interaction logic here
     console.log(`Sending message: ${message}`);
 
-    // const {loadingMessageEl, dotInterval} = this.createLoadingDots(chatMessages);
+    const {loadingMessageEl, dotInterval} = this.createLoadingDots(chatMessages);
     // Get a response from the ChatGPT API
     const chatGPTResponse = await this.getChatGPTResponse(message);
     // Stop the running "..." effect
-    // clearInterval(dotInterval);
-    // if (loadingMessageEl.parentElement) {
-    //   loadingMessageEl.parentElement.remove();
-    // }
+    clearInterval(dotInterval);
+    if (loadingMessageEl.parentElement) {
+      loadingMessageEl.parentElement.remove();
+    }
     // After receiving a response from the ChatGPT API, append it to the chat interface
     this.appendMessage(chatMessages, chatGPTResponse, this.model);
     this.scrollToBottom(chatMessages);
