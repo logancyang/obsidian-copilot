@@ -176,6 +176,7 @@ export default class CopilotChatView extends ItemView {
       chatInput.value = '';
       this.autosize(chatInput); // Reset the textarea height after clearing its value
     }, 10);
+    this.scrollToBottom(chatMessages);
 
     // Your ChatGPT API interaction logic here
     console.log(`Sending message: ${message}`);
