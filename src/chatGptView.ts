@@ -59,12 +59,9 @@ export default class ChatGPTView extends ItemView {
 
     const chatIconsContainer = bottomContainer.createDiv({ cls: 'chat-icons-container' });
 
-    const refreshIcon = this.containerEl.createEl('i', { cls: 'icon' });
-    setIcon(refreshIcon, 'refresh-cw');
     // Create the 'Regenerate Response' button
     const regenerateButton = chatIconsContainer.createEl('button', { cls: 'regenerate-button' });
     const regenerateButtonText = document.createTextNode('\u00A0Regenerate Response');
-    regenerateButton.appendChild(refreshIcon);
     regenerateButton.appendChild(regenerateButtonText);
 
     const newChatIcon = this.containerEl.createEl('i', { cls: 'icon' });
@@ -170,32 +167,15 @@ export default class ChatGPTView extends ItemView {
     // Your ChatGPT API interaction logic here
     console.log(`Sending message: ${message}`);
 
-    // Create a loading message
-    const loadingMessageEl = this.createLoadingMessage(chatMessages);
-
-    // Display the running "..." effect when waiting for a response.
-    let dotCount = 0;
-    const maxDots = 4;
-    const dotInterval = setInterval(() => {
-      if (dotCount >= maxDots) {
-        dotCount = 0;
-        loadingMessageEl.innerHTML = '';
-      } else {
-        loadingMessageEl.innerHTML += '.';
-        dotCount++;
-      }
-    }, 500);
-
-    // After receiving a response from the ChatGPT API, append it to the chat interface
-    // const chatGPTResponse = ``
-
-    //   Just adjust the value as needed to increase or decrease the line spacing.`;
+    const {loadingMessageEl, dotInterval} = this.createLoadingDots(chatMessages);
+    // Get a response from the ChatGPT API
     const chatGPTResponse = await this.getChatGPTResponse(message);
-    clearInterval(dotInterval); // Stop the running "..." effect
+    // Stop the running "..." effect
+    clearInterval(dotInterval);
     if (loadingMessageEl.parentElement) {
       loadingMessageEl.parentElement.remove();
     }
-
+    // After receiving a response from the ChatGPT API, append it to the chat interface
     this.appendMessage(chatMessages, chatGPTResponse, this.model);
     this.scrollToBottom(chatMessages);
     // Store the response in the chat history
@@ -216,6 +196,7 @@ export default class ChatGPTView extends ItemView {
     }
 
     try {
+      console.log('Model:', this.model);
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
@@ -225,6 +206,7 @@ export default class ChatGPTView extends ItemView {
             { role: 'system', content: 'You are a helpful assistant.' },
             { role: 'user', content: message },
           ],
+          temperature: 0.7,
         },
         {
           headers: {
@@ -258,5 +240,24 @@ export default class ChatGPTView extends ItemView {
     const messageContent = messageEl.createDiv({ cls: 'chat-message-content' });
     messageContent.innerHTML = '';
     return messageContent;
+  }
+
+  private createLoadingDots(chatMessages: HTMLDivElement): {loadingMessageEl: HTMLDivElement, dotInterval: NodeJS.Timer} {
+    // Create a loading dots
+    const loadingMessageEl = this.createLoadingMessage(chatMessages);
+
+    // Display the running "..." effect when waiting for a response.
+    let dotCount = 0;
+    const maxDots = 8;
+    const dotInterval = setInterval(() => {
+        if (dotCount >= maxDots) {
+          dotCount = 0;
+          loadingMessageEl.innerHTML = '';
+        } else {
+          loadingMessageEl.innerHTML += '. ';
+          dotCount++;
+        }
+      }, 300);
+    return {loadingMessageEl, dotInterval};
   }
 }
