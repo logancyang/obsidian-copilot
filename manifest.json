@@ -6,6 +6,9 @@
   "description": "A ChatGPT copilot in Obsidian.",
   "author": "Logan Yang",
   "authorUrl": "https://logancyang.com",
-  "fundingUrl": "https://www.buymeacoffee.com/logancyang",
+  "fundingUrl": {
+    "Buy Me a Coffee": "https://www.buymeacoffee.com/logancyang",
+    "GitHub Sponsor": "https://github.com/sponsors/logancyang"
+  },
   "isDesktopOnly": true
 }
