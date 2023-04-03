@@ -1,6 +1,6 @@
 import { App, Modal, Plugin } from 'obsidian';
 import { CopilotSettingTab } from "./settings";
-import ChatGPTView from './chatGptView';
+import ChatGPTView from './copilotView';
 import { SharedState } from './sharedState';
 
 const CHATGPT_VIEWTYPE = 'chat-gpt-view';

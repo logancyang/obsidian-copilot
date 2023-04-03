@@ -115,7 +115,7 @@ If your plugin does not need CSS, delete this file.
 }
 
 .chat-message.user {
-  background-color: #3a3a3a;
+  background-color: rgba(58, 58, 58, 0.8);
   color: #ffffff;
   border-radius: 5px;
   padding: 8px;

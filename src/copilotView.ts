@@ -228,7 +228,6 @@ export default class ChatGPTView extends ItemView {
           },
         }
       );
-
       const responseMessage = response.data.choices[0].message.content;
       return responseMessage
     } catch (error) {
