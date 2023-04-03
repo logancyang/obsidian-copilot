@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
+import { ItemView, WorkspaceLeaf, setIcon, MarkdownRenderer } from 'obsidian';
 import { SharedState } from './sharedState';
 import CopilotPlugin from "./main";
 import axios from 'axios';
@@ -111,7 +111,10 @@ export default class ChatGPTView extends ItemView {
   }
 
   // Create a message element and append it to the chatMessages div
-  appendMessage(chatMessages: HTMLDivElement, message: string, sender: string) {
+  async appendMessage(chatMessages: HTMLDivElement, message: string, sender: string) {
+    if (sender && sender !== 'user') {
+      sender = 'chatgpt';
+    }
     const messageEl = chatMessages.createDiv({ cls: `chat-message ${sender}` });
 
     // Create message content div
@@ -127,8 +130,14 @@ export default class ChatGPTView extends ItemView {
     // Append icon to button
     clipboardButton.appendChild(clipboardIcon);
 
+
+    // Render markdown using Obsidian's built-in markdown renderer
+    const activeFile = this.plugin.app.workspace.getActiveFile();
+    const sourcePath = activeFile ? activeFile.path : '';
+    await MarkdownRenderer.renderMarkdown(message, messageContent, sourcePath, this);
+
     // Add response message formatting
-    messageContent.innerHTML = message.replace(/\n/g, '<br>');
+    // messageContent.innerHTML = message.replace(/\n/g, '<br>');
 
     // Append clipboard button to message element
     messageEl.insertAdjacentElement('beforeend', clipboardButton);
@@ -152,6 +161,11 @@ export default class ChatGPTView extends ItemView {
     this.appendMessage(chatMessages, message, 'user');
     // Store the user's message in the chat history
     this.sharedState.addMessage({ message, sender: 'user' });
+    // Clear the textarea content after sending the message with a slight delay
+    setTimeout(() => {
+      chatInput.value = '';
+      this.autosize(chatInput); // Reset the textarea height after clearing its value
+    }, 10);
 
     // Your ChatGPT API interaction logic here
     console.log(`Sending message: ${message}`);
@@ -173,7 +187,9 @@ export default class ChatGPTView extends ItemView {
     }, 500);
 
     // After receiving a response from the ChatGPT API, append it to the chat interface
-    // const chatGPTResponse = "Hello! I'm a chatbot. Ask me a question.";
+    // const chatGPTResponse = ``
+
+    //   Just adjust the value as needed to increase or decrease the line spacing.`;
     const chatGPTResponse = await this.getChatGPTResponse(message);
     clearInterval(dotInterval); // Stop the running "..." effect
     if (loadingMessageEl.parentElement) {
@@ -184,12 +200,6 @@ export default class ChatGPTView extends ItemView {
     this.scrollToBottom(chatMessages);
     // Store the response in the chat history
     this.sharedState.addMessage({ message: chatGPTResponse, sender: this.model });
-
-    // Clear the textarea content after sending the message with a slight delay
-    setTimeout(() => {
-      chatInput.value = '';
-      this.autosize(chatInput); // Reset the textarea height after clearing its value
-    }, 10);
   }
 
   // Get a response from the ChatGPT API

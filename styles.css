@@ -135,7 +135,7 @@ If your plugin does not need CSS, delete this file.
 
 .chat-message-content {
   display: inline;
-  line-height: 1.5;
+  line-height: 1.2;
 }
 
 .clipboard-button {
