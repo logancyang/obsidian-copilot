@@ -51,7 +51,11 @@ If your plugin does not need CSS, delete this file.
   cursor: pointer;
   padding: 4px 8px;
   font-size: 12px;
-  margin-right: 12px;
+  margin-right: 5px;
+}
+
+.model-dropdown {
+  margin-right: 5px;
 }
 
 .regenerate-button .icon {
@@ -65,7 +69,7 @@ If your plugin does not need CSS, delete this file.
   border: none;
   cursor: pointer;
   padding: 4px 8px;
-  margin-right: 12px;
+  margin-right: 5px;
 }
 
 .icon-only-button .icon {

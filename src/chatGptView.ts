@@ -8,13 +8,26 @@ export default class ChatGPTView extends ItemView {
   sharedState: SharedState;
   plugin: CopilotPlugin;
   model: string;
+  modelDropdown: HTMLSelectElement;
 
   constructor(leaf: WorkspaceLeaf, plugin: CopilotPlugin) {
     super(leaf);
     this.sharedState = plugin.sharedState;
     this.plugin = plugin;
-    // TODO: Add a dropdown menu to select the model in iconsContainer
     this.model = this.plugin.settings.defaultModel;
+    // A dropdown to select the model in iconsContainer
+    // The dropdown should be set to defaultModel at the start, and should
+    // reflect the value of this.model at all times
+    this.modelDropdown = document.createElement('select');
+    this.modelDropdown.classList.add('model-dropdown');
+    this.modelDropdown.innerHTML = `
+      <option value="gpt-3.5-turbo">GPT-3.5</option>
+      <option value="gpt-4">GPT-4</option>
+    `;
+    this.modelDropdown.value = this.model;
+    this.modelDropdown.addEventListener('change', (event) => {
+      this.model = (event.target as HTMLSelectElement).value;
+    });
   }
 
   // Return a unique identifier for this view
@@ -63,6 +76,10 @@ export default class ChatGPTView extends ItemView {
     const regenerateButton = chatIconsContainer.createEl('button', { cls: 'regenerate-button' });
     const regenerateButtonText = document.createTextNode('\u00A0Regenerate Response');
     regenerateButton.appendChild(regenerateButtonText);
+
+    // Create a wrapper div for the dropdown and append the dropdown to the wrapper div
+    const modelDropdownWrapper = chatIconsContainer.createEl('div', { cls: 'model-dropdown-wrapper' });
+    modelDropdownWrapper.appendChild(this.modelDropdown);
 
     const newChatIcon = this.containerEl.createEl('i', { cls: 'icon' });
     setIcon(newChatIcon, 'refresh-ccw');
@@ -127,14 +144,10 @@ export default class ChatGPTView extends ItemView {
     // Append icon to button
     clipboardButton.appendChild(clipboardIcon);
 
-
     // Render markdown using Obsidian's built-in markdown renderer
     const activeFile = this.plugin.app.workspace.getActiveFile();
     const sourcePath = activeFile ? activeFile.path : '';
     await MarkdownRenderer.renderMarkdown(message, messageContent, sourcePath, this);
-
-    // Add response message formatting
-    // messageContent.innerHTML = message.replace(/\n/g, '<br>');
 
     // Append clipboard button to message element
     messageEl.insertAdjacentElement('beforeend', clipboardButton);
