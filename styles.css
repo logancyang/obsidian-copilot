@@ -31,24 +31,32 @@ If your plugin does not need CSS, delete this file.
   align-items: center;
   width: 100%;
   padding: 8px 8px 0;
+  order: 1;
+  gap: 8px;
 }
 
 .chat-input-container {
   display: flex;
   padding: 8px;
-  width: 100%;
   box-sizing: border-box;
+  flex-grow: 1;
+  width: 100%;
+  order: 2;
 }
 
 .chat-input-container textarea {
   flex-grow: 1;
   margin-right: 8px;
-  margin-bottom: 32px;
-  max-height: 200px;
+  margin-bottom: 8px;
   resize: vertical;
   overflow: auto;
-  width: 100%;
-  min-height: 50px; /* Add this line */
+  min-height: 60px;
+  max-height: 200px;
+}
+
+.chat-input-container button {
+  padding: 8px;
+  margin: 8px;
 }
 
 .chat-messages {
@@ -65,4 +73,5 @@ If your plugin does not need CSS, delete this file.
   font-size: 14px;
   box-sizing: border-box;
   scroll-behavior: smooth;
+  margin-top: auto;
 }

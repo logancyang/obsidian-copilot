@@ -72,14 +72,22 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
           <button className='chat-icon-button'>
             New chat
           </button>
+          <button className='chat-icon-button'>
+            something
+          </button>
+          <button className='chat-icon-button'>
+            something
+          </button>
         </div>
-        <textarea
-          className="chat-input-container"
-          value={inputMessage}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-        />
-        <button onClick={handleSendMessage}>Send</button>
+        <div className="chat-input-container">
+          <textarea
+            className="chat-input-textarea"
+            value={inputMessage}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+          />
+          <button onClick={handleSendMessage}>Send</button>
+        </div>
       </div>
     </div>
   );
