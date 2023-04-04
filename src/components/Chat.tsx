@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChatMessage, SharedState } from '../sharedState';
+import { ChatMessage, SharedState } from 'src/sharedState';
 import axios from 'axios';
 
 

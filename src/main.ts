@@ -1,8 +1,8 @@
 import { Plugin, WorkspaceLeaf } from 'obsidian';
-import { CopilotSettingTab } from './settings';
-import { SharedState } from './sharedState';
-import CopilotView from './components/CopilotView';
-import { CHAT_VIEWTYPE } from './constants';
+import { CopilotSettingTab } from 'src/settings';
+import { SharedState } from 'src/sharedState';
+import CopilotView from 'src/components/CopilotView';
+import { CHAT_VIEWTYPE } from 'src/constants';
 
 
 export interface CopilotSettings {
