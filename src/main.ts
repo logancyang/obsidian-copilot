@@ -1,9 +1,10 @@
-import { App, Modal, Plugin } from 'obsidian';
-import { CopilotSettingTab } from "./settings";
-import CopilotChatView from './copilotView';
-import { SharedState } from './sharedState';
+import { Plugin, WorkspaceLeaf } from 'obsidian';
+import { CopilotSettingTab } from './settings';
+import { SharedState, ChatMessage } from './sharedState';
+import CopilotView from './components/CopilotView';
+import { CHAT_VIEWTYPE } from './constants';
+import axios from 'axios';
 
-const CHAT_VIEWTYPE = 'copilot-chat-view';
 
 interface CopilotSettings {
   openAiApiKey: string;
@@ -20,30 +21,23 @@ export default class CopilotPlugin extends Plugin {
   // A chat history that stores the messages sent and received
   // Only reset when the user explicitly clicks "New Chat"
   sharedState: SharedState;
+  model: string;
 
-  async onload() {
+  async onload(): Promise<void> {
     await this.loadSettings();
     this.addSettingTab(new CopilotSettingTab(this.app, this));
-
     this.sharedState = new SharedState();
+    this.model = this.settings.defaultModel;
 
-    // Register your custom View class
     this.registerView(
-      'copilot-chat-view',
-      (leaf) => new CopilotChatView(leaf, this));
+      CHAT_VIEWTYPE,
+      (leaf: WorkspaceLeaf) => new CopilotView(this.app, leaf, this.sharedState)
+    );
 
-    this.addRibbonIcon('message-square', 'ChatGPT', (evt: MouseEvent) => {
+    this.addRibbonIcon('message-square', 'Copilot Chat', (evt: MouseEvent) => {
       // open or close the chatgpt view
       this.toggleView();
     });
-  }
-
-  async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-  }
-
-  async saveSettings() {
-    await this.saveData(this.settings);
   }
 
   toggleView() {
@@ -64,23 +58,66 @@ export default class CopilotPlugin extends Plugin {
     this.app.workspace.detachLeavesOfType(CHAT_VIEWTYPE);
   }
 
-  onunload() {
-    console.log('unloading plugin');
-  }
-}
-
-class SampleModal extends Modal {
-  constructor(app: App) {
-    super(app);
+  async loadSettings() {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
   }
 
-  onOpen() {
-    const {contentEl} = this;
-    contentEl.setText('Woah!');
+  async saveSettings(): Promise<void> {
+    await this.saveData(this.settings);
   }
 
-  onClose() {
-    const {contentEl} = this;
-    contentEl.empty();
+  async sendMessage(inputMessage: string): Promise<ChatMessage> {
+    // Add your logic to send a message to the AI and get the response.
+    // Use the OpenAI API key and the default model from the plugin settings.
+    // For example:
+
+    const responseMessage = await this.getChatGPTResponse(inputMessage);
+
+    // Return the message as a ChatMessage object.
+    return {
+      message: responseMessage,
+      sender: 'AI',
+    };
+  }
+
+  // Get a response from the ChatGPT API
+  async getChatGPTResponse(message: string): Promise<string> {
+    const apiKey = this.settings.openAiApiKey;
+
+    if (!apiKey) {
+      console.error('API key is not set.');
+      return 'Error: API key is not set.';
+    }
+    if (!this.model) {
+      console.error('Model is not set.');
+      return 'Error: Model is not set.';
+    }
+
+    try {
+      console.log('Model:', this.model);
+      const response = await axios.post(
+        'https://api.openai.com/v1/chat/completions',
+        {
+          model: this.model,
+          // TODO: Add support for more chat history as context
+          messages: [
+            { role: 'system', content: 'You are a helpful assistant.' },
+            { role: 'user', content: message },
+          ],
+          temperature: 0.7,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+        }
+      );
+      const responseMessage = response.data.choices[0].message.content;
+      return responseMessage
+    } catch (error) {
+      console.error('Failed to get response from OpenAI API:', error);
+      return 'Error: Failed to get response from OpenAI API.';
+    }
   }
 }
