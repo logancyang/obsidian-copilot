@@ -1,20 +1,26 @@
-import { App, WorkspaceLeaf, ItemView } from 'obsidian';
+import { WorkspaceLeaf, ItemView } from 'obsidian';
 import { SharedState } from '../sharedState';
 import * as ReactDOM from 'react-dom';
 import * as React from 'react';
 import Chat from '../components/Chat';
-import { createRoot } from 'react-dom/client';
+import { createRoot, Root } from 'react-dom/client';
 import { AppContext } from '../context';
 import { CHAT_VIEWTYPE } from '../constants';
+import CopilotPlugin, {CopilotSettings} from 'src/main';
 
 
 export default class CopilotView extends ItemView {
   private sharedState: SharedState;
+  private settings: CopilotSettings;
+  private model: string;
+  private root: Root | null = null;
 
-  constructor(app: App, leaf: WorkspaceLeaf, sharedState: SharedState) {
+  constructor(leaf: WorkspaceLeaf, plugin: CopilotPlugin) {
     super(leaf);
-    this.sharedState = sharedState;
-    this.app = app;
+    this.sharedState = plugin.sharedState;
+    this.app = plugin.app;
+    this.settings = plugin.settings;
+    this.model = plugin.settings.defaultModel;
   }
 
   getViewType(): string {
@@ -30,13 +36,19 @@ export default class CopilotView extends ItemView {
     root.render(
       <AppContext.Provider value={this.app}>
         <React.StrictMode>
-          <Chat sharedState={this.sharedState} />
+          <Chat
+            sharedState={this.sharedState}
+            apiKey={this.settings.openAiApiKey}
+            model={this.model}
+          />
         </React.StrictMode>
       </AppContext.Provider>
     );
   }
 
   async onClose(): Promise<void> {
-    ReactDOM.unmountComponentAtNode(this.containerEl.children[1]);
+    if (this.root) {
+      this.root.unmount();
+    }
   }
 }
