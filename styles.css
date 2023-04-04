@@ -75,3 +75,33 @@ If your plugin does not need CSS, delete this file.
   scroll-behavior: smooth;
   margin-top: auto;
 }
+
+.message {
+  display: flex;
+  align-items: flex-start;
+  padding: 4px;
+  margin-bottom: 4px;
+  border-radius: 4px;
+  max-width: 90%;
+}
+
+.message-icon {
+  width: 24px;
+  margin-right: 8px;
+  color: var(--inline-title-color);
+}
+
+.message-content {
+  flex-grow: 1;
+}
+
+.user-message {
+  align-self: flex-start;
+  width: 90%;
+}
+
+.bot-message {
+  align-self: flex-start;
+  width: 90%;
+}
+

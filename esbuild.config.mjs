@@ -1,6 +1,7 @@
 import esbuild from "esbuild";
 import process from "process";
 import builtins from "builtin-modules";
+import svgPlugin from "esbuild-plugin-svg";
 
 const banner =
 `/*
@@ -38,6 +39,7 @@ const context = await esbuild.context({
   sourcemap: prod ? false : "inline",
   treeShaking: true,
   outfile: "main.js",
+  plugins: [svgPlugin()],
 });
 
 if (prod) {

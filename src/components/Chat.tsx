@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ChatMessage, SharedState } from 'src/sharedState';
+import { USER_SENDER } from 'src/constants';
+import { UserIcon, BotIcon } from 'src/components/Icons';
+import { createSvgUrl } from 'src/utils';
 import axios from 'axios';
 
 
@@ -27,7 +30,7 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
 
     const userMessage: ChatMessage = {
       message: inputMessage,
-      sender: 'User',
+      sender: USER_SENDER,
     };
 
     // Add user message to chat history
@@ -58,9 +61,16 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
     <div className="chat-container">
       <div className="chat-messages">
         {chatHistory.map((message, index) => (
-          <div key={index}>
-            <strong>{message.sender}: </strong>
-            <span>{message.message}</span>
+          <div
+            key={index}
+            className={`message ${message.sender === USER_SENDER ? 'user-message' : 'bot-message'}`}
+          >
+            <div className="message-icon">
+              {message.sender === USER_SENDER ? <UserIcon /> : <BotIcon />}
+            </div>
+            <div className="message-content">
+              <span>{message.message}</span>
+            </div>
           </div>
         ))}
       </div>
