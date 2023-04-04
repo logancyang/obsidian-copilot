@@ -1,6 +1,5 @@
 import { WorkspaceLeaf, ItemView } from 'obsidian';
 import { SharedState } from '../sharedState';
-import * as ReactDOM from 'react-dom';
 import * as React from 'react';
 import Chat from '../components/Chat';
 import { createRoot, Root } from 'react-dom/client';
@@ -25,6 +24,16 @@ export default class CopilotView extends ItemView {
 
   getViewType(): string {
     return CHAT_VIEWTYPE;
+  }
+
+  // Return an icon for this view
+  getIcon(): string {
+    return 'message-square';
+  }
+
+  // Return a title for this view
+  getTitle(): string {
+    return 'Copilot Chat';
   }
 
   getDisplayText(): string {

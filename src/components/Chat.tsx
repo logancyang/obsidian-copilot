@@ -18,7 +18,7 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
     setChatHistory(sharedState.getMessages());
   }, [sharedState]);
 
-  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputMessage(event.target.value);
   };
 
@@ -31,23 +31,32 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
     };
 
     // Add user message to chat history
-    setChatHistory([...chatHistory, userMessage]);
     sharedState.addMessage(userMessage);
 
     // Send message to AI and get a response
-    const aiMessage: ChatMessage = await getChatGPTResponse(inputMessage, apiKey, model);
+    // const aiMessage: ChatMessage = await getChatGPTResponse(inputMessage, apiKey, model);
+    const aiMessage: ChatMessage = {
+      message: 'Hi there! I am a chatbot. I am here to help you with your tasks. What can I do for you?',
+      sender: model,
+    };
 
     // Add AI message to chat history
-    setChatHistory([...chatHistory, aiMessage]);
     sharedState.addMessage(aiMessage);
 
     // Clear input
     setInputMessage('');
   };
 
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault(); // Prevents adding a newline to the textarea
+      handleSendMessage();
+    }
+  };
+
   return (
-    <div>
-      <div>
+    <div className="chat-container">
+      <div className="chat-messages">
         {chatHistory.map((message, index) => (
           <div key={index}>
             <strong>{message.sender}: </strong>
@@ -55,34 +64,26 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
           </div>
         ))}
       </div>
-      <div>
-        <input
-          type="text"
-          placeholder="Type your message"
+      <div className='bottom-container'>
+        <div className='chat-icons-container'>
+          <button className='chat-icon-button'>
+            Regenerate response
+          </button>
+          <button className='chat-icon-button'>
+            New chat
+          </button>
+        </div>
+        <textarea
+          className="chat-input-container"
           value={inputMessage}
           onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
         />
         <button onClick={handleSendMessage}>Send</button>
       </div>
     </div>
   );
 };
-
-export default Chat;
-
-// async function sendMessage(inputMessage: string, apiKey: string, model: string): Promise<ChatMessage> {
-//   // Add your logic to send a message to the AI and get the response.
-//   // Use the OpenAI API key and the default model from the plugin settings.
-//   // For example:
-
-//   const responseMessage = await getChatGPTResponse(inputMessage);
-
-//   // Return the message as a ChatMessage object.
-//   return {
-//     message: responseMessage,
-//     sender: 'AI',
-//   };
-// }
 
 // Get a response from the ChatGPT API
 async function getChatGPTResponse(message: string, apiKey: string, model: string): Promise<ChatMessage> {
@@ -109,7 +110,7 @@ async function getChatGPTResponse(message: string, apiKey: string, model: string
     const responseMessage = response.data.choices[0].message.content;
     return {
       message: responseMessage,
-      sender: 'AI',
+      sender: this.model,
     };
   } catch (error) {
     console.error('Failed to get response from OpenAI API:', error);
@@ -119,3 +120,5 @@ async function getChatGPTResponse(message: string, apiKey: string, model: string
     };
   }
 }
+
+export default Chat;
