@@ -3,6 +3,7 @@ import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
 import { USER_SENDER, AI_SENDER } from '@/constants';
 import { UserIcon, BotIcon } from '@/components/Icons';
 import { OpenAIStream } from '@/openAiStream';
+import ReactMarkdown from 'react-markdown';
 
 
 interface ChatProps {
@@ -99,7 +100,11 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
               {message.sender === USER_SENDER ? <UserIcon /> : <BotIcon />}
             </div>
             <div className="message-content">
-              <span>{message.message}</span>
+              {message.sender === USER_SENDER ? (
+                <span>{message.message}</span>
+              ) : (
+                <ReactMarkdown>{message.message}</ReactMarkdown>
+              )}
             </div>
           </div>
         ))}
@@ -109,7 +114,7 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
               <BotIcon />
             </div>
             <div className="message-content">
-              <span>{currentAiMessage}</span>
+              <ReactMarkdown>{currentAiMessage}</ReactMarkdown>
             </div>
           </div>
         )}
