@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { App } from 'obsidian';
-import { AppContext, SharedStateContext } from 'src/context';
-import { SharedState } from 'src/sharedState';
+import { AppContext, SharedStateContext } from '@/context';
+import SharedState from '@/sharedState';
 
 // Custom hook to use the App context
 export const useApp = (): App | undefined => {
