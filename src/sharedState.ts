@@ -19,8 +19,12 @@ class SharedState {
 
 export default SharedState;
 
-export function useSharedState(sharedState: SharedState): [ChatMessage[], (message: ChatMessage) => void] {
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>(sharedState.getMessages());
+export function useSharedState(
+  sharedState: SharedState
+): [ChatMessage[], (message: ChatMessage) => void] {
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>(
+    sharedState.getMessages()
+  );
 
   useEffect(() => {
     setChatHistory(sharedState.getMessages());

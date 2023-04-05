@@ -28,7 +28,6 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
     };
 
     // Add user message to chat history
-    // setChatHistory((prevChatHistory) => [...prevChatHistory, userMessage]);
     addMessage(userMessage);
 
     // Clear input
@@ -37,7 +36,6 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
     // Send message to AI and get a response
     getChatGPTResponse(inputMessage, apiKey, model).then((aiMessage) => {
       // Add AI message to chat history
-      // setChatHistory((prevChatHistory) => [...prevChatHistory, aiMessage]);
       addMessage(aiMessage);
     });
 
