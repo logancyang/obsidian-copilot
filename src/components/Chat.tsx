@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import SharedState, { ChatMessage, useSharedState } from 'src/sharedState';
-import { USER_SENDER } from 'src/constants';
-import { UserIcon, BotIcon } from 'src/components/Icons';
-import axios from 'axios';
+import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
+import { USER_SENDER, AI_SENDER } from '@/constants';
+import { UserIcon, BotIcon } from '@/components/Icons';
+import { OpenAIStream } from '@/openAiStream';
 
 
 interface ChatProps {
@@ -14,6 +14,7 @@ interface ChatProps {
 const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
   const [chatHistory, addMessage] = useSharedState(sharedState);
   const [inputMessage, setInputMessage] = useState('');
+  const [currentAiMessage, setCurrentAiMessage] = useState('');
 
   const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputMessage(event.target.value);
@@ -33,20 +34,50 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
     // Clear input
     setInputMessage('');
 
-    // Send message to AI and get a response
-    getChatGPTResponse(inputMessage, apiKey, model).then((aiMessage) => {
-      // Add AI message to chat history
-      addMessage(aiMessage);
-    });
+    // The number of past messages to use as context for the AI
+    // Increase this number later as needed
+    const chatContext = getChatContext([...chatHistory, userMessage], 5);
 
-    // Send message to AI and get a response
-    // const aiMessage: ChatMessage = await getChatGPTResponse(inputMessage, apiKey, model);
-    // const aiMessage: ChatMessage = {
-    //   message: (
-    //     `Hi there! I am a chatbot. I am here to help you with your tasks. What can I do for you?\n`
-    //   ),
-    //   sender: model,
-    // };
+    // Use OpenAIStream to send message to AI and get a response
+    try {
+      const stream = await OpenAIStream(
+        model,
+        apiKey,
+        chatContext.map((chatMessage) => {
+          return {
+            role: chatMessage.sender === USER_SENDER ? 'user' : 'assistant',
+            content: chatMessage.message,
+          };
+        }),
+      );
+      const reader = stream.getReader();
+      const decoder = new TextDecoder();
+      let aiResponse = '';
+
+      reader.read().then(
+        async function processStream({ done, value }): Promise<void> {
+          if (done) {
+            // Add the full AI response to the chat history
+            const botMessage: ChatMessage = {
+              message: aiResponse,
+              sender: AI_SENDER,
+            };
+            addMessage(botMessage);
+            setCurrentAiMessage('');
+            return;
+          }
+
+          // Accumulate the AI response
+          aiResponse += decoder.decode(value);
+          setCurrentAiMessage(aiResponse);
+
+          // Continue reading the stream
+          return reader.read().then(processStream);
+        },
+      );
+    } catch (error) {
+      console.error('Error in OpenAIStream:', error);
+    }
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -72,6 +103,16 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
             </div>
           </div>
         ))}
+        {currentAiMessage && (
+          <div className="message bot-message">
+            <div className="message-icon">
+              <BotIcon />
+            </div>
+            <div className="message-content">
+              <span>{currentAiMessage}</span>
+            </div>
+          </div>
+        )}
       </div>
       <div className='bottom-container'>
         <div className='chat-icons-container'>
@@ -102,40 +143,19 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
   );
 };
 
-// Get a response from the ChatGPT API
-async function getChatGPTResponse(message: string, apiKey: string, model: string): Promise<ChatMessage> {
-  try {
-    console.log('Model:', model);
-    const response = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        model,
-        // TODO: Add support for more chat history as context
-        messages: [
-          { role: 'system', content: 'You are a helpful assistant.' },
-          { role: 'user', content: message },
-        ],
-        temperature: 0.7,
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-      }
-    );
-    const responseMessage = response.data.choices[0].message.content;
-    return {
-      message: responseMessage,
-      sender: this.model,
-    };
-  } catch (error) {
-    console.error('Failed to get response from OpenAI API:', error);
-    return {
-      message: 'Error: Failed to get response from OpenAI API.',
-      sender: 'System',
-    };
+// Returns the last N messages from the chat history, last one being the last user message
+const getChatContext = (chatHistory: ChatMessage[], contextSize: number) => {
+  const lastUserMessageIndex = chatHistory.slice().reverse().findIndex(msg => msg.sender === "user");
+
+  if (lastUserMessageIndex === -1) {
+    // No user messages found, return an empty array
+    return [];
   }
-}
+
+  const lastIndex = chatHistory.length - lastUserMessageIndex - 1;
+  const startIndex = Math.max(0, lastIndex - contextSize + 1);
+
+  return chatHistory.slice(startIndex, lastIndex + 1);
+};
 
 export default Chat;

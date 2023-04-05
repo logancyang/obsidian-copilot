@@ -100,7 +100,7 @@ If your plugin does not need CSS, delete this file.
 .user-message {
   align-self: flex-start;
   width: 90%;
-  font-size: 16px;
+  font-weight: bold;
 }
 
 .bot-message {

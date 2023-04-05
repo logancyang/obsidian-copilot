@@ -3,7 +3,13 @@ import {
   ParsedEvent,
   ReconnectInterval,
 } from 'eventsource-parser';
-import { ChatMessage } from '@/sharedState';
+
+export type Role = 'assistant' | 'user';
+
+export interface OpenAiMessage {
+  role: Role;
+  content: string;
+}
 
 export class OpenAIError extends Error {
   type: string;
@@ -22,7 +28,7 @@ export class OpenAIError extends Error {
 export const OpenAIStream = async (
   model: string,
   key: string,
-  messages: ChatMessage[],
+  messages: OpenAiMessage[],
 ) => {
   const res = await fetch(`https://api.openai.com/v1/chat/completions`, {
     headers: {
@@ -93,8 +99,16 @@ export const OpenAIStream = async (
 
       const parser = createParser(onParse);
 
-      for await (const chunk of res.body as any) {
-        parser.feed(decoder.decode(chunk));
+      if (!res.body) {
+        throw new Error("Response body is null");
+      }
+
+      const reader = res.body.getReader();
+      let done = false;
+      let value;
+      while (!done) {
+        ({ done, value } = await reader.read());
+        if (!done) parser.feed(decoder.decode(value));
       }
     },
   });
