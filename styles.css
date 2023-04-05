@@ -74,6 +74,7 @@ If your plugin does not need CSS, delete this file.
   box-sizing: border-box;
   scroll-behavior: smooth;
   margin-top: auto;
+  user-select: text;
 }
 
 .message {
@@ -93,11 +94,13 @@ If your plugin does not need CSS, delete this file.
 
 .message-content {
   flex-grow: 1;
+  white-space: pre-wrap;
 }
 
 .user-message {
   align-self: flex-start;
   width: 90%;
+  font-size: 16px;
 }
 
 .bot-message {

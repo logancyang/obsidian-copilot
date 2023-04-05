@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { ChatMessage, SharedState } from 'src/sharedState';
+import React, { useState } from 'react';
+import SharedState, { ChatMessage, useSharedState } from 'src/sharedState';
 import { USER_SENDER } from 'src/constants';
 import { UserIcon, BotIcon } from 'src/components/Icons';
-import { createSvgUrl } from 'src/utils';
 import axios from 'axios';
 
 
@@ -13,13 +12,8 @@ interface ChatProps {
 }
 
 const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [chatHistory, addMessage] = useSharedState(sharedState);
   const [inputMessage, setInputMessage] = useState('');
-
-  useEffect(() => {
-    // Initialize chat history
-    setChatHistory(sharedState.getMessages());
-  }, [sharedState]);
 
   const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputMessage(event.target.value);
@@ -34,20 +28,27 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
     };
 
     // Add user message to chat history
-    sharedState.addMessage(userMessage);
-
-    // Send message to AI and get a response
-    // const aiMessage: ChatMessage = await getChatGPTResponse(inputMessage, apiKey, model);
-    const aiMessage: ChatMessage = {
-      message: 'Hi there! I am a chatbot. I am here to help you with your tasks. What can I do for you?',
-      sender: model,
-    };
-
-    // Add AI message to chat history
-    sharedState.addMessage(aiMessage);
+    // setChatHistory((prevChatHistory) => [...prevChatHistory, userMessage]);
+    addMessage(userMessage);
 
     // Clear input
     setInputMessage('');
+
+    // Send message to AI and get a response
+    getChatGPTResponse(inputMessage, apiKey, model).then((aiMessage) => {
+      // Add AI message to chat history
+      // setChatHistory((prevChatHistory) => [...prevChatHistory, aiMessage]);
+      addMessage(aiMessage);
+    });
+
+    // Send message to AI and get a response
+    // const aiMessage: ChatMessage = await getChatGPTResponse(inputMessage, apiKey, model);
+    // const aiMessage: ChatMessage = {
+    //   message: (
+    //     `Hi there! I am a chatbot. I am here to help you with your tasks. What can I do for you?\n`
+    //   ),
+    //   sender: model,
+    // };
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
