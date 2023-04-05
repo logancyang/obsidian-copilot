@@ -3,7 +3,7 @@ import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
 import { USER_SENDER, AI_SENDER } from '@/constants';
 import { UserIcon, BotIcon } from '@/components/Icons';
 import { OpenAIStream } from '@/openAiStream';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown from '@/components/Markdown/MemoizedReactMarkdown';
 
 
 interface ChatProps {
