@@ -80,7 +80,7 @@ If your plugin does not need CSS, delete this file.
 .message {
   display: flex;
   align-items: flex-start;
-  padding: 4px;
+  padding: 8px;
   margin-bottom: 4px;
   border-radius: 4px;
   max-width: 90%;
@@ -95,12 +95,19 @@ If your plugin does not need CSS, delete this file.
 .message-content {
   flex-grow: 1;
   white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+pre, p {
+  margin: 0;
+  padding: 0;
 }
 
 .user-message {
   align-self: flex-start;
   width: 90%;
   font-weight: bold;
+  color: var(--inline-title-color);
 }
 
 .bot-message {
