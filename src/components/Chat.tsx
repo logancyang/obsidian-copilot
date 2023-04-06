@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
 import { USER_SENDER, AI_SENDER } from '@/constants';
-import { UserIcon, BotIcon } from '@/components/Icons';
+import { BotIcon } from '@/components/Icons';
 import { OpenAIStream } from '@/openAiStream';
+import ChatMessageComponent from '@/components/ChatMessageComponent';
 import ReactMarkdown from '@/components/Markdown/MemoizedReactMarkdown';
 
 
@@ -103,21 +104,7 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
     <div className="chat-container">
       <div className="chat-messages">
         {chatHistory.map((message, index) => (
-          <div
-            key={index}
-            className={`message ${message.sender === USER_SENDER ? 'user-message' : 'bot-message'}`}
-          >
-            <div className="message-icon">
-              {message.sender === USER_SENDER ? <UserIcon /> : <BotIcon />}
-            </div>
-            <div className="message-content">
-              {message.sender === USER_SENDER ? (
-                <span>{message.message}</span>
-              ) : (
-                <ReactMarkdown>{message.message}</ReactMarkdown>
-              )}
-            </div>
-          </div>
+          <ChatMessageComponent key={index} message={message} />
         ))}
         {currentAiMessage && (
           <div className="message bot-message">
@@ -161,7 +148,7 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
 
 // Returns the last N messages from the chat history, last one being the last user message
 const getChatContext = (chatHistory: ChatMessage[], contextSize: number) => {
-  const lastUserMessageIndex = chatHistory.slice().reverse().findIndex(msg => msg.sender === "user");
+  const lastUserMessageIndex = chatHistory.slice().reverse().findIndex(msg => msg.sender === USER_SENDER);
 
   if (lastUserMessageIndex === -1) {
     // No user messages found, return an empty array

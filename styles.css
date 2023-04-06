@@ -77,25 +77,51 @@ If your plugin does not need CSS, delete this file.
   user-select: text;
 }
 
-.message {
+/* .message {
   display: flex;
-  align-items: flex-start;
   padding: 8px;
   margin-bottom: 4px;
   border-radius: 4px;
   max-width: 90%;
+} */
+
+.message {
+  display: flex;
+  padding: 8px;
+  margin-bottom: 4px;
+  border-radius: 4px;
+  max-width: 90%;
+  position: relative;
 }
 
 .message-icon {
   width: 24px;
   margin-right: 8px;
   color: var(--inline-title-color);
+  grid-area: icon;
 }
 
 .message-content {
-  flex-grow: 1;
   white-space: pre-wrap;
   line-height: 1.5;
+  grid-area: content;
+}
+
+.copy-message-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  padding: 4px;
+  font-size: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  grid-area: copy;
 }
 
 pre, p {
@@ -104,14 +130,11 @@ pre, p {
 }
 
 .user-message {
-  align-self: flex-start;
   width: 90%;
-  font-weight: bold;
   color: var(--inline-title-color);
 }
 
 .bot-message {
-  align-self: flex-start;
   width: 90%;
 }
 
