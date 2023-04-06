@@ -41,10 +41,10 @@ const ChatMessageComponent: React.FC<ChatMessageComponentProps> = ({ message }) 
         ) : (
           <ReactMarkdown>{message.message}</ReactMarkdown>
         )}
-        <button onClick={copyToClipboard} className="copy-message-button">
-          {isCopied ? <CheckIcon /> : <CopyClipboardIcon />}
-        </button>
       </div>
+      <button onClick={copyToClipboard} className="copy-message-button">
+        {isCopied ? <CheckIcon /> : <CopyClipboardIcon />}
+      </button>
     </div>
   );
 };

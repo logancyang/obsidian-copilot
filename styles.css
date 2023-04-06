@@ -77,20 +77,11 @@ If your plugin does not need CSS, delete this file.
   user-select: text;
 }
 
-/* .message {
-  display: flex;
-  padding: 8px;
-  margin-bottom: 4px;
-  border-radius: 4px;
-  max-width: 90%;
-} */
-
 .message {
   display: flex;
   padding: 8px;
   margin-bottom: 4px;
   border-radius: 4px;
-  max-width: 90%;
   position: relative;
 }
 
@@ -105,12 +96,13 @@ If your plugin does not need CSS, delete this file.
   white-space: pre-wrap;
   line-height: 1.5;
   grid-area: content;
+  max-width: 90%;
 }
 
 .copy-message-button {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 2px;
+  right: 2px;
   width: 24px;
   height: 24px;
   padding: 4px;
@@ -122,6 +114,11 @@ If your plugin does not need CSS, delete this file.
   border-radius: 4px;
   cursor: pointer;
   grid-area: copy;
+  opacity: 0;
+}
+
+.message:hover .copy-message-button {
+  opacity: 1;
 }
 
 pre, p {
