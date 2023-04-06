@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
 import { USER_SENDER, AI_SENDER } from '@/constants';
 import { UserIcon, BotIcon } from '@/components/Icons';
@@ -16,6 +16,17 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
   const [chatHistory, addMessage] = useSharedState(sharedState);
   const [inputMessage, setInputMessage] = useState('');
   const [currentAiMessage, setCurrentAiMessage] = useState('');
+
+  const scrollToBottom = () => {
+    const chatMessagesContainer = document.querySelector('.chat-messages');
+    if (chatMessagesContainer) {
+      chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+    }
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [chatHistory]);
 
   const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputMessage(event.target.value);
