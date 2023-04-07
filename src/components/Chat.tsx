@@ -17,6 +17,18 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
   const [chatHistory, addMessage] = useSharedState(sharedState);
   const [inputMessage, setInputMessage] = useState('');
   const [currentAiMessage, setCurrentAiMessage] = useState('');
+  const [rows, setRows] = useState(1);
+
+  const updateRows = (text: string) => {
+    const lineHeight = 20; // You can adjust this value based on your CSS line-height
+    const maxHeight = 200; // Match this to the max-height value you set in the CSS
+    const minRows = 1;
+
+    const rowsNeeded = Math.min(
+      Math.max(text.split('\n').length, minRows), Math.floor(maxHeight / lineHeight)
+    );
+    setRows(rowsNeeded);
+  };
 
   const scrollToBottom = () => {
     const chatMessagesContainer = document.querySelector('.chat-messages');
@@ -31,6 +43,7 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
 
   const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputMessage(event.target.value);
+    updateRows(event.target.value);
   };
 
   const handleSendMessage = async () => {
@@ -142,6 +155,7 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
             value={inputMessage}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
+            rows={rows}
           />
           <button onClick={handleSendMessage}>Send</button>
         </div>

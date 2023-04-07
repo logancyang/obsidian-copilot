@@ -49,13 +49,14 @@ If your plugin does not need CSS, delete this file.
 }
 
 .chat-input-container textarea {
-  flex-grow: 1;
+  width: 100%;
   margin-right: 8px;
   margin-bottom: 8px;
-  resize: vertical;
-  overflow: auto;
+  resize: none;
+  overflow: hidden;
   min-height: 60px;
   max-height: 200px;
+  box-sizing: border-box;
 }
 
 .chat-input-container button {
