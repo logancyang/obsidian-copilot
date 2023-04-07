@@ -35,6 +35,21 @@ If your plugin does not need CSS, delete this file.
   gap: 8px;
 }
 
+.icon-scaler {
+  transform: scale(1.6);
+}
+
+.chat-icon-button {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 32px;
+  height: 32px;
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+}
+
 .chat-icon-selection {
   color: var(--inline-title-color);
 }

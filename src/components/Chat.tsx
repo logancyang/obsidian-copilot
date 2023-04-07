@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
 import { USER_SENDER, AI_SENDER } from '@/constants';
-import { BotIcon } from '@/components/Icons';
+import {
+  BotIcon, RefreshIcon, NewChatIcon, SaveAsNoteIcon, UseActiveNoteAsContextIcon
+} from '@/components/Icons';
 import { OpenAIStream } from '@/openAiStream';
 import ChatMessageComponent from '@/components/ChatMessageComponent';
 import ReactMarkdown from '@/components/Markdown/MemoizedReactMarkdown';
@@ -137,16 +139,16 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
             <option value='gpt-4'>GPT-4</option>
           </select>
           <button className='chat-icon-button'>
-            Regenerate Response
+            <RefreshIcon className='icon-scaler' />
           </button>
           <button className='chat-icon-button'>
-            New Chat
+            <NewChatIcon className='icon-scaler' />
           </button>
           <button className='chat-icon-button'>
-            Save Chat as Note
+            <SaveAsNoteIcon className='icon-scaler' />
           </button>
           <button className='chat-icon-button'>
-            Use Active Note as Context
+            <UseActiveNoteAsContextIcon className='icon-scaler' />
           </button>
         </div>
         <div className="chat-input-container">
