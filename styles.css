@@ -35,6 +35,10 @@ If your plugin does not need CSS, delete this file.
   gap: 8px;
 }
 
+.chat-icon-selection {
+  color: var(--inline-title-color);
+}
+
 .chat-input-container {
   display: flex;
   padding: 8px;
@@ -119,6 +123,30 @@ If your plugin does not need CSS, delete this file.
 }
 
 pre, p {
+  margin: 0;
+  padding: 0;
+}
+
+ol, ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+li {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: flex-start;
+}
+
+li::before {
+  content: counter(list-item, decimal) ".";
+  counter-increment: list-item;
+  margin-right: 8px;
+}
+
+li p {
   margin: 0;
   padding: 0;
 }

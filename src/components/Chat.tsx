@@ -119,17 +119,21 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
       </div>
       <div className='bottom-container'>
         <div className='chat-icons-container'>
+          <select className='chat-icon-selection'>
+            <option value='gpt-3.5-turbo'>GPT-3.5</option>
+            <option value='gpt-4'>GPT-4</option>
+          </select>
           <button className='chat-icon-button'>
-            Regenerate response
+            Regenerate Response
           </button>
           <button className='chat-icon-button'>
-            New chat
+            New Chat
           </button>
           <button className='chat-icon-button'>
-            something
+            Save Chat as Note
           </button>
           <button className='chat-icon-button'>
-            something
+            Use Active Note as Context
           </button>
         </div>
         <div className="chat-input-container">
