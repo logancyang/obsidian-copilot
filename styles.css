@@ -39,6 +39,34 @@ If your plugin does not need CSS, delete this file.
   transform: scale(1.6);
 }
 
+.tooltip-text {
+  visibility: hidden;
+  opacity: 0;
+  background-color: #333;
+  color: #fff;
+  text-align: center;
+  border-radius: 5px;
+  padding: 5px;
+  position: absolute;
+  z-index: 1;
+  bottom: 100%;
+  left: 0;
+  margin-left: 0;
+  margin-bottom: 4px;
+  transition: opacity 0.3s;
+}
+
+.select-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.select-wrapper:hover .tooltip-text,
+.chat-icon-button:hover .tooltip-text {
+  visibility: visible;
+  opacity: 1;
+}
+
 .chat-icon-button {
   display: flex;
   justify-content: center;
@@ -48,6 +76,7 @@ If your plugin does not need CSS, delete this file.
   background-color: transparent;
   border: none;
   cursor: pointer;
+  position: relative;
 }
 
 .chat-icon-selection {

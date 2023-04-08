@@ -134,21 +134,30 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
       </div>
       <div className='bottom-container'>
         <div className='chat-icons-container'>
-          <select className='chat-icon-selection'>
-            <option value='gpt-3.5-turbo'>GPT-3.5</option>
-            <option value='gpt-4'>GPT-4</option>
-          </select>
+          <div className="chat-icon-selection-tooltip">
+            <div className="select-wrapper">
+              <select id="aiModelSelect" className='chat-icon-selection'>
+                <option value='gpt-3.5-turbo'>GPT-3.5</option>
+                <option value='gpt-4'>GPT-4</option>
+              </select>
+              <span className="tooltip-text">Model Selection</span>
+            </div>
+          </div>
           <button className='chat-icon-button'>
             <RefreshIcon className='icon-scaler' />
+            <span className="tooltip-text">Regenerate Response</span>
           </button>
           <button className='chat-icon-button'>
             <NewChatIcon className='icon-scaler' />
+            <span className="tooltip-text">New Chat</span>
           </button>
           <button className='chat-icon-button'>
             <SaveAsNoteIcon className='icon-scaler' />
+            <span className="tooltip-text">Save as Note</span>
           </button>
           <button className='chat-icon-button'>
             <UseActiveNoteAsContextIcon className='icon-scaler' />
+            <span className="tooltip-text">Use Active Note as Context</span>
           </button>
         </div>
         <div className="chat-input-container">
