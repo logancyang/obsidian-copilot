@@ -19,7 +19,12 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
   const [chatHistory, addMessage] = useSharedState(sharedState);
   const [inputMessage, setInputMessage] = useState('');
   const [currentAiMessage, setCurrentAiMessage] = useState('');
+  const [currentModel, setCurrentModel] = useState(model);
   const [rows, setRows] = useState(1);
+
+  const handleModelChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setCurrentModel(event.target.value);
+  };
 
   const updateRows = (text: string) => {
     const lineHeight = 20; // You can adjust this value based on your CSS line-height
@@ -69,7 +74,7 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
     // Use OpenAIStream to send message to AI and get a response
     try {
       const stream = await OpenAIStream(
-        model,
+        currentModel,
         apiKey,
         chatContext.map((chatMessage) => {
           return {
@@ -136,7 +141,12 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
         <div className='chat-icons-container'>
           <div className="chat-icon-selection-tooltip">
             <div className="select-wrapper">
-              <select id="aiModelSelect" className='chat-icon-selection'>
+              <select
+                id="aiModelSelect"
+                className='chat-icon-selection'
+                value={currentModel}
+                onChange={handleModelChange}
+              >
                 <option value='gpt-3.5-turbo'>GPT-3.5</option>
                 <option value='gpt-4'>GPT-4</option>
               </select>

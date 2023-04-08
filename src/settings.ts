@@ -20,6 +20,15 @@ export class CopilotSettingTab extends PluginSettingTab {
 
     new Setting(apiKeySettingDiv)
       .setName("Your OpenAI API key")
+      .setDesc(
+        createFragment((frag) => {
+					frag.appendText("You can find your API key at ");
+					frag.createEl('a', {
+            text: "https://beta.openai.com/account/api-keys",
+            href: "https://beta.openai.com/account/api-keys"
+          });
+				})
+      )
       .addText((text) =>{
         text.inputEl.type = "password";
         text.inputEl.style.width = "80%";
@@ -33,15 +42,14 @@ export class CopilotSettingTab extends PluginSettingTab {
         }
       );
 
-    const apiDescEl = apiKeySettingDiv.createEl('div', {
-      cls: 'setting-item-description',
-      text: 'You can find your API key at https://beta.openai.com/account/api-keys',
-    });
-    apiDescEl.style.userSelect = 'text';
-
     new Setting(defaultModelSettingDiv)
       .setName("Default Model")
-      .setDesc("The default model to use, *only takes effect when you create a new chat or restart the plugin*.")
+      .setDesc(
+        createFragment((frag) => {
+					frag.appendText("The default model to use, only takes effect when you ");
+					frag.createEl('strong', {text: "restart the plugin"});
+				})
+      )
       .addDropdown((dropdown: DropdownComponent) => {
         dropdown
           .addOption('gpt-3.5-turbo', 'GPT-3.5')
