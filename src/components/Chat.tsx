@@ -27,8 +27,8 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
   };
 
   const updateRows = (text: string) => {
-    const lineHeight = 20; // You can adjust this value based on your CSS line-height
-    const maxHeight = 200; // Match this to the max-height value you set in the CSS
+    const lineHeight = 20; // Adjust this value based on CSS line-height
+    const maxHeight = 200; // Match this to the max-height value in CSS
     const minRows = 1;
 
     const rowsNeeded = Math.min(
@@ -173,6 +173,7 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
         <div className="chat-input-container">
           <textarea
             className="chat-input-textarea"
+            placeholder="Enter your message here..."
             value={inputMessage}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}

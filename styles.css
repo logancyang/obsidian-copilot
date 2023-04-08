@@ -103,6 +103,11 @@ If your plugin does not need CSS, delete this file.
   box-sizing: border-box;
 }
 
+.chat-input-container textarea::placeholder {
+  color: var(--inline-title-color);
+  opacity: 0.5;
+}
+
 .chat-input-container button {
   padding: 8px;
   margin: 8px;
