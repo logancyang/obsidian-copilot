@@ -50,9 +50,9 @@ If your plugin does not need CSS, delete this file.
   position: absolute;
   z-index: 1;
   bottom: 100%;
-  left: 0;
-  margin-left: 0;
+  left: 50%;
   margin-bottom: 4px;
+  transform: translateX(-50%);
   transition: opacity 0.3s;
 }
 

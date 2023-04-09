@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
 import { USER_SENDER, AI_SENDER } from '@/constants';
 import {
-  BotIcon, RefreshIcon, NewChatIcon, SaveAsNoteIcon, UseActiveNoteAsContextIcon
+  BotIcon, RefreshIcon, SaveAsNoteIcon, UseActiveNoteAsContextIcon
 } from '@/components/Icons';
 import { OpenAIStream } from '@/openAiStream';
 import ChatMessageComponent from '@/components/ChatMessageComponent';
@@ -155,11 +155,7 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
           </div>
           <button className='chat-icon-button'>
             <RefreshIcon className='icon-scaler' />
-            <span className="tooltip-text">Regenerate Response</span>
-          </button>
-          <button className='chat-icon-button'>
-            <NewChatIcon className='icon-scaler' />
-            <span className="tooltip-text">New Chat</span>
+            <span className="tooltip-text">New Chat<br/>(unsaved history will be lost)</span>
           </button>
           <button className='chat-icon-button'>
             <SaveAsNoteIcon className='icon-scaler' />
@@ -186,7 +182,7 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
   );
 };
 
-// Returns the last N messages from the chat history, last one being the last user message
+// Returns the last N messages from the chat history, last one being the new user message
 const getChatContext = (chatHistory: ChatMessage[], contextSize: number) => {
   const lastUserMessageIndex = chatHistory.slice().reverse().findIndex(msg => msg.sender === USER_SENDER);
 
