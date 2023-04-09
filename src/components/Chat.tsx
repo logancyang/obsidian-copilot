@@ -4,7 +4,7 @@ import { USER_SENDER, AI_SENDER } from '@/constants';
 import {
   BotIcon, RefreshIcon, SaveAsNoteIcon, UseActiveNoteAsContextIcon
 } from '@/components/Icons';
-import { OpenAIStream } from '@/openAiStream';
+import { OpenAIStream, Role } from '@/openAiStream';
 import ChatMessageComponent from '@/components/ChatMessageComponent';
 import ReactMarkdown from '@/components/Markdown/MemoizedReactMarkdown';
 import { getChatContext } from '@/utils';
@@ -69,20 +69,24 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
     setInputMessage('');
 
     // The number of past messages to use as context for the AI
-    // Increase this number later as needed
-    const chatContext = getChatContext([...chatHistory, userMessage], 5);
+    // Use a even number. Increase this number later as needed
+    const chatContext = getChatContext(chatHistory, 4);
 
     // Use OpenAIStream to send message to AI and get a response
     try {
       const stream = await OpenAIStream(
         currentModel,
         apiKey,
-        chatContext.map((chatMessage) => {
-          return {
-            role: chatMessage.sender === USER_SENDER ? 'user' : 'assistant',
-            content: chatMessage.message,
-          };
-        }),
+        [
+          ...chatContext.map((chatMessage) => {
+            return {
+              role: chatMessage.sender === USER_SENDER
+                ? 'user' as Role : 'assistant' as Role,
+              content: chatMessage.message,
+            };
+          }),
+          { role: 'user', content: userMessage.message },
+        ],
       );
       const reader = stream.getReader();
       const decoder = new TextDecoder();
