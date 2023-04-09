@@ -7,6 +7,7 @@ import {
 import { OpenAIStream } from '@/openAiStream';
 import ChatMessageComponent from '@/components/ChatMessageComponent';
 import ReactMarkdown from '@/components/Markdown/MemoizedReactMarkdown';
+import { getChatContext } from '@/utils';
 
 
 interface ChatProps {
@@ -180,21 +181,6 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
       </div>
     </div>
   );
-};
-
-// Returns the last N messages from the chat history, last one being the new user message
-const getChatContext = (chatHistory: ChatMessage[], contextSize: number) => {
-  const lastUserMessageIndex = chatHistory.slice().reverse().findIndex(msg => msg.sender === USER_SENDER);
-
-  if (lastUserMessageIndex === -1) {
-    // No user messages found, return an empty array
-    return [];
-  }
-
-  const lastIndex = chatHistory.length - lastUserMessageIndex - 1;
-  const startIndex = Math.max(0, lastIndex - contextSize + 1);
-
-  return chatHistory.slice(startIndex, lastIndex + 1);
 };
 
 export default Chat;
