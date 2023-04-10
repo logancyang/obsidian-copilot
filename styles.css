@@ -156,7 +156,8 @@ If your plugin does not need CSS, delete this file.
   white-space: pre-wrap;
   line-height: 1.5;
   grid-area: content;
-  max-width: 95%;
+  max-width: 100%;
+  word-break: break-word;
 }
 
 .copy-message-button {
@@ -175,25 +176,28 @@ If your plugin does not need CSS, delete this file.
 pre, p {
   margin: 0;
   padding: 0;
+  display: inline;
 }
 
 ol, ul {
   list-style: none;
-  padding: 0;
+  padding-left: 20px;
   margin: 0;
 }
 
 li {
   margin: 0;
-  padding: 0;
-  display: flex;
-  align-items: flex-start;
+  width: 100%;
+  display: inline-block;
+  position: relative;
 }
 
 li::before {
   content: counter(list-item, decimal) ".";
   counter-increment: list-item;
-  margin-right: 8px;
+  position: absolute;
+  left: -20px;
+  top: 21px;
 }
 
 li p {
