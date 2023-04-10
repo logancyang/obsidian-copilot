@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { ChatMessage } from '@/sharedState';
-import ChatMessageComponent from '@/components/ChatComponents/ChatMessageComponent';
+import ChatSingleMessage from '@/components/ChatComponents/ChatSingleMessage';
 import ReactMarkdown from '@/components/Markdown/MemoizedReactMarkdown';
 import { BotIcon } from '@/components/Icons';
 
@@ -17,14 +17,12 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({ chatHistory, currentAiMessa
     }
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [chatHistory]);
+  useEffect(() => {scrollToBottom()}, [chatHistory]);
 
   return (
     <div className="chat-messages">
       {chatHistory.map((message, index) => (
-        <ChatMessageComponent key={index} message={message} />
+        <ChatSingleMessage key={index} message={message} />
       ))}
       {currentAiMessage && (
         <div className="message bot-message">

@@ -5,11 +5,11 @@ import { UserIcon, BotIcon, CopyClipboardIcon, CheckIcon } from '@/components/Ic
 import ReactMarkdown from '@/components/Markdown/MemoizedReactMarkdown';
 
 
-interface ChatMessageComponentProps {
+interface ChatSingleMessageProps {
   message: ChatMessage;
 }
 
-const ChatMessageComponent: React.FC<ChatMessageComponentProps> = ({ message }) => {
+const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({ message }) => {
   const [isCopied, setIsCopied] = useState<boolean>(false);
 
   const copyToClipboard = () => {
@@ -51,4 +51,4 @@ const ChatMessageComponent: React.FC<ChatMessageComponentProps> = ({ message }) 
   );
 };
 
-export default ChatMessageComponent;
+export default ChatSingleMessage;
