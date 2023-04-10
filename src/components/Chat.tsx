@@ -1,12 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
 import { USER_SENDER, AI_SENDER } from '@/constants';
-import {
-  BotIcon, RefreshIcon, SaveAsNoteIcon, UseActiveNoteAsContextIcon
-} from '@/components/Icons';
 import { OpenAIStream, Role } from '@/openAiStream';
-import ChatMessageComponent from '@/components/ChatMessageComponent';
-import ReactMarkdown from '@/components/Markdown/MemoizedReactMarkdown';
+import ChatMessages from '@/components/ChatComponents/ChatMessages';
+import ChatIcons from '@/components/ChatComponents/ChatIcons';
+import ChatInput from '@/components/ChatComponents/ChatInput';
 import { getChatContext } from '@/utils';
 
 
@@ -21,38 +19,6 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
   const [inputMessage, setInputMessage] = useState('');
   const [currentAiMessage, setCurrentAiMessage] = useState('');
   const [currentModel, setCurrentModel] = useState(model);
-  const [rows, setRows] = useState(1);
-
-  const handleModelChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    setCurrentModel(event.target.value);
-  };
-
-  const updateRows = (text: string) => {
-    const lineHeight = 20; // Adjust this value based on CSS line-height
-    const maxHeight = 200; // Match this to the max-height value in CSS
-    const minRows = 1;
-
-    const rowsNeeded = Math.min(
-      Math.max(text.split('\n').length, minRows), Math.floor(maxHeight / lineHeight)
-    );
-    setRows(rowsNeeded);
-  };
-
-  const scrollToBottom = () => {
-    const chatMessagesContainer = document.querySelector('.chat-messages');
-    if (chatMessagesContainer) {
-      chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
-    }
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [chatHistory]);
-
-  const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInputMessage(event.target.value);
-    updateRows(event.target.value);
-  };
 
   const handleSendMessage = async () => {
     if (!inputMessage) return;
@@ -127,61 +93,15 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
 
   return (
     <div className="chat-container">
-      <div className="chat-messages">
-        {chatHistory.map((message, index) => (
-          <ChatMessageComponent key={index} message={message} />
-        ))}
-        {currentAiMessage && (
-          <div className="message bot-message">
-            <div className="message-icon">
-              <BotIcon />
-            </div>
-            <div className="message-content">
-              <ReactMarkdown>{currentAiMessage}</ReactMarkdown>
-            </div>
-          </div>
-        )}
-      </div>
+      <ChatMessages chatHistory={chatHistory} currentAiMessage={currentAiMessage} />
       <div className='bottom-container'>
-        <div className='chat-icons-container'>
-          <div className="chat-icon-selection-tooltip">
-            <div className="select-wrapper">
-              <select
-                id="aiModelSelect"
-                className='chat-icon-selection'
-                value={currentModel}
-                onChange={handleModelChange}
-              >
-                <option value='gpt-3.5-turbo'>GPT-3.5</option>
-                <option value='gpt-4'>GPT-4</option>
-              </select>
-              <span className="tooltip-text">Model Selection</span>
-            </div>
-          </div>
-          <button className='chat-icon-button'>
-            <RefreshIcon className='icon-scaler' />
-            <span className="tooltip-text">New Chat<br/>(unsaved history will be lost)</span>
-          </button>
-          <button className='chat-icon-button'>
-            <SaveAsNoteIcon className='icon-scaler' />
-            <span className="tooltip-text">Save as Note</span>
-          </button>
-          <button className='chat-icon-button'>
-            <UseActiveNoteAsContextIcon className='icon-scaler' />
-            <span className="tooltip-text">Use Active Note as Context</span>
-          </button>
-        </div>
-        <div className="chat-input-container">
-          <textarea
-            className="chat-input-textarea"
-            placeholder="Enter your message here..."
-            value={inputMessage}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            rows={rows}
-          />
-          <button onClick={handleSendMessage}>Send</button>
-        </div>
+        <ChatIcons currentModel={currentModel} setCurrentModel={setCurrentModel} />
+        <ChatInput
+          inputMessage={inputMessage}
+          setInputMessage={setInputMessage}
+          handleSendMessage={handleSendMessage}
+          handleKeyDown={handleKeyDown}
+        />
       </div>
     </div>
   );
