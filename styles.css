@@ -188,7 +188,8 @@ ol, ul {
 li {
   margin: 0;
   width: 100%;
-  display: inline-block;
+  padding-left: 10px;
+  display: inline;
   position: relative;
 }
 
@@ -197,12 +198,6 @@ li::before {
   counter-increment: list-item;
   position: absolute;
   left: -20px;
-  top: 21px;
-}
-
-li p {
-  margin: 0;
-  padding: 0;
 }
 
 .user-message {
