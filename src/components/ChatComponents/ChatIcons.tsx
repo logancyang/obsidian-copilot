@@ -5,15 +5,17 @@ interface ChatIconsProps {
   currentModel: string;
   setCurrentModel: (model: string) => void;
   onNewChat: () => void;
+  onSaveAsNote: () => void;
 }
 
-const ChatIcons: React.FC<ChatIconsProps> = ({ currentModel, setCurrentModel, onNewChat }) => {
+const ChatIcons: React.FC<ChatIconsProps> = ({
+  currentModel,
+  setCurrentModel,
+  onNewChat,
+  onSaveAsNote
+}) => {
   const handleModelChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setCurrentModel(event.target.value);
-  };
-
-  const handleSaveAsNote = () => {
-    console.log('Save as note button clicked');
   };
 
   const handleUseActiveNoteAsContext = () => {
@@ -40,7 +42,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({ currentModel, setCurrentModel, on
         <RefreshIcon className='icon-scaler' />
         <span className="tooltip-text">New Chat<br/>(unsaved history will be lost)</span>
       </button>
-      <button className='chat-icon-button' onClick={handleSaveAsNote}>
+      <button className='chat-icon-button' onClick={onSaveAsNote}>
         <SaveAsNoteIcon className='icon-scaler' />
         <span className="tooltip-text">Save as Note</span>
       </button>

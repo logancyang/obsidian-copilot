@@ -1,4 +1,4 @@
-import { getChatContext } from '@/utils';
+import { getChatContext, formatDateTime } from '@/utils';
 import { ChatMessage } from '@/sharedState';
 import { USER_SENDER, AI_SENDER } from '@/constants';
 
@@ -87,3 +87,18 @@ describe('getChatContext', () => {
     ]);
   });
 });
+
+describe('formatDateTime', () => {
+  it('formats the date correctly', () => {
+    const now = new Date('2023-04-11T15:30:45Z');
+    const formattedDate = formatDateTime(now, 'utc');
+    expect(formattedDate).toBe('2023_04_11-15_30_45');
+  });
+
+  it('pads single-digit month, date, hours, minutes, and seconds with zeros', () => {
+    const now = new Date('2023-01-01T01:01:01Z');
+    const formattedDate = formatDateTime(now, 'utc');
+    expect(formattedDate).toBe('2023_01_01-01_01_01');
+  });
+});
+

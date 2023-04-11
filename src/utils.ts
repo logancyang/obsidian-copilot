@@ -17,3 +17,22 @@ export const getChatContext = (chatHistory: ChatMessage[], contextSize: number) 
   const startIndex = Math.max(0, lastIndex - contextSize + 1);
   return chatHistory.slice(startIndex, lastIndex + 1);
 };
+
+export const formatDateTime = (now: Date, timezone: 'local' | 'utc' = 'local') => {
+  const get = (method: string) => {
+    if (timezone === 'utc') {
+      return (now as any)[`getUTC${method}`]();
+    }
+    return (now as any)[`get${method}`]();
+  };
+
+  return [
+    get('FullYear'),
+    (get('Month') + 1).toString().padStart(2, '0'),
+    get('Date').toString().padStart(2, '0'),
+  ].join('_') + '-' + [
+    get('Hours').toString().padStart(2, '0'),
+    get('Minutes').toString().padStart(2, '0'),
+    get('Seconds').toString().padStart(2, '0'),
+  ].join('_');
+};

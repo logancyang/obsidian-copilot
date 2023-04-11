@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
+import { AppContext } from '@/context';
 import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
 import { USER_SENDER, AI_SENDER } from '@/constants';
 import { OpenAIStream, Role } from '@/openAiStream';
+import { TFile } from 'obsidian';
 import ChatMessages from '@/components/ChatComponents/ChatMessages';
 import ChatIcons from '@/components/ChatComponents/ChatIcons';
 import ChatInput from '@/components/ChatComponents/ChatInput';
-import { getChatContext } from '@/utils';
+import { getChatContext, formatDateTime } from '@/utils';
 
 
 interface ChatProps {
@@ -21,6 +23,7 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
   const [inputMessage, setInputMessage] = useState('');
   const [currentAiMessage, setCurrentAiMessage] = useState('');
   const [currentModel, setCurrentModel] = useState(model);
+  const app = useContext(AppContext);
 
   const handleSendMessage = async () => {
     if (!inputMessage) return;
@@ -93,6 +96,25 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
     }
   };
 
+  const handleSaveAsNote = async () => {
+    if (!app) {
+      console.error('App instance is not available.');
+      return;
+    }
+    // Save the chat history as a new note in the vault
+    const chatContent = chatHistory.map((message) => `**${message.sender}**: ${message.message}`).join('\n\n');
+
+    try {
+      const now = new Date();
+      const noteFileName = `Chat-${formatDateTime(now)}.md`;
+      const newNote: TFile = await app.vault.create(noteFileName, chatContent);
+      const leaf = app.workspace.getLeaf();
+      leaf.openFile(newNote);
+    } catch (error) {
+      console.error('Error saving chat as note:', error);
+    }
+  };
+
   return (
     <div className="chat-container">
       <ChatMessages chatHistory={chatHistory} currentAiMessage={currentAiMessage} />
@@ -101,6 +123,7 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
           currentModel={currentModel}
           setCurrentModel={setCurrentModel}
           onNewChat={clearMessages}
+          onSaveAsNote={handleSaveAsNote}
         />
         <ChatInput
           inputMessage={inputMessage}
