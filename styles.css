@@ -160,23 +160,9 @@ If your plugin does not need CSS, delete this file.
   word-break: break-word;
 }
 
-.copy-message-button {
-  width: 24px;
-  height: 24px;
-  padding: 4px;
-  font-size: 12px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
 pre, p {
   margin: 0;
   padding: 0;
-  display: inline;
 }
 
 ol, ul {
@@ -198,6 +184,29 @@ li::before {
   counter-increment: list-item;
   position: absolute;
   left: -20px;
+}
+
+li:has(> p) {
+    display: flex;
+    flex-direction: column;
+}
+
+li:has(> p)::before {
+    align-self: flex-start;
+    margin-top: 0; /* Adjust this value to align the pseudo-element vertically */
+}
+
+.copy-message-button {
+  width: 24px;
+  height: 24px;
+  padding: 4px;
+  font-size: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
 }
 
 .user-message {
