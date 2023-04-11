@@ -156,7 +156,7 @@ If your plugin does not need CSS, delete this file.
   white-space: pre-wrap;
   line-height: 1.5;
   grid-area: content;
-  max-width: 100%;
+  max-width: 95%;
   word-break: break-word;
 }
 
