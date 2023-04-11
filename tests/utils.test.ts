@@ -1,4 +1,6 @@
-import { getChatContext, formatDateTime } from '@/utils';
+import {
+  getChatContext, formatDateTime,
+} from '@/utils';
 import { ChatMessage } from '@/sharedState';
 import { USER_SENDER, AI_SENDER } from '@/constants';
 

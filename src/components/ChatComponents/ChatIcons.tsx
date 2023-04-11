@@ -6,20 +6,18 @@ interface ChatIconsProps {
   setCurrentModel: (model: string) => void;
   onNewChat: () => void;
   onSaveAsNote: () => void;
+  onUseActiveNoteAsContext: () => void;
 }
 
 const ChatIcons: React.FC<ChatIconsProps> = ({
   currentModel,
   setCurrentModel,
   onNewChat,
-  onSaveAsNote
+  onSaveAsNote,
+  onUseActiveNoteAsContext,
 }) => {
   const handleModelChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setCurrentModel(event.target.value);
-  };
-
-  const handleUseActiveNoteAsContext = () => {
-    console.log('Use active note as context button clicked');
   };
 
   return (
@@ -46,7 +44,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         <SaveAsNoteIcon className='icon-scaler' />
         <span className="tooltip-text">Save as Note</span>
       </button>
-      <button className='chat-icon-button' onClick={handleUseActiveNoteAsContext}>
+      <button className='chat-icon-button' onClick={onUseActiveNoteAsContext}>
         <UseActiveNoteAsContextIcon className='icon-scaler' />
         <span className="tooltip-text">Use Active Note as Context</span>
       </button>

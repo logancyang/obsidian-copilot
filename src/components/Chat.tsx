@@ -1,13 +1,13 @@
 import React, { useState, useContext } from 'react';
 import { AppContext } from '@/context';
 import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
-import { USER_SENDER, AI_SENDER } from '@/constants';
+import { USER_SENDER, AI_SENDER, USE_NOTE_AS_CONTEXT_PROMPT } from '@/constants';
 import { OpenAIStream, Role } from '@/openAiStream';
 import { TFile } from 'obsidian';
 import ChatMessages from '@/components/ChatComponents/ChatMessages';
 import ChatIcons from '@/components/ChatComponents/ChatIcons';
 import ChatInput from '@/components/ChatComponents/ChatInput';
-import { getChatContext, formatDateTime } from '@/utils';
+import { getChatContext, formatDateTime, getFileContent } from '@/utils';
 
 
 interface ChatProps {
@@ -25,23 +25,10 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
   const [currentModel, setCurrentModel] = useState(model);
   const app = useContext(AppContext);
 
-  const handleSendMessage = async () => {
-    if (!inputMessage) return;
-
-    const userMessage: ChatMessage = {
-      message: inputMessage,
-      sender: USER_SENDER,
-    };
-
-    // Add user message to chat history
-    addMessage(userMessage);
-
-    // Clear input
-    setInputMessage('');
-
+  const sendMessageToAIAndStreamResponse = async (userMessage: ChatMessage) => {
     // The number of past messages to use as context for the AI
     // Use a even number. Increase this number later as needed
-    const chatContext = getChatContext(chatHistory, 4);
+    const chatContext = getChatContext(chatHistory, 8);
 
     // Use OpenAIStream to send message to AI and get a response
     try {
@@ -89,6 +76,22 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
     }
   };
 
+  const handleSendMessage = async () => {
+    if (!inputMessage) return;
+
+    const userMessage: ChatMessage = {
+      message: inputMessage,
+      sender: USER_SENDER,
+    };
+
+    // Add user message to chat history
+    addMessage(userMessage);
+
+    // Clear input
+    setInputMessage('');
+    await sendMessageToAIAndStreamResponse(userMessage);
+  };
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault(); // Prevents adding a newline to the textarea
@@ -115,6 +118,29 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
     }
   };
 
+  const useActiveNoteAsContext = async () => {
+    console.log('Use active note as context button clicked');
+    if (!app) {
+      console.error('App instance is not available.');
+      return;
+    }
+
+    const file = app.workspace.getActiveFile();
+    if (!file) {
+      console.error('No active note found.');
+      return;
+    }
+    const noteContent = await getFileContent(file);
+
+    // Set the context based on the noteContent
+    const prompt = USE_NOTE_AS_CONTEXT_PROMPT + noteContent;
+
+    // Send the prompt as a user message
+    const promptMessage: ChatMessage = { sender: USER_SENDER, message: prompt };
+    addMessage(promptMessage);
+    await sendMessageToAIAndStreamResponse(promptMessage);
+  };
+
   return (
     <div className="chat-container">
       <ChatMessages chatHistory={chatHistory} currentAiMessage={currentAiMessage} />
@@ -124,6 +150,7 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
           setCurrentModel={setCurrentModel}
           onNewChat={clearMessages}
           onSaveAsNote={handleSaveAsNote}
+          onUseActiveNoteAsContext={useActiveNoteAsContext}
         />
         <ChatInput
           inputMessage={inputMessage}

@@ -1,5 +1,6 @@
 import { ChatMessage } from '@/sharedState';
 import { USER_SENDER } from '@/constants';
+import { TFile } from 'obsidian';
 
 // Returns the last N messages from the chat history,
 // last one being the newest ai message
@@ -36,3 +37,8 @@ export const formatDateTime = (now: Date, timezone: 'local' | 'utc' = 'local') =
     get('Seconds').toString().padStart(2, '0'),
   ].join('_');
 };
+
+export async function getFileContent(file: TFile): Promise<string | null> {
+  if (file.extension != "md") return null;
+  return await this.app.vault.read(file);
+}
