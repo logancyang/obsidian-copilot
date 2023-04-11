@@ -15,13 +15,21 @@ class SharedState {
   getMessages(): ChatMessage[] {
     return this.chatHistory;
   }
+
+  clearChatHistory(): void {
+    this.chatHistory = [];
+  }
 }
 
 export default SharedState;
 
 export function useSharedState(
   sharedState: SharedState
-): [ChatMessage[], (message: ChatMessage) => void] {
+): [
+  ChatMessage[],
+  (message: ChatMessage) => void,
+  () => void
+] {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>(
     sharedState.getMessages()
   );
@@ -35,5 +43,14 @@ export function useSharedState(
     setChatHistory([...sharedState.getMessages()]);
   };
 
-  return [chatHistory, addMessage];
+  const clearMessages = () => {
+    sharedState.clearChatHistory();
+    setChatHistory([]);
+  };
+
+  return [
+    chatHistory,
+    addMessage,
+    clearMessages,
+  ];
 }

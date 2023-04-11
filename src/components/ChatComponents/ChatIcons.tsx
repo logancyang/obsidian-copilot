@@ -4,16 +4,12 @@ import { RefreshIcon, SaveAsNoteIcon, UseActiveNoteAsContextIcon } from '@/compo
 interface ChatIconsProps {
   currentModel: string;
   setCurrentModel: (model: string) => void;
+  onNewChat: () => void;
 }
 
-const ChatIcons: React.FC<ChatIconsProps> = ({ currentModel, setCurrentModel }) => {
+const ChatIcons: React.FC<ChatIconsProps> = ({ currentModel, setCurrentModel, onNewChat }) => {
   const handleModelChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setCurrentModel(event.target.value);
-  };
-
-  // TODO: Add these functions
-  const handleNewChat = () => {
-    console.log('New chat button clicked');
   };
 
   const handleSaveAsNote = () => {
@@ -40,7 +36,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({ currentModel, setCurrentModel }) 
           <span className="tooltip-text">Model Selection</span>
         </div>
       </div>
-      <button className='chat-icon-button' onClick={handleNewChat}>
+      <button className='chat-icon-button' onClick={onNewChat}>
         <RefreshIcon className='icon-scaler' />
         <span className="tooltip-text">New Chat<br/>(unsaved history will be lost)</span>
       </button>

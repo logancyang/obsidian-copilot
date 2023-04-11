@@ -15,7 +15,9 @@ interface ChatProps {
 }
 
 const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
-  const [chatHistory, addMessage] = useSharedState(sharedState);
+  const [
+    chatHistory, addMessage, clearMessages
+  ] = useSharedState(sharedState);
   const [inputMessage, setInputMessage] = useState('');
   const [currentAiMessage, setCurrentAiMessage] = useState('');
   const [currentModel, setCurrentModel] = useState(model);
@@ -95,7 +97,11 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
     <div className="chat-container">
       <ChatMessages chatHistory={chatHistory} currentAiMessage={currentAiMessage} />
       <div className='bottom-container'>
-        <ChatIcons currentModel={currentModel} setCurrentModel={setCurrentModel} />
+        <ChatIcons
+          currentModel={currentModel}
+          setCurrentModel={setCurrentModel}
+          onNewChat={clearMessages}
+        />
         <ChatInput
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}
