@@ -31,6 +31,7 @@ export const OpenAIStream = async (
   messages: OpenAiMessage[],
   temperature: number,
   maxTokens: number,
+  signal: AbortSignal,
 ) => {
   const res = await fetch(`https://api.openai.com/v1/chat/completions`, {
     headers: {
@@ -54,6 +55,7 @@ export const OpenAIStream = async (
       temperature: temperature,
       stream: true,
     }),
+    signal,
   });
 
   const encoder = new TextEncoder();

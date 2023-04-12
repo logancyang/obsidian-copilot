@@ -1,9 +1,12 @@
 import React from 'react';
-import { RefreshIcon, SaveAsNoteIcon, UseActiveNoteAsContextIcon } from '@/components/Icons';
+import {
+  StopIcon, RefreshIcon, SaveAsNoteIcon, UseActiveNoteAsContextIcon
+} from '@/components/Icons';
 
 interface ChatIconsProps {
   currentModel: string;
   setCurrentModel: (model: string) => void;
+  onStopGenerating: () => void;
   onNewChat: () => void;
   onSaveAsNote: () => void;
   onUseActiveNoteAsContext: () => void;
@@ -12,6 +15,7 @@ interface ChatIconsProps {
 const ChatIcons: React.FC<ChatIconsProps> = ({
   currentModel,
   setCurrentModel,
+  onStopGenerating,
   onNewChat,
   onSaveAsNote,
   onUseActiveNoteAsContext,
@@ -36,6 +40,10 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           <span className="tooltip-text">Model Selection</span>
         </div>
       </div>
+      <button className='chat-icon-button' onClick={onStopGenerating}>
+        <StopIcon className='icon-scaler' />
+        <span className="tooltip-text">Stop Generating</span>
+      </button>
       <button className='chat-icon-button' onClick={onNewChat}>
         <RefreshIcon className='icon-scaler' />
         <span className="tooltip-text">New Chat<br/>(unsaved history will be lost)</span>

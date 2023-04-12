@@ -29,6 +29,8 @@ const Chat: React.FC<ChatProps> = ({ sharedState, settings, model }) => {
   const [inputMessage, setInputMessage] = useState('');
   const [currentAiMessage, setCurrentAiMessage] = useState('');
   const [currentModel, setCurrentModel] = useState(model);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
+
   const app = useContext(AppContext);
   const {
     openAiApiKey,
@@ -44,6 +46,9 @@ const Chat: React.FC<ChatProps> = ({ sharedState, settings, model }) => {
 
     // Use OpenAIStream to send message to AI and get a response
     try {
+      const controller = new AbortController();
+      setAbortController(controller);
+
       const stream = await OpenAIStream(
         currentModel,
         openAiApiKey,
@@ -59,6 +64,7 @@ const Chat: React.FC<ChatProps> = ({ sharedState, settings, model }) => {
         ],
         Number(temperature),
         Number(maxTokens),
+        controller.signal,
       );
       const reader = stream.getReader();
       const decoder = new TextDecoder();
@@ -154,6 +160,13 @@ const Chat: React.FC<ChatProps> = ({ sharedState, settings, model }) => {
     await sendMessageToAIAndStreamResponse(promptMessage);
   };
 
+  const handleStopGenerating = () => {
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+    }
+  };
+
   return (
     <div className="chat-container">
       <ChatMessages chatHistory={chatHistory} currentAiMessage={currentAiMessage} />
@@ -161,6 +174,7 @@ const Chat: React.FC<ChatProps> = ({ sharedState, settings, model }) => {
         <ChatIcons
           currentModel={currentModel}
           setCurrentModel={setCurrentModel}
+          onStopGenerating={handleStopGenerating}
           onNewChat={clearMessages}
           onSaveAsNote={handleSaveAsNote}
           onUseActiveNoteAsContext={useActiveNoteAsContext}
