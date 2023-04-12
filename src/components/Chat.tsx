@@ -7,16 +7,22 @@ import { TFile } from 'obsidian';
 import ChatMessages from '@/components/ChatComponents/ChatMessages';
 import ChatIcons from '@/components/ChatComponents/ChatIcons';
 import ChatInput from '@/components/ChatComponents/ChatInput';
-import { getChatContext, formatDateTime, getFileContent } from '@/utils';
+import {
+  getChatContext,
+  formatDateTime,
+  getFileContent,
+  sanitizeSettings
+} from '@/utils';
+import { CopilotSettings } from '@/main';
 
 
 interface ChatProps {
   sharedState: SharedState;
-  apiKey: string;
+  settings: CopilotSettings;
   model: string;
 }
 
-const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
+const Chat: React.FC<ChatProps> = ({ sharedState, settings, model }) => {
   const [
     chatHistory, addMessage, clearMessages
   ] = useSharedState(sharedState);
@@ -24,17 +30,23 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
   const [currentAiMessage, setCurrentAiMessage] = useState('');
   const [currentModel, setCurrentModel] = useState(model);
   const app = useContext(AppContext);
+  const {
+    openAiApiKey,
+    temperature,
+    maxTokens,
+    contextTurns,
+  } = sanitizeSettings(settings);
 
   const sendMessageToAIAndStreamResponse = async (userMessage: ChatMessage) => {
-    // The number of past messages to use as context for the AI
-    // Use a even number. Increase this number later as needed
-    const chatContext = getChatContext(chatHistory, 8);
+    // The number of past conversation turns to use as context for the AI
+    // The number of messages is doubled.
+    const chatContext = getChatContext(chatHistory, Number(contextTurns)*2);
 
     // Use OpenAIStream to send message to AI and get a response
     try {
       const stream = await OpenAIStream(
         currentModel,
-        apiKey,
+        openAiApiKey,
         [
           ...chatContext.map((chatMessage) => {
             return {
@@ -45,6 +57,8 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
           }),
           { role: 'user', content: userMessage.message },
         ],
+        Number(temperature),
+        Number(maxTokens),
       );
       const reader = stream.getReader();
       const decoder = new TextDecoder();
@@ -119,7 +133,6 @@ const Chat: React.FC<ChatProps> = ({ sharedState, apiKey, model }) => {
   };
 
   const useActiveNoteAsContext = async () => {
-    console.log('Use active note as context button clicked');
     if (!app) {
       console.error('App instance is not available.');
       return;

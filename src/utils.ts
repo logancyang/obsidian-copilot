@@ -1,6 +1,7 @@
 import { ChatMessage } from '@/sharedState';
-import { USER_SENDER } from '@/constants';
+import { USER_SENDER, DEFAULT_SETTINGS } from '@/constants';
 import { TFile } from 'obsidian';
+import { CopilotSettings } from '@/main';
 
 // Returns the last N messages from the chat history,
 // last one being the newest ai message
@@ -41,4 +42,21 @@ export const formatDateTime = (now: Date, timezone: 'local' | 'utc' = 'local') =
 export async function getFileContent(file: TFile): Promise<string | null> {
   if (file.extension != "md") return null;
   return await this.app.vault.read(file);
+}
+
+export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
+  const sanitizedSettings: CopilotSettings = { ...settings };
+  sanitizedSettings.temperature = isNaN(parseFloat(settings.temperature))
+    ? DEFAULT_SETTINGS.temperature
+    : settings.temperature;
+
+  sanitizedSettings.maxTokens = isNaN(parseFloat(settings.maxTokens))
+    ? DEFAULT_SETTINGS.maxTokens
+    : settings.maxTokens;
+
+  sanitizedSettings.contextTurns = isNaN(parseFloat(settings.contextTurns))
+    ? DEFAULT_SETTINGS.contextTurns
+    : settings.contextTurns;
+
+  return sanitizedSettings;
 }

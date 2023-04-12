@@ -2,17 +2,15 @@ import { Plugin, WorkspaceLeaf } from 'obsidian';
 import { CopilotSettingTab } from '@/settings';
 import SharedState from '@/sharedState';
 import CopilotView from '@/components/CopilotView';
-import { CHAT_VIEWTYPE } from '@/constants';
+import { CHAT_VIEWTYPE, DEFAULT_SETTINGS } from '@/constants';
 
 
 export interface CopilotSettings {
   openAiApiKey: string;
   defaultModel: string;
-}
-
-const DEFAULT_SETTINGS: Partial<CopilotSettings> = {
-  openAiApiKey: '',
-  defaultModel: 'gpt-3.5-turbo',
+  temperature: string;
+  maxTokens: string;
+  contextTurns: string;
 }
 
 export default class CopilotPlugin extends Plugin {

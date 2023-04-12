@@ -47,7 +47,7 @@ export default class CopilotView extends ItemView {
         <React.StrictMode>
           <Chat
             sharedState={this.sharedState}
-            apiKey={this.settings.openAiApiKey}
+            settings={this.settings}
             model={this.model}
           />
         </React.StrictMode>

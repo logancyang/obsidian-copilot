@@ -1,8 +1,9 @@
 import {
-  getChatContext, formatDateTime,
+  getChatContext, formatDateTime, sanitizeSettings,
 } from '@/utils';
+import { CopilotSettings } from '@/main';
 import { ChatMessage } from '@/sharedState';
-import { USER_SENDER, AI_SENDER } from '@/constants';
+import { USER_SENDER, AI_SENDER, DEFAULT_SETTINGS } from '@/constants';
 
 describe('getChatContext', () => {
   const userMessage0: ChatMessage = {
@@ -103,4 +104,50 @@ describe('formatDateTime', () => {
     expect(formattedDate).toBe('2023_01_01-01_01_01');
   });
 });
+
+describe('sanitizeSettings', () => {
+  const validSettings: CopilotSettings = DEFAULT_SETTINGS;
+
+  test('returns valid settings unchanged', () => {
+    const result = sanitizeSettings(validSettings);
+    expect(result).toEqual(validSettings);
+  });
+
+  test('sanitizes invalid temperature', () => {
+    const invalidSettings: CopilotSettings = { ...validSettings, temperature: 'invalid' };
+    const result = sanitizeSettings(invalidSettings);
+    expect(result.temperature).toBe('0.7');
+  });
+
+  test('sanitizes empty temperature', () => {
+    const invalidSettings: CopilotSettings = { ...validSettings, temperature: '' };
+    const result = sanitizeSettings(invalidSettings);
+    expect(result.temperature).toBe('0.7');
+  });
+
+  test('sanitizes invalid maxTokens', () => {
+    const invalidSettings: CopilotSettings = { ...validSettings, maxTokens: 'invalid' };
+    const result = sanitizeSettings(invalidSettings);
+    expect(result.maxTokens).toBe('1000');
+  });
+
+  test('sanitizes empty maxTokens', () => {
+    const invalidSettings: CopilotSettings = { ...validSettings, maxTokens: '' };
+    const result = sanitizeSettings(invalidSettings);
+    expect(result.maxTokens).toBe('1000');
+  });
+
+  test('sanitizes invalid contextTurns', () => {
+    const invalidSettings: CopilotSettings = { ...validSettings, contextTurns: 'invalid' };
+    const result = sanitizeSettings(invalidSettings);
+    expect(result.contextTurns).toBe('3');
+  });
+
+  test('sanitizes empty contextTurns', () => {
+    const invalidSettings: CopilotSettings = { ...validSettings, contextTurns: '' };
+    const result = sanitizeSettings(invalidSettings);
+    expect(result.contextTurns).toBe('3');
+  });
+});
+
 
