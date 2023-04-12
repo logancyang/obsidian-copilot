@@ -72,7 +72,7 @@ export function useNoteAsContextPrompt(
   return `Please answer questions only based on the note below. `
     + `If there's no information about a certain topic, just say the note `
     + `does not mention it. If you understand, please reply with the following word for word:`
-    + `"OK I've read this note titled ${noteName}. `
+    + `"OK I've read this note titled [[${noteName}]]. `
     + `Feel free to ask related questions, such as 'give me a summary of this note in bulletpoints', 'what key questions does it answer', etc. "\n`
     + `Here's the content of the note:\n\n${noteContent}`;
 }

@@ -2,6 +2,7 @@
 - ChatGPT integration in Obsidian.
 - Turbocharge your Second Brain with AI.
 - Talk to your past notes for insights.
+
 Take your note-taking game to the next level with the Obsidian Copilot Plugin!
 
 ## Features
@@ -28,7 +29,7 @@ Take your note-taking game to the next level with the Obsidian Copilot Plugin!
 - "**Use Active Note as Context**" does not support super long notes yet since the OpenAI API has a limited context length (currently about 4K, 8K, or 32K tokens depending on the model you use). In the future I'm considering supporting very long notes / a folder of notes / the entire vault as context if there is enough demand.
 - You can set a very long context in the setting "**Conversation turns in context**" if needed.
 
-**Again, please always be mindful of the API cost if you use GPT-4 with a long context!**
+### Again, please always be mindful of the API cost if you use GPT-4 with a long context!
 
 ## Demo
 (add gifs)
