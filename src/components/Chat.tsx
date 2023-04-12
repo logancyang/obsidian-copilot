@@ -1,7 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { AppContext } from '@/context';
 import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
-import { USER_SENDER, AI_SENDER, USE_NOTE_AS_CONTEXT_PROMPT } from '@/constants';
+import { USER_SENDER, AI_SENDER } from '@/constants';
 import { OpenAIStream, Role } from '@/openAiStream';
 import { TFile } from 'obsidian';
 import ChatMessages from '@/components/ChatComponents/ChatMessages';
@@ -11,7 +11,9 @@ import {
   getChatContext,
   formatDateTime,
   getFileContent,
-  sanitizeSettings
+  getFileName,
+  sanitizeSettings,
+  useNoteAsContextPrompt,
 } from '@/utils';
 import { CopilotSettings } from '@/main';
 
@@ -150,13 +152,14 @@ const Chat: React.FC<ChatProps> = ({ sharedState, settings, model }) => {
       return;
     }
     const noteContent = await getFileContent(file);
+    const noteName = getFileName(file);
 
     // Set the context based on the noteContent
-    const prompt = USE_NOTE_AS_CONTEXT_PROMPT + noteContent;
+    const prompt = useNoteAsContextPrompt(noteName, noteContent);
 
     // Send the prompt as a user message
     const promptMessage: ChatMessage = { sender: USER_SENDER, message: prompt };
-    addMessage(promptMessage);
+    // Skip adding promptMessage to chat history to hide it from the user
     await sendMessageToAIAndStreamResponse(promptMessage);
   };
 
