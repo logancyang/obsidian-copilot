@@ -47,7 +47,7 @@ export const OpenAIStream = async (
       messages: [
         {
           role: 'system',
-          content: 'You are a helpful assistant.',
+          content: 'You are a helpful assistant named Obsidian Copilot.',
         },
         ...messages,
       ],
