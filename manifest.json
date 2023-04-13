@@ -1,11 +1,11 @@
 {
   "id": "obsidian-copilot",
   "name": "Obsidian Copilot",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minAppVersion": "0.15.0",
-  "description": "A ChatGPT copilot in Obsidian.",
+  "description": "A ChatGPT Copilot in Obsidian.",
   "author": "Logan Yang",
-  "authorUrl": "https://logancyang.com",
+  "authorUrl": "https://twitter.com/logancyang",
   "fundingUrl": {
     "Buy Me a Coffee": "https://www.buymeacoffee.com/logancyang",
     "GitHub Sponsor": "https://github.com/sponsors/logancyang"
