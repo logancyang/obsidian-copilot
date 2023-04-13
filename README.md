@@ -5,6 +5,8 @@
 
 Take your note-taking game to the next level with the Obsidian Copilot Plugin!
 
+<a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
+
 ## Features
 - Chat with ChatGPT right in Obsidian in the Copilot Chat window.
 - No repetitive login. Use your own API key.
@@ -19,12 +21,15 @@ Take your note-taking game to the next level with the Obsidian Copilot Plugin!
 
 ## Demo
 Chat with ChatGPT, copy a message to note, or save entire conversation as a note:
+
 ![Demo0](./images/demo0.gif)
 
 QA around your past note:
+
 ![Demo1](./images/demo1.gif)
 
-The settings page
+The settings page lets you set your own temperature, max tokens, conversation context based on your need:
+
 <img src="./images/settings-page.png" alt="Settings" width="500">
 
 ## Planned features (based on feedback)
