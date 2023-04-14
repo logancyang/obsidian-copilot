@@ -160,18 +160,18 @@ If your plugin does not need CSS, delete this file.
   word-break: break-word;
 }
 
-pre, p {
+.message-content pre, p {
   margin: 0;
   padding: 0;
 }
 
-ol, ul {
+.message-content ol, ul {
   list-style: none;
   padding-left: 20px;
   margin: 0;
 }
 
-li {
+.message-content li {
   margin: 0;
   width: 100%;
   padding-left: 10px;
@@ -179,19 +179,19 @@ li {
   position: relative;
 }
 
-li::before {
+.message-content li::before {
   content: counter(list-item, decimal) ".";
   counter-increment: list-item;
   position: absolute;
   left: -20px;
 }
 
-li:has(> p) {
+.message-content li:has(> p) {
     display: flex;
     flex-direction: column;
 }
 
-li:has(> p)::before {
+.message-content li:has(> p)::before {
     align-self: flex-start;
     margin-top: 0; /* Adjust this value to align the pseudo-element vertically */
 }
