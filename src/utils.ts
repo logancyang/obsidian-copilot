@@ -1,7 +1,7 @@
-import { ChatMessage } from '@/sharedState';
-import { USER_SENDER, DEFAULT_SETTINGS } from '@/constants';
-import { TFile } from 'obsidian';
+import { DEFAULT_SETTINGS, USER_SENDER } from '@/constants';
 import { CopilotSettings } from '@/main';
+import { ChatMessage } from '@/sharedState';
+import { TFile } from 'obsidian';
 
 // Returns the last N messages from the chat history,
 // last one being the newest ai message

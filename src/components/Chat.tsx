@@ -1,21 +1,21 @@
-import React, { useState, useContext } from 'react';
-import { AppContext } from '@/context';
-import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
-import { USER_SENDER, AI_SENDER } from '@/constants';
-import { OpenAIStream, Role } from '@/openAiStream';
-import { TFile } from 'obsidian';
-import ChatMessages from '@/components/ChatComponents/ChatMessages';
 import ChatIcons from '@/components/ChatComponents/ChatIcons';
 import ChatInput from '@/components/ChatComponents/ChatInput';
+import ChatMessages from '@/components/ChatComponents/ChatMessages';
+import { AI_SENDER, USER_SENDER } from '@/constants';
+import { AppContext } from '@/context';
+import { CopilotSettings } from '@/main';
+import { OpenAIStream, Role } from '@/openAiStream';
+import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
 import {
-  getChatContext,
   formatDateTime,
+  getChatContext,
   getFileContent,
   getFileName,
   sanitizeSettings,
   useNoteAsContextPrompt,
 } from '@/utils';
-import { CopilotSettings } from '@/main';
+import { TFile } from 'obsidian';
+import React, { useContext, useState } from 'react';
 
 
 interface ChatProps {

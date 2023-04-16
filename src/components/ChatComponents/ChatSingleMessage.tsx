@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { ChatMessage } from '@/sharedState';
-import { USER_SENDER } from '@/constants';
-import { UserIcon, BotIcon, CopyClipboardIcon, CheckIcon } from '@/components/Icons';
+import { BotIcon, CheckIcon, CopyClipboardIcon, UserIcon } from '@/components/Icons';
 import ReactMarkdown from '@/components/Markdown/MemoizedReactMarkdown';
+import { USER_SENDER } from '@/constants';
+import { ChatMessage } from '@/sharedState';
+import React, { useState } from 'react';
 
 
 interface ChatSingleMessageProps {

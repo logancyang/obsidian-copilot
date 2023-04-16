@@ -1,5 +1,5 @@
 import CopilotPlugin from "@/main";
-import { App, PluginSettingTab, Setting, DropdownComponent } from "obsidian";
+import { App, DropdownComponent, PluginSettingTab, Setting } from "obsidian";
 
 export class CopilotSettingTab extends PluginSettingTab {
   plugin: CopilotPlugin;

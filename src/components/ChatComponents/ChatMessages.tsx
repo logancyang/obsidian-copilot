@@ -1,8 +1,8 @@
-import React, { useEffect } from 'react';
-import { ChatMessage } from '@/sharedState';
 import ChatSingleMessage from '@/components/ChatComponents/ChatSingleMessage';
-import ReactMarkdown from '@/components/Markdown/MemoizedReactMarkdown';
 import { BotIcon } from '@/components/Icons';
+import ReactMarkdown from '@/components/Markdown/MemoizedReactMarkdown';
+import { ChatMessage } from '@/sharedState';
+import React, { useEffect } from 'react';
 
 interface ChatMessagesProps {
   chatHistory: ChatMessage[];

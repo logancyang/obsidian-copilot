@@ -1,7 +1,9 @@
-import React from 'react';
 import {
-  StopIcon, RefreshIcon, SaveAsNoteIcon, UseActiveNoteAsContextIcon
+  RefreshIcon, SaveAsNoteIcon,
+  StopIcon,
+  UseActiveNoteAsContextIcon
 } from '@/components/Icons';
+import React from 'react';
 
 interface ChatIconsProps {
   currentModel: string;

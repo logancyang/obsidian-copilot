@@ -1,11 +1,11 @@
-import { WorkspaceLeaf, ItemView } from 'obsidian';
-import SharedState from '@/sharedState';
-import * as React from 'react';
 import Chat from '@/components/Chat';
-import { createRoot, Root } from 'react-dom/client';
-import { AppContext } from '@/context';
 import { CHAT_VIEWTYPE } from '@/constants';
-import CopilotPlugin, {CopilotSettings} from '@/main';
+import { AppContext } from '@/context';
+import CopilotPlugin, { CopilotSettings } from '@/main';
+import SharedState from '@/sharedState';
+import { ItemView, WorkspaceLeaf } from 'obsidian';
+import * as React from 'react';
+import { Root, createRoot } from 'react-dom/client';
 
 
 export default class CopilotView extends ItemView {
