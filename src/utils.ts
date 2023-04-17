@@ -76,3 +76,8 @@ export function useNoteAsContextPrompt(
     + `Feel free to ask related questions, such as 'give me a summary of this note in bulletpoints', 'what key questions does it answer', etc. "\n`
     + `Here's the content of the note:\n\n${noteContent}`;
 }
+
+export function simplifyPrompt(selectedText: string): string {
+  return `Please simplify the following text so that a 6th-grader can understand:\n\n`
+    + `${selectedText}`;
+}
