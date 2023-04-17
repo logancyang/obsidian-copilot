@@ -1,10 +1,10 @@
 import ChatIcons from '@/components/ChatComponents/ChatIcons';
 import ChatInput from '@/components/ChatComponents/ChatInput';
 import ChatMessages from '@/components/ChatComponents/ChatMessages';
-import { AI_SENDER, USER_SENDER } from '@/constants';
+import { USER_SENDER } from '@/constants';
 import { AppContext } from '@/context';
 import { CopilotSettings } from '@/main';
-import { OpenAIStream, Role } from '@/openAiStream';
+import { OpenAiParams, sendMessageToAIAndStreamResponse } from '@/openAiStream';
 import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
 import {
   formatDateTime,
@@ -40,63 +40,15 @@ const Chat: React.FC<ChatProps> = ({ sharedState, settings, model }) => {
     maxTokens,
     contextTurns,
   } = sanitizeSettings(settings);
-
-  const sendMessageToAIAndStreamResponse = async (userMessage: ChatMessage) => {
-    // The number of past conversation turns to use as context for the AI
-    // The number of messages is doubled.
-    const chatContext = getChatContext(chatHistory, Number(contextTurns)*2);
-
-    // Use OpenAIStream to send message to AI and get a response
-    try {
-      const controller = new AbortController();
-      setAbortController(controller);
-
-      const stream = await OpenAIStream(
-        currentModel,
-        openAiApiKey,
-        [
-          ...chatContext.map((chatMessage) => {
-            return {
-              role: chatMessage.sender === USER_SENDER
-                ? 'user' as Role : 'assistant' as Role,
-              content: chatMessage.message,
-            };
-          }),
-          { role: 'user', content: userMessage.message },
-        ],
-        Number(temperature),
-        Number(maxTokens),
-        controller.signal,
-      );
-      const reader = stream.getReader();
-      const decoder = new TextDecoder();
-      let aiResponse = '';
-
-      reader.read().then(
-        async function processStream({ done, value }): Promise<void> {
-          if (done) {
-            // Add the full AI response to the chat history
-            const botMessage: ChatMessage = {
-              message: aiResponse,
-              sender: AI_SENDER,
-            };
-            addMessage(botMessage);
-            setCurrentAiMessage('');
-            return;
-          }
-
-          // Accumulate the AI response
-          aiResponse += decoder.decode(value);
-          setCurrentAiMessage(aiResponse);
-
-          // Continue reading the stream
-          return reader.read().then(processStream);
-        },
-      );
-    } catch (error) {
-      console.error('Error in OpenAIStream:', error);
-    }
-  };
+  const openAiParams: OpenAiParams = {
+    key: openAiApiKey,
+    model: currentModel,
+    temperature: Number(temperature),
+    maxTokens: Number(maxTokens),
+  }
+  // The number of past conversation turns to use as context for the AI
+  // The number of messages is doubled.
+  const chatContext = getChatContext(chatHistory, Number(contextTurns)*2);
 
   const handleSendMessage = async () => {
     if (!inputMessage) return;
@@ -111,7 +63,15 @@ const Chat: React.FC<ChatProps> = ({ sharedState, settings, model }) => {
 
     // Clear input
     setInputMessage('');
-    await sendMessageToAIAndStreamResponse(userMessage);
+
+    await sendMessageToAIAndStreamResponse(
+      userMessage,
+      chatContext,
+      openAiParams,
+      abortController,
+      setCurrentAiMessage,
+      addMessage,
+    );
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -160,7 +120,14 @@ const Chat: React.FC<ChatProps> = ({ sharedState, settings, model }) => {
     // Send the prompt as a user message
     const promptMessage: ChatMessage = { sender: USER_SENDER, message: prompt };
     // Skip adding promptMessage to chat history to hide it from the user
-    await sendMessageToAIAndStreamResponse(promptMessage);
+    await sendMessageToAIAndStreamResponse(
+      promptMessage,
+      [],
+      openAiParams,
+      abortController,
+      setCurrentAiMessage,
+      addMessage,
+    );
   };
 
   const handleStopGenerating = () => {

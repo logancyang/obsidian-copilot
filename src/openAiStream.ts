@@ -1,14 +1,24 @@
+import { AI_SENDER, USER_SENDER } from '@/constants';
+import { ChatMessage } from '@/sharedState';
 import {
   createParser,
   ParsedEvent,
   ReconnectInterval,
 } from 'eventsource-parser';
 
+
 export type Role = 'assistant' | 'user';
 
 export interface OpenAiMessage {
   role: Role;
   content: string;
+}
+
+export interface OpenAiParams {
+  model: string,
+  key: string,
+  temperature: number,
+  maxTokens: number,
 }
 
 export class OpenAIError extends Error {
@@ -31,7 +41,7 @@ export const OpenAIStream = async (
   messages: OpenAiMessage[],
   temperature: number,
   maxTokens: number,
-  signal: AbortSignal,
+  signal?: AbortSignal,
 ) => {
   const res = await fetch(`https://api.openai.com/v1/chat/completions`, {
     headers: {
@@ -118,4 +128,67 @@ export const OpenAIStream = async (
   });
 
   return stream;
+};
+
+export const sendMessageToAIAndStreamResponse = async (
+  userMessage: ChatMessage,
+  chatContext: ChatMessage[],
+  openAiParams: OpenAiParams,
+  controller: AbortController | null,
+  updateCurrentAiMessage: (message: string) => void,
+  addMessage: (message: ChatMessage) => void,
+) => {
+  const {
+    key,
+    model,
+    temperature,
+    maxTokens,
+  } = openAiParams;
+  // Use OpenAIStream to send message to AI and get a response
+  try {
+    const stream = await OpenAIStream(
+      model,
+      key,
+      [
+        ...chatContext.map((chatMessage) => {
+          return {
+            role: chatMessage.sender === USER_SENDER
+              ? 'user' as Role : 'assistant' as Role,
+            content: chatMessage.message,
+          };
+        }),
+        { role: 'user', content: userMessage.message },
+      ],
+      temperature,
+      maxTokens,
+      controller?.signal,
+    );
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+    let aiResponse = '';
+
+    reader.read().then(
+      async function processStream({ done, value }): Promise<void> {
+        if (done) {
+          // Add the full AI response to the chat history
+          const botMessage: ChatMessage = {
+            message: aiResponse,
+            sender: AI_SENDER,
+          };
+          addMessage(botMessage);
+          updateCurrentAiMessage('');
+          return;
+        }
+
+        // Accumulate the AI response
+        aiResponse += decoder.decode(value);
+        updateCurrentAiMessage(aiResponse);
+
+        // Continue reading the stream
+        return reader.read().then(processStream);
+      },
+    );
+  } catch (error) {
+    console.error('Error in OpenAIStream:', error);
+  }
 };
