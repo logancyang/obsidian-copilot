@@ -29,8 +29,15 @@ export default class CopilotPlugin extends Plugin {
       (leaf: WorkspaceLeaf) => new CopilotView(leaf, this)
     );
 
+    this.addCommand({
+      id: 'copilot-chat-toggle-window',
+      name: 'Toggle Copilot Chat Window',
+      callback: () => {
+        this.toggleView();
+      }
+    });
+
     this.addRibbonIcon('message-square', 'Copilot Chat', (evt: MouseEvent) => {
-      // open or close the chatgpt view
       this.toggleView();
     });
   }
