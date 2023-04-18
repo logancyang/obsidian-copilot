@@ -57,6 +57,7 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 }
 
 // Basic prompts
+// Note that GPT4 is much better at following instructions than GPT3.5!
 export function useNoteAsContextPrompt(
   noteName: string, noteContent: string | null
 ): string {
@@ -87,5 +88,14 @@ export function removeUrlsFromSelectionPrompt(selectedText: string): string {
 
 export function rewriteTweetSelectionPrompt(selectedText: string): string {
   return `Please rewrite the following text to under 280 characters and return it without any other changes, make it as engaging as possible:\n`
+    + `${selectedText}`;
+}
+
+export function rewriteTweetThreadSelectionPrompt(selectedText: string): string {
+  return `Please follow the instructions closely step by step and rewrite the content to a thread. `
+    + `1. Each paragraph must be under 280 characters. `
+    + `2. The starting line is \`THREAD START\n\`, and the ending line is \`\nTHREAD END\`. `
+    + `3. You must use \`\n\n---\n\n\` to separate each paragraph! Then return it without any other changes. `
+    + `4. Make it as engaging as possible.\n The original content:\n\n`
     + `${selectedText}`;
 }

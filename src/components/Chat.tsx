@@ -17,6 +17,7 @@ import {
   sanitizeSettings,
   simplifyPrompt,
   useNoteAsContextPrompt,
+  rewriteTweetThreadSelectionPrompt,
 } from '@/utils';
 import { EventEmitter } from 'events';
 import { TFile } from 'obsidian';
@@ -155,7 +156,7 @@ const Chat: React.FC<ChatProps> = ({ sharedState, settings, model, emitter }) =>
           message: promptFn(selectedText),
           sender: USER_SENDER,
         };
-
+        console.log('promptMessage', promptMessage.message);
         await sendMessageToAIAndStreamResponse(
           promptMessage,
           [],
@@ -179,6 +180,7 @@ const Chat: React.FC<ChatProps> = ({ sharedState, settings, model, emitter }) =>
   useEffect(createEffect('emojifySelection', emojifyPrompt), []);
   useEffect(createEffect('removeUrlsFromSelection', removeUrlsFromSelectionPrompt), []);
   useEffect(createEffect('rewriteTweetSelection', rewriteTweetSelectionPrompt), []);
+  useEffect(createEffect('rewriteTweetThreadSelection', rewriteTweetThreadSelectionPrompt), []);
 
   return (
     <div className="chat-container">

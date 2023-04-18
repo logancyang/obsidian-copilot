@@ -74,6 +74,14 @@ export default class CopilotPlugin extends Plugin {
         this.processSelection(editor, 'rewriteTweetSelection');
       },
     });
+
+    this.addCommand({
+      id: 'rewrite-tweet-thread-prompt',
+      name: 'Rewrite selection to a tweet thread',
+      editorCallback: (editor: Editor) => {
+        this.processSelection(editor, 'rewriteTweetThreadSelection');
+      },
+    });
   }
 
   processSelection(editor: Editor, eventType: string) {
