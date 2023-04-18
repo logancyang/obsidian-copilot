@@ -82,3 +82,9 @@ export function simplifyPrompt(selectedText: string): string {
   return `Please simplify the following text so that a 6th-grader can understand:\n\n`
     + `${selectedText}`;
 }
+
+export function emojifyPrompt(selectedText: string): string {
+  return `Please rewrite the following text in a fun way and insert emojis.`
+    + `Insert at as many places as possible, but don't make any 2 emojis together.\n`
+    + `The target text is between "---":\n---\n${selectedText}\n---\n`;
+}

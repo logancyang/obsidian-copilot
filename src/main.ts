@@ -47,25 +47,37 @@ export default class CopilotPlugin extends Plugin {
       id: 'copilot-simplify-prompt',
       name: 'Simplify selection',
       editorCallback: (editor: Editor) => {
-        if (editor.somethingSelected() === false) {
-          new Notice('Please select some text to rewrite.');
-          return;
-        }
-        const selectedText = editor.getSelection();
-        if (selectedText.length > CHAR_LENGTH_LIMIT) {
-          new Notice('Selection is too long, please select less than 5800 characters.');
-          return;
-        }
-
-        const activeCopilotView = this.app.workspace
-          .getLeavesOfType(CHAT_VIEWTYPE)
-          .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
-
-        if (selectedText && activeCopilotView) {
-          activeCopilotView.emitter.emit('simplifySelection', selectedText);
-        }
+        this.processSelection(editor, 'simplifySelection');
       },
     });
+
+    this.addCommand({
+      id: 'copilot-emojify-prompt',
+      name: 'Emojify selection',
+      editorCallback: (editor: Editor) => {
+        this.processSelection(editor, 'emojifySelection');
+      },
+    });
+  }
+
+  processSelection(editor: Editor, eventType: string) {
+    if (editor.somethingSelected() === false) {
+      new Notice('Please select some text to rewrite.');
+      return;
+    }
+    const selectedText = editor.getSelection();
+    if (selectedText.length > CHAR_LENGTH_LIMIT) {
+      new Notice('Selection is too long, please select less than 5800 characters.');
+      return;
+    }
+
+    const activeCopilotView = this.app.workspace
+      .getLeavesOfType(CHAT_VIEWTYPE)
+      .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
+
+    if (selectedText && activeCopilotView) {
+      activeCopilotView.emitter.emit(eventType, selectedText);
+    }
   }
 
   toggleView() {

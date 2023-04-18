@@ -7,6 +7,7 @@ import { CopilotSettings } from '@/main';
 import { OpenAiParams, sendMessageToAIAndStreamResponse } from '@/openAiStream';
 import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
 import {
+  emojifyPrompt,
   formatDateTime,
   getChatContext,
   getFileContent,
@@ -144,31 +145,36 @@ const Chat: React.FC<ChatProps> = ({ sharedState, settings, model, emitter }) =>
     }
   };
 
-  useEffect(() => {
-    const handleSimplifySelection = async (selectedText: string) => {
-      // Create a user message with the selected text
-      const promptMessage: ChatMessage = {
-        message: simplifyPrompt(selectedText),
-        sender: USER_SENDER,
+  const createEffect = (eventType: string, promptFn: (selectedText: string) => string) => {
+    return () => {
+      const handleSelection = async (selectedText: string) => {
+        // Create a user message with the selected text
+        const promptMessage: ChatMessage = {
+          message: promptFn(selectedText),
+          sender: USER_SENDER,
+        };
+
+        await sendMessageToAIAndStreamResponse(
+          promptMessage,
+          [],
+          openAiParams,
+          abortController,
+          setCurrentAiMessage,
+          addMessage,
+        );
       };
 
-      await sendMessageToAIAndStreamResponse(
-        promptMessage,
-        [],
-        openAiParams,
-        abortController,
-        setCurrentAiMessage,
-        addMessage,
-      );
-    };
+      emitter.on(eventType, handleSelection);
 
-    emitter.on('simplifySelection', handleSimplifySelection);
-
-    // Cleanup function to remove the event listener when the component unmounts
-    return () => {
-      emitter.removeListener('simplifySelection', handleSimplifySelection);
+      // Cleanup function to remove the event listener when the component unmounts
+      return () => {
+        emitter.removeListener(eventType, handleSelection);
+      };
     };
-  }, []); // Pass an empty dependency array so this effect only runs on mount and unmount
+  };
+
+  useEffect(createEffect('simplifySelection', simplifyPrompt), []);
+  useEffect(createEffect('emojifySelection', emojifyPrompt), []);
 
   return (
     <div className="chat-container">
