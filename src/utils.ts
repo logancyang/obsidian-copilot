@@ -79,3 +79,8 @@ export function emojifyPrompt(selectedText: string): string {
     + `Insert at as many places as possible, but don't make any 2 emojis together.\n`
     + `The target text is between "---":\n---\n${selectedText}\n---\n`;
 }
+
+export function removeUrlsFromSelectionPrompt(selectedText: string): string {
+  return `Please remove all URLs from the following text and return it without any other changes:\n\n`
+    + `${selectedText}`;
+}

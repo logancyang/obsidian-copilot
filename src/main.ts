@@ -58,6 +58,14 @@ export default class CopilotPlugin extends Plugin {
         this.processSelection(editor, 'emojifySelection');
       },
     });
+
+    this.addCommand({
+      id: 'remove-urls-prompt',
+      name: 'Remove URLs from selection',
+      editorCallback: (editor: Editor) => {
+        this.processSelection(editor, 'removeUrlsFromSelection');
+      },
+    });
   }
 
   processSelection(editor: Editor, eventType: string) {
