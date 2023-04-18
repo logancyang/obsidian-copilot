@@ -1,7 +1,7 @@
 import { DEFAULT_SETTINGS, USER_SENDER } from '@/constants';
 import { CopilotSettings } from '@/main';
 import { ChatMessage } from '@/sharedState';
-import { TFile } from 'obsidian';
+import { TFile, moment } from 'obsidian';
 
 // Returns the last N messages from the chat history,
 // last one being the newest ai message
@@ -21,22 +21,13 @@ export const getChatContext = (chatHistory: ChatMessage[], contextSize: number) 
 };
 
 export const formatDateTime = (now: Date, timezone: 'local' | 'utc' = 'local') => {
-  const get = (method: string) => {
-    if (timezone === 'utc') {
-      return (now as any)[`getUTC${method}`]();
-    }
-    return (now as any)[`get${method}`]();
-  };
+  const formattedDateTime = moment(now);
 
-  return [
-    get('FullYear'),
-    (get('Month') + 1).toString().padStart(2, '0'),
-    get('Date').toString().padStart(2, '0'),
-  ].join('_') + '-' + [
-    get('Hours').toString().padStart(2, '0'),
-    get('Minutes').toString().padStart(2, '0'),
-    get('Seconds').toString().padStart(2, '0'),
-  ].join('_');
+  if (timezone === 'utc') {
+    formattedDateTime.utc();
+  }
+
+  return formattedDateTime.format('YYYY_MM_DD-HH_mm_ss');
 };
 
 export async function getFileContent(file: TFile): Promise<string | null> {
