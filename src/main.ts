@@ -32,7 +32,7 @@ export default class CopilotPlugin extends Plugin {
     );
 
     this.addCommand({
-      id: 'copilot-chat-toggle-window',
+      id: 'chat-toggle-window',
       name: 'Toggle Copilot Chat Window',
       callback: () => {
         this.toggleView();
@@ -44,7 +44,7 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'copilot-simplify-prompt',
+      id: 'simplify-prompt',
       name: 'Simplify selection',
       editorCallback: (editor: Editor) => {
         this.processSelection(editor, 'simplifySelection');
@@ -52,7 +52,7 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'copilot-emojify-prompt',
+      id: 'emojify-prompt',
       name: 'Emojify selection',
       editorCallback: (editor: Editor) => {
         this.processSelection(editor, 'emojifySelection');
