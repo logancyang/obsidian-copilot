@@ -9,7 +9,9 @@ interface ChatMessagesProps {
   currentAiMessage: string;
 }
 
-const ChatMessages: React.FC<ChatMessagesProps> = ({ chatHistory, currentAiMessage }) => {
+const ChatMessages: React.FC<ChatMessagesProps> = ({
+  chatHistory, currentAiMessage,
+}) => {
   const scrollToBottom = () => {
     const chatMessagesContainer = document.querySelector('.chat-messages');
     if (chatMessagesContainer) {
@@ -25,7 +27,7 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({ chatHistory, currentAiMessa
         <ChatSingleMessage key={index} message={message} />
       ))}
       {currentAiMessage && (
-        <div className="message bot-message">
+        <div className="message bot-message" key={`ai_message_${currentAiMessage}`}>
           <div className="message-icon">
             <BotIcon />
           </div>

@@ -12,19 +12,26 @@ import {
   getFileContent,
   getFileName,
   sanitizeSettings,
+  simplifyPrompt,
   useNoteAsContextPrompt,
 } from '@/utils';
+import { EventEmitter } from 'events';
 import { TFile } from 'obsidian';
-import React, { useContext, useState } from 'react';
+import React, {
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
 
 
 interface ChatProps {
   sharedState: SharedState;
   settings: CopilotSettings;
   model: string;
+  emitter: EventEmitter;
 }
 
-const Chat: React.FC<ChatProps> = ({ sharedState, settings, model }) => {
+const Chat: React.FC<ChatProps> = ({ sharedState, settings, model, emitter }) => {
   const [
     chatHistory, addMessage, clearMessages
   ] = useSharedState(sharedState);
@@ -137,9 +144,38 @@ const Chat: React.FC<ChatProps> = ({ sharedState, settings, model }) => {
     }
   };
 
+  useEffect(() => {
+    const handleSimplifySelection = async (selectedText: string) => {
+      // Create a user message with the selected text
+      const promptMessage: ChatMessage = {
+        message: simplifyPrompt(selectedText),
+        sender: USER_SENDER,
+      };
+
+      await sendMessageToAIAndStreamResponse(
+        promptMessage,
+        [],
+        openAiParams,
+        abortController,
+        setCurrentAiMessage,
+        addMessage,
+      );
+    };
+
+    emitter.on('simplifySelection', handleSimplifySelection);
+
+    // Cleanup function to remove the event listener when the component unmounts
+    return () => {
+      emitter.removeListener('simplifySelection', handleSimplifySelection);
+    };
+  }, []); // Pass an empty dependency array so this effect only runs on mount and unmount
+
   return (
     <div className="chat-container">
-      <ChatMessages chatHistory={chatHistory} currentAiMessage={currentAiMessage} />
+      <ChatMessages
+        chatHistory={chatHistory}
+        currentAiMessage={currentAiMessage}
+      />
       <div className='bottom-container'>
         <ChatIcons
           currentModel={currentModel}

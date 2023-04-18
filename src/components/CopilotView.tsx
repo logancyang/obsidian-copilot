@@ -6,6 +6,7 @@ import SharedState from '@/sharedState';
 import { ItemView, WorkspaceLeaf } from 'obsidian';
 import * as React from 'react';
 import { Root, createRoot } from 'react-dom/client';
+import { EventEmitter } from 'events';
 
 
 export default class CopilotView extends ItemView {
@@ -13,6 +14,7 @@ export default class CopilotView extends ItemView {
   private settings: CopilotSettings;
   private model: string;
   private root: Root | null = null;
+  emitter: EventEmitter;
 
   constructor(leaf: WorkspaceLeaf, plugin: CopilotPlugin) {
     super(leaf);
@@ -20,6 +22,7 @@ export default class CopilotView extends ItemView {
     this.app = plugin.app;
     this.settings = plugin.settings;
     this.model = plugin.settings.defaultModel;
+    this.emitter = new EventEmitter();
   }
 
   getViewType(): string {
@@ -49,6 +52,7 @@ export default class CopilotView extends ItemView {
             sharedState={this.sharedState}
             settings={this.settings}
             model={this.model}
+            emitter={this.emitter}
           />
         </React.StrictMode>
       </AppContext.Provider>

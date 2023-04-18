@@ -1,8 +1,10 @@
 import CopilotView from '@/components/CopilotView';
-import { CHAT_VIEWTYPE, DEFAULT_SETTINGS } from '@/constants';
+import {
+  CHAR_LENGTH_LIMIT, CHAT_VIEWTYPE, DEFAULT_SETTINGS,
+} from '@/constants';
 import { CopilotSettingTab } from '@/settings';
 import SharedState from '@/sharedState';
-import { Plugin, WorkspaceLeaf } from 'obsidian';
+import { Editor, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
 
 
 export interface CopilotSettings {
@@ -39,6 +41,30 @@ export default class CopilotPlugin extends Plugin {
 
     this.addRibbonIcon('message-square', 'Copilot Chat', (evt: MouseEvent) => {
       this.toggleView();
+    });
+
+    this.addCommand({
+      id: 'copilot-simplify-prompt',
+      name: 'Simplify selection',
+      editorCallback: (editor: Editor) => {
+        if (editor.somethingSelected() === false) {
+          new Notice('Please select some text to rewrite.');
+          return;
+        }
+        const selectedText = editor.getSelection();
+        if (selectedText.length > CHAR_LENGTH_LIMIT) {
+          new Notice('Selection is too long, please select less than 5800 characters.');
+          return;
+        }
+
+        const activeCopilotView = this.app.workspace
+          .getLeavesOfType(CHAT_VIEWTYPE)
+          .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
+
+        if (selectedText && activeCopilotView) {
+          activeCopilotView.emitter.emit('simplifySelection', selectedText);
+        }
+      },
     });
   }
 
