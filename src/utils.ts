@@ -84,3 +84,8 @@ export function removeUrlsFromSelectionPrompt(selectedText: string): string {
   return `Please remove all URLs from the following text and return it without any other changes:\n\n`
     + `${selectedText}`;
 }
+
+export function rewriteTweetSelectionPrompt(selectedText: string): string {
+  return `Please rewrite the following text to under 280 characters and return it without any other changes, make it as engaging as possible:\n`
+    + `${selectedText}`;
+}

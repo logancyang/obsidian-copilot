@@ -13,6 +13,7 @@ import {
   getFileContent,
   getFileName,
   removeUrlsFromSelectionPrompt,
+  rewriteTweetSelectionPrompt,
   sanitizeSettings,
   simplifyPrompt,
   useNoteAsContextPrompt,
@@ -177,6 +178,7 @@ const Chat: React.FC<ChatProps> = ({ sharedState, settings, model, emitter }) =>
   useEffect(createEffect('simplifySelection', simplifyPrompt), []);
   useEffect(createEffect('emojifySelection', emojifyPrompt), []);
   useEffect(createEffect('removeUrlsFromSelection', removeUrlsFromSelectionPrompt), []);
+  useEffect(createEffect('rewriteTweetSelection', rewriteTweetSelectionPrompt), []);
 
   return (
     <div className="chat-container">

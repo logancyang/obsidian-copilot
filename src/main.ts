@@ -66,6 +66,14 @@ export default class CopilotPlugin extends Plugin {
         this.processSelection(editor, 'removeUrlsFromSelection');
       },
     });
+
+    this.addCommand({
+      id: 'rewrite-tweet-prompt',
+      name: 'Rewrite selection to a tweet',
+      editorCallback: (editor: Editor) => {
+        this.processSelection(editor, 'rewriteTweetSelection');
+      },
+    });
   }
 
   processSelection(editor: Editor, eventType: string) {
