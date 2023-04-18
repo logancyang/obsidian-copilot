@@ -71,13 +71,22 @@ export default class CopilotPlugin extends Plugin {
       return;
     }
 
-    const activeCopilotView = this.app.workspace
-      .getLeavesOfType(CHAT_VIEWTYPE)
-      .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
+    const isChatWindowActive = this.app.workspace
+      .getLeavesOfType(CHAT_VIEWTYPE).length > 0;
 
-    if (selectedText && activeCopilotView) {
-      activeCopilotView.emitter.emit(eventType, selectedText);
+    if (!isChatWindowActive) {
+      this.activateView();
     }
+
+    setTimeout(() => {
+      // Without the timeout, the view is not yet active
+      const activeCopilotView = this.app.workspace
+        .getLeavesOfType(CHAT_VIEWTYPE)
+        .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
+      if (selectedText && activeCopilotView) {
+        activeCopilotView.emitter.emit(eventType, selectedText);
+      }
+    }, 0);
   }
 
   toggleView() {
