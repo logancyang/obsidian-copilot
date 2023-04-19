@@ -8,6 +8,8 @@ interface Language {
 const LANGUAGES: Language[] = [
   { code: "en", name: "English" },
   { code: "zh", name: "Chinese" },
+  { code: "ja", name: "Japanese" },
+  { code: "ko", name: "Korean" },
   { code: "es", name: "Spanish" },
   { code: "fr", name: "French" },
   { code: "de", name: "German" },
