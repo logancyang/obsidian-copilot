@@ -7,6 +7,7 @@ import { CopilotSettings } from '@/main';
 import { OpenAiParams, sendMessageToAIAndStreamResponse } from '@/openAiStream';
 import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
 import {
+  createTranslateSelectionPrompt,
   emojifyPrompt,
   formatDateTime,
   getChatContext,
@@ -14,10 +15,10 @@ import {
   getFileName,
   removeUrlsFromSelectionPrompt,
   rewriteTweetSelectionPrompt,
+  rewriteTweetThreadSelectionPrompt,
   sanitizeSettings,
   simplifyPrompt,
   useNoteAsContextPrompt,
-  rewriteTweetThreadSelectionPrompt,
 } from '@/utils';
 import { EventEmitter } from 'events';
 import { TFile } from 'obsidian';
@@ -148,15 +149,18 @@ const Chat: React.FC<ChatProps> = ({ sharedState, settings, model, emitter }) =>
     }
   };
 
-  const createEffect = (eventType: string, promptFn: (selectedText: string) => string) => {
+  const createEffect = (
+    eventType: string,
+    promptFn: (selectedText: string, eventSubtype?: string) => string
+  ) => {
     return () => {
-      const handleSelection = async (selectedText: string) => {
+      const handleSelection = async (selectedText: string, eventSubtype?: string) => {
         // Create a user message with the selected text
         const promptMessage: ChatMessage = {
-          message: promptFn(selectedText),
+          message: promptFn(selectedText, eventSubtype),
           sender: USER_SENDER,
         };
-        console.log('promptMessage', promptMessage.message);
+
         await sendMessageToAIAndStreamResponse(
           promptMessage,
           [],
@@ -181,6 +185,12 @@ const Chat: React.FC<ChatProps> = ({ sharedState, settings, model, emitter }) =>
   useEffect(createEffect('removeUrlsFromSelection', removeUrlsFromSelectionPrompt), []);
   useEffect(createEffect('rewriteTweetSelection', rewriteTweetSelectionPrompt), []);
   useEffect(createEffect('rewriteTweetThreadSelection', rewriteTweetThreadSelectionPrompt), []);
+  useEffect(
+    createEffect("translateSelection", (selectedText, language) =>
+      createTranslateSelectionPrompt(language)(selectedText)
+    ),
+    []
+  );
 
   return (
     <div className="chat-container">

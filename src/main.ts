@@ -1,11 +1,11 @@
 import CopilotView from '@/components/CopilotView';
+import { LanguageModal } from "@/components/LanguageModal";
 import {
   CHAR_LENGTH_LIMIT, CHAT_VIEWTYPE, DEFAULT_SETTINGS,
 } from '@/constants';
 import { CopilotSettingTab } from '@/settings';
 import SharedState from '@/sharedState';
 import { Editor, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
-
 
 export interface CopilotSettings {
   openAiApiKey: string;
@@ -82,9 +82,23 @@ export default class CopilotPlugin extends Plugin {
         this.processSelection(editor, 'rewriteTweetThreadSelection');
       },
     });
+
+    this.addCommand({
+      id: 'translate-selection-prompt',
+      name: 'Translate selection',
+      editorCallback: (editor: Editor) => {
+        new LanguageModal(this.app, (language) => {
+          if (!language) {
+            new Notice('Please select a language.');
+            return;
+          }
+          this.processSelection(editor, 'translateSelection', language);
+        }).open();
+      },
+    });
   }
 
-  processSelection(editor: Editor, eventType: string) {
+  processSelection(editor: Editor, eventType: string, eventSubtype?: string) {
     if (editor.somethingSelected() === false) {
       new Notice('Please select some text to rewrite.');
       return;
@@ -108,7 +122,7 @@ export default class CopilotPlugin extends Plugin {
         .getLeavesOfType(CHAT_VIEWTYPE)
         .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
       if (selectedText && activeCopilotView) {
-        activeCopilotView.emitter.emit(eventType, selectedText);
+        activeCopilotView.emitter.emit(eventType, selectedText, eventSubtype);
       }
     }, 0);
   }

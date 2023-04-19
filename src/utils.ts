@@ -99,3 +99,9 @@ export function rewriteTweetThreadSelectionPrompt(selectedText: string): string 
     + `4. Make it as engaging as possible.\n The original content:\n\n`
     + `${selectedText}`;
 }
+
+export function createTranslateSelectionPrompt(language?: string) {
+  return (selectedText: string): string => {
+    return `Please translate the following text to ${language}:\n\n` + `${selectedText}`;
+  };
+}
