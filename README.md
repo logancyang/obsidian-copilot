@@ -1,32 +1,48 @@
 # 🔍 Obsidian Copilot
+
+Obsidian Copilot is a ChatGPT interface right inside Obsidian. It has a minimalistic design and is straightforward to use.
+
 - 💬 ChatGPT integration in Obsidian.
 - 🚀 Turbocharge your Second Brain with AI.
 - 🧠 Talk to your past notes for insights.
-
-Take your note-taking game to the next level with the Obsidian Copilot Plugin!
+- 🛠️ Prompt AI with your writing to get quick results.
 
 <a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
 
 ## 🛠️ Features
-- Chat with ChatGPT right in Obsidian in the Copilot Chat window.
-- No repetitive login. Use your own API key.
+- Chat with ChatGPT right inside Obsidian in the Copilot Chat window.
+- No repetitive login. Use your own API key (stored locally).
 - No monthly fee. Pay only for what you use.
 - Model selection of GPT-3.5 and GPT-4.
 - No need to buy ChatGPT Plus to use GPT-4 if you have API access.
 - No usage cap for GPT-4 like ChatGPT Plus.
 - One-click copying any message as markdown.
-- One-click saving the entire conversation as a note right inside Obsidian
+- One-click saving the entire conversation as a note.
 - One-click using the active note as context, and start a discussion around it (currently only supports shorter notes)
+- Easy commands to **simplify, emojify, translate, rewrite into a tweet/thread,** and more.
 - Set your own parameters like LLM temperature, max tokens, conversation context based on your need (**pls be mindful of the API cost**).
 
 ## 🎬 Demo
-Chat with ChatGPT, copy a message to note, or save entire conversation as a note:
+
+#### Chat with ChatGPT, copy a message to note, or save entire conversation as a note:
 
 ![Demo0](./images/demo0.gif)
 
-QA around your past note:
+#### QA around your past note:
 
 ![Demo1](./images/demo1.gif)
+
+#### Simplify, Emojify, Remove URLs
+
+![Demo2](./images/demo2.gif)
+
+#### Translate to a language of your choosing
+
+![DemoTranslate](./images/demo_translate.gif)
+
+#### Rewrite into a tweet/thread
+
+![DemoTweet](./images/demo_tweet.gif)
 
 The settings page lets you set your own temperature, max tokens, conversation context based on your need:
 
