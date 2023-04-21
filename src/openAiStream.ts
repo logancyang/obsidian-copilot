@@ -1,10 +1,6 @@
 import { AI_SENDER, USER_SENDER } from '@/constants';
 import { ChatMessage } from '@/sharedState';
-import {
-  createParser,
-  ParsedEvent,
-  ReconnectInterval,
-} from 'eventsource-parser';
+import SSE from 'sse';
 
 
 export type Role = 'assistant' | 'user';
@@ -42,92 +38,75 @@ export const OpenAIStream = async (
   temperature: number,
   maxTokens: number,
   signal?: AbortSignal,
-) => {
-  const res = await fetch(`https://api.openai.com/v1/chat/completions`, {
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${key ? key : process.env.OPENAI_API_KEY}`,
-      ...(process.env.OPENAI_ORGANIZATION && {
-        'OpenAI-Organization': process.env.OPENAI_ORGANIZATION,
-      }),
-    },
-    method: 'POST',
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a helpful assistant named Obsidian Copilot.',
-        },
-        ...messages,
-      ],
-      max_tokens: maxTokens,
-      temperature: temperature,
-      stream: true,
-    }),
-    signal,
-  });
-
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-
-  if (res.status !== 200) {
-    const result = await res.json();
-    if (result.error) {
-      throw new OpenAIError(
-        result.error.message,
-        result.error.type,
-        result.error.param,
-        result.error.code,
-      );
-    } else {
-      throw new Error(
-        `OpenAI API returned an error: ${
-          decoder.decode(result?.value) || result.statusText
-        }`,
-      );
-    }
-  }
-
-  const stream = new ReadableStream({
-    async start(controller) {
-      const onParse = (event: ParsedEvent | ReconnectInterval) => {
-        if (event.type === 'event') {
-          const data = event.data;
-
-          if (data === '[DONE]') {
-            controller.close();
-            return;
-          }
-
-          try {
-            const json = JSON.parse(data);
-            const text = json.choices[0].delta.content;
-            const queue = encoder.encode(text);
-            controller.enqueue(queue);
-          } catch (e) {
-            controller.error(e);
-          }
-        }
+): Promise<ReadableStream> => {
+  return new Promise((resolve, reject) => {
+    try {
+      const url = "https://api.openai.com/v1/chat/completions";
+      const options = {
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a helpful assistant named Obsidian Copilot.',
+          },
+          ...messages,
+        ],
+        max_tokens: maxTokens,
+        temperature: temperature,
+        stream: true,
       };
 
-      const parser = createParser(onParse);
+      const source = new SSE(url, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${key ? key : process.env.OPENAI_API_KEY}`,
+          ...(process.env.OPENAI_ORGANIZATION && {
+            'OpenAI-Organization': process.env.OPENAI_ORGANIZATION,
+          }),
+        },
+        method: 'POST',
+        payload: JSON.stringify(options),
+      });
 
-      if (!res.body) {
-        throw new Error("Response body is null");
+      source.stream();
+
+      if (signal) {
+        signal.addEventListener('abort', () => {
+          source.close();
+          reject(new Error('Aborted'));
+        });
       }
 
-      const reader = res.body.getReader();
-      let done = false;
-      let value;
-      while (!done) {
-        ({ done, value } = await reader.read());
-        if (!done) parser.feed(decoder.decode(value));
-      }
-    },
+      let txt = "";
+
+      source.addEventListener('message', (e: any) => {
+        if (e.data !== '[DONE]') {
+          const payload = JSON.parse(e.data);
+          const text = payload.choices[0].delta.content;
+          txt += text;
+        } else {
+          source.close();
+
+          // Create a ReadableStream with the accumulated txt
+          const readableStream = new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode(txt));
+              controller.close();
+            },
+          });
+
+          resolve(readableStream);
+        }
+      });
+
+      source.addEventListener('error', (e: any) => {
+        source.close();
+        reject(e);
+      });
+    } catch (err) {
+      reject(err);
+    }
   });
-
-  return stream;
 };
 
 export const sendMessageToAIAndStreamResponse = async (
