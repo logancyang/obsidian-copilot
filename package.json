@@ -11,7 +11,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "MIT",
+  "license": "AGPL-3.0",
   "devDependencies": {
     "@testing-library/jest-dom": "^5.16.5",
     "@testing-library/react": "^14.0.0",
@@ -43,6 +43,6 @@
     "react-dom": "^18.2.0",
     "react-markdown": "^8.0.6",
     "react-syntax-highlighter": "^15.5.0",
-    "sse.js": "github:mpetazzoni/sse.js"
+    "sse": "github:mpetazzoni/sse.js"
   }
 }

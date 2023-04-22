@@ -1,7 +1,7 @@
-import esbuild from "esbuild";
-import process from "process";
 import builtins from "builtin-modules";
+import esbuild from "esbuild";
 import svgPlugin from "esbuild-plugin-svg";
+import process from "process";
 
 const banner =
 `/*

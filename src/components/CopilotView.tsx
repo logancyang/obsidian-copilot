@@ -2,11 +2,12 @@ import Chat from '@/components/Chat';
 import { CHAT_VIEWTYPE } from '@/constants';
 import { AppContext } from '@/context';
 import CopilotPlugin, { CopilotSettings } from '@/main';
+import { OpenAIRequestManager } from '@/openAiStream';
 import SharedState from '@/sharedState';
+import { EventEmitter } from 'events';
 import { ItemView, WorkspaceLeaf } from 'obsidian';
 import * as React from 'react';
 import { Root, createRoot } from 'react-dom/client';
-import { EventEmitter } from 'events';
 
 
 export default class CopilotView extends ItemView {
@@ -15,6 +16,7 @@ export default class CopilotView extends ItemView {
   private model: string;
   private root: Root | null = null;
   emitter: EventEmitter;
+  streamManager: OpenAIRequestManager;
 
   constructor(leaf: WorkspaceLeaf, plugin: CopilotPlugin) {
     super(leaf);
@@ -23,6 +25,7 @@ export default class CopilotView extends ItemView {
     this.settings = plugin.settings;
     this.model = plugin.settings.defaultModel;
     this.emitter = new EventEmitter();
+    this.streamManager = new OpenAIRequestManager();
   }
 
   getViewType(): string {
@@ -53,6 +56,7 @@ export default class CopilotView extends ItemView {
             settings={this.settings}
             model={this.model}
             emitter={this.emitter}
+            streamManager={this.streamManager}
           />
         </React.StrictMode>
       </AppContext.Provider>

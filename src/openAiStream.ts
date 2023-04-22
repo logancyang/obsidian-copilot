@@ -1,7 +1,7 @@
-import { AI_SENDER, USER_SENDER } from '@/constants';
+import { AI_SENDER, OPEN_AI_API_URL, USER_SENDER } from '@/constants';
 import { ChatMessage } from '@/sharedState';
-import SSE from 'sse';
-
+import { requestUrl } from 'obsidian';
+import { SSE } from 'sse';
 
 export type Role = 'assistant' | 'user';
 
@@ -31,91 +31,146 @@ export class OpenAIError extends Error {
   }
 }
 
-export const OpenAIStream = async (
-  model: string,
-  key: string,
-  messages: OpenAiMessage[],
-  temperature: number,
-  maxTokens: number,
-  signal?: AbortSignal,
-): Promise<ReadableStream> => {
-  return new Promise((resolve, reject) => {
-    try {
-      const url = "https://api.openai.com/v1/chat/completions";
-      const options = {
-        model,
-        messages: [
+export class OpenAIRequestManager {
+  stopRequested = false;
+
+  constructor() {}
+
+  stopStreaming() {
+    this.stopRequested = true;
+  }
+
+  streamSSE = async (
+    openAiParams: OpenAiParams,
+    messages: OpenAiMessage[],
+    updateCurrentAiMessage: (message: string) => void,
+    addMessage: (message: ChatMessage) => void,
+  ) => {
+    return new Promise((resolve, reject) => {
+      try {
+        const {
+          key,
+          model,
+          temperature,
+          maxTokens,
+        } = openAiParams;
+
+        const formattedMessages = [
           {
             role: 'system',
             content: 'You are a helpful assistant named Obsidian Copilot.',
           },
           ...messages,
-        ],
-        max_tokens: maxTokens,
-        temperature: temperature,
-        stream: true,
-      };
+        ];
 
-      const source = new SSE(url, {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${key ? key : process.env.OPENAI_API_KEY}`,
-          ...(process.env.OPENAI_ORGANIZATION && {
-            'OpenAI-Organization': process.env.OPENAI_ORGANIZATION,
-          }),
-        },
-        method: 'POST',
-        payload: JSON.stringify(options),
-      });
+        const url = OPEN_AI_API_URL;
+        const options = {
+          model,
+          messages: formattedMessages,
+          max_tokens: maxTokens,
+          temperature: temperature,
+          stream: true,
+        };
 
-      source.stream();
-
-      if (signal) {
-        signal.addEventListener('abort', () => {
-          source.close();
-          reject(new Error('Aborted'));
+        const source = new SSE(url, {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${key ? key : process.env.OPENAI_API_KEY}`,
+            ...(process.env.OPENAI_ORGANIZATION && {
+              'OpenAI-Organization': process.env.OPENAI_ORGANIZATION,
+            }),
+          },
+          method: 'POST',
+          payload: JSON.stringify(options),
         });
-      }
 
-      let txt = "";
+        let aiResponse = '';
 
-      source.addEventListener('message', (e: any) => {
-        if (e.data !== '[DONE]') {
-          const payload = JSON.parse(e.data);
-          const text = payload.choices[0].delta.content;
-          txt += text;
-        } else {
+        const onMessage = async (e: any) => {
+          if (this.stopRequested) {
+            console.log('Manually closing SSE stream due to stop request.');
+            source.close();
+            resolve(null);
+            return;
+          }
+
+          if (e.data !== "[DONE]") {
+            const payload = JSON.parse(e.data);
+            const text = payload.choices[0].delta.content;
+            if (!text) {
+              return;
+            }
+            aiResponse += text;
+            updateCurrentAiMessage(aiResponse);
+          } else {
+            source.close();
+            const botMessage: ChatMessage = {
+              message: aiResponse,
+              sender: AI_SENDER,
+            };
+            addMessage(botMessage);
+            updateCurrentAiMessage('');
+            resolve(aiResponse);
+          }
+        };
+
+        source.addEventListener('message', onMessage);
+
+        source.addEventListener('error', (e: any) => {
           source.close();
+          reject(e);
+        });
 
-          // Create a ReadableStream with the accumulated txt
-          const readableStream = new ReadableStream({
-            start(controller) {
-              controller.enqueue(new TextEncoder().encode(txt));
-              controller.close();
-            },
-          });
+        source.stream();
+      } catch (err) {
+        reject(err);
+      }
+    });
+  };
+}
 
-          resolve(readableStream);
-        }
-      });
-
-      source.addEventListener('error', (e: any) => {
-        source.close();
-        reject(e);
-      });
-    } catch (err) {
-      reject(err);
-    }
+export const OpenAIRequest = async (
+  model: string,
+  key: string,
+  messages: OpenAiMessage[],
+  temperature: number,
+  maxTokens: number,
+): Promise<string> => {
+  const res = await requestUrl({
+    url: OPEN_AI_API_URL,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${key ? key : process.env.OPENAI_API_KEY}`,
+      ...(process.env.OPENAI_ORGANIZATION && {
+        'OpenAI-Organization': process.env.OPENAI_ORGANIZATION,
+      }),
+    },
+    method: 'POST',
+    body: JSON.stringify({
+      model,
+      messages,
+      max_tokens: maxTokens,
+      temperature: temperature,
+      stream: false,
+    }),
   });
+
+  if (res.status !== 200) {
+    throw new Error(`OpenAI API returned an error: ${res.status}`);
+  }
+
+  const json = await res.json();
+  return json.choices[0].text;
 };
 
-export const sendMessageToAIAndStreamResponse = async (
+export const getAIResponse = async (
   userMessage: ChatMessage,
   chatContext: ChatMessage[],
   openAiParams: OpenAiParams,
-  controller: AbortController | null,
+  streamManager: OpenAIRequestManager,
   updateCurrentAiMessage: (message: string) => void,
   addMessage: (message: ChatMessage) => void,
+  stream = true,
 ) => {
   const {
     key,
@@ -123,51 +178,50 @@ export const sendMessageToAIAndStreamResponse = async (
     temperature,
     maxTokens,
   } = openAiParams;
-  // Use OpenAIStream to send message to AI and get a response
-  try {
-    const stream = await OpenAIStream(
-      model,
-      key,
-      [
-        ...chatContext.map((chatMessage) => {
-          return {
-            role: chatMessage.sender === USER_SENDER
-              ? 'user' as Role : 'assistant' as Role,
-            content: chatMessage.message,
-          };
-        }),
-        { role: 'user', content: userMessage.message },
-      ],
-      temperature,
-      maxTokens,
-      controller?.signal,
-    );
-    const reader = stream.getReader();
-    const decoder = new TextDecoder();
-    let aiResponse = '';
 
-    reader.read().then(
-      async function processStream({ done, value }): Promise<void> {
-        if (done) {
-          // Add the full AI response to the chat history
-          const botMessage: ChatMessage = {
-            message: aiResponse,
-            sender: AI_SENDER,
-          };
-          addMessage(botMessage);
-          updateCurrentAiMessage('');
-          return;
-        }
+  const messages: OpenAiMessage[] = [
+    ...chatContext.map((chatMessage) => {
+      return {
+        role: chatMessage.sender === USER_SENDER
+          ? 'user' as Role : 'assistant' as Role,
+        content: chatMessage.message,
+      };
+    }),
+    { role: 'user', content: userMessage.message },
+  ];
 
-        // Accumulate the AI response
-        aiResponse += decoder.decode(value);
-        updateCurrentAiMessage(aiResponse);
+  if (stream) {
+    // Use streamManager.streamSSE to send message to AI and get a response
+    try {
+      await streamManager.streamSSE(
+        openAiParams,
+        messages,
+        updateCurrentAiMessage,
+        addMessage,
+      );
+    } catch (error) {
+      console.error('Error in streamManager.streamSSE:', error);
+    }
+  } else {
+    // Non-streaming setup using OpenAIRequest
+    try {
+      const aiResponse = await OpenAIRequest(
+        model,
+        key,
+        messages,
+        temperature,
+        maxTokens,
+      );
 
-        // Continue reading the stream
-        return reader.read().then(processStream);
-      },
-    );
-  } catch (error) {
-    console.error('Error in OpenAIStream:', error);
+      const botMessage: ChatMessage = {
+        message: aiResponse,
+        sender: AI_SENDER,
+      };
+      addMessage(botMessage);
+      updateCurrentAiMessage('');
+
+    } catch (error) {
+      console.error('Error in OpenAIRequest:', error);
+    }
   }
 };

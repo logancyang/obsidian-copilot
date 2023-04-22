@@ -11,3 +11,4 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   maxTokens: '1000',
   contextTurns: '3',
 };
+export const OPEN_AI_API_URL = 'https://api.openai.com/v1/chat/completions';

@@ -4,7 +4,7 @@ import ChatMessages from '@/components/ChatComponents/ChatMessages';
 import { USER_SENDER } from '@/constants';
 import { AppContext } from '@/context';
 import { CopilotSettings } from '@/main';
-import { OpenAiParams, sendMessageToAIAndStreamResponse } from '@/openAiStream';
+import { OpenAIRequestManager, OpenAiParams, getAIResponse } from '@/openAiStream';
 import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
 import {
   createTranslateSelectionPrompt,
@@ -34,16 +34,18 @@ interface ChatProps {
   settings: CopilotSettings;
   model: string;
   emitter: EventEmitter;
+  streamManager: OpenAIRequestManager;
 }
 
-const Chat: React.FC<ChatProps> = ({ sharedState, settings, model, emitter }) => {
+const Chat: React.FC<ChatProps> = ({
+  sharedState, settings, model, emitter, streamManager
+}) => {
   const [
     chatHistory, addMessage, clearMessages
   ] = useSharedState(sharedState);
   const [inputMessage, setInputMessage] = useState('');
   const [currentAiMessage, setCurrentAiMessage] = useState('');
   const [currentModel, setCurrentModel] = useState(model);
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   const app = useContext(AppContext);
   const {
@@ -76,11 +78,11 @@ const Chat: React.FC<ChatProps> = ({ sharedState, settings, model, emitter }) =>
     // Clear input
     setInputMessage('');
 
-    await sendMessageToAIAndStreamResponse(
+    await getAIResponse(
       userMessage,
       chatContext,
       openAiParams,
-      abortController,
+      streamManager,
       setCurrentAiMessage,
       addMessage,
     );
@@ -132,21 +134,18 @@ const Chat: React.FC<ChatProps> = ({ sharedState, settings, model, emitter }) =>
     // Send the prompt as a user message
     const promptMessage: ChatMessage = { sender: USER_SENDER, message: prompt };
     // Skip adding promptMessage to chat history to hide it from the user
-    await sendMessageToAIAndStreamResponse(
+    await getAIResponse(
       promptMessage,
       [],
       openAiParams,
-      abortController,
+      streamManager,
       setCurrentAiMessage,
       addMessage,
     );
   };
 
   const handleStopGenerating = () => {
-    if (abortController) {
-      abortController.abort();
-      setAbortController(null);
-    }
+    streamManager.stopStreaming();
   };
 
   const createEffect = (
@@ -161,11 +160,11 @@ const Chat: React.FC<ChatProps> = ({ sharedState, settings, model, emitter }) =>
           sender: USER_SENDER,
         };
 
-        await sendMessageToAIAndStreamResponse(
+        await getAIResponse(
           promptMessage,
           [],
           openAiParams,
-          abortController,
+          streamManager,
           setCurrentAiMessage,
           addMessage,
         );
