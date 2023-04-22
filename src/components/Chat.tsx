@@ -144,6 +144,10 @@ const Chat: React.FC<ChatProps> = ({
     );
   };
 
+  const clearCurrentAiMessage = () => {
+    setCurrentAiMessage('');
+  };
+
   const handleStopGenerating = () => {
     streamManager.stopStreaming();
   };
@@ -202,7 +206,12 @@ const Chat: React.FC<ChatProps> = ({
           currentModel={currentModel}
           setCurrentModel={setCurrentModel}
           onStopGenerating={handleStopGenerating}
-          onNewChat={clearMessages}
+          onNewChat={
+            () => {
+              clearMessages();
+              clearCurrentAiMessage();
+            }
+          }
           onSaveAsNote={handleSaveAsNote}
           onUseActiveNoteAsContext={useActiveNoteAsContext}
         />

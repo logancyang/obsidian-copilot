@@ -86,10 +86,21 @@ export class OpenAIRequestManager {
 
         let aiResponse = '';
 
+        const addAiMessageToChatHistory = (aiResponse: string) => {
+          const botMessage: ChatMessage = {
+              message: aiResponse,
+              sender: AI_SENDER,
+            };
+          addMessage(botMessage);
+          updateCurrentAiMessage('');
+        }
+
         const onMessage = async (e: any) => {
           if (this.stopRequested) {
             console.log('Manually closing SSE stream due to stop request.');
             source.close();
+            addAiMessageToChatHistory(aiResponse);
+            this.stopRequested = false;
             resolve(null);
             return;
           }
@@ -104,12 +115,7 @@ export class OpenAIRequestManager {
             updateCurrentAiMessage(aiResponse);
           } else {
             source.close();
-            const botMessage: ChatMessage = {
-              message: aiResponse,
-              sender: AI_SENDER,
-            };
-            addMessage(botMessage);
-            updateCurrentAiMessage('');
+            addAiMessageToChatHistory(aiResponse);
             resolve(aiResponse);
           }
         };
