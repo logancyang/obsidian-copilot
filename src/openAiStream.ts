@@ -165,8 +165,7 @@ export const OpenAIRequest = async (
     throw new Error(`OpenAI API returned an error: ${res.status}`);
   }
 
-  const json = await res.json();
-  return json.choices[0].text;
+  return res.json.choices[0].message.content;
 };
 
 export const getAIResponse = async (
