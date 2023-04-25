@@ -9,6 +9,7 @@ import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
 import {
   createChangeToneSelectionPrompt,
   createTranslateSelectionPrompt,
+  eli5SelectionPrompt,
   emojifyPrompt,
   formatDateTime,
   getChatContext,
@@ -189,6 +190,7 @@ const Chat: React.FC<ChatProps> = ({
   useEffect(createEffect('removeUrlsFromSelection', removeUrlsFromSelectionPrompt), []);
   useEffect(createEffect('rewriteTweetSelection', rewriteTweetSelectionPrompt), []);
   useEffect(createEffect('rewriteTweetThreadSelection', rewriteTweetThreadSelectionPrompt), []);
+  useEffect(createEffect('eli5Selection', eli5SelectionPrompt), []);
   useEffect(
     createEffect("translateSelection", (selectedText, language) =>
       createTranslateSelectionPrompt(language)(selectedText)

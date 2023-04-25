@@ -101,6 +101,11 @@ export function rewriteTweetThreadSelectionPrompt(selectedText: string): string 
     + `${selectedText}`;
 }
 
+export function eli5SelectionPrompt(selectedText: string): string {
+  return `Please explain the following text like I'm 5 years old:\n\n`
+    + `${selectedText}`;
+}
+
 export function createTranslateSelectionPrompt(language?: string) {
   return (selectedText: string): string => {
     return `Please translate the following text to ${language}:\n\n` + `${selectedText}`;

@@ -85,6 +85,14 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: 'eli5-prompt',
+      name: 'Explain selection like I\'m 5',
+      editorCallback: (editor: Editor) => {
+        this.processSelection(editor, 'eli5Selection');
+      },
+    });
+
+    this.addCommand({
       id: 'translate-selection-prompt',
       name: 'Translate selection',
       editorCallback: (editor: Editor) => {
