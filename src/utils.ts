@@ -71,6 +71,11 @@ export function useNoteAsContextPrompt(
     + `The content of the note is between "---":\n---\n${noteContent}\n---\n`;
 }
 
+export function fixGrammarSpellingSelectionPrompt(selectedText: string): string {
+  return `Please fix the grammar and spelling of the following text and return it without any other changes:\n\n`
+    + `${selectedText}`;
+}
+
 export function simplifyPrompt(selectedText: string): string {
   return `Please simplify the following text so that a 6th-grader can understand:\n\n`
     + `${selectedText}`;

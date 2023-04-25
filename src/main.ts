@@ -45,6 +45,14 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: 'fix-grammar-prompt',
+      name: 'Fix grammar and spelling of selection',
+      editorCallback: (editor: Editor) => {
+        this.processSelection(editor, 'fixGrammarSpellingSelection');
+      },
+    });
+
+    this.addCommand({
       id: 'simplify-prompt',
       name: 'Simplify selection',
       editorCallback: (editor: Editor) => {

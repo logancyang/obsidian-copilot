@@ -11,6 +11,7 @@ import {
   createTranslateSelectionPrompt,
   eli5SelectionPrompt,
   emojifyPrompt,
+  fixGrammarSpellingSelectionPrompt,
   formatDateTime,
   getChatContext,
   getFileContent,
@@ -185,6 +186,7 @@ const Chat: React.FC<ChatProps> = ({
     };
   };
 
+  useEffect(createEffect('fixGrammarSpellingSelection', fixGrammarSpellingSelectionPrompt), []);
   useEffect(createEffect('simplifySelection', simplifyPrompt), []);
   useEffect(createEffect('emojifySelection', emojifyPrompt), []);
   useEffect(createEffect('removeUrlsFromSelection', removeUrlsFromSelectionPrompt), []);
