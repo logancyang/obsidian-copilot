@@ -125,6 +125,14 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: 'press-release-prompt',
+      name: 'Rewrite selection to a press release',
+      editorCallback: (editor: Editor) => {
+        this.processSelection(editor, 'rewritePressReleaseSelection');
+      },
+    });
+
+    this.addCommand({
       id: 'translate-selection-prompt',
       name: 'Translate selection',
       editorCallback: (editor: Editor) => {

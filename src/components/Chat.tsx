@@ -18,13 +18,14 @@ import {
   getFileName,
   removeUrlsFromSelectionPrompt,
   rewriteLongerSelectionPrompt,
+  rewritePressReleaseSelectionPrompt,
   rewriteShorterSelectionPrompt,
   rewriteTweetSelectionPrompt,
   rewriteTweetThreadSelectionPrompt,
   sanitizeSettings,
   simplifyPrompt,
   summarizePrompt,
-  useNoteAsContextPrompt
+  useNoteAsContextPrompt,
 } from '@/utils';
 import { EventEmitter } from 'events';
 import { TFile } from 'obsidian';
@@ -199,6 +200,7 @@ const Chat: React.FC<ChatProps> = ({
   useEffect(createEffect('rewriteShorterSelection', rewriteShorterSelectionPrompt), []);
   useEffect(createEffect('rewriteLongerSelection', rewriteLongerSelectionPrompt), []);
   useEffect(createEffect('eli5Selection', eli5SelectionPrompt), []);
+  useEffect(createEffect('rewritePressReleaseSelection', rewritePressReleaseSelectionPrompt), []);
   useEffect(
     createEffect("translateSelection", (selectedText, language) =>
       createTranslateSelectionPrompt(language)(selectedText)

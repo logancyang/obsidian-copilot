@@ -126,6 +126,11 @@ export function eli5SelectionPrompt(selectedText: string): string {
     + `${selectedText}`;
 }
 
+export function rewritePressReleaseSelectionPrompt(selectedText: string): string {
+  return `Please rewrite the following text to make it sound like a press release:\n\n`
+    + `${selectedText}`;
+}
+
 export function createTranslateSelectionPrompt(language?: string) {
   return (selectedText: string): string => {
     return `Please translate the following text to ${language}:\n\n` + `${selectedText}`;
