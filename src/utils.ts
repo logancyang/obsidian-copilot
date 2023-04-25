@@ -106,3 +106,9 @@ export function createTranslateSelectionPrompt(language?: string) {
     return `Please translate the following text to ${language}:\n\n` + `${selectedText}`;
   };
 }
+
+export function createChangeToneSelectionPrompt(tone?: string) {
+  return (selectedText: string): string => {
+    return `Please change the tone of the following text to ${tone}:\n\n` + `${selectedText}`;
+  };
+}

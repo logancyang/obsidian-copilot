@@ -7,6 +7,7 @@ import { CopilotSettings } from '@/main';
 import { OpenAIRequestManager, OpenAiParams, getAIResponse } from '@/openAiStream';
 import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
 import {
+  createChangeToneSelectionPrompt,
   createTranslateSelectionPrompt,
   emojifyPrompt,
   formatDateTime,
@@ -191,6 +192,12 @@ const Chat: React.FC<ChatProps> = ({
   useEffect(
     createEffect("translateSelection", (selectedText, language) =>
       createTranslateSelectionPrompt(language)(selectedText)
+    ),
+    []
+  );
+  useEffect(
+    createEffect("changeToneSelection", (selectedText, tone) =>
+      createChangeToneSelectionPrompt(tone)(selectedText)
     ),
     []
   );

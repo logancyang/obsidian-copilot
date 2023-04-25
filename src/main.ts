@@ -1,5 +1,6 @@
 import CopilotView from '@/components/CopilotView';
 import { LanguageModal } from "@/components/LanguageModal";
+import { ToneModal } from "@/components/ToneModal";
 import {
   CHAR_LENGTH_LIMIT, CHAT_VIEWTYPE, DEFAULT_SETTINGS,
 } from '@/constants';
@@ -93,6 +94,20 @@ export default class CopilotPlugin extends Plugin {
             return;
           }
           this.processSelection(editor, 'translateSelection', language);
+        }).open();
+      },
+    });
+
+    this.addCommand({
+      id: 'change-tone-prompt',
+      name: 'Change tone of selection',
+      editorCallback: (editor: Editor) => {
+        new ToneModal(this.app, (tone) => {
+          if (!tone) {
+            new Notice('Please select a tone.');
+            return;
+          }
+          this.processSelection(editor, 'changeToneSelection', tone);
         }).open();
       },
     });
