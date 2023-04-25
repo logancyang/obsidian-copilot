@@ -93,6 +93,22 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: 'make-shorter-prompt',
+      name: 'Rewrite selection to make it shorter',
+      editorCallback: (editor: Editor) => {
+        this.processSelection(editor, 'rewriteShorterSelection');
+      },
+    });
+
+    this.addCommand({
+      id: 'make-longer-prompt',
+      name: 'Rewrite selection to make it longer',
+      editorCallback: (editor: Editor) => {
+        this.processSelection(editor, 'rewriteLongerSelection');
+      },
+    });
+
+    this.addCommand({
       id: 'eli5-prompt',
       name: 'Explain selection like I\'m 5',
       editorCallback: (editor: Editor) => {

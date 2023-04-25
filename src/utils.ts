@@ -106,6 +106,16 @@ export function rewriteTweetThreadSelectionPrompt(selectedText: string): string 
     + `${selectedText}`;
 }
 
+export function rewriteShorterSelectionPrompt(selectedText: string): string {
+  return `Please rewrite the following text to make it half as long while keeping the meaning as much as possible:\n`
+    + `${selectedText}`;
+}
+
+export function rewriteLongerSelectionPrompt(selectedText: string): string {
+  return `Please rewrite the following text to make it twice as long while keeping the meaning as much as possible:\n`
+    + `${selectedText}`;
+}
+
 export function eli5SelectionPrompt(selectedText: string): string {
   return `Please explain the following text like I'm 5 years old:\n\n`
     + `${selectedText}`;
