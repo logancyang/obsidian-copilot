@@ -53,6 +53,14 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: 'summarize-prompt',
+      name: 'Summarize selection',
+      editorCallback: (editor: Editor) => {
+        this.processSelection(editor, 'summarizeSelection');
+      },
+    });
+
+    this.addCommand({
       id: 'simplify-prompt',
       name: 'Simplify selection',
       editorCallback: (editor: Editor) => {
@@ -94,7 +102,7 @@ export default class CopilotPlugin extends Plugin {
 
     this.addCommand({
       id: 'make-shorter-prompt',
-      name: 'Rewrite selection to make it shorter',
+      name: 'Make selection shorter',
       editorCallback: (editor: Editor) => {
         this.processSelection(editor, 'rewriteShorterSelection');
       },
@@ -102,7 +110,7 @@ export default class CopilotPlugin extends Plugin {
 
     this.addCommand({
       id: 'make-longer-prompt',
-      name: 'Rewrite selection to make it longer',
+      name: 'Make selection longer',
       editorCallback: (editor: Editor) => {
         this.processSelection(editor, 'rewriteLongerSelection');
       },

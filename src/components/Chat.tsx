@@ -23,6 +23,7 @@ import {
   rewriteTweetThreadSelectionPrompt,
   sanitizeSettings,
   simplifyPrompt,
+  summarizePrompt,
   useNoteAsContextPrompt
 } from '@/utils';
 import { EventEmitter } from 'events';
@@ -189,6 +190,7 @@ const Chat: React.FC<ChatProps> = ({
   };
 
   useEffect(createEffect('fixGrammarSpellingSelection', fixGrammarSpellingSelectionPrompt), []);
+  useEffect(createEffect('summarizeSelection', summarizePrompt), []);
   useEffect(createEffect('simplifySelection', simplifyPrompt), []);
   useEffect(createEffect('emojifySelection', emojifyPrompt), []);
   useEffect(createEffect('removeUrlsFromSelection', removeUrlsFromSelectionPrompt), []);

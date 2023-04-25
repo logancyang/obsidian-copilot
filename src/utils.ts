@@ -67,12 +67,17 @@ export function useNoteAsContextPrompt(
     + `does not mention it. `
     + `If you understand, please reply with the following word for word:`
     + `"OK I've read this note titled [[ ${noteName} ]]. `
-    + `Feel free to ask related questions, such as 'give me a summary of this note in bulletpoints', 'what key questions does it answer', etc. "\n`
+    + `Feel free to ask related questions, such as 'give me a summary of this note in bullet points', 'what key questions does it answer', etc. "\n`
     + `The content of the note is between "---":\n---\n${noteContent}\n---\n`;
 }
 
 export function fixGrammarSpellingSelectionPrompt(selectedText: string): string {
   return `Please fix the grammar and spelling of the following text and return it without any other changes:\n\n`
+    + `${selectedText}`;
+}
+
+export function summarizePrompt(selectedText: string): string {
+  return `Please summarize the following text into bullet points and return it without any other changes:\n\n`
     + `${selectedText}`;
 }
 
