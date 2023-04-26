@@ -1,6 +1,6 @@
 import { AI_SENDER, OPEN_AI_API_URL, USER_SENDER } from '@/constants';
 import { ChatMessage } from '@/sharedState';
-import { requestUrl } from 'obsidian';
+import { Notice, requestUrl } from 'obsidian';
 import { SSE } from 'sse';
 
 export type Role = 'assistant' | 'user';
@@ -214,8 +214,9 @@ export const getAIResponse = async (
         addMessage,
       );
     } catch (error) {
-      console.error('Error in streamManager.streamSSE:', error);
-    }
+        new Notice("Error: Please check your API key and credentials.");
+        console.error('Error in streamManager.streamSSE:', error);
+      }
   } else {
     // Non-streaming setup using OpenAIRequest
     try {
@@ -235,6 +236,7 @@ export const getAIResponse = async (
       updateCurrentAiMessage('');
 
     } catch (error) {
+      new Notice("Error: Please check your API key and credentials.");
       console.error('Error in OpenAIRequest:', error);
     }
   }

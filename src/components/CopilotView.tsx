@@ -26,6 +26,7 @@ export default class CopilotView extends ItemView {
     this.app = plugin.app;
     this.settings = plugin.settings;
     this.model = plugin.settings.defaultModel;
+    this.stream = plugin.settings.stream;
     this.debug = plugin.settings.debug;
     this.emitter = new EventEmitter();
     this.streamManager = new OpenAIRequestManager();
