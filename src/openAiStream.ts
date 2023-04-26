@@ -176,6 +176,7 @@ export const getAIResponse = async (
   updateCurrentAiMessage: (message: string) => void,
   addMessage: (message: ChatMessage) => void,
   stream = true,
+  debug = false,
 ) => {
   const {
     key,
@@ -194,6 +195,14 @@ export const getAIResponse = async (
     }),
     { role: 'user', content: userMessage.message },
   ];
+
+  if (debug) {
+    console.log('openAiParams:', openAiParams);
+    console.log('stream:', stream);
+    for (const [i, message] of messages.entries()) {
+      console.log(`Message ${i}:\nrole: ${message.role}\n${message.content}`);
+    }
+  }
 
   if (stream) {
     // Use streamManager.streamSSE to send message to AI and get a response

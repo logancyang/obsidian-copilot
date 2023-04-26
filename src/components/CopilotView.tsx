@@ -15,6 +15,7 @@ export default class CopilotView extends ItemView {
   private settings: CopilotSettings;
   private model: string;
   private root: Root | null = null;
+  private debug = false;
   emitter: EventEmitter;
   streamManager: OpenAIRequestManager;
 
@@ -24,6 +25,7 @@ export default class CopilotView extends ItemView {
     this.app = plugin.app;
     this.settings = plugin.settings;
     this.model = plugin.settings.defaultModel;
+    this.debug = plugin.settings.debug;
     this.emitter = new EventEmitter();
     this.streamManager = new OpenAIRequestManager();
   }
@@ -57,6 +59,7 @@ export default class CopilotView extends ItemView {
             model={this.model}
             emitter={this.emitter}
             streamManager={this.streamManager}
+            debug={this.debug}
           />
         </React.StrictMode>
       </AppContext.Provider>

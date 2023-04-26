@@ -44,10 +44,11 @@ interface ChatProps {
   model: string;
   emitter: EventEmitter;
   streamManager: OpenAIRequestManager;
+  debug: boolean;
 }
 
 const Chat: React.FC<ChatProps> = ({
-  sharedState, settings, model, emitter, streamManager
+  sharedState, settings, model, emitter, streamManager, debug
 }) => {
   const [
     chatHistory, addMessage, clearMessages
@@ -94,6 +95,8 @@ const Chat: React.FC<ChatProps> = ({
       streamManager,
       setCurrentAiMessage,
       addMessage,
+      true,
+      debug,
     );
   };
 
@@ -150,6 +153,8 @@ const Chat: React.FC<ChatProps> = ({
       streamManager,
       setCurrentAiMessage,
       addMessage,
+      true,
+      debug,
     );
   };
 
@@ -161,6 +166,7 @@ const Chat: React.FC<ChatProps> = ({
     streamManager.stopStreaming();
   };
 
+  // Create an effect for each event type (command)
   const createEffect = (
     eventType: string,
     promptFn: (selectedText: string, eventSubtype?: string) => string
@@ -180,6 +186,8 @@ const Chat: React.FC<ChatProps> = ({
           streamManager,
           setCurrentAiMessage,
           addMessage,
+          true,
+          debug,
         );
       };
 

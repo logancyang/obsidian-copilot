@@ -14,6 +14,7 @@ export interface CopilotSettings {
   temperature: string;
   maxTokens: string;
   contextTurns: string;
+  debug: boolean;
 }
 
 export default class CopilotPlugin extends Plugin {

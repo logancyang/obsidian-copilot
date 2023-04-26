@@ -130,5 +130,26 @@ export class CopilotSettingTab extends PluginSettingTab {
           })
         }
       );
+
+    containerEl.createEl('h4', {text: 'Development mode'});
+
+    new Setting(containerEl)
+      .setName("Debug mode")
+      .setDesc(
+        createFragment((frag) => {
+					frag.appendText("Debug mode will log all API requests and prompts to the console. Only takes effect when you ");
+					frag.createEl('strong', {text: "restart the plugin"});
+				})
+      )
+      .addDropdown((dropdown: DropdownComponent) => {
+        dropdown
+          .addOption('true', 'On')
+          .addOption('false', 'Off')
+          .setValue(this.plugin.settings.debug ? 'true' : 'false')
+          .onChange(async (value: string) => {
+            this.plugin.settings.debug = value === 'true';
+            await this.plugin.saveSettings();
+          });
+      });
   }
 }
