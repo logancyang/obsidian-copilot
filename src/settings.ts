@@ -1,5 +1,6 @@
+import { DEFAULT_SETTINGS } from "@/constants";
 import CopilotPlugin from "@/main";
-import { App, DropdownComponent, PluginSettingTab, Setting } from "obsidian";
+import { App, DropdownComponent, Notice, PluginSettingTab, Setting } from "obsidian";
 
 export class CopilotSettingTab extends PluginSettingTab {
   plugin: CopilotPlugin;
@@ -14,20 +15,38 @@ export class CopilotSettingTab extends PluginSettingTab {
 
     containerEl.empty();
     containerEl.createEl('h2', {text: 'Obsidian Copilot Settings'});
+
+    containerEl.createEl('button', {
+      text: 'Reset to default settings',
+      type: 'button',
+      cls: 'mod-cta',
+    }).addEventListener('click', async () => {
+      this.plugin.settings = DEFAULT_SETTINGS;
+      await this.plugin.saveSettings();
+      new Notice('Settings have been reset to their default values.');
+    });
+
     containerEl.createEl('h4', {text: 'OpenAI API Settings'});
 
     new Setting(containerEl)
       .setName("Your OpenAI API key")
       .setDesc(
         createFragment((frag) => {
-					frag.appendText("You can find your API key at ");
-					frag.createEl('a', {
+          frag.appendText("You can find your API key at ");
+          frag.createEl('a', {
             text: "https://beta.openai.com/account/api-keys",
             href: "https://beta.openai.com/account/api-keys"
           });
           frag.createEl('br');
-          frag.appendText("It is stored locally in your vault, and is only used to make requests to OpenAI.");
-				})
+          frag.appendText(
+            "It is stored locally in your vault at "
+          );
+          frag.createEl(
+            'strong',
+            {text: "path_to_your_vault/.obsidian/plugins/obsidian-copilot/data.json"}
+          );
+          frag.appendText(", and it is only used to make requests to OpenAI.");
+        })
       )
       .addText((text) =>{
         text.inputEl.type = "password";
@@ -46,9 +65,9 @@ export class CopilotSettingTab extends PluginSettingTab {
       .setName("Default Model")
       .setDesc(
         createFragment((frag) => {
-					frag.appendText("The default model to use, only takes effect when you ");
-					frag.createEl('strong', {text: "restart the plugin"});
-				})
+          frag.appendText("The default model to use, only takes effect when you ");
+          frag.createEl('strong', {text: "restart the plugin"});
+        })
       )
       .addDropdown((dropdown: DropdownComponent) => {
         dropdown
@@ -72,10 +91,10 @@ export class CopilotSettingTab extends PluginSettingTab {
       .setName("Temperature")
       .setDesc(
         createFragment((frag) => {
-					frag.appendText(
+          frag.appendText(
             "Default is 0.7. Higher values will result in more creativeness, but also more mistakes. Set to 0 for no randomness."
           );
-				})
+        })
       )
       .addText((text) =>{
         text.inputEl.type = "number";
@@ -93,10 +112,10 @@ export class CopilotSettingTab extends PluginSettingTab {
       .setName("Token limit")
       .setDesc(
         createFragment((frag) => {
-					frag.appendText(
+          frag.appendText(
             "The maximum number of tokens to generate. Default is 1000."
           );
-				})
+        })
       )
       .addText((text) =>{
         text.inputEl.type = "number";
@@ -114,10 +133,10 @@ export class CopilotSettingTab extends PluginSettingTab {
       .setName("Conversation turns in context")
       .setDesc(
         createFragment((frag) => {
-					frag.appendText(
+          frag.appendText(
             "The number of previous conversation turns to include in the context. Default is 3 turns, i.e. 6 messages."
           );
-				})
+        })
       )
       .addText((text) =>{
         text.inputEl.type = "number";
@@ -132,14 +151,34 @@ export class CopilotSettingTab extends PluginSettingTab {
       );
 
     containerEl.createEl('h4', {text: 'Development mode'});
+    containerEl.createEl('h6',
+      {text: 'Please reload the plugin when you change these settings.'}
+    );
+
+    new Setting(containerEl)
+      .setName("Streaming mode")
+      .setDesc(
+        createFragment((frag) => {
+          frag.appendText("Stream the response from the API as it comes in.");
+        })
+      )
+      .addDropdown((dropdown: DropdownComponent) => {
+        dropdown
+          .addOption('true', 'On')
+          .addOption('false', 'Off')
+          .setValue(this.plugin.settings.stream ? 'true' : 'false')
+          .onChange(async (value: string) => {
+            this.plugin.settings.stream = value === 'true';
+            await this.plugin.saveSettings();
+          });
+      });
 
     new Setting(containerEl)
       .setName("Debug mode")
       .setDesc(
         createFragment((frag) => {
-					frag.appendText("Debug mode will log all API requests and prompts to the console. Only takes effect when you ");
-					frag.createEl('strong', {text: "restart the plugin"});
-				})
+          frag.appendText("Debug mode will log all API requests and prompts to the console.");
+        })
       )
       .addDropdown((dropdown: DropdownComponent) => {
         dropdown

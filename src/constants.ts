@@ -10,5 +10,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   temperature: '0.7',
   maxTokens: '1000',
   contextTurns: '3',
+  stream: true,
+  debug: false,
 };
 export const OPEN_AI_API_URL = 'https://api.openai.com/v1/chat/completions';

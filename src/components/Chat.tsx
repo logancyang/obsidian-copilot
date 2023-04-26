@@ -44,11 +44,12 @@ interface ChatProps {
   model: string;
   emitter: EventEmitter;
   streamManager: OpenAIRequestManager;
+  stream: boolean;
   debug: boolean;
 }
 
 const Chat: React.FC<ChatProps> = ({
-  sharedState, settings, model, emitter, streamManager, debug
+  sharedState, settings, model, emitter, streamManager, stream, debug
 }) => {
   const [
     chatHistory, addMessage, clearMessages
@@ -95,7 +96,7 @@ const Chat: React.FC<ChatProps> = ({
       streamManager,
       setCurrentAiMessage,
       addMessage,
-      true,
+      stream,
       debug,
     );
   };
@@ -153,7 +154,7 @@ const Chat: React.FC<ChatProps> = ({
       streamManager,
       setCurrentAiMessage,
       addMessage,
-      true,
+      stream,
       debug,
     );
   };
@@ -186,7 +187,7 @@ const Chat: React.FC<ChatProps> = ({
           streamManager,
           setCurrentAiMessage,
           addMessage,
-          true,
+          stream,
           debug,
         );
       };
