@@ -81,6 +81,11 @@ export function summarizePrompt(selectedText: string): string {
     + `${selectedText}`;
 }
 
+export function tocPrompt(selectedText: string): string {
+  return `Please generate a table of contents for the following text and return it without any other changes:\n\n`
+    + `${selectedText}`;
+}
+
 export function simplifyPrompt(selectedText: string): string {
   return `Please simplify the following text so that a 6th-grader can understand:\n\n`
     + `${selectedText}`;

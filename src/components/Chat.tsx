@@ -25,6 +25,7 @@ import {
   sanitizeSettings,
   simplifyPrompt,
   summarizePrompt,
+  tocPrompt,
   useNoteAsContextPrompt,
 } from '@/utils';
 import { EventEmitter } from 'events';
@@ -192,6 +193,7 @@ const Chat: React.FC<ChatProps> = ({
 
   useEffect(createEffect('fixGrammarSpellingSelection', fixGrammarSpellingSelectionPrompt), []);
   useEffect(createEffect('summarizeSelection', summarizePrompt), []);
+  useEffect(createEffect('tocSelection', tocPrompt), []);
   useEffect(createEffect('simplifySelection', simplifyPrompt), []);
   useEffect(createEffect('emojifySelection', emojifyPrompt), []);
   useEffect(createEffect('removeUrlsFromSelection', removeUrlsFromSelectionPrompt), []);
