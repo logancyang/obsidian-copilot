@@ -16,6 +16,7 @@ import {
   getChatContext,
   getFileContent,
   getFileName,
+  glossaryPrompt,
   removeUrlsFromSelectionPrompt,
   rewriteLongerSelectionPrompt,
   rewritePressReleaseSelectionPrompt,
@@ -194,6 +195,7 @@ const Chat: React.FC<ChatProps> = ({
   useEffect(createEffect('fixGrammarSpellingSelection', fixGrammarSpellingSelectionPrompt), []);
   useEffect(createEffect('summarizeSelection', summarizePrompt), []);
   useEffect(createEffect('tocSelection', tocPrompt), []);
+  useEffect(createEffect('glossarySelection', glossaryPrompt), []);
   useEffect(createEffect('simplifySelection', simplifyPrompt), []);
   useEffect(createEffect('emojifySelection', emojifyPrompt), []);
   useEffect(createEffect('removeUrlsFromSelection', removeUrlsFromSelectionPrompt), []);

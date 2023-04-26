@@ -69,6 +69,15 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: 'generate-glossary-prompt',
+      name: 'Generate glossary for selection',
+      editorCallback: (editor: Editor) => {
+        this.processSelection(editor, 'glossarySelection');
+      },
+    });
+
+
+    this.addCommand({
       id: 'simplify-prompt',
       name: 'Simplify selection',
       editorCallback: (editor: Editor) => {

@@ -86,6 +86,11 @@ export function tocPrompt(selectedText: string): string {
     + `${selectedText}`;
 }
 
+export function glossaryPrompt(selectedText: string): string {
+  return `Please generate a glossary for the following text and return it without any other changes:\n\n`
+    + `${selectedText}`;
+}
+
 export function simplifyPrompt(selectedText: string): string {
   return `Please simplify the following text so that a 6th-grader can understand:\n\n`
     + `${selectedText}`;
