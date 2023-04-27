@@ -26,6 +26,10 @@ export class CopilotSettingTab extends PluginSettingTab {
       new Notice('Settings have been reset to their default values.');
     });
 
+    containerEl.createEl('h6',
+      {text: 'Please reload the plugin when you change any setting below.'}
+    );
+
     containerEl.createEl('h4', {text: 'OpenAI API Settings'});
 
     new Setting(containerEl)
@@ -76,6 +80,24 @@ export class CopilotSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.defaultModel)
           .onChange(async (value: string) => {
             this.plugin.settings.defaultModel = value;
+            await this.plugin.saveSettings();
+          });
+      });
+
+    new Setting(containerEl)
+      .setName("Streaming mode")
+      .setDesc(
+        createFragment((frag) => {
+          frag.appendText("Stream the response from the API as it comes in. It can take a while for the API to respond, so keeping it on is recommended.");
+        })
+      )
+      .addDropdown((dropdown: DropdownComponent) => {
+        dropdown
+          .addOption('true', 'On')
+          .addOption('false', 'Off')
+          .setValue(this.plugin.settings.stream ? 'true' : 'false')
+          .onChange(async (value: string) => {
+            this.plugin.settings.stream = value === 'true';
             await this.plugin.saveSettings();
           });
       });
@@ -151,27 +173,6 @@ export class CopilotSettingTab extends PluginSettingTab {
       );
 
     containerEl.createEl('h4', {text: 'Development mode'});
-    containerEl.createEl('h6',
-      {text: 'Please reload the plugin when you change these settings.'}
-    );
-
-    new Setting(containerEl)
-      .setName("Streaming mode")
-      .setDesc(
-        createFragment((frag) => {
-          frag.appendText("Stream the response from the API as it comes in.");
-        })
-      )
-      .addDropdown((dropdown: DropdownComponent) => {
-        dropdown
-          .addOption('true', 'On')
-          .addOption('false', 'Off')
-          .setValue(this.plugin.settings.stream ? 'true' : 'false')
-          .onChange(async (value: string) => {
-            this.plugin.settings.stream = value === 'true';
-            await this.plugin.saveSettings();
-          });
-      });
 
     new Setting(containerEl)
       .setName("Debug mode")
