@@ -24,7 +24,7 @@ Obsidian Copilot is a ChatGPT interface right inside Obsidian. It has a minimali
 
 ## 🎬 Demo
 
-[![Video Thumbnail](https://img.youtube.com/vi/jRCDAg2sck8/maxresdefault.jpg)](https://www.youtube.com/watch?v=jRCDAg2sck8)
+[![Video Thumbnail](./images/thumbnail.png)](https://www.youtube.com/watch?v=jRCDAg2sck8)
 
 - Chat with ChatGPT, copy messages to note, save entire conversation as a note
 - QA around your past note
