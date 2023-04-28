@@ -23,7 +23,8 @@ Obsidian Copilot is a ChatGPT interface right inside Obsidian. It has a minimali
 - Set your own parameters like LLM temperature, max tokens, conversation context based on your need (**pls be mindful of the API cost**).
 
 ## 🎬 Demo
-<iframe width="560" height="315" src="https://www.youtube.com/embed/jRCDAg2sck8" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+[![Video Thumbnail](https://img.youtube.com/vi/jRCDAg2sck8/maxresdefault.jpg)](https://www.youtube.com/watch?v=jRCDAg2sck8)
 
 - Chat with ChatGPT, copy messages to note, save entire conversation as a note
 - QA around your past note
