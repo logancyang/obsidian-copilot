@@ -170,7 +170,8 @@ const Chat: React.FC<ChatProps> = ({
   // Create an effect for each event type (command)
   const createEffect = (
     eventType: string,
-    promptFn: (selectedText: string, eventSubtype?: string) => string
+    promptFn: (selectedText: string, eventSubtype?: string) => string,
+    custom_temperature?: number,
   ) => {
     return () => {
       const handleSelection = async (selectedText: string, eventSubtype?: string) => {
@@ -180,10 +181,16 @@ const Chat: React.FC<ChatProps> = ({
           sender: USER_SENDER,
         };
 
+        // Have a hardcoded custom temperature for some commands that need more strictness
+        const updatedOpenAiParams = {
+          ...openAiParams,
+          ...(custom_temperature && { temperature: custom_temperature }),
+        };
+
         await getAIResponse(
           promptMessage,
           [],
-          openAiParams,
+          updatedOpenAiParams,
           streamManager,
           setCurrentAiMessage,
           addMessage,
@@ -208,8 +215,8 @@ const Chat: React.FC<ChatProps> = ({
   useEffect(createEffect('simplifySelection', simplifyPrompt), []);
   useEffect(createEffect('emojifySelection', emojifyPrompt), []);
   useEffect(createEffect('removeUrlsFromSelection', removeUrlsFromSelectionPrompt), []);
-  useEffect(createEffect('rewriteTweetSelection', rewriteTweetSelectionPrompt), []);
-  useEffect(createEffect('rewriteTweetThreadSelection', rewriteTweetThreadSelectionPrompt), []);
+  useEffect(createEffect('rewriteTweetSelection', rewriteTweetSelectionPrompt, 0.2), []);
+  useEffect(createEffect('rewriteTweetThreadSelection', rewriteTweetThreadSelectionPrompt, 0.2), []);
   useEffect(createEffect('rewriteShorterSelection', rewriteShorterSelectionPrompt), []);
   useEffect(createEffect('rewriteLongerSelection', rewriteLongerSelectionPrompt), []);
   useEffect(createEffect('eli5Selection', eli5SelectionPrompt), []);

@@ -97,9 +97,9 @@ export function simplifyPrompt(selectedText: string): string {
 }
 
 export function emojifyPrompt(selectedText: string): string {
-  return `Please rewrite the following text in a fun way and insert emojis.`
-    + `Insert at as many places as possible, but don't make any 2 emojis together.\n`
-    + `The target text is between "---":\n---\n${selectedText}\n---\n`;
+  return `Please rewrite the following content in a fun way and insert emojis.`
+    + `Insert at as many places as possible, but don't have any 2 emojis together.\n`
+    + `Content: ${selectedText}`;
 }
 
 export function removeUrlsFromSelectionPrompt(selectedText: string): string {
@@ -108,8 +108,8 @@ export function removeUrlsFromSelectionPrompt(selectedText: string): string {
 }
 
 export function rewriteTweetSelectionPrompt(selectedText: string): string {
-  return `Please rewrite the following text to under 280 characters and return it without any other changes, make it as engaging as possible:\n`
-    + `${selectedText}`;
+  return `Please rewrite the following content to under 280 characters using simple sentences. Please follow the instruction strictly. Content:\n
+    + ${selectedText}`
 }
 
 export function rewriteTweetThreadSelectionPrompt(selectedText: string): string {
