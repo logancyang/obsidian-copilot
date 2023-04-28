@@ -114,7 +114,7 @@ export function rewriteTweetSelectionPrompt(selectedText: string): string {
 
 export function rewriteTweetThreadSelectionPrompt(selectedText: string): string {
   return `Please follow the instructions closely step by step and rewrite the content to a thread. `
-    + `1. Each paragraph must be under 280 characters. `
+    + `1. Each paragraph must be under 240 characters. `
     + `2. The starting line is \`THREAD START\n\`, and the ending line is \`\nTHREAD END\`. `
     + `3. You must use \`\n\n---\n\n\` to separate each paragraph! Then return it without any other changes. `
     + `4. Make it as engaging as possible.\n The original content:\n\n`
