@@ -23,26 +23,16 @@ Obsidian Copilot is a ChatGPT interface right inside Obsidian. It has a minimali
 - Set your own parameters like LLM temperature, max tokens, conversation context based on your need (**pls be mindful of the API cost**).
 
 ## 🎬 Demo
+<iframe width="560" height="315" src="https://www.youtube.com/embed/jRCDAg2sck8" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
 
-#### Chat with ChatGPT, copy a message to note, or save entire conversation as a note:
-
-![Demo0](./images/demo0.gif)
-
-#### QA around your past note:
-
-![Demo1](./images/demo1.gif)
-
-#### Simplify, Emojify, Remove URLs
-
-![Demo2](./images/demo2.gif)
-
-#### Translate to a language of your choosing
-
-![DemoTranslate](./images/demo_translate.gif)
-
-#### Rewrite into a tweet/thread
-
-![DemoTweet](./images/demo_tweet.gif)
+- Chat with ChatGPT, copy messages to note, save entire conversation as a note
+- QA around your past note
+- Fix grammar and spelling, Summarize, Simplify, Emojify, Remove URLs
+- Generate glossary, table of contents
+- Translate to a language of your choosing
+- Change tone: professional, casual, straightforward, confident, friendly
+- Make longer/shorter
+- Rewrite into a tweet/thread
 
 The settings page lets you set your own temperature, max tokens, conversation context based on your need:
 
@@ -55,10 +45,10 @@ The settings page lets you set your own temperature, max tokens, conversation co
 
 ## 📝 Planned features (based on feedback)
 - More standard prompts that can be used with commands
-- User customized prompts
+- User custom prompts
 - Online prompt library access
-- Add support for having unlimited context, i.e. QA against very long notes, a collection of notes or the entire vault
-- Integration with ChatGPT plugins when I get access
+- Unlimited context, i.e. very long notes, a collection of notes or the entire vault
+- Integration with ChatGPT plugins
 
 ## 🔔 Note
 - The chat history is not saved by default. Please use "**Save as Note**" to save it. The note will have a title `Chat-Year_Month_Day-Hour_Minute_Second`, you can change its name as needed.
