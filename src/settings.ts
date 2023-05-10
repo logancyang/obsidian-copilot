@@ -14,7 +14,7 @@ export class CopilotSettingTab extends PluginSettingTab {
     const { containerEl } = this;
 
     containerEl.empty();
-    containerEl.createEl('h2', {text: 'Obsidian Copilot Settings'});
+    containerEl.createEl('h2', {text: 'Copilot Settings'});
 
     containerEl.createEl('button', {
       text: 'Reset to default settings',

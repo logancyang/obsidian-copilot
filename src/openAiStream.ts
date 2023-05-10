@@ -58,7 +58,7 @@ export class OpenAIRequestManager {
         const formattedMessages = [
           {
             role: 'system',
-            content: 'You are a helpful assistant named Obsidian Copilot.',
+            content: 'You are a helpful assistant named Copilot for Obsidian.',
           },
           ...messages,
         ];

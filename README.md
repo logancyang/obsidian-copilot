@@ -1,6 +1,6 @@
-# 🔍 Obsidian Copilot
+# 🔍 Copilot for Obsidian
 
-Obsidian Copilot is a ChatGPT interface right inside Obsidian. It has a minimalistic design and is straightforward to use.
+Copilot for Obsidian is a ChatGPT interface right inside Obsidian. It has a minimalistic design and is straightforward to use.
 
 - 💬 ChatGPT integration in Obsidian.
 - 🚀 Turbocharge your Second Brain with AI.
