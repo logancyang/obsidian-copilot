@@ -64,7 +64,7 @@ export default class CopilotPlugin extends Plugin {
 
     this.addCommand({
       id: 'generate-toc-prompt',
-      name: 'Generate table of cotents for selection',
+      name: 'Generate table of contents for selection',
       editorCallback: (editor: Editor) => {
         this.processSelection(editor, 'tocSelection');
       },
