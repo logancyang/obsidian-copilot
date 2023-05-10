@@ -39,7 +39,18 @@ The settings page lets you set your own temperature, max tokens, conversation co
 
 <img src="./images/settings-page.png" alt="Settings" width="500">
 
-## ⚙️ Manual Installation
+## ⚙️ Installation
+
+Copilot for Obsidian is now available in **Obsidian Community Plugin**!
+
+- Open Community Plugins settings page, click on the Browse button.
+- Search for "Copilot" in the search bar and find the plugin with this exact name.
+- Click on the Install button.
+- Once the installation is complete, enable the Copilot plugin by toggling on its switch in the Community Plugins settings page.
+
+Now you can see the chat icon in your leftside ribbon, clicking on it will open the chat panel on the right! Don't forget to check out the Copilot commands available in the commands palette!
+
+### 🔧 Manual Installation
 - Go to the latest release
 - Download `main.js`, `manifest.json`, `styles.css` and put them under `.obsidian/plugins/obsidian-copilot/` in your vault
 - Open your Obsidian settings > Community plugins, and turn on `Copilot`.
