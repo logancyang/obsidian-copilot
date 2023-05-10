@@ -17,20 +17,6 @@ export interface OpenAiParams {
   maxTokens: number,
 }
 
-export class OpenAIError extends Error {
-  type: string;
-  param: string;
-  code: string;
-
-  constructor(message: string, type: string, param: string, code: string) {
-    super(message);
-    this.name = 'OpenAIError';
-    this.type = type;
-    this.param = param;
-    this.code = code;
-  }
-}
-
 export class OpenAIRequestManager {
   stopRequested = false;
 
@@ -214,9 +200,15 @@ export const getAIResponse = async (
         addMessage,
       );
     } catch (error) {
-        new Notice("Error: Please check your API key and credentials.");
-        console.error('Error in streamManager.streamSSE:', error);
+      const errorData = JSON.parse(error.data);
+      if (errorData && errorData.error) {
+        new Notice(
+          `OpenAI error: ${errorData.error.code}. `
+          + `Pls check the console for the full error message.`
+        );
       }
+      console.error('Error in streamSSE:', error.data);
+    }
   } else {
     // Non-streaming setup using OpenAIRequest
     try {
@@ -236,8 +228,8 @@ export const getAIResponse = async (
       updateCurrentAiMessage('');
 
     } catch (error) {
-      new Notice("Error: Please check your API key and credentials.");
-      console.error('Error in OpenAIRequest:', error);
+      new Notice(`OpenAI non-streaming error: ${error.status}`);
+      console.error(error);
     }
   }
 };
