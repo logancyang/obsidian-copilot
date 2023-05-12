@@ -160,12 +160,12 @@ If your plugin does not need CSS, delete this file.
   word-break: break-word;
 }
 
-.message-content pre, p {
+.message-content pre, .message-content p {
   margin: 0;
   padding: 0;
 }
 
-.message-content ol, ul {
+.message-content ol, .message-content ul {
   list-style: none;
   padding-left: 20px;
   margin: 0;
