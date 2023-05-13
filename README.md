@@ -62,7 +62,7 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 - User custom prompts
 - Online prompt library access
 - Unlimited context, i.e. very long notes, a collection of notes or the entire vault
-- Integration with ChatGPT plugins
+- Integration with more LLMs, including open-source and local ones.
 
 ## 🔔 Note
 - The chat history is not saved by default. Please use "**Save as Note**" to save it. The note will have a title `Chat-Year_Month_Day-Hour_Minute_Second`, you can change its name as needed.
