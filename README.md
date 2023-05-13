@@ -1,4 +1,5 @@
 # 🔍 Copilot for Obsidian
+![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/logancyang/obsidian-copilot?style=for-the-badge&sort=semver)
 
 Copilot for Obsidian is a ChatGPT interface right inside Obsidian. It has a minimalistic design and is straightforward to use.
 
@@ -8,8 +9,6 @@ Copilot for Obsidian is a ChatGPT interface right inside Obsidian. It has a mini
 - 🧠 Talk to your past notes for insights.
 
 <img src="./images/ui.png" alt="UI">
-
-<a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
 
 ## 🛠️ Features
 - Chat with ChatGPT right inside Obsidian in the Copilot Chat window.
@@ -24,9 +23,9 @@ Copilot for Obsidian is a ChatGPT interface right inside Obsidian. It has a mini
 - Easy commands to **simplify, emojify, translate, rewrite into a tweet/thread,** and more.
 - Set your own parameters like LLM temperature, max tokens, conversation context based on your need (**pls be mindful of the API cost**).
 
-## 🎬 Demo
+## 🎬 Video Demo
 
-[![Video Thumbnail](./images/thumbnail.png)](https://www.youtube.com/watch?v=jRCDAg2sck8)
+<a href="https://www.youtube.com/watch?v=jRCDAg2sck8" target="_blank"><img src="./images/thumbnail.png" /></a>
 
 - Chat with ChatGPT, copy messages to note, save entire conversation as a note
 - QA around your past note
@@ -71,3 +70,13 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 - You can set a very long context in the setting "**Conversation turns in context**" if needed.
 
 ### 📣 Again, please always be mindful of the API cost if you use GPT-4 with a long context!
+
+## Say Thank You
+If you are enjoying Copilot, please support my work by buying me a coffee here: https://www.buymeacoffee.com/logancyang
+
+
+<a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
+
+Please also help spread the word by sharing about the Copilot for Obsidian Plugin on Twitter, Reddit, or any other social media platform you use.
+
+You can find me on Twitter [@logancyang](https://twitter.com/logancyang).
