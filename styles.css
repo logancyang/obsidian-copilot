@@ -97,7 +97,7 @@ If your plugin does not need CSS, delete this file.
   margin-right: 8px;
   margin-bottom: 8px;
   resize: none;
-  overflow: hidden;
+  overflow: auto;
   min-height: 60px;
   max-height: 200px;
   box-sizing: border-box;
