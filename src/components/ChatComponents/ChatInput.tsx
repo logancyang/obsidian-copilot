@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 
 interface ChatInputProps {
@@ -6,12 +6,15 @@ interface ChatInputProps {
   setInputMessage: (message: string) => void;
   handleKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   handleSendMessage: () => void;
+  getChatVisibility: () => Promise<boolean>;
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
-  inputMessage, setInputMessage, handleKeyDown, handleSendMessage
+  inputMessage, setInputMessage, handleKeyDown, handleSendMessage, getChatVisibility,
 }) => {
   const [rows, setRows] = useState(1);
+  const [shouldFocus, setShouldFocus] = useState(false);
+  const textAreaRef = useRef<HTMLTextAreaElement>(null);;
 
   const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputMessage(event.target.value);
@@ -29,9 +32,26 @@ const ChatInput: React.FC<ChatInputProps> = ({
     setRows(rowsNeeded);
   };
 
+  // Effect hook to get the chat visibility
+  useEffect(() => {
+    const fetchChatVisibility = async () => {
+      const visibility = await getChatVisibility();
+      setShouldFocus(visibility);
+    };
+    fetchChatVisibility();
+  }, [getChatVisibility]);
+
+  // This effect will run every time the shouldFocus state is updated
+  useEffect(() => {
+    if (textAreaRef.current && shouldFocus) {
+      textAreaRef.current.focus();
+    }
+  }, [shouldFocus]);
+
   return (
     <div className="chat-input-container">
       <textarea
+        ref={textAreaRef}
         className="chat-input-textarea"
         placeholder="Enter your message here..."
         value={inputMessage}

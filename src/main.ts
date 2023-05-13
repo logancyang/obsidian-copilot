@@ -23,6 +23,10 @@ export default class CopilotPlugin extends Plugin {
   // A chat history that stores the messages sent and received
   // Only reset when the user explicitly clicks "New Chat"
   sharedState: SharedState;
+  activateViewPromise: Promise<void> | null = null;
+  chatIsVisible: boolean = false;
+
+  isChatVisible = () => this.chatIsVisible;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -216,15 +220,18 @@ export default class CopilotPlugin extends Plugin {
 
   async activateView() {
     this.app.workspace.detachLeavesOfType(CHAT_VIEWTYPE);
-    await this.app.workspace.getRightLeaf(false).setViewState({
+    this.activateViewPromise = this.app.workspace.getRightLeaf(false).setViewState({
       type: CHAT_VIEWTYPE,
       active: true,
     });
+    await this.activateViewPromise;
     this.app.workspace.revealLeaf(this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]);
+    this.chatIsVisible = true;
   }
 
   async deactivateView() {
     this.app.workspace.detachLeavesOfType(CHAT_VIEWTYPE);
+    this.chatIsVisible = false;
   }
 
   async loadSettings() {

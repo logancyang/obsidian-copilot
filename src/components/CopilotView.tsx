@@ -20,7 +20,7 @@ export default class CopilotView extends ItemView {
   emitter: EventEmitter;
   streamManager: OpenAIRequestManager;
 
-  constructor(leaf: WorkspaceLeaf, plugin: CopilotPlugin) {
+  constructor(leaf: WorkspaceLeaf, private plugin: CopilotPlugin) {
     super(leaf);
     this.sharedState = plugin.sharedState;
     this.app = plugin.app;
@@ -30,6 +30,7 @@ export default class CopilotView extends ItemView {
     this.debug = plugin.settings.debug;
     this.emitter = new EventEmitter();
     this.streamManager = new OpenAIRequestManager();
+    this.getChatVisibility = this.getChatVisibility.bind(this);
   }
 
   getViewType(): string {
@@ -50,6 +51,13 @@ export default class CopilotView extends ItemView {
     return 'Copilot';
   }
 
+  async getChatVisibility(){
+    if (this.plugin.activateViewPromise) {
+      await this.plugin.activateViewPromise;
+    }
+    return this.plugin.isChatVisible();
+  }
+  
   async onOpen(): Promise<void> {
     const root = createRoot(this.containerEl.children[1]);
     root.render(
@@ -62,6 +70,7 @@ export default class CopilotView extends ItemView {
             emitter={this.emitter}
             streamManager={this.streamManager}
             stream={this.stream}
+            getChatVisibility={this.getChatVisibility}
             debug={this.debug}
           />
         </React.StrictMode>

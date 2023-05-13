@@ -45,11 +45,12 @@ interface ChatProps {
   emitter: EventEmitter;
   streamManager: OpenAIRequestManager;
   stream: boolean;
+  getChatVisibility: () => Promise<boolean>;
   debug: boolean;
 }
 
 const Chat: React.FC<ChatProps> = ({
-  sharedState, settings, model, emitter, streamManager, stream, debug
+  sharedState, settings, model, emitter, streamManager, stream, getChatVisibility, debug
 }) => {
   const [
     chatHistory, addMessage, clearMessages
@@ -259,6 +260,7 @@ const Chat: React.FC<ChatProps> = ({
           setInputMessage={setInputMessage}
           handleSendMessage={handleSendMessage}
           handleKeyDown={handleKeyDown}
+          getChatVisibility={getChatVisibility}
         />
       </div>
     </div>
