@@ -3,11 +3,11 @@
 Copilot for Obsidian is a ChatGPT interface right inside Obsidian. It has a minimalistic design and is straightforward to use.
 
 - 💬 ChatGPT UI in Obsidian.
+- 🛠️ Prompt AI with your writing with Copilot commands to get quick results.
 - 🚀 Turbocharge your Second Brain with AI.
 - 🧠 Talk to your past notes for insights.
-- 🛠️ Prompt AI with your writing to get quick results.
 
-<img src="./images/ui.png" alt="UI" width="500">
+<img src="./images/ui.png" alt="UI">
 
 <a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
 
