@@ -172,23 +172,24 @@ export class CopilotSettingTab extends PluginSettingTab {
         }
       );
 
-    new Setting(containerEl)
-      .setName("Use Note as context (beta)")
-      .setDesc(
-        createFragment((frag) => {
-          frag.appendText(
-            "Use your note as context. Currently only support the active note. "
-            + "Default to off. Be cautious, this could incur more API costs!"
-          );
-        })
-      )
-      .addToggle(toggle => toggle
-        .setValue(this.plugin.settings.useNotesAsContext)
-        .onChange(async (value) => {
-          this.plugin.settings.useNotesAsContext = value;
-          await this.plugin.saveSettings();
-        })
-      );
+    // TODO: Enable this after langchain integration
+    // new Setting(containerEl)
+    //   .setName("Use Notes as context (beta)")
+    //   .setDesc(
+    //     createFragment((frag) => {
+    //       frag.appendText(
+    //         "Use your notes as context. Currently only support the active note. "
+    //         + "Default to off. Be cautious, this could incur more API costs!"
+    //       );
+    //     })
+    //   )
+    //   .addToggle(toggle => toggle
+    //     .setValue(this.plugin.settings.useNotesAsContext)
+    //     .onChange(async (value) => {
+    //       this.plugin.settings.useNotesAsContext = value;
+    //       await this.plugin.saveSettings();
+    //     })
+    //   );
 
     containerEl.createEl('h4', {text: 'Advanced Settings'});
 
