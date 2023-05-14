@@ -13,6 +13,7 @@ import {
   emojifyPrompt,
   fixGrammarSpellingSelectionPrompt,
   formatDateTime,
+  getActiveNoteSystemPrompt,
   getChatContext,
   getFileContent,
   getFileName,
@@ -143,20 +144,23 @@ const Chat: React.FC<ChatProps> = ({
     const noteName = getFileName(file);
 
     // Set the context based on the noteContent
-    const prompt = useNoteAsContextPrompt(noteName, noteContent);
+    const prompt = useNoteAsContextPrompt(noteName);
 
     // Send the prompt as a user message
     const promptMessage: ChatMessage = { sender: USER_SENDER, message: prompt };
-    // Skip adding promptMessage to chat history to hide it from the user
+    const userSystemPrompt = getActiveNoteSystemPrompt(noteContent);
+    console.log('userSystemPrompt 000:', userSystemPrompt);
+    // Hide the prompt from the user
     await getAIResponse(
       promptMessage,
-      [],
+      chatContext,
       openAiParams,
       streamManager,
       setCurrentAiMessage,
       addMessage,
       stream,
       debug,
+      userSystemPrompt,
     );
   };
 

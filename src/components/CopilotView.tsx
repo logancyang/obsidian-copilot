@@ -19,6 +19,8 @@ export default class CopilotView extends ItemView {
   private debug = false;
   emitter: EventEmitter;
   streamManager: OpenAIRequestManager;
+  userSystemPrompt = '';
+  useNotesAsContext = false;
 
   constructor(leaf: WorkspaceLeaf, private plugin: CopilotPlugin) {
     super(leaf);
@@ -31,6 +33,8 @@ export default class CopilotView extends ItemView {
     this.emitter = new EventEmitter();
     this.streamManager = new OpenAIRequestManager();
     this.getChatVisibility = this.getChatVisibility.bind(this);
+    this.userSystemPrompt = plugin.settings.userSystemPrompt;
+    this.useNotesAsContext = plugin.settings.useNotesAsContext;
   }
 
   getViewType(): string {
@@ -57,7 +61,7 @@ export default class CopilotView extends ItemView {
     }
     return this.plugin.isChatVisible();
   }
-  
+
   async onOpen(): Promise<void> {
     const root = createRoot(this.containerEl.children[1]);
     root.render(

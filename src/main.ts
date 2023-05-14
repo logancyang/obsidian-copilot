@@ -14,6 +14,8 @@ export interface CopilotSettings {
   temperature: string;
   maxTokens: string;
   contextTurns: string;
+  useNotesAsContext: boolean;
+  userSystemPrompt: string;
   stream: boolean;
   debug: boolean;
 }
@@ -24,7 +26,7 @@ export default class CopilotPlugin extends Plugin {
   // Only reset when the user explicitly clicks "New Chat"
   sharedState: SharedState;
   activateViewPromise: Promise<void> | null = null;
-  chatIsVisible: boolean = false;
+  chatIsVisible = false;
 
   isChatVisible = () => this.chatIsVisible;
 

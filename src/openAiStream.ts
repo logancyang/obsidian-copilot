@@ -1,4 +1,8 @@
-import { AI_SENDER, OPEN_AI_API_URL, USER_SENDER } from '@/constants';
+import {
+  AI_SENDER,
+  DEFAULT_SYSTEM_PROMPT,
+  OPEN_AI_API_URL, USER_SENDER,
+} from '@/constants';
 import { ChatMessage } from '@/sharedState';
 import { Notice, requestUrl } from 'obsidian';
 import { SSE } from 'sse';
@@ -31,6 +35,7 @@ export class OpenAIRequestManager {
     messages: OpenAiMessage[],
     updateCurrentAiMessage: (message: string) => void,
     addMessage: (message: ChatMessage) => void,
+    userSystemPrompt?: string,
   ) => {
     return new Promise((resolve, reject) => {
       try {
@@ -44,7 +49,7 @@ export class OpenAIRequestManager {
         const formattedMessages = [
           {
             role: 'system',
-            content: 'You are a helpful assistant named Copilot for Obsidian.',
+            content: userSystemPrompt || DEFAULT_SYSTEM_PROMPT,
           },
           ...messages,
         ];
@@ -163,6 +168,7 @@ export const getAIResponse = async (
   addMessage: (message: ChatMessage) => void,
   stream = true,
   debug = false,
+  userSystemPrompt?: string,
 ) => {
   const {
     key,
@@ -185,6 +191,7 @@ export const getAIResponse = async (
   if (debug) {
     console.log('openAiParams:', openAiParams);
     console.log('stream:', stream);
+    console.log('system prompt:', userSystemPrompt || DEFAULT_SYSTEM_PROMPT);
     for (const [i, message] of messages.entries()) {
       console.log(`Message ${i}:\nrole: ${message.role}\n${message.content}`);
     }
@@ -198,6 +205,7 @@ export const getAIResponse = async (
         messages,
         updateCurrentAiMessage,
         addMessage,
+        userSystemPrompt,
       );
     } catch (error) {
       const errorData = JSON.parse(error.data);

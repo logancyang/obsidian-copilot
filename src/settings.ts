@@ -172,6 +172,47 @@ export class CopilotSettingTab extends PluginSettingTab {
         }
       );
 
+    new Setting(containerEl)
+      .setName("Use Note as context (beta)")
+      .setDesc(
+        createFragment((frag) => {
+          frag.appendText(
+            "Use your note as context. Currently only support the active note. "
+            + "Default to off. Be cautious, this could incur more API costs!"
+          );
+        })
+      )
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.useNotesAsContext)
+        .onChange(async (value) => {
+          this.plugin.settings.useNotesAsContext = value;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    containerEl.createEl('h4', {text: 'Advanced Settings'});
+
+    new Setting(containerEl)
+      .setName("User custom system prompt")
+      .setDesc(
+        createFragment((frag) => {
+          frag.appendText(
+            "You can set your own system prompt here. It will override the default system prompt for all messages!"
+          );
+        })
+      )
+      .addTextArea(text => {
+        text.inputEl.style.width = "200px";
+        text.inputEl.style.height = "100px";
+        text
+          .setPlaceholder("User system prompt")
+          .setValue(this.plugin.settings.userSystemPrompt)
+          .onChange(async (value) => {
+            this.plugin.settings.userSystemPrompt = value;
+            await this.plugin.saveSettings();
+          });
+      });
+
     containerEl.createEl('h4', {text: 'Development mode'});
 
     new Setting(containerEl)
