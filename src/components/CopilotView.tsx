@@ -75,6 +75,7 @@ export default class CopilotView extends ItemView {
             streamManager={this.streamManager}
             stream={this.stream}
             getChatVisibility={this.getChatVisibility}
+            userSystemPrompt={this.userSystemPrompt}
             debug={this.debug}
           />
         </React.StrictMode>

@@ -13,7 +13,6 @@ import {
   emojifyPrompt,
   fixGrammarSpellingSelectionPrompt,
   formatDateTime,
-  getActiveNoteSystemPrompt,
   getChatContext,
   getFileContent,
   getFileName,
@@ -28,7 +27,7 @@ import {
   simplifyPrompt,
   summarizePrompt,
   tocPrompt,
-  useNoteAsContextPrompt,
+  useNoteAsContextPrompt
 } from '@/utils';
 import { EventEmitter } from 'events';
 import { TFile } from 'obsidian';
@@ -47,11 +46,13 @@ interface ChatProps {
   streamManager: OpenAIRequestManager;
   stream: boolean;
   getChatVisibility: () => Promise<boolean>;
+  userSystemPrompt: string;
   debug: boolean;
 }
 
 const Chat: React.FC<ChatProps> = ({
-  sharedState, settings, model, emitter, streamManager, stream, getChatVisibility, debug
+  sharedState, settings, model, emitter, streamManager, stream, getChatVisibility,
+  userSystemPrompt, debug
 }) => {
   const [
     chatHistory, addMessage, clearMessages
@@ -100,6 +101,7 @@ const Chat: React.FC<ChatProps> = ({
       addMessage,
       stream,
       debug,
+      userSystemPrompt,
     );
   };
 
@@ -144,12 +146,11 @@ const Chat: React.FC<ChatProps> = ({
     const noteName = getFileName(file);
 
     // Set the context based on the noteContent
-    const prompt = useNoteAsContextPrompt(noteName);
+    const prompt = useNoteAsContextPrompt(noteName, noteContent);
 
     // Send the prompt as a user message
     const promptMessage: ChatMessage = { sender: USER_SENDER, message: prompt };
-    const userSystemPrompt = getActiveNoteSystemPrompt(noteContent);
-    console.log('userSystemPrompt 000:', userSystemPrompt);
+
     // Hide the prompt from the user
     await getAIResponse(
       promptMessage,

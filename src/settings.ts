@@ -198,7 +198,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       .setDesc(
         createFragment((frag) => {
           frag.appendText(
-            "You can set your own system prompt here. It will override the default system prompt for all messages!"
+            "You can set your own system prompt here. It will override the default system prompt for all messages! Use with caution!"
           );
         })
       )

@@ -59,17 +59,17 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
 // Basic prompts
 // Note that GPT4 is much better at following instructions than GPT3.5!
-export function useNoteAsContextPrompt(noteName: string): string {
-  return `Please reply with the following word for word:`
-    + `"OK I've read this note titled [[ ${noteName} ]]. `
-    + `Feel free to ask related questions, such as 'give me a summary of this note in bullet points', 'what key questions does it answer', etc. "\n`;
-}
-
-export function getActiveNoteSystemPrompt(noteContent: string | null): string {
+export function useNoteAsContextPrompt(
+  noteName: string,
+  noteContent: string | null,
+): string {
   return `Please read the note below and be ready to answer questions about it. `
     + `If there's no information about a certain topic, just say the note `
     + `does not mention it. `
-    + `The content of the note is between "/***/":\n/***/\n${noteContent}\n/***/\n`;
+    + `The content of the note is between "/***/":\n\n/***/\n\n${noteContent}\n\n/***/\n\n`
+    + `Please reply with the following word for word:`
+    + `"OK I've read this note titled [[ ${noteName} ]]. `
+    + `Feel free to ask related questions, such as 'give me a summary of this note in bullet points', 'what key questions does it answer', etc. "\n`
 }
 
 export function fixGrammarSpellingSelectionPrompt(selectedText: string): string {

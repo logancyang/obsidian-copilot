@@ -7,7 +7,7 @@ import { ChatMessage } from '@/sharedState';
 import { Notice, requestUrl } from 'obsidian';
 import { SSE } from 'sse';
 
-export type Role = 'assistant' | 'user';
+export type Role = 'assistant' | 'user' | 'system';
 
 export interface OpenAiMessage {
   role: Role;
@@ -35,7 +35,7 @@ export class OpenAIRequestManager {
     messages: OpenAiMessage[],
     updateCurrentAiMessage: (message: string) => void,
     addMessage: (message: ChatMessage) => void,
-    userSystemPrompt?: string,
+    systemPrompt: string,
   ) => {
     return new Promise((resolve, reject) => {
       try {
@@ -49,7 +49,7 @@ export class OpenAIRequestManager {
         const formattedMessages = [
           {
             role: 'system',
-            content: userSystemPrompt || DEFAULT_SYSTEM_PROMPT,
+            content: systemPrompt,
           },
           ...messages,
         ];
@@ -132,7 +132,15 @@ export const OpenAIRequest = async (
   messages: OpenAiMessage[],
   temperature: number,
   maxTokens: number,
+  systemPrompt: string,
 ): Promise<string> => {
+  const formattedMessages: OpenAiMessage[] = [
+    {
+      role: 'system',
+      content: systemPrompt,
+    },
+    ...messages,
+  ];
   const res = await requestUrl({
     url: OPEN_AI_API_URL,
     headers: {
@@ -145,7 +153,7 @@ export const OpenAIRequest = async (
     method: 'POST',
     body: JSON.stringify({
       model,
-      messages,
+      messages: formattedMessages,
       max_tokens: maxTokens,
       temperature: temperature,
       stream: false,
@@ -188,10 +196,11 @@ export const getAIResponse = async (
     { role: 'user', content: userMessage.message },
   ];
 
+  const systemPrompt = userSystemPrompt || DEFAULT_SYSTEM_PROMPT;
   if (debug) {
     console.log('openAiParams:', openAiParams);
     console.log('stream:', stream);
-    console.log('system prompt:', userSystemPrompt || DEFAULT_SYSTEM_PROMPT);
+    console.log('system prompt:', systemPrompt);
     for (const [i, message] of messages.entries()) {
       console.log(`Message ${i}:\nrole: ${message.role}\n${message.content}`);
     }
@@ -205,7 +214,7 @@ export const getAIResponse = async (
         messages,
         updateCurrentAiMessage,
         addMessage,
-        userSystemPrompt,
+        systemPrompt,
       );
     } catch (error) {
       const errorData = JSON.parse(error.data);
@@ -226,6 +235,7 @@ export const getAIResponse = async (
         messages,
         temperature,
         maxTokens,
+        systemPrompt,
       );
 
       const botMessage: ChatMessage = {
