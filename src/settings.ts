@@ -91,16 +91,13 @@ export class CopilotSettingTab extends PluginSettingTab {
           frag.appendText("Stream the response from the API as it comes in. It can take a while for the API to respond, so keeping it on is recommended.");
         })
       )
-      .addDropdown((dropdown: DropdownComponent) => {
-        dropdown
-          .addOption('true', 'On')
-          .addOption('false', 'Off')
-          .setValue(this.plugin.settings.stream ? 'true' : 'false')
-          .onChange(async (value: string) => {
-            this.plugin.settings.stream = value === 'true';
-            await this.plugin.saveSettings();
-          });
-      });
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.stream)
+        .onChange(async (value) => {
+          this.plugin.settings.stream = value;
+          await this.plugin.saveSettings();
+        })
+      );
 
     containerEl.createEl(
       'h6',
@@ -228,15 +225,12 @@ export class CopilotSettingTab extends PluginSettingTab {
           frag.appendText("Debug mode will log all API requests and prompts to the console.");
         })
       )
-      .addDropdown((dropdown: DropdownComponent) => {
-        dropdown
-          .addOption('true', 'On')
-          .addOption('false', 'Off')
-          .setValue(this.plugin.settings.debug ? 'true' : 'false')
-          .onChange(async (value: string) => {
-            this.plugin.settings.debug = value === 'true';
-            await this.plugin.saveSettings();
-          });
-      });
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.debug)
+        .onChange(async (value) => {
+          this.plugin.settings.debug = value;
+          await this.plugin.saveSettings();
+        })
+      );
   }
 }
