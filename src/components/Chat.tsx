@@ -1,7 +1,7 @@
 import ChatIcons from '@/components/ChatComponents/ChatIcons';
 import ChatInput from '@/components/ChatComponents/ChatInput';
 import ChatMessages from '@/components/ChatComponents/ChatMessages';
-import { USER_SENDER } from '@/constants';
+import { DEFAULT_SYSTEM_PROMPT, USER_SENDER } from '@/constants';
 import { AppContext } from '@/context';
 import { LangChainParams, getAIResponse } from '@/langchainStream';
 import { CopilotSettings } from '@/main';
@@ -67,12 +67,14 @@ const Chat: React.FC<ChatProps> = ({
     maxTokens,
     contextTurns,
   } = sanitizeSettings(settings);
+
+  const systemPrompt = userSystemPrompt || DEFAULT_SYSTEM_PROMPT;
   const langChainParams: LangChainParams = {
     key: openAiApiKey,
     model: currentModel,
     temperature: Number(temperature),
     maxTokens: Number(maxTokens),
-    systemMessage: userSystemPrompt,
+    systemMessage: systemPrompt,
   }
   // The number of past conversation turns to use as context for the AI
   // The number of messages is doubled.

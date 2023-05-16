@@ -59,7 +59,7 @@ export const getAIResponse = async (
         {
           handleLLMNewToken: (token) => {
             fullAIResponse += token;
-            updateCurrentAiMessage(token);
+            updateCurrentAiMessage(fullAIResponse);
           },
         },
       ],
@@ -69,7 +69,9 @@ export const getAIResponse = async (
     addMessage({
       message: fullAIResponse,
       sender: AI_SENDER,
+      isVisible: true,
     });
+    updateCurrentAiMessage('');
 
   } catch (error) {
     new Notice(`LangChain error: ${error.status}`);
