@@ -2,7 +2,6 @@ import Chat from '@/components/Chat';
 import { CHAT_VIEWTYPE } from '@/constants';
 import { AppContext } from '@/context';
 import CopilotPlugin, { CopilotSettings } from '@/main';
-import { OpenAIRequestManager } from '@/openAiStream';
 import SharedState from '@/sharedState';
 import { EventEmitter } from 'events';
 import { ItemView, WorkspaceLeaf } from 'obsidian';
@@ -18,7 +17,6 @@ export default class CopilotView extends ItemView {
   private stream = true;
   private debug = false;
   emitter: EventEmitter;
-  streamManager: OpenAIRequestManager;
   userSystemPrompt = '';
   useNotesAsContext = false;
 
@@ -31,7 +29,6 @@ export default class CopilotView extends ItemView {
     this.stream = plugin.settings.stream;
     this.debug = plugin.settings.debug;
     this.emitter = new EventEmitter();
-    this.streamManager = new OpenAIRequestManager();
     this.getChatVisibility = this.getChatVisibility.bind(this);
     this.userSystemPrompt = plugin.settings.userSystemPrompt;
     this.useNotesAsContext = plugin.settings.useNotesAsContext;
@@ -72,7 +69,6 @@ export default class CopilotView extends ItemView {
             settings={this.settings}
             model={this.model}
             emitter={this.emitter}
-            streamManager={this.streamManager}
             stream={this.stream}
             getChatVisibility={this.getChatVisibility}
             userSystemPrompt={this.userSystemPrompt}

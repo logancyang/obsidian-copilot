@@ -1,10 +1,10 @@
 import ChatIcons from '@/components/ChatComponents/ChatIcons';
 import ChatInput from '@/components/ChatComponents/ChatInput';
 import ChatMessages from '@/components/ChatComponents/ChatMessages';
-import { USER_SENDER } from '@/constants';
+import { DEFAULT_SYSTEM_PROMPT, USER_SENDER } from '@/constants';
 import { AppContext } from '@/context';
+import { LangChainParams, getAIResponse } from '@/langchainStream';
 import { CopilotSettings } from '@/main';
-import { OpenAIRequestManager, OpenAiParams, getAIResponse } from '@/openAiStream';
 import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
 import {
   createChangeToneSelectionPrompt,
@@ -43,7 +43,6 @@ interface ChatProps {
   settings: CopilotSettings;
   model: string;
   emitter: EventEmitter;
-  streamManager: OpenAIRequestManager;
   stream: boolean;
   getChatVisibility: () => Promise<boolean>;
   userSystemPrompt: string;
@@ -51,7 +50,7 @@ interface ChatProps {
 }
 
 const Chat: React.FC<ChatProps> = ({
-  sharedState, settings, model, emitter, streamManager, stream, getChatVisibility,
+  sharedState, settings, model, emitter, stream, getChatVisibility,
   userSystemPrompt, debug
 }) => {
   const [
@@ -60,6 +59,7 @@ const Chat: React.FC<ChatProps> = ({
   const [inputMessage, setInputMessage] = useState('');
   const [currentAiMessage, setCurrentAiMessage] = useState('');
   const [currentModel, setCurrentModel] = useState(model);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   const app = useContext(AppContext);
   const {
@@ -68,11 +68,14 @@ const Chat: React.FC<ChatProps> = ({
     maxTokens,
     contextTurns,
   } = sanitizeSettings(settings);
-  const openAiParams: OpenAiParams = {
+
+  const systemPrompt = userSystemPrompt || DEFAULT_SYSTEM_PROMPT;
+  const langChainParams: LangChainParams = {
     key: openAiApiKey,
     model: currentModel,
     temperature: Number(temperature),
     maxTokens: Number(maxTokens),
+    systemMessage: systemPrompt,
   }
   // The number of past conversation turns to use as context for the AI
   // The number of messages is doubled.
@@ -96,13 +99,12 @@ const Chat: React.FC<ChatProps> = ({
     await getAIResponse(
       userMessage,
       chatContext,
-      openAiParams,
-      streamManager,
+      langChainParams,
       setCurrentAiMessage,
       addMessage,
+      setAbortController,
       stream,
       debug,
-      userSystemPrompt,
     );
   };
 
@@ -161,13 +163,12 @@ const Chat: React.FC<ChatProps> = ({
     await getAIResponse(
       promptMessage,
       chatContext,
-      openAiParams,
-      streamManager,
+      langChainParams,
       setCurrentAiMessage,
       addMessage,
+      setAbortController,
       stream,
       debug,
-      userSystemPrompt,
     );
   };
 
@@ -176,7 +177,10 @@ const Chat: React.FC<ChatProps> = ({
   };
 
   const handleStopGenerating = () => {
-    streamManager.stopStreaming();
+    if (abortController) {
+      console.log("User stopping generation...");
+      abortController.abort();
+    }
   };
 
   // Create an effect for each event type (command)
@@ -195,18 +199,18 @@ const Chat: React.FC<ChatProps> = ({
         };
 
         // Have a hardcoded custom temperature for some commands that need more strictness
-        const updatedOpenAiParams = {
-          ...openAiParams,
+        const updatedLangChainParams = {
+          ...langChainParams,
           ...(custom_temperature && { temperature: custom_temperature }),
         };
 
         await getAIResponse(
           promptMessage,
           [],
-          updatedOpenAiParams,
-          streamManager,
+          updatedLangChainParams,
           setCurrentAiMessage,
           addMessage,
+          setAbortController,
           stream,
           debug,
         );

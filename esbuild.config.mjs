@@ -2,6 +2,7 @@ import builtins from "builtin-modules";
 import esbuild from "esbuild";
 import svgPlugin from "esbuild-plugin-svg";
 import process from "process";
+import wasmPlugin from "./wasmPlugin.mjs";
 
 const banner =
 `/*
@@ -39,7 +40,7 @@ const context = await esbuild.context({
   sourcemap: prod ? false : "inline",
   treeShaking: true,
   outfile: "main.js",
-  plugins: [svgPlugin()],
+  plugins: [svgPlugin(), wasmPlugin],
 });
 
 if (prod) {
