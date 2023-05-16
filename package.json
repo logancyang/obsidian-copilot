@@ -37,6 +37,7 @@
     "axios": "^1.3.4",
     "esbuild-plugin-svg": "^0.1.0",
     "eventsource-parser": "^1.0.0",
+    "langchain": "^0.0.75",
     "next-i18next": "^13.2.2",
     "prop-types": "^15.8.1",
     "react": "^18.2.0",
