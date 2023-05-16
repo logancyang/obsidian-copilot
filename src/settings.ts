@@ -84,21 +84,6 @@ export class CopilotSettingTab extends PluginSettingTab {
           });
       });
 
-    new Setting(containerEl)
-      .setName("Streaming mode")
-      .setDesc(
-        createFragment((frag) => {
-          frag.appendText("Stream the response from the API as it comes in. It can take a while for the API to respond, so keeping it on is recommended.");
-        })
-      )
-      .addToggle(toggle => toggle
-        .setValue(this.plugin.settings.stream)
-        .onChange(async (value) => {
-          this.plugin.settings.stream = value;
-          await this.plugin.saveSettings();
-        })
-      );
-
     containerEl.createEl(
       'h6',
       {

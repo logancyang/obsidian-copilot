@@ -59,6 +59,7 @@ const Chat: React.FC<ChatProps> = ({
   const [inputMessage, setInputMessage] = useState('');
   const [currentAiMessage, setCurrentAiMessage] = useState('');
   const [currentModel, setCurrentModel] = useState(model);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   const app = useContext(AppContext);
   const {
@@ -101,6 +102,7 @@ const Chat: React.FC<ChatProps> = ({
       langChainParams,
       setCurrentAiMessage,
       addMessage,
+      setAbortController,
       stream,
       debug,
     );
@@ -164,6 +166,7 @@ const Chat: React.FC<ChatProps> = ({
       langChainParams,
       setCurrentAiMessage,
       addMessage,
+      setAbortController,
       stream,
       debug,
     );
@@ -174,7 +177,10 @@ const Chat: React.FC<ChatProps> = ({
   };
 
   const handleStopGenerating = () => {
-    // TODO: Add langchain stopStreaming functionality
+    if (abortController) {
+      console.log("User stopping generation...");
+      abortController.abort();
+    }
   };
 
   // Create an effect for each event type (command)
@@ -204,6 +210,7 @@ const Chat: React.FC<ChatProps> = ({
           updatedLangChainParams,
           setCurrentAiMessage,
           addMessage,
+          setAbortController,
           stream,
           debug,
         );

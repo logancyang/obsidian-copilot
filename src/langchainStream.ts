@@ -20,6 +20,7 @@ export const getAIResponse = async (
   langChainParams: LangChainParams,
   updateCurrentAiMessage: (message: string) => void,
   addMessage: (message: ChatMessage) => void,
+  updateShouldAbort: (abortController: AbortController | null) => void,
   stream = true,
   debug = false,
 ) => {
@@ -47,6 +48,8 @@ export const getAIResponse = async (
     }
   }
 
+  const abortController = new AbortController();
+
   try {
     let fullAIResponse = '';
     const chatOpenAI = new ChatOpenAI({
@@ -65,7 +68,11 @@ export const getAIResponse = async (
       ],
     });
 
-    await chatOpenAI.call(messages);
+    updateShouldAbort(abortController);
+    await chatOpenAI.call(
+      messages,
+      { signal: abortController.signal }
+    );
     addMessage({
       message: fullAIResponse,
       sender: AI_SENDER,
@@ -74,7 +81,9 @@ export const getAIResponse = async (
     updateCurrentAiMessage('');
 
   } catch (error) {
-    new Notice(`LangChain error: ${error.status}`);
-    console.error(error);
+    const errorData = error?.response?.data?.error || error;
+    const errorCode = errorData?.code || error;
+    new Notice(`LangChain error: ${errorCode}`);
+    console.error(errorData);
   }
 };
