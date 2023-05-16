@@ -84,6 +84,7 @@ const Chat: React.FC<ChatProps> = ({
     const userMessage: ChatMessage = {
       message: inputMessage,
       sender: USER_SENDER,
+      isVisible: true,
     };
 
     // Add user message to chat history
@@ -149,7 +150,12 @@ const Chat: React.FC<ChatProps> = ({
     const prompt = useNoteAsContextPrompt(noteName, noteContent);
 
     // Send the prompt as a user message
-    const promptMessage: ChatMessage = { sender: USER_SENDER, message: prompt };
+    const promptMessage: ChatMessage = {
+      sender: USER_SENDER,
+      message: prompt,
+      isVisible: false,
+    };
+    addMessage(promptMessage);
 
     // Hide the prompt from the user
     await getAIResponse(
@@ -185,6 +191,7 @@ const Chat: React.FC<ChatProps> = ({
         const promptMessage: ChatMessage = {
           message: promptFn(selectedText, eventSubtype),
           sender: USER_SENDER,
+          isVisible: false,
         };
 
         // Have a hardcoded custom temperature for some commands that need more strictness

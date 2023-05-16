@@ -81,6 +81,7 @@ export class OpenAIRequestManager {
           const botMessage: ChatMessage = {
               message: aiResponse,
               sender: AI_SENDER,
+              isVisible: true,
             };
           addMessage(botMessage);
           updateCurrentAiMessage('');
@@ -241,6 +242,7 @@ export const getAIResponse = async (
       const botMessage: ChatMessage = {
         message: aiResponse,
         sender: AI_SENDER,
+        isVisible: true,
       };
       addMessage(botMessage);
       updateCurrentAiMessage('');

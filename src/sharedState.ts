@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 export interface ChatMessage {
   message: string;
   sender: string;
+  isVisible: boolean;
 }
 
 class SharedState {
