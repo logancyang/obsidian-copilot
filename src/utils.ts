@@ -98,7 +98,7 @@ export function simplifyPrompt(selectedText: string): string {
 }
 
 export function emojifyPrompt(selectedText: string): string {
-  return `Please rewrite the following content in a fun way and insert emojis.`
+  return `Please insert emojis to the following content without changing the text.`
     + `Insert at as many places as possible, but don't have any 2 emojis together.\n`
     + `Content: ${selectedText}`;
 }
