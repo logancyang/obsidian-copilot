@@ -16,7 +16,7 @@ Copilot for Obsidian is a ChatGPT interface right inside Obsidian. It has a mini
 - No repetitive login. Use your own API key (stored locally).
 - No monthly fee. Pay only for what you use.
 - Model selection of GPT-3.5 and GPT-4.
-- No need to buy ChatGPT Plus to use GPT-4 if you have API access.
+- No need to buy ChatGPT Plus to use GPT-4 **if you have API access**.
 - No usage cap for GPT-4 like ChatGPT Plus.
 - One-click copying any message as markdown.
 - One-click saving the entire conversation as a note.
@@ -63,6 +63,10 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 - Online prompt library access
 - Unlimited context, i.e. very long notes, a collection of notes or the entire vault
 - Integration with more LLMs, including open-source and local ones.
+
+## FAQ (please read before submitting an issue)
+- You need access to GPT-4 **API** to use it in this plugin! If you don't have API access, you will see an error "model not found".
+  - A common misunderstanding I see is that some think they have access to GPT-4 API when they get ChatGPT plus subscription. That is not true. You still need to get access to GPT-4 API to use the GPT-4 model in this plugin. Please check if you can successfully use your model in the OpenAI playground first https://platform.openai.com/playground?mode=chat&model=gpt-4. If not, you can apply for GPT-4 API access here https://openai.com/waitlist/gpt-4-api
 
 ## 🔔 Note
 - The chat history is not saved by default. Please use "**Save as Note**" to save it. The note will have a title `Chat-Year_Month_Day-Hour_Minute_Second`, you can change its name as needed.
