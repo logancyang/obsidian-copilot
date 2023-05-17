@@ -52,21 +52,37 @@ Copilot for Obsidian is now available in **Obsidian Community Plugin**!
 
 Now you can see the chat icon in your leftside ribbon, clicking on it will open the chat panel on the right! Don't forget to check out the Copilot commands available in the commands palette!
 
-### 🔧 Manual Installation
+#### 🔧 Manual Installation
 - Go to the latest release
 - Download `main.js`, `manifest.json`, `styles.css` and put them under `.obsidian/plugins/obsidian-copilot/` in your vault
 - Open your Obsidian settings > Community plugins, and turn on `Copilot`.
 
+## 🔔 Note
+- The chat history is not saved by default. Please use "**Save as Note**" to save it. The note will have a title `Chat-Year_Month_Day-Hour_Minute_Second`, you can change its name as needed.
+- "**New Chat**" clears all previous chat history. Again, please use "**Save as Note**" if you would like to save the chat.
+- "**Use Active Note as Context**" does not support super long notes yet since the OpenAI API has a limited context length (currently about 4K, 8K, or 32K tokens depending on the model you use). In the future I'm considering supporting very long notes / a folder of notes / the entire vault as context if there is enough demand.
+- You can set a very long context in the setting "**Conversation turns in context**" if needed.
+
 ## 🤔 FAQ (please read before submitting an issue)
-- "model_not_found"
+
+<details>
+  <summary>"model_not_found"</summary>
+
   - A common misunderstanding I see is that some think they have access to GPT-4 API when they get ChatGPT Plus subscription. That is not true. *You need to get access to GPT-4 API to use the GPT-4 model in this plugin*. Please check if you can successfully use your model in the OpenAI playground first https://platform.openai.com/playground?mode=chat&model=gpt-4. If not, you can apply for GPT-4 API access here https://openai.com/waitlist/gpt-4-api. Once you have access to the API, you can use GPT-4 with this plugin without the ChatGPT Plus subsciption!
   - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/3#issuecomment-1544583676
-- "insufficient_quota"
+</details>
+<details>
+  <summary>"insufficient_quota"</summary>
+
   - It might be because you haven't set up payment for your OpenAI account, or you exceeded your max monthly limit. OpenAI has a cap on how much you can use their API, usually $120 for individual users.
   - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/11
-- "context_length_exceeded"
+</details>
+<details>
+  <summary>"context_length_exceeded"</summary>
+
   - GPT-3.5 has a 4096 context token limit, GPT-4 has 8K (there is a 32K one available to the public soon per OpenAI). So if you pass a very long note as context or set a big token limit in your Copilot setting, you can get this error. Note that the prompts behind the scenes for Copilot commands can also take up tokens, so please limit your message length to avoid this error. (I'm working on a solution to support unlimited context, stay tuned!)
   - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/1#issuecomment-1542934569
+</details>
 
 ## 📝 Planned features (based on feedback)
 - More standard prompts that can be used with commands
@@ -74,12 +90,6 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 - Online prompt library access
 - Unlimited context, i.e. very long notes, a collection of notes or the entire vault
 - Integration with more LLMs, including open-source and local ones.
-
-## 🔔 Note
-- The chat history is not saved by default. Please use "**Save as Note**" to save it. The note will have a title `Chat-Year_Month_Day-Hour_Minute_Second`, you can change its name as needed.
-- "**New Chat**" clears all previous chat history. Again, please use "**Save as Note**" if you would like to save the chat.
-- "**Use Active Note as Context**" does not support super long notes yet since the OpenAI API has a limited context length (currently about 4K, 8K, or 32K tokens depending on the model you use). In the future I'm considering supporting very long notes / a folder of notes / the entire vault as context if there is enough demand.
-- You can set a very long context in the setting "**Conversation turns in context**" if needed.
 
 ### 📣 Again, please always be mindful of the API cost if you use GPT-4 with a long context!
 
