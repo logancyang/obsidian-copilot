@@ -64,9 +64,11 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 - Unlimited context, i.e. very long notes, a collection of notes or the entire vault
 - Integration with more LLMs, including open-source and local ones.
 
-## FAQ (please read before submitting an issue)
-- You need access to GPT-4 **API** to use it in this plugin! If you don't have API access, you will see an error "model not found".
-  - A common misunderstanding I see is that some think they have access to GPT-4 API when they get ChatGPT plus subscription. That is not true. You still need to get access to GPT-4 API to use the GPT-4 model in this plugin. Please check if you can successfully use your model in the OpenAI playground first https://platform.openai.com/playground?mode=chat&model=gpt-4. If not, you can apply for GPT-4 API access here https://openai.com/waitlist/gpt-4-api
+## 🤔 FAQ (please read before submitting an issue)
+- "model_not_found"
+  - A common misunderstanding I see is that some think they have access to GPT-4 API when they get ChatGPT Plus subscription. That is not true. **You need to get access to GPT-4 API to use the GPT-4 model in this plugin**. Please check if you can successfully use your model in the OpenAI playground first https://platform.openai.com/playground?mode=chat&model=gpt-4. If not, you can apply for GPT-4 API access here https://openai.com/waitlist/gpt-4-api. Once you have access to the API, you can use GPT-4 with this plugin without the ChatGPT Plus subsciption!
+- "insufficient_quota"
+  - It might be because you haven't set up payment for your OpenAI account, or you exceeded your max monthly limit. OpenAI has a cap on how much you can use their API, usually $120 for individual users.
 
 ## 🔔 Note
 - The chat history is not saved by default. Please use "**Save as Note**" to save it. The note will have a title `Chat-Year_Month_Day-Hour_Minute_Second`, you can change its name as needed.
@@ -76,7 +78,7 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 
 ### 📣 Again, please always be mindful of the API cost if you use GPT-4 with a long context!
 
-## Say Thank You
+## 🙏 Say Thank You
 If you are enjoying Copilot, please support my work by buying me a coffee here: https://www.buymeacoffee.com/logancyang
 
 
