@@ -53,7 +53,7 @@ const Chat: React.FC<ChatProps> = ({
     chatHistory, addMessage, clearMessages,
   ] = useSharedState(sharedState);
   const [
-    currentModel, setCurrentModel, clearChatMemory,
+    currentModel, setModel, clearChatMemory,
   ] = useAIState(aiState);
   const [currentAiMessage, setCurrentAiMessage] = useState('');
   const [inputMessage, setInputMessage] = useState('');
@@ -234,7 +234,7 @@ const Chat: React.FC<ChatProps> = ({
       <div className='bottom-container'>
         <ChatIcons
           currentModel={currentModel}
-          setCurrentModel={setCurrentModel}
+          setCurrentModel={setModel}
           onStopGenerating={handleStopGenerating}
           onNewChat={
             () => {

@@ -41,6 +41,12 @@ class AIState {
     this.createNewChain();
   }
 
+  setModel(newModel: string): void {
+    console.log('setting model to', newModel);
+    this.langChainParams.model = newModel;
+    this.createNewChain();
+  }
+
   createNewChain(): void {
     const {
       key, model, temperature, maxTokens, systemMessage,
@@ -84,9 +90,14 @@ export function useAIState(
     setChatMemory(aiState.memory);
   };
 
+  const setModel = (newModel: string) => {
+    aiState.setModel(newModel);
+    setCurrentModel(newModel);
+  };
+
   return [
     currentModel,
-    setCurrentModel,
+    setModel,
     clearChatMemory,
   ];
 }
