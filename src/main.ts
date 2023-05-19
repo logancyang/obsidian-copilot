@@ -1,11 +1,13 @@
+import AIState, { LangChainParams } from '@/aiState';
 import CopilotView from '@/components/CopilotView';
 import { LanguageModal } from "@/components/LanguageModal";
 import { ToneModal } from "@/components/ToneModal";
 import {
-  CHAR_LENGTH_LIMIT, CHAT_VIEWTYPE, DEFAULT_SETTINGS,
+  CHAR_LENGTH_LIMIT, CHAT_VIEWTYPE, DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT,
 } from '@/constants';
 import { CopilotSettingTab } from '@/settings';
 import SharedState from '@/sharedState';
+import { sanitizeSettings } from "@/utils";
 import { Editor, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
 
 export interface CopilotSettings {
@@ -25,6 +27,7 @@ export default class CopilotPlugin extends Plugin {
   // A chat history that stores the messages sent and received
   // Only reset when the user explicitly clicks "New Chat"
   sharedState: SharedState;
+  aiState: AIState;
   activateViewPromise: Promise<void> | null = null;
   chatIsVisible = false;
 
@@ -33,7 +36,10 @@ export default class CopilotPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadSettings();
     this.addSettingTab(new CopilotSettingTab(this.app, this));
+    // Always have one instance of sharedState and aiState in the plugin
     this.sharedState = new SharedState();
+    const langChainParams = this.getAIStateParams();
+    this.aiState = new AIState(langChainParams);
 
     this.registerView(
       CHAT_VIEWTYPE,
@@ -242,5 +248,22 @@ export default class CopilotPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+  }
+
+  getAIStateParams(): LangChainParams {
+    const {
+      openAiApiKey,
+      temperature,
+      maxTokens,
+      contextTurns,
+    } = sanitizeSettings(this.settings);
+    return {
+      key: openAiApiKey,
+      model: this.settings.defaultModel,
+      temperature: Number(temperature),
+      maxTokens: Number(maxTokens),
+      systemMessage: DEFAULT_SYSTEM_PROMPT || this.settings.userSystemPrompt,
+      chatContextTurns: Number(contextTurns),
+    };
   }
 }

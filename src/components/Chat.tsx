@@ -1,11 +1,13 @@
+import AIState, { useAIState } from '@/aiState';
 import ChatIcons from '@/components/ChatComponents/ChatIcons';
 import ChatInput from '@/components/ChatComponents/ChatInput';
 import ChatMessages from '@/components/ChatComponents/ChatMessages';
-import { DEFAULT_SYSTEM_PROMPT, USER_SENDER } from '@/constants';
+import { USER_SENDER } from '@/constants';
 import { AppContext } from '@/context';
-import { LangChainParams, getAIResponse } from '@/langchainStream';
-import { CopilotSettings } from '@/main';
-import SharedState, { ChatMessage, useSharedState } from '@/sharedState';
+import { getAIResponse } from '@/langchainStream';
+import SharedState, {
+  ChatMessage, useSharedState,
+} from '@/sharedState';
 import {
   createChangeToneSelectionPrompt,
   createTranslateSelectionPrompt,
@@ -13,7 +15,6 @@ import {
   emojifyPrompt,
   fixGrammarSpellingSelectionPrompt,
   formatDateTime,
-  getChatContext,
   getFileContent,
   getFileName,
   glossaryPrompt,
@@ -23,7 +24,6 @@ import {
   rewriteShorterSelectionPrompt,
   rewriteTweetSelectionPrompt,
   rewriteTweetThreadSelectionPrompt,
-  sanitizeSettings,
   simplifyPrompt,
   summarizePrompt,
   tocPrompt,
@@ -40,46 +40,26 @@ import React, {
 
 interface ChatProps {
   sharedState: SharedState;
-  settings: CopilotSettings;
-  model: string;
+  aiState: AIState;
   emitter: EventEmitter;
-  stream: boolean;
   getChatVisibility: () => Promise<boolean>;
-  userSystemPrompt: string;
   debug: boolean;
 }
 
 const Chat: React.FC<ChatProps> = ({
-  sharedState, settings, model, emitter, stream, getChatVisibility,
-  userSystemPrompt, debug
+  sharedState, aiState, emitter, getChatVisibility, debug
 }) => {
   const [
-    chatHistory, addMessage, clearMessages
+    chatHistory, addMessage, clearMessages,
   ] = useSharedState(sharedState);
-  const [inputMessage, setInputMessage] = useState('');
+  const [
+    currentModel, setCurrentModel, clearChatMemory,
+  ] = useAIState(aiState);
   const [currentAiMessage, setCurrentAiMessage] = useState('');
-  const [currentModel, setCurrentModel] = useState(model);
+  const [inputMessage, setInputMessage] = useState('');
   const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   const app = useContext(AppContext);
-  const {
-    openAiApiKey,
-    temperature,
-    maxTokens,
-    contextTurns,
-  } = sanitizeSettings(settings);
-
-  const systemPrompt = userSystemPrompt || DEFAULT_SYSTEM_PROMPT;
-  const langChainParams: LangChainParams = {
-    key: openAiApiKey,
-    model: currentModel,
-    temperature: Number(temperature),
-    maxTokens: Number(maxTokens),
-    systemMessage: systemPrompt,
-  }
-  // The number of past conversation turns to use as context for the AI
-  // The number of messages is doubled.
-  const chatContext = getChatContext(chatHistory, Number(contextTurns)*2);
 
   const handleSendMessage = async () => {
     if (!inputMessage) return;
@@ -98,12 +78,10 @@ const Chat: React.FC<ChatProps> = ({
 
     await getAIResponse(
       userMessage,
-      chatContext,
-      langChainParams,
-      setCurrentAiMessage,
+      aiState,
       addMessage,
+      setCurrentAiMessage,
       setAbortController,
-      stream,
       debug,
     );
   };
@@ -162,12 +140,10 @@ const Chat: React.FC<ChatProps> = ({
     // Hide the prompt from the user
     await getAIResponse(
       promptMessage,
-      chatContext,
-      langChainParams,
-      setCurrentAiMessage,
+      aiState,
       addMessage,
+      setCurrentAiMessage,
       setAbortController,
-      stream,
       debug,
     );
   };
@@ -199,19 +175,17 @@ const Chat: React.FC<ChatProps> = ({
         };
 
         // Have a hardcoded custom temperature for some commands that need more strictness
-        const updatedLangChainParams = {
-          ...langChainParams,
+        aiState.langChainParams = {
+          ...aiState.langChainParams,
           ...(custom_temperature && { temperature: custom_temperature }),
         };
 
         await getAIResponse(
           promptMessage,
-          [],
-          updatedLangChainParams,
-          setCurrentAiMessage,
+          aiState,
           addMessage,
+          setCurrentAiMessage,
           setAbortController,
-          stream,
           debug,
         );
       };
@@ -265,6 +239,7 @@ const Chat: React.FC<ChatProps> = ({
           onNewChat={
             () => {
               clearMessages();
+              clearChatMemory();
               clearCurrentAiMessage();
             }
           }
