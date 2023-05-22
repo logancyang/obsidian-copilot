@@ -14,7 +14,6 @@ export const getAIResponse = async (
   debug = false,
 ) => {
   const abortController = new AbortController();
-  // let fullAIResponse = '';
 
   try {
     updateShouldAbort(abortController);
