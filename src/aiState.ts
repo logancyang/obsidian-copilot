@@ -1,3 +1,5 @@
+import { DEFAULT_SYSTEM_PROMPT, USER_SENDER } from '@/constants';
+import { ChatMessage } from '@/sharedState';
 import { ConversationChain } from "langchain/chains";
 import { ChatOpenAI } from 'langchain/chat_models/openai';
 import { BufferWindowMemory } from "langchain/memory";
@@ -7,6 +9,7 @@ import {
   MessagesPlaceholder,
   SystemMessagePromptTemplate,
 } from "langchain/prompts";
+import { AIChatMessage, HumanChatMessage, SystemChatMessage } from 'langchain/schema';
 import { useState } from 'react';
 
 export interface LangChainParams {
@@ -73,7 +76,80 @@ class AIState {
       prompt: chatPrompt,
     });
   }
+
+  async runChatOpenAI(
+    userMessage: ChatMessage,
+    chatContext: ChatMessage[],
+    abortController: AbortController,
+    updateCurrentAiMessage: (message: string) => void,
+    debug = false,
+  ) {
+    if (debug) {
+      for (const [i, chatMessage] of chatContext.entries()) {
+        console.log(
+          `chat message ${i}:\nsender: ${chatMessage.sender}\n${chatMessage.message}`
+        );
+      }
+    }
+
+    const systemMessage = this.langChainParams.systemMessage || DEFAULT_SYSTEM_PROMPT;
+    const messages = [
+      new SystemChatMessage(systemMessage),
+      ...chatContext.map((chatMessage) => {
+        return chatMessage.sender === USER_SENDER
+          ? new HumanChatMessage(chatMessage.message)
+          : new AIChatMessage(chatMessage.message);
+      }),
+      new HumanChatMessage(userMessage.message),
+    ];
+
+    let fullAIResponse = '';
+    await AIState.chatOpenAI.call(
+      messages,
+      { signal: abortController.signal },
+      [
+        {
+          handleLLMNewToken: (token) => {
+            fullAIResponse += token;
+            updateCurrentAiMessage(fullAIResponse);
+          }
+        }
+      ]
+    );
+    return fullAIResponse;
+  }
+
+  async runChain(
+    userMessage: string,
+    abortController: AbortController,
+    updateCurrentAiMessage: (message: string) => void,
+    debug = false,
+  ) {
+    if (debug) {
+      console.log('Chat memory:', this.memory);
+    }
+    let fullAIResponse = '';
+    // TODO: chain.call stop signal gives error:
+    // "input values have 2 keys, you must specify an input key or pass only 1 key as input".
+    // Follow up with LangchainJS: https://github.com/hwchase17/langchainjs/issues/1327
+    await AIState.chain.call(
+      {
+        input: userMessage,
+        // signal: abortController.signal,
+      },
+      [
+        {
+          handleLLMNewToken: (token) => {
+            fullAIResponse += token;
+            updateCurrentAiMessage(fullAIResponse);
+          }
+        }
+      ]
+    );
+    return fullAIResponse;
+  }
 }
+
 
 export function useAIState(
   aiState: AIState,
