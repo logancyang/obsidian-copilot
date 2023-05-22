@@ -63,6 +63,8 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 - "**Use Active Note as Context**" does not support super long notes yet since the OpenAI API has a limited context length (currently about 4K, 8K, or 32K tokens depending on the model you use). In the future I'm considering supporting very long notes / a folder of notes / the entire vault as context if there is enough demand.
 - You can set a very long context in the setting "**Conversation turns in context**" if needed.
 
+#### 📣 Again, please always be mindful of the API cost if you use GPT-4 with a long context!
+
 ## 🤔 FAQ (please read before submitting an issue)
 
 <details>
@@ -90,8 +92,6 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 - Online prompt library access
 - Unlimited context, i.e. very long notes, a collection of notes or the entire vault
 - Integration with more LLMs, including open-source and local ones.
-
-### 📣 Again, please always be mindful of the API cost if you use GPT-4 with a long context!
 
 ## 🙏 Say Thank You
 If you are enjoying Copilot, please support my work by buying me a coffee here: https://www.buymeacoffee.com/logancyang

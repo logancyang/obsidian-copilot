@@ -22,8 +22,6 @@ class SharedState {
   }
 }
 
-export default SharedState;
-
 export function useSharedState(
   sharedState: SharedState
 ): [
@@ -64,3 +62,5 @@ export function useSharedState(
     clearMessages,
   ];
 }
+
+export default SharedState;

@@ -1,7 +1,8 @@
+import AIState from '@/aiState';
 import Chat from '@/components/Chat';
 import { CHAT_VIEWTYPE } from '@/constants';
 import { AppContext } from '@/context';
-import CopilotPlugin, { CopilotSettings } from '@/main';
+import CopilotPlugin from '@/main';
 import SharedState from '@/sharedState';
 import { EventEmitter } from 'events';
 import { ItemView, WorkspaceLeaf } from 'obsidian';
@@ -11,10 +12,9 @@ import { Root, createRoot } from 'react-dom/client';
 
 export default class CopilotView extends ItemView {
   private sharedState: SharedState;
-  private settings: CopilotSettings;
+  private aiState: AIState;
   private model: string;
   private root: Root | null = null;
-  private stream = true;
   private debug = false;
   emitter: EventEmitter;
   userSystemPrompt = '';
@@ -24,9 +24,8 @@ export default class CopilotView extends ItemView {
     super(leaf);
     this.sharedState = plugin.sharedState;
     this.app = plugin.app;
-    this.settings = plugin.settings;
+    this.aiState = plugin.aiState;
     this.model = plugin.settings.defaultModel;
-    this.stream = plugin.settings.stream;
     this.debug = plugin.settings.debug;
     this.emitter = new EventEmitter();
     this.getChatVisibility = this.getChatVisibility.bind(this);
@@ -66,12 +65,10 @@ export default class CopilotView extends ItemView {
         <React.StrictMode>
           <Chat
             sharedState={this.sharedState}
-            settings={this.settings}
+            aiState={this.aiState}
             model={this.model}
             emitter={this.emitter}
-            stream={this.stream}
             getChatVisibility={this.getChatVisibility}
-            userSystemPrompt={this.userSystemPrompt}
             debug={this.debug}
           />
         </React.StrictMode>
