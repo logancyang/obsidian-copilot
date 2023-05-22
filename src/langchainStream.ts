@@ -14,8 +14,9 @@ export const getAIResponse = async (
   debug = false,
 ) => {
   const abortController = new AbortController();
+  let fullAIResponse = '';
+
   try {
-    let fullAIResponse = '';
     updateShouldAbort(abortController);
 
     // TODO: stop signal gives error: "input values have 2 keys, you must specify an input key or pass only 1 key as input". Follow up with LangchainJS.
@@ -32,31 +33,34 @@ export const getAIResponse = async (
         }
       ]
     );
-
-    addMessage({
-      message: fullAIResponse,
-      sender: AI_SENDER,
-      isVisible: true,
-    });
+  } catch (error) {
+    const errorData = error?.response?.data?.error || error;
+    const errorCode = errorData?.code || error;
+    new Notice(`LangChain error: ${errorCode}`);
+    console.error(errorData);
+  } finally {
+    if (fullAIResponse) {
+      addMessage({
+        message: fullAIResponse,
+        sender: AI_SENDER,
+        isVisible: true,
+      });
+    }
     updateCurrentAiMessage('');
 
     if (debug) {
       const {
         model, temperature, maxTokens, systemMessage, chatContextTurns
       } = aiState.langChainParams;
-      console.log('*** DEBUG INFO ***\n')
-      console.log('user message:', userMessage.message);
-      console.log('model:', model);
-      console.log('temperature:', temperature);
-      console.log('maxTokens:', maxTokens);
-      console.log('system message:', systemMessage);
-      console.log('chat context turns:', chatContextTurns);
-      console.log('conversation memory:\n', aiState.memory);
+      console.log(`*** DEBUG INFO ***\n`
+        + `user message: ${userMessage.message}\n`
+        + `model: ${model}\n`
+        + `temperature: ${temperature}\n`
+        + `maxTokens: ${maxTokens}\n`
+        + `system message: ${systemMessage}\n`
+        + `chat context turns: ${chatContextTurns}\n`
+      );
+      console.log('conversation memory:', aiState.memory);
     }
-  } catch (error) {
-    const errorData = error?.response?.data?.error || error;
-    const errorCode = errorData?.code || error;
-    new Notice(`LangChain error: ${errorCode}`);
-    console.error(errorData);
   }
 };
