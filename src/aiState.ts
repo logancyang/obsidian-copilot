@@ -1,4 +1,4 @@
-import { DEFAULT_SYSTEM_PROMPT, USER_SENDER } from '@/constants';
+import { AI_SENDER, DEFAULT_SYSTEM_PROMPT, USER_SENDER } from '@/constants';
 import { ChatMessage } from '@/sharedState';
 import { ConversationChain } from "langchain/chains";
 import { ChatOpenAI } from 'langchain/chat_models/openai';
@@ -82,6 +82,7 @@ class AIState {
     chatContext: ChatMessage[],
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void,
+    addMessage: (message: ChatMessage) => void,
     debug = false,
   ) {
     if (debug) {
@@ -116,6 +117,13 @@ class AIState {
         }
       ]
     );
+
+    addMessage({
+      message: fullAIResponse,
+      sender: AI_SENDER,
+      isVisible: true,
+    });
+    updateCurrentAiMessage('');
     return fullAIResponse;
   }
 
@@ -123,6 +131,7 @@ class AIState {
     userMessage: string,
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void,
+    addMessage: (message: ChatMessage) => void,
     debug = false,
   ) {
     if (debug) {
@@ -146,6 +155,13 @@ class AIState {
         }
       ]
     );
+
+    addMessage({
+      message: fullAIResponse,
+      sender: AI_SENDER,
+      isVisible: true,
+    });
+    updateCurrentAiMessage('');
     return fullAIResponse;
   }
 }

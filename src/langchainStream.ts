@@ -1,5 +1,4 @@
 import AIState from '@/aiState';
-import { AI_SENDER } from '@/constants';
 import { ChatMessage } from '@/sharedState';
 import { Notice } from 'obsidian';
 
@@ -15,7 +14,7 @@ export const getAIResponse = async (
   debug = false,
 ) => {
   const abortController = new AbortController();
-  let fullAIResponse = '';
+  // let fullAIResponse = '';
 
   try {
     updateShouldAbort(abortController);
@@ -33,23 +32,17 @@ export const getAIResponse = async (
       );
     }
 
-    fullAIResponse = await aiState.runChatOpenAI(
+    await aiState.runChatOpenAI(
       userMessage,
       chatContext,
       abortController,
       updateCurrentAiMessage,
+      addMessage,
     );
   } catch (error) {
     const errorData = error?.response?.data?.error || error;
     const errorCode = errorData?.code || error;
     new Notice(`LangChain error: ${errorCode}`);
     console.error(errorData);
-  } finally {
-    addMessage({
-      message: fullAIResponse,
-      sender: AI_SENDER,
-      isVisible: true,
-    });
-    updateCurrentAiMessage('');
   }
 };
