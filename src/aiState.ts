@@ -66,6 +66,7 @@ class AIState {
       streaming: true,
     });
 
+    // TODO: Use this once https://github.com/hwchase17/langchainjs/issues/1327 is resolved
     AIState.chain = new ConversationChain({
       llm: AIState.chatOpenAI,
       memory: this.memory,

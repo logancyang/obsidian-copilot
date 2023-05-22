@@ -15,6 +15,7 @@ import {
   emojifyPrompt,
   fixGrammarSpellingSelectionPrompt,
   formatDateTime,
+  getChatContext,
   getFileContent,
   getFileName,
   glossaryPrompt,
@@ -61,6 +62,8 @@ const Chat: React.FC<ChatProps> = ({
 
   const app = useContext(AppContext);
 
+  const chatContext = getChatContext(chatHistory, aiState.langChainParams.chatContextTurns * 2);
+
   const handleSendMessage = async () => {
     if (!inputMessage) return;
 
@@ -78,6 +81,7 @@ const Chat: React.FC<ChatProps> = ({
 
     await getAIResponse(
       userMessage,
+      chatContext,
       aiState,
       addMessage,
       setCurrentAiMessage,
@@ -140,6 +144,7 @@ const Chat: React.FC<ChatProps> = ({
     // Hide the prompt from the user
     await getAIResponse(
       promptMessage,
+      chatContext,
       aiState,
       addMessage,
       setCurrentAiMessage,
@@ -182,6 +187,7 @@ const Chat: React.FC<ChatProps> = ({
 
         await getAIResponse(
           promptMessage,
+          [],
           aiState,
           addMessage,
           setCurrentAiMessage,
