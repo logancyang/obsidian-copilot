@@ -77,6 +77,12 @@ class AIState {
     });
   }
 
+  async countTokens(inputStr: string): Promise<number> {
+    // TODO: This is currently falling back to an approximation. Follow up with LangchainJS:
+    // https://github.com/hwchase17/langchainjs/issues/985
+    return AIState.chatOpenAI.getNumTokens(inputStr);
+  }
+
   async runChatOpenAI(
     userMessage: ChatMessage,
     chatContext: ChatMessage[],

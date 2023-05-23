@@ -1,6 +1,5 @@
 import { CopilotSettings } from '@/main';
 
-export const CHAR_LENGTH_LIMIT = 5800; // TODO: Remove this after unlimited context support
 export const CHAT_VIEWTYPE = 'copilot-chat-view';
 export const USER_SENDER = 'user';
 export const AI_SENDER = 'ai';
