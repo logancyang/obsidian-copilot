@@ -7,8 +7,8 @@ import {
 } from "langchain/chains";
 
 // Add new chain types here
-const CONVERSATION_CHAIN = 'ConversationChain';
-const CONVERSATIONAL_RETRIEVAL_QA_CHAIN = 'ConversationalRetrievalQAChain';
+export const CONVERSATION_CHAIN = 'ConversationChain';
+export const CONVERSATIONAL_RETRIEVAL_QA_CHAIN = 'ConversationalRetrievalQAChain';
 const SUPPORTED_CHAIN_TYPES = new Set([
   CONVERSATION_CHAIN,
   CONVERSATIONAL_RETRIEVAL_QA_CHAIN,

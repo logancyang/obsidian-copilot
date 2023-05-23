@@ -1,6 +1,10 @@
+import ChainFactory, {
+  CONVERSATION_CHAIN,
+  CONVERSATIONAL_RETRIEVAL_QA_CHAIN,
+} from '@/chainFactory';
 import { AI_SENDER, DEFAULT_SYSTEM_PROMPT, USER_SENDER } from '@/constants';
 import { ChatMessage } from '@/sharedState';
-import { ConversationChain } from "langchain/chains";
+import { ConversationalRetrievalQAChain, ConversationChain } from "langchain/chains";
 import { ChatOpenAI } from 'langchain/chat_models/openai';
 import { BufferWindowMemory } from "langchain/memory";
 import {
@@ -24,6 +28,7 @@ export interface LangChainParams {
 class AIState {
   static chatOpenAI: ChatOpenAI;
   static chain: ConversationChain;
+  static conversationalRetrievalQAChain: ConversationalRetrievalQAChain;
   memory: BufferWindowMemory;
   langChainParams: LangChainParams;
 
@@ -35,22 +40,22 @@ class AIState {
       returnMessages: true,
     });
 
-    this.createNewChain();
+    this.createNewChain(CONVERSATION_CHAIN);
   }
 
   clearChatMemory(): void {
     console.log('clearing chat memory');
     this.memory.clear();
-    this.createNewChain();
+    this.createNewChain(CONVERSATION_CHAIN);
   }
 
   setModel(newModel: string): void {
     console.log('setting model to', newModel);
     this.langChainParams.model = newModel;
-    this.createNewChain();
+    this.createNewChain(CONVERSATION_CHAIN);
   }
 
-  createNewChain(): void {
+  createNewChain(chainType: string): void {
     const {
       key, model, temperature, maxTokens, systemMessage,
     } = this.langChainParams;
@@ -70,16 +75,23 @@ class AIState {
     });
 
     // TODO: Use this once https://github.com/hwchase17/langchainjs/issues/1327 is resolved
-    AIState.chain = new ConversationChain({
-      llm: AIState.chatOpenAI,
-      memory: this.memory,
-      prompt: chatPrompt,
-    });
+    if (chainType === CONVERSATION_CHAIN) {
+      AIState.chain = ChainFactory.getChain(chainType, {
+        llm: AIState.chatOpenAI,
+        memory: this.memory,
+        prompt: chatPrompt,
+      }) as ConversationChain;
+    } else if (chainType === CONVERSATIONAL_RETRIEVAL_QA_CHAIN) {
+      // TODO: Create CONVERSATIONAL_RETRIEVAL_QA_CHAIN
+      // AIState.conversationalRetrievalQAChain = ChainFactory.getChain(
+      //   chainType,
+      //   {},
+      // );
+    }
+
   }
 
   async countTokens(inputStr: string): Promise<number> {
-    // TODO: This is currently falling back to an approximation. Follow up with LangchainJS:
-    // https://github.com/hwchase17/langchainjs/issues/985
     return AIState.chatOpenAI.getNumTokens(inputStr);
   }
 
