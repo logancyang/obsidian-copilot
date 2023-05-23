@@ -66,7 +66,6 @@ export default class CopilotView extends ItemView {
           <Chat
             sharedState={this.sharedState}
             aiState={this.aiState}
-            model={this.model}
             emitter={this.emitter}
             getChatVisibility={this.getChatVisibility}
             debug={this.debug}

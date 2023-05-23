@@ -2,7 +2,7 @@ import AIState, { useAIState } from '@/aiState';
 import ChatIcons from '@/components/ChatComponents/ChatIcons';
 import ChatInput from '@/components/ChatComponents/ChatInput';
 import ChatMessages from '@/components/ChatComponents/ChatMessages';
-import { USER_SENDER } from '@/constants';
+import { AI_SENDER, USER_SENDER } from '@/constants';
 import { AppContext } from '@/context';
 import { getAIResponse } from '@/langchainStream';
 import SharedState, {
@@ -163,6 +163,26 @@ const Chat: React.FC<ChatProps> = ({
       abortController.abort();
     }
   };
+
+  useEffect(() => {
+    async function handleSelection(selectedText: string) {
+      const wordCount = selectedText.split(' ').length;
+      const tokenCount = await aiState.countTokens(selectedText);
+      const tokenCountMessage: ChatMessage = {
+        sender: AI_SENDER,
+        message: `The selected text contains ${wordCount} words and ${tokenCount} tokens.`,
+        isVisible: true,
+      };
+      addMessage(tokenCountMessage);
+    }
+
+    emitter.on('countTokensSelection', handleSelection);
+
+    // Cleanup function to remove the event listener when the component unmounts
+    return () => {
+      emitter.removeListener('countTokensSelection', handleSelection);
+    };
+  }, []);
 
   // Create an effect for each event type (command)
   const createEffect = (

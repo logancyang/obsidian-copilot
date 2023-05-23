@@ -3,7 +3,7 @@ import CopilotView from '@/components/CopilotView';
 import { LanguageModal } from "@/components/LanguageModal";
 import { ToneModal } from "@/components/ToneModal";
 import {
-  CHAR_LENGTH_LIMIT, CHAT_VIEWTYPE, DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT,
+  CHAT_VIEWTYPE, DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT
 } from '@/constants';
 import { CopilotSettingTab } from '@/settings';
 import SharedState from '@/sharedState';
@@ -190,6 +190,14 @@ export default class CopilotPlugin extends Plugin {
         }).open();
       },
     });
+
+    this.addCommand({
+      id: 'count-tokens',
+      name: 'Count words and tokens in selection',
+      editorCallback: (editor: Editor) => {
+        this.processSelection(editor, 'countTokensSelection');
+      },
+    });
   }
 
   processSelection(editor: Editor, eventType: string, eventSubtype?: string) {
@@ -198,10 +206,6 @@ export default class CopilotPlugin extends Plugin {
       return;
     }
     const selectedText = editor.getSelection();
-    if (selectedText.length > CHAR_LENGTH_LIMIT) {
-      new Notice('Selection is too long, please select less than 5800 characters.');
-      return;
-    }
 
     const isChatWindowActive = this.app.workspace
       .getLeavesOfType(CHAT_VIEWTYPE).length > 0;
