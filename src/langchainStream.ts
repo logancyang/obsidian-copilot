@@ -37,6 +37,7 @@ export const getAIResponse = async (
       abortController,
       updateCurrentAiMessage,
       addMessage,
+      debug,
     );
   } catch (error) {
     const errorData = error?.response?.data?.error || error;
