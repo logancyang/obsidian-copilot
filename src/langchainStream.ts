@@ -31,23 +31,23 @@ export const getAIResponse = async (
       );
     }
 
-    // await aiState.runChatOpenAI(
-    //   userMessage,
-    //   chatContext,
-    //   abortController,
-    //   updateCurrentAiMessage,
-    //   addMessage,
-    //   debug,
-    // );
-
-    await aiState.runChain(
-      userMessage.message,
+    await aiState.runChatOpenAI(
+      userMessage,
       chatContext,
       abortController,
       updateCurrentAiMessage,
       addMessage,
       debug,
     );
+
+    // await aiState.runChain(
+    //   userMessage.message,
+    //   chatContext,
+    //   abortController,
+    //   updateCurrentAiMessage,
+    //   addMessage,
+    //   debug,
+    // );
   } catch (error) {
     const errorData = error?.response?.data?.error || error;
     const errorCode = errorData?.code || error;
