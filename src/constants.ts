@@ -6,6 +6,7 @@ export const AI_SENDER = 'ai';
 export const DEFAULT_SYSTEM_PROMPT = 'You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.';
 export const DEFAULT_SETTINGS: CopilotSettings = {
   openAiApiKey: '',
+  huggingfaceApiKey: '',
   defaultModel: 'gpt-3.5-turbo',
   temperature: '0.7',
   maxTokens: '1000',

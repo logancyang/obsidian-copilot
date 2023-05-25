@@ -28,10 +28,10 @@ import {
   simplifyPrompt,
   summarizePrompt,
   tocPrompt,
-  useNoteAsContextPrompt
+  useNoteAsContextPrompt,
 } from '@/utils';
 import { EventEmitter } from 'events';
-import { TFile } from 'obsidian';
+import { Notice, TFile } from 'obsidian';
 import React, {
   useContext,
   useEffect,
@@ -124,11 +124,30 @@ const Chat: React.FC<ChatProps> = ({
 
     const file = app.workspace.getActiveFile();
     if (!file) {
+      new Notice('No active note found.');
       console.error('No active note found.');
       return;
     }
     const noteContent = await getFileContent(file);
     const noteName = getFileName(file);
+
+    /* TODO: Make a switch for unlimited context search, on and off. When turned on, this
+       message is shown in both notice and console: Unlimited Context Enabled!
+    */
+    // const activeNoteOnMessage: ChatMessage = {
+    //   sender: AI_SENDER,
+    //   message: `OK please ask me questions about [[${noteName}]]`,
+    //   isVisible: true,
+    // };
+    // addMessage(activeNoteOnMessage);
+
+    // if (noteContent) {
+    //   aiState.setChain(CONVERSATIONAL_RETRIEVAL_QA_CHAIN, { noteContent });
+    // } else {
+    //   new Notice('No note content found.');
+    //   console.error('No note content found.');
+    //   return;
+    // }
 
     // Set the context based on the noteContent
     const prompt = useNoteAsContextPrompt(noteName, noteContent);

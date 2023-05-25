@@ -173,6 +173,34 @@ export class CopilotSettingTab extends PluginSettingTab {
     //     })
     //   );
 
+    // containerEl.createEl('h4', {text: 'Other API Settings'});
+
+    // new Setting(containerEl)
+    //   .setName("Your Huggingface Inference API key")
+    //   .setDesc(
+    //     createFragment((frag) => {
+    //       frag.appendText("You can find your API key at ");
+    //       frag.createEl('a', {
+    //         text: "https://hf.co/settings/tokens",
+    //         href: "https://hf.co/settings/tokens"
+    //       });
+    //       frag.createEl('br');
+    //       frag.appendText("It is used to make requests to Huggingface Inference API for vector search (BETA).");
+    //     })
+    //   )
+    //   .addText((text) =>{
+    //     text.inputEl.type = "password";
+    //     text.inputEl.style.width = "80%";
+    //     text
+    //       .setPlaceholder("Huggingface Inference API key")
+    //       .setValue(this.plugin.settings.huggingfaceApiKey)
+    //       .onChange(async (value) => {
+    //         this.plugin.settings.huggingfaceApiKey = value;
+    //         await this.plugin.saveSettings();
+    //       })
+    //     }
+    //   );
+
     containerEl.createEl('h4', {text: 'Advanced Settings'});
 
     new Setting(containerEl)

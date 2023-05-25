@@ -12,6 +12,7 @@ import { Editor, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
 
 export interface CopilotSettings {
   openAiApiKey: string;
+  huggingfaceApiKey: string;
   defaultModel: string;
   temperature: string;
   maxTokens: string;
@@ -257,12 +258,14 @@ export default class CopilotPlugin extends Plugin {
   getAIStateParams(): LangChainParams {
     const {
       openAiApiKey,
+      huggingfaceApiKey,
       temperature,
       maxTokens,
       contextTurns,
     } = sanitizeSettings(this.settings);
     return {
       key: openAiApiKey,
+      huggingfaceApiKey: huggingfaceApiKey,
       model: this.settings.defaultModel,
       temperature: Number(temperature),
       maxTokens: Number(maxTokens),
