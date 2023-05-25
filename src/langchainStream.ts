@@ -31,8 +31,17 @@ export const getAIResponse = async (
       );
     }
 
-    await aiState.runChatOpenAI(
-      userMessage,
+    // await aiState.runChatOpenAI(
+    //   userMessage,
+    //   chatContext,
+    //   abortController,
+    //   updateCurrentAiMessage,
+    //   addMessage,
+    //   debug,
+    // );
+
+    await aiState.runChain(
+      userMessage.message,
       chatContext,
       abortController,
       updateCurrentAiMessage,

@@ -1,46 +1,57 @@
+import { BaseLanguageModel } from "langchain/base_language";
 import {
   BaseChain,
   ConversationChain,
   ConversationalRetrievalQAChain,
-  ConversationalRetrievalQAChainInput,
   LLMChainInput,
 } from "langchain/chains";
+import { BaseRetriever } from "langchain/schema";
+
+
+export interface ConversationalRetrievalChainParams {
+  llm: BaseLanguageModel;
+  retriever: BaseRetriever;
+  options?: {
+    questionGeneratorTemplate?: string;
+    qaTemplate?: string;
+    returnSourceDocuments?: boolean;
+  }
+}
 
 // Add new chain types here
-export const CONVERSATION_CHAIN = 'ConversationChain';
-export const CONVERSATIONAL_RETRIEVAL_QA_CHAIN = 'ConversationalRetrievalQAChain';
-const SUPPORTED_CHAIN_TYPES = new Set([
-  CONVERSATION_CHAIN,
+export const LLM_CHAIN = 'llm_chain';
+export const CONVERSATIONAL_RETRIEVAL_QA_CHAIN = 'conversational_retrieval_chain';
+export const SUPPORTED_CHAIN_TYPES = new Set([
+  LLM_CHAIN,
   CONVERSATIONAL_RETRIEVAL_QA_CHAIN,
 ]);
 
 class ChainFactory {
   private static instances: Map<string, BaseChain> = new Map();
 
-  public static getChain(
-    chainType: string,
-    args: LLMChainInput | ConversationalRetrievalQAChainInput
-  ): BaseChain {
-    let instance = ChainFactory.instances.get(chainType);
+  public static getLLMChain(args: LLMChainInput): BaseChain {
+    let instance = ChainFactory.instances.get(LLM_CHAIN);
     if (!instance) {
-      if (!SUPPORTED_CHAIN_TYPES.has(chainType)) {
-        throw new Error(`Unsupported chain type: ${chainType}`);
-      }
-
-      if (chainType === CONVERSATION_CHAIN) {
-        instance = new ConversationChain(args as LLMChainInput);
-      } else if (chainType === CONVERSATIONAL_RETRIEVAL_QA_CHAIN) {
-        instance = new ConversationalRetrievalQAChain(
-          args as ConversationalRetrievalQAChainInput
-        );
-      } else {
-        throw new Error(`Invalid arguments for chain type: ${chainType}`);
-      }
-
-      ChainFactory.instances.set(chainType, instance);
+      instance = new ConversationChain(args as LLMChainInput);
+      console.log('New chain created: ', instance._chainType());
+      ChainFactory.instances.set(LLM_CHAIN, instance);
     }
-
     return instance;
+  }
+
+  public static getRetrievalChain(
+    args: ConversationalRetrievalChainParams
+  ): ConversationalRetrievalQAChain {
+    let instance = ChainFactory.instances.get(CONVERSATIONAL_RETRIEVAL_QA_CHAIN);
+    if (!instance) {
+      const argsRetrieval = args as ConversationalRetrievalChainParams;
+      instance = ConversationalRetrievalQAChain.fromLLM(
+        argsRetrieval.llm, argsRetrieval.retriever, argsRetrieval.options
+      );
+      console.log('New chain created: ', instance._chainType());
+      ChainFactory.instances.set(CONVERSATIONAL_RETRIEVAL_QA_CHAIN, instance);
+    }
+    return instance as ConversationalRetrievalQAChain;
   }
 }
 
