@@ -185,10 +185,11 @@ const Chat: React.FC<ChatProps> = ({
 
   useEffect(() => {
     async function handleSelection(selectedText: string) {
+      const wordCount = selectedText.split(' ').length;
       const tokenCount = await aiState.countTokens(selectedText);
       const tokenCountMessage: ChatMessage = {
         sender: AI_SENDER,
-        message: `The selected text contains ${tokenCount} tokens.`,
+        message: `The selected text contains ${wordCount} words and ${tokenCount} tokens.`,
         isVisible: true,
       };
       addMessage(tokenCountMessage);
