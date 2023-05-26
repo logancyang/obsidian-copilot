@@ -32,7 +32,7 @@ export const LLM_CHAIN = 'llm_chain';
 // Issue where conversational retrieval chain gives rephrased question
 // when streaming: https://github.com/hwchase17/langchainjs/issues/754#issuecomment-1540257078
 // Temp workaround triggers CORS issue 'refused to set header user-agent'
-// Wait for official fix.
+// TODO: Wait for official fix and use conversational retrieval chain instead of retrieval qa.
 export const CONVERSATIONAL_RETRIEVAL_QA_CHAIN = 'conversational_retrieval_chain';
 export const RETRIEVAL_QA_CHAIN = 'retrieval_qa';
 export const SUPPORTED_CHAIN_TYPES = new Set([

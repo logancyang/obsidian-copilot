@@ -89,6 +89,9 @@ class AIState {
     });
     switch(this.langChainParams.embeddingProvider) {
       case OPENAI:
+        // Every OpenAIEmbedding call is giving a 'refused to set header user-agent'
+        // It's generally not a problem.
+        // TODO: Check if this error can be avoided.
         return OpenAIEmbeddingsAPI
       case HUGGINGFACE:
         return new HuggingFaceInferenceEmbeddings({
