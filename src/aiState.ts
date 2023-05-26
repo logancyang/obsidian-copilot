@@ -103,7 +103,6 @@ class AIState {
     chainType: string,
     options: SetChainOptions = {},
   ): Promise<void> {
-    // TODO: Use this once https://github.com/hwchase17/langchainjs/issues/1327 is resolved
     if (chainType === LLM_CHAIN && options.prompt) {
       AIState.chain = ChainFactory.getLLMChain({
         llm: AIState.chatOpenAI,
@@ -204,9 +203,7 @@ class AIState {
           if (debug) {
             console.log('Chat memory:', this.memory);
           }
-          // TODO: chain.call stop signal gives error:
-          // "input values have 2 keys, you must specify an input key or pass only 1 key as input".
-          // Follow up with LangchainJS: https://github.com/hwchase17/langchainjs/issues/1327
+
           await AIState.chain.call(
             {
               input: userMessage,
