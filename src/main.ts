@@ -20,6 +20,7 @@ export interface CopilotSettings {
   useNotesAsContext: boolean;
   userSystemPrompt: string;
   stream: boolean;
+  embeddingProvider: string;
   debug: boolean;
 }
 
@@ -262,6 +263,7 @@ export default class CopilotPlugin extends Plugin {
       temperature,
       maxTokens,
       contextTurns,
+      embeddingProvider,
     } = sanitizeSettings(this.settings);
     return {
       key: openAiApiKey,
@@ -271,6 +273,7 @@ export default class CopilotPlugin extends Plugin {
       maxTokens: Number(maxTokens),
       systemMessage: DEFAULT_SYSTEM_PROMPT || this.settings.userSystemPrompt,
       chatContextTurns: Number(contextTurns),
+      embeddingProvider: embeddingProvider,
     };
   }
 }

@@ -19,7 +19,12 @@ export const getAIResponse = async (
     updateShouldAbort(abortController);
     if (debug) {
       const {
-        model, temperature, maxTokens, systemMessage, chatContextTurns
+        model,
+        temperature,
+        maxTokens,
+        systemMessage,
+        chatContextTurns,
+        embeddingProvider,
       } = aiState.langChainParams;
       console.log(`*** DEBUG INFO ***\n`
         + `user message: ${userMessage.message}\n`
@@ -27,7 +32,8 @@ export const getAIResponse = async (
         + `temperature: ${temperature}\n`
         + `maxTokens: ${maxTokens}\n`
         + `system message: ${systemMessage}\n`
-        + `chat context turns: ${chatContextTurns}\n`
+        + `chat context turns: ${chatContextTurns}\n`,
+        + `embedding provider: ${embeddingProvider}\n`
       );
     }
 

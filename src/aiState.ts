@@ -1,20 +1,24 @@
 import ChainFactory, {
-  CONVERSATIONAL_RETRIEVAL_QA_CHAIN,
   LLM_CHAIN,
+  RETRIEVAL_QA_CHAIN
 } from '@/chainFactory';
 import {
   AI_SENDER,
   DEFAULT_SYSTEM_PROMPT,
+  HUGGINGFACE,
+  OPENAI,
   USER_SENDER
 } from '@/constants';
 import { ChatMessage } from '@/sharedState';
 import {
   BaseChain,
   ConversationChain,
-  ConversationalRetrievalQAChain
+  ConversationalRetrievalQAChain,
+  RetrievalQAChain,
 } from "langchain/chains";
 import { ChatOpenAI } from 'langchain/chat_models/openai';
 import { HuggingFaceInferenceEmbeddings } from "langchain/embeddings/hf";
+import { OpenAIEmbeddings } from "langchain/embeddings/openai";
 import { BufferWindowMemory } from "langchain/memory";
 import {
   ChatPromptTemplate,
@@ -25,6 +29,7 @@ import {
 import { AIChatMessage, HumanChatMessage, SystemChatMessage } from 'langchain/schema';
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
+import { Notice } from 'obsidian';
 import { useState } from 'react';
 
 export interface LangChainParams {
@@ -35,6 +40,7 @@ export interface LangChainParams {
   maxTokens: number,
   systemMessage: string,
   chatContextTurns: number,
+  embeddingProvider: string,
 }
 
 interface SetChainOptions {
@@ -45,7 +51,8 @@ interface SetChainOptions {
 class AIState {
   static chatOpenAI: ChatOpenAI;
   static chain: BaseChain;
-  static retrievalChain: ConversationalRetrievalQAChain;
+  static retrievalChain: RetrievalQAChain;
+  static conversationalRetrievalChain: ConversationalRetrievalQAChain;
   static useChain: string;
   memory: BufferWindowMemory;
   langChainParams: LangChainParams;
@@ -58,7 +65,6 @@ class AIState {
       inputKey: 'input',
       returnMessages: true,
     });
-
     this.createNewChain(LLM_CHAIN);
   }
 
@@ -73,6 +79,27 @@ class AIState {
     console.log('setting model to', newModel);
     this.langChainParams.model = newModel;
     this.createNewChain(LLM_CHAIN);
+  }
+
+  getEmbeddingsAPI(): OpenAIEmbeddings | HuggingFaceInferenceEmbeddings {
+    const OpenAIEmbeddingsAPI = new OpenAIEmbeddings({
+      openAIApiKey: this.langChainParams.key,
+      maxRetries: 3,
+      maxConcurrency: 3,
+    });
+    switch(this.langChainParams.embeddingProvider) {
+      case OPENAI:
+        return OpenAIEmbeddingsAPI
+      case HUGGINGFACE:
+        return new HuggingFaceInferenceEmbeddings({
+          apiKey: this.langChainParams.huggingfaceApiKey,
+          maxRetries: 3,
+          maxConcurrency: 3,
+        });
+      default:
+        console.error('No embedding provider set. Using OpenAI.');
+        return OpenAIEmbeddingsAPI;
+    }
   }
 
   createNewChain(chainType: string): void {
@@ -111,26 +138,30 @@ class AIState {
       }) as ConversationChain;
       AIState.useChain = LLM_CHAIN;
       console.log('Set chain:', LLM_CHAIN);
-    } else if (chainType === CONVERSATIONAL_RETRIEVAL_QA_CHAIN && options.noteContent) {
+    } else if (chainType === RETRIEVAL_QA_CHAIN && options.noteContent) {
       const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 1000 });
       const docs = await textSplitter.createDocuments([options.noteContent]);
-      const vectorStore = await MemoryVectorStore.fromDocuments(
-        docs,
-        new HuggingFaceInferenceEmbeddings({
-          apiKey: this.langChainParams.huggingfaceApiKey,
-        }),
-      );
-      /* Create or retrieve the chain */
-      AIState.retrievalChain = ChainFactory.getRetrievalChain({
-        llm: AIState.chatOpenAI,
-        retriever: vectorStore.asRetriever(),
-      });
-      // Issue where conversational retrieval chain gives rephrased question
-      // when streaming: https://github.com/hwchase17/langchainjs/issues/754#issuecomment-1540257078
-      // Temp workaround triggers CORS issue 'refused to set header user-agent'
-      // Wait for official fix.
-      AIState.useChain = CONVERSATIONAL_RETRIEVAL_QA_CHAIN;
-      console.log('Set chain:', CONVERSATIONAL_RETRIEVAL_QA_CHAIN);
+      const embeddingsAPI = this.getEmbeddingsAPI();
+
+      try {
+        // Note: HF can give 503 errors frequently (it's free)
+        console.log('Creating vector store...');
+        const vectorStore = await MemoryVectorStore.fromDocuments(
+          docs, embeddingsAPI,
+        );
+        console.log('Vector store created successfully.');
+        /* Create or retrieve the chain */
+        AIState.retrievalChain = ChainFactory.getRetrievalChain({
+          llm: AIState.chatOpenAI,
+          retriever: vectorStore.asRetriever(),
+        });
+        AIState.useChain = RETRIEVAL_QA_CHAIN;
+        console.log('Set chain:', RETRIEVAL_QA_CHAIN);
+      } catch (error) {
+        new Notice('Failed to create vector store, please try again:', error);
+        console.log('Failed to create vector store, please try again.:', error);
+        return;
+      }
     }
   }
 
@@ -219,11 +250,10 @@ class AIState {
             ]
           );
           break;
-        case CONVERSATIONAL_RETRIEVAL_QA_CHAIN:
+        case RETRIEVAL_QA_CHAIN:
           await AIState.retrievalChain.call(
             {
-              question: userMessage,
-              chat_history: chatContext,
+              query: userMessage,
             },
             [
               {
@@ -238,6 +268,9 @@ class AIState {
         default:
           console.error('Chain type not supported:', AIState.useChain);
       }
+    } catch (error) {
+      new Notice('Error running chain:', error);
+      console.error('Error running chain:', error);
     } finally {
       addMessage({
         message: fullAIResponse,

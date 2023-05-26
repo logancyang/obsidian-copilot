@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS } from "@/constants";
+import { DEFAULT_SETTINGS, HUGGINGFACE, OPENAI } from "@/constants";
 import CopilotPlugin from "@/main";
 import { App, DropdownComponent, Notice, PluginSettingTab, Setting } from "obsidian";
 
@@ -173,33 +173,56 @@ export class CopilotSettingTab extends PluginSettingTab {
     //     })
     //   );
 
-    // containerEl.createEl('h4', {text: 'Other API Settings'});
+    containerEl.createEl('h4', {text: 'Vector-based Search Settings (BETA). No context limit!'});
 
-    // new Setting(containerEl)
-    //   .setName("Your Huggingface Inference API key")
-    //   .setDesc(
-    //     createFragment((frag) => {
-    //       frag.appendText("You can find your API key at ");
-    //       frag.createEl('a', {
-    //         text: "https://hf.co/settings/tokens",
-    //         href: "https://hf.co/settings/tokens"
-    //       });
-    //       frag.createEl('br');
-    //       frag.appendText("It is used to make requests to Huggingface Inference API for vector search (BETA).");
-    //     })
-    //   )
-    //   .addText((text) =>{
-    //     text.inputEl.type = "password";
-    //     text.inputEl.style.width = "80%";
-    //     text
-    //       .setPlaceholder("Huggingface Inference API key")
-    //       .setValue(this.plugin.settings.huggingfaceApiKey)
-    //       .onChange(async (value) => {
-    //         this.plugin.settings.huggingfaceApiKey = value;
-    //         await this.plugin.saveSettings();
-    //       })
-    //     }
-    //   );
+    new Setting(containerEl)
+      .setName("Embedding Provider")
+      .setDesc(
+        createFragment((frag) => {
+          frag.appendText("The embedding provider to use, only takes effect when you ");
+          frag.createEl('strong', {text: "restart the plugin"});
+          frag.createEl('br');
+          frag.appendText(
+            "OpenAI is more expensive more has better results. Huggingface embeddings are free but has worse quality results."
+          );
+        })
+      )
+      .addDropdown((dropdown: DropdownComponent) => {
+        dropdown
+          .addOption(OPENAI, 'OpenAI')
+          .addOption(HUGGINGFACE, 'Huggingface')
+          .setValue(this.plugin.settings.embeddingProvider)
+          .onChange(async (value: string) => {
+            this.plugin.settings.embeddingProvider = value;
+            await this.plugin.saveSettings();
+          });
+      });
+
+    new Setting(containerEl)
+      .setName("Your Huggingface Inference API key")
+      .setDesc(
+        createFragment((frag) => {
+          frag.appendText("You can find your API key at ");
+          frag.createEl('a', {
+            text: "https://hf.co/settings/tokens",
+            href: "https://hf.co/settings/tokens"
+          });
+          frag.createEl('br');
+          frag.appendText("It is used to make requests to Huggingface Inference API for *vector-based search* (BETA).");
+        })
+      )
+      .addText((text) =>{
+        text.inputEl.type = "password";
+        text.inputEl.style.width = "80%";
+        text
+          .setPlaceholder("Huggingface Inference API key")
+          .setValue(this.plugin.settings.huggingfaceApiKey)
+          .onChange(async (value) => {
+            this.plugin.settings.huggingfaceApiKey = value;
+            await this.plugin.saveSettings();
+          })
+        }
+      );
 
     containerEl.createEl('h4', {text: 'Advanced Settings'});
 
