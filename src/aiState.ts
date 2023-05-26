@@ -55,6 +55,7 @@ class AIState {
     this.memory = new BufferWindowMemory({
       k: this.langChainParams.chatContextTurns * 2,
       memoryKey: 'history',
+      inputKey: 'input',
       returnMessages: true,
     });
 
@@ -91,6 +92,8 @@ class AIState {
       temperature: temperature,
       maxTokens: maxTokens,
       streaming: true,
+      maxRetries: 3,
+      maxConcurrency: 3,
     });
 
     this.setChain(chainType, {prompt: chatPrompt});
@@ -112,7 +115,6 @@ class AIState {
     } else if (chainType === CONVERSATIONAL_RETRIEVAL_QA_CHAIN && options.noteContent) {
       const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 1000 });
       const docs = await textSplitter.createDocuments([options.noteContent]);
-      console.log('docs:', docs);
       const vectorStore = await MemoryVectorStore.fromDocuments(
         docs,
         new HuggingFaceInferenceEmbeddings({
@@ -196,55 +198,57 @@ class AIState {
     debug = false,
   ) {
     let fullAIResponse = '';
-    switch(AIState.useChain) {
-      case LLM_CHAIN:
-        if (debug) {
-          console.log('Chat memory:', this.memory);
-        }
-        // TODO: chain.call stop signal gives error:
-        // "input values have 2 keys, you must specify an input key or pass only 1 key as input".
-        // Follow up with LangchainJS: https://github.com/hwchase17/langchainjs/issues/1327
-        await AIState.chain.call(
-          {
-            input: userMessage,
-            // signal: abortController.signal,
-          },
-          [
+    try {
+      switch(AIState.useChain) {
+        case LLM_CHAIN:
+          if (debug) {
+            console.log('Chat memory:', this.memory);
+          }
+          // TODO: chain.call stop signal gives error:
+          // "input values have 2 keys, you must specify an input key or pass only 1 key as input".
+          // Follow up with LangchainJS: https://github.com/hwchase17/langchainjs/issues/1327
+          await AIState.chain.call(
             {
-              handleLLMNewToken: (token) => {
-                fullAIResponse += token;
-                updateCurrentAiMessage(fullAIResponse);
+              input: userMessage,
+              signal: abortController.signal,
+            },
+            [
+              {
+                handleLLMNewToken: (token) => {
+                  fullAIResponse += token;
+                  updateCurrentAiMessage(fullAIResponse);
+                }
               }
-            }
-          ]
-        );
-        break;
-      case CONVERSATIONAL_RETRIEVAL_QA_CHAIN:
-        await AIState.retrievalChain.call(
-          {
-            question: userMessage,
-            chat_history: chatContext,
-          },
-          [
+            ]
+          );
+          break;
+        case CONVERSATIONAL_RETRIEVAL_QA_CHAIN:
+          await AIState.retrievalChain.call(
             {
-              handleLLMNewToken: (token) => {
-                fullAIResponse += token;
-                updateCurrentAiMessage(fullAIResponse);
+              question: userMessage,
+              chat_history: chatContext,
+            },
+            [
+              {
+                handleLLMNewToken: (token) => {
+                  fullAIResponse += token;
+                  updateCurrentAiMessage(fullAIResponse);
+                }
               }
-            }
-          ]
-        );
-        break;
-      default:
-        console.error('Chain type not supported:', AIState.useChain);
+            ]
+          );
+          break;
+        default:
+          console.error('Chain type not supported:', AIState.useChain);
+      }
+    } finally {
+      addMessage({
+        message: fullAIResponse,
+        sender: AI_SENDER,
+        isVisible: true,
+      });
+      updateCurrentAiMessage('');
     }
-
-    addMessage({
-      message: fullAIResponse,
-      sender: AI_SENDER,
-      isVisible: true,
-    });
-    updateCurrentAiMessage('');
     return fullAIResponse;
   }
 }
