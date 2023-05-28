@@ -79,8 +79,6 @@ class AIState {
   clearChatMemory(): void {
     console.log('clearing chat memory');
     this.memory.clear();
-    this.createNewChain(LLM_CHAIN);
-    this.langChainParams.chainType = LLM_CHAIN;
   }
 
   setModel(newModel: string): void {
@@ -113,6 +111,7 @@ class AIState {
     }
   }
 
+  /* Create a new chain, or update chain with new model */
   createNewChain(
     chainType: string,
     options?: SetChainOptions,
@@ -150,32 +149,45 @@ class AIState {
         break;
       }
       case RETRIEVAL_QA_CHAIN: {
-        const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 1000 });
         if (!options.noteContent) {
           console.error('No note content provided.');
           return;
         }
-        const docs = await textSplitter.createDocuments([options.noteContent]);
-        const embeddingsAPI = this.getEmbeddingsAPI();
 
-        try {
-          // Note: HF can give 503 errors frequently (it's free)
-          console.log('Creating vector store...');
-          const vectorStore = await MemoryVectorStore.fromDocuments(
-            docs, embeddingsAPI,
-          );
-          console.log('Vector store created successfully.');
-          /* Create or retrieve the chain */
-          AIState.retrievalChain = ChainFactory.getRetrievalChain({
-            llm: AIState.chatOpenAI,
-            retriever: vectorStore.asRetriever(),
-          });
+        const docHash = ChainFactory.getDocumentHash(options.noteContent);
+        if (ChainFactory.instances.has(docHash)) {
+          AIState.retrievalChain = ChainFactory.getRetrievalChain(docHash);
           this.langChainParams.chainType = RETRIEVAL_QA_CHAIN;
           console.log('Set chain:', RETRIEVAL_QA_CHAIN);
-        } catch (error) {
-          new Notice('Failed to create vector store, please try again:', error);
-          console.log('Failed to create vector store, please try again.:', error);
           return;
+        } else {
+          // Should not create new a new chain and index if there's already one
+          const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 1000 });
+
+          const docs = await textSplitter.createDocuments([options.noteContent]);
+          const embeddingsAPI = this.getEmbeddingsAPI();
+
+          try {
+            // Note: HF can give 503 errors frequently (it's free)
+            console.log('Creating vector store...');
+            const vectorStore = await MemoryVectorStore.fromDocuments(
+              docs, embeddingsAPI,
+            );
+            console.log('Vector store created successfully.');
+            /* Create or retrieve the chain */
+            AIState.retrievalChain = ChainFactory.createRetrievalChain(
+              {
+                llm: AIState.chatOpenAI,
+                retriever: vectorStore.asRetriever(),
+              },
+              docHash,
+            );
+            this.langChainParams.chainType = RETRIEVAL_QA_CHAIN;
+            console.log('Set chain:', RETRIEVAL_QA_CHAIN);
+          } catch (error) {
+            new Notice('Failed to create vector store, please try again:', error);
+            console.log('Failed to create vector store, please try again.:', error);
+          }
         }
         break;
       }

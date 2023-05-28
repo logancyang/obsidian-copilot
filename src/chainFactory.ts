@@ -1,3 +1,4 @@
+import { MD5 } from 'crypto-js';
 import { BaseLanguageModel } from "langchain/base_language";
 import {
   BaseChain,
@@ -42,7 +43,7 @@ export const SUPPORTED_CHAIN_TYPES = new Set([
 ]);
 
 class ChainFactory {
-  private static instances: Map<string, BaseChain> = new Map();
+  public static instances: Map<string, BaseChain> = new Map();
 
   public static getLLMChain(args: LLMChainInput): BaseChain {
     let instance = ChainFactory.instances.get(LLM_CHAIN);
@@ -54,15 +55,40 @@ class ChainFactory {
     return instance;
   }
 
+  public static getDocumentHash(sourceDocument: string): string {
+    return MD5(sourceDocument).toString();
+  }
+
+  /**
+ * Get the retrieval chain for a given source document. If the document exists
+ * and is not changed, it retrieves its previous chain instance. Otherwise,
+ * it creates a new chain and put it into the chain factory map where the key
+ * is the full document's MD5 hash.
+ */
   public static getRetrievalChain(
-    args: RetrievalChainParams
+    inputDocHash: string,
   ): RetrievalQAChain {
-    // Create a new retrieval chain every time, not singleton
+    let instance;
+    if (ChainFactory.instances.has(inputDocHash)) {
+      // Use the existing chain when the note has been indexed
+      instance = ChainFactory.instances.get(inputDocHash) as RetrievalQAChain;
+      console.log('Retrieval qa chain retrieved for document hash: ', inputDocHash);
+    }
+
+    return instance as RetrievalQAChain;
+  }
+
+  public static createRetrievalChain(
+    args: RetrievalChainParams,
+    inputDocHash: string,
+  ): RetrievalQAChain {
+    // Create a new retrieval chain when the note hasn't been indexed
     const argsRetrieval = args as RetrievalChainParams;
     const instance = RetrievalQAChain.fromLLM(
       argsRetrieval.llm, argsRetrieval.retriever, argsRetrieval.options
     );
-    console.log('New chain created: ', instance._chainType());
+    ChainFactory.instances.set(inputDocHash, instance);
+    console.log('New retrieval qa chain created for document hash: ', inputDocHash);
 
     return instance as RetrievalQAChain;
   }
