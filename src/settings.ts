@@ -154,26 +154,14 @@ export class CopilotSettingTab extends PluginSettingTab {
         }
       );
 
-    // TODO: Enable this after langchain integration
-    // new Setting(containerEl)
-    //   .setName("Use Notes as context (beta)")
-    //   .setDesc(
-    //     createFragment((frag) => {
-    //       frag.appendText(
-    //         "Use your notes as context. Currently only support the active note. "
-    //         + "Default to off. Be cautious, this could incur more API costs!"
-    //       );
-    //     })
-    //   )
-    //   .addToggle(toggle => toggle
-    //     .setValue(this.plugin.settings.useNotesAsContext)
-    //     .onChange(async (value) => {
-    //       this.plugin.settings.useNotesAsContext = value;
-    //       await this.plugin.saveSettings();
-    //     })
-    //   );
-
     containerEl.createEl('h4', {text: 'Vector-based Search Settings (BETA). No context limit!'});
+    containerEl.createEl('h6', {text: 'Use the Chain Selection dropdown to enable QA: Long Note.'});
+    containerEl.createEl(
+      'h6',
+      {
+        text: 'NOTE: OpenAI embeddings are more expensive but give better QA results. Huggingface embeddings are free but the result is not as good, and you may see more API timeout errors.'
+      }
+    );
 
     new Setting(containerEl)
       .setName("Embedding Provider")
@@ -181,10 +169,6 @@ export class CopilotSettingTab extends PluginSettingTab {
         createFragment((frag) => {
           frag.appendText("The embedding provider to use, only takes effect when you ");
           frag.createEl('strong', {text: "restart the plugin"});
-          frag.createEl('br');
-          frag.appendText(
-            "OpenAI is more expensive more has better results. Huggingface embeddings are free but has worse quality results."
-          );
         })
       )
       .addDropdown((dropdown: DropdownComponent) => {
@@ -208,7 +192,15 @@ export class CopilotSettingTab extends PluginSettingTab {
             href: "https://hf.co/settings/tokens"
           });
           frag.createEl('br');
-          frag.appendText("It is used to make requests to Huggingface Inference API for *vector-based search* (BETA).");
+          frag.appendText("It is used to make requests to Huggingface Inference API for free embeddings.");
+          frag.createEl('br');
+          frag.createEl('strong', {
+            text: "Please note that the quality may be worse than OpenAI embeddings,"
+          });
+          frag.createEl('br');
+          frag.createEl('strong', {
+            text: "and may have more API timeout errors."
+          });
         })
       )
       .addText((text) =>{

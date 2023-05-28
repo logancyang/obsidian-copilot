@@ -44,9 +44,9 @@ export interface LangChainParams {
   chainType: string,
 }
 
-interface SetChainOptions {
+export interface SetChainOptions {
   prompt?: ChatPromptTemplate;
-  noteContent?: string;
+  noteContent: string | null;
 }
 
 class AIState {
@@ -56,6 +56,7 @@ class AIState {
   static conversationalRetrievalChain: ConversationalRetrievalQAChain;
   memory: BufferWindowMemory;
   langChainParams: LangChainParams;
+  chatPrompt:  ChatPromptTemplate;
 
   constructor(langChainParams: LangChainParams) {
     this.langChainParams = langChainParams;
@@ -65,6 +66,13 @@ class AIState {
       inputKey: 'input',
       returnMessages: true,
     });
+    this.chatPrompt = ChatPromptTemplate.fromPromptMessages([
+      SystemMessagePromptTemplate.fromTemplate(
+        this.langChainParams.systemMessage
+      ),
+      new MessagesPlaceholder("history"),
+      HumanMessagePromptTemplate.fromTemplate("{input}"),
+    ]);
     this.createNewChain(LLM_CHAIN);
   }
 
@@ -105,16 +113,13 @@ class AIState {
     }
   }
 
-  createNewChain(chainType: string): void {
+  createNewChain(
+    chainType: string,
+    options?: SetChainOptions,
+  ): void {
     const {
-      key, model, temperature, maxTokens, systemMessage,
+      key, model, temperature, maxTokens,
     } = this.langChainParams;
-
-    const chatPrompt = ChatPromptTemplate.fromPromptMessages([
-      SystemMessagePromptTemplate.fromTemplate(systemMessage),
-      new MessagesPlaceholder("history"),
-      HumanMessagePromptTemplate.fromTemplate("{input}"),
-    ]);
 
     AIState.chatOpenAI = new ChatOpenAI({
       openAIApiKey: key,
@@ -126,45 +131,57 @@ class AIState {
       maxConcurrency: 3,
     });
 
-    this.setChain(chainType, {prompt: chatPrompt});
+    this.setChain(chainType, options);
   }
 
   async setChain(
     chainType: string,
     options: SetChainOptions = {},
   ): Promise<void> {
-    if (chainType === LLM_CHAIN && options.prompt) {
-      AIState.chain = ChainFactory.getLLMChain({
-        llm: AIState.chatOpenAI,
-        memory: this.memory,
-        prompt: options.prompt,
-      }) as ConversationChain;
-      this.langChainParams.chainType = LLM_CHAIN;
-      console.log('Set chain:', LLM_CHAIN);
-    } else if (chainType === RETRIEVAL_QA_CHAIN && options.noteContent) {
-      const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 1000 });
-      const docs = await textSplitter.createDocuments([options.noteContent]);
-      const embeddingsAPI = this.getEmbeddingsAPI();
-
-      try {
-        // Note: HF can give 503 errors frequently (it's free)
-        console.log('Creating vector store...');
-        const vectorStore = await MemoryVectorStore.fromDocuments(
-          docs, embeddingsAPI,
-        );
-        console.log('Vector store created successfully.');
-        /* Create or retrieve the chain */
-        AIState.retrievalChain = ChainFactory.getRetrievalChain({
+    switch (chainType) {
+      case LLM_CHAIN: {
+        AIState.chain = ChainFactory.getLLMChain({
           llm: AIState.chatOpenAI,
-          retriever: vectorStore.asRetriever(),
-        });
-        this.langChainParams.chainType = RETRIEVAL_QA_CHAIN;
-        console.log('Set chain:', RETRIEVAL_QA_CHAIN);
-      } catch (error) {
-        new Notice('Failed to create vector store, please try again:', error);
-        console.log('Failed to create vector store, please try again.:', error);
-        return;
+          memory: this.memory,
+          prompt: options.prompt || this.chatPrompt,
+        }) as ConversationChain;
+        this.langChainParams.chainType = LLM_CHAIN;
+        console.log('Set chain:', LLM_CHAIN);
+        break;
       }
+      case RETRIEVAL_QA_CHAIN: {
+        const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 1000 });
+        if (!options.noteContent) {
+          console.error('No note content provided.');
+          return;
+        }
+        const docs = await textSplitter.createDocuments([options.noteContent]);
+        const embeddingsAPI = this.getEmbeddingsAPI();
+
+        try {
+          // Note: HF can give 503 errors frequently (it's free)
+          console.log('Creating vector store...');
+          const vectorStore = await MemoryVectorStore.fromDocuments(
+            docs, embeddingsAPI,
+          );
+          console.log('Vector store created successfully.');
+          /* Create or retrieve the chain */
+          AIState.retrievalChain = ChainFactory.getRetrievalChain({
+            llm: AIState.chatOpenAI,
+            retriever: vectorStore.asRetriever(),
+          });
+          this.langChainParams.chainType = RETRIEVAL_QA_CHAIN;
+          console.log('Set chain:', RETRIEVAL_QA_CHAIN);
+        } catch (error) {
+          new Notice('Failed to create vector store, please try again:', error);
+          console.log('Failed to create vector store, please try again.:', error);
+          return;
+        }
+        break;
+      }
+      default:
+        console.error('No chain type set.');
+        break;
     }
   }
 
@@ -293,7 +310,7 @@ export function useAIState(
   string,
   (model: string) => void,
   string,
-  (chain: string) => void,
+  (chain: string, options?: SetChainOptions) => void,
   () => void,
 ] {
   const { langChainParams } = aiState;
@@ -311,8 +328,8 @@ export function useAIState(
     setCurrentModel(newModel);
   };
 
-  const setChain = (newChain: string) => {
-    aiState.setChain(newChain);
+  const setChain = (newChain: string, options?: SetChainOptions) => {
+    aiState.setChain(newChain, options);
     setCurrentChain(newChain);
   };
 
