@@ -41,6 +41,7 @@ export interface LangChainParams {
   systemMessage: string,
   chatContextTurns: number,
   embeddingProvider: string,
+  chainType: string,
 }
 
 interface SetChainOptions {
@@ -53,7 +54,6 @@ class AIState {
   static chain: BaseChain;
   static retrievalChain: RetrievalQAChain;
   static conversationalRetrievalChain: ConversationalRetrievalQAChain;
-  static useChain: string;
   memory: BufferWindowMemory;
   langChainParams: LangChainParams;
 
@@ -72,7 +72,7 @@ class AIState {
     console.log('clearing chat memory');
     this.memory.clear();
     this.createNewChain(LLM_CHAIN);
-    AIState.useChain = LLM_CHAIN;
+    this.langChainParams.chainType = LLM_CHAIN;
   }
 
   setModel(newModel: string): void {
@@ -139,7 +139,7 @@ class AIState {
         memory: this.memory,
         prompt: options.prompt,
       }) as ConversationChain;
-      AIState.useChain = LLM_CHAIN;
+      this.langChainParams.chainType = LLM_CHAIN;
       console.log('Set chain:', LLM_CHAIN);
     } else if (chainType === RETRIEVAL_QA_CHAIN && options.noteContent) {
       const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 1000 });
@@ -158,7 +158,7 @@ class AIState {
           llm: AIState.chatOpenAI,
           retriever: vectorStore.asRetriever(),
         });
-        AIState.useChain = RETRIEVAL_QA_CHAIN;
+        this.langChainParams.chainType = RETRIEVAL_QA_CHAIN;
         console.log('Set chain:', RETRIEVAL_QA_CHAIN);
       } catch (error) {
         new Notice('Failed to create vector store, please try again:', error);
@@ -232,7 +232,7 @@ class AIState {
   ) {
     let fullAIResponse = '';
     try {
-      switch(AIState.useChain) {
+      switch(this.langChainParams.chainType) {
         case LLM_CHAIN:
           if (debug) {
             console.log('Chat memory:', this.memory);
@@ -269,7 +269,7 @@ class AIState {
           );
           break;
         default:
-          console.error('Chain type not supported:', AIState.useChain);
+          console.error('Chain type not supported:', this.langChainParams.chainType);
       }
     } catch (error) {
       new Notice('Error running chain:', error);
@@ -292,10 +292,13 @@ export function useAIState(
 ): [
   string,
   (model: string) => void,
+  string,
+  (chain: string) => void,
   () => void,
 ] {
   const { langChainParams } = aiState;
   const [currentModel, setCurrentModel] = useState<string>(langChainParams.model);
+  const [currentChain, setCurrentChain] = useState<string>(langChainParams.chainType);
   const [, setChatMemory] = useState<BufferWindowMemory | null>(aiState.memory);
 
   const clearChatMemory = () => {
@@ -308,9 +311,16 @@ export function useAIState(
     setCurrentModel(newModel);
   };
 
+  const setChain = (newChain: string) => {
+    aiState.setChain(newChain);
+    setCurrentChain(newChain);
+  };
+
   return [
     currentModel,
     setModel,
+    currentChain,
+    setChain,
     clearChatMemory,
   ];
 }

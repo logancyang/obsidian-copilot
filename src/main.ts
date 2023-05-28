@@ -1,4 +1,5 @@
 import AIState, { LangChainParams } from '@/aiState';
+import { LLM_CHAIN } from '@/chainFactory';
 import CopilotView from '@/components/CopilotView';
 import { LanguageModal } from "@/components/LanguageModal";
 import { ToneModal } from "@/components/ToneModal";
@@ -274,6 +275,7 @@ export default class CopilotPlugin extends Plugin {
       systemMessage: DEFAULT_SYSTEM_PROMPT || this.settings.userSystemPrompt,
       chatContextTurns: Number(contextTurns),
       embeddingProvider: embeddingProvider,
+      chainType: LLM_CHAIN,
     };
   }
 }
