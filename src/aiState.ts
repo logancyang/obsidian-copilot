@@ -46,7 +46,7 @@ export interface LangChainParams {
 
 export interface SetChainOptions {
   prompt?: ChatPromptTemplate;
-  noteContent: string | null;
+  noteContent?: string | null;
 }
 
 class AIState {
