@@ -54,7 +54,7 @@ const Chat: React.FC<ChatProps> = ({
     chatHistory, addMessage, clearMessages,
   ] = useSharedState(sharedState);
   const [
-    currentModel, setModel, clearChatMemory,
+    currentModel, setModel, currentChain, setChain, clearChatMemory,
   ] = useAIState(aiState);
   const [currentAiMessage, setCurrentAiMessage] = useState('');
   const [inputMessage, setInputMessage] = useState('');
@@ -130,24 +130,6 @@ const Chat: React.FC<ChatProps> = ({
     }
     const noteContent = await getFileContent(file);
     const noteName = getFileName(file);
-
-    /* TODO: Make a switch for unlimited context search, on and off. When turned on, this
-       message is shown in both notice and console: Unlimited Context Enabled!
-    */
-    // const activeNoteOnMessage: ChatMessage = {
-    //   sender: AI_SENDER,
-    //   message: `OK please ask me questions about [[${noteName}]]`,
-    //   isVisible: true,
-    // };
-    // addMessage(activeNoteOnMessage);
-
-    // if (noteContent) {
-    //   aiState.setChain(CONVERSATIONAL_RETRIEVAL_QA_CHAIN, { noteContent });
-    // } else {
-    //   new Notice('No note content found.');
-    //   console.error('No note content found.');
-    //   return;
-    // }
 
     // Set the context based on the noteContent
     const prompt = useNoteAsContextPrompt(noteName, noteContent);
@@ -280,6 +262,8 @@ const Chat: React.FC<ChatProps> = ({
         <ChatIcons
           currentModel={currentModel}
           setCurrentModel={setModel}
+          currentChain={currentChain}
+          setCurrentChain={setChain}
           onStopGenerating={handleStopGenerating}
           onNewChat={
             () => {
@@ -290,6 +274,7 @@ const Chat: React.FC<ChatProps> = ({
           }
           onSaveAsNote={handleSaveAsNote}
           onUseActiveNoteAsContext={useActiveNoteAsContext}
+          addMessage={addMessage}
         />
         <ChatInput
           inputMessage={inputMessage}
