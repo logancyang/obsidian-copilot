@@ -24,7 +24,6 @@ export const getAIResponse = async (
         maxTokens,
         systemMessage,
         chatContextTurns,
-        embeddingProvider,
       } = aiState.langChainParams;
       console.log(`*** DEBUG INFO ***\n`
         + `user message: ${userMessage.message}\n`
@@ -33,7 +32,6 @@ export const getAIResponse = async (
         + `maxTokens: ${maxTokens}\n`
         + `system message: ${systemMessage}\n`
         + `chat context turns: ${chatContextTurns}\n`,
-        + `embedding provider: ${embeddingProvider}\n`
       );
     }
 

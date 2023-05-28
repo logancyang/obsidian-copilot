@@ -84,7 +84,7 @@ class AIState {
   setModel(newModel: string): void {
     console.log('setting model to', newModel);
     this.langChainParams.model = newModel;
-    this.createNewChain(LLM_CHAIN);
+    AIState.chatOpenAI.modelName = newModel;
   }
 
   getEmbeddingsAPI(): OpenAIEmbeddings | HuggingFaceInferenceEmbeddings {
@@ -266,7 +266,7 @@ class AIState {
           if (debug) {
             console.log('Chat memory:', this.memory);
           }
-
+          console.log('model:::: ', AIState.chatOpenAI.modelName)
           await AIState.chain.call(
             {
               input: userMessage,
@@ -283,6 +283,9 @@ class AIState {
           );
           break;
         case RETRIEVAL_QA_CHAIN:
+          if (debug) {
+            console.log('embedding provider:', this.langChainParams.embeddingProvider);
+          }
           await AIState.retrievalChain.call(
             {
               query: userMessage,
