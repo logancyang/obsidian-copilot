@@ -266,7 +266,6 @@ class AIState {
           if (debug) {
             console.log('Chat memory:', this.memory);
           }
-          console.log('model:::: ', AIState.chatOpenAI.modelName)
           await AIState.chain.call(
             {
               input: userMessage,
@@ -304,14 +303,18 @@ class AIState {
           console.error('Chain type not supported:', this.langChainParams.chainType);
       }
     } catch (error) {
-      new Notice('Error running chain:', error);
-      console.error('Error running chain:', error);
+      const errorData = error?.response?.data?.error || error;
+      const errorCode = errorData?.code || error;
+      new Notice(`LangChain error: ${errorCode}`);
+      console.error(errorData);
     } finally {
-      addMessage({
-        message: fullAIResponse,
-        sender: AI_SENDER,
-        isVisible: true,
-      });
+      if (fullAIResponse) {
+        addMessage({
+          message: fullAIResponse,
+          sender: AI_SENDER,
+          isVisible: true,
+        });
+      }
       updateCurrentAiMessage('');
     }
     return fullAIResponse;

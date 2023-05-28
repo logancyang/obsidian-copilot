@@ -1,6 +1,5 @@
 import AIState from '@/aiState';
 import { ChatMessage } from '@/sharedState';
-import { Notice } from 'obsidian';
 
 export type Role = 'assistant' | 'user' | 'system';
 
@@ -15,38 +14,31 @@ export const getAIResponse = async (
 ) => {
   const abortController = new AbortController();
 
-  try {
-    updateShouldAbort(abortController);
-    if (debug) {
-      const {
-        model,
-        temperature,
-        maxTokens,
-        systemMessage,
-        chatContextTurns,
-      } = aiState.langChainParams;
-      console.log(`*** DEBUG INFO ***\n`
-        + `user message: ${userMessage.message}\n`
-        + `model: ${model}\n`
-        + `temperature: ${temperature}\n`
-        + `maxTokens: ${maxTokens}\n`
-        + `system message: ${systemMessage}\n`
-        + `chat context turns: ${chatContextTurns}\n`,
-      );
-    }
-
-    await aiState.runChain(
-      userMessage.message,
-      chatContext,
-      abortController,
-      updateCurrentAiMessage,
-      addMessage,
-      debug,
+  updateShouldAbort(abortController);
+  if (debug) {
+    const {
+      model,
+      temperature,
+      maxTokens,
+      systemMessage,
+      chatContextTurns,
+    } = aiState.langChainParams;
+    console.log(`*** DEBUG INFO ***\n`
+      + `user message: ${userMessage.message}\n`
+      + `model: ${model}\n`
+      + `temperature: ${temperature}\n`
+      + `maxTokens: ${maxTokens}\n`
+      + `system message: ${systemMessage}\n`
+      + `chat context turns: ${chatContextTurns}\n`,
     );
-  } catch (error) {
-    const errorData = error?.response?.data?.error || error;
-    const errorCode = errorData?.code || error;
-    new Notice(`LangChain error: ${errorCode}`);
-    console.error(errorData);
   }
+
+  await aiState.runChain(
+    userMessage.message,
+    chatContext,
+    abortController,
+    updateCurrentAiMessage,
+    addMessage,
+    debug,
+  );
 };
