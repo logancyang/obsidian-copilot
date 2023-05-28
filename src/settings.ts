@@ -101,7 +101,7 @@ export class CopilotSettingTab extends PluginSettingTab {
         })
       )
       .addText((text) =>{
-        text.inputEl.type = "number";
+        text.inputEl.type = "decimal";
         text
           .setPlaceholder("0.7")
           .setValue(this.plugin.settings.temperature)
