@@ -157,10 +157,11 @@ class AIState {
         }
 
         const docHash = ChainFactory.getDocumentHash(options.noteContent);
-        if (ChainFactory.vectorStoreMap.has(docHash)) {
+        const vectorStore = ChainFactory.vectorStoreMap.get(docHash);
+        if (vectorStore) {
           AIState.retrievalChain = RetrievalQAChain.fromLLM(
             AIState.chatOpenAI,
-            this.vectorStore.asRetriever(),
+            vectorStore.asRetriever(),
           );
           console.log('Existing vector store for document hash: ', docHash);
         } else {

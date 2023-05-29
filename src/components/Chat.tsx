@@ -136,15 +136,24 @@ const Chat: React.FC<ChatProps> = ({
       return;
     }
 
+    let activeNoteOnMessage: ChatMessage;
     const docHash = ChainFactory.getDocumentHash(noteContent);
-    await aiState.buildIndex(noteContent, docHash);
-    console.log('Vector store added for docHash:', docHash)
+    const vectorStore = ChainFactory.vectorStoreMap.get(docHash);
+    if (vectorStore) {
+      activeNoteOnMessage = {
+        sender: AI_SENDER,
+        message: `I have Read [[${noteName}]].\n\n Please switch to "QA: Active Note" to ask questions about it.`,
+        isVisible: true,
+      };
+    } else {
+      await aiState.buildIndex(noteContent, docHash);
+      activeNoteOnMessage = {
+        sender: AI_SENDER,
+        message: `Reading [[${noteName}]]...\n\n Please switch to "QA: Active Note" to ask questions about it.`,
+        isVisible: true,
+      };
+    }
 
-    const activeNoteOnMessage: ChatMessage = {
-      sender: AI_SENDER,
-      message: `Reading [[${noteName}]]...\n\n Switch to "QA: Active Note" to ask questions about it.`,
-      isVisible: true,
-    };
     addMessage(activeNoteOnMessage);
   };
 
