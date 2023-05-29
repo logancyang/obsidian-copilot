@@ -17,6 +17,7 @@ import {
   RetrievalQAChain,
 } from "langchain/chains";
 import { ChatOpenAI } from 'langchain/chat_models/openai';
+import { VectorStore } from 'langchain/dist/vectorstores/base';
 import { HuggingFaceInferenceEmbeddings } from "langchain/embeddings/hf";
 import { OpenAIEmbeddings } from "langchain/embeddings/openai";
 import { BufferWindowMemory } from "langchain/memory";
@@ -57,6 +58,7 @@ class AIState {
   memory: BufferWindowMemory;
   langChainParams: LangChainParams;
   chatPrompt:  ChatPromptTemplate;
+  vectorStore: VectorStore
 
   constructor(langChainParams: LangChainParams) {
     this.langChainParams = langChainParams;
@@ -155,46 +157,49 @@ class AIState {
         }
 
         const docHash = ChainFactory.getDocumentHash(options.noteContent);
-        if (ChainFactory.instances.has(docHash)) {
-          AIState.retrievalChain = ChainFactory.getRetrievalChain(docHash);
-          this.langChainParams.chainType = RETRIEVAL_QA_CHAIN;
-          console.log('Set chain:', RETRIEVAL_QA_CHAIN);
-          return;
+        if (ChainFactory.vectorStoreMap.has(docHash)) {
+          AIState.retrievalChain = RetrievalQAChain.fromLLM(
+            AIState.chatOpenAI,
+            this.vectorStore.asRetriever(),
+          );
+          console.log('Existing vector store for document hash: ', docHash);
         } else {
-          // Should not create new a new chain and index if there's already one
-          const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 1000 });
-
-          const docs = await textSplitter.createDocuments([options.noteContent]);
-          const embeddingsAPI = this.getEmbeddingsAPI();
-
           try {
-            // Note: HF can give 503 errors frequently (it's free)
-            console.log('Creating vector store...');
-            const vectorStore = await MemoryVectorStore.fromDocuments(
-              docs, embeddingsAPI,
+            await this.buildIndex(options.noteContent, docHash);
+            AIState.retrievalChain = RetrievalQAChain.fromLLM(
+              AIState.chatOpenAI,
+              this.vectorStore.asRetriever(),
             );
-            console.log('Vector store created successfully.');
-            /* Create or retrieve the chain */
-            AIState.retrievalChain = ChainFactory.createRetrievalChain(
-              {
-                llm: AIState.chatOpenAI,
-                retriever: vectorStore.asRetriever(),
-              },
-              docHash,
-            );
-            this.langChainParams.chainType = RETRIEVAL_QA_CHAIN;
-            console.log('Set chain:', RETRIEVAL_QA_CHAIN);
+            console.log('New retrieval qa chain created for document hash: ', docHash);
           } catch (error) {
             new Notice('Failed to create vector store, please try again:', error);
             console.log('Failed to create vector store, please try again.:', error);
           }
         }
+
+        this.langChainParams.chainType = RETRIEVAL_QA_CHAIN;
+        console.log('Set chain:', RETRIEVAL_QA_CHAIN);
         break;
       }
       default:
         console.error('No chain type set.');
         break;
     }
+  }
+
+  async buildIndex(noteContent: string, docHash: string): Promise<void> {
+    const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 1000 });
+
+    const docs = await textSplitter.createDocuments([noteContent]);
+    const embeddingsAPI = this.getEmbeddingsAPI();
+
+    // Note: HF can give 503 errors frequently (it's free)
+    console.log('Creating vector store...');
+    this.vectorStore = await MemoryVectorStore.fromDocuments(
+      docs, embeddingsAPI,
+    );
+    ChainFactory.setVectorStore(this.vectorStore, docHash);
+    console.log('Vector store created successfully.');
   }
 
   async countTokens(inputStr: string): Promise<number> {

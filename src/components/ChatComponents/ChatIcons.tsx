@@ -78,7 +78,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
 
       const activeNoteOnMessage: ChatMessage = {
         sender: AI_SENDER,
-        message: `OK I've read this long note [[${noteName}]]. Feel free to ask me questions about it.`,
+        message: `OK Feel free to ask me questions about [[${noteName}]].`,
         isVisible: true,
       };
       addMessage(activeNoteOnMessage);
@@ -119,7 +119,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
       </button>
       <button className='chat-icon-button' onClick={onUseActiveNoteAsContext}>
         <UseActiveNoteAsContextIcon className='icon-scaler' />
-        <span className="tooltip-text">QA: Active Short Note</span>
+        <span className="tooltip-text">Use Active Note as Context</span>
       </button>
       <div className="chat-icon-selection-tooltip">
         <div className="select-wrapper">
@@ -130,7 +130,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             onChange={handleChainChange}
           >
             <option value='llm_chain'>Conversation</option>
-            <option value='retrieval_qa'>QA: Long Note</option>
+            <option value='retrieval_qa'>QA: Active Note</option>
           </select>
           <span className="tooltip-text">Chain Selection<br/>(clears history!)</span>
         </div>
