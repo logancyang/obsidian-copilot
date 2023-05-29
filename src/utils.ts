@@ -42,15 +42,15 @@ export function getFileName(file: TFile): string {
 
 export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   const sanitizedSettings: CopilotSettings = { ...settings };
-  sanitizedSettings.temperature = isNaN(parseFloat(settings.temperature))
+  sanitizedSettings.temperature = isNaN(settings.temperature)
     ? DEFAULT_SETTINGS.temperature
     : settings.temperature;
 
-  sanitizedSettings.maxTokens = isNaN(parseFloat(settings.maxTokens))
+  sanitizedSettings.maxTokens = isNaN(settings.maxTokens)
     ? DEFAULT_SETTINGS.maxTokens
     : settings.maxTokens;
 
-  sanitizedSettings.contextTurns = isNaN(parseFloat(settings.contextTurns))
+  sanitizedSettings.contextTurns = isNaN(settings.contextTurns)
     ? DEFAULT_SETTINGS.contextTurns
     : settings.contextTurns;
 

@@ -14,7 +14,7 @@ export class CopilotSettingTab extends PluginSettingTab {
     const { containerEl } = this;
 
     containerEl.empty();
-    containerEl.createEl('h2', {text: 'Copilot Settings'});
+    containerEl.createEl('h2', { text: 'Copilot Settings' });
 
     containerEl.createEl('button', {
       text: 'Reset to default settings',
@@ -27,10 +27,10 @@ export class CopilotSettingTab extends PluginSettingTab {
     });
 
     containerEl.createEl('h6',
-      {text: 'Please reload the plugin when you change any setting below.'}
+      { text: 'Please reload the plugin when you change any setting below.' }
     );
 
-    containerEl.createEl('h4', {text: 'OpenAI API Settings'});
+    containerEl.createEl('h4', { text: 'OpenAI API Settings' });
 
     new Setting(containerEl)
       .setName("Your OpenAI API key")
@@ -47,12 +47,12 @@ export class CopilotSettingTab extends PluginSettingTab {
           );
           frag.createEl(
             'strong',
-            {text: "path_to_your_vault/.obsidian/plugins/obsidian-copilot/data.json"}
+            { text: "path_to_your_vault/.obsidian/plugins/obsidian-copilot/data.json" }
           );
           frag.appendText(", and it is only used to make requests to OpenAI.");
         })
       )
-      .addText((text) =>{
+      .addText((text) => {
         text.inputEl.type = "password";
         text.inputEl.style.width = "80%";
         text
@@ -62,7 +62,7 @@ export class CopilotSettingTab extends PluginSettingTab {
             this.plugin.settings.openAiApiKey = value;
             await this.plugin.saveSettings();
           })
-        }
+      }
       );
 
     new Setting(containerEl)
@@ -70,7 +70,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       .setDesc(
         createFragment((frag) => {
           frag.appendText("The default model to use, only takes effect when you ");
-          frag.createEl('strong', {text: "restart the plugin"});
+          frag.createEl('strong', { text: "restart the plugin" });
         })
       )
       .addDropdown((dropdown: DropdownComponent) => {
@@ -100,16 +100,19 @@ export class CopilotSettingTab extends PluginSettingTab {
           );
         })
       )
-      .addText((text) =>{
-        text.inputEl.type = "number";
-        text
-          .setPlaceholder("0.7")
-          .setValue(this.plugin.settings.temperature)
-          .onChange(async (value) => {
+      .addSlider(slider =>
+        slider
+          .setLimits(0, 2, 0.05)
+          .setValue(
+            this.plugin.settings.temperature !== undefined &&
+              this.plugin.settings.temperature !== null ?
+              this.plugin.settings.temperature : 0.7
+          )
+          .setDynamicTooltip()
+          .onChange(async value => {
             this.plugin.settings.temperature = value;
             await this.plugin.saveSettings();
           })
-        }
       );
 
     new Setting(containerEl)
@@ -121,16 +124,19 @@ export class CopilotSettingTab extends PluginSettingTab {
           );
         })
       )
-      .addText((text) =>{
-        text.inputEl.type = "number";
-        text
-          .setPlaceholder("1000")
-          .setValue(this.plugin.settings.maxTokens)
-          .onChange(async (value) => {
+      .addSlider(slider =>
+        slider
+          .setLimits(0, 8000, 100)
+          .setValue(
+            this.plugin.settings.maxTokens !== undefined &&
+              this.plugin.settings.maxTokens !== null ?
+              this.plugin.settings.maxTokens : 1000
+          )
+          .setDynamicTooltip()
+          .onChange(async value => {
             this.plugin.settings.maxTokens = value;
             await this.plugin.saveSettings();
           })
-        }
       );
 
     new Setting(containerEl)
@@ -142,20 +148,23 @@ export class CopilotSettingTab extends PluginSettingTab {
           );
         })
       )
-      .addText((text) =>{
-        text.inputEl.type = "number";
-        text
-          .setPlaceholder("3")
-          .setValue(this.plugin.settings.contextTurns)
-          .onChange(async (value) => {
+      .addSlider(slider =>
+        slider
+          .setLimits(1, 10, 1)
+          .setValue(
+            this.plugin.settings.contextTurns !== undefined &&
+              this.plugin.settings.contextTurns !== null ?
+              this.plugin.settings.contextTurns : 3
+          )
+          .setDynamicTooltip()
+          .onChange(async value => {
             this.plugin.settings.contextTurns = value;
             await this.plugin.saveSettings();
           })
-        }
       );
 
-    containerEl.createEl('h4', {text: 'Vector-based Search Settings (BETA). No context limit!'});
-    containerEl.createEl('h6', {text: 'Use the Chain Selection dropdown to enable QA: Long Note.'});
+    containerEl.createEl('h4', { text: 'Vector-based Search Settings (BETA). No context limit!' });
+    containerEl.createEl('h6', { text: 'Use the Chain Selection dropdown to enable QA: Long Note.' });
     containerEl.createEl(
       'h6',
       {
@@ -168,7 +177,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       .setDesc(
         createFragment((frag) => {
           frag.appendText("The embedding provider to use, only takes effect when you ");
-          frag.createEl('strong', {text: "restart the plugin"});
+          frag.createEl('strong', { text: "restart the plugin" });
         })
       )
       .addDropdown((dropdown: DropdownComponent) => {
@@ -203,7 +212,7 @@ export class CopilotSettingTab extends PluginSettingTab {
           });
         })
       )
-      .addText((text) =>{
+      .addText((text) => {
         text.inputEl.type = "password";
         text.inputEl.style.width = "80%";
         text
@@ -213,10 +222,10 @@ export class CopilotSettingTab extends PluginSettingTab {
             this.plugin.settings.huggingfaceApiKey = value;
             await this.plugin.saveSettings();
           })
-        }
+      }
       );
 
-    containerEl.createEl('h4', {text: 'Advanced Settings'});
+    containerEl.createEl('h4', { text: 'Advanced Settings' });
 
     new Setting(containerEl)
       .setName("User custom system prompt")
@@ -225,7 +234,7 @@ export class CopilotSettingTab extends PluginSettingTab {
           frag.appendText("You can set your own system prompt here. ")
           frag.createEl(
             'strong',
-            {text: "Warning: It will override the default system prompt for all messages! "}
+            { text: "Warning: It will override the default system prompt for all messages! " }
           );
           frag.appendText(
             "Use with caution! Also note that OpenAI can return error codes for some system prompts."
@@ -244,7 +253,7 @@ export class CopilotSettingTab extends PluginSettingTab {
           });
       });
 
-    containerEl.createEl('h4', {text: 'Development mode'});
+    containerEl.createEl('h4', { text: 'Development mode' });
 
     new Setting(containerEl)
       .setName("Debug mode")

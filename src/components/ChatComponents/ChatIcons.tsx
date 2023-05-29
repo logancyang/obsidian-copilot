@@ -55,7 +55,6 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   }
 
   useEffect(() => {
-    onNewChat();
     const handleRetrievalQAChain = async () => {
       if (selectedChain !== RETRIEVAL_QA_CHAIN) {
         setCurrentChain(selectedChain);
@@ -132,7 +131,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             <option value='llm_chain'>Conversation</option>
             <option value='retrieval_qa'>QA: Active Note</option>
           </select>
-          <span className="tooltip-text">Chain Selection<br/>(clears history!)</span>
+          <span className="tooltip-text">Chain Selection</span>
         </div>
       </div>
     </div>

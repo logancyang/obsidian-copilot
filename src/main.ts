@@ -15,9 +15,9 @@ export interface CopilotSettings {
   openAiApiKey: string;
   huggingfaceApiKey: string;
   defaultModel: string;
-  temperature: string;
-  maxTokens: string;
-  contextTurns: string;
+  temperature: number;
+  maxTokens: number;
+  contextTurns: number;
   useNotesAsContext: boolean;
   userSystemPrompt: string;
   stream: boolean;
@@ -270,10 +270,10 @@ export default class CopilotPlugin extends Plugin {
       key: openAiApiKey,
       huggingfaceApiKey: huggingfaceApiKey,
       model: this.settings.defaultModel,
-      temperature: Number(temperature),
-      maxTokens: Number(maxTokens),
+      temperature: temperature,
+      maxTokens: maxTokens,
       systemMessage: DEFAULT_SYSTEM_PROMPT || this.settings.userSystemPrompt,
-      chatContextTurns: Number(contextTurns),
+      chatContextTurns: contextTurns,
       embeddingProvider: embeddingProvider,
       chainType: LLM_CHAIN,
     };
