@@ -1,5 +1,5 @@
 import AIState, { useAIState } from '@/aiState';
-import ChainFactory from '@/chainFactory';
+import ChainFactory, { RETRIEVAL_QA_CHAIN } from '@/chainFactory';
 import ChatIcons from '@/components/ChatComponents/ChatIcons';
 import ChatInput from '@/components/ChatComponents/ChatInput';
 import ChatMessages from '@/components/ChatComponents/ChatMessages';
@@ -145,6 +145,9 @@ const Chat: React.FC<ChatProps> = ({
         message: `I have Read [[${noteName}]].\n\n Please switch to "QA: Active Note" to ask questions about it.`,
         isVisible: true,
       };
+      if (currentChain === RETRIEVAL_QA_CHAIN) {
+        setChain(RETRIEVAL_QA_CHAIN, { noteContent });
+      }
     } else {
       await aiState.buildIndex(noteContent, docHash);
       activeNoteOnMessage = {
