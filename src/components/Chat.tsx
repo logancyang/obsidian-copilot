@@ -1,4 +1,5 @@
 import AIState, { useAIState } from '@/aiState';
+import ChainFactory from '@/chainFactory';
 import ChatIcons from '@/components/ChatComponents/ChatIcons';
 import ChatInput from '@/components/ChatComponents/ChatInput';
 import ChatMessages from '@/components/ChatComponents/ChatMessages';
@@ -27,8 +28,7 @@ import {
   rewriteTweetThreadSelectionPrompt,
   simplifyPrompt,
   summarizePrompt,
-  tocPrompt,
-  useNoteAsContextPrompt,
+  tocPrompt
 } from '@/utils';
 import { EventEmitter } from 'events';
 import { Notice, TFile } from 'obsidian';
@@ -130,28 +130,31 @@ const Chat: React.FC<ChatProps> = ({
     }
     const noteContent = await getFileContent(file);
     const noteName = getFileName(file);
+    if (!noteContent) {
+      new Notice('No note content found.');
+      console.error('No note content found.');
+      return;
+    }
 
-    // Set the context based on the noteContent
-    const prompt = useNoteAsContextPrompt(noteName, noteContent);
+    let activeNoteOnMessage: ChatMessage;
+    const docHash = ChainFactory.getDocumentHash(noteContent);
+    const vectorStore = ChainFactory.vectorStoreMap.get(docHash);
+    if (vectorStore) {
+      activeNoteOnMessage = {
+        sender: AI_SENDER,
+        message: `I have Read [[${noteName}]].\n\n Please switch to "QA: Active Note" to ask questions about it.`,
+        isVisible: true,
+      };
+    } else {
+      await aiState.buildIndex(noteContent, docHash);
+      activeNoteOnMessage = {
+        sender: AI_SENDER,
+        message: `Reading [[${noteName}]]...\n\n Please switch to "QA: Active Note" to ask questions about it.`,
+        isVisible: true,
+      };
+    }
 
-    // Send the prompt as a user message
-    const promptMessage: ChatMessage = {
-      sender: USER_SENDER,
-      message: prompt,
-      isVisible: false,
-    };
-    addMessage(promptMessage);
-
-    // Hide the prompt from the user
-    await getAIResponse(
-      promptMessage,
-      chatContext,
-      aiState,
-      addMessage,
-      setCurrentAiMessage,
-      setAbortController,
-      debug,
-    );
+    addMessage(activeNoteOnMessage);
   };
 
   const clearCurrentAiMessage = () => {

@@ -4,9 +4,9 @@ import {
   BaseChain,
   ConversationChain,
   ConversationalRetrievalQAChain,
-  LLMChainInput,
-  RetrievalQAChain,
+  LLMChainInput
 } from "langchain/chains";
+import { VectorStore } from 'langchain/dist/vectorstores/base';
 import { BaseRetriever } from "langchain/schema";
 
 
@@ -44,6 +44,7 @@ export const SUPPORTED_CHAIN_TYPES = new Set([
 
 class ChainFactory {
   public static instances: Map<string, BaseChain> = new Map();
+  public static vectorStoreMap: Map<string, VectorStore> = new Map();
 
   public static getLLMChain(args: LLMChainInput): BaseChain {
     let instance = ChainFactory.instances.get(LLM_CHAIN);
@@ -59,41 +60,15 @@ class ChainFactory {
     return MD5(sourceDocument).toString();
   }
 
-  /**
- * Get the retrieval chain for a given source document. If the document exists
- * and is not changed, it retrieves its previous chain instance. Otherwise,
- * it creates a new chain and put it into the chain factory map where the key
- * is the full document's MD5 hash.
- */
-  public static getRetrievalChain(
-    inputDocHash: string,
-  ): RetrievalQAChain {
-    let instance;
-    if (ChainFactory.instances.has(inputDocHash)) {
-      // Use the existing chain when the note has been indexed
-      instance = ChainFactory.instances.get(inputDocHash) as RetrievalQAChain;
-      console.log('Retrieval qa chain retrieved for document hash: ', inputDocHash);
-    }
-
-    return instance as RetrievalQAChain;
+  public static setVectorStore(vectorStore: VectorStore, docHash: string): void {
+    ChainFactory.vectorStoreMap.set(docHash, vectorStore);
   }
 
-  public static createRetrievalChain(
-    args: RetrievalChainParams,
-    inputDocHash: string,
-  ): RetrievalQAChain {
-    // Create a new retrieval chain when the note hasn't been indexed
-    const argsRetrieval = args as RetrievalChainParams;
-    const instance = RetrievalQAChain.fromLLM(
-      argsRetrieval.llm, argsRetrieval.retriever, argsRetrieval.options
-    );
-    ChainFactory.instances.set(inputDocHash, instance);
-    console.log('New retrieval qa chain created for document hash: ', inputDocHash);
-
-    return instance as RetrievalQAChain;
+  public static getVectorStore(docHash: string): VectorStore | undefined {
+    return ChainFactory.vectorStoreMap.get(docHash);
   }
 
-  public static getConversationalRetrievalChain(
+  public static createConversationalRetrievalChain(
     args: ConversationalRetrievalChainParams
   ): ConversationalRetrievalQAChain {
     // Create a new retrieval chain every time, not singleton
