@@ -118,7 +118,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
       </button>
       <button className='chat-icon-button' onClick={onUseActiveNoteAsContext}>
         <UseActiveNoteAsContextIcon className='icon-scaler' />
-        <span className="tooltip-text">Use Active Note as Context</span>
+        <span className="tooltip-text">Rebuild Index for Active Note</span>
       </button>
       <div className="chat-icon-selection-tooltip">
         <div className="select-wrapper">
