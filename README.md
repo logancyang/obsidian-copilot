@@ -31,7 +31,7 @@ My goal is to make this AI assistant **local-first** and **privacy-focused**. Mo
 
 #### 🎉 NEW in v2.1.0: Unlimited Context Support for Active Note!
 
-<a href="https://www.youtube.com/watch?v=" target="_blank"><img src="./images/thumbnail1.png" /></a>
+<a href="https://www.youtube.com/watch?v=2va-Bu7cMKw" target="_blank"><img src="./images/thumbnail1.png" /></a>
 
 #### 🤗 How to use Copilot for beginners:
 
@@ -81,6 +81,11 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 ## 🤔 FAQ (please read before submitting an issue)
 
 <details>
+  <summary>Unresponsive QA when using Huggingface as the Embedding Provider</summary>
+
+  - Huggingface Inference API is free to use. It can give errors such as 503 or 504 frequently at times because their server has issues. If it's an issue for you, please consider using OpenAI as the embedding provider. Just keep in mind that it can cost more, especially with very long notes as context.
+</details>
+<details>
   <summary>"model_not_found"</summary>
 
   - A common misunderstanding I see is that some think they have access to GPT-4 API when they get ChatGPT Plus subscription. That is not true. *You need to get access to GPT-4 API to use the GPT-4 model in this plugin*. Please check if you can successfully use your model in the OpenAI playground first https://platform.openai.com/playground?mode=chat&model=gpt-4. If not, you can apply for GPT-4 API access here https://openai.com/waitlist/gpt-4-api. Once you have access to the API, you can use GPT-4 with this plugin without the ChatGPT Plus subsciption!
@@ -97,11 +102,6 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 
   - GPT-3.5 has a 4096 context token limit, GPT-4 has 8K (there is a 32K one available to the public soon per OpenAI). So if you set a big token limit in your Copilot setting, you can get this error. Note that the prompts behind the scenes for Copilot commands can also take up tokens, so please limit your message length to avoid this error. (For QA with Unlimited Context, use the "QA: Active Note" chain in the dropdown! Requires Copilot v2.1.0.)
   - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/1#issuecomment-1542934569
-</details>
-<details>
-  <summary>Unresponsive QA when using Huggingface as the Embedding Provider</summary>
-
-  - Huggingface Inference API is free to use. It can give errors such as 503 frequently at times. Usually it becomes more responsive if you interact with it more. If it's an issue for you, please consider using OpenAI as the embedding provider. Just keep in mind that it can cost more, especially with very long notes as context.
 </details>
 
 When opening an issue, please include relevant console logs. You can go to Copilot's settings and turn on "Debug mode" at the bottom for more console messages!

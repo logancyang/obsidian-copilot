@@ -168,6 +168,10 @@ class AIState {
           console.log('Existing vector store for document hash: ', docHash);
         } else {
           await this.buildIndex(options.noteContent, docHash);
+          if (!this.vectorStore) {
+            console.error('Error creating vector store.');
+            return;
+          }
           AIState.retrievalChain = RetrievalQAChain.fromLLM(
             AIState.chatOpenAI,
             this.vectorStore.asRetriever(),
