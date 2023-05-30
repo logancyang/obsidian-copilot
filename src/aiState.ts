@@ -94,6 +94,7 @@ class AIState {
       openAIApiKey: this.langChainParams.key,
       maxRetries: 3,
       maxConcurrency: 3,
+      timeout: 10000,
     });
     switch(this.langChainParams.embeddingProvider) {
       case OPENAI:
@@ -102,6 +103,7 @@ class AIState {
         // TODO: Check if this error can be avoided.
         return OpenAIEmbeddingsAPI
       case HUGGINGFACE:
+        // TODO: This does not have a timeout param, need to check in the future.
         return new HuggingFaceInferenceEmbeddings({
           apiKey: this.langChainParams.huggingfaceApiKey,
           maxRetries: 3,
@@ -165,17 +167,16 @@ class AIState {
           );
           console.log('Existing vector store for document hash: ', docHash);
         } else {
-          try {
-            await this.buildIndex(options.noteContent, docHash);
-            AIState.retrievalChain = RetrievalQAChain.fromLLM(
-              AIState.chatOpenAI,
-              this.vectorStore.asRetriever(),
-            );
-            console.log('New retrieval qa chain created for document hash: ', docHash);
-          } catch (error) {
-            new Notice('Failed to create vector store, please try again:', error);
-            console.log('Failed to create vector store, please try again.:', error);
+          await this.buildIndex(options.noteContent, docHash);
+          if (!this.vectorStore) {
+            console.error('Error creating vector store.');
+            return;
           }
+          AIState.retrievalChain = RetrievalQAChain.fromLLM(
+            AIState.chatOpenAI,
+            this.vectorStore.asRetriever(),
+          );
+          console.log('New retrieval qa chain created for document hash: ', docHash);
         }
 
         this.langChainParams.chainType = RETRIEVAL_QA_CHAIN;
@@ -196,11 +197,16 @@ class AIState {
 
     // Note: HF can give 503 errors frequently (it's free)
     console.log('Creating vector store...');
-    this.vectorStore = await MemoryVectorStore.fromDocuments(
-      docs, embeddingsAPI,
-    );
-    ChainFactory.setVectorStore(this.vectorStore, docHash);
-    console.log('Vector store created successfully.');
+    try {
+      this.vectorStore = await MemoryVectorStore.fromDocuments(
+        docs, embeddingsAPI,
+      );
+      ChainFactory.setVectorStore(this.vectorStore, docHash);
+      console.log('Vector store created successfully.');
+    } catch (error) {
+      new Notice('Failed to create vector store, please try again:', error);
+      console.log('Failed to create vector store, please try again.:', error);
+    }
   }
 
   async countTokens(inputStr: string): Promise<number> {

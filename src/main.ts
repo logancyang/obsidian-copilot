@@ -270,10 +270,10 @@ export default class CopilotPlugin extends Plugin {
       key: openAiApiKey,
       huggingfaceApiKey: huggingfaceApiKey,
       model: this.settings.defaultModel,
-      temperature: temperature,
-      maxTokens: maxTokens,
+      temperature: Number(temperature),
+      maxTokens: Number(maxTokens),
       systemMessage: DEFAULT_SYSTEM_PROMPT || this.settings.userSystemPrompt,
-      chatContextTurns: contextTurns,
+      chatContextTurns: Number(contextTurns),
       embeddingProvider: embeddingProvider,
       chainType: LLM_CHAIN,
     };
