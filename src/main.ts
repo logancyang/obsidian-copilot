@@ -201,6 +201,30 @@ export default class CopilotPlugin extends Plugin {
         this.processSelection(editor, 'countTokensSelection');
       },
     });
+
+    // this.addCommand({
+    //   id: 'add-custom-prompt',
+    //   name: 'Add custom prompt for selection',
+    //   editorCallback: (editor: Editor) => {
+    //     new AddPromptModal(this.app, () => {
+    //       this.processSelection(editor, 'addCustomPromptSelection');
+    //     }).open();
+    //   },
+    // });
+
+    // this.addCommand({
+    //   id: 'apply-custom-prompt',
+    //   name: 'Apply custom prompt for selection',
+    //   editorCallback: (editor: Editor) => {
+    //     new ApplyCustomPromptModal(this.app, (prompt: string) => {
+    //       if (!prompt) {
+    //         new Notice('Please select a prompt.');
+    //         return;
+    //       }
+    //       this.processSelection(editor, 'applyCustomPromptSelection', prompt);
+    //     }).open();
+    //   },
+    // });
   }
 
   processSelection(editor: Editor, eventType: string, eventSubtype?: string) {

@@ -142,7 +142,7 @@ const Chat: React.FC<ChatProps> = ({
     if (vectorStore) {
       activeNoteOnMessage = {
         sender: AI_SENDER,
-        message: `I have Read [[${noteName}]].\n\n Please switch to "QA: Active Note" to ask questions about it.`,
+        message: `I have read [[${noteName}]].\n\n Please switch to "QA: Active Note" to ask questions about it.`,
         isVisible: true,
       };
       if (currentChain === RETRIEVAL_QA_CHAIN) {
