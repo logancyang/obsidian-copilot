@@ -122,6 +122,12 @@ export class CopilotSettingTab extends PluginSettingTab {
           frag.appendText(
             "The maximum number of tokens to generate. Default is 1000."
           );
+          frag.createEl(
+            'strong',
+            {
+              text: 'This number plus the length of your prompt must be smaller than the context window of the model.'
+            }
+          )
         })
       )
       .addSlider(slider =>
