@@ -170,7 +170,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       );
 
     containerEl.createEl('h4', { text: 'Vector-based QA Settings (BETA). No context limit!' });
-    containerEl.createEl('h6', { text: 'To start the QA session, use the Chain Selection dropdown and select "QA: Active Note". Switch back to "Conversation" when you are done!' });
+    containerEl.createEl('h6', { text: 'To start the QA session, use the Mode Selection dropdown and select "QA: Active Note". Switch back to "Conversation" when you are done!' });
     containerEl.createEl(
       'h6',
       {

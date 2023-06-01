@@ -22,7 +22,7 @@ My goal is to make this AI assistant **local-first** and **privacy-focused**. Mo
 - No usage cap for GPT-4 like ChatGPT Plus.
 - One-click copying any message as markdown.
 - One-click saving the entire conversation as a note.
-- Use the active note as context, and start a discussion around it by switching to "QA: Active Note" in the Chain Selection menu.
+- Use the active note as context, and start a discussion around it by switching to "QA: Active Note" in the Mode Selection menu.
   - **NEW in v2.1.0**: **Unlimited context** when chatting with your long note, no more "context length exceeded" errors!!
 - Easy commands to **simplify, emojify, summarize, translate, change tone, fix grammar, rewrite into a tweet/thread, count tokens** and more.
 - Set your own parameters like LLM temperature, max tokens, conversation context based on your need (**pls be mindful of the API cost**).
@@ -78,7 +78,7 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 ## 🔔 Note
 - The chat history is not saved by default. Please use "**Save as Note**" to save it. The note will have a title `Chat-Year_Month_Day-Hour_Minute_Second`, you can change its name as needed.
 - "**New Chat**" clears all previous chat history. Again, please use "**Save as Note**" if you would like to save the chat.
-- "**Use Active Note as Context**" creates a local vector index for the active note so that you can chat with super long note! To start the QA, please switch from "Conversation" to "QA: Active Note" in the Chain Selection dropdown.
+- "**Use Active Note as Context**" creates a local vector index for the active note so that you can chat with super long note! To start the QA, please switch from "Conversation" to "QA: Active Note" in the Mode Selection dropdown.
 - You can set a very long context in the setting "**Conversation turns in context**" if needed.
 
 #### 📣 Again, please always be mindful of the API cost if you use GPT-4 with a long context!
