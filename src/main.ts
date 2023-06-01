@@ -1,9 +1,9 @@
 import AIState, { LangChainParams } from '@/aiState';
 import { LLM_CHAIN } from '@/chainFactory';
 import { AddPromptModal } from "@/components/AddPromptModal";
-import { ApplyPromptModal } from "@/components/ApplyPromptModal";
 import CopilotView from '@/components/CopilotView';
 import { LanguageModal } from "@/components/LanguageModal";
+import { ListPromptModal } from "@/components/ListPromptModal";
 import { ToneModal } from "@/components/ToneModal";
 import {
   CHAT_VIEWTYPE, DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT
@@ -236,7 +236,7 @@ export default class CopilotPlugin extends Plugin {
       name: 'Apply custom prompt to selection',
       editorCallback: (editor: Editor) => {
         this.fetchPromptTitles().then((promptTitles: string[]) => {
-          new ApplyPromptModal(this.app, promptTitles, async (promptTitle: string) => {
+          new ListPromptModal(this.app, promptTitles, async (promptTitle: string) => {
             if (!promptTitle) {
               new Notice('Please select a prompt title.');
               return;
@@ -254,6 +254,44 @@ export default class CopilotPlugin extends Plugin {
             }
           }).open();
         });
+      },
+    });
+
+    this.addCommand({
+      id: 'delete-custom-prompt',
+      name: 'Delete custom prompt',
+      checkCallback: (checking: boolean) => {
+        if (checking) {
+          return true;
+        }
+
+        this.fetchPromptTitles().then((promptTitles: string[]) => {
+          new ListPromptModal(this.app, promptTitles, async (promptTitle: string) => {
+            if (!promptTitle) {
+              new Notice('Please select a prompt title.');
+              return;
+            }
+
+            try {
+              const doc = await this.dbPrompts.get(promptTitle);
+              if (doc._rev) {
+                await this.dbPrompts.remove(doc as PouchDB.Core.RemoveDocument);
+                new Notice(`Prompt "${promptTitle}" has been deleted.`);
+              } else {
+                new Notice(`Failed to delete prompt "${promptTitle}".`);
+              }
+            } catch (err) {
+              if (err.name === 'not_found') {
+                new Notice(`No prompt found with the title "${promptTitle}".`);
+              } else {
+                console.error(err);
+                new Notice('An error occurred while deleting the prompt.');
+              }
+            }
+          }).open();
+        });
+
+        return true;
       },
     });
   }

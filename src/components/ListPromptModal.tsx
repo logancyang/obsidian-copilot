@@ -1,7 +1,7 @@
 import { App, FuzzySuggestModal } from "obsidian";
 
 
-export class ApplyPromptModal extends FuzzySuggestModal<string> {
+export class ListPromptModal extends FuzzySuggestModal<string> {
   private onChoosePromptTitle: (promptTitle: string) => void;
   private promptTitles: string[];
 
