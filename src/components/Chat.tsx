@@ -143,7 +143,7 @@ const Chat: React.FC<ChatProps> = ({
     if (vectorStore) {
       activeNoteOnMessage = {
         sender: AI_SENDER,
-        message: `I have read [[${noteName}]].\n\n Please switch to "QA: Active Note" to ask questions about it.`,
+        message: `I have read [[${noteName}]].\n\n Please switch to "QA: Active Note" in Mode Selection to ask questions about it.`,
         isVisible: true,
       };
       if (currentChain === RETRIEVAL_QA_CHAIN) {
@@ -153,7 +153,7 @@ const Chat: React.FC<ChatProps> = ({
       await aiState.buildIndex(noteContent, docHash);
       activeNoteOnMessage = {
         sender: AI_SENDER,
-        message: `Reading [[${noteName}]]...\n\n Please switch to "QA: Active Note" to ask questions about it.`,
+        message: `Reading [[${noteName}]]...\n\n Please switch to "QA: Active Note" in Mode Selection to ask questions about it.`,
         isVisible: true,
       };
     }

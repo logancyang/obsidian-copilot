@@ -116,10 +116,6 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         <SaveAsNoteIcon className='icon-scaler' />
         <span className="tooltip-text">Save as Note</span>
       </button>
-      <button className='chat-icon-button' onClick={onUseActiveNoteAsContext}>
-        <UseActiveNoteAsContextIcon className='icon-scaler' />
-        <span className="tooltip-text">Rebuild Index for Active Note</span>
-      </button>
       <div className="chat-icon-selection-tooltip">
         <div className="select-wrapper">
           <select
@@ -131,9 +127,13 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             <option value='llm_chain'>Conversation</option>
             <option value='retrieval_qa'>QA: Active Note</option>
           </select>
-          <span className="tooltip-text">Chain Selection</span>
+          <span className="tooltip-text">Mode Selection</span>
         </div>
       </div>
+      <button className='chat-icon-button' onClick={onUseActiveNoteAsContext}>
+        <UseActiveNoteAsContextIcon className='icon-scaler' />
+        <span className="tooltip-text">Rebuild Index for Active Note</span>
+      </button>
     </div>
   );
 };
