@@ -1,5 +1,7 @@
 import AIState, { LangChainParams } from '@/aiState';
 import { LLM_CHAIN } from '@/chainFactory';
+import { AddPromptModal } from "@/components/AddPromptModal";
+import { ApplyPromptModal } from "@/components/ApplyPromptModal";
 import CopilotView from '@/components/CopilotView';
 import { LanguageModal } from "@/components/LanguageModal";
 import { ToneModal } from "@/components/ToneModal";
@@ -10,6 +12,8 @@ import { CopilotSettingTab } from '@/settings';
 import SharedState from '@/sharedState';
 import { sanitizeSettings } from "@/utils";
 import { Editor, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
+import PouchDB from 'pouchdb';
+
 
 export interface CopilotSettings {
   openAiApiKey: string;
@@ -25,6 +29,12 @@ export interface CopilotSettings {
   debug: boolean;
 }
 
+interface CustomPrompt {
+  _id: string;
+  _rev?: string;
+  prompt: string;
+}
+
 export default class CopilotPlugin extends Plugin {
   settings: CopilotSettings;
   // A chat history that stores the messages sent and received
@@ -33,6 +43,7 @@ export default class CopilotPlugin extends Plugin {
   aiState: AIState;
   activateViewPromise: Promise<void> | null = null;
   chatIsVisible = false;
+  dbPrompts: PouchDB.Database;
 
   isChatVisible = () => this.chatIsVisible;
 
@@ -43,6 +54,7 @@ export default class CopilotPlugin extends Plugin {
     this.sharedState = new SharedState();
     const langChainParams = this.getAIStateParams();
     this.aiState = new AIState(langChainParams);
+    this.dbPrompts = new PouchDB<CustomPrompt>('copilot_custom_prompts');
 
     this.registerView(
       CHAT_VIEWTYPE,
@@ -202,29 +214,48 @@ export default class CopilotPlugin extends Plugin {
       },
     });
 
-    // this.addCommand({
-    //   id: 'add-custom-prompt',
-    //   name: 'Add custom prompt for selection',
-    //   editorCallback: (editor: Editor) => {
-    //     new AddPromptModal(this.app, () => {
-    //       this.processSelection(editor, 'addCustomPromptSelection');
-    //     }).open();
-    //   },
-    // });
+    this.addCommand({
+      id: 'add-custom-prompt',
+      name: 'Add custom prompt for selection',
+      editorCallback: (editor: Editor) => {
+        new AddPromptModal(this.app, async (title: string, prompt: string) => {
+          try {
+            // Save the prompt to the database
+            await this.dbPrompts.put({ _id: title, prompt: prompt });
+            new Notice('Custom prompt saved successfully.');
+          } catch (e) {
+            new Notice('Error saving custom prompt.');
+            console.error(e);
+          }
+        }).open();
+      },
+    });
 
-    // this.addCommand({
-    //   id: 'apply-custom-prompt',
-    //   name: 'Apply custom prompt for selection',
-    //   editorCallback: (editor: Editor) => {
-    //     new ApplyCustomPromptModal(this.app, (prompt: string) => {
-    //       if (!prompt) {
-    //         new Notice('Please select a prompt.');
-    //         return;
-    //       }
-    //       this.processSelection(editor, 'applyCustomPromptSelection', prompt);
-    //     }).open();
-    //   },
-    // });
+    this.addCommand({
+      id: 'apply-custom-prompt',
+      name: 'Apply custom prompt to selection',
+      editorCallback: (editor: Editor) => {
+        this.fetchPromptTitles().then((promptTitles: string[]) => {
+          new ApplyPromptModal(this.app, promptTitles, async (promptTitle: string) => {
+            if (!promptTitle) {
+              new Notice('Please select a prompt title.');
+              return;
+            }
+            try {
+              const doc = await this.dbPrompts.get(promptTitle) as CustomPrompt;
+              this.processSelection(editor, 'applyCustomPromptSelection', doc.prompt);
+            } catch (err) {
+              if (err.name === 'not_found') {
+                new Notice(`No prompt found with the title "${promptTitle}".`);
+              } else {
+                console.error(err);
+                new Notice('An error occurred.');
+              }
+            }
+          }).open();
+        });
+      },
+    });
   }
 
   processSelection(editor: Editor, eventType: string, eventSubtype?: string) {
@@ -279,6 +310,13 @@ export default class CopilotPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+  }
+
+  async fetchPromptTitles(): Promise<string[]> {
+    const response = await this.dbPrompts.allDocs({ include_docs: true });
+    return response.rows
+      .map(row => (row.doc as CustomPrompt)?._id)
+      .filter(Boolean) as string[];
   }
 
   getAIStateParams(): LangChainParams {
