@@ -222,7 +222,7 @@ If your plugin does not need CSS, delete this file.
 .custom-prompt-modal {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
 }
 
@@ -241,6 +241,13 @@ If your plugin does not need CSS, delete this file.
 .custom-prompt-input-container textarea {
   height: 150px;
   resize: vertical;
+}
+
+.custom-prompt-save-btn-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
 }
 
 .custom-prompt-save-btn {
