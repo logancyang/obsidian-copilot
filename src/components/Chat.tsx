@@ -14,6 +14,7 @@ import {
   createTranslateSelectionPrompt,
   eli5SelectionPrompt,
   emojifyPrompt,
+  fillInSelectionForCustomPrompt,
   fixGrammarSpellingSelectionPrompt,
   formatDateTime,
   getChatContext,
@@ -28,7 +29,7 @@ import {
   rewriteTweetThreadSelectionPrompt,
   simplifyPrompt,
   summarizePrompt,
-  tocPrompt
+  tocPrompt,
 } from '@/utils';
 import { EventEmitter } from 'events';
 import { Notice, TFile } from 'obsidian';
@@ -142,7 +143,7 @@ const Chat: React.FC<ChatProps> = ({
     if (vectorStore) {
       activeNoteOnMessage = {
         sender: AI_SENDER,
-        message: `I have Read [[${noteName}]].\n\n Please switch to "QA: Active Note" to ask questions about it.`,
+        message: `I have read [[${noteName}]].\n\n Please switch to "QA: Active Note" to ask questions about it.`,
         isVisible: true,
       };
       if (currentChain === RETRIEVAL_QA_CHAIN) {
@@ -257,6 +258,13 @@ const Chat: React.FC<ChatProps> = ({
     ),
     []
   );
+  useEffect(
+    createEffect("applyCustomPromptSelection", (selectedText, prompt) =>
+      fillInSelectionForCustomPrompt(prompt)(selectedText)
+    ),
+    []
+  );
+
 
   return (
     <div className="chat-container">

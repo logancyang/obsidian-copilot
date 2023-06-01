@@ -217,3 +217,39 @@ If your plugin does not need CSS, delete this file.
 .bot-message {
   width: 95%;
 }
+
+/* Apply some style to AddPromptModal */
+.custom-prompt-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.custom-prompt-input-container {
+  width: 90%;
+  margin: auto;
+}
+
+.custom-prompt-input-container input,
+.custom-prompt-input-container textarea {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+}
+
+.custom-prompt-input-container textarea {
+  height: 150px;
+  resize: vertical;
+}
+
+.custom-prompt-save-btn-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.custom-prompt-save-btn {
+  margin-top: 15px;
+}

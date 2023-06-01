@@ -1,7 +1,9 @@
 import AIState, { LangChainParams } from '@/aiState';
 import { LLM_CHAIN } from '@/chainFactory';
+import { AddPromptModal } from "@/components/AddPromptModal";
 import CopilotView from '@/components/CopilotView';
 import { LanguageModal } from "@/components/LanguageModal";
+import { ListPromptModal } from "@/components/ListPromptModal";
 import { ToneModal } from "@/components/ToneModal";
 import {
   CHAT_VIEWTYPE, DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT
@@ -10,6 +12,8 @@ import { CopilotSettingTab } from '@/settings';
 import SharedState from '@/sharedState';
 import { sanitizeSettings } from "@/utils";
 import { Editor, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
+import PouchDB from 'pouchdb';
+
 
 export interface CopilotSettings {
   openAiApiKey: string;
@@ -25,6 +29,12 @@ export interface CopilotSettings {
   debug: boolean;
 }
 
+interface CustomPrompt {
+  _id: string;
+  _rev?: string;
+  prompt: string;
+}
+
 export default class CopilotPlugin extends Plugin {
   settings: CopilotSettings;
   // A chat history that stores the messages sent and received
@@ -33,6 +43,7 @@ export default class CopilotPlugin extends Plugin {
   aiState: AIState;
   activateViewPromise: Promise<void> | null = null;
   chatIsVisible = false;
+  dbPrompts: PouchDB.Database;
 
   isChatVisible = () => this.chatIsVisible;
 
@@ -43,6 +54,7 @@ export default class CopilotPlugin extends Plugin {
     this.sharedState = new SharedState();
     const langChainParams = this.getAIStateParams();
     this.aiState = new AIState(langChainParams);
+    this.dbPrompts = new PouchDB<CustomPrompt>('copilot_custom_prompts');
 
     this.registerView(
       CHAT_VIEWTYPE,
@@ -201,6 +213,91 @@ export default class CopilotPlugin extends Plugin {
         this.processSelection(editor, 'countTokensSelection');
       },
     });
+
+    this.addCommand({
+      id: 'add-custom-prompt',
+      name: 'Add custom prompt for selection',
+      editorCallback: (editor: Editor) => {
+        new AddPromptModal(this.app, async (title: string, prompt: string) => {
+          try {
+            // Save the prompt to the database
+            await this.dbPrompts.put({ _id: title, prompt: prompt });
+            new Notice('Custom prompt saved successfully.');
+          } catch (e) {
+            new Notice('Error saving custom prompt.');
+            console.error(e);
+          }
+        }).open();
+      },
+    });
+
+    this.addCommand({
+      id: 'apply-custom-prompt',
+      name: 'Apply custom prompt to selection',
+      editorCallback: (editor: Editor) => {
+        this.fetchPromptTitles().then((promptTitles: string[]) => {
+          new ListPromptModal(this.app, promptTitles, async (promptTitle: string) => {
+            if (!promptTitle) {
+              new Notice('Please select a prompt title.');
+              return;
+            }
+            try {
+              const doc = await this.dbPrompts.get(promptTitle) as CustomPrompt;
+              if (!doc.prompt) {
+                new Notice(`No prompt found with the title "${promptTitle}".`);
+                return;
+              }
+              this.processSelection(editor, 'applyCustomPromptSelection', doc.prompt);
+            } catch (err) {
+              if (err.name === 'not_found') {
+                new Notice(`No prompt found with the title "${promptTitle}".`);
+              } else {
+                console.error(err);
+                new Notice('An error occurred.');
+              }
+            }
+          }).open();
+        });
+      },
+    });
+
+    this.addCommand({
+      id: 'delete-custom-prompt',
+      name: 'Delete custom prompt',
+      checkCallback: (checking: boolean) => {
+        if (checking) {
+          return true;
+        }
+
+        this.fetchPromptTitles().then((promptTitles: string[]) => {
+          new ListPromptModal(this.app, promptTitles, async (promptTitle: string) => {
+            if (!promptTitle) {
+              new Notice('Please select a prompt title.');
+              return;
+            }
+
+            try {
+              const doc = await this.dbPrompts.get(promptTitle);
+              if (doc._rev) {
+                await this.dbPrompts.remove(doc as PouchDB.Core.RemoveDocument);
+                new Notice(`Prompt "${promptTitle}" has been deleted.`);
+              } else {
+                new Notice(`Failed to delete prompt "${promptTitle}": No revision found.`);
+              }
+            } catch (err) {
+              if (err.name === 'not_found') {
+                new Notice(`No prompt found with the title "${promptTitle}".`);
+              } else {
+                console.error(err);
+                new Notice('An error occurred while deleting the prompt.');
+              }
+            }
+          }).open();
+        });
+
+        return true;
+      },
+    });
   }
 
   processSelection(editor: Editor, eventType: string, eventSubtype?: string) {
@@ -255,6 +352,13 @@ export default class CopilotPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+  }
+
+  async fetchPromptTitles(): Promise<string[]> {
+    const response = await this.dbPrompts.allDocs({ include_docs: true });
+    return response.rows
+      .map(row => (row.doc as CustomPrompt)?._id)
+      .filter(Boolean) as string[];
   }
 
   getAIStateParams(): LangChainParams {

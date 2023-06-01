@@ -158,3 +158,12 @@ export function createChangeToneSelectionPrompt(tone?: string) {
     return `Please change the tone of the following text to ${tone}:\n\n` + `${selectedText}`;
   };
 }
+
+export function fillInSelectionForCustomPrompt(prompt?: string) {
+  return (selectedText: string): string => {
+    if (!prompt) {
+      return selectedText;
+    }
+    return prompt.replace('{}', selectedText);
+  };
+}
