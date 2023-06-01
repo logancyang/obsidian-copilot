@@ -24,6 +24,7 @@ My goal is to make this AI assistant **local-first** and **privacy-focused**. Mo
 - One-click saving the entire conversation as a note.
 - Use the active note as context, and start a discussion around it by switching to "QA: Active Note" in the Mode Selection menu.
   - **NEW in v2.1.0**: **Unlimited context** when chatting with your long note, no more "context length exceeded" errors!!
+  - This feature is powered by retrieval augmentation with a **local** vector store. No sending your data to a cloud-based vector search service!
 - Easy commands to **simplify, emojify, summarize, translate, change tone, fix grammar, rewrite into a tweet/thread, count tokens** and more.
 - Set your own parameters like LLM temperature, max tokens, conversation context based on your need (**pls be mindful of the API cost**).
 - **NEW in v2.2.0**: **User custom prompt support added**! Now you can *add, apply, delete* your custom prompts, persisted in your local Obsidian environment!

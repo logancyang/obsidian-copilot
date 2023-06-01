@@ -39,6 +39,10 @@ import React, {
   useState,
 } from 'react';
 
+interface CreateEffectOptions {
+  custom_temperature?: number;
+  isVisible?: boolean;
+}
 
 interface ChatProps {
   sharedState: SharedState;
@@ -196,16 +200,21 @@ const Chat: React.FC<ChatProps> = ({
   const createEffect = (
     eventType: string,
     promptFn: (selectedText: string, eventSubtype?: string) => string,
-    custom_temperature?: number,
+    options: CreateEffectOptions = {},
   ) => {
     return () => {
+      const { custom_temperature, isVisible = false } = options;
       const handleSelection = async (selectedText: string, eventSubtype?: string) => {
         // Create a user message with the selected text
         const promptMessage: ChatMessage = {
           message: promptFn(selectedText, eventSubtype),
           sender: USER_SENDER,
-          isVisible: false,
+          isVisible: isVisible,
         };
+
+        if (isVisible) {
+          addMessage(promptMessage);
+        }
 
         // Have a hardcoded custom temperature for some commands that need more strictness
         aiState.langChainParams = {
@@ -240,27 +249,42 @@ const Chat: React.FC<ChatProps> = ({
   useEffect(createEffect('simplifySelection', simplifyPrompt), []);
   useEffect(createEffect('emojifySelection', emojifyPrompt), []);
   useEffect(createEffect('removeUrlsFromSelection', removeUrlsFromSelectionPrompt), []);
-  useEffect(createEffect('rewriteTweetSelection', rewriteTweetSelectionPrompt, 0.2), []);
-  useEffect(createEffect('rewriteTweetThreadSelection', rewriteTweetThreadSelectionPrompt, 0.2), []);
+  useEffect(
+    createEffect(
+      'rewriteTweetSelection', rewriteTweetSelectionPrompt, { custom_temperature: 0.2 },
+    ),
+    []
+  );
+  useEffect(
+    createEffect(
+      'rewriteTweetThreadSelection', rewriteTweetThreadSelectionPrompt, { custom_temperature: 0.2 },
+    ),
+    []
+  );
   useEffect(createEffect('rewriteShorterSelection', rewriteShorterSelectionPrompt), []);
   useEffect(createEffect('rewriteLongerSelection', rewriteLongerSelectionPrompt), []);
   useEffect(createEffect('eli5Selection', eli5SelectionPrompt), []);
   useEffect(createEffect('rewritePressReleaseSelection', rewritePressReleaseSelectionPrompt), []);
   useEffect(
-    createEffect("translateSelection", (selectedText, language) =>
+    createEffect('translateSelection', (selectedText, language) =>
       createTranslateSelectionPrompt(language)(selectedText)
     ),
     []
   );
   useEffect(
-    createEffect("changeToneSelection", (selectedText, tone) =>
+    createEffect('changeToneSelection', (selectedText, tone) =>
       createChangeToneSelectionPrompt(tone)(selectedText)
     ),
     []
   );
   useEffect(
-    createEffect("applyCustomPromptSelection", (selectedText, prompt) =>
-      fillInSelectionForCustomPrompt(prompt)(selectedText)
+    createEffect(
+      'applyCustomPromptSelection',
+      (selectedText, prompt) =>
+        fillInSelectionForCustomPrompt(prompt)(selectedText),
+      // Not showing the custom prompt in the chat UI for now, Leaving it here as an option.
+      // To check the prompt, use Debug mode in the setting.
+      // { isVisible: true },
     ),
     []
   );
