@@ -48,7 +48,7 @@ export class AddPromptModal extends Modal {
       frag.appendText('Save the prompt to the local prompt library. You can then use it with the Copilot command: ');
       frag.createEl(
         'strong',
-        { text: 'CopilotApply custom prompt to selection.' }
+        { text: 'Apply custom prompt to selection.' }
       );
       frag.createEl('br');
       frag.appendText('Check out the ');
