@@ -86,6 +86,14 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 ## 🤔 FAQ (please read before submitting an issue)
 
 <details>
+  <summary>It's not using my note as context</summary>
+
+  - Please don't forget to switch to "**QA: Active Note**" in the Mode Selection dropdown in order to start the QA. Copilot does not have your note as context in "Conversation" mode.
+    <img src="./images/faq-mode-switch.png" alt="Settings" width="500">
+  - In fact, you don't have to click the button on the right before starting the QA. Switching to QA mode in the dropdown directly is enough for Copilot to read the note as context. The button on the right is only for when you'd like to manually rebuild the index for the active note, like, when you'd like to switch context to another note, or you think the current index is corrupted because you switched the embedding provider, etc.
+  - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/51
+</details>
+<details>
   <summary>Unresponsive QA when using Huggingface as the Embedding Provider</summary>
 
   - Huggingface Inference API is free to use. It can give errors such as 503 or 504 frequently at times because their server has issues. If it's an issue for you, please consider using OpenAI as the embedding provider. Just keep in mind that it can cost more, especially with very long notes as context.
