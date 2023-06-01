@@ -14,6 +14,7 @@ import {
   createTranslateSelectionPrompt,
   eli5SelectionPrompt,
   emojifyPrompt,
+  fillInSelectionForCustomPrompt,
   fixGrammarSpellingSelectionPrompt,
   formatDateTime,
   getChatContext,
@@ -28,7 +29,7 @@ import {
   rewriteTweetThreadSelectionPrompt,
   simplifyPrompt,
   summarizePrompt,
-  tocPrompt
+  tocPrompt,
 } from '@/utils';
 import { EventEmitter } from 'events';
 import { Notice, TFile } from 'obsidian';
@@ -257,6 +258,13 @@ const Chat: React.FC<ChatProps> = ({
     ),
     []
   );
+  useEffect(
+    createEffect("applyCustomPromptSelection", (selectedText, prompt) =>
+      fillInSelectionForCustomPrompt(prompt)(selectedText)
+    ),
+    []
+  );
+
 
   return (
     <div className="chat-container">

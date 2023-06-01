@@ -243,6 +243,10 @@ export default class CopilotPlugin extends Plugin {
             }
             try {
               const doc = await this.dbPrompts.get(promptTitle) as CustomPrompt;
+              if (!doc.prompt) {
+                new Notice(`No prompt found with the title "${promptTitle}".`);
+                return;
+              }
               this.processSelection(editor, 'applyCustomPromptSelection', doc.prompt);
             } catch (err) {
               if (err.name === 'not_found') {
@@ -278,7 +282,7 @@ export default class CopilotPlugin extends Plugin {
                 await this.dbPrompts.remove(doc as PouchDB.Core.RemoveDocument);
                 new Notice(`Prompt "${promptTitle}" has been deleted.`);
               } else {
-                new Notice(`Failed to delete prompt "${promptTitle}".`);
+                new Notice(`Failed to delete prompt "${promptTitle}": No revision found.`);
               }
             } catch (err) {
               if (err.name === 'not_found') {
