@@ -44,13 +44,26 @@ export class AddPromptModal extends Modal {
     );
     const promptField = promptContainer.createEl('textarea');
 
-    promptContainer.createEl(
-      'p',
-      {
-        text: 'Save the prompt to the local prompt library. You can then use it with the Copilot command: *Apply custom prompt to selection*.',
-        cls: 'custom-prompt-description',
-      }
-    );
+    const descFragment = createFragment((frag) => {
+      frag.appendText('Save the prompt to the local prompt library. You can then use it with the Copilot command: ');
+      frag.createEl(
+        'strong',
+        { text: 'Apply custom prompt to selection.' }
+      );
+      frag.createEl('br');
+      frag.appendText('Check out the ');
+      frag.createEl('a', {
+        href: 'https://github.com/f/awesome-chatgpt-prompts',
+        text: 'awesome chatGPT prompts',
+      }).setAttr('target', '_blank');
+      frag.appendText(' for inspiration.');
+    });
+
+    const descContainer = promptContainer.createEl('p', {
+      cls: 'custom-prompt-description',
+    });
+
+    descContainer.appendChild(descFragment);
 
     const saveButtonContainer = formContainer.createEl(
       'div',

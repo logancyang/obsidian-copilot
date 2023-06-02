@@ -22,20 +22,26 @@ My goal is to make this AI assistant **local-first** and **privacy-focused**. Mo
 - No usage cap for GPT-4 like ChatGPT Plus.
 - One-click copying any message as markdown.
 - One-click saving the entire conversation as a note.
-- One-click using the active note as context, and start a discussion around it (currently only supports shorter notes)
-- Easy commands to **simplify, emojify, translate, rewrite into a tweet/thread,** and more.
+- Use the active note as context, and start a discussion around it by switching to "QA: Active Note" in the Mode Selection menu.
+  - **NEW in v2.1.0**: **Unlimited context** when chatting with your long note, no more "context length exceeded" errors!!
+  - This feature is powered by retrieval augmentation with a **local** vector store. No sending your data to a cloud-based vector search service!
+- Easy commands to **simplify, emojify, summarize, translate, change tone, fix grammar, rewrite into a tweet/thread, count tokens** and more.
 - Set your own parameters like LLM temperature, max tokens, conversation context based on your need (**pls be mindful of the API cost**).
-- **NEW in v2.1.0**: **Unlimited context** when chatting with your long note, no more "context length exceeded" errors!!
+- **NEW in v2.2.0**: **User custom prompt support added**! Now you can *add, apply, delete* your custom prompts, persisted in your local Obsidian environment!
 
 ## 🎬 Video Demos
 
+#### 🎉 NEW in v2.2.0: User Custom Prompts!
+
+<a href="https://www.youtube.com/watch?v=apuV1Jz6ObE" target="_blank"><img src="./images/thumbnail2.png" width="700" /></a>
+
 #### 🎉 NEW in v2.1.0: Unlimited Context Support for Active Note!
 
-<a href="https://www.youtube.com/watch?v=2va-Bu7cMKw" target="_blank"><img src="./images/thumbnail1.png" /></a>
+<a href="https://www.youtube.com/watch?v=2va-Bu7cMKw" target="_blank"><img src="./images/thumbnail1.png" width="700" /></a>
 
-#### 🤗 How to use Copilot for beginners:
+#### 🤗 New to Copilot? Quick Guide for Beginners:
 
-<a href="https://www.youtube.com/watch?v=jRCDAg2sck8" target="_blank"><img src="./images/thumbnail.png" /></a>
+<a href="https://www.youtube.com/watch?v=jRCDAg2sck8" target="_blank"><img src="./images/thumbnail.png" width="700" /></a>
 
 - Chat with ChatGPT, copy messages to note, save entire conversation as a note
 - QA around your past note
@@ -73,13 +79,21 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 ## 🔔 Note
 - The chat history is not saved by default. Please use "**Save as Note**" to save it. The note will have a title `Chat-Year_Month_Day-Hour_Minute_Second`, you can change its name as needed.
 - "**New Chat**" clears all previous chat history. Again, please use "**Save as Note**" if you would like to save the chat.
-- "**Use Active Note as Context**" creates a local vector index for the active note so that you can chat with super long note! To start the QA, please switch from "Conversation" to "QA: Active Note" in the Chain Selection dropdown.
+- "**Use Active Note as Context**" creates a local vector index for the active note so that you can chat with super long note! To start the QA, please switch from "Conversation" to "QA: Active Note" in the Mode Selection dropdown.
 - You can set a very long context in the setting "**Conversation turns in context**" if needed.
 
 #### 📣 Again, please always be mindful of the API cost if you use GPT-4 with a long context!
 
 ## 🤔 FAQ (please read before submitting an issue)
 
+<details>
+  <summary>It's not using my note as context</summary>
+
+  - Please don't forget to switch to "**QA: Active Note**" in the Mode Selection dropdown in order to start the QA. Copilot does not have your note as context in "Conversation" mode.
+    <img src="./images/faq-mode-switch.png" alt="Settings" width="500">
+  - In fact, you don't have to click the button on the right before starting the QA. Switching to QA mode in the dropdown directly is enough for Copilot to read the note as context. The button on the right is only for when you'd like to manually rebuild the index for the active note, like, when you'd like to switch context to another note, or you think the current index is corrupted because you switched the embedding provider, etc.
+  - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/51
+</details>
 <details>
   <summary>Unresponsive QA when using Huggingface as the Embedding Provider</summary>
 

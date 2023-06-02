@@ -224,7 +224,7 @@ export default class CopilotPlugin extends Plugin {
             await this.dbPrompts.put({ _id: title, prompt: prompt });
             new Notice('Custom prompt saved successfully.');
           } catch (e) {
-            new Notice('Error saving custom prompt.');
+            new Notice('Error saving custom prompt. Please check if the title already exists.');
             console.error(e);
           }
         }).open();
