@@ -33,15 +33,15 @@ My goal is to make this AI assistant **local-first** and **privacy-focused**. Mo
 
 #### 🎉 NEW in v2.2.0: User Custom Prompts!
 
-<a href="https://www.youtube.com/watch?v=" target="_blank"><img src="./images/thumbnail2.png" /></a>
+<a href="https://www.youtube.com/watch?v=apuV1Jz6ObE" target="_blank"><img src="./images/thumbnail2.png" width="700" /></a>
 
 #### 🎉 NEW in v2.1.0: Unlimited Context Support for Active Note!
 
-<a href="https://www.youtube.com/watch?v=2va-Bu7cMKw" target="_blank"><img src="./images/thumbnail1.png" /></a>
+<a href="https://www.youtube.com/watch?v=2va-Bu7cMKw" target="_blank"><img src="./images/thumbnail1.png" width="700" /></a>
 
 #### 🤗 New to Copilot? Quick Guide for Beginners:
 
-<a href="https://www.youtube.com/watch?v=jRCDAg2sck8" target="_blank"><img src="./images/thumbnail.png" /></a>
+<a href="https://www.youtube.com/watch?v=jRCDAg2sck8" target="_blank"><img src="./images/thumbnail.png" width="700" /></a>
 
 - Chat with ChatGPT, copy messages to note, save entire conversation as a note
 - QA around your past note
