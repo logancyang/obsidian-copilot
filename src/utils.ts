@@ -83,28 +83,28 @@ export function fixGrammarSpellingSelectionPrompt(selectedText: string): string 
 }
 
 export function summarizePrompt(selectedText: string): string {
-  return `Please summarize the following text into bullet points and return it without any other changes:\n\n`
+  return `Please summarize the following text into bullet points and return it without any other changes. Output in the same language as the source, do not output English if it is not English:\n\n`
     + `${selectedText}`;
 }
 
 export function tocPrompt(selectedText: string): string {
-  return `Please generate a table of contents for the following text and return it without any other changes:\n\n`
+  return `Please generate a table of contents for the following text and return it without any other changes. Output in the same language as the source, do not output English if it is not English:\n\n`
     + `${selectedText}`;
 }
 
 export function glossaryPrompt(selectedText: string): string {
-  return `Please generate a glossary for the following text and return it without any other changes:\n\n`
+  return `Please generate a glossary for the following text and return it without any other changes. Output in the same language as the source, do not output English if it is not English:\n\n`
     + `${selectedText}`;
 }
 
 export function simplifyPrompt(selectedText: string): string {
-  return `Please simplify the following text so that a 6th-grader can understand:\n\n`
+  return `Please simplify the following text so that a 6th-grader can understand. Output in the same language as the source, do not output English if it is not English:\n\n`
     + `${selectedText}`;
 }
 
 export function emojifyPrompt(selectedText: string): string {
   return `Please insert emojis to the following content without changing the text.`
-    + `Insert at as many places as possible, but don't have any 2 emojis together.\n`
+    + `Insert at as many places as possible, but don't have any 2 emojis together. The original text must be returned.\n`
     + `Content: ${selectedText}`;
 }
 
@@ -114,7 +114,7 @@ export function removeUrlsFromSelectionPrompt(selectedText: string): string {
 }
 
 export function rewriteTweetSelectionPrompt(selectedText: string): string {
-  return `Please rewrite the following content to under 280 characters using simple sentences. Please follow the instruction strictly. Content:\n
+  return `Please rewrite the following content to under 280 characters using simple sentences. Output in the same language as the source, do not output English if it is not English. Please follow the instruction strictly. Content:\n
     + ${selectedText}`
 }
 
@@ -123,27 +123,28 @@ export function rewriteTweetThreadSelectionPrompt(selectedText: string): string 
     + `1. Each paragraph must be under 240 characters. `
     + `2. The starting line is \`THREAD START\n\`, and the ending line is \`\nTHREAD END\`. `
     + `3. You must use \`\n\n---\n\n\` to separate each paragraph! Then return it without any other changes. `
-    + `4. Make it as engaging as possible.\n The original content:\n\n`
+    + `4. Make it as engaging as possible.`
+    + `5. Output in the same language as the source, do not output English if it is not English.\n The original content:\n\n`
     + `${selectedText}`;
 }
 
 export function rewriteShorterSelectionPrompt(selectedText: string): string {
-  return `Please rewrite the following text to make it half as long while keeping the meaning as much as possible:\n`
+  return `Please rewrite the following text to make it half as long while keeping the meaning as much as possible. Output in the same language as the source, do not output English if it is not English:\n`
     + `${selectedText}`;
 }
 
 export function rewriteLongerSelectionPrompt(selectedText: string): string {
-  return `Please rewrite the following text to make it twice as long while keeping the meaning as much as possible:\n`
+  return `Please rewrite the following text to make it twice as long while keeping the meaning as much as possible. Output in the same language as the source, do not output English if it is not English:\n`
     + `${selectedText}`;
 }
 
 export function eli5SelectionPrompt(selectedText: string): string {
-  return `Please explain the following text like I'm 5 years old:\n\n`
+  return `Please explain the following text like I'm 5 years old. Output in the same language as the source, do not output English if it is not English:\n\n`
     + `${selectedText}`;
 }
 
 export function rewritePressReleaseSelectionPrompt(selectedText: string): string {
-  return `Please rewrite the following text to make it sound like a press release:\n\n`
+  return `Please rewrite the following text to make it sound like a press release. Output in the same language as the source, do not output English if it is not English:\n\n`
     + `${selectedText}`;
 }
 
@@ -155,7 +156,7 @@ export function createTranslateSelectionPrompt(language?: string) {
 
 export function createChangeToneSelectionPrompt(tone?: string) {
   return (selectedText: string): string => {
-    return `Please change the tone of the following text to ${tone}:\n\n` + `${selectedText}`;
+    return `Please change the tone of the following text to ${tone}. Output in the same language as the source, do not output English if it is not English:\n\n` + `${selectedText}`;
   };
 }
 
