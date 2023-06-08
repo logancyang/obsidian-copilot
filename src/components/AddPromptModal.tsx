@@ -2,10 +2,16 @@ import { App, Modal, Notice } from "obsidian";
 
 
 export class AddPromptModal extends Modal {
-  constructor(app: App, onSave: (title: string, prompt: string) => void) {
+  constructor(
+    app: App,
+    onSave: (title: string, prompt: string) => void,
+    initialTitle = '',
+    initialPrompt = '',
+    disabledTitle?: boolean,
+  ) {
     super(app);
 
-    this.contentEl.createEl('h2', { text: 'Add Custom Prompt' });
+    this.contentEl.createEl('h2', { text: 'User Custom Prompt' });
 
     const formContainer = this.contentEl.createEl('div', { cls: 'custom-prompt-modal' });
 
@@ -26,6 +32,12 @@ export class AddPromptModal extends Modal {
     );
 
     const titleField = titleContainer.createEl('input', { type: 'text' });
+    if (disabledTitle) {
+      titleField.setAttribute('disabled', 'true');
+    }
+    if (initialTitle) {
+      titleField.value = initialTitle;
+    }
 
     const promptContainer = formContainer.createEl(
       'div',
@@ -43,6 +55,9 @@ export class AddPromptModal extends Modal {
       }
     );
     const promptField = promptContainer.createEl('textarea');
+    if (initialPrompt) {
+      promptField.value = initialPrompt;
+    }
 
     const descFragment = createFragment((frag) => {
       frag.appendText('Save the prompt to the local prompt library. You can then use it with the Copilot command: ');

@@ -298,6 +298,49 @@ export default class CopilotPlugin extends Plugin {
         return true;
       },
     });
+
+    this.addCommand({
+      id: 'edit-custom-prompt',
+      name: 'Edit custom prompt',
+      checkCallback: (checking: boolean) => {
+        if (checking) {
+          return true;
+        }
+
+        this.fetchPromptTitles().then((promptTitles: string[]) => {
+          new ListPromptModal(this.app, promptTitles, async (promptTitle: string) => {
+            if (!promptTitle) {
+              new Notice('Please select a prompt title.');
+              return;
+            }
+
+            try {
+              const doc = await this.dbPrompts.get(promptTitle) as CustomPrompt;
+              if (doc.prompt) {
+                new AddPromptModal(this.app, (title: string, newPrompt: string) => {
+                  this.dbPrompts.put({
+                    ...doc,
+                    prompt: newPrompt,
+                  });
+                  new Notice(`Prompt "${title}" has been updated.`);
+                }, doc._id, doc.prompt, true).open();
+              } else {
+                new Notice(`No prompt found with the title "${promptTitle}".`);
+              }
+            } catch (err) {
+              if (err.name === 'not_found') {
+                new Notice(`No prompt found with the title "${promptTitle}".`);
+              } else {
+                console.error(err);
+                new Notice('An error occurred.');
+              }
+            }
+          }).open();
+        });
+
+        return true;
+      },
+    });
   }
 
   processSelection(editor: Editor, eventType: string, eventSubtype?: string) {
