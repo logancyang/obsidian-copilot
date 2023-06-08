@@ -54,7 +54,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       )
       .addText((text) => {
         text.inputEl.type = "password";
-        text.inputEl.style.width = "80%";
+        text.inputEl.style.width = "100%";
         text
           .setPlaceholder("OpenAI API key")
           .setValue(this.plugin.settings.openAiApiKey)
