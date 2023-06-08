@@ -124,6 +124,13 @@ class AIState {
       key, model, temperature, maxTokens,
     } = this.langChainParams;
 
+    if (!key) {
+      new Notice(
+        'No OpenAI API key provided. Please set it in Copilot settings, and restart the plugin.'
+      );
+      return;
+    }
+
     AIState.chatOpenAI = new ChatOpenAI({
       openAIApiKey: key,
       modelName: model,

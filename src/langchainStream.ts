@@ -1,5 +1,6 @@
 import AIState from '@/aiState';
 import { ChatMessage } from '@/sharedState';
+import { Notice } from 'obsidian';
 
 export type Role = 'assistant' | 'user' | 'system';
 
@@ -12,17 +13,25 @@ export const getAIResponse = async (
   updateShouldAbort: (abortController: AbortController | null) => void,
   debug = false,
 ) => {
+  const {
+    key,
+    model,
+    temperature,
+    maxTokens,
+    systemMessage,
+    chatContextTurns,
+  } = aiState.langChainParams;
+  if (!key) {
+    new Notice(
+      'No OpenAI API key provided. Please set it in Copilot settings, and restart the plugin.'
+    );
+    return;
+  }
+
   const abortController = new AbortController();
 
   updateShouldAbort(abortController);
   if (debug) {
-    const {
-      model,
-      temperature,
-      maxTokens,
-      systemMessage,
-      chatContextTurns,
-    } = aiState.langChainParams;
     console.log(`*** DEBUG INFO ***\n`
       + `user message: ${userMessage.message}\n`
       + `model: ${model}\n`
