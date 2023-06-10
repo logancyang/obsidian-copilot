@@ -150,9 +150,6 @@ const Chat: React.FC<ChatProps> = ({
         message: `I have read [[${noteName}]].\n\n Please switch to "QA: Active Note" in Mode Selection to ask questions about it.`,
         isVisible: true,
       };
-      if (currentChain === RETRIEVAL_QA_CHAIN) {
-        setChain(RETRIEVAL_QA_CHAIN, { noteContent });
-      }
     } else {
       await aiState.buildIndex(noteContent, docHash);
       activeNoteOnMessage = {
@@ -160,6 +157,10 @@ const Chat: React.FC<ChatProps> = ({
         message: `Reading [[${noteName}]]...\n\n Please switch to "QA: Active Note" in Mode Selection to ask questions about it.`,
         isVisible: true,
       };
+    }
+
+    if (currentChain === RETRIEVAL_QA_CHAIN) {
+      setChain(RETRIEVAL_QA_CHAIN, { noteContent });
     }
 
     addMessage(activeNoteOnMessage);

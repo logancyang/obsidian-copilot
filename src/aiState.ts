@@ -30,6 +30,8 @@ import {
   MessagesPlaceholder,
   SystemMessagePromptTemplate,
 } from "langchain/prompts";
+import { ContextualCompressionRetriever } from "langchain/retrievers/contextual_compression";
+import { LLMChainExtractor } from "langchain/retrievers/document_compressors/chain_extract";
 import { AIChatMessage, HumanChatMessage, SystemChatMessage } from 'langchain/schema';
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
@@ -189,11 +191,20 @@ class AIState {
             console.error('Error creating vector store.');
             return;
           }
+
+          const baseCompressor = LLMChainExtractor.fromLLM(AIState.chatOpenAI);
+          const retriever = new ContextualCompressionRetriever({
+            baseCompressor,
+            baseRetriever: this.vectorStore.asRetriever(),
+          });
           AIState.retrievalChain = RetrievalQAChain.fromLLM(
             AIState.chatOpenAI,
-            this.vectorStore.asRetriever(),
+            retriever,
           );
-          console.log('New retrieval qa chain created for document hash: ', docHash);
+          console.log(
+            'New retrieval qa chain with contextual compression created for '
+            + 'document hash: ', docHash
+          );
         }
 
         this.langChainParams.chainType = RETRIEVAL_QA_CHAIN;

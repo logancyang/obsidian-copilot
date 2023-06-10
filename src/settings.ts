@@ -174,7 +174,7 @@ export class CopilotSettingTab extends PluginSettingTab {
     containerEl.createEl(
       'h6',
       {
-        text: 'NOTE: OpenAI embeddings are more expensive but give better QA results. Huggingface embeddings are free but the result is not as good, and you may see more API timeout errors. CohereAI now offers trial API for free and is more stable than Huggingface Inference API!'
+        text: 'NOTE: OpenAI embeddings are not free but may give better QA results. CohereAI (recommended) offers trial API for FREE and the quality is very good! It is more stable than Huggingface Inference API. Huggingface embeddings are also free but the result is not as good, and you may see more API timeout errors. '
       }
     );
 

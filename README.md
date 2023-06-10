@@ -56,7 +56,7 @@ My goal is to make this AI assistant **local-first** and **privacy-focused**. Mo
 
 The settings page lets you set your own temperature, max tokens, conversation context based on your need.
 
-You can also use your own system prompt, choose between different embedding providers such as OpenAI and Huggingface Inference API (free! New in v2.1.0).
+You can also use your own system prompt, choose between different embedding providers such as OpenAI, CohereAI (their trial API is free and quite stable!) and Huggingface Inference API (free but sometimes times out).
 
 <img src="./images/settings.png" alt="Settings" width="500">
 
@@ -97,7 +97,7 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 <details>
   <summary>Unresponsive QA when using Huggingface as the Embedding Provider</summary>
 
-  - Huggingface Inference API is free to use. It can give errors such as 503 or 504 frequently at times because their server has issues. If it's an issue for you, please consider using OpenAI as the embedding provider. Just keep in mind that it can cost more, especially with very long notes as context.
+  - Huggingface Inference API is free to use. It can give errors such as 503 or 504 frequently at times because their server has issues. If it's an issue for you, please consider using OpenAI or CohereAI as the embedding provider. Just keep in mind that OpenAI costs more, especially with very long notes as context.
 </details>
 <details>
   <summary>"model_not_found"</summary>
