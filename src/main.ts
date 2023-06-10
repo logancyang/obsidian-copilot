@@ -18,6 +18,7 @@ import PouchDB from 'pouchdb';
 export interface CopilotSettings {
   openAiApiKey: string;
   huggingfaceApiKey: string;
+  cohereApiKey: string;
   defaultModel: string;
   temperature: number;
   maxTokens: number;
@@ -408,14 +409,16 @@ export default class CopilotPlugin extends Plugin {
     const {
       openAiApiKey,
       huggingfaceApiKey,
+      cohereApiKey,
       temperature,
       maxTokens,
       contextTurns,
       embeddingProvider,
     } = sanitizeSettings(this.settings);
     return {
-      key: openAiApiKey,
+      openAiApiKey: openAiApiKey,
       huggingfaceApiKey: huggingfaceApiKey,
+      cohereApiKey: cohereApiKey,
       model: this.settings.defaultModel,
       temperature: Number(temperature),
       maxTokens: Number(maxTokens),

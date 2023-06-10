@@ -14,14 +14,14 @@ export const getAIResponse = async (
   debug = false,
 ) => {
   const {
-    key,
+    openAiApiKey,
     model,
     temperature,
     maxTokens,
     systemMessage,
     chatContextTurns,
   } = aiState.langChainParams;
-  if (!key) {
+  if (!openAiApiKey) {
     new Notice(
       'No OpenAI API key provided. Please set it in Copilot settings, and restart the plugin.'
     );

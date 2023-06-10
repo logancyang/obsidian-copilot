@@ -38,6 +38,7 @@
     "@tabler/icons-react": "^2.14.0",
     "@types/pouchdb": "^6.4.0",
     "axios": "^1.3.4",
+    "cohere-ai": "^5.1.0",
     "crypto-js": "^4.1.1",
     "esbuild-plugin-svg": "^0.1.0",
     "eventsource-parser": "^1.0.0",
