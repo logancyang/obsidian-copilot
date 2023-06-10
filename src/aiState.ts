@@ -4,6 +4,7 @@ import ChainFactory, {
 } from '@/chainFactory';
 import {
   AI_SENDER,
+  COHEREAI,
   DEFAULT_SYSTEM_PROMPT,
   HUGGINGFACE,
   OPENAI,
@@ -18,6 +19,8 @@ import {
 } from "langchain/chains";
 import { ChatOpenAI } from 'langchain/chat_models/openai';
 import { VectorStore } from 'langchain/dist/vectorstores/base';
+import { Embeddings } from "langchain/embeddings/base";
+import { CohereEmbeddings } from "langchain/embeddings/cohere";
 import { HuggingFaceInferenceEmbeddings } from "langchain/embeddings/hf";
 import { OpenAIEmbeddings } from "langchain/embeddings/openai";
 import { BufferWindowMemory } from "langchain/memory";
@@ -34,8 +37,9 @@ import { Notice } from 'obsidian';
 import { useState } from 'react';
 
 export interface LangChainParams {
-  key: string,
+  openAiApiKey: string,
   huggingfaceApiKey: string,
+  cohereApiKey: string,
   model: string,
   temperature: number,
   maxTokens: number,
@@ -89,9 +93,9 @@ class AIState {
     AIState.chatOpenAI.modelName = newModel;
   }
 
-  getEmbeddingsAPI(): OpenAIEmbeddings | HuggingFaceInferenceEmbeddings {
+  getEmbeddingsAPI(): Embeddings {
     const OpenAIEmbeddingsAPI = new OpenAIEmbeddings({
-      openAIApiKey: this.langChainParams.key,
+      openAIApiKey: this.langChainParams.openAiApiKey,
       maxRetries: 3,
       maxConcurrency: 3,
       timeout: 10000,
@@ -109,6 +113,12 @@ class AIState {
           maxRetries: 3,
           maxConcurrency: 3,
         });
+      case COHEREAI:
+        return new CohereEmbeddings({
+          apiKey: this.langChainParams.cohereApiKey,
+          maxRetries: 3,
+          maxConcurrency: 3,
+        });
       default:
         console.error('No embedding provider set. Using OpenAI.');
         return OpenAIEmbeddingsAPI;
@@ -121,10 +131,10 @@ class AIState {
     options?: SetChainOptions,
   ): void {
     const {
-      key, model, temperature, maxTokens,
+      openAiApiKey, model, temperature, maxTokens,
     } = this.langChainParams;
 
-    if (!key) {
+    if (!openAiApiKey) {
       new Notice(
         'No OpenAI API key provided. Please set it in Copilot settings, and restart the plugin.'
       );
@@ -132,7 +142,7 @@ class AIState {
     }
 
     AIState.chatOpenAI = new ChatOpenAI({
-      openAIApiKey: key,
+      openAIApiKey: openAiApiKey,
       modelName: model,
       temperature: temperature,
       maxTokens: maxTokens,

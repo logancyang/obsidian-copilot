@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, HUGGINGFACE, OPENAI } from "@/constants";
+import { COHEREAI, DEFAULT_SETTINGS, HUGGINGFACE, OPENAI } from "@/constants";
 import CopilotPlugin from "@/main";
 import { App, DropdownComponent, Notice, PluginSettingTab, Setting } from "obsidian";
 
@@ -174,7 +174,7 @@ export class CopilotSettingTab extends PluginSettingTab {
     containerEl.createEl(
       'h6',
       {
-        text: 'NOTE: OpenAI embeddings are more expensive but give better QA results. Huggingface embeddings are free but the result is not as good, and you may see more API timeout errors.'
+        text: 'NOTE: OpenAI embeddings are more expensive but give better QA results. Huggingface embeddings are free but the result is not as good, and you may see more API timeout errors. CohereAI now offers trial API for free and is more stable than Huggingface Inference API!'
       }
     );
 
@@ -189,6 +189,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       .addDropdown((dropdown: DropdownComponent) => {
         dropdown
           .addOption(OPENAI, 'OpenAI')
+          .addOption(COHEREAI, 'CohereAI')
           .addOption(HUGGINGFACE, 'Huggingface')
           .setValue(this.plugin.settings.embeddingProvider)
           .onChange(async (value: string) => {
@@ -196,6 +197,32 @@ export class CopilotSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           });
       });
+
+    new Setting(containerEl)
+      .setName("Your CohereAI trial API key")
+      .setDesc(
+        createFragment((frag) => {
+          frag.appendText("You can sign up at CohereAI and find your API key at ");
+          frag.createEl('a', {
+            text: "https://dashboard.cohere.ai/api-keys",
+            href: "https://dashboard.cohere.ai/api-keys"
+          });
+          frag.createEl('br');
+          frag.appendText("It is used to make requests to CohereAI trial API for free embeddings.");
+        })
+      )
+      .addText((text) => {
+        text.inputEl.type = "password";
+        text.inputEl.style.width = "80%";
+        text
+          .setPlaceholder("CohereAI trial API key")
+          .setValue(this.plugin.settings.cohereApiKey)
+          .onChange(async (value) => {
+            this.plugin.settings.cohereApiKey = value;
+            await this.plugin.saveSettings();
+          })
+      }
+      );
 
     new Setting(containerEl)
       .setName("Your Huggingface Inference API key")
