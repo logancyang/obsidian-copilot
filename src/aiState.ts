@@ -231,6 +231,7 @@ class AIState {
       );
       ChainFactory.setVectorStore(this.vectorStore, docHash);
       console.log('Vector store created successfully.');
+      new Notice('Vector store created successfully.');
     } catch (error) {
       new Notice('Failed to create vector store, please try again:', error);
       console.log('Failed to create vector store, please try again.:', error);
