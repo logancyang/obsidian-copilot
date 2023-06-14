@@ -1,5 +1,16 @@
 import { SetChainOptions } from '@/aiState';
-import { AI_SENDER } from '@/constants';
+import {
+  AI_SENDER,
+  AZURE_GPT_35_TURBO,
+  CLAUDE_1,
+  CLAUDE_1_100K,
+  CLAUDE_INSTANT_1,
+  CLAUDE_INSTANT_1_100K,
+  GPT_35_TURBO,
+  GPT_35_TURBO_16K,
+  GPT_4,
+  GPT_4_32K
+} from '@/constants';
 import {
   ChatMessage
 } from '@/sharedState';
@@ -98,8 +109,17 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             value={currentModel}
             onChange={handleModelChange}
           >
-            <option value='gpt-3.5-turbo'>GPT-3.5</option>
-            <option value='gpt-4'>GPT-4</option>
+            <option value={GPT_35_TURBO}>GPT-3.5</option>
+            <option value={GPT_35_TURBO_16K}>GPT-3.5 16K</option>
+            <option value={GPT_4}>GPT-4</option>
+            <option value={GPT_4_32K}>GPT-4 32K</option>
+            <option value={CLAUDE_1}>CLAUDE-1</option>
+            <option value={CLAUDE_1_100K}>CLAUDE-1-100K</option>
+            <option value={CLAUDE_INSTANT_1}>CLAUDE-INSTANT</option>
+            <option value={CLAUDE_INSTANT_1_100K}>CLAUDE-INSTANT-100K</option>
+            <option value={AZURE_GPT_35_TURBO}>AZURE GPT-3.5</option>
+            <option value={GPT_4}>AZURE GPT-4</option>
+            <option value={GPT_4_32K}>AZURE GPT-4-32K</option>
           </select>
           <span className="tooltip-text">Model Selection</span>
         </div>

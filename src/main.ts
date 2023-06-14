@@ -19,6 +19,11 @@ export interface CopilotSettings {
   openAiApiKey: string;
   huggingfaceApiKey: string;
   cohereApiKey: string;
+  anthropicApiKey: string;
+  azureOpenAIApiKey: string;
+  azureOpenAIApiInstanceName: string;
+  azureOpenAIApiDeploymentName: string;
+  azureOpenAIApiVersion: string;
   defaultModel: string;
   temperature: number;
   maxTokens: number;
@@ -410,15 +415,25 @@ export default class CopilotPlugin extends Plugin {
       openAiApiKey,
       huggingfaceApiKey,
       cohereApiKey,
+      anthropicApiKey,
+      azureOpenAIApiKey,
+      azureOpenAIApiInstanceName,
+      azureOpenAIApiDeploymentName,
+      azureOpenAIApiVersion,
       temperature,
       maxTokens,
       contextTurns,
       embeddingProvider,
     } = sanitizeSettings(this.settings);
     return {
-      openAiApiKey: openAiApiKey,
-      huggingfaceApiKey: huggingfaceApiKey,
-      cohereApiKey: cohereApiKey,
+      openAiApiKey,
+      huggingfaceApiKey,
+      cohereApiKey,
+      anthropicApiKey,
+      azureOpenAIApiKey,
+      azureOpenAIApiInstanceName,
+      azureOpenAIApiDeploymentName,
+      azureOpenAIApiVersion,
       model: this.settings.defaultModel,
       temperature: Number(temperature),
       maxTokens: Number(maxTokens),
