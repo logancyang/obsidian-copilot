@@ -1,5 +1,5 @@
 import AIState, { useAIState } from '@/aiState';
-import ChainFactory, { RETRIEVAL_QA_CHAIN } from '@/chainFactory';
+import ChainFactory, { ChainType } from '@/chainFactory';
 import ChatIcons from '@/components/ChatComponents/ChatIcons';
 import ChatInput from '@/components/ChatComponents/ChatInput';
 import ChatMessages from '@/components/ChatComponents/ChatMessages';
@@ -159,8 +159,8 @@ const Chat: React.FC<ChatProps> = ({
       };
     }
 
-    if (currentChain === RETRIEVAL_QA_CHAIN) {
-      setChain(RETRIEVAL_QA_CHAIN, { noteContent });
+    if (currentChain === ChainType.RETRIEVAL_QA_CHAIN) {
+      setChain(ChainType.RETRIEVAL_QA_CHAIN, { noteContent });
     }
 
     addMessage(activeNoteOnMessage);

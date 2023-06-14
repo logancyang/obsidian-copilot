@@ -1,8 +1,51 @@
-import { DEFAULT_SETTINGS, USER_SENDER } from '@/constants';
+import { ChainType } from '@/chainFactory';
+import {
+  ANTHROPIC,
+  AZURE_MODELS,
+  AZURE_OPENAI,
+  CHAT_MODELS,
+  CLAUDE_MODELS,
+  DEFAULT_SETTINGS,
+  OPENAI,
+  OPENAI_MODELS,
+  USER_SENDER,
+} from '@/constants';
 import { CopilotSettings } from '@/main';
 import { ChatMessage } from '@/sharedState';
 import moment from 'moment';
 import { TFile } from 'obsidian';
+
+export const stringToChainType = (chain: string): ChainType => {
+  switch(chain) {
+    case 'llm_chain':
+      return ChainType.LLM_CHAIN;
+    case 'retrieval_qa':
+      return ChainType.RETRIEVAL_QA_CHAIN;
+    default:
+      throw new Error(`Unknown chain type: ${chain}`);
+  }
+}
+
+export const getModelDisplayName = (model: string): string => {
+  return CHAT_MODELS[model];
+}
+
+export const getModelVendorMap = (): Record<string, string> => {
+  const model_to_vendor: Record<string, string> = {};
+
+  for (const model of OPENAI_MODELS) {
+    model_to_vendor[model] = OPENAI;
+  }
+
+  for (const model of AZURE_MODELS) {
+    model_to_vendor[model] = AZURE_OPENAI;
+  }
+
+  for (const model of CLAUDE_MODELS) {
+    model_to_vendor[model] = ANTHROPIC;
+  }
+  return model_to_vendor;
+}
 
 // Returns the last N messages from the chat history,
 // last one being the newest ai message

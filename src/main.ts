@@ -1,5 +1,5 @@
 import AIState, { LangChainParams } from '@/aiState';
-import { LLM_CHAIN } from '@/chainFactory';
+import { ChainType } from '@/chainFactory';
 import { AddPromptModal } from "@/components/AddPromptModal";
 import CopilotView from '@/components/CopilotView';
 import { LanguageModal } from "@/components/LanguageModal";
@@ -16,7 +16,7 @@ import PouchDB from 'pouchdb';
 
 
 export interface CopilotSettings {
-  openAiApiKey: string;
+  openAIApiKey: string;
   huggingfaceApiKey: string;
   cohereApiKey: string;
   anthropicApiKey: string;
@@ -412,7 +412,7 @@ export default class CopilotPlugin extends Plugin {
 
   getAIStateParams(): LangChainParams {
     const {
-      openAiApiKey,
+      openAIApiKey,
       huggingfaceApiKey,
       cohereApiKey,
       anthropicApiKey,
@@ -426,7 +426,7 @@ export default class CopilotPlugin extends Plugin {
       embeddingProvider,
     } = sanitizeSettings(this.settings);
     return {
-      openAiApiKey,
+      openAIApiKey,
       huggingfaceApiKey,
       cohereApiKey,
       anthropicApiKey,
@@ -440,7 +440,7 @@ export default class CopilotPlugin extends Plugin {
       systemMessage: DEFAULT_SYSTEM_PROMPT || this.settings.userSystemPrompt,
       chatContextTurns: Number(contextTurns),
       embeddingProvider: embeddingProvider,
-      chainType: LLM_CHAIN,
+      chainType: ChainType.LLM_CHAIN,
     };
   }
 }

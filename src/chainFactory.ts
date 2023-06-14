@@ -36,11 +36,11 @@ export const LLM_CHAIN = 'llm_chain';
 // TODO: Wait for official fix and use conversational retrieval chain instead of retrieval qa.
 export const CONVERSATIONAL_RETRIEVAL_QA_CHAIN = 'conversational_retrieval_chain';
 export const RETRIEVAL_QA_CHAIN = 'retrieval_qa';
-export const SUPPORTED_CHAIN_TYPES = new Set([
+
+export enum ChainType {
   LLM_CHAIN,
-  RETRIEVAL_QA_CHAIN,
-  CONVERSATIONAL_RETRIEVAL_QA_CHAIN,
-]);
+  RETRIEVAL_QA_CHAIN
+}
 
 class ChainFactory {
   public static instances: Map<string, BaseChain> = new Map();

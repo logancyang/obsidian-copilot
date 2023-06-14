@@ -49,21 +49,29 @@ export const CLAUDE_MODELS = new Set([
 ]);
 
 export const CHAT_MODELS: Record<string, string> = {
-  GPT_35_TURBO: GPT_35_TURBO_DISPLAY_NAME,
-  GPT_35_TURBO_16K: GPT_35_TURBO_16K_DISPLAY_NAME,
-  GPT_4: GPT_4_DISPLAY_NAME,
-  GPT_4_32K: GPT_4_32K_DISPLAY_NAME,
-  CLAUDE_1: CLAUDE_1_DISPLAY_NAME,
-  CLAUDE_1_100K: CLAUDE_1_100K_DISPLAY_NAME,
-  CLAUDE_INSTANT_1: CLAUDE_INSTANT_1_DISPLAY_NAME,
-  CLAUDE_INSTANT_1_100K: CLAUDE_INSTANT_1_100K_DISPLAY_NAME,
-  AZURE_GPT_35_TURBO: AZURE_GPT_35_TURBO_DISPLAY_NAME,
+  [GPT_35_TURBO]: GPT_35_TURBO_DISPLAY_NAME,
+  [GPT_35_TURBO_16K]: GPT_35_TURBO_16K_DISPLAY_NAME,
+  [GPT_4]: GPT_4_DISPLAY_NAME,
+  [GPT_4_32K]: GPT_4_32K_DISPLAY_NAME,
+  [CLAUDE_1]: CLAUDE_1_DISPLAY_NAME,
+  [CLAUDE_1_100K]: CLAUDE_1_100K_DISPLAY_NAME,
+  [CLAUDE_INSTANT_1]: CLAUDE_INSTANT_1_DISPLAY_NAME,
+  [CLAUDE_INSTANT_1_100K]: CLAUDE_INSTANT_1_100K_DISPLAY_NAME,
+  [AZURE_GPT_35_TURBO]: AZURE_GPT_35_TURBO_DISPLAY_NAME,
 };
 
-// Embedding Providers
+// Model Providers
 export const OPENAI = 'openai';
 export const HUGGINGFACE = 'huggingface';
 export const COHEREAI = 'cohereai';
+export const AZURE_OPENAI = 'azure_openai';
+export const ANTHROPIC = 'anthropic';
+
+export const VENDOR_MODELS: Record<string, Set<string>> = {
+  [OPENAI]: OPENAI_MODELS,
+  [AZURE_OPENAI]: AZURE_MODELS,
+  [ANTHROPIC]: CLAUDE_MODELS,
+};
 
 // Embedding Models
 export const DISTILBERT_NLI = 'sentence-transformers/distilbert-base-nli-mean-tokens';
@@ -71,7 +79,7 @@ export const INSTRUCTOR_XL = 'hkunlp/instructor-xl'; // Inference API is off for
 export const MPNET_V2 = 'sentence-transformers/all-mpnet-base-v2'; // Inference API returns 400
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
-  openAiApiKey: '',
+  openAIApiKey: '',
   huggingfaceApiKey: '',
   cohereApiKey: '',
   anthropicApiKey: '',

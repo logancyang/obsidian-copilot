@@ -57,15 +57,15 @@ export class CopilotSettingTab extends PluginSettingTab {
       )
       .addDropdown((dropdown: DropdownComponent) => {
         dropdown
-          .addOption(GPT_35_TURBO, CHAT_MODELS.GPT_35_TURBO)
-          .addOption(GPT_35_TURBO_16K, CHAT_MODELS.GPT_35_TURBO_16K)
-          .addOption(GPT_4, CHAT_MODELS.GPT_4)
-          .addOption(GPT_4_32K, CHAT_MODELS.GPT_4_32K)
-          .addOption(CLAUDE_1, CHAT_MODELS.CLAUDE_1)
-          .addOption(CLAUDE_1_100K, CHAT_MODELS.CLAUDE_1_100K)
-          .addOption(CLAUDE_INSTANT_1, CHAT_MODELS.CLAUDE_INSTANT_1)
-          .addOption(CLAUDE_INSTANT_1_100K, CHAT_MODELS.CLAUDE_INSTANT_1_100K)
-          .addOption(AZURE_GPT_35_TURBO, CHAT_MODELS.AZURE_GPT_35_TURBO)
+          .addOption(GPT_35_TURBO, CHAT_MODELS[GPT_35_TURBO])
+          .addOption(GPT_35_TURBO_16K, CHAT_MODELS[GPT_35_TURBO_16K])
+          .addOption(GPT_4, CHAT_MODELS[GPT_4])
+          .addOption(GPT_4_32K, CHAT_MODELS[GPT_4_32K])
+          .addOption(CLAUDE_1, CHAT_MODELS[CLAUDE_1])
+          .addOption(CLAUDE_1_100K, CHAT_MODELS[CLAUDE_1_100K])
+          .addOption(CLAUDE_INSTANT_1, CHAT_MODELS[CLAUDE_INSTANT_1])
+          .addOption(CLAUDE_INSTANT_1_100K, CHAT_MODELS[CLAUDE_INSTANT_1_100K])
+          .addOption(AZURE_GPT_35_TURBO, CHAT_MODELS[AZURE_GPT_35_TURBO])
           .addOption(GPT_4, AZURE_GPT_4_DISPLAY_NAME)
           .addOption(GPT_4_32K, AZURE_GPT_4_32K_DISPLAY_NAME)
           .setValue(this.plugin.settings.defaultModel)
@@ -103,9 +103,9 @@ export class CopilotSettingTab extends PluginSettingTab {
         text.inputEl.style.width = "100%";
         text
           .setPlaceholder("OpenAI API key")
-          .setValue(this.plugin.settings.openAiApiKey)
+          .setValue(this.plugin.settings.openAIApiKey)
           .onChange(async (value) => {
-            this.plugin.settings.openAiApiKey = value;
+            this.plugin.settings.openAIApiKey = value;
             await this.plugin.saveSettings();
           })
       }

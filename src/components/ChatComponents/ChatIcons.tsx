@@ -35,19 +35,20 @@ import {
   useState,
 } from 'react';
 
-import { RETRIEVAL_QA_CHAIN } from '@/chainFactory';
+import { ChainType } from '@/chainFactory';
 import {
   RefreshIcon, SaveAsNoteIcon,
   StopIcon,
   UseActiveNoteAsContextIcon
 } from '@/components/Icons';
+import { stringToChainType } from '@/utils';
 import React from 'react';
 
 interface ChatIconsProps {
   currentModel: string;
   setCurrentModel: (model: string) => void;
-  currentChain: string;
-  setCurrentChain: (chain: string, options?: SetChainOptions) => void;
+  currentChain: ChainType;
+  setCurrentChain: (chain: ChainType, options?: SetChainOptions) => void;
   onStopGenerating: () => void;
   onNewChat: () => void;
   onSaveAsNote: () => void;
@@ -66,19 +67,19 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   onUseActiveNoteAsContext,
   addMessage,
 }) => {
-  const [selectedChain, setSelectedChain] = useState<string>(currentChain);
+  const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
 
   const handleModelChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setCurrentModel(event.target.value);
   };
 
   const handleChainChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedChain(event.target.value);
+    setSelectedChain(stringToChainType(event.target.value));
   }
 
   useEffect(() => {
     const handleRetrievalQAChain = async () => {
-      if (selectedChain !== RETRIEVAL_QA_CHAIN) {
+      if (selectedChain !== ChainType.RETRIEVAL_QA_CHAIN) {
         setCurrentChain(selectedChain);
         return;
       }
@@ -103,8 +104,9 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         isVisible: true,
       };
       addMessage(activeNoteOnMessage);
-
-      setCurrentChain(selectedChain, { noteContent });
+      if (noteContent) {
+        setCurrentChain(selectedChain, { noteContent });
+      }
     };
 
     handleRetrievalQAChain();
