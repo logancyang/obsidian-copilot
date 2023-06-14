@@ -1,5 +1,7 @@
 import {
   AZURE_GPT_35_TURBO,
+  AZURE_GPT_4_32K_DISPLAY_NAME,
+  AZURE_GPT_4_DISPLAY_NAME,
   CHAT_MODELS,
   CLAUDE_1,
   CLAUDE_1_100K,
@@ -64,7 +66,8 @@ export class CopilotSettingTab extends PluginSettingTab {
           .addOption(CLAUDE_INSTANT_1, CHAT_MODELS.CLAUDE_INSTANT_1)
           .addOption(CLAUDE_INSTANT_1_100K, CHAT_MODELS.CLAUDE_INSTANT_1_100K)
           .addOption(AZURE_GPT_35_TURBO, CHAT_MODELS.AZURE_GPT_35_TURBO)
-          .addOption(AZURE_GPT_35_TURBO, )
+          .addOption(GPT_4, AZURE_GPT_4_DISPLAY_NAME)
+          .addOption(GPT_4_32K, AZURE_GPT_4_32K_DISPLAY_NAME)
           .setValue(this.plugin.settings.defaultModel)
           .onChange(async (value: string) => {
             this.plugin.settings.defaultModel = value;
