@@ -5,14 +5,6 @@ import {
   AZURE_GPT_35_TURBO_DISPLAY_NAME,
   AZURE_GPT_4_32K_DISPLAY_NAME,
   AZURE_GPT_4_DISPLAY_NAME,
-  CLAUDE_1,
-  CLAUDE_1_100K,
-  CLAUDE_1_100K_DISPLAY_NAME,
-  CLAUDE_1_DISPLAY_NAME,
-  CLAUDE_INSTANT_1,
-  CLAUDE_INSTANT_1_100K,
-  CLAUDE_INSTANT_1_100K_DISPLAY_NAME,
-  CLAUDE_INSTANT_1_DISPLAY_NAME,
   GPT_35_TURBO,
   GPT_35_TURBO_16K,
   GPT_35_TURBO_16K_DISPLAY_NAME,
@@ -20,7 +12,7 @@ import {
   GPT_4,
   GPT_4_32K,
   GPT_4_32K_DISPLAY_NAME,
-  GPT_4_DISPLAY_NAME,
+  GPT_4_DISPLAY_NAME
 } from '@/constants';
 import {
   ChatMessage
@@ -126,10 +118,10 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             <option value={GPT_35_TURBO_16K}>{GPT_35_TURBO_16K_DISPLAY_NAME}</option>
             <option value={GPT_4}>{GPT_4_DISPLAY_NAME}</option>
             <option value={GPT_4_32K}>{GPT_4_32K_DISPLAY_NAME}</option>
-            <option value={CLAUDE_1}>{CLAUDE_1_DISPLAY_NAME}</option>
+            {/* <option value={CLAUDE_1}>{CLAUDE_1_DISPLAY_NAME}</option>
             <option value={CLAUDE_1_100K}>{CLAUDE_1_100K_DISPLAY_NAME}</option>
             <option value={CLAUDE_INSTANT_1}>{CLAUDE_INSTANT_1_DISPLAY_NAME}</option>
-            <option value={CLAUDE_INSTANT_1_100K}>{CLAUDE_INSTANT_1_100K_DISPLAY_NAME}</option>
+            <option value={CLAUDE_INSTANT_1_100K}>{CLAUDE_INSTANT_1_100K_DISPLAY_NAME}</option> */}
             <option value={AZURE_GPT_35_TURBO}>{AZURE_GPT_35_TURBO_DISPLAY_NAME}</option>
             <option value={GPT_4}>{AZURE_GPT_4_DISPLAY_NAME}</option>
             <option value={GPT_4_32K}>{AZURE_GPT_4_32K_DISPLAY_NAME}</option>
