@@ -14,19 +14,12 @@ export const getAIResponse = async (
   debug = false,
 ) => {
   const {
-    openAiApiKey,
     model,
     temperature,
     maxTokens,
     systemMessage,
     chatContextTurns,
   } = aiState.langChainParams;
-  if (!openAiApiKey) {
-    new Notice(
-      'No OpenAI API key provided. Please set it in Copilot settings, and restart the plugin.'
-    );
-    return;
-  }
 
   const abortController = new AbortController();
 
@@ -42,12 +35,19 @@ export const getAIResponse = async (
     );
   }
 
-  await aiState.runChain(
-    userMessage.message,
-    chatContext,
-    abortController,
-    updateCurrentAiMessage,
-    addMessage,
-    debug,
-  );
+  try {
+    // TODO: Need to run certain models without langchain
+    // it will mean no retrieval qa mode for those models!
+
+    await aiState.runChain(
+      userMessage.message,
+      abortController,
+      updateCurrentAiMessage,
+      addMessage,
+      debug,
+    );
+  } catch (error) {
+    console.error('Model request failed:', error);
+    new Notice('Model request failed:', error);
+  }
 };

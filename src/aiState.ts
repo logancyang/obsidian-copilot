@@ -1,22 +1,29 @@
 import ChainFactory, {
-  LLM_CHAIN,
-  RETRIEVAL_QA_CHAIN
+  ChainType
 } from '@/chainFactory';
 import {
   AI_SENDER,
+  ANTHROPIC,
+  AZURE_MODELS,
+  AZURE_OPENAI,
+  CLAUDE_MODELS,
   COHEREAI,
   DEFAULT_SYSTEM_PROMPT,
   HUGGINGFACE,
   OPENAI,
+  OPENAI_MODELS,
   USER_SENDER
 } from '@/constants';
 import { ChatMessage } from '@/sharedState';
+import { getModelName, isSupportedChain } from '@/utils';
 import {
   BaseChain,
   ConversationChain,
   ConversationalRetrievalQAChain,
-  RetrievalQAChain,
+  RetrievalQAChain
 } from "langchain/chains";
+import { ChatAnthropic } from 'langchain/chat_models/anthropic';
+import { BaseChatModel } from 'langchain/chat_models/base';
 import { ChatOpenAI } from 'langchain/chat_models/openai';
 import { VectorStore } from 'langchain/dist/vectorstores/base';
 import { Embeddings } from "langchain/embeddings/base";
@@ -38,42 +45,93 @@ import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { Notice } from 'obsidian';
 import { useState } from 'react';
 
+
+interface ModelConfig {
+  modelName: string,
+  temperature: number,
+  streaming: boolean,
+  maxRetries: number,
+  maxConcurrency: number,
+  maxTokens?: number,
+  openAIApiKey?: string,
+  anthropicApiKey?: string,
+  azureOpenAIApiKey?: string,
+  azureOpenAIApiInstanceName?: string,
+  azureOpenAIApiDeploymentName?: string,
+  azureOpenAIApiVersion?: string,
+}
+
 export interface LangChainParams {
-  openAiApiKey: string,
+  openAIApiKey: string,
   huggingfaceApiKey: string,
   cohereApiKey: string,
+  anthropicApiKey: string,
+  azureOpenAIApiKey: string,
+  azureOpenAIApiInstanceName: string,
+  azureOpenAIApiDeploymentName: string,
+  azureOpenAIApiVersion: string,
   model: string,
+  modelDisplayName: string,
   temperature: number,
   maxTokens: number,
   systemMessage: string,
   chatContextTurns: number,
   embeddingProvider: string,
-  chainType: string,
+  chainType: ChainType,  // Default ChainType is set in main.ts getAIStateParams
+  options: SetChainOptions,
 }
 
 export interface SetChainOptions {
   prompt?: ChatPromptTemplate;
-  noteContent?: string | null;
+  noteContent?: string;
+  forceNewCreation?: boolean;
 }
 
 class AIState {
-  static chatOpenAI: ChatOpenAI;
-  static chain: BaseChain;
-  static retrievalChain: RetrievalQAChain;
-  static conversationalRetrievalChain: ConversationalRetrievalQAChain;
+  private static chatModel: BaseChatModel;
+  private static chatOpenAI: ChatOpenAI;
+  private static chatAnthropic: ChatAnthropic;
+  private static azureChatOpenAI: ChatOpenAI;
+  private static chain: BaseChain;
+  private static retrievalChain: RetrievalQAChain;
+  private static conversationalRetrievalChain: ConversationalRetrievalQAChain;
+
+  private chatPrompt:  ChatPromptTemplate;
+  private vectorStore: VectorStore;
+
   memory: BufferWindowMemory;
   langChainParams: LangChainParams;
-  chatPrompt:  ChatPromptTemplate;
-  vectorStore: VectorStore
+  modelMap: Record<
+    string,
+    {
+      hasApiKey: boolean;
+      AIConstructor: new (config: ModelConfig) => BaseChatModel;
+      vendor: string;
+    }>;
 
   constructor(langChainParams: LangChainParams) {
     this.langChainParams = langChainParams;
+    this.buildModelMap();
+    this.initMemory();
+    this.initChatPrompt();
+    // This takes care of chain creation as well
+    this.setModel(this.langChainParams.modelDisplayName);
+  }
+
+  private initMemory(): void {
     this.memory = new BufferWindowMemory({
       k: this.langChainParams.chatContextTurns * 2,
       memoryKey: 'history',
       inputKey: 'input',
       returnMessages: true,
     });
+  }
+
+  private setNoteContent(noteContent: string): void {
+    this.langChainParams.options.noteContent = noteContent;
+  }
+
+  private initChatPrompt(): void {
     this.chatPrompt = ChatPromptTemplate.fromPromptMessages([
       SystemMessagePromptTemplate.fromTemplate(
         this.langChainParams.systemMessage
@@ -81,23 +139,108 @@ class AIState {
       new MessagesPlaceholder("history"),
       HumanMessagePromptTemplate.fromTemplate("{input}"),
     ]);
-    this.createNewChain(LLM_CHAIN);
   }
 
-  clearChatMemory(): void {
-    console.log('clearing chat memory');
-    this.memory.clear();
+  private validateChainType(chainType: ChainType): void {
+    if (chainType === undefined || chainType === null) throw new Error('No chain type set');
   }
 
-  setModel(newModel: string): void {
-    console.log('setting model to', newModel);
-    this.langChainParams.model = newModel;
-    AIState.chatOpenAI.modelName = newModel;
+  private validateChatModel(chatModel: BaseChatModel): void {
+    if (chatModel === undefined || chatModel === null) throw new Error('No chat model set');
+  }
+
+  private getModelConfig(chatModelProvider: string): ModelConfig {
+    const {
+      openAIApiKey,
+      anthropicApiKey,
+      azureOpenAIApiKey,
+      azureOpenAIApiInstanceName,
+      azureOpenAIApiDeploymentName,
+      azureOpenAIApiVersion,
+      model,
+      temperature,
+      maxTokens,
+    } = this.langChainParams;
+
+    // Create a base configuration that applies to all models
+    let config: ModelConfig = {
+      modelName: model,
+      temperature: temperature,
+      streaming: true,
+      maxRetries: 3,
+      maxConcurrency: 3
+    };
+
+    switch(chatModelProvider) {
+      case OPENAI:
+        config = {
+          ...config,
+          openAIApiKey,
+          maxTokens,
+        };
+        break;
+      case ANTHROPIC:
+        config = {
+          ...config,
+          anthropicApiKey,
+        };
+        break;
+      case AZURE_OPENAI:
+        config = {
+          ...config,
+          maxTokens,
+          azureOpenAIApiKey: azureOpenAIApiKey,
+          azureOpenAIApiInstanceName: azureOpenAIApiInstanceName,
+          azureOpenAIApiDeploymentName: azureOpenAIApiDeploymentName,
+          azureOpenAIApiVersion: azureOpenAIApiVersion,
+        };
+        break;
+    }
+
+    return config;
+  }
+
+  private buildModelMap() {
+    const modelMap: Record<
+      string,
+      {
+        hasApiKey: boolean;
+        AIConstructor: new (config: ModelConfig) => BaseChatModel;
+        vendor: string;
+      }
+    > = {};
+
+    // Build modelMap
+    for (const modelDisplayNameKey of OPENAI_MODELS) {
+      modelMap[modelDisplayNameKey] = {
+        hasApiKey: Boolean(this.langChainParams.openAIApiKey),
+        AIConstructor: ChatOpenAI,
+        vendor: OPENAI,
+      };
+    }
+
+    for (const modelDisplayNameKey of CLAUDE_MODELS) {
+      modelMap[modelDisplayNameKey] = {
+        hasApiKey: Boolean(this.langChainParams.anthropicApiKey),
+        AIConstructor: ChatAnthropic,
+        vendor: ANTHROPIC,
+      };
+    }
+
+    for (const modelDisplayNameKey of AZURE_MODELS) {
+      modelMap[modelDisplayNameKey] = {
+        hasApiKey: Boolean(this.langChainParams.azureOpenAIApiKey),
+        AIConstructor: ChatOpenAI,
+        vendor: AZURE_OPENAI,
+      };
+    }
+
+    this.modelMap = modelMap;
   }
 
   getEmbeddingsAPI(): Embeddings {
     const OpenAIEmbeddingsAPI = new OpenAIEmbeddings({
-      openAIApiKey: this.langChainParams.openAiApiKey,
+      openAIApiKey: this.langChainParams.openAIApiKey,
       maxRetries: 3,
       maxConcurrency: 3,
       timeout: 10000,
@@ -127,61 +270,118 @@ class AIState {
     }
   }
 
-  /* Create a new chain, or update chain with new model */
-  createNewChain(
-    chainType: string,
-    options?: SetChainOptions,
-  ): void {
-    const {
-      openAiApiKey, model, temperature, maxTokens,
-    } = this.langChainParams;
+  clearChatMemory(): void {
+    console.log('clearing chat memory');
+    this.memory.clear();
+  }
 
-    if (!openAiApiKey) {
-      new Notice(
-        'No OpenAI API key provided. Please set it in Copilot settings, and restart the plugin.'
-      );
-      return;
+  private setChatModel(modelDisplayName: string): void {
+    if (!this.modelMap.hasOwnProperty(modelDisplayName)) {
+      throw new Error(`No model found for: ${modelDisplayName}`);
     }
 
-    AIState.chatOpenAI = new ChatOpenAI({
-      openAIApiKey: openAiApiKey,
-      modelName: model,
-      temperature: temperature,
-      maxTokens: maxTokens,
-      streaming: true,
-      maxRetries: 3,
-      maxConcurrency: 3,
-    });
+    // Create and return the appropriate model
+    const selectedModel = this.modelMap[modelDisplayName];
+    if (!selectedModel.hasApiKey) {
+      new Notice(`API key is not provided for the model: ${modelDisplayName}`);
+      console.error(`API key is not provided for the model: ${modelDisplayName}`);
+    }
 
-    this.setChain(chainType, options);
+    const modelConfig = this.getModelConfig(selectedModel.vendor);
+
+    try {
+      const newModelInstance = new selectedModel.AIConstructor({
+        ...modelConfig,
+      });
+
+      switch(selectedModel.vendor) {
+        case OPENAI:
+          AIState.chatOpenAI = newModelInstance as ChatOpenAI;
+          break;
+        case ANTHROPIC:
+          AIState.chatAnthropic = newModelInstance as ChatAnthropic;
+          break;
+        case AZURE_OPENAI:
+          AIState.azureChatOpenAI = newModelInstance as ChatOpenAI;
+          break;
+      }
+
+      AIState.chatModel = newModelInstance;
+    } catch (error) {
+      console.error(error);
+      new Notice(`Error creating model: ${modelDisplayName}`);
+    }
+  }
+
+  setModel(newModelDisplayName: string): void {
+    const newModel = getModelName(newModelDisplayName);
+    // model and model display name must be update at the same time!
+    this.langChainParams.model = newModel;
+    this.langChainParams.modelDisplayName = newModelDisplayName;
+    this.setChatModel(newModelDisplayName);
+    // Must update the chatModel for chain because ChainFactory always
+    // retrieves the old chain without the chatModel change if it exists!
+    // Create a new chain with the new chatModel
+    this.createChain(
+      this.langChainParams.chainType,
+      {...this.langChainParams.options, forceNewCreation: true},
+    )
+    console.log(`Setting model to ${newModelDisplayName}: ${newModel}`);
+  }
+
+  /* Create a new chain, or update chain with new model */
+  createChain(
+    chainType: ChainType,
+    options?: SetChainOptions,
+  ): void {
+    this.validateChainType(chainType);
+    try {
+      this.setChain(chainType, options);
+    } catch (error) {
+      new Notice('Error creating chain:', error);
+      console.error('Error creating chain:', error);
+    }
   }
 
   async setChain(
-    chainType: string,
+    chainType: ChainType,
     options: SetChainOptions = {},
   ): Promise<void> {
+    this.validateChatModel(AIState.chatModel);
+    this.validateChainType(chainType);
+
     switch (chainType) {
-      case LLM_CHAIN: {
-        AIState.chain = ChainFactory.getLLMChain({
-          llm: AIState.chatOpenAI,
-          memory: this.memory,
-          prompt: options.prompt || this.chatPrompt,
-        }) as ConversationChain;
-        this.langChainParams.chainType = LLM_CHAIN;
-        console.log('Set chain:', LLM_CHAIN);
-        break;
-      }
-      case RETRIEVAL_QA_CHAIN: {
-        if (!options.noteContent) {
-          console.error('No note content provided.');
-          return;
+      case ChainType.LLM_CHAIN: {
+        if (options.forceNewCreation) {
+          AIState.chain = ChainFactory.createNewLLMChain({
+            llm: AIState.chatModel,
+            memory: this.memory,
+            prompt: options.prompt || this.chatPrompt,
+          }) as ConversationChain;
+        } else {
+          AIState.chain = ChainFactory.getLLMChainFromMap({
+            llm: AIState.chatModel,
+            memory: this.memory,
+            prompt: options.prompt || this.chatPrompt,
+          }) as ConversationChain;
         }
 
+        this.langChainParams.chainType = ChainType.LLM_CHAIN;
+        console.log('Set chain:', ChainType.LLM_CHAIN);
+        break;
+      }
+      case ChainType.RETRIEVAL_QA_CHAIN: {
+        if (!options.noteContent) {
+          new Notice('No note content provided');
+          throw new Error('No note content provided');
+        }
+
+        this.setNoteContent(options.noteContent);
         const docHash = ChainFactory.getDocumentHash(options.noteContent);
         const vectorStore = ChainFactory.vectorStoreMap.get(docHash);
         if (vectorStore) {
           AIState.retrievalChain = RetrievalQAChain.fromLLM(
-            AIState.chatOpenAI,
+            AIState.chatModel,
             vectorStore.asRetriever(),
           );
           console.log('Existing vector store for document hash: ', docHash);
@@ -192,13 +392,13 @@ class AIState {
             return;
           }
 
-          const baseCompressor = LLMChainExtractor.fromLLM(AIState.chatOpenAI);
+          const baseCompressor = LLMChainExtractor.fromLLM(AIState.chatModel);
           const retriever = new ContextualCompressionRetriever({
             baseCompressor,
             baseRetriever: this.vectorStore.asRetriever(),
           });
           AIState.retrievalChain = RetrievalQAChain.fromLLM(
-            AIState.chatOpenAI,
+            AIState.chatModel,
             retriever,
           );
           console.log(
@@ -207,12 +407,12 @@ class AIState {
           );
         }
 
-        this.langChainParams.chainType = RETRIEVAL_QA_CHAIN;
-        console.log('Set chain:', RETRIEVAL_QA_CHAIN);
+        this.langChainParams.chainType = ChainType.RETRIEVAL_QA_CHAIN;
+        console.log('Set chain:', ChainType.RETRIEVAL_QA_CHAIN);
         break;
       }
       default:
-        console.error('No chain type set.');
+        this.validateChainType(chainType);
         break;
     }
   }
@@ -231,9 +431,10 @@ class AIState {
       );
       ChainFactory.setVectorStore(this.vectorStore, docHash);
       console.log('Vector store created successfully.');
+      new Notice('Vector store created successfully.');
     } catch (error) {
       new Notice('Failed to create vector store, please try again:', error);
-      console.log('Failed to create vector store, please try again.:', error);
+      console.error('Failed to create vector store, please try again.:', error);
     }
   }
 
@@ -241,7 +442,7 @@ class AIState {
     return AIState.chatOpenAI.getNumTokens(inputStr);
   }
 
-  async runChatOpenAI(
+  async runChatModel(
     userMessage: ChatMessage,
     chatContext: ChatMessage[],
     abortController: AbortController,
@@ -250,6 +451,7 @@ class AIState {
     debug = false,
   ) {
     if (debug) {
+      console.log('chatModel:', AIState.chatModel);
       for (const [i, chatMessage] of chatContext.entries()) {
         console.log(
           `chat message ${i}:\nsender: ${chatMessage.sender}\n${chatMessage.message}`
@@ -269,7 +471,7 @@ class AIState {
     ];
 
     let fullAIResponse = '';
-    await AIState.chatOpenAI.call(
+    await AIState.chatModel.call(
       messages,
       { signal: abortController.signal },
       [
@@ -293,17 +495,26 @@ class AIState {
 
   async runChain(
     userMessage: string,
-    chatContext: ChatMessage[],
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void,
     addMessage: (message: ChatMessage) => void,
     debug = false,
   ) {
+    // Check if chain is initialized properly
+    if (!isSupportedChain(AIState.chain)) {
+      console.error(
+        'Chain is not initialized properly, re-initializing chain: ',
+        this.langChainParams.chainType
+      );
+      this.setChain(this.langChainParams.chainType, this.langChainParams.options);
+    }
+
     let fullAIResponse = '';
     try {
       switch(this.langChainParams.chainType) {
-        case LLM_CHAIN:
+        case ChainType.LLM_CHAIN:
           if (debug) {
+            console.log('chain:', AIState.chain);
             console.log('Chat memory:', this.memory);
           }
           await AIState.chain.call(
@@ -321,7 +532,7 @@ class AIState {
             ]
           );
           break;
-        case RETRIEVAL_QA_CHAIN:
+        case ChainType.RETRIEVAL_QA_CHAIN:
           if (debug) {
             console.log('embedding provider:', this.langChainParams.embeddingProvider);
           }
@@ -367,13 +578,13 @@ export function useAIState(
 ): [
   string,
   (model: string) => void,
-  string,
-  (chain: string, options?: SetChainOptions) => void,
+  ChainType,
+  (chain: ChainType, options?: SetChainOptions) => void,
   () => void,
 ] {
   const { langChainParams } = aiState;
-  const [currentModel, setCurrentModel] = useState<string>(langChainParams.model);
-  const [currentChain, setCurrentChain] = useState<string>(langChainParams.chainType);
+  const [currentModel, setCurrentModel] = useState<string>(langChainParams.modelDisplayName);
+  const [currentChain, setCurrentChain] = useState<ChainType>(langChainParams.chainType);
   const [, setChatMemory] = useState<BufferWindowMemory | null>(aiState.memory);
 
   const clearChatMemory = () => {
@@ -381,12 +592,12 @@ export function useAIState(
     setChatMemory(aiState.memory);
   };
 
-  const setModel = (newModel: string) => {
-    aiState.setModel(newModel);
-    setCurrentModel(newModel);
+  const setModel = (newModelDisplayName: string) => {
+    aiState.setModel(newModelDisplayName);
+    setCurrentModel(newModelDisplayName);
   };
 
-  const setChain = (newChain: string, options?: SetChainOptions) => {
+  const setChain = (newChain: ChainType, options?: SetChainOptions) => {
     aiState.setChain(newChain, options);
     setCurrentChain(newChain);
   };

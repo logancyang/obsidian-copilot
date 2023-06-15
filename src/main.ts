@@ -1,5 +1,5 @@
-import AIState, { LangChainParams } from '@/aiState';
-import { LLM_CHAIN } from '@/chainFactory';
+import AIState, { LangChainParams, SetChainOptions } from '@/aiState';
+import { ChainType } from '@/chainFactory';
 import { AddPromptModal } from "@/components/AddPromptModal";
 import CopilotView from '@/components/CopilotView';
 import { LanguageModal } from "@/components/LanguageModal";
@@ -16,10 +16,16 @@ import PouchDB from 'pouchdb';
 
 
 export interface CopilotSettings {
-  openAiApiKey: string;
+  openAIApiKey: string;
   huggingfaceApiKey: string;
   cohereApiKey: string;
+  anthropicApiKey: string;
+  azureOpenAIApiKey: string;
+  azureOpenAIApiInstanceName: string;
+  azureOpenAIApiDeploymentName: string;
+  azureOpenAIApiVersion: string;
   defaultModel: string;
+  defaultModelDisplayName: string;
   temperature: number;
   maxTokens: number;
   contextTurns: number;
@@ -407,25 +413,37 @@ export default class CopilotPlugin extends Plugin {
 
   getAIStateParams(): LangChainParams {
     const {
-      openAiApiKey,
+      openAIApiKey,
       huggingfaceApiKey,
       cohereApiKey,
+      anthropicApiKey,
+      azureOpenAIApiKey,
+      azureOpenAIApiInstanceName,
+      azureOpenAIApiDeploymentName,
+      azureOpenAIApiVersion,
       temperature,
       maxTokens,
       contextTurns,
       embeddingProvider,
     } = sanitizeSettings(this.settings);
     return {
-      openAiApiKey: openAiApiKey,
-      huggingfaceApiKey: huggingfaceApiKey,
-      cohereApiKey: cohereApiKey,
+      openAIApiKey,
+      huggingfaceApiKey,
+      cohereApiKey,
+      anthropicApiKey,
+      azureOpenAIApiKey,
+      azureOpenAIApiInstanceName,
+      azureOpenAIApiDeploymentName,
+      azureOpenAIApiVersion,
       model: this.settings.defaultModel,
+      modelDisplayName: this.settings.defaultModelDisplayName,
       temperature: Number(temperature),
       maxTokens: Number(maxTokens),
       systemMessage: DEFAULT_SYSTEM_PROMPT || this.settings.userSystemPrompt,
       chatContextTurns: Number(contextTurns),
       embeddingProvider: embeddingProvider,
-      chainType: LLM_CHAIN,
+      chainType: ChainType.LLM_CHAIN,  // Set LLM_CHAIN as default ChainType
+      options: { forceNewCreation: true } as SetChainOptions,
     };
   }
 }

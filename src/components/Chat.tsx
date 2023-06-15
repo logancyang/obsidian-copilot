@@ -1,5 +1,5 @@
 import AIState, { useAIState } from '@/aiState';
-import ChainFactory, { RETRIEVAL_QA_CHAIN } from '@/chainFactory';
+import ChainFactory, { ChainType } from '@/chainFactory';
 import ChatIcons from '@/components/ChatComponents/ChatIcons';
 import ChatInput from '@/components/ChatComponents/ChatInput';
 import ChatMessages from '@/components/ChatComponents/ChatMessages';
@@ -121,7 +121,7 @@ const Chat: React.FC<ChatProps> = ({
     }
   };
 
-  const useActiveNoteAsContext = async () => {
+  const forceRebuildActiveNoteContext = async () => {
     if (!app) {
       console.error('App instance is not available.');
       return;
@@ -141,26 +141,16 @@ const Chat: React.FC<ChatProps> = ({
       return;
     }
 
-    let activeNoteOnMessage: ChatMessage;
     const docHash = ChainFactory.getDocumentHash(noteContent);
-    const vectorStore = ChainFactory.vectorStoreMap.get(docHash);
-    if (vectorStore) {
-      activeNoteOnMessage = {
-        sender: AI_SENDER,
-        message: `I have read [[${noteName}]].\n\n Please switch to "QA: Active Note" in Mode Selection to ask questions about it.`,
-        isVisible: true,
-      };
-    } else {
-      await aiState.buildIndex(noteContent, docHash);
-      activeNoteOnMessage = {
-        sender: AI_SENDER,
-        message: `Reading [[${noteName}]]...\n\n Please switch to "QA: Active Note" in Mode Selection to ask questions about it.`,
-        isVisible: true,
-      };
-    }
+    await aiState.buildIndex(noteContent, docHash);
+    const activeNoteOnMessage: ChatMessage = {
+      sender: AI_SENDER,
+      message: `Reading [[${noteName}]]...\n\n Please switch to "QA: Active Note" in Mode Selection to ask questions about it.`,
+      isVisible: true,
+    };
 
-    if (currentChain === RETRIEVAL_QA_CHAIN) {
-      setChain(RETRIEVAL_QA_CHAIN, { noteContent });
+    if (currentChain === ChainType.RETRIEVAL_QA_CHAIN) {
+      setChain(ChainType.RETRIEVAL_QA_CHAIN, { noteContent });
     }
 
     addMessage(activeNoteOnMessage);
@@ -312,7 +302,7 @@ const Chat: React.FC<ChatProps> = ({
             }
           }
           onSaveAsNote={handleSaveAsNote}
-          onUseActiveNoteAsContext={useActiveNoteAsContext}
+          onForceRebuildActiveNoteContext={forceRebuildActiveNoteContext}
           addMessage={addMessage}
         />
         <ChatInput

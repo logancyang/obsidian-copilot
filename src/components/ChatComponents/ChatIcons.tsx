@@ -1,5 +1,8 @@
 import { SetChainOptions } from '@/aiState';
-import { AI_SENDER } from '@/constants';
+import {
+  AI_SENDER,
+  ChatModelDisplayNames,
+} from '@/constants';
 import {
   ChatMessage
 } from '@/sharedState';
@@ -13,23 +16,24 @@ import {
   useState,
 } from 'react';
 
-import { RETRIEVAL_QA_CHAIN } from '@/chainFactory';
+import { ChainType } from '@/chainFactory';
 import {
   RefreshIcon, SaveAsNoteIcon,
   StopIcon,
   UseActiveNoteAsContextIcon
 } from '@/components/Icons';
+import { stringToChainType } from '@/utils';
 import React from 'react';
 
 interface ChatIconsProps {
   currentModel: string;
   setCurrentModel: (model: string) => void;
-  currentChain: string;
-  setCurrentChain: (chain: string, options?: SetChainOptions) => void;
+  currentChain: ChainType;
+  setCurrentChain: (chain: ChainType, options?: SetChainOptions) => void;
   onStopGenerating: () => void;
   onNewChat: () => void;
   onSaveAsNote: () => void;
-  onUseActiveNoteAsContext: () => void;
+  onForceRebuildActiveNoteContext: () => void;
   addMessage: (message: ChatMessage) => void;
 }
 
@@ -41,22 +45,22 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   onStopGenerating,
   onNewChat,
   onSaveAsNote,
-  onUseActiveNoteAsContext,
+  onForceRebuildActiveNoteContext,
   addMessage,
 }) => {
-  const [selectedChain, setSelectedChain] = useState<string>(currentChain);
+  const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
 
   const handleModelChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setCurrentModel(event.target.value);
   };
 
   const handleChainChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedChain(event.target.value);
+    setSelectedChain(stringToChainType(event.target.value));
   }
 
   useEffect(() => {
     const handleRetrievalQAChain = async () => {
-      if (selectedChain !== RETRIEVAL_QA_CHAIN) {
+      if (selectedChain !== ChainType.RETRIEVAL_QA_CHAIN) {
         setCurrentChain(selectedChain);
         return;
       }
@@ -81,8 +85,9 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         isVisible: true,
       };
       addMessage(activeNoteOnMessage);
-
-      setCurrentChain(selectedChain, { noteContent });
+      if (noteContent) {
+        setCurrentChain(selectedChain, { noteContent });
+      }
     };
 
     handleRetrievalQAChain();
@@ -98,8 +103,17 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             value={currentModel}
             onChange={handleModelChange}
           >
-            <option value='gpt-3.5-turbo'>GPT-3.5</option>
-            <option value='gpt-4'>GPT-4</option>
+            <option value={ChatModelDisplayNames.GPT_35_TURBO}>{ChatModelDisplayNames.GPT_35_TURBO}</option>
+            <option value={ChatModelDisplayNames.GPT_35_TURBO_16K}>{ChatModelDisplayNames.GPT_35_TURBO_16K}</option>
+            <option value={ChatModelDisplayNames.GPT_4}>{ChatModelDisplayNames.GPT_4}</option>
+            <option value={ChatModelDisplayNames.GPT_4_32K}>{ChatModelDisplayNames.GPT_4_32K}</option>
+            {/* <option value={ChatModelDisplayNames.CLAUDE_1}>{ChatModelDisplayNames.CLAUDE_1}</option>
+            <option value={ChatModelDisplayNames.CLAUDE_1_100K}>{ChatModelDisplayNames.CLAUDE_1_100K}</option>
+            <option value={ChatModelDisplayNames.CLAUDE_INSTANT_1}>{ChatModelDisplayNames.CLAUDE_INSTANT_1}</option>
+            <option value={ChatModelDisplayNames.CLAUDE_INSTANT_1_100K}>{ChatModelDisplayNames.CLAUDE_INSTANT_1_100K}</option> */}
+            <option value={ChatModelDisplayNames.AZURE_GPT_35_TURBO}>{ChatModelDisplayNames.AZURE_GPT_35_TURBO}</option>
+            <option value={ChatModelDisplayNames.AZURE_GPT_4}>{ChatModelDisplayNames.AZURE_GPT_4}</option>
+            <option value={ChatModelDisplayNames.AZURE_GPT_4_32K}>{ChatModelDisplayNames.AZURE_GPT_4_32K}</option>
           </select>
           <span className="tooltip-text">Model Selection</span>
         </div>
@@ -130,7 +144,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           <span className="tooltip-text">Mode Selection</span>
         </div>
       </div>
-      <button className='chat-icon-button' onClick={onUseActiveNoteAsContext}>
+      <button className='chat-icon-button' onClick={onForceRebuildActiveNoteContext}>
         <UseActiveNoteAsContextIcon className='icon-scaler' />
         <span className="tooltip-text">Rebuild Index for Active Note</span>
       </button>

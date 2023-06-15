@@ -1,4 +1,11 @@
-import { COHEREAI, DEFAULT_SETTINGS, HUGGINGFACE, OPENAI } from "@/constants";
+import {
+  COHEREAI,
+  ChatModelDisplayNames,
+  ChatModels,
+  DEFAULT_SETTINGS,
+  HUGGINGFACE,
+  OPENAI
+} from "@/constants";
 import CopilotPlugin from "@/main";
 import { App, DropdownComponent, Notice, PluginSettingTab, Setting } from "obsidian";
 
@@ -30,7 +37,37 @@ export class CopilotSettingTab extends PluginSettingTab {
       { text: 'Please reload the plugin when you change any setting below.' }
     );
 
-    containerEl.createEl('h4', { text: 'OpenAI API Settings' });
+    new Setting(containerEl)
+      .setName("Default Model")
+      .setDesc(
+        createFragment((frag) => {
+          frag.appendText("The default model to use, only takes effect when you ");
+          frag.createEl('strong', { text: "restart the plugin" });
+        })
+      )
+      .addDropdown((dropdown: DropdownComponent) => {
+        dropdown
+          .addOption(ChatModels.GPT_35_TURBO, ChatModelDisplayNames.GPT_35_TURBO)
+          .addOption(ChatModels.GPT_35_TURBO_16K, ChatModelDisplayNames.GPT_35_TURBO_16K)
+          .addOption(ChatModels.GPT_4, ChatModelDisplayNames.GPT_4)
+          .addOption(ChatModels.GPT_4_32K, ChatModelDisplayNames.GPT_4_32K)
+          // .addOption(ChatModels.CLAUDE_1, ChatModelDisplayNames.CLAUDE_1)
+          // .addOption(ChatModels.CLAUDE_1_100K, ChatModelDisplayNames.CLAUDE_1_100K)
+          // .addOption(ChatModels.CLAUDE_INSTANT_1, ChatModelDisplayNames.CLAUDE_INSTANT_1)
+          // .addOption(ChatModels.CLAUDE_INSTANT_1_100K, ChatModelDisplayNames.CLAUDE_INSTANT_1_100K)
+          .addOption(ChatModels.AZURE_GPT_35_TURBO, ChatModelDisplayNames.AZURE_GPT_35_TURBO)
+          .addOption(ChatModels.GPT_4, ChatModelDisplayNames.AZURE_GPT_4)
+          .addOption(ChatModels.GPT_4_32K, ChatModelDisplayNames.AZURE_GPT_4_32K)
+          .setValue(this.plugin.settings.defaultModel)
+          .onChange(async (value: string) => {
+            this.plugin.settings.defaultModel = value;
+            this.plugin.settings.defaultModelDisplayName = ChatModelDisplayNames[value as keyof typeof ChatModels];
+            await this.plugin.saveSettings();
+          });
+      });
+
+    containerEl.createEl('h4', { text: 'API Settings' });
+    containerEl.createEl('h6', { text: 'OpenAI API' });
 
     new Setting(containerEl)
       .setName("Your OpenAI API key")
@@ -57,32 +94,103 @@ export class CopilotSettingTab extends PluginSettingTab {
         text.inputEl.style.width = "100%";
         text
           .setPlaceholder("OpenAI API key")
-          .setValue(this.plugin.settings.openAiApiKey)
+          .setValue(this.plugin.settings.openAIApiKey)
           .onChange(async (value) => {
-            this.plugin.settings.openAiApiKey = value;
+            this.plugin.settings.openAIApiKey = value;
+            await this.plugin.saveSettings();
+          })
+      }
+      );
+
+    // containerEl.createEl('h6', { text: 'Anthropic' });
+
+    // new Setting(containerEl)
+    //   .setName("Your Anthropic API key")
+    //   .setDesc(
+    //     createFragment((frag) => {
+    //       frag.appendText("This is for Claude models. Sign up on their waitlist if you don't have access.");
+    //       frag.createEl('a', {
+    //         text: "https://docs.anthropic.com/claude/docs/getting-access-to-claude",
+    //         href: "https://docs.anthropic.com/claude/docs/getting-access-to-claude"
+    //       });
+    //     })
+    //   )
+    //   .addText((text) => {
+    //     text.inputEl.type = "password";
+    //     text.inputEl.style.width = "100%";
+    //     text
+    //       .setPlaceholder("Anthropic API key")
+    //       .setValue(this.plugin.settings.anthropicApiKey)
+    //       .onChange(async (value) => {
+    //         this.plugin.settings.anthropicApiKey = value;
+    //         await this.plugin.saveSettings();
+    //       })
+    //   }
+    //   );
+
+    containerEl.createEl('h6', { text: 'Azure OpenAI API' });
+
+    new Setting(containerEl)
+      .setName("Your Azure OpenAI API key")
+      .setDesc(
+        createFragment((frag) => {
+          frag.appendText("This is for Azure OpenAI APIs. Sign up on their waitlist if you don't have access.");
+        })
+      )
+      .addText((text) => {
+        text.inputEl.type = "password";
+        text.inputEl.style.width = "100%";
+        text
+          .setPlaceholder("Azure OpenAI API key")
+          .setValue(this.plugin.settings.azureOpenAIApiKey)
+          .onChange(async (value) => {
+            this.plugin.settings.azureOpenAIApiKey = value;
             await this.plugin.saveSettings();
           })
       }
       );
 
     new Setting(containerEl)
-      .setName("Default Model")
-      .setDesc(
-        createFragment((frag) => {
-          frag.appendText("The default model to use, only takes effect when you ");
-          frag.createEl('strong', { text: "restart the plugin" });
-        })
-      )
-      .addDropdown((dropdown: DropdownComponent) => {
-        dropdown
-          .addOption('gpt-3.5-turbo', 'GPT-3.5')
-          .addOption('gpt-4', 'GPT-4')
-          .setValue(this.plugin.settings.defaultModel)
-          .onChange(async (value: string) => {
-            this.plugin.settings.defaultModel = value;
+      .setName("Your Azure OpenAI instance name")
+      .addText((text) => {
+        text.inputEl.style.width = "100%";
+        text
+          .setPlaceholder("Azure OpenAI instance name")
+          .setValue(this.plugin.settings.azureOpenAIApiInstanceName)
+          .onChange(async (value) => {
+            this.plugin.settings.azureOpenAIApiInstanceName = value;
             await this.plugin.saveSettings();
-          });
-      });
+          })
+      }
+      );
+
+    new Setting(containerEl)
+      .setName("Your Azure OpenAI deployment name")
+      .addText((text) => {
+        text.inputEl.style.width = "100%";
+        text
+          .setPlaceholder("Azure OpenAI deployment name")
+          .setValue(this.plugin.settings.azureOpenAIApiDeploymentName)
+          .onChange(async (value) => {
+            this.plugin.settings.azureOpenAIApiDeploymentName = value;
+            await this.plugin.saveSettings();
+          })
+      }
+      );
+
+    new Setting(containerEl)
+      .setName("Your Azure OpenAI API version")
+      .addText((text) => {
+        text.inputEl.style.width = "100%";
+        text
+          .setPlaceholder("Azure OpenAI API version")
+          .setValue(this.plugin.settings.azureOpenAIApiVersion)
+          .onChange(async (value) => {
+            this.plugin.settings.azureOpenAIApiVersion = value;
+            await this.plugin.saveSettings();
+          })
+      }
+      );
 
     containerEl.createEl(
       'h6',
