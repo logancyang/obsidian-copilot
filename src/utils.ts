@@ -32,12 +32,12 @@ export const stringToChainType = (chain: string): ChainType => {
 }
 
 export const isLLMChain = (chain: BaseChain): chain is LLMChain => {
-    return 'llm' in chain && chain.llm !== undefined;
-  }
+  return (chain as any).llm !== undefined;
+}
 
 export const isRetrievalQAChain = (chain: BaseChain): chain is RetrievalQAChain => {
-    return 'retriever' in chain && chain.retriever !== undefined;
-  }
+  return (chain as any).retriever !== undefined;
+}
 
 export const isSupportedChain = (chain: BaseChain): chain is BaseChain => {
     return isLLMChain(chain) || isRetrievalQAChain(chain);
