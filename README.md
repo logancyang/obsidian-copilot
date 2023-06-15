@@ -17,7 +17,7 @@ My goal is to make this AI assistant **local-first** and **privacy-focused**. Mo
 - Chat with ChatGPT right inside Obsidian in the Copilot Chat window.
 - No repetitive login. Use your own API key (stored locally).
 - No monthly fee. Pay only for what you use.
-- Model selection of GPT-3.5 and GPT-4.
+- Model selection of GPT-3.5, GPT-4 and more.
 - No need to buy ChatGPT Plus to use GPT-4 **if you have API access**.
 - No usage cap for GPT-4 like ChatGPT Plus.
 - One-click copying any message as markdown.
@@ -31,13 +31,9 @@ My goal is to make this AI assistant **local-first** and **privacy-focused**. Mo
 
 ## 🎬 Video Demos
 
-#### 🎉 NEW in v2.2.0: User Custom Prompts!
+#### 🎉 NEW in v2.3.0: New OpenAI and Azure models!
 
-<a href="https://www.youtube.com/watch?v=apuV1Jz6ObE" target="_blank"><img src="./images/thumbnail2.png" width="700" /></a>
-
-#### 🎉 NEW in v2.1.0: Unlimited Context Support for Active Note!
-
-<a href="https://www.youtube.com/watch?v=2va-Bu7cMKw" target="_blank"><img src="./images/thumbnail1.png" width="700" /></a>
+<a href="https://www.youtube.com/watch?v=d84KWejBp30" target="_blank"><img src="./images/thumbnail3.png" width="700" /></a>
 
 #### 🤗 New to Copilot? Quick Guide for Beginners:
 
@@ -56,9 +52,9 @@ My goal is to make this AI assistant **local-first** and **privacy-focused**. Mo
 
 The settings page lets you set your own temperature, max tokens, conversation context based on your need.
 
-You can also use your own system prompt, choose between different embedding providers such as OpenAI, CohereAI (their trial API is free and quite stable!) and Huggingface Inference API (free but sometimes times out).
+New models will be added as I get access.
 
-<img src="./images/settings.png" alt="Settings" width="500">
+You can also use your own system prompt, choose between different embedding providers such as OpenAI, CohereAI (their trial API is free and quite stable!) and Huggingface Inference API (free but sometimes times out).
 
 ## ⚙️ Installation
 
@@ -102,6 +98,7 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 <details>
   <summary>"model_not_found"</summary>
 
+  - You need to have access to some of the models like GPT-4 or Azure ones to use them. If you don't, sign up on their waitlist!
   - A common misunderstanding I see is that some think they have access to GPT-4 API when they get ChatGPT Plus subscription. That is not true. *You need to get access to GPT-4 API to use the GPT-4 model in this plugin*. Please check if you can successfully use your model in the OpenAI playground first https://platform.openai.com/playground?mode=chat&model=gpt-4. If not, you can apply for GPT-4 API access here https://openai.com/waitlist/gpt-4-api. Once you have access to the API, you can use GPT-4 with this plugin without the ChatGPT Plus subsciption!
   - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/3#issuecomment-1544583676
 </details>
@@ -114,18 +111,16 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 <details>
   <summary>"context_length_exceeded"</summary>
 
-  - GPT-3.5 has a 4096 context token limit, GPT-4 has 8K (there is a 32K one available to the public soon per OpenAI). So if you set a big token limit in your Copilot setting, you can get this error. Note that the prompts behind the scenes for Copilot commands can also take up tokens, so please limit your message length to avoid this error. (For QA with Unlimited Context, use the "QA: Active Note" chain in the dropdown! Requires Copilot v2.1.0.)
+  - GPT-3.5 has a 4096 context token limit, GPT-4 has 8K (there is a 32K one available to the public soon per OpenAI). **So if you set a big token limit in your Copilot setting, you could get this error.** Note that the prompts behind the scenes for Copilot commands can also take up tokens, so please limit your message length and max tokens to avoid this error. (For QA with Unlimited Context, use the "QA: Active Note" chain in the dropdown! Requires Copilot v2.1.0.)
   - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/1#issuecomment-1542934569
 </details>
 
 When opening an issue, please include relevant console logs. You can go to Copilot's settings and turn on "Debug mode" at the bottom for more console messages!
 
 ## 📝 Planned features (based on feedback)
-- More standard prompts that can be used with commands
-- User custom prompts
-- Online prompt library access
-- Unlimited context for a collection of notes
 - Integration with more LLMs, including open-source and local ones
+- More standard prompts that can be used with commands
+- Unlimited context for a collection of notes
 
 ## 🙏 Say Thank You
 If you are enjoying Copilot, please support my work by buying me a coffee here: https://www.buymeacoffee.com/logancyang
