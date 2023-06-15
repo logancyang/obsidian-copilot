@@ -145,6 +145,10 @@ class AIState {
     if (chainType === undefined || chainType === null) throw new Error('No chain type set');
   }
 
+  private validateChatModel(chatModel: BaseChatModel): void {
+    if (chatModel === undefined || chatModel === null) throw new Error('No chat model set');
+  }
+
   private getModelConfig(chatModelProvider: string): ModelConfig {
     const {
       openAIApiKey,
@@ -343,7 +347,9 @@ class AIState {
     chainType: ChainType,
     options: SetChainOptions = {},
   ): Promise<void> {
+    this.validateChatModel(AIState.chatModel);
     this.validateChainType(chainType);
+
     switch (chainType) {
       case ChainType.LLM_CHAIN: {
         if (options.forceNewCreation) {
@@ -496,7 +502,7 @@ class AIState {
   ) {
     // Check if chain is initialized properly
     if (!isSupportedChain(AIState.chain)) {
-      console.log(
+      console.error(
         'Chain is not initialized properly, re-initializing chain: ',
         this.langChainParams.chainType
       );
