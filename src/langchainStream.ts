@@ -1,5 +1,6 @@
 import AIState from '@/aiState';
 import { ChatMessage } from '@/sharedState';
+import { Notice } from 'obsidian';
 
 export type Role = 'assistant' | 'user' | 'system';
 
@@ -12,7 +13,6 @@ export const getAIResponse = async (
   updateShouldAbort: (abortController: AbortController | null) => void,
   debug = false,
 ) => {
-  // TODO: test new installation when there is no api key
   const {
     model,
     temperature,
@@ -35,21 +35,19 @@ export const getAIResponse = async (
     );
   }
 
-  // await aiState.runChatModel(
-  //   userMessage,
-  //   chatContext,
-  //   abortController,
-  //   updateCurrentAiMessage,
-  //   addMessage,
-  //   debug,
-  // )
+  try {
+    // TODO: Need to run certain models without langchain
+    // it will mean no retrieval qa mode for those models!
 
-  await aiState.runChain(
-    userMessage.message,
-    chatContext,
-    abortController,
-    updateCurrentAiMessage,
-    addMessage,
-    debug,
-  );
+    await aiState.runChain(
+      userMessage.message,
+      abortController,
+      updateCurrentAiMessage,
+      addMessage,
+      debug,
+    );
+  } catch (error) {
+    console.error('Model request failed:', error);
+    new Notice('Model request failed:', error);
+  }
 };

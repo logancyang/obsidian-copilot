@@ -1,14 +1,8 @@
 import {
-  AZURE_GPT_35_TURBO,
-  AZURE_GPT_4_32K_DISPLAY_NAME,
-  AZURE_GPT_4_DISPLAY_NAME,
-  CHAT_MODELS,
   COHEREAI,
+  ChatModelDisplayNames,
+  ChatModels,
   DEFAULT_SETTINGS,
-  GPT_35_TURBO,
-  GPT_35_TURBO_16K,
-  GPT_4,
-  GPT_4_32K,
   HUGGINGFACE,
   OPENAI
 } from "@/constants";
@@ -53,26 +47,27 @@ export class CopilotSettingTab extends PluginSettingTab {
       )
       .addDropdown((dropdown: DropdownComponent) => {
         dropdown
-          .addOption(GPT_35_TURBO, CHAT_MODELS[GPT_35_TURBO])
-          .addOption(GPT_35_TURBO_16K, CHAT_MODELS[GPT_35_TURBO_16K])
-          .addOption(GPT_4, CHAT_MODELS[GPT_4])
-          .addOption(GPT_4_32K, CHAT_MODELS[GPT_4_32K])
-          // .addOption(CLAUDE_1, CHAT_MODELS[CLAUDE_1])
-          // .addOption(CLAUDE_1_100K, CHAT_MODELS[CLAUDE_1_100K])
-          // .addOption(CLAUDE_INSTANT_1, CHAT_MODELS[CLAUDE_INSTANT_1])
-          // .addOption(CLAUDE_INSTANT_1_100K, CHAT_MODELS[CLAUDE_INSTANT_1_100K])
-          .addOption(AZURE_GPT_35_TURBO, CHAT_MODELS[AZURE_GPT_35_TURBO])
-          .addOption(GPT_4, AZURE_GPT_4_DISPLAY_NAME)
-          .addOption(GPT_4_32K, AZURE_GPT_4_32K_DISPLAY_NAME)
+          .addOption(ChatModels.GPT_35_TURBO, ChatModelDisplayNames.GPT_35_TURBO)
+          .addOption(ChatModels.GPT_35_TURBO_16K, ChatModelDisplayNames.GPT_35_TURBO_16K)
+          .addOption(ChatModels.GPT_4, ChatModelDisplayNames.GPT_4)
+          .addOption(ChatModels.GPT_4_32K, ChatModelDisplayNames.GPT_4_32K)
+          // .addOption(ChatModels.CLAUDE_1, ChatModelDisplayNames.CLAUDE_1)
+          // .addOption(ChatModels.CLAUDE_1_100K, ChatModelDisplayNames.CLAUDE_1_100K)
+          // .addOption(ChatModels.CLAUDE_INSTANT_1, ChatModelDisplayNames.CLAUDE_INSTANT_1)
+          // .addOption(ChatModels.CLAUDE_INSTANT_1_100K, ChatModelDisplayNames.CLAUDE_INSTANT_1_100K)
+          .addOption(ChatModels.AZURE_GPT_35_TURBO, ChatModelDisplayNames.AZURE_GPT_35_TURBO)
+          .addOption(ChatModels.GPT_4, ChatModelDisplayNames.AZURE_GPT_4)
+          .addOption(ChatModels.GPT_4_32K, ChatModelDisplayNames.AZURE_GPT_4_32K)
           .setValue(this.plugin.settings.defaultModel)
           .onChange(async (value: string) => {
             this.plugin.settings.defaultModel = value;
+            this.plugin.settings.defaultModelDisplayName = ChatModelDisplayNames[value as keyof typeof ChatModels];
             await this.plugin.saveSettings();
           });
       });
 
     containerEl.createEl('h4', { text: 'API Settings' });
-    containerEl.createEl('h6', { text: 'OpenAI' });
+    containerEl.createEl('h6', { text: 'OpenAI API' });
 
     new Setting(containerEl)
       .setName("Your OpenAI API key")

@@ -3,15 +3,20 @@ import {
   ANTHROPIC,
   AZURE_MODELS,
   AZURE_OPENAI,
-  CHAT_MODELS,
   CLAUDE_MODELS,
   DEFAULT_SETTINGS,
+  DISPLAY_NAME_TO_MODEL,
   OPENAI,
   OPENAI_MODELS,
   USER_SENDER,
 } from '@/constants';
 import { CopilotSettings } from '@/main';
 import { ChatMessage } from '@/sharedState';
+import {
+  BaseChain,
+  LLMChain,
+  RetrievalQAChain
+} from "langchain/chains";
 import moment from 'moment';
 import { TFile } from 'obsidian';
 
@@ -26,8 +31,20 @@ export const stringToChainType = (chain: string): ChainType => {
   }
 }
 
-export const getModelDisplayName = (model: string): string => {
-  return CHAT_MODELS[model];
+export const isLLMChain = (chain: BaseChain): chain is LLMChain => {
+    return 'llm' in chain && chain.llm !== undefined;
+  }
+
+export const isRetrievalQAChain = (chain: BaseChain): chain is RetrievalQAChain => {
+    return 'retriever' in chain && chain.retriever !== undefined;
+  }
+
+export const isSupportedChain = (chain: BaseChain): chain is BaseChain => {
+    return isLLMChain(chain) || isRetrievalQAChain(chain);
+  }
+
+export const getModelName = (modelDisplayName: string): string => {
+  return DISPLAY_NAME_TO_MODEL[modelDisplayName];
 }
 
 export const getModelVendorMap = (): Record<string, string> => {

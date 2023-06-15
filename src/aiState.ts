@@ -15,12 +15,12 @@ import {
   USER_SENDER
 } from '@/constants';
 import { ChatMessage } from '@/sharedState';
-import { getModelDisplayName } from '@/utils';
+import { getModelName, isSupportedChain } from '@/utils';
 import {
   BaseChain,
   ConversationChain,
   ConversationalRetrievalQAChain,
-  RetrievalQAChain,
+  RetrievalQAChain
 } from "langchain/chains";
 import { ChatAnthropic } from 'langchain/chat_models/anthropic';
 import { BaseChatModel } from 'langchain/chat_models/base';
@@ -71,17 +71,20 @@ export interface LangChainParams {
   azureOpenAIApiDeploymentName: string,
   azureOpenAIApiVersion: string,
   model: string,
+  modelDisplayName: string,
   temperature: number,
   maxTokens: number,
   systemMessage: string,
   chatContextTurns: number,
   embeddingProvider: string,
-  chainType: ChainType,
+  chainType: ChainType,  // Default ChainType is set in main.ts getAIStateParams
+  options: SetChainOptions,
 }
 
 export interface SetChainOptions {
   prompt?: ChatPromptTemplate;
   noteContent?: string;
+  forceNewCreation?: boolean;
 }
 
 class AIState {
@@ -111,7 +114,8 @@ class AIState {
     this.buildModelMap();
     this.initMemory();
     this.initChatPrompt();
-    this.createNewChain(ChainType.LLM_CHAIN);
+    // This takes care of chain creation as well
+    this.setModel(this.langChainParams.modelDisplayName);
   }
 
   private initMemory(): void {
@@ -121,6 +125,10 @@ class AIState {
       inputKey: 'input',
       returnMessages: true,
     });
+  }
+
+  private setNoteContent(noteContent: string): void {
+    this.langChainParams.options.noteContent = noteContent;
   }
 
   private initChatPrompt(): void {
@@ -226,6 +234,43 @@ class AIState {
     this.modelMap = modelMap;
   }
 
+  getEmbeddingsAPI(): Embeddings {
+    const OpenAIEmbeddingsAPI = new OpenAIEmbeddings({
+      openAIApiKey: this.langChainParams.openAIApiKey,
+      maxRetries: 3,
+      maxConcurrency: 3,
+      timeout: 10000,
+    });
+    switch(this.langChainParams.embeddingProvider) {
+      case OPENAI:
+        // Every OpenAIEmbedding call is giving a 'refused to set header user-agent'
+        // It's generally not a problem.
+        // TODO: Check if this error can be avoided.
+        return OpenAIEmbeddingsAPI
+      case HUGGINGFACE:
+        // TODO: This does not have a timeout param, need to check in the future.
+        return new HuggingFaceInferenceEmbeddings({
+          apiKey: this.langChainParams.huggingfaceApiKey,
+          maxRetries: 3,
+          maxConcurrency: 3,
+        });
+      case COHEREAI:
+        return new CohereEmbeddings({
+          apiKey: this.langChainParams.cohereApiKey,
+          maxRetries: 3,
+          maxConcurrency: 3,
+        });
+      default:
+        console.error('No embedding provider set. Using OpenAI.');
+        return OpenAIEmbeddingsAPI;
+    }
+  }
+
+  clearChatMemory(): void {
+    console.log('clearing chat memory');
+    this.memory.clear();
+  }
+
   private setChatModel(modelDisplayName: string): void {
     if (!this.modelMap.hasOwnProperty(modelDisplayName)) {
       throw new Error(`No model found for: ${modelDisplayName}`);
@@ -264,63 +309,34 @@ class AIState {
     }
   }
 
-  clearChatMemory(): void {
-    console.log('clearing chat memory');
-    this.memory.clear();
-  }
-
-  setModel(newModel: string): void {
+  setModel(newModelDisplayName: string): void {
+    const newModel = getModelName(newModelDisplayName);
+    // model and model display name must be update at the same time!
     this.langChainParams.model = newModel;
-    const modelDisplayName = getModelDisplayName(newModel);
-    this.setChatModel(modelDisplayName);
-    console.log('Setting model to:', newModel);
-  }
-
-  getEmbeddingsAPI(): Embeddings {
-    const OpenAIEmbeddingsAPI = new OpenAIEmbeddings({
-      openAIApiKey: this.langChainParams.openAIApiKey,
-      maxRetries: 3,
-      maxConcurrency: 3,
-      timeout: 10000,
-    });
-    switch(this.langChainParams.embeddingProvider) {
-      case OPENAI:
-        // Every OpenAIEmbedding call is giving a 'refused to set header user-agent'
-        // It's generally not a problem.
-        // TODO: Check if this error can be avoided.
-        return OpenAIEmbeddingsAPI
-      case HUGGINGFACE:
-        // TODO: This does not have a timeout param, need to check in the future.
-        return new HuggingFaceInferenceEmbeddings({
-          apiKey: this.langChainParams.huggingfaceApiKey,
-          maxRetries: 3,
-          maxConcurrency: 3,
-        });
-      case COHEREAI:
-        return new CohereEmbeddings({
-          apiKey: this.langChainParams.cohereApiKey,
-          maxRetries: 3,
-          maxConcurrency: 3,
-        });
-      default:
-        console.error('No embedding provider set. Using OpenAI.');
-        return OpenAIEmbeddingsAPI;
-    }
+    this.langChainParams.modelDisplayName = newModelDisplayName;
+    this.setChatModel(newModelDisplayName);
+    // Must update the chatModel for chain because ChainFactory always
+    // retrieves the old chain without the chatModel change if it exists!
+    // Create a new chain with the new chatModel
+    this.createChain(
+      this.langChainParams.chainType,
+      {...this.langChainParams.options, forceNewCreation: true},
+    )
+    console.log(`Setting model to ${newModelDisplayName}: ${newModel}`);
   }
 
   /* Create a new chain, or update chain with new model */
-  createNewChain(
+  createChain(
     chainType: ChainType,
     options?: SetChainOptions,
   ): void {
     this.validateChainType(chainType);
-    const modelDisplayName = getModelDisplayName(this.langChainParams.model);
-    if (!modelDisplayName) {
-      new Notice('No valid model name provided.');
-      throw new Error('No valid model name provided.');
+    try {
+      this.setChain(chainType, options);
+    } catch (error) {
+      new Notice('Error creating chain:', error);
+      console.error('Error creating chain:', error);
     }
-    this.setChatModel(modelDisplayName);
-    this.setChain(chainType, options);
   }
 
   async setChain(
@@ -328,14 +344,22 @@ class AIState {
     options: SetChainOptions = {},
   ): Promise<void> {
     this.validateChainType(chainType);
-
     switch (chainType) {
       case ChainType.LLM_CHAIN: {
-        AIState.chain = ChainFactory.getLLMChain({
-          llm: AIState.chatModel,
-          memory: this.memory,
-          prompt: options.prompt || this.chatPrompt,
-        }) as ConversationChain;
+        if (options.forceNewCreation) {
+          AIState.chain = ChainFactory.createNewLLMChain({
+            llm: AIState.chatModel,
+            memory: this.memory,
+            prompt: options.prompt || this.chatPrompt,
+          }) as ConversationChain;
+        } else {
+          AIState.chain = ChainFactory.getLLMChainFromMap({
+            llm: AIState.chatModel,
+            memory: this.memory,
+            prompt: options.prompt || this.chatPrompt,
+          }) as ConversationChain;
+        }
+
         this.langChainParams.chainType = ChainType.LLM_CHAIN;
         console.log('Set chain:', ChainType.LLM_CHAIN);
         break;
@@ -346,6 +370,7 @@ class AIState {
           throw new Error('No note content provided');
         }
 
+        this.setNoteContent(options.noteContent);
         const docHash = ChainFactory.getDocumentHash(options.noteContent);
         const vectorStore = ChainFactory.vectorStoreMap.get(docHash);
         if (vectorStore) {
@@ -464,18 +489,26 @@ class AIState {
 
   async runChain(
     userMessage: string,
-    chatContext: ChatMessage[],
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void,
     addMessage: (message: ChatMessage) => void,
     debug = false,
   ) {
+    // Check if chain is initialized properly
+    if (!isSupportedChain(AIState.chain)) {
+      console.log(
+        'Chain is not initialized properly, re-initializing chain: ',
+        this.langChainParams.chainType
+      );
+      this.setChain(this.langChainParams.chainType, this.langChainParams.options);
+    }
+
     let fullAIResponse = '';
     try {
       switch(this.langChainParams.chainType) {
         case ChainType.LLM_CHAIN:
           if (debug) {
-            console.log('chatModel:', AIState.chatModel);
+            console.log('chain:', AIState.chain);
             console.log('Chat memory:', this.memory);
           }
           await AIState.chain.call(
@@ -544,7 +577,7 @@ export function useAIState(
   () => void,
 ] {
   const { langChainParams } = aiState;
-  const [currentModel, setCurrentModel] = useState<string>(langChainParams.model);
+  const [currentModel, setCurrentModel] = useState<string>(langChainParams.modelDisplayName);
   const [currentChain, setCurrentChain] = useState<ChainType>(langChainParams.chainType);
   const [, setChatMemory] = useState<BufferWindowMemory | null>(aiState.memory);
 
@@ -553,9 +586,9 @@ export function useAIState(
     setChatMemory(aiState.memory);
   };
 
-  const setModel = (newModel: string) => {
-    aiState.setModel(newModel);
-    setCurrentModel(newModel);
+  const setModel = (newModelDisplayName: string) => {
+    aiState.setModel(newModelDisplayName);
+    setCurrentModel(newModelDisplayName);
   };
 
   const setChain = (newChain: ChainType, options?: SetChainOptions) => {

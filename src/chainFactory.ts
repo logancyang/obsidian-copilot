@@ -28,30 +28,33 @@ export interface ConversationalRetrievalChainParams {
   }
 }
 
-// Add new chain types here
-export const LLM_CHAIN = 'llm_chain';
 // Issue where conversational retrieval chain gives rephrased question
 // when streaming: https://github.com/hwchase17/langchainjs/issues/754#issuecomment-1540257078
 // Temp workaround triggers CORS issue 'refused to set header user-agent'
-// TODO: Wait for official fix and use conversational retrieval chain instead of retrieval qa.
-export const CONVERSATIONAL_RETRIEVAL_QA_CHAIN = 'conversational_retrieval_chain';
-export const RETRIEVAL_QA_CHAIN = 'retrieval_qa';
 
+// Add new chain types here
 export enum ChainType {
-  LLM_CHAIN,
-  RETRIEVAL_QA_CHAIN
+  LLM_CHAIN = 'llm_chain',
+  RETRIEVAL_QA_CHAIN = 'retrieval_qa',
+  // TODO: Wait for official fix and use conversational retrieval chain instead of retrieval qa.
+  CONVERSATIONAL_RETRIEVAL_QA_CHAIN = 'conversational_retrieval_chain',
 }
 
 class ChainFactory {
   public static instances: Map<string, BaseChain> = new Map();
   public static vectorStoreMap: Map<string, VectorStore> = new Map();
 
-  public static getLLMChain(args: LLMChainInput): BaseChain {
-    let instance = ChainFactory.instances.get(LLM_CHAIN);
+  public static createNewLLMChain(args: LLMChainInput): BaseChain {
+    const instance = new ConversationChain(args as LLMChainInput);
+    console.log('New chain created: ', instance._chainType());
+    ChainFactory.instances.set(ChainType.LLM_CHAIN, instance);
+    return instance;
+  }
+
+  public static getLLMChainFromMap(args: LLMChainInput): BaseChain {
+    let instance = ChainFactory.instances.get(ChainType.LLM_CHAIN);
     if (!instance) {
-      instance = new ConversationChain(args as LLMChainInput);
-      console.log('New chain created: ', instance._chainType());
-      ChainFactory.instances.set(LLM_CHAIN, instance);
+      instance = ChainFactory.createNewLLMChain(args);
     }
     return instance;
   }

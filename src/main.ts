@@ -1,4 +1,4 @@
-import AIState, { LangChainParams } from '@/aiState';
+import AIState, { LangChainParams, SetChainOptions } from '@/aiState';
 import { ChainType } from '@/chainFactory';
 import { AddPromptModal } from "@/components/AddPromptModal";
 import CopilotView from '@/components/CopilotView';
@@ -25,6 +25,7 @@ export interface CopilotSettings {
   azureOpenAIApiDeploymentName: string;
   azureOpenAIApiVersion: string;
   defaultModel: string;
+  defaultModelDisplayName: string;
   temperature: number;
   maxTokens: number;
   contextTurns: number;
@@ -435,12 +436,14 @@ export default class CopilotPlugin extends Plugin {
       azureOpenAIApiDeploymentName,
       azureOpenAIApiVersion,
       model: this.settings.defaultModel,
+      modelDisplayName: this.settings.defaultModelDisplayName,
       temperature: Number(temperature),
       maxTokens: Number(maxTokens),
       systemMessage: DEFAULT_SYSTEM_PROMPT || this.settings.userSystemPrompt,
       chatContextTurns: Number(contextTurns),
       embeddingProvider: embeddingProvider,
-      chainType: ChainType.LLM_CHAIN,
+      chainType: ChainType.LLM_CHAIN,  // Set LLM_CHAIN as default ChainType
+      options: { forceNewCreation: true } as SetChainOptions,
     };
   }
 }

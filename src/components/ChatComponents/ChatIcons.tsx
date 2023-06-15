@@ -1,18 +1,7 @@
 import { SetChainOptions } from '@/aiState';
 import {
   AI_SENDER,
-  AZURE_GPT_35_TURBO,
-  AZURE_GPT_35_TURBO_DISPLAY_NAME,
-  AZURE_GPT_4_32K_DISPLAY_NAME,
-  AZURE_GPT_4_DISPLAY_NAME,
-  GPT_35_TURBO,
-  GPT_35_TURBO_16K,
-  GPT_35_TURBO_16K_DISPLAY_NAME,
-  GPT_35_TURBO_DISPLAY_NAME,
-  GPT_4,
-  GPT_4_32K,
-  GPT_4_32K_DISPLAY_NAME,
-  GPT_4_DISPLAY_NAME
+  ChatModelDisplayNames,
 } from '@/constants';
 import {
   ChatMessage
@@ -114,17 +103,17 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             value={currentModel}
             onChange={handleModelChange}
           >
-            <option value={GPT_35_TURBO}>{GPT_35_TURBO_DISPLAY_NAME}</option>
-            <option value={GPT_35_TURBO_16K}>{GPT_35_TURBO_16K_DISPLAY_NAME}</option>
-            <option value={GPT_4}>{GPT_4_DISPLAY_NAME}</option>
-            <option value={GPT_4_32K}>{GPT_4_32K_DISPLAY_NAME}</option>
-            {/* <option value={CLAUDE_1}>{CLAUDE_1_DISPLAY_NAME}</option>
-            <option value={CLAUDE_1_100K}>{CLAUDE_1_100K_DISPLAY_NAME}</option>
-            <option value={CLAUDE_INSTANT_1}>{CLAUDE_INSTANT_1_DISPLAY_NAME}</option>
-            <option value={CLAUDE_INSTANT_1_100K}>{CLAUDE_INSTANT_1_100K_DISPLAY_NAME}</option> */}
-            <option value={AZURE_GPT_35_TURBO}>{AZURE_GPT_35_TURBO_DISPLAY_NAME}</option>
-            <option value={GPT_4}>{AZURE_GPT_4_DISPLAY_NAME}</option>
-            <option value={GPT_4_32K}>{AZURE_GPT_4_32K_DISPLAY_NAME}</option>
+            <option value={ChatModelDisplayNames.GPT_35_TURBO}>{ChatModelDisplayNames.GPT_35_TURBO}</option>
+            <option value={ChatModelDisplayNames.GPT_35_TURBO_16K}>{ChatModelDisplayNames.GPT_35_TURBO_16K}</option>
+            <option value={ChatModelDisplayNames.GPT_4}>{ChatModelDisplayNames.GPT_4}</option>
+            <option value={ChatModelDisplayNames.GPT_4_32K}>{ChatModelDisplayNames.GPT_4_32K}</option>
+            {/* <option value={ChatModelDisplayNames.CLAUDE_1}>{ChatModelDisplayNames.CLAUDE_1}</option>
+            <option value={ChatModelDisplayNames.CLAUDE_1_100K}>{ChatModelDisplayNames.CLAUDE_1_100K}</option>
+            <option value={ChatModelDisplayNames.CLAUDE_INSTANT_1}>{ChatModelDisplayNames.CLAUDE_INSTANT_1}</option>
+            <option value={ChatModelDisplayNames.CLAUDE_INSTANT_1_100K}>{ChatModelDisplayNames.CLAUDE_INSTANT_1_100K}</option> */}
+            <option value={ChatModelDisplayNames.AZURE_GPT_35_TURBO}>{ChatModelDisplayNames.AZURE_GPT_35_TURBO}</option>
+            <option value={ChatModelDisplayNames.AZURE_GPT_4}>{ChatModelDisplayNames.AZURE_GPT_4}</option>
+            <option value={ChatModelDisplayNames.AZURE_GPT_4_32K}>{ChatModelDisplayNames.AZURE_GPT_4_32K}</option>
           </select>
           <span className="tooltip-text">Model Selection</span>
         </div>
