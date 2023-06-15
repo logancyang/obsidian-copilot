@@ -33,7 +33,7 @@ interface ChatIconsProps {
   onStopGenerating: () => void;
   onNewChat: () => void;
   onSaveAsNote: () => void;
-  onUseActiveNoteAsContext: () => void;
+  onForceRebuildActiveNoteContext: () => void;
   addMessage: (message: ChatMessage) => void;
 }
 
@@ -45,7 +45,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   onStopGenerating,
   onNewChat,
   onSaveAsNote,
-  onUseActiveNoteAsContext,
+  onForceRebuildActiveNoteContext,
   addMessage,
 }) => {
   const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
@@ -144,7 +144,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           <span className="tooltip-text">Mode Selection</span>
         </div>
       </div>
-      <button className='chat-icon-button' onClick={onUseActiveNoteAsContext}>
+      <button className='chat-icon-button' onClick={onForceRebuildActiveNoteContext}>
         <UseActiveNoteAsContextIcon className='icon-scaler' />
         <span className="tooltip-text">Rebuild Index for Active Note</span>
       </button>
