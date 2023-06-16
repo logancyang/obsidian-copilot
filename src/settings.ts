@@ -1,8 +1,8 @@
 import {
   COHEREAI,
   ChatModelDisplayNames,
-  ChatModels,
   DEFAULT_SETTINGS,
+  DISPLAY_NAME_TO_MODEL,
   HUGGINGFACE,
   OPENAI
 } from "@/constants";
@@ -37,6 +37,20 @@ export class CopilotSettingTab extends PluginSettingTab {
       { text: 'Please reload the plugin when you change any setting below.' }
     );
 
+    const modelDisplayNames = [
+      ChatModelDisplayNames.GPT_35_TURBO,
+      ChatModelDisplayNames.GPT_35_TURBO_16K,
+      ChatModelDisplayNames.GPT_4,
+      ChatModelDisplayNames.GPT_4_32K,
+      // ChatModelDisplayNames.CLAUDE_1,
+      // ChatModelDisplayNames.CLAUDE_1_100K,
+      // ChatModelDisplayNames.CLAUDE_INSTANT_1,
+      // ChatModelDisplayNames.CLAUDE_INSTANT_1_100K,
+      ChatModelDisplayNames.AZURE_GPT_35_TURBO,
+      ChatModelDisplayNames.AZURE_GPT_4,
+      ChatModelDisplayNames.AZURE_GPT_4_32K,
+    ];
+
     new Setting(containerEl)
       .setName("Default Model")
       .setDesc(
@@ -46,22 +60,14 @@ export class CopilotSettingTab extends PluginSettingTab {
         })
       )
       .addDropdown((dropdown: DropdownComponent) => {
+        modelDisplayNames.forEach(displayName => {
+          dropdown.addOption(displayName, displayName);
+        });
         dropdown
-          .addOption(ChatModels.GPT_35_TURBO, ChatModelDisplayNames.GPT_35_TURBO)
-          .addOption(ChatModels.GPT_35_TURBO_16K, ChatModelDisplayNames.GPT_35_TURBO_16K)
-          .addOption(ChatModels.GPT_4, ChatModelDisplayNames.GPT_4)
-          .addOption(ChatModels.GPT_4_32K, ChatModelDisplayNames.GPT_4_32K)
-          // .addOption(ChatModels.CLAUDE_1, ChatModelDisplayNames.CLAUDE_1)
-          // .addOption(ChatModels.CLAUDE_1_100K, ChatModelDisplayNames.CLAUDE_1_100K)
-          // .addOption(ChatModels.CLAUDE_INSTANT_1, ChatModelDisplayNames.CLAUDE_INSTANT_1)
-          // .addOption(ChatModels.CLAUDE_INSTANT_1_100K, ChatModelDisplayNames.CLAUDE_INSTANT_1_100K)
-          .addOption(ChatModels.AZURE_GPT_35_TURBO, ChatModelDisplayNames.AZURE_GPT_35_TURBO)
-          .addOption(ChatModels.GPT_4, ChatModelDisplayNames.AZURE_GPT_4)
-          .addOption(ChatModels.GPT_4_32K, ChatModelDisplayNames.AZURE_GPT_4_32K)
-          .setValue(this.plugin.settings.defaultModel)
+          .setValue(this.plugin.settings.defaultModelDisplayName)
           .onChange(async (value: string) => {
-            this.plugin.settings.defaultModel = value;
-            this.plugin.settings.defaultModelDisplayName = ChatModelDisplayNames[value as keyof typeof ChatModels];
+            this.plugin.settings.defaultModelDisplayName = value;
+            this.plugin.settings.defaultModel = DISPLAY_NAME_TO_MODEL[this.plugin.settings.defaultModelDisplayName];
             await this.plugin.saveSettings();
           });
       });
