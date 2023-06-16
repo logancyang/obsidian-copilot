@@ -17,7 +17,7 @@ My goal is to make this AI assistant **local-first** and **privacy-focused**. Mo
 - Chat with ChatGPT right inside Obsidian in the Copilot Chat window.
 - No repetitive login. Use your own API key (stored locally).
 - No monthly fee. Pay only for what you use.
-- Model selection of GPT-3.5, GPT-4 and more.
+- Model selection of GPT-3.5, GPT-4, Azure OpenAI models and more.
 - No need to buy ChatGPT Plus to use GPT-4 **if you have API access**.
 - No usage cap for GPT-4 like ChatGPT Plus.
 - One-click copying any message as markdown.
