@@ -240,7 +240,7 @@ class AIState {
 
   getEmbeddingsAPI(): Embeddings {
     const OpenAIEmbeddingsAPI = new OpenAIEmbeddings({
-      openAIApiKey: this.langChainParams.openAIApiKey,
+      openAIApiKey: this.langChainParams.openAIApiKey || this.langChainParams.azureOpenAIApiKey,
       maxRetries: 3,
       maxConcurrency: 3,
       timeout: 10000,
