@@ -39,7 +39,7 @@ import {
 } from "langchain/prompts";
 import { ContextualCompressionRetriever } from "langchain/retrievers/contextual_compression";
 import { LLMChainExtractor } from "langchain/retrievers/document_compressors/chain_extract";
-import { AIChatMessage, HumanChatMessage, SystemChatMessage } from 'langchain/schema';
+import { AIMessage, HumanMessage, SystemMessage } from 'langchain/schema';
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { Notice } from 'obsidian';
@@ -461,13 +461,13 @@ class AIState {
 
     const systemMessage = this.langChainParams.systemMessage || DEFAULT_SYSTEM_PROMPT;
     const messages = [
-      new SystemChatMessage(systemMessage),
+      new SystemMessage(systemMessage),
       ...chatContext.map((chatMessage) => {
         return chatMessage.sender === USER_SENDER
-          ? new HumanChatMessage(chatMessage.message)
-          : new AIChatMessage(chatMessage.message);
+          ? new HumanMessage(chatMessage.message)
+          : new AIMessage(chatMessage.message);
       }),
-      new HumanChatMessage(userMessage.message),
+      new HumanMessage(userMessage.message),
     ];
 
     let fullAIResponse = '';
