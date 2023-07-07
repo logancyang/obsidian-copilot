@@ -539,6 +539,7 @@ class AIState {
           await AIState.retrievalChain.call(
             {
               query: userMessage,
+              signal: abortController.signal,
             },
             [
               {
