@@ -15,6 +15,7 @@ export enum ChatModels {
   CLAUDE_INSTANT_1 = 'claude-instant-1',
   CLAUDE_INSTANT_1_100K = 'claude-instant-1-100k',
   AZURE_GPT_35_TURBO = 'gpt-35-turbo',
+  AZURE_GPT_35_TURBO_16K = 'gpt-35-turbo-16k',
 }
 
 export enum ChatModelDisplayNames {
@@ -27,6 +28,7 @@ export enum ChatModelDisplayNames {
   CLAUDE_INSTANT_1 = 'CLAUDE-INSTANT',
   CLAUDE_INSTANT_1_100K = 'CLAUDE-INSTANT-100K',
   AZURE_GPT_35_TURBO = 'AZURE GPT-3.5',
+  AZURE_GPT_35_TURBO_16K = 'AZURE GPT-3.5-16K',
   AZURE_GPT_4 = 'AZURE GPT-4',
   AZURE_GPT_4_32K = 'AZURE GPT-4 32K',
 }
@@ -40,6 +42,7 @@ export const OPENAI_MODELS = new Set([
 
 export const AZURE_MODELS = new Set([
     ChatModelDisplayNames.AZURE_GPT_35_TURBO,
+    ChatModelDisplayNames.AZURE_GPT_35_TURBO_16K,
     ChatModelDisplayNames.AZURE_GPT_4,
     ChatModelDisplayNames.AZURE_GPT_4_32K,
 ]);
@@ -61,6 +64,7 @@ export const DISPLAY_NAME_TO_MODEL: Record<string, string> = {
   [ChatModelDisplayNames.CLAUDE_INSTANT_1]: ChatModels.CLAUDE_INSTANT_1,
   [ChatModelDisplayNames.CLAUDE_INSTANT_1_100K]: ChatModels.CLAUDE_INSTANT_1_100K,
   [ChatModelDisplayNames.AZURE_GPT_35_TURBO]: ChatModels.AZURE_GPT_35_TURBO,
+  [ChatModelDisplayNames.AZURE_GPT_35_TURBO_16K]: ChatModels.AZURE_GPT_35_TURBO_16K,
   [ChatModelDisplayNames.AZURE_GPT_4]: ChatModels.GPT_4,
   [ChatModelDisplayNames.AZURE_GPT_4_32K]: ChatModels.GPT_4_32K,
 };
@@ -92,6 +96,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   azureOpenAIApiInstanceName: '',
   azureOpenAIApiDeploymentName: '',
   azureOpenAIApiVersion: '',
+  azureOpenAIApiEmbeddingDeploymentName: '',
   defaultModel: ChatModels.GPT_35_TURBO_16K,
   defaultModelDisplayName: ChatModelDisplayNames.GPT_35_TURBO_16K,
   temperature: 0.7,

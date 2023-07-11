@@ -39,7 +39,7 @@ import {
 } from "langchain/prompts";
 import { ContextualCompressionRetriever } from "langchain/retrievers/contextual_compression";
 import { LLMChainExtractor } from "langchain/retrievers/document_compressors/chain_extract";
-import { AIChatMessage, HumanChatMessage, SystemChatMessage } from 'langchain/schema';
+import { AIMessage, HumanMessage, SystemMessage } from 'langchain/schema';
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { Notice } from 'obsidian';
@@ -70,6 +70,7 @@ export interface LangChainParams {
   azureOpenAIApiInstanceName: string,
   azureOpenAIApiDeploymentName: string,
   azureOpenAIApiVersion: string,
+  azureOpenAIApiEmbeddingDeploymentName: string,
   model: string,
   modelDisplayName: string,
   temperature: number,
@@ -239,12 +240,21 @@ class AIState {
   }
 
   getEmbeddingsAPI(): Embeddings {
+    const {
+      openAIApiKey,
+      azureOpenAIApiKey,
+      azureOpenAIApiInstanceName,
+      azureOpenAIApiVersion,
+      azureOpenAIApiEmbeddingDeploymentName,
+    } = this.langChainParams;
+
     const OpenAIEmbeddingsAPI = new OpenAIEmbeddings({
-      openAIApiKey: this.langChainParams.openAIApiKey,
+      openAIApiKey,
       maxRetries: 3,
       maxConcurrency: 3,
       timeout: 10000,
     });
+
     switch(this.langChainParams.embeddingProvider) {
       case OPENAI:
         // Every OpenAIEmbedding call is giving a 'refused to set header user-agent'
@@ -261,6 +271,15 @@ class AIState {
       case COHEREAI:
         return new CohereEmbeddings({
           apiKey: this.langChainParams.cohereApiKey,
+          maxRetries: 3,
+          maxConcurrency: 3,
+        });
+      case AZURE_OPENAI:
+        return new OpenAIEmbeddings({
+          azureOpenAIApiKey,
+          azureOpenAIApiInstanceName,
+          azureOpenAIApiDeploymentName: azureOpenAIApiEmbeddingDeploymentName,
+          azureOpenAIApiVersion,
           maxRetries: 3,
           maxConcurrency: 3,
         });
@@ -461,13 +480,13 @@ class AIState {
 
     const systemMessage = this.langChainParams.systemMessage || DEFAULT_SYSTEM_PROMPT;
     const messages = [
-      new SystemChatMessage(systemMessage),
+      new SystemMessage(systemMessage),
       ...chatContext.map((chatMessage) => {
         return chatMessage.sender === USER_SENDER
-          ? new HumanChatMessage(chatMessage.message)
-          : new AIChatMessage(chatMessage.message);
+          ? new HumanMessage(chatMessage.message)
+          : new AIMessage(chatMessage.message);
       }),
-      new HumanChatMessage(userMessage.message),
+      new HumanMessage(userMessage.message),
     ];
 
     let fullAIResponse = '';
@@ -539,6 +558,7 @@ class AIState {
           await AIState.retrievalChain.call(
             {
               query: userMessage,
+              signal: abortController.signal,
             },
             [
               {

@@ -1,6 +1,6 @@
 {
   "name": "obsidian-copilot",
-  "version": "2.3.2",
+  "version": "2.3.3",
   "description": "ChatGPT integration for Obsidian",
   "main": "main.js",
   "scripts": {
@@ -42,7 +42,7 @@
     "crypto-js": "^4.1.1",
     "esbuild-plugin-svg": "^0.1.0",
     "eventsource-parser": "^1.0.0",
-    "langchain": "^0.0.79",
+    "langchain": "^0.0.103",
     "next-i18next": "^13.2.2",
     "pouchdb": "^8.0.1",
     "prop-types": "^15.8.1",
