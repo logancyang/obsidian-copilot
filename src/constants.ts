@@ -96,6 +96,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   azureOpenAIApiInstanceName: '',
   azureOpenAIApiDeploymentName: '',
   azureOpenAIApiVersion: '',
+  azureOpenAIApiEmbeddingDeploymentName: '',
   defaultModel: ChatModels.GPT_35_TURBO_16K,
   defaultModelDisplayName: ChatModelDisplayNames.GPT_35_TURBO_16K,
   temperature: 0.7,

@@ -70,6 +70,7 @@ export interface LangChainParams {
   azureOpenAIApiInstanceName: string,
   azureOpenAIApiDeploymentName: string,
   azureOpenAIApiVersion: string,
+  azureOpenAIApiEmbeddingDeploymentName: string,
   model: string,
   modelDisplayName: string,
   temperature: number,
@@ -239,12 +240,21 @@ class AIState {
   }
 
   getEmbeddingsAPI(): Embeddings {
+    const {
+      openAIApiKey,
+      azureOpenAIApiKey,
+      azureOpenAIApiInstanceName,
+      azureOpenAIApiVersion,
+      azureOpenAIApiEmbeddingDeploymentName,
+    } = this.langChainParams;
+
     const OpenAIEmbeddingsAPI = new OpenAIEmbeddings({
-      openAIApiKey: this.langChainParams.openAIApiKey,
+      openAIApiKey,
       maxRetries: 3,
       maxConcurrency: 3,
       timeout: 10000,
     });
+
     switch(this.langChainParams.embeddingProvider) {
       case OPENAI:
         // Every OpenAIEmbedding call is giving a 'refused to set header user-agent'
@@ -261,6 +271,16 @@ class AIState {
       case COHEREAI:
         return new CohereEmbeddings({
           apiKey: this.langChainParams.cohereApiKey,
+          maxRetries: 3,
+          maxConcurrency: 3,
+        });
+      case AZURE_OPENAI:
+        console.log("azureOpenAIApiEmbeddingDeploymentName:", azureOpenAIApiEmbeddingDeploymentName);
+        return new OpenAIEmbeddings({
+          azureOpenAIApiKey,
+          azureOpenAIApiInstanceName,
+          azureOpenAIApiDeploymentName: azureOpenAIApiEmbeddingDeploymentName,
+          azureOpenAIApiVersion,
           maxRetries: 3,
           maxConcurrency: 3,
         });

@@ -24,6 +24,7 @@ export interface CopilotSettings {
   azureOpenAIApiInstanceName: string;
   azureOpenAIApiDeploymentName: string;
   azureOpenAIApiVersion: string;
+  azureOpenAIApiEmbeddingDeploymentName: string;
   defaultModel: string;
   defaultModelDisplayName: string;
   temperature: number;
@@ -421,6 +422,7 @@ export default class CopilotPlugin extends Plugin {
       azureOpenAIApiInstanceName,
       azureOpenAIApiDeploymentName,
       azureOpenAIApiVersion,
+      azureOpenAIApiEmbeddingDeploymentName,
       temperature,
       maxTokens,
       contextTurns,
@@ -435,6 +437,7 @@ export default class CopilotPlugin extends Plugin {
       azureOpenAIApiInstanceName,
       azureOpenAIApiDeploymentName,
       azureOpenAIApiVersion,
+      azureOpenAIApiEmbeddingDeploymentName,
       model: this.settings.defaultModel,
       modelDisplayName: this.settings.defaultModelDisplayName,
       temperature: Number(temperature),
