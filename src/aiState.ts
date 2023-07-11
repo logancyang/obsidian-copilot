@@ -275,7 +275,6 @@ class AIState {
           maxConcurrency: 3,
         });
       case AZURE_OPENAI:
-        console.log("azureOpenAIApiEmbeddingDeploymentName:", azureOpenAIApiEmbeddingDeploymentName);
         return new OpenAIEmbeddings({
           azureOpenAIApiKey,
           azureOpenAIApiInstanceName,
