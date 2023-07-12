@@ -442,7 +442,7 @@ export default class CopilotPlugin extends Plugin {
       modelDisplayName: this.settings.defaultModelDisplayName,
       temperature: Number(temperature),
       maxTokens: Number(maxTokens),
-      systemMessage: DEFAULT_SYSTEM_PROMPT || this.settings.userSystemPrompt,
+      systemMessage: this.settings.userSystemPrompt || DEFAULT_SYSTEM_PROMPT,
       chatContextTurns: Number(contextTurns),
       embeddingProvider: embeddingProvider,
       chainType: ChainType.LLM_CHAIN,  // Set LLM_CHAIN as default ChainType
