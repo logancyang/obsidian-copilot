@@ -48,6 +48,13 @@ My goal is to make this AI assistant **local-first** and **privacy-focused**. Mo
 - Make longer/shorter
 - Rewrite into a tweet/thread
 
+#### 💬 User Custom Prompt: Create as Many Copilot Commands as You Like!
+
+You can add, apply, edit and delete your own custom Copilot commands, all persisted in your **local** Obsidian environment!
+Check out this demo video below!
+
+<a href="https://www.youtube.com/watch?v=apuV1Jz6ObE" target="_blank"><img src="./images/thumbnail2.png" width="700" /></a>
+
 #### 🔧 Copilot Settings
 
 The settings page lets you set your own temperature, max tokens, conversation context based on your need.
@@ -113,6 +120,21 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 
   - GPT-3.5 has a 4096 context token limit, GPT-4 has 8K (there is a 32K one available to the public soon per OpenAI). **So if you set a big token limit in your Copilot setting, you could get this error.** Note that the prompts behind the scenes for Copilot commands can also take up tokens, so please limit your message length and max tokens to avoid this error. (For QA with Unlimited Context, use the "QA: Active Note" chain in the dropdown! Requires Copilot v2.1.0.)
   - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/1#issuecomment-1542934569
+</details>
+<details>
+  <summary>Azure issue</summary>
+
+  - It's a bit tricky to get all Azure credentials right in the first try. My suggestion is to use `curl` to test in your terminal first, make sure it gets response back, and then set the correct params in Copilot settings. Example:
+    ```
+    curl https://YOUR_RESOURCE_NAME.openai.azure.com/openai/deployments/YOUR_DEPLOYMENT_NAME/completions?api-version=VERSION\
+      -H "Content-Type: application/json" \
+      -H "api-key: YOUR_API_KEY" \
+      -d "{
+      \"prompt\": \"Once upon a time\",
+      \"max_tokens\": 5
+    }"
+    ```
+  - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/98
 </details>
 
 When opening an issue, please include relevant console logs. You can go to Copilot's settings and turn on "Debug mode" at the bottom for more console messages!
