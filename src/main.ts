@@ -77,6 +77,14 @@ export default class CopilotPlugin extends Plugin {
       }
     });
 
+    this.addCommand({
+      id: 'chat-toggle-window-note-area',
+      name: 'Toggle Copilot Chat Window in Note Area',
+      callback: () => {
+        this.toggleViewNoteArea();
+      }
+    });
+
     this.addRibbonIcon('message-square', 'Copilot Chat', (evt: MouseEvent) => {
       this.toggleView();
     });
@@ -395,6 +403,22 @@ export default class CopilotPlugin extends Plugin {
   async deactivateView() {
     this.app.workspace.detachLeavesOfType(CHAT_VIEWTYPE);
     this.chatIsVisible = false;
+  }
+
+  async toggleViewNoteArea() {
+    const leaves = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE);
+    leaves.length > 0 ? this.deactivateView() : this.activateViewNoteArea();
+  }
+
+  async activateViewNoteArea() {
+    this.app.workspace.detachLeavesOfType(CHAT_VIEWTYPE);
+    this.activateViewPromise = this.app.workspace.getLeaf(true).setViewState({
+      type: CHAT_VIEWTYPE,
+      active: true,
+    });
+    await this.activateViewPromise;
+    this.app.workspace.revealLeaf(this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]);
+    this.chatIsVisible = true;
   }
 
   async loadSettings() {
