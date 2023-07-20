@@ -44,6 +44,7 @@ import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { Notice } from 'obsidian';
 import { useState } from 'react';
+import { ProxyChatOpenAI } from './langchainWrappers';
 
 
 interface ModelConfig {
@@ -59,6 +60,7 @@ interface ModelConfig {
   azureOpenAIApiInstanceName?: string,
   azureOpenAIApiDeploymentName?: string,
   azureOpenAIApiVersion?: string,
+  openAIProxyBaseUrl?: string,
 }
 
 export interface LangChainParams {
@@ -80,6 +82,7 @@ export interface LangChainParams {
   embeddingProvider: string,
   chainType: ChainType,  // Default ChainType is set in main.ts getAIStateParams
   options: SetChainOptions,
+  openAIProxyBaseUrl?: string,
 }
 
 export interface SetChainOptions {
@@ -161,6 +164,7 @@ class AIState {
       model,
       temperature,
       maxTokens,
+      openAIProxyBaseUrl,
     } = this.langChainParams;
 
     // Create a base configuration that applies to all models
@@ -169,7 +173,7 @@ class AIState {
       temperature: temperature,
       streaming: true,
       maxRetries: 3,
-      maxConcurrency: 3
+      maxConcurrency: 3,
     };
 
     switch(chatModelProvider) {
@@ -178,6 +182,7 @@ class AIState {
           ...config,
           openAIApiKey,
           maxTokens,
+          openAIProxyBaseUrl,
         };
         break;
       case ANTHROPIC:
@@ -211,11 +216,14 @@ class AIState {
       }
     > = {};
 
+    const OpenAIChatModel = this.langChainParams.openAIProxyBaseUrl
+      ? ProxyChatOpenAI : ChatOpenAI;
+
     // Build modelMap
     for (const modelDisplayNameKey of OPENAI_MODELS) {
       modelMap[modelDisplayNameKey] = {
         hasApiKey: Boolean(this.langChainParams.openAIApiKey),
-        AIConstructor: ChatOpenAI,
+        AIConstructor: OpenAIChatModel,
         vendor: OPENAI,
       };
     }
