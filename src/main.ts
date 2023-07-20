@@ -32,6 +32,7 @@ export interface CopilotSettings {
   contextTurns: number;
   useNotesAsContext: boolean;
   userSystemPrompt: string;
+  openAIProxyBaseUrl: string;
   stream: boolean;
   embeddingProvider: string;
   debug: boolean;
@@ -471,6 +472,7 @@ export default class CopilotPlugin extends Plugin {
       embeddingProvider: embeddingProvider,
       chainType: ChainType.LLM_CHAIN,  // Set LLM_CHAIN as default ChainType
       options: { forceNewCreation: true } as SetChainOptions,
+      openAIProxyBaseUrl: this.settings.openAIProxyBaseUrl,
     };
   }
 }

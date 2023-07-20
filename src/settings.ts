@@ -422,6 +422,29 @@ export class CopilotSettingTab extends PluginSettingTab {
           });
       });
 
+    new Setting(containerEl)
+      .setName("OpenAI Proxy Base URL (3rd-party providers)")
+      .setDesc(
+        createFragment((frag) => {
+          frag.createEl(
+            'strong',
+            { text: "CAUTION: This will override the default OpenAI API URL! Use with discretion!" }
+          );
+          frag.createEl('br');
+          frag.appendText("Leave blank to use the official OpenAI API.");
+        })
+      )
+      .addText((text) => {
+        text.inputEl.style.width = "100%";
+        text
+          .setPlaceholder("https://openai.example.com/v1")
+          .setValue(this.plugin.settings.openAIProxyBaseUrl)
+          .onChange(async (value) => {
+            this.plugin.settings.openAIProxyBaseUrl = value;
+            await this.plugin.saveSettings();
+          })
+      });
+
     containerEl.createEl('h4', { text: 'Development mode' });
 
     new Setting(containerEl)

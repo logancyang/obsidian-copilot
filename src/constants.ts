@@ -104,6 +104,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   contextTurns: 3,
   useNotesAsContext: false,
   userSystemPrompt: '',
+  openAIProxyBaseUrl: '',
   stream: true,
   embeddingProvider: OPENAI,
   debug: false,
