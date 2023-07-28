@@ -11,6 +11,11 @@ import {
 import { CopilotSettingTab } from '@/settings';
 import SharedState from '@/sharedState';
 import { sanitizeSettings } from "@/utils";
+import cors from '@koa/cors';
+import { Server } from 'http';
+import Koa from 'koa';
+import proxy from 'koa-proxies';
+import net from 'net';
 import { Editor, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
 import PouchDB from 'pouchdb';
 
@@ -53,6 +58,8 @@ export default class CopilotPlugin extends Plugin {
   activateViewPromise: Promise<void> | null = null;
   chatIsVisible = false;
   dbPrompts: PouchDB.Database;
+  server: Server| null = null;
+  useProxy = true;
 
   isChatVisible = () => this.chatIsVisible;
 
@@ -64,6 +71,9 @@ export default class CopilotPlugin extends Plugin {
     const langChainParams = this.getAIStateParams();
     this.aiState = new AIState(langChainParams);
     this.dbPrompts = new PouchDB<CustomPrompt>('copilot_custom_prompts');
+    if (this.useProxy) {
+      await this.startProxyServer();
+    }
 
     this.registerView(
       CHAT_VIEWTYPE,
@@ -360,6 +370,10 @@ export default class CopilotPlugin extends Plugin {
     });
   }
 
+  async onunload() {
+    await this.stopProxyServer();
+  }
+
   processSelection(editor: Editor, eventType: string, eventSubtype?: string) {
     if (editor.somethingSelected() === false) {
       new Notice('Please select some text to rewrite.');
@@ -474,5 +488,60 @@ export default class CopilotPlugin extends Plugin {
       options: { forceNewCreation: true } as SetChainOptions,
       openAIProxyBaseUrl: this.settings.openAIProxyBaseUrl,
     };
+  }
+
+  async startProxyServer() {
+    console.log('loading plugin');
+
+    const port = 3001;
+
+    // check if the port is already in use
+    const inUse = await this.checkPortInUse(port);
+
+    if (!inUse) {
+      // Create a new Koa application
+      const app = new Koa();
+
+      app.use(cors());
+
+      // Create and apply the proxy middleware
+      app.use(proxy('/', {
+        target: 'http://localhost:8080', // your local API
+        changeOrigin: true,
+      }));
+
+      // Start the server on the specified port
+      this.server = app.listen(port);
+      console.log(`Proxy server running on http://localhost:${port}`);
+    } else {
+      console.error(`Port ${port} is in use`);
+    }
+  }
+
+  async stopProxyServer() {
+    console.log('stopping proxy server...');
+    if (this.server) {
+      this.server.close();
+    }
+  }
+
+  checkPortInUse(port: number) {
+    return new Promise((resolve, reject) => {
+      const server = net.createServer()
+        .once('error', (err: NodeJS.ErrnoException) => {  // Typecast here
+          if (err.code === 'EADDRINUSE') {
+            resolve(true);  // Port is in use
+          } else {
+            reject(err);
+          }
+        })
+        .once('listening', () => {
+          server.once('close', () => {
+            resolve(false);  // Port is not in use
+          })
+          .close();
+        })
+        .listen(port);
+    });
   }
 }
