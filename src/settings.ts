@@ -394,6 +394,48 @@ export class CopilotSettingTab extends PluginSettingTab {
       }
       );
 
+    containerEl.createEl('h4', { text: 'LocalAI Settings (BETA, no internet required!!)' });
+    containerEl.createEl('h6', { text: 'To use LocalAI, pls check the docs to set it up locally on your device. Once ready, switch on the toggle below, type in the LocalAI Model name you have, and pick LocalAI in the Copilot Chat model selection dropdown to chat with it!' });
+
+    new Setting(containerEl)
+      .setName("Use LocalAI")
+      .setDesc(
+        createFragment((frag) => {
+          frag.appendText("Toggle this switch to use a local proxy server for LocalAI. If this is on, 3rd-party proxy is overridden.");
+          frag.createEl('br');
+          frag.createEl(
+            'strong',
+            { text: "Plugin restart required." }
+          );
+        })
+      )
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.settings.useLocalProxy)
+          .onChange(async (value) => {
+            this.plugin.settings.useLocalProxy = value;
+            await this.plugin.saveSettings();
+          });
+      });
+
+    new Setting(containerEl)
+      .setName("LocalAI Model")
+      .setDesc(
+        createFragment((frag) => {
+          frag.appendText("The local model you'd like to use. Make sure you download that model in your LocalAI models directory.");
+        })
+      )
+      .addText((text) => {
+        text.inputEl.style.width = "100%";
+        text
+          .setPlaceholder("ggml-gpt4all-j")
+          .setValue(this.plugin.settings.localAIModel)
+          .onChange(async (value) => {
+            this.plugin.settings.localAIModel = value;
+            await this.plugin.saveSettings();
+          })
+      });
+
     containerEl.createEl('h4', { text: 'Advanced Settings' });
 
     new Setting(containerEl)

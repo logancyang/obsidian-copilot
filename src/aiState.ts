@@ -8,11 +8,12 @@ import {
   AZURE_OPENAI,
   CLAUDE_MODELS,
   COHEREAI,
+  ChatModelDisplayNames,
   DEFAULT_SYSTEM_PROMPT,
   HUGGINGFACE,
   OPENAI,
   OPENAI_MODELS,
-  USER_SENDER
+  USER_SENDER,
 } from '@/constants';
 import { ChatMessage } from '@/sharedState';
 import { getModelName, isSupportedChain } from '@/utils';
@@ -61,6 +62,8 @@ interface ModelConfig {
   azureOpenAIApiDeploymentName?: string,
   azureOpenAIApiVersion?: string,
   openAIProxyBaseUrl?: string,
+  useLocalProxy?: boolean,
+  localAIModel?: string,
 }
 
 export interface LangChainParams {
@@ -83,6 +86,8 @@ export interface LangChainParams {
   chainType: ChainType,  // Default ChainType is set in main.ts getAIStateParams
   options: SetChainOptions,
   openAIProxyBaseUrl?: string,
+  useLocalProxy?: boolean,
+  localAIModel?: string,
 }
 
 export interface SetChainOptions {
@@ -165,6 +170,8 @@ class AIState {
       temperature,
       maxTokens,
       openAIProxyBaseUrl,
+      useLocalProxy,
+      localAIModel,
     } = this.langChainParams;
 
     // Create a base configuration that applies to all models
@@ -183,6 +190,8 @@ class AIState {
           openAIApiKey,
           maxTokens,
           openAIProxyBaseUrl,
+          useLocalProxy,
+          localAIModel,
         };
         break;
       case ANTHROPIC:
@@ -341,8 +350,18 @@ class AIState {
   }
 
   setModel(newModelDisplayName: string): void {
-    const newModel = getModelName(newModelDisplayName);
     // model and model display name must be update at the same time!
+    let newModel = getModelName(newModelDisplayName);
+    const {useLocalProxy, localAIModel} = this.langChainParams;
+
+    if (newModelDisplayName === ChatModelDisplayNames.LOCAL_AI && useLocalProxy) {
+      if (!localAIModel) {
+        new Notice('No local AI model provided! Please set it in settings first.');
+        console.error('No local AI model provided! Please set it in settings first.');
+        return;
+      }
+      newModel = localAIModel;
+    }
     this.langChainParams.model = newModel;
     this.langChainParams.modelDisplayName = newModelDisplayName;
     this.setChatModel(newModelDisplayName);

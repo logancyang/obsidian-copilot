@@ -6,7 +6,9 @@ import { LanguageModal } from "@/components/LanguageModal";
 import { ListPromptModal } from "@/components/ListPromptModal";
 import { ToneModal } from "@/components/ToneModal";
 import {
-  CHAT_VIEWTYPE, DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT
+  CHAT_VIEWTYPE, DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT,
+  LOCALAI_URL,
+  PROXY_SERVER_PORT
 } from '@/constants';
 import { CopilotSettingTab } from '@/settings';
 import SharedState from '@/sharedState';
@@ -38,6 +40,8 @@ export interface CopilotSettings {
   useNotesAsContext: boolean;
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;
+  useLocalProxy: boolean;
+  localAIModel: string;
   stream: boolean;
   embeddingProvider: string;
   debug: boolean;
@@ -59,7 +63,6 @@ export default class CopilotPlugin extends Plugin {
   chatIsVisible = false;
   dbPrompts: PouchDB.Database;
   server: Server| null = null;
-  useProxy = true;
 
   isChatVisible = () => this.chatIsVisible;
 
@@ -69,11 +72,15 @@ export default class CopilotPlugin extends Plugin {
     // Always have one instance of sharedState and aiState in the plugin
     this.sharedState = new SharedState();
     const langChainParams = this.getAIStateParams();
-    this.aiState = new AIState(langChainParams);
-    this.dbPrompts = new PouchDB<CustomPrompt>('copilot_custom_prompts');
-    if (this.useProxy) {
-      await this.startProxyServer();
+    if (this.settings.useLocalProxy) {
+      // If using local proxy, 3rd party proxy is overridden
+      langChainParams.openAIProxyBaseUrl = `http://localhost:${PROXY_SERVER_PORT}`;
+      langChainParams.useLocalProxy = true;
+      await this.startProxyServer(LOCALAI_URL);
     }
+    this.aiState = new AIState(langChainParams);
+
+    this.dbPrompts = new PouchDB<CustomPrompt>('copilot_custom_prompts');
 
     this.registerView(
       CHAT_VIEWTYPE,
@@ -466,7 +473,9 @@ export default class CopilotPlugin extends Plugin {
       maxTokens,
       contextTurns,
       embeddingProvider,
+      localAIModel,
     } = sanitizeSettings(this.settings);
+    console.log('langchain params localai model:', localAIModel);
     return {
       openAIApiKey,
       huggingfaceApiKey,
@@ -477,6 +486,7 @@ export default class CopilotPlugin extends Plugin {
       azureOpenAIApiDeploymentName,
       azureOpenAIApiVersion,
       azureOpenAIApiEmbeddingDeploymentName,
+      localAIModel,
       model: this.settings.defaultModel,
       modelDisplayName: this.settings.defaultModelDisplayName,
       temperature: Number(temperature),
@@ -490,13 +500,10 @@ export default class CopilotPlugin extends Plugin {
     };
   }
 
-  async startProxyServer() {
+  async startProxyServer(proxyBaseUrl: string) {
     console.log('loading plugin');
-
-    const port = 3001;
-
     // check if the port is already in use
-    const inUse = await this.checkPortInUse(port);
+    const inUse = await this.checkPortInUse(PROXY_SERVER_PORT);
 
     if (!inUse) {
       // Create a new Koa application
@@ -506,15 +513,16 @@ export default class CopilotPlugin extends Plugin {
 
       // Create and apply the proxy middleware
       app.use(proxy('/', {
-        target: 'http://localhost:8080', // your local API
+        // your target API, e.g. http://localhost:8080 for LocalAI
+        target: proxyBaseUrl,
         changeOrigin: true,
       }));
 
       // Start the server on the specified port
-      this.server = app.listen(port);
-      console.log(`Proxy server running on http://localhost:${port}`);
+      this.server = app.listen(PROXY_SERVER_PORT);
+      console.log(`Proxy server running on http://localhost:${PROXY_SERVER_PORT}`);
     } else {
-      console.error(`Port ${port} is in use`);
+      console.error(`Port ${PROXY_SERVER_PORT} is in use`);
     }
   }
 
