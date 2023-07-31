@@ -394,14 +394,15 @@ export class CopilotSettingTab extends PluginSettingTab {
       }
       );
 
-    containerEl.createEl('h4', { text: 'LocalAI Settings (BETA, no internet required!!)' });
-    containerEl.createEl('h6', { text: 'To use LocalAI, pls check the docs to set it up locally on your device. Once ready, switch on the toggle below, type in the LocalAI Model name you have, and pick LocalAI in the Copilot Chat model selection dropdown to chat with it!' });
+    containerEl.createEl('h4', { text: 'Local Copilot (EXPERIMENTAL, NO INTERNET NEEDED!!)' });
+    containerEl.createEl('h6', { text: 'To use Local Copilot, pls check the docs/demo video to set up LocalAI server on your device. Once ready, switch on the toggle below, type in the LocalAI Model name you have, and pick LocalAI in the Copilot Chat model selection dropdown to chat with it!' });
+    containerEl.createEl('h6', { text: 'Local models can be limited in capabilities and may not work for some use cases at this time. Keep in mind that it is still in early experimental phase. But it is definitely fun to try out!' });
 
     new Setting(containerEl)
-      .setName("Use LocalAI")
+      .setName("Use Local Copilot")
       .setDesc(
         createFragment((frag) => {
-          frag.appendText("Toggle this switch to use a local proxy server for LocalAI. If this is on, 3rd-party proxy is overridden.");
+          frag.appendText("Toggle this switch to launch a local proxy server. If this is on, 3rd-party proxy in Advanced Setting is overridden.");
           frag.createEl('br');
           frag.createEl(
             'strong',
@@ -428,7 +429,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       .addText((text) => {
         text.inputEl.style.width = "100%";
         text
-          .setPlaceholder("ggml-gpt4all-j")
+          .setPlaceholder("llama-2-13b-q4ks")
           .setValue(this.plugin.settings.localAIModel)
           .onChange(async (value) => {
             this.plugin.settings.localAIModel = value;

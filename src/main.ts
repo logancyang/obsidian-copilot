@@ -475,7 +475,6 @@ export default class CopilotPlugin extends Plugin {
       embeddingProvider,
       localAIModel,
     } = sanitizeSettings(this.settings);
-    console.log('langchain params localai model:', localAIModel);
     return {
       openAIApiKey,
       huggingfaceApiKey,
