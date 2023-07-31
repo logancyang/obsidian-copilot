@@ -77,6 +77,7 @@ export const HUGGINGFACE = 'huggingface';
 export const COHEREAI = 'cohereai';
 export const AZURE_OPENAI = 'azure_openai';
 export const ANTHROPIC = 'anthropic';
+export const LOCALAI = 'localai';
 
 export const VENDOR_MODELS: Record<string, Set<string>> = {
   [OPENAI]: OPENAI_MODELS,

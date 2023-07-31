@@ -31,9 +31,11 @@ My goal is to make this AI assistant **local-first** and **privacy-focused**. Mo
 
 ## 🎬 Video Demos
 
-#### 🎉 NEW in v2.3.0: New OpenAI and Azure models!
+#### 🎉 NEW in v2.4.0: Local Copilot! No internet required! 🎉
 
 <a href="https://www.youtube.com/watch?v=d84KWejBp30" target="_blank"><img src="./images/thumbnail3.png" width="700" /></a>
+
+[Step-by-step setup guide](./localai_setup.md)
 
 #### 🤗 New to Copilot? Quick Guide for Beginners:
 

@@ -5,7 +5,8 @@ import {
   DEFAULT_SETTINGS,
   DISPLAY_NAME_TO_MODEL,
   HUGGINGFACE,
-  OPENAI
+  LOCALAI,
+  OPENAI,
 } from "@/constants";
 import CopilotPlugin from "@/main";
 import { App, DropdownComponent, Notice, PluginSettingTab, Setting } from "obsidian";
@@ -327,6 +328,7 @@ export class CopilotSettingTab extends PluginSettingTab {
           .addOption(COHEREAI, 'CohereAI')
           .addOption(AZURE_OPENAI, 'Azure OpenAI')
           .addOption(HUGGINGFACE, 'Huggingface')
+          .addOption(LOCALAI, 'LocalAI')
           .setValue(this.plugin.settings.embeddingProvider)
           .onChange(async (value: string) => {
             this.plugin.settings.embeddingProvider = value;
@@ -395,7 +397,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       );
 
     containerEl.createEl('h4', { text: 'Local Copilot (EXPERIMENTAL, NO INTERNET NEEDED!!)' });
-    containerEl.createEl('h6', { text: 'To use Local Copilot, pls check the docs/demo video to set up LocalAI server on your device. Once ready, switch on the toggle below, type in the LocalAI Model name you have, and pick LocalAI in the Copilot Chat model selection dropdown to chat with it!' });
+    containerEl.createEl('h6', { text: 'To use Local Copilot, please check the doc/demo video to set up LocalAI server on your device. Once ready, switch on the toggle below, type in the LocalAI Model name you have, and pick LocalAI in the Copilot Chat model selection dropdown to chat with it!' });
     containerEl.createEl('h6', { text: 'Local models can be limited in capabilities and may not work for some use cases at this time. Keep in mind that it is still in early experimental phase. But it is definitely fun to try out!' });
 
     new Setting(containerEl)
@@ -429,7 +431,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       .addText((text) => {
         text.inputEl.style.width = "100%";
         text
-          .setPlaceholder("llama-2-13b-q4ks")
+          .setPlaceholder("llama-2-uncensored-q4ks")
           .setValue(this.plugin.settings.localAIModel)
           .onChange(async (value) => {
             this.plugin.settings.localAIModel = value;

@@ -11,6 +11,7 @@ import {
   ChatModelDisplayNames,
   DEFAULT_SYSTEM_PROMPT,
   HUGGINGFACE,
+  LOCALAI,
   OPENAI,
   OPENAI_MODELS,
   USER_SENDER,
@@ -45,7 +46,7 @@ import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { Notice } from 'obsidian';
 import { useState } from 'react';
-import { ProxyChatOpenAI } from './langchainWrappers';
+import { ProxyChatOpenAI, ProxyOpenAIEmbeddings } from './langchainWrappers';
 
 
 interface ModelConfig {
@@ -263,6 +264,8 @@ class AIState {
       azureOpenAIApiInstanceName,
       azureOpenAIApiVersion,
       azureOpenAIApiEmbeddingDeploymentName,
+      openAIProxyBaseUrl,
+      useLocalProxy,
     } = this.langChainParams;
 
     const OpenAIEmbeddingsAPI = new OpenAIEmbeddings({
@@ -300,6 +303,15 @@ class AIState {
           maxRetries: 3,
           maxConcurrency: 3,
         });
+      case LOCALAI:
+        return new ProxyOpenAIEmbeddings({
+          openAIApiKey,
+          openAIProxyBaseUrl,
+          useLocalProxy,
+          maxRetries: 3,
+          maxConcurrency: 3,
+          timeout: 10000,
+        })
       default:
         console.error('No embedding provider set. Using OpenAI.');
         return OpenAIEmbeddingsAPI;
