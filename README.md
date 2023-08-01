@@ -31,11 +31,11 @@ My goal is to make this AI assistant **local-first** and **privacy-focused**. Mo
 
 ## 🎬 Video Demos
 
-#### 🎉 NEW in v2.4.0: Local Copilot! No internet required! 🎉
+#### 🎉 NEW in v2.4.0: Local Copilot! No internet required!! 🎉
 
-<a href="https://www.youtube.com/watch?v=d84KWejBp30" target="_blank"><img src="./images/thumbnail3.png" width="700" /></a>
+<a href="https://www.youtube.com/watch?v=3yPVDI8wZcI" target="_blank"><img src="./images/thumbnail-local-copilot.png" width="700" /></a>
 
-[Step-by-step setup guide](./localai_setup.md)
+**Please make sure you go through this [Step-by-step setup guide](./localai_setup.md) to setup Local Copilot on your device correctly!**
 
 #### 🤗 New to Copilot? Quick Guide for Beginners:
 
