@@ -5,7 +5,8 @@ import {
   DEFAULT_SETTINGS,
   DISPLAY_NAME_TO_MODEL,
   HUGGINGFACE,
-  OPENAI
+  LOCALAI,
+  OPENAI,
 } from "@/constants";
 import CopilotPlugin from "@/main";
 import { App, DropdownComponent, Notice, PluginSettingTab, Setting } from "obsidian";
@@ -327,6 +328,7 @@ export class CopilotSettingTab extends PluginSettingTab {
           .addOption(COHEREAI, 'CohereAI')
           .addOption(AZURE_OPENAI, 'Azure OpenAI')
           .addOption(HUGGINGFACE, 'Huggingface')
+          .addOption(LOCALAI, 'LocalAI')
           .setValue(this.plugin.settings.embeddingProvider)
           .onChange(async (value: string) => {
             this.plugin.settings.embeddingProvider = value;
@@ -393,6 +395,49 @@ export class CopilotSettingTab extends PluginSettingTab {
           })
       }
       );
+
+    containerEl.createEl('h4', { text: 'Local Copilot (EXPERIMENTAL, NO INTERNET NEEDED!!)' });
+    containerEl.createEl('h6', { text: 'To use Local Copilot, please check the doc/demo video to set up LocalAI server on your device. Once ready, switch on the toggle below, type in the LocalAI Model name you have, and pick LocalAI in the Copilot Chat model selection dropdown to chat with it!' });
+    containerEl.createEl('h6', { text: 'Local models can be limited in capabilities and may not work for some use cases at this time. Keep in mind that it is still in early experimental phase. But it is definitely fun to try out!' });
+
+    new Setting(containerEl)
+      .setName("Use Local Copilot")
+      .setDesc(
+        createFragment((frag) => {
+          frag.appendText("Toggle this switch to launch a local proxy server. If this is on, 3rd-party proxy in Advanced Setting is overridden.");
+          frag.createEl('br');
+          frag.createEl(
+            'strong',
+            { text: "Plugin restart required." }
+          );
+        })
+      )
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.settings.useLocalProxy)
+          .onChange(async (value) => {
+            this.plugin.settings.useLocalProxy = value;
+            await this.plugin.saveSettings();
+          });
+      });
+
+    new Setting(containerEl)
+      .setName("LocalAI Model")
+      .setDesc(
+        createFragment((frag) => {
+          frag.appendText("The local model you'd like to use. Make sure you download that model in your LocalAI models directory.");
+        })
+      )
+      .addText((text) => {
+        text.inputEl.style.width = "100%";
+        text
+          .setPlaceholder("llama-2-uncensored-q4ks")
+          .setValue(this.plugin.settings.localAIModel)
+          .onChange(async (value) => {
+            this.plugin.settings.localAIModel = value;
+            await this.plugin.saveSettings();
+          })
+      });
 
     containerEl.createEl('h4', { text: 'Advanced Settings' });
 

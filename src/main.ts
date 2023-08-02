@@ -6,11 +6,18 @@ import { LanguageModal } from "@/components/LanguageModal";
 import { ListPromptModal } from "@/components/ListPromptModal";
 import { ToneModal } from "@/components/ToneModal";
 import {
-  CHAT_VIEWTYPE, DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT
+  CHAT_VIEWTYPE, DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT,
+  LOCALAI_URL,
+  PROXY_SERVER_PORT
 } from '@/constants';
 import { CopilotSettingTab } from '@/settings';
 import SharedState from '@/sharedState';
 import { sanitizeSettings } from "@/utils";
+import cors from '@koa/cors';
+import { Server } from 'http';
+import Koa from 'koa';
+import proxy from 'koa-proxies';
+import net from 'net';
 import { Editor, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
 import PouchDB from 'pouchdb';
 
@@ -33,6 +40,8 @@ export interface CopilotSettings {
   useNotesAsContext: boolean;
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;
+  useLocalProxy: boolean;
+  localAIModel: string;
   stream: boolean;
   embeddingProvider: string;
   debug: boolean;
@@ -53,6 +62,7 @@ export default class CopilotPlugin extends Plugin {
   activateViewPromise: Promise<void> | null = null;
   chatIsVisible = false;
   dbPrompts: PouchDB.Database;
+  server: Server| null = null;
 
   isChatVisible = () => this.chatIsVisible;
 
@@ -62,7 +72,14 @@ export default class CopilotPlugin extends Plugin {
     // Always have one instance of sharedState and aiState in the plugin
     this.sharedState = new SharedState();
     const langChainParams = this.getAIStateParams();
+    if (this.settings.useLocalProxy) {
+      // If using local proxy, 3rd party proxy is overridden
+      langChainParams.openAIProxyBaseUrl = `http://localhost:${PROXY_SERVER_PORT}`;
+      langChainParams.useLocalProxy = true;
+      await this.startProxyServer(LOCALAI_URL);
+    }
     this.aiState = new AIState(langChainParams);
+
     this.dbPrompts = new PouchDB<CustomPrompt>('copilot_custom_prompts');
 
     this.registerView(
@@ -360,6 +377,10 @@ export default class CopilotPlugin extends Plugin {
     });
   }
 
+  async onunload() {
+    await this.stopProxyServer();
+  }
+
   processSelection(editor: Editor, eventType: string, eventSubtype?: string) {
     if (editor.somethingSelected() === false) {
       new Notice('Please select some text to rewrite.');
@@ -452,6 +473,7 @@ export default class CopilotPlugin extends Plugin {
       maxTokens,
       contextTurns,
       embeddingProvider,
+      localAIModel,
     } = sanitizeSettings(this.settings);
     return {
       openAIApiKey,
@@ -463,6 +485,7 @@ export default class CopilotPlugin extends Plugin {
       azureOpenAIApiDeploymentName,
       azureOpenAIApiVersion,
       azureOpenAIApiEmbeddingDeploymentName,
+      localAIModel,
       model: this.settings.defaultModel,
       modelDisplayName: this.settings.defaultModelDisplayName,
       temperature: Number(temperature),
@@ -474,5 +497,58 @@ export default class CopilotPlugin extends Plugin {
       options: { forceNewCreation: true } as SetChainOptions,
       openAIProxyBaseUrl: this.settings.openAIProxyBaseUrl,
     };
+  }
+
+  async startProxyServer(proxyBaseUrl: string) {
+    console.log('loading plugin');
+    // check if the port is already in use
+    const inUse = await this.checkPortInUse(PROXY_SERVER_PORT);
+
+    if (!inUse) {
+      // Create a new Koa application
+      const app = new Koa();
+
+      app.use(cors());
+
+      // Create and apply the proxy middleware
+      app.use(proxy('/', {
+        // your target API, e.g. http://localhost:8080 for LocalAI
+        target: proxyBaseUrl,
+        changeOrigin: true,
+      }));
+
+      // Start the server on the specified port
+      this.server = app.listen(PROXY_SERVER_PORT);
+      console.log(`Proxy server running on http://localhost:${PROXY_SERVER_PORT}`);
+    } else {
+      console.error(`Port ${PROXY_SERVER_PORT} is in use`);
+    }
+  }
+
+  async stopProxyServer() {
+    console.log('stopping proxy server...');
+    if (this.server) {
+      this.server.close();
+    }
+  }
+
+  checkPortInUse(port: number) {
+    return new Promise((resolve, reject) => {
+      const server = net.createServer()
+        .once('error', (err: NodeJS.ErrnoException) => {  // Typecast here
+          if (err.code === 'EADDRINUSE') {
+            resolve(true);  // Port is in use
+          } else {
+            reject(err);
+          }
+        })
+        .once('listening', () => {
+          server.once('close', () => {
+            resolve(false);  // Port is not in use
+          })
+          .close();
+        })
+        .listen(port);
+    });
   }
 }

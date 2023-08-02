@@ -8,11 +8,13 @@ import {
   AZURE_OPENAI,
   CLAUDE_MODELS,
   COHEREAI,
+  ChatModelDisplayNames,
   DEFAULT_SYSTEM_PROMPT,
   HUGGINGFACE,
+  LOCALAI,
   OPENAI,
   OPENAI_MODELS,
-  USER_SENDER
+  USER_SENDER,
 } from '@/constants';
 import { ChatMessage } from '@/sharedState';
 import { getModelName, isSupportedChain } from '@/utils';
@@ -44,7 +46,7 @@ import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { Notice } from 'obsidian';
 import { useState } from 'react';
-import { ProxyChatOpenAI } from './langchainWrappers';
+import { ProxyChatOpenAI, ProxyOpenAIEmbeddings } from './langchainWrappers';
 
 
 interface ModelConfig {
@@ -61,6 +63,8 @@ interface ModelConfig {
   azureOpenAIApiDeploymentName?: string,
   azureOpenAIApiVersion?: string,
   openAIProxyBaseUrl?: string,
+  useLocalProxy?: boolean,
+  localAIModel?: string,
 }
 
 export interface LangChainParams {
@@ -83,6 +87,8 @@ export interface LangChainParams {
   chainType: ChainType,  // Default ChainType is set in main.ts getAIStateParams
   options: SetChainOptions,
   openAIProxyBaseUrl?: string,
+  useLocalProxy?: boolean,
+  localAIModel?: string,
 }
 
 export interface SetChainOptions {
@@ -165,6 +171,8 @@ class AIState {
       temperature,
       maxTokens,
       openAIProxyBaseUrl,
+      useLocalProxy,
+      localAIModel,
     } = this.langChainParams;
 
     // Create a base configuration that applies to all models
@@ -183,6 +191,8 @@ class AIState {
           openAIApiKey,
           maxTokens,
           openAIProxyBaseUrl,
+          useLocalProxy,
+          localAIModel,
         };
         break;
       case ANTHROPIC:
@@ -254,6 +264,8 @@ class AIState {
       azureOpenAIApiInstanceName,
       azureOpenAIApiVersion,
       azureOpenAIApiEmbeddingDeploymentName,
+      openAIProxyBaseUrl,
+      useLocalProxy,
     } = this.langChainParams;
 
     const OpenAIEmbeddingsAPI = new OpenAIEmbeddings({
@@ -291,6 +303,15 @@ class AIState {
           maxRetries: 3,
           maxConcurrency: 3,
         });
+      case LOCALAI:
+        return new ProxyOpenAIEmbeddings({
+          openAIApiKey,
+          openAIProxyBaseUrl,
+          useLocalProxy,
+          maxRetries: 3,
+          maxConcurrency: 3,
+          timeout: 10000,
+        })
       default:
         console.error('No embedding provider set. Using OpenAI.');
         return OpenAIEmbeddingsAPI;
@@ -341,8 +362,18 @@ class AIState {
   }
 
   setModel(newModelDisplayName: string): void {
-    const newModel = getModelName(newModelDisplayName);
     // model and model display name must be update at the same time!
+    let newModel = getModelName(newModelDisplayName);
+    const {useLocalProxy, localAIModel} = this.langChainParams;
+
+    if (newModelDisplayName === ChatModelDisplayNames.LOCAL_AI && useLocalProxy) {
+      if (!localAIModel) {
+        new Notice('No local AI model provided! Please set it in settings first.');
+        console.error('No local AI model provided! Please set it in settings first.');
+        return;
+      }
+      newModel = localAIModel;
+    }
     this.langChainParams.model = newModel;
     this.langChainParams.modelDisplayName = newModelDisplayName;
     this.setChatModel(newModelDisplayName);
