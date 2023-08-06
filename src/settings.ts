@@ -422,6 +422,27 @@ export class CopilotSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
+      .setName("Running LocalAI with Docker")
+      .setDesc(
+        createFragment((frag) => {
+          frag.appendText("Enable this option if you are running LocalAI with Docker; otherwise, disable it.");
+          frag.createEl('br');
+          frag.createEl(
+            'strong',
+            { text: "Plugin restart required." }
+          );
+        })
+      )
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.settings.usingDocker)
+          .onChange(async (value) => {
+            this.plugin.settings.usingDocker = value;
+            await this.plugin.saveSettings();
+          });
+      });
+
+    new Setting(containerEl)
       .setName("LocalAI Model")
       .setDesc(
         createFragment((frag) => {

@@ -114,6 +114,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   userSystemPrompt: '',
   openAIProxyBaseUrl: '',
   useLocalProxy: false,
+  usingDocker: true,
   localAIModel: '',
   stream: true,
   embeddingProvider: OPENAI,

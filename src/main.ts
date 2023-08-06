@@ -41,6 +41,7 @@ export interface CopilotSettings {
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;
   useLocalProxy: boolean;
+  usingDocker: boolean;
   localAIModel: string;
   stream: boolean;
   embeddingProvider: string;
@@ -74,7 +75,10 @@ export default class CopilotPlugin extends Plugin {
     const langChainParams = this.getAIStateParams();
     if (this.settings.useLocalProxy) {
       // If using local proxy, 3rd party proxy is overridden
-      langChainParams.openAIProxyBaseUrl = `http://localhost:${PROXY_SERVER_PORT}`;
+      langChainParams.openAIProxyBaseUrl = this.settings.usingDocker
+      ? `http://localhost:${PROXY_SERVER_PORT}`
+      : LOCALAI_URL.replace(/\/v1$/, '');
+
       langChainParams.useLocalProxy = true;
       await this.startProxyServer(LOCALAI_URL);
     }
