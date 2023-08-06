@@ -77,7 +77,7 @@ export default class CopilotPlugin extends Plugin {
       // If using local proxy, 3rd party proxy is overridden
       langChainParams.openAIProxyBaseUrl = this.settings.usingDocker
       ? `http://localhost:${PROXY_SERVER_PORT}`
-      : LOCALAI_URL.replace(/\/v1$/, '');
+      : LOCALAI_URL.substring(0, LOCALAI_URL.lastIndexOf('/'));
 
       langChainParams.useLocalProxy = true;
       await this.startProxyServer(LOCALAI_URL);
