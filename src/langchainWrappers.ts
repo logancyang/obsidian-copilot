@@ -8,10 +8,8 @@ export class ProxyChatOpenAI extends ChatOpenAI {
   ) {
     super(fields ?? {});
 
-    const modelName = fields.useLocalProxy ? fields.localAIModel : fields.modelName;
-    if (fields.useLocalProxy) {
-      console.log('Using local proxy, LocalAI model: ', modelName);
-    }
+    // Use LocalAIModel if it is set
+    const modelName = fields.localAIModel ? fields.localAIModel : fields.modelName;
 
     const clientConfig = new Configuration({
       ...this["clientConfig"],
@@ -29,10 +27,6 @@ export class ProxyOpenAIEmbeddings extends OpenAIEmbeddings {
     fields?: any,
   ) {
     super(fields ?? {});
-
-    if (fields.useLocalProxy) {
-      console.log('Using local proxy, LocalAI embedding. ');
-    }
 
     const clientConfig = new Configuration({
       ...this["clientConfig"],

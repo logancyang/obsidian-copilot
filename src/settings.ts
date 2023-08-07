@@ -401,31 +401,12 @@ export class CopilotSettingTab extends PluginSettingTab {
     containerEl.createEl('h6', { text: 'Local models can be limited in capabilities and may not work for some use cases at this time. Keep in mind that it is still in early experimental phase. But it is definitely fun to try out!' });
 
     new Setting(containerEl)
-      .setName("Use Local Copilot")
-      .setDesc(
-        createFragment((frag) => {
-          frag.appendText("Toggle this switch to launch a local proxy server. If this is on, 3rd-party proxy in Advanced Setting is overridden.");
-          frag.createEl('br');
-          frag.createEl(
-            'strong',
-            { text: "Plugin restart required." }
-          );
-        })
-      )
-      .addToggle((toggle) => {
-        toggle
-          .setValue(this.plugin.settings.useLocalProxy)
-          .onChange(async (value) => {
-            this.plugin.settings.useLocalProxy = value;
-            await this.plugin.saveSettings();
-          });
-      });
-
-    new Setting(containerEl)
       .setName("LocalAI Model")
       .setDesc(
         createFragment((frag) => {
           frag.appendText("The local model you'd like to use. Make sure you download that model in your LocalAI models directory.");
+          frag.createEl('br');
+          frag.appendText("NOTE: Please set OpenAI Proxy Base URL to http://localhost:8080/v1 under Advanced Settings")
         })
       )
       .addText((text) => {
