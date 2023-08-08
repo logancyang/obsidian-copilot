@@ -63,7 +63,6 @@ interface ModelConfig {
   azureOpenAIApiDeploymentName?: string,
   azureOpenAIApiVersion?: string,
   openAIProxyBaseUrl?: string,
-  useLocalProxy?: boolean,
   localAIModel?: string,
 }
 
@@ -87,7 +86,6 @@ export interface LangChainParams {
   chainType: ChainType,  // Default ChainType is set in main.ts getAIStateParams
   options: SetChainOptions,
   openAIProxyBaseUrl?: string,
-  useLocalProxy?: boolean,
   localAIModel?: string,
 }
 
@@ -171,7 +169,6 @@ class AIState {
       temperature,
       maxTokens,
       openAIProxyBaseUrl,
-      useLocalProxy,
       localAIModel,
     } = this.langChainParams;
 
@@ -191,7 +188,6 @@ class AIState {
           openAIApiKey,
           maxTokens,
           openAIProxyBaseUrl,
-          useLocalProxy,
           localAIModel,
         };
         break;
@@ -265,7 +261,6 @@ class AIState {
       azureOpenAIApiVersion,
       azureOpenAIApiEmbeddingDeploymentName,
       openAIProxyBaseUrl,
-      useLocalProxy,
     } = this.langChainParams;
 
     const OpenAIEmbeddingsAPI = new OpenAIEmbeddings({
@@ -307,7 +302,6 @@ class AIState {
         return new ProxyOpenAIEmbeddings({
           openAIApiKey,
           openAIProxyBaseUrl,
-          useLocalProxy,
           maxRetries: 3,
           maxConcurrency: 3,
           timeout: 10000,
@@ -364,12 +358,17 @@ class AIState {
   setModel(newModelDisplayName: string): void {
     // model and model display name must be update at the same time!
     let newModel = getModelName(newModelDisplayName);
-    const {useLocalProxy, localAIModel} = this.langChainParams;
+    const {localAIModel} = this.langChainParams;
 
-    if (newModelDisplayName === ChatModelDisplayNames.LOCAL_AI && useLocalProxy) {
+    if (newModelDisplayName === ChatModelDisplayNames.LOCAL_AI) {
       if (!localAIModel) {
         new Notice('No local AI model provided! Please set it in settings first.');
         console.error('No local AI model provided! Please set it in settings first.');
+        return;
+      }
+      if (!this.langChainParams.openAIProxyBaseUrl) {
+        new Notice('Please set the OpenAI Proxy Base URL in settings.');
+        console.error('Please set the OpenAI Proxy Base URL in settings.');
         return;
       }
       newModel = localAIModel;
