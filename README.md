@@ -37,6 +37,10 @@ My goal is to make this AI assistant **local-first** and **privacy-focused**. Mo
 
 **Please make sure you go through this [Step-by-step setup guide](./localai_setup.md) to setup Local Copilot on your device correctly!**
 
+I've got feedback about "Use Local Copilot" toggle being unnecesary, so it is removed in v2.4.1. Now, make sure your have `--cors` flag enabled in your LocalAI server (or .env `CORS=true` if you use Docker). Then simply fill in the OpenAI Proxy Base URL as "http://localhost:8080/v1" and restart the plugin to chat with your local models.
+
+When you are done, clear the OpenAI Proxy Base URL to switch back to non-local models.
+
 #### 🤗 New to Copilot? Quick Guide for Beginners:
 
 <a href="https://www.youtube.com/watch?v=jRCDAg2sck8" target="_blank"><img src="./images/thumbnail.png" width="700" /></a>

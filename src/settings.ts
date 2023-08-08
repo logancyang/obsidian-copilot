@@ -397,8 +397,12 @@ export class CopilotSettingTab extends PluginSettingTab {
       );
 
     containerEl.createEl('h4', { text: 'Local Copilot (EXPERIMENTAL, NO INTERNET NEEDED!!)' });
-    containerEl.createEl('h6', { text: 'To use Local Copilot, please check the doc/demo video to set up LocalAI server on your device. Once ready, switch on the toggle below, type in the LocalAI Model name you have, and pick LocalAI in the Copilot Chat model selection dropdown to chat with it!' });
-    containerEl.createEl('h6', { text: 'Local models can be limited in capabilities and may not work for some use cases at this time. Keep in mind that it is still in early experimental phase. But it is definitely fun to try out!' });
+    containerEl.createEl('p', { text: 'To use Local Copilot, please check the doc to set up LocalAI server on your device. Once ready,' });
+    containerEl.createEl('p', { text: '1. Set OpenAI Proxy Base URL to http://localhost:8080/v1 under Advanced Settings.' });
+    containerEl.createEl('p', { text: '2. Type in the LocalAI Model name you have below.' });
+    containerEl.createEl('p', { text: '3. Pick LocalAI in the Copilot Chat model selection dropdown to chat with it!' });
+    containerEl.createEl('p', { text: 'Local models can be limited in capabilities and may not work for some use cases at this time. Keep in mind that it is still in early experimental phase. But it is definitely fun to try out!' });
+    containerEl.createEl('h6', { text: 'When you are done, clear the OpenAI Proxy Base URL to switch back to non-local models.' });
 
     new Setting(containerEl)
       .setName("LocalAI Model")
