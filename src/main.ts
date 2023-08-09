@@ -1,5 +1,7 @@
 import AIState, { LangChainParams, SetChainOptions } from '@/aiState';
-import { ChainType } from '@/chainFactory';
+import ChainFactory, {
+  ChainType, VectorStoreDocument
+} from '@/chainFactory';
 import { AddPromptModal } from "@/components/AddPromptModal";
 import CopilotView from '@/components/CopilotView';
 import { LanguageModal } from "@/components/LanguageModal";
@@ -11,11 +13,7 @@ import {
 import { CopilotSettingTab } from '@/settings';
 import SharedState from '@/sharedState';
 import { sanitizeSettings } from "@/utils";
-import cors from '@koa/cors';
 import { Server } from 'http';
-import Koa from 'koa';
-import proxy from 'koa-proxies';
-import net from 'net';
 import { Editor, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
 import PouchDB from 'pouchdb';
 
@@ -59,6 +57,7 @@ export default class CopilotPlugin extends Plugin {
   activateViewPromise: Promise<void> | null = null;
   chatIsVisible = false;
   dbPrompts: PouchDB.Database;
+  dbVectorStores: PouchDB.Database;
   server: Server| null = null;
 
   isChatVisible = () => this.chatIsVisible;
@@ -72,6 +71,9 @@ export default class CopilotPlugin extends Plugin {
     this.aiState = new AIState(langChainParams);
 
     this.dbPrompts = new PouchDB<CustomPrompt>('copilot_custom_prompts');
+    this.dbVectorStores = new PouchDB<VectorStoreDocument>('copilot_vector_stores');
+
+    ChainFactory.initializeDB(this.dbVectorStores);
 
     this.registerView(
       CHAT_VIEWTYPE,
