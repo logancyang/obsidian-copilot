@@ -368,6 +368,24 @@ export default class CopilotPlugin extends Plugin {
         return true;
       },
     });
+
+    this.addCommand({
+      id: 'clear-local-vector-store',
+      name: 'Clear local vector store',
+      callback: async () => {
+        try {
+          // Clear the vectorstore db
+          await this.dbVectorStores.destroy();
+          // Reinitialize the database
+          this.dbVectorStores = new PouchDB<VectorStoreDocument>('copilot_vector_stores'); //
+          new Notice('Local vector store cleared successfully.');
+          console.log('Local vector store cleared successfully.');
+        } catch (err) {
+          console.error("Error clearing the local vector store:", err);
+          new Notice('An error occurred while clearing the local vector store.');
+        }
+      }
+    });
   }
 
   processSelection(editor: Editor, eventType: string, eventSubtype?: string) {
