@@ -71,7 +71,7 @@ class VectorDBManager {
       // Save the document.
       await this.db.put(docToSave);
     } catch (err) {
-      console.error("Error storing vectors in PouchDB:", err);
+      console.error("Error storing vectors in VectorDB:", err);
     }
   }
 
@@ -83,7 +83,7 @@ class VectorDBManager {
         return JSON.parse(doc.memory_vectors);
       }
     } catch (err) {
-      console.log("No vectors found in PouchDB for dochash:", docHash);
+      console.log("No vectors found in VectorDB for dochash:", docHash);
     }
   }
 
@@ -91,7 +91,6 @@ class VectorDBManager {
     if (!this.db) throw new Error("DB not initialized");
 
     try {
-      // const twoWeeksInMillis = 14 * 24 * 60 * 60 * 1000; // 2 weeks in milliseconds
       const thresholdTime = Date.now() - ttl;
 
       // Fetch all documents from the database
@@ -104,6 +103,9 @@ class VectorDBManager {
           return doc && doc.created_at < thresholdTime;
       });
 
+      if (oldDocs.length === 0) {
+          return;
+      }
       // Prepare the documents for deletion
       const docsToDelete = oldDocs.map(row => ({
           _id: row.id,
@@ -113,8 +115,10 @@ class VectorDBManager {
 
       // Delete the old documents
       await this.db.bulkDocs(docsToDelete);
-    } catch (err) {
-        console.error("Error removing old documents from PouchDB:", err);
+      console.log("Deleted old documents from VectorDB");
+    }
+     catch (err) {
+      console.error("Error removing old documents from VectorDB:", err);
     }
   }
 

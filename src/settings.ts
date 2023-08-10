@@ -337,6 +337,23 @@ export class CopilotSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
+      .setName("TTL (Days)")
+      .setDesc("Specify the Time To Live (TTL) for the saved embeddings in days. Default is 30 days. Embeddings older than the TTL will be deleted automatically to save storage space.")
+      .addText((text) => {
+        text
+          .setPlaceholder("30")
+          .setValue(this.plugin.settings.ttlDays ? this.plugin.settings.ttlDays.toString() : '')
+          .onChange(async (value: string) => {
+            const intValue = parseInt(value);
+            if (!isNaN(intValue)) {
+              this.plugin.settings.ttlDays = intValue;
+              await this.plugin.saveSettings();
+            }
+          });
+      });
+
+
+    new Setting(containerEl)
       .setName("Your CohereAI trial API key")
       .setDesc(
         createFragment((frag) => {
