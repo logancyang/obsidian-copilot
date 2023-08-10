@@ -1,7 +1,5 @@
 import AIState, { LangChainParams, SetChainOptions } from '@/aiState';
-import ChainFactory, {
-  ChainType, VectorStoreDocument
-} from '@/chainFactory';
+import { ChainType } from '@/chainFactory';
 import { AddPromptModal } from "@/components/AddPromptModal";
 import CopilotView from '@/components/CopilotView';
 import { LanguageModal } from "@/components/LanguageModal";
@@ -13,6 +11,7 @@ import {
 import { CopilotSettingTab } from '@/settings';
 import SharedState from '@/sharedState';
 import { sanitizeSettings } from "@/utils";
+import VectorDBManager, { VectorStoreDocument } from '@/vectorDBManager';
 import { Server } from 'http';
 import { Editor, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
 import PouchDB from 'pouchdb';
@@ -73,7 +72,7 @@ export default class CopilotPlugin extends Plugin {
     this.dbPrompts = new PouchDB<CustomPrompt>('copilot_custom_prompts');
     this.dbVectorStores = new PouchDB<VectorStoreDocument>('copilot_vector_stores');
 
-    ChainFactory.initializeDB(this.dbVectorStores);
+    VectorDBManager.initializeDB(this.dbVectorStores);
 
     this.registerView(
       CHAT_VIEWTYPE,

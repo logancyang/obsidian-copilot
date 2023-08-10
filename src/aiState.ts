@@ -1,5 +1,5 @@
 import ChainFactory, {
-  ChainType, MemoryVector,
+  ChainType
 } from '@/chainFactory';
 import {
   AI_SENDER,
@@ -18,6 +18,7 @@ import {
 } from '@/constants';
 import { ChatMessage } from '@/sharedState';
 import { getModelName, isSupportedChain } from '@/utils';
+import VectorDBManager, { MemoryVector } from '@/vectorDBManager';
 import {
   BaseChain,
   ConversationChain,
@@ -433,10 +434,10 @@ class AIState {
         }
 
         this.setNoteContent(options.noteContent);
-        const docHash = ChainFactory.getDocumentHash(options.noteContent);
-        const parsedMemoryVectors: MemoryVector[] | undefined = await ChainFactory.getMemoryVectors(docHash);
+        const docHash = VectorDBManager.getDocumentHash(options.noteContent);
+        const parsedMemoryVectors: MemoryVector[] | undefined = await VectorDBManager.getMemoryVectors(docHash);
         if (parsedMemoryVectors) {
-          const vectorStore = await ChainFactory.rebuildMemoryVectorStore(
+          const vectorStore = await VectorDBManager.rebuildMemoryVectorStore(
             parsedMemoryVectors, this.getEmbeddingsAPI()
           );
           AIState.retrievalChain = RetrievalQAChain.fromLLM(
@@ -489,7 +490,7 @@ class AIState {
         docs, embeddingsAPI,
       );
       // Serialize and save vector store to PouchDB
-      ChainFactory.setMemoryVectors(this.vectorStore.memoryVectors, docHash);
+      VectorDBManager.setMemoryVectors(this.vectorStore.memoryVectors, docHash);
       console.log('Vector store created successfully.');
       new Notice('Vector store created successfully.');
     } catch (error) {

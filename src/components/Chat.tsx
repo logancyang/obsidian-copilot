@@ -1,5 +1,5 @@
 import AIState, { useAIState } from '@/aiState';
-import ChainFactory, { ChainType } from '@/chainFactory';
+import { ChainType } from '@/chainFactory';
 import ChatIcons from '@/components/ChatComponents/ChatIcons';
 import ChatInput from '@/components/ChatComponents/ChatInput';
 import ChatMessages from '@/components/ChatComponents/ChatMessages';
@@ -31,6 +31,7 @@ import {
   summarizePrompt,
   tocPrompt,
 } from '@/utils';
+import VectorDBManager from '@/vectorDBManager';
 import { EventEmitter } from 'events';
 import { Notice, TFile } from 'obsidian';
 import React, {
@@ -141,7 +142,7 @@ const Chat: React.FC<ChatProps> = ({
       return;
     }
 
-    const docHash = ChainFactory.getDocumentHash(noteContent);
+    const docHash = VectorDBManager.getDocumentHash(noteContent);
     await aiState.buildIndex(noteContent, docHash);
     const activeNoteOnMessage: ChatMessage = {
       sender: AI_SENDER,
