@@ -18,6 +18,7 @@ import {
 } from '@/constants';
 import { ChatMessage } from '@/sharedState';
 import { getModelName, isSupportedChain } from '@/utils';
+import VectorDBManager, { MemoryVector } from '@/vectorDBManager';
 import {
   BaseChain,
   ConversationChain,
@@ -27,7 +28,6 @@ import {
 import { ChatAnthropic } from 'langchain/chat_models/anthropic';
 import { BaseChatModel } from 'langchain/chat_models/base';
 import { ChatOpenAI } from 'langchain/chat_models/openai';
-import { VectorStore } from 'langchain/dist/vectorstores/base';
 import { Embeddings } from "langchain/embeddings/base";
 import { CohereEmbeddings } from "langchain/embeddings/cohere";
 import { HuggingFaceInferenceEmbeddings } from "langchain/embeddings/hf";
@@ -105,7 +105,7 @@ class AIState {
   private static conversationalRetrievalChain: ConversationalRetrievalQAChain;
 
   private chatPrompt:  ChatPromptTemplate;
-  private vectorStore: VectorStore;
+  private vectorStore: MemoryVectorStore;
 
   memory: BufferWindowMemory;
   langChainParams: LangChainParams;
@@ -434,9 +434,12 @@ class AIState {
         }
 
         this.setNoteContent(options.noteContent);
-        const docHash = ChainFactory.getDocumentHash(options.noteContent);
-        const vectorStore = ChainFactory.vectorStoreMap.get(docHash);
-        if (vectorStore) {
+        const docHash = VectorDBManager.getDocumentHash(options.noteContent);
+        const parsedMemoryVectors: MemoryVector[] | undefined = await VectorDBManager.getMemoryVectors(docHash);
+        if (parsedMemoryVectors) {
+          const vectorStore = await VectorDBManager.rebuildMemoryVectorStore(
+            parsedMemoryVectors, this.getEmbeddingsAPI()
+          );
           AIState.retrievalChain = RetrievalQAChain.fromLLM(
             AIState.chatModel,
             vectorStore.asRetriever(),
@@ -486,7 +489,8 @@ class AIState {
       this.vectorStore = await MemoryVectorStore.fromDocuments(
         docs, embeddingsAPI,
       );
-      ChainFactory.setVectorStore(this.vectorStore, docHash);
+      // Serialize and save vector store to PouchDB
+      VectorDBManager.setMemoryVectors(this.vectorStore.memoryVectors, docHash);
       console.log('Vector store created successfully.');
       new Notice('Vector store created successfully.');
     } catch (error) {

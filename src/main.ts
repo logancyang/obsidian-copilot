@@ -11,11 +11,8 @@ import {
 import { CopilotSettingTab } from '@/settings';
 import SharedState from '@/sharedState';
 import { sanitizeSettings } from "@/utils";
-import cors from '@koa/cors';
+import VectorDBManager, { VectorStoreDocument } from '@/vectorDBManager';
 import { Server } from 'http';
-import Koa from 'koa';
-import proxy from 'koa-proxies';
-import net from 'net';
 import { Editor, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
 import PouchDB from 'pouchdb';
 
@@ -39,6 +36,7 @@ export interface CopilotSettings {
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;
   localAIModel: string;
+  ttlDays: number;
   stream: boolean;
   embeddingProvider: string;
   debug: boolean;
@@ -59,6 +57,7 @@ export default class CopilotPlugin extends Plugin {
   activateViewPromise: Promise<void> | null = null;
   chatIsVisible = false;
   dbPrompts: PouchDB.Database;
+  dbVectorStores: PouchDB.Database;
   server: Server| null = null;
 
   isChatVisible = () => this.chatIsVisible;
@@ -72,6 +71,13 @@ export default class CopilotPlugin extends Plugin {
     this.aiState = new AIState(langChainParams);
 
     this.dbPrompts = new PouchDB<CustomPrompt>('copilot_custom_prompts');
+    this.dbVectorStores = new PouchDB<VectorStoreDocument>('copilot_vector_stores');
+
+    VectorDBManager.initializeDB(this.dbVectorStores);
+    // Remove documents older than TTL days on load
+    VectorDBManager.removeOldDocuments(
+      this.settings.ttlDays * 24 * 60 * 60 * 1000
+    );
 
     this.registerView(
       CHAT_VIEWTYPE,
@@ -365,6 +371,24 @@ export default class CopilotPlugin extends Plugin {
 
         return true;
       },
+    });
+
+    this.addCommand({
+      id: 'clear-local-vector-store',
+      name: 'Clear local vector store',
+      callback: async () => {
+        try {
+          // Clear the vectorstore db
+          await this.dbVectorStores.destroy();
+          // Reinitialize the database
+          this.dbVectorStores = new PouchDB<VectorStoreDocument>('copilot_vector_stores'); //
+          new Notice('Local vector store cleared successfully.');
+          console.log('Local vector store cleared successfully.');
+        } catch (err) {
+          console.error("Error clearing the local vector store:", err);
+          new Notice('An error occurred while clearing the local vector store.');
+        }
+      }
     });
   }
 

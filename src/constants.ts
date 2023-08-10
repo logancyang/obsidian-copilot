@@ -111,6 +111,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   userSystemPrompt: '',
   openAIProxyBaseUrl: '',
   localAIModel: '',
+  ttlDays: 30,
   stream: true,
   embeddingProvider: OPENAI,
   debug: false,

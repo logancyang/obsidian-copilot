@@ -1,4 +1,3 @@
-import { MD5 } from 'crypto-js';
 import { BaseLanguageModel } from "langchain/base_language";
 import {
   BaseChain,
@@ -6,9 +5,7 @@ import {
   ConversationalRetrievalQAChain,
   LLMChainInput
 } from "langchain/chains";
-import { VectorStore } from 'langchain/dist/vectorstores/base';
 import { BaseRetriever } from "langchain/schema";
-
 
 export interface RetrievalChainParams {
   llm: BaseLanguageModel;
@@ -42,7 +39,6 @@ export enum ChainType {
 
 class ChainFactory {
   public static instances: Map<string, BaseChain> = new Map();
-  public static vectorStoreMap: Map<string, VectorStore> = new Map();
 
   public static createNewLLMChain(args: LLMChainInput): BaseChain {
     const instance = new ConversationChain(args as LLMChainInput);
@@ -57,18 +53,6 @@ class ChainFactory {
       instance = ChainFactory.createNewLLMChain(args);
     }
     return instance;
-  }
-
-  public static getDocumentHash(sourceDocument: string): string {
-    return MD5(sourceDocument).toString();
-  }
-
-  public static setVectorStore(vectorStore: VectorStore, docHash: string): void {
-    ChainFactory.vectorStoreMap.set(docHash, vectorStore);
-  }
-
-  public static getVectorStore(docHash: string): VectorStore | undefined {
-    return ChainFactory.vectorStoreMap.get(docHash);
   }
 
   public static createConversationalRetrievalChain(

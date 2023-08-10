@@ -1,6 +1,6 @@
 {
   "name": "obsidian-copilot",
-  "version": "2.4.1",
+  "version": "2.4.2",
   "description": "ChatGPT integration for Obsidian",
   "main": "main.js",
   "scripts": {
