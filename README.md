@@ -9,7 +9,7 @@ Copilot for Obsidian is a **free** and **open-source** ChatGPT interface right i
 - 🚀 Turbocharge your Second Brain with AI.
 - 🧠 Talk to your past notes for insights.
 
-My goal is to make this AI assistant **local-first** and **privacy-focused**. More features are under construction. Stay tuned!
+My goal is to make this AI assistant **local-first** and **privacy-focused**. It has a **local** vector store and can work with **local** models for chat and QA **completely offline**! More features are under construction. Stay tuned!
 
 <img src="./images/ui.png" alt="UI">
 
@@ -17,17 +17,17 @@ My goal is to make this AI assistant **local-first** and **privacy-focused**. Mo
 - Chat with ChatGPT right inside Obsidian in the Copilot Chat window.
 - No repetitive login. Use your own API key (stored locally).
 - No monthly fee. Pay only for what you use.
-- Model selection of GPT-3.5, GPT-4, Azure OpenAI models and more.
-- No need to buy ChatGPT Plus to use GPT-4 **if you have API access**.
+- Model selection of OpenAI, Azure and **local** models powered by LocalAI.
+- No need to buy ChatGPT Plus to use GPT-4.
 - No usage cap for GPT-4 like ChatGPT Plus.
 - One-click copying any message as markdown.
 - One-click saving the entire conversation as a note.
 - Use the active note as context, and start a discussion around it by switching to "QA: Active Note" in the Mode Selection menu.
-  - **NEW in v2.1.0**: **Unlimited context** when chatting with your long note, no more "context length exceeded" errors!!
   - This feature is powered by retrieval augmentation with a **local** vector store. No sending your data to a cloud-based vector search service!
 - Easy commands to **simplify, emojify, summarize, translate, change tone, fix grammar, rewrite into a tweet/thread, count tokens** and more.
 - Set your own parameters like LLM temperature, max tokens, conversation context based on your need (**pls be mindful of the API cost**).
-- **NEW in v2.2.0**: **User custom prompt support added**! Now you can *add, apply, delete* your custom prompts, persisted in your local Obsidian environment!
+- **User custom prompt**! You can *add, apply, edit, delete* your custom prompts, persisted in your local Obsidian environment! Be creative with your own prompt templates, sky is the limit!
+- **Local model** support for **offline chat and QA** using LocalAI. Talk to your notes without internet! (experimental feature)
 
 ## 🎬 Video Demos
 
@@ -146,9 +146,10 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 When opening an issue, please include relevant console logs. You can go to Copilot's settings and turn on "Debug mode" at the bottom for more console messages!
 
 ## 📝 Planned features (based on feedback)
-- Integration with more LLMs, including open-source and local ones
-- More standard prompts that can be used with commands
-- Unlimited context for a collection of notes
+- Support embedded PDFs as context
+- Integration with ElevenLabs or Bark to let the AI speak like human
+- Unlimited context for a collection of notes.
+- Retrieval augmented generation (RAG) with your vault. Explore, brainstorm and review ideas like never before!
 
 ## 🙏 Say Thank You
 If you are enjoying Copilot, please support my work by buying me a coffee here: https://www.buymeacoffee.com/logancyang
