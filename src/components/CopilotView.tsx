@@ -13,25 +13,21 @@ import { Root, createRoot } from 'react-dom/client';
 export default class CopilotView extends ItemView {
   private sharedState: SharedState;
   private aiState: AIState;
-  private model: string;
   private root: Root | null = null;
   private defaultSaveFolder: string;
   private debug = false;
   emitter: EventEmitter;
   userSystemPrompt = '';
-  useNotesAsContext = false;
 
   constructor(leaf: WorkspaceLeaf, private plugin: CopilotPlugin) {
     super(leaf);
     this.sharedState = plugin.sharedState;
     this.app = plugin.app;
     this.aiState = plugin.aiState;
-    this.model = plugin.settings.defaultModel;
     this.debug = plugin.settings.debug;
     this.emitter = new EventEmitter();
     this.getChatVisibility = this.getChatVisibility.bind(this);
     this.userSystemPrompt = plugin.settings.userSystemPrompt;
-    this.useNotesAsContext = plugin.settings.useNotesAsContext;
     this.defaultSaveFolder = plugin.settings.defaultSaveFolder;
   }
 

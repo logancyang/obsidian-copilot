@@ -32,7 +32,6 @@ export interface CopilotSettings {
   temperature: number;
   maxTokens: number;
   contextTurns: number;
-  useNotesAsContext: boolean;
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;
   localAIModel: string;

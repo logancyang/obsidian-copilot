@@ -107,7 +107,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   temperature: 0.7,
   maxTokens: 1000,
   contextTurns: 3,
-  useNotesAsContext: false,
   userSystemPrompt: '',
   openAIProxyBaseUrl: '',
   localAIModel: '',
