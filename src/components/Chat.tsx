@@ -50,11 +50,12 @@ interface ChatProps {
   aiState: AIState;
   emitter: EventEmitter;
   getChatVisibility: () => Promise<boolean>;
+  defaultSaveFolder: string;
   debug: boolean;
 }
 
 const Chat: React.FC<ChatProps> = ({
-  sharedState, aiState, emitter, getChatVisibility, debug
+  sharedState, aiState, emitter, getChatVisibility, defaultSaveFolder, debug
 }) => {
   const [
     chatHistory, addMessage, clearMessages,
@@ -112,8 +113,14 @@ const Chat: React.FC<ChatProps> = ({
     const chatContent = chatHistory.map((message) => `**${message.sender}**: ${message.message}`).join('\n\n');
 
     try {
+      // Check if the default folder exists or create it
+      const folder = app.vault.getAbstractFileByPath(defaultSaveFolder);
+      if (!folder) {
+        await app.vault.createFolder(defaultSaveFolder);
+      }
+
       const now = new Date();
-      const noteFileName = `Chat-${formatDateTime(now)}.md`;
+      const noteFileName = `${defaultSaveFolder}/Chat-${formatDateTime(now)}.md`;
       const newNote: TFile = await app.vault.create(noteFileName, chatContent);
       const leaf = app.workspace.getLeaf();
       leaf.openFile(newNote);
