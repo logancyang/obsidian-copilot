@@ -114,6 +114,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   ttlDays: 30,
   stream: true,
   embeddingProvider: OPENAI,
+  defaultSaveFolder: 'copilot-conversations',
   debug: false,
 };
 export const OPEN_AI_API_URL = 'https://api.openai.com/v1/chat/completions';

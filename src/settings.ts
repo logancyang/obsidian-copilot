@@ -75,6 +75,18 @@ export class CopilotSettingTab extends PluginSettingTab {
           });
       });
 
+    new Setting(containerEl)
+      .setName("Default Conversation Folder Name")
+      .setDesc("The default folder name where chat conversations will be saved. Default is 'copilot-conversations'")
+      .addText(text => text
+          .setPlaceholder("copilot-conversations")
+          .setValue(this.plugin.settings.defaultSaveFolder)
+          .onChange(async (value: string) => {
+              this.plugin.settings.defaultSaveFolder = value;
+              await this.plugin.saveSettings();
+          })
+      );
+
     containerEl.createEl('h4', { text: 'API Settings' });
     containerEl.createEl('h6', { text: 'OpenAI API' });
 

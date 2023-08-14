@@ -15,6 +15,7 @@ export default class CopilotView extends ItemView {
   private aiState: AIState;
   private model: string;
   private root: Root | null = null;
+  private defaultSaveFolder: string;
   private debug = false;
   emitter: EventEmitter;
   userSystemPrompt = '';
@@ -31,6 +32,7 @@ export default class CopilotView extends ItemView {
     this.getChatVisibility = this.getChatVisibility.bind(this);
     this.userSystemPrompt = plugin.settings.userSystemPrompt;
     this.useNotesAsContext = plugin.settings.useNotesAsContext;
+    this.defaultSaveFolder = plugin.settings.defaultSaveFolder;
   }
 
   getViewType(): string {
@@ -68,6 +70,7 @@ export default class CopilotView extends ItemView {
             aiState={this.aiState}
             emitter={this.emitter}
             getChatVisibility={this.getChatVisibility}
+            defaultSaveFolder={this.defaultSaveFolder}
             debug={this.debug}
           />
         </React.StrictMode>

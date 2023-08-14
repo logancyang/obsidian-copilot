@@ -39,6 +39,7 @@ export interface CopilotSettings {
   ttlDays: number;
   stream: boolean;
   embeddingProvider: string;
+  defaultSaveFolder: string;
   debug: boolean;
 }
 
