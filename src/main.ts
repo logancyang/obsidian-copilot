@@ -11,6 +11,7 @@ import {
 import { CopilotSettingTab } from '@/settings';
 import SharedState from '@/sharedState';
 import { sanitizeSettings } from "@/utils";
+import * as fileUtils from "@/fileUtils"
 import VectorDBManager, { VectorStoreDocument } from '@/vectorDBManager';
 import { Server } from 'http';
 import { Editor, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
@@ -83,6 +84,14 @@ export default class CopilotPlugin extends Plugin {
       CHAT_VIEWTYPE,
       (leaf: WorkspaceLeaf) => new CopilotView(leaf, this)
     );
+
+    this.addCommand({
+      id: 'chat-extract-file-contents',
+      name: 'Extract Active File Contents',
+      callback: () => {
+        fileUtils.useActiveFileAsContext();
+      }
+    })
 
     this.addCommand({
       id: 'chat-toggle-window',
