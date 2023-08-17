@@ -89,7 +89,7 @@ export default class CopilotPlugin extends Plugin {
       id: 'chat-extract-file-contents',
       name: 'Extract Active File Contents',
       callback: () => {
-        fileUtils.useActiveFileAsContext();
+        fileUtils.useActiveFileAsContext(this.aiState);
       }
     })
 
