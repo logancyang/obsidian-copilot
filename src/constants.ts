@@ -69,6 +69,7 @@ export const DISPLAY_NAME_TO_MODEL: Record<string, string> = {
   [ChatModelDisplayNames.AZURE_GPT_35_TURBO_16K]: ChatModels.AZURE_GPT_35_TURBO_16K,
   [ChatModelDisplayNames.AZURE_GPT_4]: ChatModels.GPT_4,
   [ChatModelDisplayNames.AZURE_GPT_4_32K]: ChatModels.GPT_4_32K,
+  [ChatModelDisplayNames.LOCAL_AI]: 'localai',
 };
 
 // Model Providers

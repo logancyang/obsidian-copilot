@@ -52,6 +52,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       ChatModelDisplayNames.AZURE_GPT_35_TURBO_16K,
       ChatModelDisplayNames.AZURE_GPT_4,
       ChatModelDisplayNames.AZURE_GPT_4_32K,
+      ChatModelDisplayNames.LOCAL_AI,
     ];
 
     new Setting(containerEl)
