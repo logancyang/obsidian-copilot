@@ -11,6 +11,7 @@ import {
 import { CopilotSettingTab } from '@/settings';
 import SharedState from '@/sharedState';
 import { sanitizeSettings } from "@/utils";
+import * as fileUtils from "@/fileUtils"
 import VectorDBManager, { VectorStoreDocument } from '@/vectorDBManager';
 import { Server } from 'http';
 import { Editor, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
@@ -32,13 +33,13 @@ export interface CopilotSettings {
   temperature: number;
   maxTokens: number;
   contextTurns: number;
-  useNotesAsContext: boolean;
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;
   localAIModel: string;
   ttlDays: number;
   stream: boolean;
   embeddingProvider: string;
+  defaultSaveFolder: string;
   debug: boolean;
 }
 
@@ -83,6 +84,14 @@ export default class CopilotPlugin extends Plugin {
       CHAT_VIEWTYPE,
       (leaf: WorkspaceLeaf) => new CopilotView(leaf, this)
     );
+
+    // this.addCommand({ // TODO: Change this to allow loading a directory of files as context
+    //   id: 'chat-extract-file-contents',
+    //   name: 'Extract Active File Contents',
+    //   callback: () => {
+    //     fileUtils.useActiveFileAsContext(this.aiState);
+    //   }
+    // })
 
     this.addCommand({
       id: 'chat-toggle-window',
