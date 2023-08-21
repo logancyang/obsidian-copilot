@@ -85,13 +85,13 @@ export default class CopilotPlugin extends Plugin {
       (leaf: WorkspaceLeaf) => new CopilotView(leaf, this)
     );
 
-    this.addCommand({
-      id: 'chat-extract-file-contents',
-      name: 'Extract Active File Contents',
-      callback: () => {
-        fileUtils.useActiveFileAsContext(this.aiState);
-      }
-    })
+    // this.addCommand({ // TODO: Change this to allow loading a directory of files as context
+    //   id: 'chat-extract-file-contents',
+    //   name: 'Extract Active File Contents',
+    //   callback: () => {
+    //     fileUtils.useActiveFileAsContext(this.aiState);
+    //   }
+    // })
 
     this.addCommand({
       id: 'chat-toggle-window',
