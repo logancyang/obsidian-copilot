@@ -19,6 +19,7 @@ import {
 } from "langchain/chains";
 import moment from 'moment';
 import { TFile } from 'obsidian';
+import { FileUtils } from './fileUtils';
 
 export const stringToChainType = (chain: string): ChainType => {
   switch(chain) {
@@ -92,8 +93,12 @@ export const formatDateTime = (now: Date, timezone: 'local' | 'utc' = 'local') =
 };
 
 export async function getFileContent(file: TFile): Promise<string | null> {
-  if (file.extension != "md") return null;
-  return await this.app.vault.read(file);
+  if (file.extension == "md") {
+    return await this.app.vault.read(file);
+  } else if (file.extension == "pdf") {
+    return await FileUtils.getAllPDFText(this.app, file);
+  }
+  return null;
 }
 
 export function getFileName(file: TFile): string {

@@ -135,6 +135,9 @@ const Chat: React.FC<ChatProps> = ({
       return;
     }
     const noteContent = await getFileContent(file);
+    if (debug) {
+      console.log("ALL NOTE CONTENT IS", noteContent)
+    }
     const noteName = getFileName(file);
     if (!noteContent) {
       new Notice('No note content found.');

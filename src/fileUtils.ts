@@ -1,50 +1,34 @@
-import { TFile } from 'obsidian';
-import { MemoryVectorStore } from 'langchain/vectorstores/memory';
-import { PDFLoader } from "langchain/document_loaders/fs/pdf";
-import AIState from './aiState';
-import { loadPdfJs } from 'obsidian';
+import { App, TFile, loadPdfJs } from "obsidian";
 
-import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
+/**
+ * Retrieves all the text content of a PDF file.
+ * @param app The Obsidian App object.
+ * @param file The PDF file to read.
+ * @returns A Promise that resolves to the text content of the PDF file.
+ */
+export async function getAllPDFText(app: App, file: TFile): Promise<string | null> {
+  const PDFJS = await loadPdfJs();
 
-export async function getFileContents(file: TFile): Promise<string | null> {
-  if (file.extension != "md") return null;
-  return await this.app.vault.read(file);
-}
-
-export async function useActiveFileAsContext(aiState: AIState) {
-  let file = this.app.workspace.getActiveFile();
-  if (file.extension == "pdf") {
-    await readPDF(file, aiState);
-    return;
-  }
-  console.log("FILE IS", file);
-}
-
-async function readPDF(file: TFile, aiState: AIState) {
-  console.log("FILE IS", file)
-  let pdfBinary = await this.app.vault.readBinary(file);
-
-  let pdfjsLib = await loadPdfJs();
-  let doc = await pdfjsLib.getDocument(pdfBinary).promise;
+  const pdfBinary = await app.vault.readBinary(file);
+  const doc = await PDFJS.getDocument(pdfBinary).promise;
 
   let textContent = [];
-  let ids = [];
   for (let i = 0; i < doc.numPages; i++) {
-    let page = await doc.getPage(i + 1);
-    let text = await page.getTextContent();
-    textContent.push(text.items.map(item => item.str).join(" "));
-    ids.push({ id: i });
+	  let page = await doc.getPage(i + 1);
+	  let text = await page.getTextContent();
+    if (text.items.length > 0) {
+      let pageText = text.items.map((item: any) => item.str).join(" ");
+      pageText = pageText.replace(/\s+/g, ' ').trim(); // Remove potentially duplicated spaces
+      textContent.push(pageText);
+    }
   }
 
-  const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 1000 });
+  if (textContent.length == 0) {
+    return null;
+  }
+  return textContent.join("");
+}
 
-  const docs = await textSplitter.createDocuments(textContent);
-
-  console.log('Creating vector store...');
-  let vectorStore = await MemoryVectorStore.fromDocuments(
-    docs, aiState.getEmbeddingsAPI(),
-  );
-
-  const resultOne = await vectorStore.similaritySearch("math", 1)
-  console.log("RESULT ONE IS", resultOne)
+export const FileUtils = {
+	getAllPDFText
 }
