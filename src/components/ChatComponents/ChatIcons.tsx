@@ -79,6 +79,13 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
       const noteContent = await getFileContent(file);
       const noteName = getFileName(file);
 
+      if (!noteContent) {
+        new Notice('No note content found.');
+        setSelectedChain(ChainType.LLM_CHAIN);
+        console.error('No note content found. Double check if your content contains text.');
+        return;
+      }
+
       const activeNoteOnMessage: ChatMessage = {
         sender: AI_SENDER,
         message: `OK Feel free to ask me questions about [[${noteName}]].`,

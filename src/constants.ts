@@ -90,9 +90,6 @@ export const DISTILBERT_NLI = 'sentence-transformers/distilbert-base-nli-mean-to
 export const INSTRUCTOR_XL = 'hkunlp/instructor-xl'; // Inference API is off for this
 export const MPNET_V2 = 'sentence-transformers/all-mpnet-base-v2'; // Inference API returns 400
 
-// Proxy parameters
-export const PROXY_SERVER_PORT = 3001;
-export const LOCALAI_URL = 'http://localhost:8080/v1';  // LocalAI server
 // export const LOCALAI_DEFAULT_MODEL = 'ggml-gpt4all-j';
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
@@ -110,14 +107,13 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   temperature: 0.7,
   maxTokens: 1000,
   contextTurns: 3,
-  useNotesAsContext: false,
   userSystemPrompt: '',
   openAIProxyBaseUrl: '',
-  useLocalProxy: false,
-  usingDocker: true,
   localAIModel: '',
+  ttlDays: 30,
   stream: true,
   embeddingProvider: OPENAI,
+  defaultSaveFolder: 'copilot-conversations',
   debug: false,
 };
 export const OPEN_AI_API_URL = 'https://api.openai.com/v1/chat/completions';

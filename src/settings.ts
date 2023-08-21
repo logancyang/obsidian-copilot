@@ -75,6 +75,18 @@ export class CopilotSettingTab extends PluginSettingTab {
           });
       });
 
+    new Setting(containerEl)
+      .setName("Default Conversation Folder Name")
+      .setDesc("The default folder name where chat conversations will be saved. Default is 'copilot-conversations'")
+      .addText(text => text
+          .setPlaceholder("copilot-conversations")
+          .setValue(this.plugin.settings.defaultSaveFolder)
+          .onChange(async (value: string) => {
+              this.plugin.settings.defaultSaveFolder = value;
+              await this.plugin.saveSettings();
+          })
+      );
+
     containerEl.createEl('h4', { text: 'API Settings' });
     containerEl.createEl('h6', { text: 'OpenAI API' });
 
@@ -337,6 +349,23 @@ export class CopilotSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
+      .setName("TTL (Days)")
+      .setDesc("Specify the Time To Live (TTL) for the saved embeddings in days. Default is 30 days. Embeddings older than the TTL will be deleted automatically to save storage space.")
+      .addText((text) => {
+        text
+          .setPlaceholder("30")
+          .setValue(this.plugin.settings.ttlDays ? this.plugin.settings.ttlDays.toString() : '')
+          .onChange(async (value: string) => {
+            const intValue = parseInt(value);
+            if (!isNaN(intValue)) {
+              this.plugin.settings.ttlDays = intValue;
+              await this.plugin.saveSettings();
+            }
+          });
+      });
+
+
+    new Setting(containerEl)
       .setName("Your CohereAI trial API key")
       .setDesc(
         createFragment((frag) => {
@@ -397,29 +426,12 @@ export class CopilotSettingTab extends PluginSettingTab {
       );
 
     containerEl.createEl('h4', { text: 'Local Copilot (EXPERIMENTAL, NO INTERNET NEEDED!!)' });
-    containerEl.createEl('h6', { text: 'To use Local Copilot, please check the doc/demo video to set up LocalAI server on your device. Once ready, switch on the toggle below, type in the LocalAI Model name you have, and pick LocalAI in the Copilot Chat model selection dropdown to chat with it!' });
-    containerEl.createEl('h6', { text: 'Local models can be limited in capabilities and may not work for some use cases at this time. Keep in mind that it is still in early experimental phase. But it is definitely fun to try out!' });
-
-    new Setting(containerEl)
-      .setName("Use Local Copilot")
-      .setDesc(
-        createFragment((frag) => {
-          frag.appendText("Toggle this switch to launch a local proxy server. If this is on, 3rd-party proxy in Advanced Setting is overridden.");
-          frag.createEl('br');
-          frag.createEl(
-            'strong',
-            { text: "Plugin restart required." }
-          );
-        })
-      )
-      .addToggle((toggle) => {
-        toggle
-          .setValue(this.plugin.settings.useLocalProxy)
-          .onChange(async (value) => {
-            this.plugin.settings.useLocalProxy = value;
-            await this.plugin.saveSettings();
-          });
-      });
+    containerEl.createEl('p', { text: 'To use Local Copilot, please check the doc to set up LocalAI server on your device. Once ready,' });
+    containerEl.createEl('p', { text: '1. Set OpenAI Proxy Base URL to http://localhost:8080/v1 under Advanced Settings.' });
+    containerEl.createEl('p', { text: '2. Type in the LocalAI Model name you have below.' });
+    containerEl.createEl('p', { text: '3. Pick LocalAI in the Copilot Chat model selection dropdown to chat with it!' });
+    containerEl.createEl('p', { text: 'Local models can be limited in capabilities and may not work for some use cases at this time. Keep in mind that it is still in early experimental phase. But it is definitely fun to try out!' });
+    containerEl.createEl('h6', { text: 'When you are done, clear the OpenAI Proxy Base URL to switch back to non-local models.' });
 
     new Setting(containerEl)
       .setName("Running LocalAI with Docker")
@@ -447,6 +459,8 @@ export class CopilotSettingTab extends PluginSettingTab {
       .setDesc(
         createFragment((frag) => {
           frag.appendText("The local model you'd like to use. Make sure you download that model in your LocalAI models directory.");
+          frag.createEl('br');
+          frag.appendText("NOTE: Please set OpenAI Proxy Base URL to http://localhost:8080/v1 under Advanced Settings")
         })
       )
       .addText((text) => {

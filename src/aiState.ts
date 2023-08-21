@@ -18,6 +18,7 @@ import {
 } from '@/constants';
 import { ChatMessage } from '@/sharedState';
 import { getModelName, isSupportedChain } from '@/utils';
+import VectorDBManager, { MemoryVector } from '@/vectorDBManager';
 import {
   BaseChain,
   ConversationChain,
@@ -27,7 +28,6 @@ import {
 import { ChatAnthropic } from 'langchain/chat_models/anthropic';
 import { BaseChatModel } from 'langchain/chat_models/base';
 import { ChatOpenAI } from 'langchain/chat_models/openai';
-import { VectorStore } from 'langchain/dist/vectorstores/base';
 import { Embeddings } from "langchain/embeddings/base";
 import { CohereEmbeddings } from "langchain/embeddings/cohere";
 import { HuggingFaceInferenceEmbeddings } from "langchain/embeddings/hf";
@@ -63,7 +63,6 @@ interface ModelConfig {
   azureOpenAIApiDeploymentName?: string,
   azureOpenAIApiVersion?: string,
   openAIProxyBaseUrl?: string,
-  useLocalProxy?: boolean,
   localAIModel?: string,
 }
 
@@ -87,7 +86,6 @@ export interface LangChainParams {
   chainType: ChainType,  // Default ChainType is set in main.ts getAIStateParams
   options: SetChainOptions,
   openAIProxyBaseUrl?: string,
-  useLocalProxy?: boolean,
   localAIModel?: string,
 }
 
@@ -107,7 +105,7 @@ class AIState {
   private static conversationalRetrievalChain: ConversationalRetrievalQAChain;
 
   private chatPrompt:  ChatPromptTemplate;
-  private vectorStore: VectorStore;
+  private vectorStore: MemoryVectorStore;
 
   memory: BufferWindowMemory;
   langChainParams: LangChainParams;
@@ -171,7 +169,6 @@ class AIState {
       temperature,
       maxTokens,
       openAIProxyBaseUrl,
-      useLocalProxy,
       localAIModel,
     } = this.langChainParams;
 
@@ -191,7 +188,6 @@ class AIState {
           openAIApiKey,
           maxTokens,
           openAIProxyBaseUrl,
-          useLocalProxy,
           localAIModel,
         };
         break;
@@ -265,7 +261,6 @@ class AIState {
       azureOpenAIApiVersion,
       azureOpenAIApiEmbeddingDeploymentName,
       openAIProxyBaseUrl,
-      useLocalProxy,
     } = this.langChainParams;
 
     const OpenAIEmbeddingsAPI = new OpenAIEmbeddings({
@@ -307,7 +302,6 @@ class AIState {
         return new ProxyOpenAIEmbeddings({
           openAIApiKey,
           openAIProxyBaseUrl,
-          useLocalProxy,
           maxRetries: 3,
           maxConcurrency: 3,
           timeout: 10000,
@@ -364,12 +358,17 @@ class AIState {
   setModel(newModelDisplayName: string): void {
     // model and model display name must be update at the same time!
     let newModel = getModelName(newModelDisplayName);
-    const {useLocalProxy, localAIModel} = this.langChainParams;
+    const {localAIModel} = this.langChainParams;
 
-    if (newModelDisplayName === ChatModelDisplayNames.LOCAL_AI && useLocalProxy) {
+    if (newModelDisplayName === ChatModelDisplayNames.LOCAL_AI) {
       if (!localAIModel) {
         new Notice('No local AI model provided! Please set it in settings first.');
         console.error('No local AI model provided! Please set it in settings first.');
+        return;
+      }
+      if (!this.langChainParams.openAIProxyBaseUrl) {
+        new Notice('Please set the OpenAI Proxy Base URL in settings.');
+        console.error('Please set the OpenAI Proxy Base URL in settings.');
         return;
       }
       newModel = localAIModel;
@@ -435,9 +434,12 @@ class AIState {
         }
 
         this.setNoteContent(options.noteContent);
-        const docHash = ChainFactory.getDocumentHash(options.noteContent);
-        const vectorStore = ChainFactory.vectorStoreMap.get(docHash);
-        if (vectorStore) {
+        const docHash = VectorDBManager.getDocumentHash(options.noteContent);
+        const parsedMemoryVectors: MemoryVector[] | undefined = await VectorDBManager.getMemoryVectors(docHash);
+        if (parsedMemoryVectors) {
+          const vectorStore = await VectorDBManager.rebuildMemoryVectorStore(
+            parsedMemoryVectors, this.getEmbeddingsAPI()
+          );
           AIState.retrievalChain = RetrievalQAChain.fromLLM(
             AIState.chatModel,
             vectorStore.asRetriever(),
@@ -487,7 +489,8 @@ class AIState {
       this.vectorStore = await MemoryVectorStore.fromDocuments(
         docs, embeddingsAPI,
       );
-      ChainFactory.setVectorStore(this.vectorStore, docHash);
+      // Serialize and save vector store to PouchDB
+      VectorDBManager.setMemoryVectors(this.vectorStore.memoryVectors, docHash);
       console.log('Vector store created successfully.');
       new Notice('Vector store created successfully.');
     } catch (error) {

@@ -1,5 +1,5 @@
 import AIState, { useAIState } from '@/aiState';
-import ChainFactory, { ChainType } from '@/chainFactory';
+import { ChainType } from '@/chainFactory';
 import ChatIcons from '@/components/ChatComponents/ChatIcons';
 import ChatInput from '@/components/ChatComponents/ChatInput';
 import ChatMessages from '@/components/ChatComponents/ChatMessages';
@@ -31,6 +31,7 @@ import {
   summarizePrompt,
   tocPrompt,
 } from '@/utils';
+import VectorDBManager from '@/vectorDBManager';
 import { EventEmitter } from 'events';
 import { Notice, TFile } from 'obsidian';
 import React, {
@@ -49,11 +50,12 @@ interface ChatProps {
   aiState: AIState;
   emitter: EventEmitter;
   getChatVisibility: () => Promise<boolean>;
+  defaultSaveFolder: string;
   debug: boolean;
 }
 
 const Chat: React.FC<ChatProps> = ({
-  sharedState, aiState, emitter, getChatVisibility, debug
+  sharedState, aiState, emitter, getChatVisibility, defaultSaveFolder, debug
 }) => {
   const [
     chatHistory, addMessage, clearMessages,
@@ -111,8 +113,14 @@ const Chat: React.FC<ChatProps> = ({
     const chatContent = chatHistory.map((message) => `**${message.sender}**: ${message.message}`).join('\n\n');
 
     try {
+      // Check if the default folder exists or create it
+      const folder = app.vault.getAbstractFileByPath(defaultSaveFolder);
+      if (!folder) {
+        await app.vault.createFolder(defaultSaveFolder);
+      }
+
       const now = new Date();
-      const noteFileName = `Chat-${formatDateTime(now)}.md`;
+      const noteFileName = `${defaultSaveFolder}/Chat-${formatDateTime(now)}.md`;
       const newNote: TFile = await app.vault.create(noteFileName, chatContent);
       const leaf = app.workspace.getLeaf();
       leaf.openFile(newNote);
@@ -134,6 +142,9 @@ const Chat: React.FC<ChatProps> = ({
       return;
     }
     const noteContent = await getFileContent(file);
+    if (debug) {
+      console.log("ALL NOTE CONTENT IS", noteContent)
+    }
     const noteName = getFileName(file);
     if (!noteContent) {
       new Notice('No note content found.');
@@ -141,7 +152,7 @@ const Chat: React.FC<ChatProps> = ({
       return;
     }
 
-    const docHash = ChainFactory.getDocumentHash(noteContent);
+    const docHash = VectorDBManager.getDocumentHash(noteContent);
     await aiState.buildIndex(noteContent, docHash);
     const activeNoteOnMessage: ChatMessage = {
       sender: AI_SENDER,

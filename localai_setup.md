@@ -21,10 +21,10 @@ git clone https://github.com/go-skynet/LocalAI.git
 cd LocalAI
 
 # build the binary
-make build
+make BUILD_TYPE=metal build
 
-# Start localai with model gallery
-GALLERIES='[{"name":"model-gallery", "url":"github:go-skynet/model-gallery/index.yaml"}, {"url": "github:go-skynet/model-gallery/huggingface.yaml","name":"huggingface"}]' ./local-ai --models-path ./models/ --debug
+# Start localai with model gallery with CORS enabled
+GALLERIES='[{"name":"model-gallery", "url":"github:go-skynet/model-gallery/index.yaml"}, {"url": "github:go-skynet/model-gallery/huggingface.yaml","name":"huggingface"}]' ./local-ai --models-path ./models/ --debug --cors
 ```
 
 (Here's the original [localAI guide](https://localai.io/basics/build/#build-on-mac) I referred to. I added some more details for the errors I saw when I set it up on my M1 Macbook Air. Hope this helps!)
@@ -56,6 +56,12 @@ Set the `GALLERIES` env variable to load models from model-gallery. Edit `.env` 
 
 ```
 GALLERIES=[{"name":"model-gallery", "url":"github:go-skynet/model-gallery/index.yaml"}, {"url": "github:go-skynet/model-gallery/huggingface.yaml","name":"huggingface"}]
+```
+
+Also uncomment the `CORS` settings in `.env`
+
+```
+CORS=true
 ```
 
 Then start the Docker container,
