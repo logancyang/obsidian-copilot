@@ -33,13 +33,13 @@ export interface CopilotSettings {
   temperature: number;
   maxTokens: number;
   contextTurns: number;
-  useNotesAsContext: boolean;
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;
   localAIModel: string;
   ttlDays: number;
   stream: boolean;
   embeddingProvider: string;
+  defaultSaveFolder: string;
   debug: boolean;
 }
 
