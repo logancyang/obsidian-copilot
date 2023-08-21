@@ -16,6 +16,7 @@ export async function getAllPDFText(app: App, file: TFile): Promise<string | nul
   for (let i = 0; i < doc.numPages; i++) {
 	  let page = await doc.getPage(i + 1);
 	  let text = await page.getTextContent();
+
     if (text.items.length > 0) {
       let pageText = text.items.map((item: any) => item.str).join(" ");
       pageText = pageText.replace(/\s+/g, ' ').trim(); // Remove potentially duplicated spaces
