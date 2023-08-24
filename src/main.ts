@@ -14,7 +14,7 @@ import { sanitizeSettings } from "@/utils";
 import * as fileUtils from "@/fileUtils"
 import VectorDBManager, { VectorStoreDocument } from '@/vectorDBManager';
 import { Server } from 'http';
-import { Editor, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
+import { Editor, MarkdownEditView, MarkdownView, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
 import PouchDB from 'pouchdb';
 
 
@@ -85,13 +85,6 @@ export default class CopilotPlugin extends Plugin {
       (leaf: WorkspaceLeaf) => new CopilotView(leaf, this)
     );
 
-    // this.addCommand({ // TODO: Change this to allow loading a directory of files as context
-    //   id: 'chat-extract-file-contents',
-    //   name: 'Extract Active File Contents',
-    //   callback: () => {
-    //     fileUtils.useActiveFileAsContext(this.aiState);
-    //   }
-    // })
 
     this.addCommand({
       id: 'chat-toggle-window',
@@ -116,148 +109,152 @@ export default class CopilotPlugin extends Plugin {
     this.addCommand({
       id: 'fix-grammar-prompt',
       name: 'Fix grammar and spelling of selection',
-      editorCallback: (editor: Editor) => {
-        this.processSelection(editor, 'fixGrammarSpellingSelection');
-      },
+      callback: () => {
+        this.processSelection('fixGrammarSpellingSelection')
+      }
     });
 
     this.addCommand({
       id: 'summarize-prompt',
       name: 'Summarize selection',
-      editorCallback: (editor: Editor) => {
-        this.processSelection(editor, 'summarizeSelection');
-      },
+      callback: () => {
+        this.processSelection('summarizeSelection')
+      }
     });
 
     this.addCommand({
       id: 'generate-toc-prompt',
       name: 'Generate table of contents for selection',
-      editorCallback: (editor: Editor) => {
-        this.processSelection(editor, 'tocSelection');
-      },
+      callback: () => {
+        this.processSelection('tocSelection')
+      }
     });
 
     this.addCommand({
       id: 'generate-glossary-prompt',
       name: 'Generate glossary for selection',
-      editorCallback: (editor: Editor) => {
-        this.processSelection(editor, 'glossarySelection');
-      },
+      callback: () => {
+        this.processSelection('glossarySelection')
+      }
     });
 
 
     this.addCommand({
       id: 'simplify-prompt',
       name: 'Simplify selection',
-      editorCallback: (editor: Editor) => {
-        this.processSelection(editor, 'simplifySelection');
-      },
+      callback: () => {
+        this.processSelection('simplifySelection')
+      }
     });
 
     this.addCommand({
       id: 'emojify-prompt',
       name: 'Emojify selection',
-      editorCallback: (editor: Editor) => {
-        this.processSelection(editor, 'emojifySelection');
-      },
+      callback: () => {
+        this.processSelection('emojifySelection')
+      }
     });
 
     this.addCommand({
       id: 'remove-urls-prompt',
       name: 'Remove URLs from selection',
-      editorCallback: (editor: Editor) => {
-        this.processSelection(editor, 'removeUrlsFromSelection');
-      },
+      callback: () => {
+        this.processSelection('removeUrlsFromSelection')
+      }
     });
 
     this.addCommand({
       id: 'rewrite-tweet-prompt',
       name: 'Rewrite selection to a tweet',
-      editorCallback: (editor: Editor) => {
-        this.processSelection(editor, 'rewriteTweetSelection');
-      },
+      callback: () => {
+        this.processSelection('rewriteTweetSelection')
+      }
     });
 
     this.addCommand({
       id: 'rewrite-tweet-thread-prompt',
       name: 'Rewrite selection to a tweet thread',
-      editorCallback: (editor: Editor) => {
-        this.processSelection(editor, 'rewriteTweetThreadSelection');
-      },
+      callback: () => {
+        this.processSelection('rewriteTweetThreadSelection');
+      }
     });
 
     this.addCommand({
       id: 'make-shorter-prompt',
       name: 'Make selection shorter',
-      editorCallback: (editor: Editor) => {
-        this.processSelection(editor, 'rewriteShorterSelection');
-      },
+      callback: () => {
+        this.processSelection('rewriteShorterSelection');
+      }
     });
 
     this.addCommand({
       id: 'make-longer-prompt',
       name: 'Make selection longer',
-      editorCallback: (editor: Editor) => {
-        this.processSelection(editor, 'rewriteLongerSelection');
-      },
-    });
+      callback: () => {
+        this.processSelection('rewriteLongerSelection')
+      }
+    }); 
 
     this.addCommand({
       id: 'eli5-prompt',
       name: 'Explain selection like I\'m 5',
-      editorCallback: (editor: Editor) => {
-        this.processSelection(editor, 'eli5Selection');
-      },
+      callback: () => {
+        this.processSelection('eli5Selection')
+      }
     });
 
     this.addCommand({
       id: 'press-release-prompt',
       name: 'Rewrite selection to a press release',
-      editorCallback: (editor: Editor) => {
-        this.processSelection(editor, 'rewritePressReleaseSelection');
-      },
+      callback: () => {
+        this.processSelection('rewritePressReleaseSelection');
+      }
     });
 
     this.addCommand({
       id: 'translate-selection-prompt',
       name: 'Translate selection',
-      editorCallback: (editor: Editor) => {
+      callback: () => {
+        // If outside the markdown editor, the selection is lost when modal is opened so save text now
+        const currentlySelectedText = activeWindow.getSelection()?.toString();
         new LanguageModal(this.app, (language) => {
           if (!language) {
             new Notice('Please select a language.');
             return;
           }
-          this.processSelection(editor, 'translateSelection', language);
+          this.processSelection('translateSelection', currentlySelectedText, language);
         }).open();
-      },
+      }
     });
 
     this.addCommand({
       id: 'change-tone-prompt',
       name: 'Change tone of selection',
-      editorCallback: (editor: Editor) => {
+      callback: () => {
+        // If outside the markdown editor, the selection is lost when modal is opened so save text now
+        const currentlySelectedText = activeWindow.getSelection()?.toString();
         new ToneModal(this.app, (tone) => {
           if (!tone) {
             new Notice('Please select a tone.');
             return;
           }
-          this.processSelection(editor, 'changeToneSelection', tone);
+          this.processSelection('changeToneSelection', currentlySelectedText, tone);
         }).open();
       },
     });
-
+        
     this.addCommand({
       id: 'count-tokens',
       name: 'Count words and tokens in selection',
-      editorCallback: (editor: Editor) => {
-        this.processSelection(editor, 'countTokensSelection');
+      callback: () => {
+        this.processSelection('countTokensSelection');
       },
     });
 
     this.addCommand({
       id: 'add-custom-prompt',
       name: 'Add custom prompt for selection',
-      editorCallback: (editor: Editor) => {
+      callback: () => {
         new AddPromptModal(this.app, async (title: string, prompt: string) => {
           try {
             // Save the prompt to the database
@@ -274,8 +271,9 @@ export default class CopilotPlugin extends Plugin {
     this.addCommand({
       id: 'apply-custom-prompt',
       name: 'Apply custom prompt to selection',
-      editorCallback: (editor: Editor) => {
+      callback: () => {
         this.fetchPromptTitles().then((promptTitles: string[]) => {
+          const currentlySelectedText = activeWindow.getSelection()?.toString();
           new ListPromptModal(this.app, promptTitles, async (promptTitle: string) => {
             if (!promptTitle) {
               new Notice('Please select a prompt title.');
@@ -287,7 +285,7 @@ export default class CopilotPlugin extends Plugin {
                 new Notice(`No prompt found with the title "${promptTitle}".`);
                 return;
               }
-              this.processSelection(editor, 'applyCustomPromptSelection', doc.prompt);
+              this.processSelection('applyCustomPromptSelection', currentlySelectedText, doc.prompt);
             } catch (err) {
               if (err.name === 'not_found') {
                 new Notice(`No prompt found with the title "${promptTitle}".`);
@@ -304,11 +302,7 @@ export default class CopilotPlugin extends Plugin {
     this.addCommand({
       id: 'delete-custom-prompt',
       name: 'Delete custom prompt',
-      checkCallback: (checking: boolean) => {
-        if (checking) {
-          return true;
-        }
-
+      callback: () => {
         this.fetchPromptTitles().then((promptTitles: string[]) => {
           new ListPromptModal(this.app, promptTitles, async (promptTitle: string) => {
             if (!promptTitle) {
@@ -342,11 +336,7 @@ export default class CopilotPlugin extends Plugin {
     this.addCommand({
       id: 'edit-custom-prompt',
       name: 'Edit custom prompt',
-      checkCallback: (checking: boolean) => {
-        if (checking) {
-          return true;
-        }
-
+      callback: () => {
         this.fetchPromptTitles().then((promptTitles: string[]) => {
           new ListPromptModal(this.app, promptTitles, async (promptTitle: string) => {
             if (!promptTitle) {
@@ -401,12 +391,21 @@ export default class CopilotPlugin extends Plugin {
     });
   }
 
-  processSelection(editor: Editor, eventType: string, eventSubtype?: string) {
-    if (editor.somethingSelected() === false) {
-      new Notice('Please select some text to rewrite.');
+  processSelection(eventType: string, selectedText?: string | undefined, eventSubtype?: string) {
+    if (!selectedText) {
+      selectedText = activeWindow.getSelection()?.toString();
+    }
+
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (activeView) {
+      const editor = activeView.editor;
+      selectedText = editor.getSelection();
+    }
+
+    if (!selectedText) {
+      new Notice('No text selected. You may need to set up a keyboard shortcut so your selection is not lost when executing this command.');
       return;
     }
-    const selectedText = editor.getSelection();
 
     const isChatWindowActive = this.app.workspace
       .getLeavesOfType(CHAT_VIEWTYPE).length > 0;
