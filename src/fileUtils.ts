@@ -1,5 +1,12 @@
 import { App, TFile, loadPdfJs } from "obsidian";
 
+async function loadPDF(app: App, file: TFile) {
+  const PDFJS = await loadPdfJs();
+  const pdfBinary = await app.vault.readBinary(file);
+  const doc = await PDFJS.getDocument(pdfBinary).promise;
+  return doc;
+}
+
 /**
  * Retrieves all the text content of a PDF file.
  * @param app The Obsidian App object.
@@ -7,10 +14,7 @@ import { App, TFile, loadPdfJs } from "obsidian";
  * @returns A Promise that resolves to the text content of the PDF file.
  */
 export async function getAllPDFText(app: App, file: TFile): Promise<string | null> {
-  const PDFJS = await loadPdfJs();
-
-  const pdfBinary = await app.vault.readBinary(file);
-  const doc = await PDFJS.getDocument(pdfBinary).promise;
+  const doc = await loadPDF(app, file);
 
   let textContent = [];
   for (let i = 0; i < doc.numPages; i++) {
@@ -31,5 +35,5 @@ export async function getAllPDFText(app: App, file: TFile): Promise<string | nul
 }
 
 export const FileUtils = {
-	getAllPDFText
+	getAllPDFText,
 }
