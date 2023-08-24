@@ -13,7 +13,7 @@ import SharedState from '@/sharedState';
 import { sanitizeSettings } from "@/utils";
 import VectorDBManager, { VectorStoreDocument } from '@/vectorDBManager';
 import { Server } from 'http';
-import { Editor, MarkdownEditView, MarkdownView, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
+import { MarkdownView, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
 import PouchDB from 'pouchdb';
 
 
