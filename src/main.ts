@@ -11,7 +11,6 @@ import {
 import { CopilotSettingTab } from '@/settings';
 import SharedState from '@/sharedState';
 import { sanitizeSettings } from "@/utils";
-import * as fileUtils from "@/fileUtils"
 import VectorDBManager, { VectorStoreDocument } from '@/vectorDBManager';
 import { Server } from 'http';
 import { Editor, MarkdownEditView, MarkdownView, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
