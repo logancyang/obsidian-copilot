@@ -10,6 +10,7 @@ export enum ChatModels {
   GPT_35_TURBO_16K = 'gpt-3.5-turbo-16k',
   GPT_4 = 'gpt-4',
   GPT_4_32K = 'gpt-4-32k',
+  GPT_4_TURBO = 'gpt-4-1106-preview',
   CLAUDE_1 = 'claude-1',
   CLAUDE_1_100K = 'claude-1-100k',
   CLAUDE_INSTANT_1 = 'claude-instant-1',
@@ -23,6 +24,7 @@ export enum ChatModelDisplayNames {
   GPT_35_TURBO_16K = 'GPT-3.5 16K',
   GPT_4 = 'GPT-4',
   GPT_4_32K = 'GPT-4 32K',
+  GPT_4_TURBO = 'GPT-4 Turbo',
   CLAUDE_1 = 'CLAUDE-1',
   CLAUDE_1_100K = 'CLAUDE-1-100K',
   CLAUDE_INSTANT_1 = 'CLAUDE-INSTANT',
@@ -39,6 +41,7 @@ export const OPENAI_MODELS = new Set([
     ChatModelDisplayNames.GPT_35_TURBO_16K,
     ChatModelDisplayNames.GPT_4,
     ChatModelDisplayNames.GPT_4_32K,
+    ChatModelDisplayNames.GPT_4_TURBO,
     ChatModelDisplayNames.LOCAL_AI,
 ]);
 
@@ -61,6 +64,7 @@ export const DISPLAY_NAME_TO_MODEL: Record<string, string> = {
   [ChatModelDisplayNames.GPT_35_TURBO_16K]: ChatModels.GPT_35_TURBO_16K,
   [ChatModelDisplayNames.GPT_4]: ChatModels.GPT_4,
   [ChatModelDisplayNames.GPT_4_32K]: ChatModels.GPT_4_32K,
+  [ChatModelDisplayNames.GPT_4_TURBO]: ChatModels.GPT_4_TURBO,
   [ChatModelDisplayNames.CLAUDE_1]: ChatModels.CLAUDE_1,
   [ChatModelDisplayNames.CLAUDE_1_100K]: ChatModels.CLAUDE_1_100K,
   [ChatModelDisplayNames.CLAUDE_INSTANT_1]: ChatModels.CLAUDE_INSTANT_1,
