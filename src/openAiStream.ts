@@ -146,6 +146,9 @@ export const OpenAIRequest = async (
     url: OPEN_AI_API_URL,
     headers: {
       'Content-Type': 'application/json',
+      'HTTP-Referer': `https://github.com/logancyang/obsidian-copilot`, // To identify your app. Can be set to e.g. http://localhost:3000 for testing
+      'X-Title': `Obsidian CoPilot`, // Optional. Shows on openrouter.ai
+
       Authorization: `Bearer ${key ? key : process.env.OPENAI_API_KEY}`,
       ...(process.env.OPENAI_ORGANIZATION && {
         'OpenAI-Organization': process.env.OPENAI_ORGANIZATION,
