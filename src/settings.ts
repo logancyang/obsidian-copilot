@@ -96,8 +96,8 @@ export class CopilotSettingTab extends PluginSettingTab {
         createFragment((frag) => {
           frag.appendText("You can find your API key at ");
           frag.createEl('a', {
-            text: "https://beta.openai.com/account/api-keys",
-            href: "https://beta.openai.com/account/api-keys"
+            text: "https://platform.openai.com/api-keys",
+            href: "https://platform.openai.com/api-keys"
           });
           frag.createEl('br');
           frag.appendText(
