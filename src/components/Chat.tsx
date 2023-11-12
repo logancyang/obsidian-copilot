@@ -98,6 +98,7 @@ const Chat: React.FC<ChatProps> = ({
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.nativeEvent.isComposing) return;
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault(); // Prevents adding a newline to the textarea
       handleSendMessage();
