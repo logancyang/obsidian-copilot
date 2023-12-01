@@ -32,6 +32,7 @@ import { Embeddings } from "langchain/embeddings/base";
 import { CohereEmbeddings } from "langchain/embeddings/cohere";
 import { HuggingFaceInferenceEmbeddings } from "langchain/embeddings/hf";
 import { OpenAIEmbeddings } from "langchain/embeddings/openai";
+import { ConfigurationParameters } from "openai";
 import { BufferWindowMemory } from "langchain/memory";
 import {
   ChatPromptTemplate,
@@ -263,12 +264,15 @@ class AIState {
       openAIProxyBaseUrl,
     } = this.langChainParams;
 
+	const OpenAIEmbeddingsConfs: ConfigurationParameters = {};
+	openAIProxyBaseUrl ? OpenAIEmbeddingsConfs["basePath"] = openAIProxyBaseUrl : null;
+
     const OpenAIEmbeddingsAPI = new OpenAIEmbeddings({
       openAIApiKey,
       maxRetries: 3,
       maxConcurrency: 3,
       timeout: 10000,
-    });
+    }, OpenAIEmbeddingsConfs);
 
     switch(this.langChainParams.embeddingProvider) {
       case OPENAI:
