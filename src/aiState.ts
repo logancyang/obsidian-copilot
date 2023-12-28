@@ -95,6 +95,41 @@ export interface SetChainOptions {
   forceNewCreation?: boolean;
 }
 
+/**
+ * AIState manages the chat model, LangChain, and related state.
+ *
+ * initMemory() - Initializes the memory buffer for the chat history.
+ *
+ * initChatPrompt() - Initializes the chat prompt template with placeholders for chat history and user input.
+ *
+ * validateChainType() - Throws error if chain type is invalid.
+ *
+ * validateChatModel() - Throws error if chat model is not initialized.
+ *
+ * getModelConfig() - Gets model configuration based on vendor.
+ *
+ * buildModelMap() - Builds map of available models and required info to instantiate them.
+ *
+ * getEmbeddingsAPI() - Gets the appropriate embeddings API instance based on settings.
+ *
+ * clearChatMemory() - Clears the chat history memory.
+ *
+ * setChatModel() - Creates and sets the chat model instance based on name.
+ *
+ * setModel() - Sets new model name and display name, creates new chain.
+ *
+ * createChain() - Creates new chain or updates existing with new model.
+ *
+ * setChain() - Validates and sets the chain instance of specified type.
+ *
+ * buildIndex() - Builds vector index for note content using embeddings API.
+ *
+ * countTokens() - Counts number of tokens for given input string.
+ *
+ * runChatModel() - Runs chat model and handles streaming output.
+ *
+ * runChain() - Runs the LangChain and handles streaming output.
+ */
 class AIState {
   private static chatModel: BaseChatModel;
   private static chatOpenAI: ChatOpenAI;
@@ -634,7 +669,9 @@ class AIState {
   }
 }
 
-
+/**
+ * React hook to manage state related to model, chain and memory in Chat component.
+*/
 export function useAIState(
   aiState: AIState,
 ): [
