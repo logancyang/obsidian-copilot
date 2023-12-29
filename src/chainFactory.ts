@@ -1,3 +1,4 @@
+import { BaseRetriever } from "@langchain/core/retrievers";
 import { BaseLanguageModel } from "langchain/base_language";
 import {
   BaseChain,
@@ -5,7 +6,6 @@ import {
   ConversationalRetrievalQAChain,
   LLMChainInput
 } from "langchain/chains";
-import { BaseRetriever } from "langchain/schema";
 
 export interface RetrievalChainParams {
   llm: BaseLanguageModel;

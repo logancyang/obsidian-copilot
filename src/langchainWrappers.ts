@@ -1,7 +1,8 @@
 import { ChatOpenAI } from 'langchain/chat_models/openai';
 import { OpenAIEmbeddings } from "langchain/embeddings/openai";
-import { Configuration, OpenAIApi } from "openai";
+import OpenAI from "openai";
 
+// Migrated to OpenAI v4 client from v3: https://github.com/openai/openai-node/discussions/217
 export class ProxyChatOpenAI extends ChatOpenAI {
   constructor(
     fields?: any,
@@ -9,16 +10,15 @@ export class ProxyChatOpenAI extends ChatOpenAI {
     super(fields ?? {});
 
     // Use LocalAIModel if it is set
+    // TODO: Remove this once move over to LM Studio
     const modelName = fields.localAIModel ? fields.localAIModel : fields.modelName;
 
-    const clientConfig = new Configuration({
+    // Reinitialize the client with the updated clientConfig
+    this["client"] = new OpenAI({
       ...this["clientConfig"],
       modelName,
-      basePath: fields.openAIProxyBaseUrl,
+      baseURL: fields.openAIProxyBaseUrl,
     });
-
-    // Reinitialize the client with the updated clientConfig
-    this["client"] = new OpenAIApi(clientConfig);
   }
 }
 
@@ -28,12 +28,10 @@ export class ProxyOpenAIEmbeddings extends OpenAIEmbeddings {
   ) {
     super(fields ?? {});
 
-    const clientConfig = new Configuration({
-      ...this["clientConfig"],
-      basePath: fields.openAIProxyBaseUrl,
-    });
-
     // Reinitialize the client with the updated clientConfig
-    this["client"] = new OpenAIApi(clientConfig);
+    this["client"] = new OpenAI({
+      ...this["clientConfig"],
+      baseURL: fields.openAIProxyBaseUrl,
+    });
   }
 }

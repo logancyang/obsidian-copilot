@@ -95,6 +95,41 @@ export interface SetChainOptions {
   forceNewCreation?: boolean;
 }
 
+/**
+ * AIState manages the chat model, LangChain, and related state.
+ *
+ * initMemory() - Initializes the memory buffer for the chat history.
+ *
+ * initChatPrompt() - Initializes the chat prompt template with placeholders for chat history and user input.
+ *
+ * validateChainType() - Throws error if chain type is invalid.
+ *
+ * validateChatModel() - Throws error if chat model is not initialized.
+ *
+ * getModelConfig() - Gets model configuration based on vendor.
+ *
+ * buildModelMap() - Builds map of available models and required info to instantiate them.
+ *
+ * getEmbeddingsAPI() - Gets the appropriate embeddings API instance based on settings.
+ *
+ * clearChatMemory() - Clears the chat history memory.
+ *
+ * setChatModel() - Creates and sets the chat model instance based on name.
+ *
+ * setModel() - Sets new model name and display name, creates new chain.
+ *
+ * createChain() - Creates new chain or updates existing with new model.
+ *
+ * setChain() - Validates and sets the chain instance of specified type.
+ *
+ * buildIndex() - Builds vector index for note content using embeddings API.
+ *
+ * countTokens() - Counts number of tokens for given input string.
+ *
+ * runChatModel() - Runs chat model and handles streaming output.
+ *
+ * runChain() - Runs the LangChain and handles streaming output.
+ */
 class AIState {
   private static chatModel: BaseChatModel;
   private static chatOpenAI: ChatOpenAI;
@@ -263,12 +298,22 @@ class AIState {
       openAIProxyBaseUrl,
     } = this.langChainParams;
 
-    const OpenAIEmbeddingsAPI = new OpenAIEmbeddings({
-      openAIApiKey,
-      maxRetries: 3,
-      maxConcurrency: 3,
-      timeout: 10000,
-    });
+    // Note that openAIProxyBaseUrl has the highest priority.
+    // If openAIProxyBaseUrl is set, it overrides both chat and embedding models.
+    const OpenAIEmbeddingsAPI = openAIProxyBaseUrl ?
+      new ProxyOpenAIEmbeddings({
+        openAIApiKey,
+        maxRetries: 3,
+        maxConcurrency: 3,
+        timeout: 10000,
+        openAIProxyBaseUrl,
+      }):
+      new OpenAIEmbeddings({
+        openAIApiKey,
+        maxRetries: 3,
+        maxConcurrency: 3,
+        timeout: 10000,
+      });
 
     switch(this.langChainParams.embeddingProvider) {
       case OPENAI:
@@ -409,6 +454,7 @@ class AIState {
 
     switch (chainType) {
       case ChainType.LLM_CHAIN: {
+        // For initial load of the plugin
         if (options.forceNewCreation) {
           AIState.chain = ChainFactory.createNewLLMChain({
             llm: AIState.chatModel,
@@ -416,6 +462,7 @@ class AIState {
             prompt: options.prompt || this.chatPrompt,
           }) as ConversationChain;
         } else {
+          // For navigating back to the plugin view
           AIState.chain = ChainFactory.getLLMChainFromMap({
             llm: AIState.chatModel,
             memory: this.memory,
@@ -562,7 +609,7 @@ class AIState {
     debug = false,
   ) {
     // Check if chain is initialized properly
-    if (!isSupportedChain(AIState.chain)) {
+    if (!AIState.chain || !isSupportedChain(AIState.chain)) {
       console.error(
         'Chain is not initialized properly, re-initializing chain: ',
         this.langChainParams.chainType
@@ -634,7 +681,9 @@ class AIState {
   }
 }
 
-
+/**
+ * React hook to manage state related to model, chain and memory in Chat component.
+*/
 export function useAIState(
   aiState: AIState,
 ): [

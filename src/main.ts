@@ -381,9 +381,11 @@ export default class CopilotPlugin extends Plugin {
           // Clear the vectorstore db
           await this.dbVectorStores.destroy();
           // Reinitialize the database
-          this.dbVectorStores = new PouchDB<VectorStoreDocument>('copilot_vector_stores'); //
+          this.dbVectorStores = new PouchDB<VectorStoreDocument>('copilot_vector_stores');
+          // Make sure to update the instance with VectorDBManager
+          VectorDBManager.updateDBInstance(this.dbVectorStores);
           new Notice('Local vector store cleared successfully.');
-          console.log('Local vector store cleared successfully.');
+          console.log('Local vector store cleared successfully, new instance created.');
         } catch (err) {
           console.error("Error clearing the local vector store:", err);
           new Notice('An error occurred while clearing the local vector store.');

@@ -489,10 +489,14 @@ export class CopilotSettingTab extends PluginSettingTab {
         createFragment((frag) => {
           frag.createEl(
             'strong',
-            { text: "CAUTION: This will override the default OpenAI API URL! Use with discretion!" }
+            { text: "CAUTION: This overrides the OpenAI API URL " },
           );
           frag.createEl('br');
-          frag.appendText("Leave blank to use the official OpenAI API.");
+          frag.createEl('strong', {
+            text: "for both chat and embedding models when OpenAI models are picked!"
+          });
+          frag.createEl('br');
+          frag.appendText(" Leave blank to use the official OpenAI API.");
         })
       )
       .addText((text) => {
