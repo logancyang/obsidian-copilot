@@ -47,7 +47,7 @@
     "eventsource-parser": "^1.0.0",
     "koa": "^2.14.2",
     "koa-proxies": "^0.12.3",
-    "langchain": "^0.0.103",
+    "langchain": "^0.0.212",
     "next-i18next": "^13.2.2",
     "pouchdb": "^8.0.1",
     "prop-types": "^15.8.1",
