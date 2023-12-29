@@ -298,12 +298,22 @@ class AIState {
       openAIProxyBaseUrl,
     } = this.langChainParams;
 
-    const OpenAIEmbeddingsAPI = new OpenAIEmbeddings({
-      openAIApiKey,
-      maxRetries: 3,
-      maxConcurrency: 3,
-      timeout: 10000,
-    });
+    // Note that openAIProxyBaseUrl has the highest priority.
+    // If openAIProxyBaseUrl is set, it overrides both chat and embedding models.
+    const OpenAIEmbeddingsAPI = openAIProxyBaseUrl ?
+      new ProxyOpenAIEmbeddings({
+        openAIApiKey,
+        maxRetries: 3,
+        maxConcurrency: 3,
+        timeout: 10000,
+        openAIProxyBaseUrl,
+      }):
+      new OpenAIEmbeddings({
+        openAIApiKey,
+        maxRetries: 3,
+        maxConcurrency: 3,
+        timeout: 10000,
+      });
 
     switch(this.langChainParams.embeddingProvider) {
       case OPENAI:
