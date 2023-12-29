@@ -23,6 +23,10 @@ class VectorDBManager {
     this.db = db;
   }
 
+  public static updateDBInstance(newDb: PouchDB.Database): void {
+    this.db = newDb;
+  }
+
   public static getDocumentHash(sourceDocument: string): string {
     return MD5(sourceDocument).toString();
   }
