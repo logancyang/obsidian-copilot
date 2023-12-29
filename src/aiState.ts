@@ -444,6 +444,7 @@ class AIState {
 
     switch (chainType) {
       case ChainType.LLM_CHAIN: {
+        // For initial load of the plugin
         if (options.forceNewCreation) {
           AIState.chain = ChainFactory.createNewLLMChain({
             llm: AIState.chatModel,
@@ -451,6 +452,7 @@ class AIState {
             prompt: options.prompt || this.chatPrompt,
           }) as ConversationChain;
         } else {
+          // For navigating back to the plugin view
           AIState.chain = ChainFactory.getLLMChainFromMap({
             llm: AIState.chatModel,
             memory: this.memory,
@@ -597,7 +599,7 @@ class AIState {
     debug = false,
   ) {
     // Check if chain is initialized properly
-    if (!isSupportedChain(AIState.chain)) {
+    if (!AIState.chain || !isSupportedChain(AIState.chain)) {
       console.error(
         'Chain is not initialized properly, re-initializing chain: ',
         this.langChainParams.chainType
