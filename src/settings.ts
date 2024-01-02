@@ -19,6 +19,24 @@ export class CopilotSettingTab extends PluginSettingTab {
     this.plugin = plugin;
   }
 
+  async reloadPlugin() {
+    try {
+      // Save the settings before reloading
+      await this.plugin.saveSettings();
+
+      // Reload the plugin
+      const app = (this.plugin.app as any);
+      await app.plugins.disablePlugin("copilot");
+      await app.plugins.enablePlugin("copilot");
+
+      app.setting.openTabById("copilot").display();
+      new Notice('Plugin reloaded successfully.');
+    } catch (error) {
+      new Notice('Failed to reload the plugin. Please reload manually.');
+      console.error('Error reloading plugin:', error);
+    }
+  }
+
   display(): void {
     const { containerEl } = this;
 
@@ -26,9 +44,19 @@ export class CopilotSettingTab extends PluginSettingTab {
     containerEl.createEl('h2', { text: 'Copilot Settings' });
 
     containerEl.createEl('button', {
-      text: 'Reset to default settings',
+      text: 'Save and Reload',
       type: 'button',
-      cls: 'mod-cta',
+      cls: 'mod-cta button-spacing',
+    }).addEventListener('click', async () => {
+      await this.plugin.saveSettings();
+      await this.reloadPlugin();
+      new Notice('Settings have been saved and the plugin has been reloaded.');
+    });
+
+    containerEl.createEl('button', {
+      text: 'Reset to Default Settings',
+      type: 'button',
+      cls: 'mod-cta button-spacing',
     }).addEventListener('click', async () => {
       this.plugin.settings = DEFAULT_SETTINGS;
       await this.plugin.saveSettings();
@@ -36,7 +64,7 @@ export class CopilotSettingTab extends PluginSettingTab {
     });
 
     containerEl.createEl('h6',
-      { text: 'Please reload the plugin when you change any setting below.' }
+      { text: 'Please Save and Reload the plugin when you change any setting below.' }
     );
 
     const modelDisplayNames = [

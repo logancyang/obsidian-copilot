@@ -7,6 +7,10 @@ If your plugin does not need CSS, delete this file.
 
 */
 
+.button-spacing {
+    margin-right: 10px;
+}
+
 .chat-container {
     display: flex;
     flex-direction: column;
