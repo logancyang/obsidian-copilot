@@ -104,7 +104,7 @@ export interface SetChainOptions {
  *
  * validateChainType() - Throws error if chain type is invalid.
  *
- * validateChatModel() - Throws error if chat model is not initialized.
+ * validateChatModel() - Returns false if chat model is empty.
  *
  * getModelConfig() - Gets model configuration based on vendor.
  *
@@ -188,8 +188,11 @@ class AIState {
     if (chainType === undefined || chainType === null) throw new Error('No chain type set');
   }
 
-  private validateChatModel(chatModel: BaseChatModel): void {
-    if (chatModel === undefined || chatModel === null) throw new Error('No chat model set');
+  private validateChatModel(chatModel: BaseChatModel): boolean {
+    if (chatModel === undefined || chatModel === null) {
+      return false;
+    }
+    return true
   }
 
   private getModelConfig(chatModelProvider: string): ModelConfig {
@@ -370,8 +373,10 @@ class AIState {
     // Create and return the appropriate model
     const selectedModel = this.modelMap[modelDisplayName];
     if (!selectedModel.hasApiKey) {
-      new Notice(`API key is not provided for the model: ${modelDisplayName}`);
-      console.error(`API key is not provided for the model: ${modelDisplayName}`);
+      const errorMessage = `API key is not provided for the model: ${modelDisplayName}. Model switch failed.`;
+      new Notice(errorMessage);
+      // Stop execution and deliberate fail the model switch
+      throw new Error(errorMessage);
     }
 
     const modelConfig = this.getModelConfig(selectedModel.vendor);
@@ -418,17 +423,23 @@ class AIState {
       }
       newModel = localAIModel;
     }
-    this.langChainParams.model = newModel;
-    this.langChainParams.modelDisplayName = newModelDisplayName;
-    this.setChatModel(newModelDisplayName);
-    // Must update the chatModel for chain because ChainFactory always
-    // retrieves the old chain without the chatModel change if it exists!
-    // Create a new chain with the new chatModel
-    this.createChain(
-      this.langChainParams.chainType,
-      {...this.langChainParams.options, forceNewCreation: true},
-    )
-    console.log(`Setting model to ${newModelDisplayName}: ${newModel}`);
+
+    try {
+      this.langChainParams.model = newModel;
+      this.langChainParams.modelDisplayName = newModelDisplayName;
+      this.setChatModel(newModelDisplayName);
+      // Must update the chatModel for chain because ChainFactory always
+      // retrieves the old chain without the chatModel change if it exists!
+      // Create a new chain with the new chatModel
+      this.createChain(
+        this.langChainParams.chainType,
+        {...this.langChainParams.options, forceNewCreation: true},
+      )
+      console.log(`Setting model to ${newModelDisplayName}: ${newModel}`);
+    } catch (error) {
+      console.error("setModel failed: ", error);
+      console.log("model:", this.langChainParams.model);
+    }
   }
 
   /* Create a new chain, or update chain with new model */
@@ -449,7 +460,11 @@ class AIState {
     chainType: ChainType,
     options: SetChainOptions = {},
   ): Promise<void> {
-    this.validateChatModel(AIState.chatModel);
+    if (!this.validateChatModel(AIState.chatModel)) {
+      // No need to throw error and trigger multiple Notices to user
+      console.error('setChain failed: No chat model set.');
+      return;
+    }
     this.validateChainType(chainType);
 
     switch (chainType) {
@@ -608,6 +623,12 @@ class AIState {
     addMessage: (message: ChatMessage) => void,
     debug = false,
   ) {
+    if (!this.validateChatModel(AIState.chatModel)) {
+      const errorMsg = 'Chat model is not initialized properly, check your API key in Copilot setting and make sure you have API access.';
+      new Notice(errorMsg);
+      console.error(errorMsg);
+      return;
+    }
     // Check if chain is initialized properly
     if (!AIState.chain || !isSupportedChain(AIState.chain)) {
       console.error(
@@ -617,12 +638,30 @@ class AIState {
       this.setChain(this.langChainParams.chainType, this.langChainParams.options);
     }
 
+    const {
+      temperature,
+      maxTokens,
+      systemMessage,
+      chatContextTurns,
+      chainType,
+    } = this.langChainParams;
+
     let fullAIResponse = '';
+    const chain = AIState.chain as any;
     try {
-      switch(this.langChainParams.chainType) {
+      switch(chainType) {
         case ChainType.LLM_CHAIN:
           if (debug) {
-            console.log('chain:', AIState.chain);
+            console.log(`*** DEBUG INFO ***\n`
+              + `user message: ${userMessage}\n`
+              + `model: ${chain.llm.modelName}\n`
+              + `chain type: ${chainType}\n`
+              + `temperature: ${temperature}\n`
+              + `maxTokens: ${maxTokens}\n`
+              + `system message: ${systemMessage}\n`
+              + `chat context turns: ${chatContextTurns}\n`,
+            );
+            console.log('chain:', chain);
             console.log('Chat memory:', this.memory);
           }
           await AIState.chain.call(
@@ -642,6 +681,16 @@ class AIState {
           break;
         case ChainType.RETRIEVAL_QA_CHAIN:
           if (debug) {
+            console.log(`*** DEBUG INFO ***\n`
+              + `user message: ${userMessage}\n`
+              + `model: ${chain.llm.modelName}\n`
+              + `chain type: ${chainType}\n`
+              + `temperature: ${temperature}\n`
+              + `maxTokens: ${maxTokens}\n`
+              + `system message: ${systemMessage}\n`
+              + `chat context turns: ${chatContextTurns}\n`,
+            );
+            console.log('chain:', chain);
             console.log('embedding provider:', this.langChainParams.embeddingProvider);
           }
           await AIState.retrievalChain.call(
@@ -665,8 +714,14 @@ class AIState {
     } catch (error) {
       const errorData = error?.response?.data?.error || error;
       const errorCode = errorData?.code || error;
-      new Notice(`LangChain error: ${errorCode}`);
-      console.error(errorData);
+      if (errorCode === 'model_not_found') {
+        const modelNotFoundMsg = "You do not have access to this model or the model does not exist, please check with your API provider.";
+        new Notice(modelNotFoundMsg);
+        console.error(modelNotFoundMsg);
+      } else {
+        new Notice(`LangChain error: ${errorCode}`);
+        console.error(errorData);
+      }
     } finally {
       if (fullAIResponse) {
         addMessage({

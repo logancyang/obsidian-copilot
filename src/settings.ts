@@ -19,25 +19,57 @@ export class CopilotSettingTab extends PluginSettingTab {
     this.plugin = plugin;
   }
 
+  async reloadPlugin() {
+    try {
+      // Save the settings before reloading
+      await this.plugin.saveSettings();
+
+      // Reload the plugin
+      const app = (this.plugin.app as any);
+      await app.plugins.disablePlugin("copilot");
+      await app.plugins.enablePlugin("copilot");
+
+      app.setting.openTabById("copilot").display();
+      new Notice('Plugin reloaded successfully.');
+    } catch (error) {
+      new Notice('Failed to reload the plugin. Please reload manually.');
+      console.error('Error reloading plugin:', error);
+    }
+  }
+
   display(): void {
     const { containerEl } = this;
 
     containerEl.empty();
     containerEl.createEl('h2', { text: 'Copilot Settings' });
 
-    containerEl.createEl('button', {
-      text: 'Reset to default settings',
+    const buttonContainer = containerEl.createDiv({ cls: 'button-container' });
+    buttonContainer.createEl('button', {
+      text: 'Save and Reload',
+      type: 'button',
+      cls: 'mod-cta',
+    }).addEventListener('click', async () => {
+      await this.plugin.saveSettings();
+      await this.reloadPlugin();
+      new Notice('Settings have been saved and the plugin has been reloaded.');
+    });
+
+    buttonContainer.createEl('button', {
+      text: 'Reset to Default Settings',
       type: 'button',
       cls: 'mod-cta',
     }).addEventListener('click', async () => {
       this.plugin.settings = DEFAULT_SETTINGS;
       await this.plugin.saveSettings();
+      await this.reloadPlugin();
       new Notice('Settings have been reset to their default values.');
     });
 
-    containerEl.createEl('h6',
-      { text: 'Please reload the plugin when you change any setting below.' }
-    );
+    containerEl.createEl('div', {
+      text: 'Please Save and Reload the plugin when you change any setting below!',
+      cls: 'warning-message'
+    });
+
 
     const modelDisplayNames = [
       ChatModelDisplayNames.GPT_35_TURBO,
@@ -60,8 +92,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       .setName("Default Model")
       .setDesc(
         createFragment((frag) => {
-          frag.appendText("The default model to use, only takes effect when you ");
-          frag.createEl('strong', { text: "restart the plugin" });
+          frag.appendText("The default model to use");
         })
       )
       .addDropdown((dropdown: DropdownComponent) => {
@@ -105,11 +136,13 @@ export class CopilotSettingTab extends PluginSettingTab {
           frag.appendText(
             "It is stored locally in your vault at "
           );
+          frag.createEl('br');
           frag.createEl(
             'strong',
             { text: "path_to_your_vault/.obsidian/plugins/obsidian-copilot/data.json" }
           );
-          frag.appendText(", and it is only used to make requests to OpenAI.");
+          frag.createEl('br');
+          frag.appendText("and it is only used to make requests to OpenAI.");
         })
       )
       .addText((text) => {
@@ -124,6 +157,27 @@ export class CopilotSettingTab extends PluginSettingTab {
           })
       }
       );
+
+    const warningMessage = containerEl.createEl('div', { cls: 'warning-message' });
+
+    warningMessage.createEl('span', {
+        text: 'If errors occur, pls re-enter the API key, save and reload the plugin to see if it resolves the issue.'
+    });
+
+    warningMessage.createEl('br');
+
+    warningMessage.createEl('span', {
+        text: 'If you are a new user, try '
+    });
+
+    warningMessage.createEl('a', {
+        text: 'OpenAI playground',
+        href: 'https://platform.openai.com/playground?mode=chat'
+    });
+
+    warningMessage.createEl('span', {
+        text: ' to see if you have correct API access first.'
+    });
 
     // containerEl.createEl('h6', { text: 'Anthropic' });
 
@@ -332,8 +386,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       .setName("Embedding Provider")
       .setDesc(
         createFragment((frag) => {
-          frag.appendText("The embedding provider to use, only takes effect when you ");
-          frag.createEl('strong', { text: "restart the plugin" });
+          frag.appendText("The embedding provider to use");
         })
       )
       .addDropdown((dropdown: DropdownComponent) => {

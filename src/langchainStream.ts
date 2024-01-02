@@ -13,28 +13,8 @@ export const getAIResponse = async (
   updateShouldAbort: (abortController: AbortController | null) => void,
   debug = false,
 ) => {
-  const {
-    model,
-    temperature,
-    maxTokens,
-    systemMessage,
-    chatContextTurns,
-  } = aiState.langChainParams;
-
   const abortController = new AbortController();
-
   updateShouldAbort(abortController);
-  if (debug) {
-    console.log(`*** DEBUG INFO ***\n`
-      + `user message: ${userMessage.message}\n`
-      + `model: ${model}\n`
-      + `temperature: ${temperature}\n`
-      + `maxTokens: ${maxTokens}\n`
-      + `system message: ${systemMessage}\n`
-      + `chat context turns: ${chatContextTurns}\n`,
-    );
-  }
-
   try {
     // TODO: Need to run certain models without langchain
     // it will mean no retrieval qa mode for those models!

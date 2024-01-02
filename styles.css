@@ -7,12 +7,34 @@ If your plugin does not need CSS, delete this file.
 
 */
 
+.button-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.button-container .mod-cta {
+  flex: 1; /* Make buttons take equal width */
+  margin: 25px; /* Adds some space between buttons */
+}
+
+.warning-message {
+  background-color: black;
+  color: orange;
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 5px;
+  border: 1px solid orange;
+  font-weight: bolder;
+  text-align: center;
+}
+
 .chat-container {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;  /* Fix overflow and can't scroll up */
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;  /* Fix overflow and can't scroll up */
 }
 
 .bottom-container {
