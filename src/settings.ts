@@ -43,29 +43,32 @@ export class CopilotSettingTab extends PluginSettingTab {
     containerEl.empty();
     containerEl.createEl('h2', { text: 'Copilot Settings' });
 
-    containerEl.createEl('button', {
+    const buttonContainer = containerEl.createDiv({ cls: 'button-container' });
+    buttonContainer.createEl('button', {
       text: 'Save and Reload',
       type: 'button',
-      cls: 'mod-cta button-spacing',
+      cls: 'mod-cta',
     }).addEventListener('click', async () => {
       await this.plugin.saveSettings();
       await this.reloadPlugin();
       new Notice('Settings have been saved and the plugin has been reloaded.');
     });
 
-    containerEl.createEl('button', {
+    buttonContainer.createEl('button', {
       text: 'Reset to Default Settings',
       type: 'button',
-      cls: 'mod-cta button-spacing',
+      cls: 'mod-cta',
     }).addEventListener('click', async () => {
       this.plugin.settings = DEFAULT_SETTINGS;
       await this.plugin.saveSettings();
       new Notice('Settings have been reset to their default values.');
     });
 
-    containerEl.createEl('h6',
-      { text: 'Please Save and Reload the plugin when you change any setting below.' }
-    );
+    containerEl.createEl('div', {
+      text: 'Please Save and Reload the plugin when you change any setting below!',
+      cls: 'warning-message'
+    });
+
 
     const modelDisplayNames = [
       ChatModelDisplayNames.GPT_35_TURBO,
@@ -88,8 +91,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       .setName("Default Model")
       .setDesc(
         createFragment((frag) => {
-          frag.appendText("The default model to use, only takes effect when you ");
-          frag.createEl('strong', { text: "restart the plugin" });
+          frag.appendText("The default model to use");
         })
       )
       .addDropdown((dropdown: DropdownComponent) => {
@@ -152,6 +154,21 @@ export class CopilotSettingTab extends PluginSettingTab {
           })
       }
       );
+
+    const warningMessage = containerEl.createEl('div', { cls: 'warning-message' });
+
+    warningMessage.createEl('span', {
+        text: 'If the model does not respond, try '
+    });
+
+    warningMessage.createEl('a', {
+        text: 'OpenAI playground',
+        href: 'https://platform.openai.com/playground?mode=chat'
+    });
+
+    warningMessage.createEl('span', {
+        text: ' to see if you have correct API access.'
+    });
 
     // containerEl.createEl('h6', { text: 'Anthropic' });
 
@@ -360,8 +377,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       .setName("Embedding Provider")
       .setDesc(
         createFragment((frag) => {
-          frag.appendText("The embedding provider to use, only takes effect when you ");
-          frag.createEl('strong', { text: "restart the plugin" });
+          frag.appendText("The embedding provider to use");
         })
       )
       .addDropdown((dropdown: DropdownComponent) => {
