@@ -61,6 +61,7 @@ export class CopilotSettingTab extends PluginSettingTab {
     }).addEventListener('click', async () => {
       this.plugin.settings = DEFAULT_SETTINGS;
       await this.plugin.saveSettings();
+      await this.reloadPlugin();
       new Notice('Settings have been reset to their default values.');
     });
 
@@ -135,11 +136,13 @@ export class CopilotSettingTab extends PluginSettingTab {
           frag.appendText(
             "It is stored locally in your vault at "
           );
+          frag.createEl('br');
           frag.createEl(
             'strong',
             { text: "path_to_your_vault/.obsidian/plugins/obsidian-copilot/data.json" }
           );
-          frag.appendText(", and it is only used to make requests to OpenAI.");
+          frag.createEl('br');
+          frag.appendText("and it is only used to make requests to OpenAI.");
         })
       )
       .addText((text) => {
