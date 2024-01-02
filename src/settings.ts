@@ -158,7 +158,13 @@ export class CopilotSettingTab extends PluginSettingTab {
     const warningMessage = containerEl.createEl('div', { cls: 'warning-message' });
 
     warningMessage.createEl('span', {
-        text: 'If the model does not respond, try '
+        text: 'If errors occur, pls re-enter the API key, save and reload the plugin to see if it resolves the issue.'
+    });
+
+    warningMessage.createEl('br');
+
+    warningMessage.createEl('span', {
+        text: 'If you are a new user, try '
     });
 
     warningMessage.createEl('a', {
@@ -167,7 +173,7 @@ export class CopilotSettingTab extends PluginSettingTab {
     });
 
     warningMessage.createEl('span', {
-        text: ' to see if you have correct API access.'
+        text: ' to see if you have correct API access first.'
     });
 
     // containerEl.createEl('h6', { text: 'Anthropic' });
