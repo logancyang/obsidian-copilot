@@ -17,6 +17,7 @@ export enum ChatModels {
   CLAUDE_INSTANT_1_100K = 'claude-instant-1-100k',
   AZURE_GPT_35_TURBO = 'gpt-35-turbo',
   AZURE_GPT_35_TURBO_16K = 'gpt-35-turbo-16k',
+  GEMINI_PRO = 'gemini-pro',
 }
 
 export enum ChatModelDisplayNames {
@@ -33,6 +34,7 @@ export enum ChatModelDisplayNames {
   AZURE_GPT_35_TURBO_16K = 'AZURE GPT-3.5-16K',
   AZURE_GPT_4 = 'AZURE GPT-4',
   AZURE_GPT_4_32K = 'AZURE GPT-4 32K',
+  GEMINI_PRO = 'GEMINI PRO',
   LOCAL_AI = 'LocalAI',
 }
 
@@ -59,6 +61,10 @@ export const CLAUDE_MODELS = new Set([
     ChatModelDisplayNames.CLAUDE_INSTANT_1_100K,
 ]);
 
+export const GOOGLE_MODELS = new Set([
+  ChatModelDisplayNames.GEMINI_PRO,
+]);
+
 export const DISPLAY_NAME_TO_MODEL: Record<string, string> = {
   [ChatModelDisplayNames.GPT_35_TURBO]: ChatModels.GPT_35_TURBO,
   [ChatModelDisplayNames.GPT_35_TURBO_16K]: ChatModels.GPT_35_TURBO_16K,
@@ -73,6 +79,7 @@ export const DISPLAY_NAME_TO_MODEL: Record<string, string> = {
   [ChatModelDisplayNames.AZURE_GPT_35_TURBO_16K]: ChatModels.AZURE_GPT_35_TURBO_16K,
   [ChatModelDisplayNames.AZURE_GPT_4]: ChatModels.GPT_4,
   [ChatModelDisplayNames.AZURE_GPT_4_32K]: ChatModels.GPT_4_32K,
+  [ChatModelDisplayNames.GEMINI_PRO]: ChatModels.GEMINI_PRO,
 };
 
 // Model Providers
@@ -81,12 +88,14 @@ export const HUGGINGFACE = 'huggingface';
 export const COHEREAI = 'cohereai';
 export const AZURE_OPENAI = 'azure_openai';
 export const ANTHROPIC = 'anthropic';
+export const GOOGLE = 'google';
 export const LOCALAI = 'localai';
 
 export const VENDOR_MODELS: Record<string, Set<string>> = {
   [OPENAI]: OPENAI_MODELS,
   [AZURE_OPENAI]: AZURE_MODELS,
   [ANTHROPIC]: CLAUDE_MODELS,
+  [GOOGLE]: GOOGLE_MODELS,
 };
 
 // Embedding Models
@@ -106,6 +115,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   azureOpenAIApiDeploymentName: '',
   azureOpenAIApiVersion: '',
   azureOpenAIApiEmbeddingDeploymentName: '',
+  googleApiKey: '',
   defaultModel: ChatModels.GPT_4_TURBO,
   defaultModelDisplayName: ChatModelDisplayNames.GPT_4_TURBO,
   temperature: 0.7,

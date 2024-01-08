@@ -10,6 +10,8 @@ import {
   COHEREAI,
   ChatModelDisplayNames,
   DEFAULT_SYSTEM_PROMPT,
+  GOOGLE,
+  GOOGLE_MODELS,
   HUGGINGFACE,
   LOCALAI,
   OPENAI,
@@ -19,6 +21,7 @@ import {
 import { ChatMessage } from '@/sharedState';
 import { getModelName, isSupportedChain } from '@/utils';
 import VectorDBManager, { MemoryVector } from '@/vectorDBManager';
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import {
   BaseChain,
   ConversationChain,
@@ -62,6 +65,8 @@ interface ModelConfig {
   azureOpenAIApiInstanceName?: string,
   azureOpenAIApiDeploymentName?: string,
   azureOpenAIApiVersion?: string,
+  // Google API key https://api.js.langchain.com/classes/langchain_google_genai.ChatGoogleGenerativeAI.html
+  apiKey?: string,
   openAIProxyBaseUrl?: string,
   localAIModel?: string,
 }
@@ -76,6 +81,7 @@ export interface LangChainParams {
   azureOpenAIApiDeploymentName: string,
   azureOpenAIApiVersion: string,
   azureOpenAIApiEmbeddingDeploymentName: string,
+  googleApiKey?: string,
   model: string,
   modelDisplayName: string,
   temperature: number,
@@ -135,6 +141,7 @@ class AIState {
   private static chatOpenAI: ChatOpenAI;
   private static chatAnthropic: ChatAnthropic;
   private static azureChatOpenAI: ChatOpenAI;
+  private static chatGoogleGenerativeAI: ChatGoogleGenerativeAI;
   private static chain: BaseChain;
   private static retrievalChain: RetrievalQAChain;
   private static conversationalRetrievalChain: ConversationalRetrievalQAChain;
@@ -207,6 +214,7 @@ class AIState {
       temperature,
       maxTokens,
       openAIProxyBaseUrl,
+      googleApiKey,
       localAIModel,
     } = this.langChainParams;
 
@@ -245,6 +253,11 @@ class AIState {
           azureOpenAIApiVersion: azureOpenAIApiVersion,
         };
         break;
+      case GOOGLE:
+        config = {
+          ...config,
+          apiKey: googleApiKey,
+        };
     }
 
     return config;
@@ -285,6 +298,14 @@ class AIState {
         hasApiKey: Boolean(this.langChainParams.azureOpenAIApiKey),
         AIConstructor: ChatOpenAI,
         vendor: AZURE_OPENAI,
+      };
+    }
+
+    for (const modelDisplayNameKey of GOOGLE_MODELS) {
+      modelMap[modelDisplayNameKey] = {
+        hasApiKey: Boolean(this.langChainParams.googleApiKey),
+        AIConstructor: ChatGoogleGenerativeAI,
+        vendor: GOOGLE,
       };
     }
 
@@ -395,6 +416,9 @@ class AIState {
           break;
         case AZURE_OPENAI:
           AIState.azureChatOpenAI = newModelInstance as ChatOpenAI;
+          break;
+        case GOOGLE:
+          AIState.chatGoogleGenerativeAI = newModelInstance as ChatGoogleGenerativeAI;
           break;
       }
 

@@ -85,6 +85,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       ChatModelDisplayNames.AZURE_GPT_35_TURBO_16K,
       ChatModelDisplayNames.AZURE_GPT_4,
       ChatModelDisplayNames.AZURE_GPT_4_32K,
+      ChatModelDisplayNames.GEMINI_PRO,
       ChatModelDisplayNames.LOCAL_AI,
     ];
 
@@ -204,6 +205,32 @@ export class CopilotSettingTab extends PluginSettingTab {
     //       })
     //   }
     //   );
+
+    containerEl.createEl('h6', { text: 'Google Gemini API' });
+
+    new Setting(containerEl)
+      .setName("Your Google API key")
+      .setDesc(
+        createFragment((frag) => {
+          frag.appendText("If you have Google Cloud, you can get Gemini API key ");
+          frag.createEl('a', {
+            text: "here",
+            href: "https://makersuite.google.com/app/apikey"
+          });
+        })
+      )
+      .addText((text) => {
+        text.inputEl.type = "password";
+        text.inputEl.style.width = "100%";
+        text
+          .setPlaceholder("Google API key")
+          .setValue(this.plugin.settings.googleApiKey)
+          .onChange(async (value) => {
+            this.plugin.settings.googleApiKey = value;
+            await this.plugin.saveSettings();
+          })
+      }
+      );
 
     containerEl.createEl('h6', { text: 'Azure OpenAI API' });
 
