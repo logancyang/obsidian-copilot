@@ -13,6 +13,10 @@ My goal is to make this AI assistant **local-first** and **privacy-focused**. It
 
 <img src="./images/ui.png" alt="UI">
 
+If you enjoy Copilot for Obsidian, please consider [sponsoring this project](https://github.com/sponsors/logancyang), or donate by clicking the button below. It will help me keep this project going to build toward a privacy-focused AI experience. Thank you!
+
+<a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
+
 ## 🛠️ Features
 - Chat with ChatGPT right inside Obsidian in the Copilot Chat window.
 - No repetitive login. Use your own API key (stored locally).
@@ -145,18 +149,16 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 
 When opening an issue, please include relevant console logs. You can go to Copilot's settings and turn on "Debug mode" at the bottom for more console messages!
 
-## 📝 Planned features (based on feedback)
+## 📝 Planned features (feedback welcome)
+- New modes
+  - Chat mode (originally Conversation mode): You can now provide multiple notes at once for context in conversations, for LLMs with an extended context window.
+  - QA mode: You can index any folder and perform question and answer sessions using a **fully local** index and Retrieval-Augmented Generation system.
 - Support embedded PDFs as context
-- Integration with ElevenLabs or Bark to let the AI speak like human
-- Unlimited context for a collection of notes.
-- Retrieval augmented generation (RAG) with your vault. Explore, brainstorm and review ideas like never before!
+- Interact with a powerful AI agent that knows your vault. Explore, brainstorm and review ideas like never before!
 
-## 🙏 Say Thank You
-If you are enjoying Copilot, please support my work by buying me a coffee here: https://www.buymeacoffee.com/logancyang
-
-
-<a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
+## 🙏 Thank You
+If you are enjoying Copilot, please support my work here: https://www.buymeacoffee.com/logancyang
 
 Please also help spread the word by sharing about the Copilot for Obsidian Plugin on Twitter, Reddit, or any other social media platform you use.
 
-You can find me on Twitter [@logancyang](https://twitter.com/logancyang).
+You can find me on Twitter/X [@logancyang](https://twitter.com/logancyang).

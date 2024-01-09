@@ -118,7 +118,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   googleApiKey: '',
   defaultModel: ChatModels.GPT_4_TURBO,
   defaultModelDisplayName: ChatModelDisplayNames.GPT_4_TURBO,
-  temperature: 0.7,
+  temperature: 0.1,
   maxTokens: 1000,
   contextTurns: 3,
   userSystemPrompt: '',
