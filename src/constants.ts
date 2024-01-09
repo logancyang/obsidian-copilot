@@ -35,7 +35,7 @@ export enum ChatModelDisplayNames {
   AZURE_GPT_4 = 'AZURE GPT-4',
   AZURE_GPT_4_32K = 'AZURE GPT-4 32K',
   GEMINI_PRO = 'GEMINI PRO',
-  LOCAL_AI = 'LocalAI',
+  LOCAL_COPILOT = 'Local Copilot',
 }
 
 export const OPENAI_MODELS = new Set([
@@ -44,7 +44,7 @@ export const OPENAI_MODELS = new Set([
     ChatModelDisplayNames.GPT_4,
     ChatModelDisplayNames.GPT_4_TURBO,
     ChatModelDisplayNames.GPT_4_32K,
-    ChatModelDisplayNames.LOCAL_AI,
+    ChatModelDisplayNames.LOCAL_COPILOT,
 ]);
 
 export const AZURE_MODELS = new Set([
@@ -89,7 +89,7 @@ export const COHEREAI = 'cohereai';
 export const AZURE_OPENAI = 'azure_openai';
 export const ANTHROPIC = 'anthropic';
 export const GOOGLE = 'google';
-export const LOCALAI = 'localai';
+export const LOCALCOPILOT = 'local_copilot';
 
 export const VENDOR_MODELS: Record<string, Set<string>> = {
   [OPENAI]: OPENAI_MODELS,
@@ -102,8 +102,6 @@ export const VENDOR_MODELS: Record<string, Set<string>> = {
 export const DISTILBERT_NLI = 'sentence-transformers/distilbert-base-nli-mean-tokens';
 export const INSTRUCTOR_XL = 'hkunlp/instructor-xl'; // Inference API is off for this
 export const MPNET_V2 = 'sentence-transformers/all-mpnet-base-v2'; // Inference API returns 400
-
-// export const LOCALAI_DEFAULT_MODEL = 'ggml-gpt4all-j';
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
   openAIApiKey: '',
@@ -123,7 +121,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   contextTurns: 3,
   userSystemPrompt: '',
   openAIProxyBaseUrl: '',
-  localAIModel: '',
+  localCopilotModel: '',
   ttlDays: 30,
   stream: true,
   embeddingProvider: OPENAI,

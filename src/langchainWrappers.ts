@@ -9,14 +9,14 @@ export class ProxyChatOpenAI extends ChatOpenAI {
   ) {
     super(fields ?? {});
 
-    // Use LocalAIModel if it is set
+    // Use localCopilotModel if it is set
     // TODO: Remove this once move over to LM Studio
-    const modelName = fields.localAIModel ? fields.localAIModel : fields.modelName;
+    // const modelName = fields.localCopilotModel ? fields.localCopilotModel : fields.modelName;
 
     // Reinitialize the client with the updated clientConfig
     this["client"] = new OpenAI({
       ...this["clientConfig"],
-      modelName,
+      // modelName,
       baseURL: fields.openAIProxyBaseUrl,
     });
   }

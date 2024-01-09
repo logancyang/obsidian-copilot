@@ -5,7 +5,7 @@ import {
   DEFAULT_SETTINGS,
   DISPLAY_NAME_TO_MODEL,
   HUGGINGFACE,
-  LOCALAI,
+  LOCALCOPILOT,
   OPENAI,
 } from "@/constants";
 import CopilotPlugin from "@/main";
@@ -86,7 +86,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       ChatModelDisplayNames.AZURE_GPT_4,
       ChatModelDisplayNames.AZURE_GPT_4_32K,
       ChatModelDisplayNames.GEMINI_PRO,
-      ChatModelDisplayNames.LOCAL_AI,
+      ChatModelDisplayNames.LOCAL_COPILOT,
     ];
 
     new Setting(containerEl)
@@ -422,7 +422,7 @@ export class CopilotSettingTab extends PluginSettingTab {
           .addOption(COHEREAI, 'CohereAI')
           .addOption(AZURE_OPENAI, 'Azure OpenAI')
           .addOption(HUGGINGFACE, 'Huggingface')
-          .addOption(LOCALAI, 'LocalAI')
+          .addOption(LOCALCOPILOT, 'Local Copilot')
           .setValue(this.plugin.settings.embeddingProvider)
           .onChange(async (value: string) => {
             this.plugin.settings.embeddingProvider = value;
@@ -507,34 +507,6 @@ export class CopilotSettingTab extends PluginSettingTab {
       }
       );
 
-    containerEl.createEl('h4', { text: 'Local Copilot (EXPERIMENTAL, NO INTERNET NEEDED!!)' });
-    containerEl.createEl('p', { text: 'To use Local Copilot, please check the doc to set up LocalAI server on your device. Once ready,' });
-    containerEl.createEl('p', { text: '1. Set OpenAI Proxy Base URL to http://localhost:8080/v1 under Advanced Settings.' });
-    containerEl.createEl('p', { text: '2. Type in the LocalAI Model name you have below.' });
-    containerEl.createEl('p', { text: '3. Pick LocalAI in the Copilot Chat model selection dropdown to chat with it!' });
-    containerEl.createEl('p', { text: 'Local models can be limited in capabilities and may not work for some use cases at this time. Keep in mind that it is still in early experimental phase. But it is definitely fun to try out!' });
-    containerEl.createEl('h6', { text: 'When you are done, clear the OpenAI Proxy Base URL to switch back to non-local models.' });
-
-    new Setting(containerEl)
-      .setName("LocalAI Model")
-      .setDesc(
-        createFragment((frag) => {
-          frag.appendText("The local model you'd like to use. Make sure you download that model in your LocalAI models directory.");
-          frag.createEl('br');
-          frag.appendText("NOTE: Please set OpenAI Proxy Base URL to http://localhost:8080/v1 under Advanced Settings")
-        })
-      )
-      .addText((text) => {
-        text.inputEl.style.width = "100%";
-        text
-          .setPlaceholder("llama-2-uncensored-q4ks")
-          .setValue(this.plugin.settings.localAIModel)
-          .onChange(async (value) => {
-            this.plugin.settings.localAIModel = value;
-            await this.plugin.saveSettings();
-          })
-      });
-
     containerEl.createEl('h4', { text: 'Advanced Settings' });
 
     new Setting(containerEl)
@@ -589,6 +561,13 @@ export class CopilotSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           })
       });
+
+    containerEl.createEl('h4', { text: 'Local Copilot (EXPERIMENTAL, NO INTERNET NEEDED!!)' });
+    containerEl.createEl('p', { text: 'To use Local Copilot, please check the doc to set up LM Studio server on your device. Once ready,' });
+    containerEl.createEl('p', { text: '1. Set OpenAI Proxy Base URL to http://localhost:<your_port_number>/v1 under Advanced Settings.' });
+    containerEl.createEl('p', { text: '2. Pick Local Copilot in the Copilot Chat model selection dropdown to chat with it!' });
+    containerEl.createEl('p', { text: 'Local models can be limited in capabilities and may not work for some use cases at this time. Keep in mind that it is still in early experimental phase. But it is definitely fun to try out!' });
+    containerEl.createEl('h6', { text: 'When you are done, clear the OpenAI Proxy Base URL to switch back to non-local models.' });
 
     containerEl.createEl('h4', { text: 'Development mode' });
 

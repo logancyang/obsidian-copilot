@@ -13,7 +13,7 @@ import {
   GOOGLE,
   GOOGLE_MODELS,
   HUGGINGFACE,
-  LOCALAI,
+  LOCALCOPILOT,
   OPENAI,
   OPENAI_MODELS,
   USER_SENDER,
@@ -68,7 +68,7 @@ interface ModelConfig {
   // Google API key https://api.js.langchain.com/classes/langchain_google_genai.ChatGoogleGenerativeAI.html
   apiKey?: string,
   openAIProxyBaseUrl?: string,
-  localAIModel?: string,
+  localCopilotModel?: string,
 }
 
 export interface LangChainParams {
@@ -92,7 +92,7 @@ export interface LangChainParams {
   chainType: ChainType,  // Default ChainType is set in main.ts getAIStateParams
   options: SetChainOptions,
   openAIProxyBaseUrl?: string,
-  localAIModel?: string,
+  localCopilotModel?: string,
 }
 
 export interface SetChainOptions {
@@ -215,7 +215,7 @@ class AIState {
       maxTokens,
       openAIProxyBaseUrl,
       googleApiKey,
-      localAIModel,
+      localCopilotModel,
     } = this.langChainParams;
 
     // Create a base configuration that applies to all models
@@ -234,7 +234,7 @@ class AIState {
           openAIApiKey,
           maxTokens,
           openAIProxyBaseUrl,
-          localAIModel,
+          localCopilotModel,
         };
         break;
       case ANTHROPIC:
@@ -367,7 +367,7 @@ class AIState {
           maxRetries: 3,
           maxConcurrency: 3,
         });
-      case LOCALAI:
+      case LOCALCOPILOT:
         return new ProxyOpenAIEmbeddings({
           openAIApiKey,
           openAIProxyBaseUrl,
@@ -432,10 +432,10 @@ class AIState {
   setModel(newModelDisplayName: string): void {
     // model and model display name must be update at the same time!
     let newModel = getModelName(newModelDisplayName);
-    const {localAIModel} = this.langChainParams;
+    const {localCopilotModel} = this.langChainParams;
 
-    if (newModelDisplayName === ChatModelDisplayNames.LOCAL_AI) {
-      if (!localAIModel) {
+    if (newModelDisplayName === ChatModelDisplayNames.LOCAL_COPILOT) {
+      if (!localCopilotModel) {
         new Notice('No local AI model provided! Please set it in settings first.');
         console.error('No local AI model provided! Please set it in settings first.');
         return;
@@ -445,7 +445,7 @@ class AIState {
         console.error('Please set the OpenAI Proxy Base URL in settings.');
         return;
       }
-      newModel = localAIModel;
+      newModel = localCopilotModel;
     }
 
     try {
