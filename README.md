@@ -100,6 +100,13 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 ## 🤔 FAQ (please read before submitting an issue)
 
 <details>
+  <summary>"You do not have access to this model"</summary>
+
+  - You need to have access to some of the models like GPT-4 or Azure ones to use them. If you don't, sign up on their waitlist!
+  - A common misunderstanding I see is that some think they have access to GPT-4 API when they get ChatGPT Plus subscription. It was not always true. *You need to have access to GPT-4 API to use the GPT-4 model in this plugin*. Please check if you can successfully use your model in the OpenAI playground first https://platform.openai.com/playground?mode=chat. If not, you can apply for GPT-4 API access here https://openai.com/waitlist/gpt-4-api. Once you have access to the API, you can use GPT-4 with this plugin without the ChatGPT Plus subscription!
+  - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/3#issuecomment-1544583676
+</details>
+<details>
   <summary>It's not using my note as context</summary>
 
   - Please don't forget to switch to "**QA: Active Note**" in the Mode Selection dropdown in order to start the QA. Copilot does not have your note as context in "Conversation" mode.
@@ -111,13 +118,6 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
   <summary>Unresponsive QA when using Huggingface as the Embedding Provider</summary>
 
   - Huggingface Inference API is free to use. It can give errors such as 503 or 504 frequently at times because their server has issues. If it's an issue for you, please consider using OpenAI or CohereAI as the embedding provider. Just keep in mind that OpenAI costs more, especially with very long notes as context.
-</details>
-<details>
-  <summary>"model_not_found"</summary>
-
-  - You need to have access to some of the models like GPT-4 or Azure ones to use them. If you don't, sign up on their waitlist!
-  - A common misunderstanding I see is that some think they have access to GPT-4 API when they get ChatGPT Plus subscription. That is not true. *You need to get access to GPT-4 API to use the GPT-4 model in this plugin*. Please check if you can successfully use your model in the OpenAI playground first https://platform.openai.com/playground?mode=chat&model=gpt-4. If not, you can apply for GPT-4 API access here https://openai.com/waitlist/gpt-4-api. Once you have access to the API, you can use GPT-4 with this plugin without the ChatGPT Plus subsciption!
-  - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/3#issuecomment-1544583676
 </details>
 <details>
   <summary>"insufficient_quota"</summary>
