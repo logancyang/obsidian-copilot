@@ -567,7 +567,10 @@ export class CopilotSettingTab extends PluginSettingTab {
     containerEl.createEl('p', { text: '1. Set OpenAI Proxy Base URL to http://localhost:<your_port_number>/v1 under Advanced Settings.' });
     containerEl.createEl('p', { text: '2. Pick Local Copilot in the Copilot Chat model selection dropdown to chat with it!' });
     containerEl.createEl('p', { text: 'Local models can be limited in capabilities and may not work for some use cases at this time. Keep in mind that it is still in early experimental phase. But it is definitely fun to try out!' });
-    containerEl.createEl('h6', { text: 'When you are done, clear the OpenAI Proxy Base URL to switch back to non-local models.' });
+    containerEl.createEl('div', {
+      text: 'When you are done, clear the OpenAI Proxy Base URL to switch back to non-local models!',
+      cls: 'warning-message'
+    });
 
     containerEl.createEl('h4', { text: 'Development mode' });
 

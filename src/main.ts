@@ -501,7 +501,7 @@ export default class CopilotPlugin extends Plugin {
       azureOpenAIApiVersion,
       azureOpenAIApiEmbeddingDeploymentName,
       googleApiKey,
-      localCopilotModel,
+      localCopilotModel: localCopilotModel || 'placeholder',  // TODO: remove this once tested LM Studio and Ollama
       model: this.settings.defaultModel,
       modelDisplayName: this.settings.defaultModelDisplayName,
       temperature: Number(temperature),
