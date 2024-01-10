@@ -35,7 +35,7 @@ If you enjoy Copilot for Obsidian, please consider [sponsoring this project](htt
 
 ## 🎬 Video Demos
 
-#### 🎉 NEW in v2.4.8: Local Copilot with LM Studio! No internet required!! 🎉🎉🎉
+#### 🎉 NEW in v2.4.8: Local Copilot with LM Studio and Ollama! No internet required!! 🎉🎉🎉
 
 <a href="https://www.youtube.com/watch?v=3yPVDI8wZcI" target="_blank"><img src="./images/thumbnail-local-copilot-lm-studio.png" width="700" /></a>
 

@@ -37,7 +37,7 @@ export enum ChatModelDisplayNames {
   AZURE_GPT_4_32K = 'AZURE GPT-4 32K',
   GEMINI_PRO = 'GEMINI PRO',
   OLLAMA = 'OLLAMA (LOCAL)',
-  LOCAL_COPILOT = 'LOCAL COPILOT',
+  LM_STUDIO = 'LM STUDIO (LOCAL)',
 }
 
 export const OPENAI_MODELS = new Set([
@@ -46,7 +46,7 @@ export const OPENAI_MODELS = new Set([
     ChatModelDisplayNames.GPT_4,
     ChatModelDisplayNames.GPT_4_TURBO,
     ChatModelDisplayNames.GPT_4_32K,
-    ChatModelDisplayNames.LOCAL_COPILOT,
+    ChatModelDisplayNames.LM_STUDIO,
 ]);
 
 export const AZURE_MODELS = new Set([
@@ -69,6 +69,10 @@ export const GOOGLE_MODELS = new Set([
 
 export const OLLAMA_MODELS = new Set([
   ChatModelDisplayNames.OLLAMA,
+]);
+
+export const LM_STUDIO_MODELS = new Set([
+  ChatModelDisplayNames.LM_STUDIO,
 ]);
 
 export const DISPLAY_NAME_TO_MODEL: Record<string, string> = {
@@ -95,7 +99,7 @@ export const COHEREAI = 'cohereai';
 export const AZURE_OPENAI = 'azure_openai';
 export const ANTHROPIC = 'anthropic';
 export const GOOGLE = 'google';
-export const LOCALCOPILOT = 'local_copilot';
+export const LM_STUDIO = 'lm_studio';
 export const OLLAMA = 'ollama';
 
 export const VENDOR_MODELS: Record<string, Set<string>> = {
@@ -104,6 +108,7 @@ export const VENDOR_MODELS: Record<string, Set<string>> = {
   [ANTHROPIC]: CLAUDE_MODELS,
   [GOOGLE]: GOOGLE_MODELS,
   [OLLAMA]: OLLAMA_MODELS,
+  [LM_STUDIO]: LM_STUDIO_MODELS,
 };
 
 // Embedding Models
@@ -130,6 +135,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   userSystemPrompt: '',
   openAIProxyBaseUrl: '',
   ollamaModel: 'llama2',
+  lmStudioPort: '1234',
   ttlDays: 30,
   stream: true,
   embeddingProvider: OPENAI,

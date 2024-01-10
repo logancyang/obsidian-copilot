@@ -5,8 +5,7 @@ import {
   DEFAULT_SETTINGS,
   DISPLAY_NAME_TO_MODEL,
   HUGGINGFACE,
-  LOCALCOPILOT,
-  OPENAI,
+  OPENAI
 } from "@/constants";
 import CopilotPlugin from "@/main";
 import { App, DropdownComponent, Notice, PluginSettingTab, Setting } from "obsidian";
@@ -87,8 +86,8 @@ export class CopilotSettingTab extends PluginSettingTab {
       ChatModelDisplayNames.AZURE_GPT_4,
       ChatModelDisplayNames.AZURE_GPT_4_32K,
       ChatModelDisplayNames.GEMINI_PRO,
+      ChatModelDisplayNames.LM_STUDIO,
       ChatModelDisplayNames.OLLAMA,
-      ChatModelDisplayNames.LOCAL_COPILOT,
     ];
 
     new Setting(containerEl)
@@ -424,7 +423,6 @@ export class CopilotSettingTab extends PluginSettingTab {
           .addOption(COHEREAI, 'CohereAI')
           .addOption(AZURE_OPENAI, 'Azure OpenAI')
           .addOption(HUGGINGFACE, 'Huggingface')
-          .addOption(LOCALCOPILOT, 'Local Copilot')
           .setValue(this.plugin.settings.embeddingProvider)
           .onChange(async (value: string) => {
             this.plugin.settings.embeddingProvider = value;
@@ -564,7 +562,7 @@ export class CopilotSettingTab extends PluginSettingTab {
           })
       });
 
-    containerEl.createEl('h4', { text: 'Local Copilot (NO INTERNET NEEDED!)' });
+    containerEl.createEl('h4', { text: 'Local Copilot (No Internet Required!)' });
     containerEl.createEl('div', {
       text: 'Please check the doc to set up LM Studio or Ollama server on your device.',
       cls: 'warning-message'
@@ -574,8 +572,21 @@ export class CopilotSettingTab extends PluginSettingTab {
 
     containerEl.createEl('h5', { text: 'LM Studio' });
     containerEl.createEl('p', { text: 'To use Local Copilot with LM Studio:' });
-    containerEl.createEl('p', { text: '1. Set OpenAI Proxy Base URL to http://localhost:<your_port_number>/v1 under Advanced Settings.' });
+    containerEl.createEl('p', { text: '1. Start LM Studio server with CORS on. Default port is 1234 but if you change it, you can provide it below.' });
     containerEl.createEl('p', { text: '2. Pick LM Studio in the Copilot Chat model selection dropdown to chat with it!' });
+
+    new Setting(containerEl)
+      .setName("LM Studio server port")
+      .setDesc("The default is 1234")
+      .addText(text => text
+          .setPlaceholder("1234")
+          .setValue(this.plugin.settings.lmStudioPort)
+          .onChange(async (value: string) => {
+              this.plugin.settings.lmStudioPort = value;
+              await this.plugin.saveSettings();
+          })
+      );
+
     containerEl.createEl('div', {
       text: 'When you are done, clear the OpenAI Proxy Base URL to switch back to non-local models!',
       cls: 'warning-message'

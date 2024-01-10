@@ -117,8 +117,8 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             <option value={ChatModelDisplayNames.AZURE_GPT_4}>{ChatModelDisplayNames.AZURE_GPT_4}</option>
             <option value={ChatModelDisplayNames.AZURE_GPT_4_32K}>{ChatModelDisplayNames.AZURE_GPT_4_32K}</option>
             <option value={ChatModelDisplayNames.GEMINI_PRO}>{ChatModelDisplayNames.GEMINI_PRO}</option>
+            <option value={ChatModelDisplayNames.LM_STUDIO}>{ChatModelDisplayNames.LM_STUDIO}</option>
             <option value={ChatModelDisplayNames.OLLAMA}>{ChatModelDisplayNames.OLLAMA}</option>
-            <option value={ChatModelDisplayNames.LOCAL_COPILOT}>{ChatModelDisplayNames.LOCAL_COPILOT}</option>
           </select>
           <span className="tooltip-text">Model Selection</span>
         </div>

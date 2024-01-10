@@ -13,7 +13,8 @@ import {
   GOOGLE,
   GOOGLE_MODELS,
   HUGGINGFACE,
-  LOCALCOPILOT,
+  LM_STUDIO,
+  LM_STUDIO_MODELS,
   OLLAMA,
   OLLAMA_MODELS,
   OPENAI,
@@ -72,6 +73,7 @@ interface ModelConfig {
   apiKey?: string,
   openAIProxyBaseUrl?: string,
   ollamaModel?: string,
+  lmStudioPort?: string,
 }
 
 export interface LangChainParams {
@@ -84,7 +86,7 @@ export interface LangChainParams {
   azureOpenAIApiDeploymentName: string,
   azureOpenAIApiVersion: string,
   azureOpenAIApiEmbeddingDeploymentName: string,
-  googleApiKey?: string,
+  googleApiKey: string,
   model: string,
   modelDisplayName: string,
   temperature: number,
@@ -95,6 +97,7 @@ export interface LangChainParams {
   chainType: ChainType,  // Default ChainType is set in main.ts getAIStateParams
   options: SetChainOptions,
   ollamaModel: string,
+  lmStudioPort: string,
   openAIProxyBaseUrl?: string,
 }
 
@@ -264,6 +267,13 @@ class AIState {
           apiKey: googleApiKey,
         };
         break;
+      case LM_STUDIO:
+        config = {
+          ...config,
+          openAIApiKey: 'placeholder',
+          openAIProxyBaseUrl: `http://localhost:${this.langChainParams.lmStudioPort}/v1`,
+        };
+        break;
       case OLLAMA:
         config = {
           ...config,
@@ -329,6 +339,14 @@ class AIState {
       };
     }
 
+    for (const modelDisplayNameKey of LM_STUDIO_MODELS) {
+      modelMap[modelDisplayNameKey] = {
+        hasApiKey: true,
+        AIConstructor: ProxyChatOpenAI,
+        vendor: LM_STUDIO,
+      };
+    }
+
     this.modelMap = modelMap;
   }
 
@@ -387,14 +405,15 @@ class AIState {
           maxRetries: 3,
           maxConcurrency: 3,
         });
-      case LOCALCOPILOT:
-        return new ProxyOpenAIEmbeddings({
-          openAIApiKey,
-          openAIProxyBaseUrl,
-          maxRetries: 3,
-          maxConcurrency: 3,
-          timeout: 10000,
-        })
+      // TODO: Check Ollama local embedding and come back here
+      // case OLLAMA:
+      //   return new ProxyOpenAIEmbeddings({
+      //     openAIApiKey,
+      //     openAIProxyBaseUrl,
+      //     maxRetries: 3,
+      //     maxConcurrency: 3,
+      //     timeout: 10000,
+      //   })
       default:
         console.error('No embedding provider set. Using OpenAI.');
         return OpenAIEmbeddingsAPI;
@@ -461,13 +480,13 @@ class AIState {
       newModel = this.langChainParams.ollamaModel;
     }
 
-    if (newModelDisplayName === ChatModelDisplayNames.LOCAL_COPILOT) {
-      if (!this.langChainParams.openAIProxyBaseUrl) {
-        new Notice('Please set the OpenAI Proxy Base URL in settings.');
-        console.error('Please set the OpenAI Proxy Base URL in settings.');
-        return;
-      }
-      newModel = LOCALCOPILOT;
+    if (newModelDisplayName === ChatModelDisplayNames.LM_STUDIO) {
+      // if (!this.langChainParams.openAIProxyBaseUrl) {
+      //   new Notice('Please set the OpenAI Proxy Base URL in settings.');
+      //   console.error('Please set the OpenAI Proxy Base URL in settings.');
+      //   return;
+      // }
+      newModel = LM_STUDIO;
     }
 
     try {
