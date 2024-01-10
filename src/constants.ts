@@ -36,7 +36,7 @@ export enum ChatModelDisplayNames {
   AZURE_GPT_4 = 'AZURE GPT-4',
   AZURE_GPT_4_32K = 'AZURE GPT-4 32K',
   GEMINI_PRO = 'GEMINI PRO',
-  OLLAMA = 'OLLAMA',
+  OLLAMA = 'OLLAMA (LOCAL)',
   LOCAL_COPILOT = 'LOCAL COPILOT',
 }
 
