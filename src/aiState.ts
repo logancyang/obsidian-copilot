@@ -71,7 +71,7 @@ interface ModelConfig {
   // Google API key https://api.js.langchain.com/classes/langchain_google_genai.ChatGoogleGenerativeAI.html
   apiKey?: string,
   openAIProxyBaseUrl?: string,
-  localCopilotModel?: string,
+  ollamaModel?: string,
 }
 
 export interface LangChainParams {
@@ -95,7 +95,7 @@ export interface LangChainParams {
   chainType: ChainType,  // Default ChainType is set in main.ts getAIStateParams
   options: SetChainOptions,
   openAIProxyBaseUrl?: string,
-  localCopilotModel?: string,
+  ollamaModel?: string,
 }
 
 export interface SetChainOptions {
@@ -219,7 +219,7 @@ class AIState {
       maxTokens,
       openAIProxyBaseUrl,
       googleApiKey,
-      localCopilotModel,
+      ollamaModel,
     } = this.langChainParams;
 
     // Create a base configuration that applies to all models
@@ -238,7 +238,6 @@ class AIState {
           openAIApiKey,
           maxTokens,
           openAIProxyBaseUrl,
-          localCopilotModel,
         };
         break;
       case ANTHROPIC:
@@ -262,6 +261,13 @@ class AIState {
           ...config,
           apiKey: googleApiKey,
         };
+        break;
+      case OLLAMA:
+        config = {
+          ...config,
+          modelName: ollamaModel || 'llama2',
+        };
+        break;
     }
 
     return config;
@@ -446,20 +452,14 @@ class AIState {
   setModel(newModelDisplayName: string): void {
     // model and model display name must be update at the same time!
     let newModel = getModelName(newModelDisplayName);
-    const {localCopilotModel} = this.langChainParams;
 
     if (newModelDisplayName === ChatModelDisplayNames.LOCAL_COPILOT) {
-      if (!localCopilotModel) {
-        new Notice('No local copilot model provided! Please set it in settings first.');
-        console.error('No local copilot model provided! Please set it in settings first.');
-        return;
-      }
       if (!this.langChainParams.openAIProxyBaseUrl) {
         new Notice('Please set the OpenAI Proxy Base URL in settings.');
         console.error('Please set the OpenAI Proxy Base URL in settings.');
         return;
       }
-      newModel = localCopilotModel;
+      newModel = LOCALCOPILOT;
     }
 
     try {

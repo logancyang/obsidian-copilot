@@ -41,6 +41,7 @@ export class CopilotSettingTab extends PluginSettingTab {
     const { containerEl } = this;
 
     containerEl.empty();
+    containerEl.style.userSelect = 'text';
     containerEl.createEl('h2', { text: 'Copilot Settings' });
 
     const buttonContainer = containerEl.createDiv({ cls: 'button-container' });
@@ -563,15 +564,42 @@ export class CopilotSettingTab extends PluginSettingTab {
           })
       });
 
-    containerEl.createEl('h4', { text: 'Local Copilot (EXPERIMENTAL, NO INTERNET NEEDED!!)' });
-    containerEl.createEl('p', { text: 'To use Local Copilot, please check the doc to set up LM Studio server on your device. Once ready,' });
-    containerEl.createEl('p', { text: '1. Set OpenAI Proxy Base URL to http://localhost:<your_port_number>/v1 under Advanced Settings.' });
-    containerEl.createEl('p', { text: '2. Pick Local Copilot in the Copilot Chat model selection dropdown to chat with it!' });
+    containerEl.createEl('h4', { text: 'Local Copilot (NO INTERNET NEEDED!)' });
+    containerEl.createEl('div', {
+      text: 'Please check the doc to set up LM Studio or Ollama server on your device.',
+      cls: 'warning-message'
+    });
     containerEl.createEl('p', { text: 'Local models can be limited in capabilities and may not work for some use cases at this time. Keep in mind that it is still in early experimental phase. But it is definitely fun to try out!' });
+
+
+    containerEl.createEl('h5', { text: 'LM Studio' });
+    containerEl.createEl('p', { text: 'To use Local Copilot with LM Studio:' });
+    containerEl.createEl('p', { text: '1. Set OpenAI Proxy Base URL to http://localhost:<your_port_number>/v1 under Advanced Settings.' });
+    containerEl.createEl('p', { text: '2. Pick LM Studio in the Copilot Chat model selection dropdown to chat with it!' });
     containerEl.createEl('div', {
       text: 'When you are done, clear the OpenAI Proxy Base URL to switch back to non-local models!',
       cls: 'warning-message'
     });
+
+    containerEl.createEl('h5', { text: 'Ollama' });
+    containerEl.createEl('p', { text: 'To use Local Copilot with Ollama, pick Ollama in the Copilot Chat model selection dropdown.' });
+    containerEl.createEl('p', { text: 'Run the local Ollama server by running this in your terminal:' });
+    containerEl.createEl(
+      'strong',
+      { text: "OLLAMA_ORIGINS=app://obsidian.md* ollama serve" }
+    );
+
+    new Setting(containerEl)
+      .setName("Ollama model")
+      .setDesc("The default is llama2")
+      .addText(text => text
+          .setPlaceholder("llama2")
+          .setValue(this.plugin.settings.ollamaModel)
+          .onChange(async (value: string) => {
+              this.plugin.settings.ollamaModel = value;
+              await this.plugin.saveSettings();
+          })
+      );
 
     containerEl.createEl('h4', { text: 'Development mode' });
 

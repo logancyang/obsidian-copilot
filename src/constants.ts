@@ -129,7 +129,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   contextTurns: 3,
   userSystemPrompt: '',
   openAIProxyBaseUrl: '',
-  localCopilotModel: 'placeholder',
+  ollamaModel: 'llama2',
   ttlDays: 30,
   stream: true,
   embeddingProvider: OPENAI,
