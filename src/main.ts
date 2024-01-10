@@ -501,7 +501,7 @@ export default class CopilotPlugin extends Plugin {
       azureOpenAIApiVersion,
       azureOpenAIApiEmbeddingDeploymentName,
       googleApiKey,
-      ollamaModel,
+      ollamaModel: ollamaModel || DEFAULT_SETTINGS.ollamaModel,
       model: this.settings.defaultModel,
       modelDisplayName: this.settings.defaultModelDisplayName,
       temperature: Number(temperature),

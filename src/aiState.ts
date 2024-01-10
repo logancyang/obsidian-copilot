@@ -94,8 +94,8 @@ export interface LangChainParams {
   embeddingProvider: string,
   chainType: ChainType,  // Default ChainType is set in main.ts getAIStateParams
   options: SetChainOptions,
+  ollamaModel: string,
   openAIProxyBaseUrl?: string,
-  ollamaModel?: string,
 }
 
 export interface SetChainOptions {
@@ -265,7 +265,7 @@ class AIState {
       case OLLAMA:
         config = {
           ...config,
-          modelName: ollamaModel || 'llama2',
+          modelName: ollamaModel,
         };
         break;
     }
@@ -452,6 +452,10 @@ class AIState {
   setModel(newModelDisplayName: string): void {
     // model and model display name must be update at the same time!
     let newModel = getModelName(newModelDisplayName);
+
+    if (newModelDisplayName === ChatModelDisplayNames.OLLAMA) {
+      newModel = this.langChainParams.ollamaModel;
+    }
 
     if (newModelDisplayName === ChatModelDisplayNames.LOCAL_COPILOT) {
       if (!this.langChainParams.openAIProxyBaseUrl) {
