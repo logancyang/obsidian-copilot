@@ -181,91 +181,6 @@ export class CopilotSettingTab extends PluginSettingTab {
         text: ' to see if you have correct API access first.'
     });
 
-    containerEl.createEl(
-      'h6',
-      {
-        text: 'Please be mindful of the number of tokens and context conversation turns you set here, as they will affect the cost of your API requests.'
-      }
-    );
-
-    new Setting(containerEl)
-      .setName("Temperature")
-      .setDesc(
-        createFragment((frag) => {
-          frag.appendText(
-            "Default is 0.7. Higher values will result in more creativeness, but also more mistakes. Set to 0 for no randomness."
-          );
-        })
-      )
-      .addSlider(slider =>
-        slider
-          .setLimits(0, 2, 0.05)
-          .setValue(
-            this.plugin.settings.temperature !== undefined &&
-              this.plugin.settings.temperature !== null ?
-              this.plugin.settings.temperature : 0.7
-          )
-          .setDynamicTooltip()
-          .onChange(async value => {
-            this.plugin.settings.temperature = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Token limit")
-      .setDesc(
-        createFragment((frag) => {
-          frag.appendText(
-            "The maximum number of output tokens to generate. Default is 1000."
-          );
-          frag.createEl(
-            'strong',
-            {
-              text: 'This number plus the length of your prompt (input tokens) must be smaller than the context window of the model.'
-            }
-          )
-        })
-      )
-      .addSlider(slider =>
-        slider
-          .setLimits(0, 8000, 100)
-          .setValue(
-            this.plugin.settings.maxTokens !== undefined &&
-              this.plugin.settings.maxTokens !== null ?
-              this.plugin.settings.maxTokens : 1000
-          )
-          .setDynamicTooltip()
-          .onChange(async value => {
-            this.plugin.settings.maxTokens = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Conversation turns in context")
-      .setDesc(
-        createFragment((frag) => {
-          frag.appendText(
-            "The number of previous conversation turns to include in the context. Default is 3 turns, i.e. 6 messages."
-          );
-        })
-      )
-      .addSlider(slider =>
-        slider
-          .setLimits(1, 10, 1)
-          .setValue(
-            this.plugin.settings.contextTurns !== undefined &&
-              this.plugin.settings.contextTurns !== null ?
-              this.plugin.settings.contextTurns : 3
-          )
-          .setDynamicTooltip()
-          .onChange(async value => {
-            this.plugin.settings.contextTurns = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
     // containerEl.createEl('h6', { text: 'Anthropic' });
 
     // new Setting(containerEl)
@@ -401,12 +316,97 @@ export class CopilotSettingTab extends PluginSettingTab {
       }
       );
 
-    containerEl.createEl('h4', { text: 'Vector-based QA Settings (BETA). No context limit!' });
-    containerEl.createEl('h6', { text: 'To start the QA session, use the Mode Selection dropdown and select "QA: Active Note". Switch back to "Conversation" when you are done!' });
     containerEl.createEl(
       'h6',
       {
-        text: 'NOTE: OpenAI embeddings are not free but may give better QA results. CohereAI (recommended) offers trial API for FREE and the quality is very good! It is more stable than Huggingface Inference API. Huggingface embeddings are also free but the result is not as good, and you may see more API timeout errors. '
+        text: 'Please be mindful of the number of tokens and context conversation turns you set here, as they will affect the cost of your API requests.'
+      }
+    );
+
+    new Setting(containerEl)
+      .setName("Temperature")
+      .setDesc(
+        createFragment((frag) => {
+          frag.appendText(
+            "Default is 0.7. Higher values will result in more creativeness, but also more mistakes. Set to 0 for no randomness."
+          );
+        })
+      )
+      .addSlider(slider =>
+        slider
+          .setLimits(0, 2, 0.05)
+          .setValue(
+            this.plugin.settings.temperature !== undefined &&
+              this.plugin.settings.temperature !== null ?
+              this.plugin.settings.temperature : 0.7
+          )
+          .setDynamicTooltip()
+          .onChange(async value => {
+            this.plugin.settings.temperature = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Token limit")
+      .setDesc(
+        createFragment((frag) => {
+          frag.appendText(
+            "The maximum number of output tokens to generate. Default is 1000."
+          );
+          frag.createEl(
+            'strong',
+            {
+              text: 'This number plus the length of your prompt (input tokens) must be smaller than the context window of the model.'
+            }
+          )
+        })
+      )
+      .addSlider(slider =>
+        slider
+          .setLimits(0, 8000, 100)
+          .setValue(
+            this.plugin.settings.maxTokens !== undefined &&
+              this.plugin.settings.maxTokens !== null ?
+              this.plugin.settings.maxTokens : 1000
+          )
+          .setDynamicTooltip()
+          .onChange(async value => {
+            this.plugin.settings.maxTokens = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Conversation turns in context")
+      .setDesc(
+        createFragment((frag) => {
+          frag.appendText(
+            "The number of previous conversation turns to include in the context. Default is 3 turns, i.e. 6 messages."
+          );
+        })
+      )
+      .addSlider(slider =>
+        slider
+          .setLimits(1, 10, 1)
+          .setValue(
+            this.plugin.settings.contextTurns !== undefined &&
+              this.plugin.settings.contextTurns !== null ?
+              this.plugin.settings.contextTurns : 3
+          )
+          .setDynamicTooltip()
+          .onChange(async value => {
+            this.plugin.settings.contextTurns = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    containerEl.createEl('h4', { text: 'Vector-based QA Settings (Beta). No context limit!' });
+    containerEl.createEl('p', { text: 'To start the QA session, use the Mode Selection dropdown and select "QA: Active Note". Switch back to "Conversation" when you are done!' });
+    containerEl.createEl(
+      'p',
+      {
+        text: 'NOTE: OpenAI embeddings are not free but may give better QA results. CohereAI offers trial API for FREE and the quality is very good! It is more stable than Huggingface Inference API (more timeouts).'
       }
     );
 
