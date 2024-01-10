@@ -86,6 +86,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       ChatModelDisplayNames.AZURE_GPT_4,
       ChatModelDisplayNames.AZURE_GPT_4_32K,
       ChatModelDisplayNames.GEMINI_PRO,
+      ChatModelDisplayNames.OLLAMA,
       ChatModelDisplayNames.LOCAL_COPILOT,
     ];
 

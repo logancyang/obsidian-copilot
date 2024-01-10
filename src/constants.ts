@@ -18,6 +18,7 @@ export enum ChatModels {
   AZURE_GPT_35_TURBO = 'gpt-35-turbo',
   AZURE_GPT_35_TURBO_16K = 'gpt-35-turbo-16k',
   GEMINI_PRO = 'gemini-pro',
+  OLLAMA = 'ollama',
 }
 
 export enum ChatModelDisplayNames {
@@ -35,7 +36,8 @@ export enum ChatModelDisplayNames {
   AZURE_GPT_4 = 'AZURE GPT-4',
   AZURE_GPT_4_32K = 'AZURE GPT-4 32K',
   GEMINI_PRO = 'GEMINI PRO',
-  LOCAL_COPILOT = 'Local Copilot',
+  OLLAMA = 'OLLAMA',
+  LOCAL_COPILOT = 'LOCAL COPILOT',
 }
 
 export const OPENAI_MODELS = new Set([
@@ -65,6 +67,10 @@ export const GOOGLE_MODELS = new Set([
   ChatModelDisplayNames.GEMINI_PRO,
 ]);
 
+export const OLLAMA_MODELS = new Set([
+  ChatModelDisplayNames.OLLAMA,
+]);
+
 export const DISPLAY_NAME_TO_MODEL: Record<string, string> = {
   [ChatModelDisplayNames.GPT_35_TURBO]: ChatModels.GPT_35_TURBO,
   [ChatModelDisplayNames.GPT_35_TURBO_16K]: ChatModels.GPT_35_TURBO_16K,
@@ -90,12 +96,14 @@ export const AZURE_OPENAI = 'azure_openai';
 export const ANTHROPIC = 'anthropic';
 export const GOOGLE = 'google';
 export const LOCALCOPILOT = 'local_copilot';
+export const OLLAMA = 'ollama';
 
 export const VENDOR_MODELS: Record<string, Set<string>> = {
   [OPENAI]: OPENAI_MODELS,
   [AZURE_OPENAI]: AZURE_MODELS,
   [ANTHROPIC]: CLAUDE_MODELS,
   [GOOGLE]: GOOGLE_MODELS,
+  [OLLAMA]: OLLAMA_MODELS,
 };
 
 // Embedding Models

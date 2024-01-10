@@ -14,6 +14,8 @@ import {
   GOOGLE_MODELS,
   HUGGINGFACE,
   LOCALCOPILOT,
+  OLLAMA,
+  OLLAMA_MODELS,
   OPENAI,
   OPENAI_MODELS,
   USER_SENDER,
@@ -21,6 +23,8 @@ import {
 import { ChatMessage } from '@/sharedState';
 import { getModelName, isSupportedChain } from '@/utils';
 import VectorDBManager, { MemoryVector } from '@/vectorDBManager';
+import { CohereEmbeddings } from "@langchain/cohere";
+import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import {
   BaseChain,
@@ -32,7 +36,6 @@ import { ChatAnthropic } from 'langchain/chat_models/anthropic';
 import { BaseChatModel } from 'langchain/chat_models/base';
 import { ChatOpenAI } from 'langchain/chat_models/openai';
 import { Embeddings } from "langchain/embeddings/base";
-import { CohereEmbeddings } from "langchain/embeddings/cohere";
 import { HuggingFaceInferenceEmbeddings } from "langchain/embeddings/hf";
 import { OpenAIEmbeddings } from "langchain/embeddings/openai";
 import { BufferWindowMemory } from "langchain/memory";
@@ -142,6 +145,7 @@ class AIState {
   private static chatAnthropic: ChatAnthropic;
   private static azureChatOpenAI: ChatOpenAI;
   private static chatGoogleGenerativeAI: ChatGoogleGenerativeAI;
+  private static chatOllama: ChatOllama;
   private static chain: BaseChain;
   private static retrievalChain: RetrievalQAChain;
   private static conversationalRetrievalChain: ConversationalRetrievalQAChain;
@@ -309,6 +313,14 @@ class AIState {
       };
     }
 
+    for (const modelDisplayNameKey of OLLAMA_MODELS) {
+      modelMap[modelDisplayNameKey] = {
+        hasApiKey: true,
+        AIConstructor: ChatOllama,
+        vendor: OLLAMA,
+      };
+    }
+
     this.modelMap = modelMap;
   }
 
@@ -420,6 +432,8 @@ class AIState {
         case GOOGLE:
           AIState.chatGoogleGenerativeAI = newModelInstance as ChatGoogleGenerativeAI;
           break;
+        case OLLAMA:
+          AIState.chatOllama = newModelInstance as ChatOllama;
       }
 
       AIState.chatModel = newModelInstance;
@@ -436,8 +450,8 @@ class AIState {
 
     if (newModelDisplayName === ChatModelDisplayNames.LOCAL_COPILOT) {
       if (!localCopilotModel) {
-        new Notice('No local AI model provided! Please set it in settings first.');
-        console.error('No local AI model provided! Please set it in settings first.');
+        new Notice('No local copilot model provided! Please set it in settings first.');
+        console.error('No local copilot model provided! Please set it in settings first.');
         return;
       }
       if (!this.langChainParams.openAIProxyBaseUrl) {
