@@ -153,6 +153,8 @@ class AIState {
   private chatPrompt:  ChatPromptTemplate;
   private vectorStore: MemoryVectorStore;
 
+  private static isOllamaModelActive = false;
+
   memory: BufferWindowMemory;
   langChainParams: LangChainParams;
   modelMap: Record<
@@ -440,6 +442,7 @@ class AIState {
           break;
         case OLLAMA:
           AIState.chatOllama = newModelInstance as ChatOllama;
+          break;
       }
 
       AIState.chatModel = newModelInstance;
@@ -450,6 +453,7 @@ class AIState {
   }
 
   setModel(newModelDisplayName: string): void {
+    AIState.isOllamaModelActive = newModelDisplayName === ChatModelDisplayNames.OLLAMA;
     // model and model display name must be update at the same time!
     let newModel = getModelName(newModelDisplayName);
 
@@ -513,6 +517,11 @@ class AIState {
       case ChainType.LLM_CHAIN: {
         // For initial load of the plugin
         if (options.forceNewCreation) {
+          // setChain is async, this is to ensure Ollama has the right model passed in from the setting
+          if (AIState.isOllamaModelActive) {
+            (AIState.chatModel as ChatOllama).model = this.langChainParams.ollamaModel;
+          }
+
           AIState.chain = ChainFactory.createNewLLMChain({
             llm: AIState.chatModel,
             memory: this.memory,
@@ -696,7 +705,8 @@ class AIState {
           if (debug) {
             console.log(`*** DEBUG INFO ***\n`
               + `user message: ${userMessage}\n`
-              + `model: ${chain.llm.modelName}\n`
+              // ChatOpenAI has modelName, some other ChatModels like ChatOllama have model
+              + `model: ${chain.llm.modelName || chain.llm.model}\n`
               + `chain type: ${chainType}\n`
               + `temperature: ${temperature}\n`
               + `maxTokens: ${maxTokens}\n`
