@@ -481,12 +481,7 @@ class AIState {
     }
 
     if (newModelDisplayName === ChatModelDisplayNames.LM_STUDIO) {
-      // if (!this.langChainParams.openAIProxyBaseUrl) {
-      //   new Notice('Please set the OpenAI Proxy Base URL in settings.');
-      //   console.error('Please set the OpenAI Proxy Base URL in settings.');
-      //   return;
-      // }
-      newModel = LM_STUDIO;
+      newModel = 'check_model_in_lm_studio_ui';
     }
 
     try {

@@ -587,11 +587,6 @@ export class CopilotSettingTab extends PluginSettingTab {
           })
       );
 
-    containerEl.createEl('div', {
-      text: 'When you are done, clear the OpenAI Proxy Base URL to switch back to non-local models!',
-      cls: 'warning-message'
-    });
-
     containerEl.createEl('h5', { text: 'Ollama' });
     containerEl.createEl('p', { text: 'To use Local Copilot with Ollama, pick Ollama in the Copilot Chat model selection dropdown.' });
     containerEl.createEl('p', { text: 'Run the local Ollama server by running this in your terminal:' });

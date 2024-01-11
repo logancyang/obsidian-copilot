@@ -21,7 +21,7 @@ If you enjoy Copilot for Obsidian, please consider [sponsoring this project](htt
 - Chat with ChatGPT right inside Obsidian in the Copilot Chat window.
 - No repetitive login. Use your own API key (stored locally).
 - No monthly fee. Pay only for what you use.
-- Model selection of OpenAI, Azure and **local** models powered by LM Studio.
+- Model selection of OpenAI, Azure and **local** models powered by LM Studio and Ollama.
 - No need to buy ChatGPT Plus to use GPT-4.
 - No usage cap for GPT-4 like ChatGPT Plus.
 - One-click copying any message as markdown.
@@ -31,17 +31,15 @@ If you enjoy Copilot for Obsidian, please consider [sponsoring this project](htt
 - Easy commands to **simplify, emojify, summarize, translate, change tone, fix grammar, rewrite into a tweet/thread, count tokens** and more.
 - Set your own parameters like LLM temperature, max tokens, conversation context based on your need (**pls be mindful of the API cost**).
 - **User custom prompt**! You can *add, apply, edit, delete* your custom prompts, persisted in your local Obsidian environment! Be creative with your own prompt templates, sky is the limit!
-- **Local model** support for **offline chat and QA** using LM Studio. Talk to your notes without internet! (experimental feature)
+- **Local model** support for **offline chat** using LM Studio and Ollama (experimental feature).
 
-## 🎬 Video Demos
+## 🎬 Demos
 
-#### 🎉 NEW in v2.4.8: Local Copilot with LM Studio and Ollama! No internet required!! 🎉🎉🎉
+#### 🎉 NEW in v2.4.8: Local Copilot Chat with LM Studio and Ollama! No internet required! 🎉🎉🎉
 
-<a href="https://www.youtube.com/watch?v=3yPVDI8wZcI" target="_blank"><img src="./images/thumbnail-local-copilot-lm-studio.png" width="700" /></a>
+<!-- <a href="https://www.youtube.com/watch?v=3yPVDI8wZcI" target="_blank"><img src="./images/thumbnail-local-copilot-lm-studio.png" width="700" /></a> -->
 
-In LM Studio's Local Server tab, make sure your have `CORS` enabled. Then simply fill in the OpenAI Proxy Base URL as "http://localhost:1234/v1" (or whatever port number you use), save and reload the plugin in Copilot settings. And voila, that's it! Go nuts with your local model!
-
-When you are done, don't forget to clear the OpenAI Proxy Base URL to switch back to non-local models.
+LM Studio and Ollama are the 2 best choices for running local models on your own machine. Please check out the super simple setup guide [here](local_copilot.md). Don't forget to flex your creativity in custom prompts using local models!
 
 #### 🤗 New to Copilot? Quick Guide for Beginners:
 
@@ -148,7 +146,7 @@ When opening an issue, please include relevant console logs. You can go to Copil
 ## 📝 Planned features (feedback welcome)
 - New modes
   - **Chat mode** (originally Conversation mode): You can now provide multiple notes at once as context in conversations, for LLMs with an extended context window.
-  - **QA mode**: You can **index any folder** and perform question and answer sessions using a **fully local** index and Retrieval-Augmented Generation system.
+  - **QA mode**: You can **index any folder** and perform question and answer sessions using a **local** search index and Retrieval-Augmented Generation (RAG) system.
 - Support **embedded PDFs** as context
 - Interact with a **powerful AI agent** that knows your vault who can search, filter and use your notes as context to work with. Explore, brainstorm and research like never before!
 
