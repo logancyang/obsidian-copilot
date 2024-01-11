@@ -13,7 +13,10 @@ import {
   GOOGLE,
   GOOGLE_MODELS,
   HUGGINGFACE,
-  LOCALAI,
+  LM_STUDIO,
+  LM_STUDIO_MODELS,
+  OLLAMA,
+  OLLAMA_MODELS,
   OPENAI,
   OPENAI_MODELS,
   USER_SENDER,
@@ -21,6 +24,8 @@ import {
 import { ChatMessage } from '@/sharedState';
 import { getModelName, isSupportedChain } from '@/utils';
 import VectorDBManager, { MemoryVector } from '@/vectorDBManager';
+import { CohereEmbeddings } from "@langchain/cohere";
+import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import {
   BaseChain,
@@ -32,7 +37,6 @@ import { ChatAnthropic } from 'langchain/chat_models/anthropic';
 import { BaseChatModel } from 'langchain/chat_models/base';
 import { ChatOpenAI } from 'langchain/chat_models/openai';
 import { Embeddings } from "langchain/embeddings/base";
-import { CohereEmbeddings } from "langchain/embeddings/cohere";
 import { HuggingFaceInferenceEmbeddings } from "langchain/embeddings/hf";
 import { OpenAIEmbeddings } from "langchain/embeddings/openai";
 import { BufferWindowMemory } from "langchain/memory";
@@ -68,7 +72,8 @@ interface ModelConfig {
   // Google API key https://api.js.langchain.com/classes/langchain_google_genai.ChatGoogleGenerativeAI.html
   apiKey?: string,
   openAIProxyBaseUrl?: string,
-  localAIModel?: string,
+  ollamaModel?: string,
+  lmStudioPort?: string,
 }
 
 export interface LangChainParams {
@@ -81,7 +86,7 @@ export interface LangChainParams {
   azureOpenAIApiDeploymentName: string,
   azureOpenAIApiVersion: string,
   azureOpenAIApiEmbeddingDeploymentName: string,
-  googleApiKey?: string,
+  googleApiKey: string,
   model: string,
   modelDisplayName: string,
   temperature: number,
@@ -91,8 +96,9 @@ export interface LangChainParams {
   embeddingProvider: string,
   chainType: ChainType,  // Default ChainType is set in main.ts getAIStateParams
   options: SetChainOptions,
+  ollamaModel: string,
+  lmStudioPort: string,
   openAIProxyBaseUrl?: string,
-  localAIModel?: string,
 }
 
 export interface SetChainOptions {
@@ -142,12 +148,15 @@ class AIState {
   private static chatAnthropic: ChatAnthropic;
   private static azureChatOpenAI: ChatOpenAI;
   private static chatGoogleGenerativeAI: ChatGoogleGenerativeAI;
+  private static chatOllama: ChatOllama;
   private static chain: BaseChain;
   private static retrievalChain: RetrievalQAChain;
   private static conversationalRetrievalChain: ConversationalRetrievalQAChain;
 
   private chatPrompt:  ChatPromptTemplate;
   private vectorStore: MemoryVectorStore;
+
+  private static isOllamaModelActive = false;
 
   memory: BufferWindowMemory;
   langChainParams: LangChainParams;
@@ -215,7 +224,7 @@ class AIState {
       maxTokens,
       openAIProxyBaseUrl,
       googleApiKey,
-      localAIModel,
+      ollamaModel,
     } = this.langChainParams;
 
     // Create a base configuration that applies to all models
@@ -234,7 +243,6 @@ class AIState {
           openAIApiKey,
           maxTokens,
           openAIProxyBaseUrl,
-          localAIModel,
         };
         break;
       case ANTHROPIC:
@@ -258,6 +266,20 @@ class AIState {
           ...config,
           apiKey: googleApiKey,
         };
+        break;
+      case LM_STUDIO:
+        config = {
+          ...config,
+          openAIApiKey: 'placeholder',
+          openAIProxyBaseUrl: `http://localhost:${this.langChainParams.lmStudioPort}/v1`,
+        };
+        break;
+      case OLLAMA:
+        config = {
+          ...config,
+          modelName: ollamaModel,
+        };
+        break;
     }
 
     return config;
@@ -306,6 +328,22 @@ class AIState {
         hasApiKey: Boolean(this.langChainParams.googleApiKey),
         AIConstructor: ChatGoogleGenerativeAI,
         vendor: GOOGLE,
+      };
+    }
+
+    for (const modelDisplayNameKey of OLLAMA_MODELS) {
+      modelMap[modelDisplayNameKey] = {
+        hasApiKey: true,
+        AIConstructor: ChatOllama,
+        vendor: OLLAMA,
+      };
+    }
+
+    for (const modelDisplayNameKey of LM_STUDIO_MODELS) {
+      modelMap[modelDisplayNameKey] = {
+        hasApiKey: true,
+        AIConstructor: ProxyChatOpenAI,
+        vendor: LM_STUDIO,
       };
     }
 
@@ -367,14 +405,15 @@ class AIState {
           maxRetries: 3,
           maxConcurrency: 3,
         });
-      case LOCALAI:
-        return new ProxyOpenAIEmbeddings({
-          openAIApiKey,
-          openAIProxyBaseUrl,
-          maxRetries: 3,
-          maxConcurrency: 3,
-          timeout: 10000,
-        })
+      // TODO: Check Ollama local embedding and come back here
+      // case OLLAMA:
+      //   return new ProxyOpenAIEmbeddings({
+      //     openAIApiKey,
+      //     openAIProxyBaseUrl,
+      //     maxRetries: 3,
+      //     maxConcurrency: 3,
+      //     timeout: 10000,
+      //   })
       default:
         console.error('No embedding provider set. Using OpenAI.');
         return OpenAIEmbeddingsAPI;
@@ -420,6 +459,9 @@ class AIState {
         case GOOGLE:
           AIState.chatGoogleGenerativeAI = newModelInstance as ChatGoogleGenerativeAI;
           break;
+        case OLLAMA:
+          AIState.chatOllama = newModelInstance as ChatOllama;
+          break;
       }
 
       AIState.chatModel = newModelInstance;
@@ -430,22 +472,16 @@ class AIState {
   }
 
   setModel(newModelDisplayName: string): void {
+    AIState.isOllamaModelActive = newModelDisplayName === ChatModelDisplayNames.OLLAMA;
     // model and model display name must be update at the same time!
     let newModel = getModelName(newModelDisplayName);
-    const {localAIModel} = this.langChainParams;
 
-    if (newModelDisplayName === ChatModelDisplayNames.LOCAL_AI) {
-      if (!localAIModel) {
-        new Notice('No local AI model provided! Please set it in settings first.');
-        console.error('No local AI model provided! Please set it in settings first.');
-        return;
-      }
-      if (!this.langChainParams.openAIProxyBaseUrl) {
-        new Notice('Please set the OpenAI Proxy Base URL in settings.');
-        console.error('Please set the OpenAI Proxy Base URL in settings.');
-        return;
-      }
-      newModel = localAIModel;
+    if (newModelDisplayName === ChatModelDisplayNames.OLLAMA) {
+      newModel = this.langChainParams.ollamaModel;
+    }
+
+    if (newModelDisplayName === ChatModelDisplayNames.LM_STUDIO) {
+      newModel = 'check_model_in_lm_studio_ui';
     }
 
     try {
@@ -495,6 +531,11 @@ class AIState {
       case ChainType.LLM_CHAIN: {
         // For initial load of the plugin
         if (options.forceNewCreation) {
+          // setChain is async, this is to ensure Ollama has the right model passed in from the setting
+          if (AIState.isOllamaModelActive) {
+            (AIState.chatModel as ChatOllama).model = this.langChainParams.ollamaModel;
+          }
+
           AIState.chain = ChainFactory.createNewLLMChain({
             llm: AIState.chatModel,
             memory: this.memory,
@@ -678,7 +719,8 @@ class AIState {
           if (debug) {
             console.log(`*** DEBUG INFO ***\n`
               + `user message: ${userMessage}\n`
-              + `model: ${chain.llm.modelName}\n`
+              // ChatOpenAI has modelName, some other ChatModels like ChatOllama have model
+              + `model: ${chain.llm.modelName || chain.llm.model}\n`
               + `chain type: ${chainType}\n`
               + `temperature: ${temperature}\n`
               + `maxTokens: ${maxTokens}\n`

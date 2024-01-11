@@ -18,6 +18,7 @@ export enum ChatModels {
   AZURE_GPT_35_TURBO = 'gpt-35-turbo',
   AZURE_GPT_35_TURBO_16K = 'gpt-35-turbo-16k',
   GEMINI_PRO = 'gemini-pro',
+  OLLAMA = 'ollama',
 }
 
 export enum ChatModelDisplayNames {
@@ -35,7 +36,8 @@ export enum ChatModelDisplayNames {
   AZURE_GPT_4 = 'AZURE GPT-4',
   AZURE_GPT_4_32K = 'AZURE GPT-4 32K',
   GEMINI_PRO = 'GEMINI PRO',
-  LOCAL_AI = 'LocalAI',
+  OLLAMA = 'OLLAMA (LOCAL)',
+  LM_STUDIO = 'LM STUDIO (LOCAL)',
 }
 
 export const OPENAI_MODELS = new Set([
@@ -44,7 +46,7 @@ export const OPENAI_MODELS = new Set([
     ChatModelDisplayNames.GPT_4,
     ChatModelDisplayNames.GPT_4_TURBO,
     ChatModelDisplayNames.GPT_4_32K,
-    ChatModelDisplayNames.LOCAL_AI,
+    ChatModelDisplayNames.LM_STUDIO,
 ]);
 
 export const AZURE_MODELS = new Set([
@@ -63,6 +65,14 @@ export const CLAUDE_MODELS = new Set([
 
 export const GOOGLE_MODELS = new Set([
   ChatModelDisplayNames.GEMINI_PRO,
+]);
+
+export const OLLAMA_MODELS = new Set([
+  ChatModelDisplayNames.OLLAMA,
+]);
+
+export const LM_STUDIO_MODELS = new Set([
+  ChatModelDisplayNames.LM_STUDIO,
 ]);
 
 export const DISPLAY_NAME_TO_MODEL: Record<string, string> = {
@@ -89,21 +99,22 @@ export const COHEREAI = 'cohereai';
 export const AZURE_OPENAI = 'azure_openai';
 export const ANTHROPIC = 'anthropic';
 export const GOOGLE = 'google';
-export const LOCALAI = 'localai';
+export const LM_STUDIO = 'lm_studio';
+export const OLLAMA = 'ollama';
 
 export const VENDOR_MODELS: Record<string, Set<string>> = {
   [OPENAI]: OPENAI_MODELS,
   [AZURE_OPENAI]: AZURE_MODELS,
   [ANTHROPIC]: CLAUDE_MODELS,
   [GOOGLE]: GOOGLE_MODELS,
+  [OLLAMA]: OLLAMA_MODELS,
+  [LM_STUDIO]: LM_STUDIO_MODELS,
 };
 
 // Embedding Models
 export const DISTILBERT_NLI = 'sentence-transformers/distilbert-base-nli-mean-tokens';
 export const INSTRUCTOR_XL = 'hkunlp/instructor-xl'; // Inference API is off for this
 export const MPNET_V2 = 'sentence-transformers/all-mpnet-base-v2'; // Inference API returns 400
-
-// export const LOCALAI_DEFAULT_MODEL = 'ggml-gpt4all-j';
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
   openAIApiKey: '',
@@ -123,7 +134,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   contextTurns: 3,
   userSystemPrompt: '',
   openAIProxyBaseUrl: '',
-  localAIModel: '',
+  ollamaModel: 'llama2',
+  lmStudioPort: '1234',
   ttlDays: 30,
   stream: true,
   embeddingProvider: OPENAI,

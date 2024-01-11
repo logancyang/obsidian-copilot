@@ -21,7 +21,7 @@ If you enjoy Copilot for Obsidian, please consider [sponsoring this project](htt
 - Chat with ChatGPT right inside Obsidian in the Copilot Chat window.
 - No repetitive login. Use your own API key (stored locally).
 - No monthly fee. Pay only for what you use.
-- Model selection of OpenAI, Azure and **local** models powered by LocalAI.
+- Model selection of OpenAI, Azure and **local** models powered by LM Studio and Ollama.
 - No need to buy ChatGPT Plus to use GPT-4.
 - No usage cap for GPT-4 like ChatGPT Plus.
 - One-click copying any message as markdown.
@@ -31,19 +31,15 @@ If you enjoy Copilot for Obsidian, please consider [sponsoring this project](htt
 - Easy commands to **simplify, emojify, summarize, translate, change tone, fix grammar, rewrite into a tweet/thread, count tokens** and more.
 - Set your own parameters like LLM temperature, max tokens, conversation context based on your need (**pls be mindful of the API cost**).
 - **User custom prompt**! You can *add, apply, edit, delete* your custom prompts, persisted in your local Obsidian environment! Be creative with your own prompt templates, sky is the limit!
-- **Local model** support for **offline chat and QA** using LocalAI. Talk to your notes without internet! (experimental feature)
+- **Local model** support for **offline chat** using LM Studio and Ollama (experimental feature).
 
-## 🎬 Video Demos
+## 🎬 Demos
 
-#### 🎉 NEW in v2.4.0: Local Copilot! No internet required!! 🎉
+#### 🎉 NEW in v2.4.8: Local Copilot Chat with LM Studio and Ollama! No internet required! 🎉🎉🎉
 
-<a href="https://www.youtube.com/watch?v=3yPVDI8wZcI" target="_blank"><img src="./images/thumbnail-local-copilot.png" width="700" /></a>
+<!-- <a href="https://www.youtube.com/watch?v=3yPVDI8wZcI" target="_blank"><img src="./images/thumbnail-local-copilot-lm-studio.png" width="700" /></a> -->
 
-**Please make sure you go through this [Step-by-step setup guide](./localai_setup.md) to setup Local Copilot on your device correctly!**
-
-I've got feedback about "Use Local Copilot" toggle being unnecesary, so it is removed in v2.4.1. Now, make sure your have `--cors` flag enabled in your LocalAI server (or .env `CORS=true` if you use Docker). Then simply fill in the OpenAI Proxy Base URL as "http://localhost:8080/v1" and restart the plugin to chat with your local models.
-
-When you are done, clear the OpenAI Proxy Base URL to switch back to non-local models.
+LM Studio and Ollama are the 2 best choices for running local models on your own machine. Please check out the super simple setup guide [here](local_copilot.md). Don't forget to flex your creativity in custom prompts using local models!
 
 #### 🤗 New to Copilot? Quick Guide for Beginners:
 
@@ -54,9 +50,7 @@ When you are done, clear the OpenAI Proxy Base URL to switch back to non-local m
 - Fix grammar and spelling, Summarize, Simplify, Emojify, Remove URLs
 - Generate glossary, table of contents
 - Translate to a language of your choosing
-- Change tone: professional, casual, straightforward, confident, friendly
-- Make longer/shorter
-- Rewrite into a tweet/thread
+- You can find all Copilot commands in your command palette
 
 #### 💬 User Custom Prompt: Create as Many Copilot Commands as You Like!
 
@@ -151,13 +145,15 @@ When opening an issue, please include relevant console logs. You can go to Copil
 
 ## 📝 Planned features (feedback welcome)
 - New modes
-  - Chat mode (originally Conversation mode): You can now provide multiple notes at once for context in conversations, for LLMs with an extended context window.
-  - QA mode: You can index any folder and perform question and answer sessions using a **fully local** index and Retrieval-Augmented Generation system.
-- Support embedded PDFs as context
-- Interact with a powerful AI agent that knows your vault. Explore, brainstorm and review ideas like never before!
+  - **Chat mode** (originally Conversation mode): You can now provide multiple notes at once as context in conversations, for LLMs with an extended context window.
+  - **QA mode**: You can **index any folder** and perform question and answer sessions using a **local** search index and Retrieval-Augmented Generation (RAG) system.
+- Support **embedded PDFs** as context
+- Interact with a **powerful AI agent** that knows your vault who can search, filter and use your notes as context to work with. Explore, brainstorm and research like never before!
 
 ## 🙏 Thank You
-If you are enjoying Copilot, please support my work here: https://www.buymeacoffee.com/logancyang
+Did you know that [even the timer on Alexa needs internet access](https://twitter.com/logancyang/status/1720929870635802738)? In this era of corporate-dominated internet, I still believe there's room for powerful tech that's focused on privacy. A great **local** AI agent in Obsidian is the ultimate form of this plugin. If you share my vision, please consider [sponsoring this project](https://github.com/sponsors/logancyang) or buying me coffees!
+
+<a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
 
 Please also help spread the word by sharing about the Copilot for Obsidian Plugin on Twitter, Reddit, or any other social media platform you use.
 

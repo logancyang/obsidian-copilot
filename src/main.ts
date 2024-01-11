@@ -35,7 +35,8 @@ export interface CopilotSettings {
   contextTurns: number;
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;
-  localAIModel: string;
+  ollamaModel: string;
+  lmStudioPort: string;
   ttlDays: number;
   stream: boolean;
   embeddingProvider: string;
@@ -488,7 +489,8 @@ export default class CopilotPlugin extends Plugin {
       maxTokens,
       contextTurns,
       embeddingProvider,
-      localAIModel,
+      ollamaModel,
+      lmStudioPort,
     } = sanitizeSettings(this.settings);
     return {
       openAIApiKey,
@@ -501,7 +503,8 @@ export default class CopilotPlugin extends Plugin {
       azureOpenAIApiVersion,
       azureOpenAIApiEmbeddingDeploymentName,
       googleApiKey,
-      localAIModel,
+      ollamaModel: ollamaModel || DEFAULT_SETTINGS.ollamaModel,
+      lmStudioPort: lmStudioPort || DEFAULT_SETTINGS.lmStudioPort,
       model: this.settings.defaultModel,
       modelDisplayName: this.settings.defaultModelDisplayName,
       temperature: Number(temperature),

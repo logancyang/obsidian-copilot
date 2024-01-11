@@ -5,8 +5,7 @@ import {
   DEFAULT_SETTINGS,
   DISPLAY_NAME_TO_MODEL,
   HUGGINGFACE,
-  LOCALAI,
-  OPENAI,
+  OPENAI
 } from "@/constants";
 import CopilotPlugin from "@/main";
 import { App, DropdownComponent, Notice, PluginSettingTab, Setting } from "obsidian";
@@ -41,6 +40,7 @@ export class CopilotSettingTab extends PluginSettingTab {
     const { containerEl } = this;
 
     containerEl.empty();
+    containerEl.style.userSelect = 'text';
     containerEl.createEl('h2', { text: 'Copilot Settings' });
 
     const buttonContainer = containerEl.createDiv({ cls: 'button-container' });
@@ -86,7 +86,8 @@ export class CopilotSettingTab extends PluginSettingTab {
       ChatModelDisplayNames.AZURE_GPT_4,
       ChatModelDisplayNames.AZURE_GPT_4_32K,
       ChatModelDisplayNames.GEMINI_PRO,
-      ChatModelDisplayNames.LOCAL_AI,
+      ChatModelDisplayNames.LM_STUDIO,
+      ChatModelDisplayNames.OLLAMA,
     ];
 
     new Setting(containerEl)
@@ -351,12 +352,12 @@ export class CopilotSettingTab extends PluginSettingTab {
       .setDesc(
         createFragment((frag) => {
           frag.appendText(
-            "The maximum number of tokens to generate. Default is 1000."
+            "The maximum number of output tokens to generate. Default is 1000."
           );
           frag.createEl(
             'strong',
             {
-              text: 'This number plus the length of your prompt must be smaller than the context window of the model.'
+              text: 'This number plus the length of your prompt (input tokens) must be smaller than the context window of the model.'
             }
           )
         })
@@ -400,12 +401,12 @@ export class CopilotSettingTab extends PluginSettingTab {
           })
       );
 
-    containerEl.createEl('h4', { text: 'Vector-based QA Settings (BETA). No context limit!' });
-    containerEl.createEl('h6', { text: 'To start the QA session, use the Mode Selection dropdown and select "QA: Active Note". Switch back to "Conversation" when you are done!' });
+    containerEl.createEl('h4', { text: 'Vector-based QA Settings (Beta). No context limit!' });
+    containerEl.createEl('p', { text: 'To start the QA session, use the Mode Selection dropdown and select "QA: Active Note". Switch back to "Conversation" when you are done!' });
     containerEl.createEl(
-      'h6',
+      'p',
       {
-        text: 'NOTE: OpenAI embeddings are not free but may give better QA results. CohereAI (recommended) offers trial API for FREE and the quality is very good! It is more stable than Huggingface Inference API. Huggingface embeddings are also free but the result is not as good, and you may see more API timeout errors. '
+        text: 'NOTE: OpenAI embeddings are not free but may give better QA results. CohereAI offers trial API for FREE and the quality is very good! It is more stable than Huggingface Inference API (more timeouts).'
       }
     );
 
@@ -422,7 +423,6 @@ export class CopilotSettingTab extends PluginSettingTab {
           .addOption(COHEREAI, 'CohereAI')
           .addOption(AZURE_OPENAI, 'Azure OpenAI')
           .addOption(HUGGINGFACE, 'Huggingface')
-          .addOption(LOCALAI, 'LocalAI')
           .setValue(this.plugin.settings.embeddingProvider)
           .onChange(async (value: string) => {
             this.plugin.settings.embeddingProvider = value;
@@ -507,34 +507,6 @@ export class CopilotSettingTab extends PluginSettingTab {
       }
       );
 
-    containerEl.createEl('h4', { text: 'Local Copilot (EXPERIMENTAL, NO INTERNET NEEDED!!)' });
-    containerEl.createEl('p', { text: 'To use Local Copilot, please check the doc to set up LocalAI server on your device. Once ready,' });
-    containerEl.createEl('p', { text: '1. Set OpenAI Proxy Base URL to http://localhost:8080/v1 under Advanced Settings.' });
-    containerEl.createEl('p', { text: '2. Type in the LocalAI Model name you have below.' });
-    containerEl.createEl('p', { text: '3. Pick LocalAI in the Copilot Chat model selection dropdown to chat with it!' });
-    containerEl.createEl('p', { text: 'Local models can be limited in capabilities and may not work for some use cases at this time. Keep in mind that it is still in early experimental phase. But it is definitely fun to try out!' });
-    containerEl.createEl('h6', { text: 'When you are done, clear the OpenAI Proxy Base URL to switch back to non-local models.' });
-
-    new Setting(containerEl)
-      .setName("LocalAI Model")
-      .setDesc(
-        createFragment((frag) => {
-          frag.appendText("The local model you'd like to use. Make sure you download that model in your LocalAI models directory.");
-          frag.createEl('br');
-          frag.appendText("NOTE: Please set OpenAI Proxy Base URL to http://localhost:8080/v1 under Advanced Settings")
-        })
-      )
-      .addText((text) => {
-        text.inputEl.style.width = "100%";
-        text
-          .setPlaceholder("llama-2-uncensored-q4ks")
-          .setValue(this.plugin.settings.localAIModel)
-          .onChange(async (value) => {
-            this.plugin.settings.localAIModel = value;
-            await this.plugin.saveSettings();
-          })
-      });
-
     containerEl.createEl('h4', { text: 'Advanced Settings' });
 
     new Setting(containerEl)
@@ -589,6 +561,51 @@ export class CopilotSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           })
       });
+
+    containerEl.createEl('h4', { text: 'Local Copilot (No Internet Required!)' });
+    containerEl.createEl('div', {
+      text: 'Please check the doc to set up LM Studio or Ollama server on your device.',
+      cls: 'warning-message'
+    });
+    containerEl.createEl('p', { text: 'Local models can be limited in capabilities and may not work for some use cases at this time. Keep in mind that it is still in early experimental phase. But some 13B even 7B models are already quite capable!' });
+
+
+    containerEl.createEl('h5', { text: 'LM Studio' });
+    containerEl.createEl('p', { text: 'To use Local Copilot with LM Studio:' });
+    containerEl.createEl('p', { text: '1. Start LM Studio server with CORS on. Default port is 1234 but if you change it, you can provide it below.' });
+    containerEl.createEl('p', { text: '2. Pick LM Studio in the Copilot Chat model selection dropdown to chat with it!' });
+
+    new Setting(containerEl)
+      .setName("LM Studio server port")
+      .setDesc("The default is 1234")
+      .addText(text => text
+          .setPlaceholder("1234")
+          .setValue(this.plugin.settings.lmStudioPort)
+          .onChange(async (value: string) => {
+              this.plugin.settings.lmStudioPort = value;
+              await this.plugin.saveSettings();
+          })
+      );
+
+    containerEl.createEl('h5', { text: 'Ollama' });
+    containerEl.createEl('p', { text: 'To use Local Copilot with Ollama, pick Ollama in the Copilot Chat model selection dropdown.' });
+    containerEl.createEl('p', { text: 'Run the local Ollama server by running this in your terminal:' });
+    containerEl.createEl(
+      'strong',
+      { text: "OLLAMA_ORIGINS=app://obsidian.md* ollama serve" }
+    );
+
+    new Setting(containerEl)
+      .setName("Ollama model")
+      .setDesc("The default is llama2")
+      .addText(text => text
+          .setPlaceholder("llama2")
+          .setValue(this.plugin.settings.ollamaModel)
+          .onChange(async (value: string) => {
+              this.plugin.settings.ollamaModel = value;
+              await this.plugin.saveSettings();
+          })
+      );
 
     containerEl.createEl('h4', { text: 'Development mode' });
 
