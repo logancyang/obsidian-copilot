@@ -17,6 +17,10 @@ If you enjoy Copilot for Obsidian, please consider [sponsoring this project](htt
 
 <a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
 
+## 🎉 NEW in v2.4.8: Local Copilot Chat with LM Studio and Ollama! No internet required! 🎉🎉🎉
+
+**LM Studio** and **Ollama** are the 2 best choices for running local models on your own machine. Please check out the super simple setup guide [here](local_copilot.md). Don't forget to flex your creativity in custom prompts using local models!
+
 ## 🛠️ Features
 - Chat with ChatGPT right inside Obsidian in the Copilot Chat window.
 - No repetitive login. Use your own API key (stored locally).
@@ -35,11 +39,7 @@ If you enjoy Copilot for Obsidian, please consider [sponsoring this project](htt
 
 ## 🎬 Demos
 
-#### 🎉 NEW in v2.4.8: Local Copilot Chat with LM Studio and Ollama! No internet required! 🎉🎉🎉
-
 <!-- <a href="https://www.youtube.com/watch?v=3yPVDI8wZcI" target="_blank"><img src="./images/thumbnail-local-copilot-lm-studio.png" width="700" /></a> -->
-
-LM Studio and Ollama are the 2 best choices for running local models on your own machine. Please check out the super simple setup guide [here](local_copilot.md). Don't forget to flex your creativity in custom prompts using local models!
 
 #### 🤗 New to Copilot? Quick Guide for Beginners:
 
