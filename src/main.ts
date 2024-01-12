@@ -1,4 +1,5 @@
-import AIState, { LangChainParams, SetChainOptions } from '@/aiState';
+import { LangChainParams, SetChainOptions } from '@/aiParams';
+import AIState from '@/aiState';
 import { ChainType } from '@/chainFactory';
 import { AddPromptModal } from "@/components/AddPromptModal";
 import CopilotView from '@/components/CopilotView';
@@ -28,6 +29,8 @@ export interface CopilotSettings {
   azureOpenAIApiVersion: string;
   azureOpenAIApiEmbeddingDeploymentName: string;
   googleApiKey: string;
+  openRouterAiApiKey: string;
+  openRouterModel: string;
   defaultModel: string;
   defaultModelDisplayName: string;
   temperature: number;
@@ -485,6 +488,8 @@ export default class CopilotPlugin extends Plugin {
       azureOpenAIApiVersion,
       azureOpenAIApiEmbeddingDeploymentName,
       googleApiKey,
+      openRouterAiApiKey,
+      openRouterModel,
       temperature,
       maxTokens,
       contextTurns,
@@ -503,6 +508,8 @@ export default class CopilotPlugin extends Plugin {
       azureOpenAIApiVersion,
       azureOpenAIApiEmbeddingDeploymentName,
       googleApiKey,
+      openRouterAiApiKey,
+      openRouterModel: openRouterModel || DEFAULT_SETTINGS.openRouterModel,
       ollamaModel: ollamaModel || DEFAULT_SETTINGS.ollamaModel,
       lmStudioPort: lmStudioPort || DEFAULT_SETTINGS.lmStudioPort,
       model: this.settings.defaultModel,
