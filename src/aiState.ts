@@ -19,6 +19,8 @@ import {
   OLLAMA_MODELS,
   OPENAI,
   OPENAI_MODELS,
+  OPENROUTERAI,
+  OPENROUTERAI_MODELS,
   USER_SENDER,
 } from '@/constants';
 import { ChatMessage } from '@/sharedState';
@@ -53,59 +55,8 @@ import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { Notice } from 'obsidian';
 import { useState } from 'react';
+import { LangChainParams, ModelConfig, SetChainOptions } from './aiParams';
 import { ProxyChatOpenAI, ProxyOpenAIEmbeddings } from './langchainWrappers';
-
-
-interface ModelConfig {
-  modelName: string,
-  temperature: number,
-  streaming: boolean,
-  maxRetries: number,
-  maxConcurrency: number,
-  maxTokens?: number,
-  openAIApiKey?: string,
-  anthropicApiKey?: string,
-  azureOpenAIApiKey?: string,
-  azureOpenAIApiInstanceName?: string,
-  azureOpenAIApiDeploymentName?: string,
-  azureOpenAIApiVersion?: string,
-  // Google API key https://api.js.langchain.com/classes/langchain_google_genai.ChatGoogleGenerativeAI.html
-  apiKey?: string,
-  openAIProxyBaseUrl?: string,
-  ollamaModel?: string,
-  lmStudioPort?: string,
-}
-
-export interface LangChainParams {
-  openAIApiKey: string,
-  huggingfaceApiKey: string,
-  cohereApiKey: string,
-  anthropicApiKey: string,
-  azureOpenAIApiKey: string,
-  azureOpenAIApiInstanceName: string,
-  azureOpenAIApiDeploymentName: string,
-  azureOpenAIApiVersion: string,
-  azureOpenAIApiEmbeddingDeploymentName: string,
-  googleApiKey: string,
-  model: string,
-  modelDisplayName: string,
-  temperature: number,
-  maxTokens: number,
-  systemMessage: string,
-  chatContextTurns: number,
-  embeddingProvider: string,
-  chainType: ChainType,  // Default ChainType is set in main.ts getAIStateParams
-  options: SetChainOptions,
-  ollamaModel: string,
-  lmStudioPort: string,
-  openAIProxyBaseUrl?: string,
-}
-
-export interface SetChainOptions {
-  prompt?: ChatPromptTemplate;
-  noteContent?: string;
-  forceNewCreation?: boolean;
-}
 
 /**
  * AIState manages the chat model, LangChain, and related state.
@@ -157,6 +108,7 @@ class AIState {
   private vectorStore: MemoryVectorStore;
 
   private static isOllamaModelActive = false;
+  private static isOpenRouterModelActive = false;
 
   memory: BufferWindowMemory;
   langChainParams: LangChainParams;
@@ -224,7 +176,9 @@ class AIState {
       maxTokens,
       openAIProxyBaseUrl,
       googleApiKey,
+      openRouterAiApiKey,
       ollamaModel,
+      openRouterModel,
     } = this.langChainParams;
 
     // Create a base configuration that applies to all models
@@ -265,6 +219,14 @@ class AIState {
         config = {
           ...config,
           apiKey: googleApiKey,
+        };
+        break;
+      case OPENROUTERAI:
+        config = {
+          ...config,
+          modelName: openRouterModel,
+          openAIApiKey: openRouterAiApiKey,
+          openAIProxyBaseUrl: 'https://openrouter.ai/api/v1',
         };
         break;
       case LM_STUDIO:
@@ -328,6 +290,14 @@ class AIState {
         hasApiKey: Boolean(this.langChainParams.googleApiKey),
         AIConstructor: ChatGoogleGenerativeAI,
         vendor: GOOGLE,
+      };
+    }
+
+    for (const modelDisplayNameKey of OPENROUTERAI_MODELS) {
+      modelMap[modelDisplayNameKey] = {
+        hasApiKey: Boolean(this.langChainParams.openRouterAiApiKey),
+        AIConstructor: ProxyChatOpenAI,
+        vendor: OPENROUTERAI,
       };
     }
 
@@ -459,6 +429,9 @@ class AIState {
         case GOOGLE:
           AIState.chatGoogleGenerativeAI = newModelInstance as ChatGoogleGenerativeAI;
           break;
+        case OPENROUTERAI:
+          AIState.chatOpenAI = newModelInstance as ProxyChatOpenAI;
+          break;
         case OLLAMA:
           AIState.chatOllama = newModelInstance as ChatOllama;
           break;
@@ -473,15 +446,20 @@ class AIState {
 
   setModel(newModelDisplayName: string): void {
     AIState.isOllamaModelActive = newModelDisplayName === ChatModelDisplayNames.OLLAMA;
+    AIState.isOpenRouterModelActive = newModelDisplayName === ChatModelDisplayNames.OPENROUTERAI;
     // model and model display name must be update at the same time!
     let newModel = getModelName(newModelDisplayName);
 
-    if (newModelDisplayName === ChatModelDisplayNames.OLLAMA) {
-      newModel = this.langChainParams.ollamaModel;
-    }
-
-    if (newModelDisplayName === ChatModelDisplayNames.LM_STUDIO) {
-      newModel = 'check_model_in_lm_studio_ui';
+    switch (newModelDisplayName) {
+      case ChatModelDisplayNames.OLLAMA:
+        newModel = this.langChainParams.ollamaModel;
+        break;
+      case ChatModelDisplayNames.LM_STUDIO:
+        newModel = 'check_model_in_lm_studio_ui';
+        break;
+      case ChatModelDisplayNames.OPENROUTERAI:
+        newModel = this.langChainParams.openRouterModel;
+        break;
     }
 
     try {
@@ -534,6 +512,8 @@ class AIState {
           // setChain is async, this is to ensure Ollama has the right model passed in from the setting
           if (AIState.isOllamaModelActive) {
             (AIState.chatModel as ChatOllama).model = this.langChainParams.ollamaModel;
+          } else if (AIState.isOpenRouterModelActive) {
+            (AIState.chatModel as ProxyChatOpenAI).modelName = this.langChainParams.openRouterModel;
           }
 
           AIState.chain = ChainFactory.createNewLLMChain({

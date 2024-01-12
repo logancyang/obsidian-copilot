@@ -86,6 +86,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       ChatModelDisplayNames.AZURE_GPT_4,
       ChatModelDisplayNames.AZURE_GPT_4_32K,
       ChatModelDisplayNames.GEMINI_PRO,
+      ChatModelDisplayNames.OPENROUTERAI,
       ChatModelDisplayNames.LM_STUDIO,
       ChatModelDisplayNames.OLLAMA,
     ];
@@ -232,6 +233,45 @@ export class CopilotSettingTab extends PluginSettingTab {
           })
       }
       );
+
+    containerEl.createEl('h6', { text: 'OpenRouter.ai API' });
+
+    new Setting(containerEl)
+      .setName("Your OpenRouterAI API key")
+      .setDesc(
+        createFragment((frag) => {
+          frag.appendText("You can get your OpenRouterAI key ");
+          frag.createEl('a', {
+            text: "here",
+            href: "https://openrouter.ai/keys"
+          });
+        })
+      )
+      .addText((text) => {
+        text.inputEl.type = "password";
+        text.inputEl.style.width = "100%";
+        text
+          .setPlaceholder("OpenRouterAI API key")
+          .setValue(this.plugin.settings.openRouterAiApiKey)
+          .onChange(async (value) => {
+            this.plugin.settings.openRouterAiApiKey = value;
+            await this.plugin.saveSettings();
+          })
+      });
+
+    new Setting(containerEl)
+      .setName("OpenRouterAI model")
+      .setDesc("Default: cognitivecomputations/dolphin-mixtral-8x7b")
+      .addText(text => {
+        text.inputEl.style.width = "100%";
+        text
+          .setPlaceholder("cognitivecomputations/dolphin-mixtral-8x7b")
+          .setValue(this.plugin.settings.openRouterModel)
+          .onChange(async (value: string) => {
+              this.plugin.settings.openRouterModel = value;
+              await this.plugin.saveSettings();
+          })
+      });
 
     containerEl.createEl('h6', { text: 'Azure OpenAI API' });
 

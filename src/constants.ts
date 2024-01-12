@@ -36,6 +36,7 @@ export enum ChatModelDisplayNames {
   AZURE_GPT_4 = 'AZURE GPT-4',
   AZURE_GPT_4_32K = 'AZURE GPT-4 32K',
   GEMINI_PRO = 'GEMINI PRO',
+  OPENROUTERAI = 'OPENROUTER.AI',
   OLLAMA = 'OLLAMA (LOCAL)',
   LM_STUDIO = 'LM STUDIO (LOCAL)',
 }
@@ -66,6 +67,10 @@ export const CLAUDE_MODELS = new Set([
 export const GOOGLE_MODELS = new Set([
   ChatModelDisplayNames.GEMINI_PRO,
 ]);
+
+export const OPENROUTERAI_MODELS = new Set([
+  ChatModelDisplayNames.OPENROUTERAI,
+])
 
 export const OLLAMA_MODELS = new Set([
   ChatModelDisplayNames.OLLAMA,
@@ -99,6 +104,7 @@ export const COHEREAI = 'cohereai';
 export const AZURE_OPENAI = 'azure_openai';
 export const ANTHROPIC = 'anthropic';
 export const GOOGLE = 'google';
+export const OPENROUTERAI = 'openrouterai';
 export const LM_STUDIO = 'lm_studio';
 export const OLLAMA = 'ollama';
 
@@ -107,6 +113,7 @@ export const VENDOR_MODELS: Record<string, Set<string>> = {
   [AZURE_OPENAI]: AZURE_MODELS,
   [ANTHROPIC]: CLAUDE_MODELS,
   [GOOGLE]: GOOGLE_MODELS,
+  [OPENROUTERAI]: OPENROUTERAI_MODELS,
   [OLLAMA]: OLLAMA_MODELS,
   [LM_STUDIO]: LM_STUDIO_MODELS,
 };
@@ -127,6 +134,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   azureOpenAIApiVersion: '',
   azureOpenAIApiEmbeddingDeploymentName: '',
   googleApiKey: '',
+  openRouterAiApiKey: '',
+  openRouterModel: 'cognitivecomputations/dolphin-mixtral-8x7b',
   defaultModel: ChatModels.GPT_4_TURBO,
   defaultModelDisplayName: ChatModelDisplayNames.GPT_4_TURBO,
   temperature: 0.1,
