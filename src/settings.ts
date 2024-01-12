@@ -404,7 +404,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       )
       .addSlider(slider =>
         slider
-          .setLimits(0, 8000, 100)
+          .setLimits(0, 10000, 100)
           .setValue(
             this.plugin.settings.maxTokens !== undefined &&
               this.plugin.settings.maxTokens !== null ?
@@ -428,7 +428,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       )
       .addSlider(slider =>
         slider
-          .setLimits(1, 10, 1)
+          .setLimits(1, 30, 1)
           .setValue(
             this.plugin.settings.contextTurns !== undefined &&
               this.plugin.settings.contextTurns !== null ?
