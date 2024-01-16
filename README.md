@@ -17,7 +17,11 @@ If you enjoy Copilot for Obsidian, please consider [sponsoring this project](htt
 
 <a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
 
-## 🎉 NEW in v2.4.8: Local Copilot Chat with LM Studio and Ollama! No internet required! 🎉🎉🎉
+#### 🎉 NEW in v2.4.9: FREE Models with OpenRouter.ai, LM Studio and Ollama! 🎉🎉🎉
+
+<a href="https://www.youtube.com/watch?v=TuiPnNZ-gMA" target="_blank"><img src="./images/thumbnail-open-source-models.png" width="700" /></a>
+
+**OpenRouter.ai** hosts some of the best open-source models at the moment, such as MistralAI's new models, check out their websites for all the good stuff they have!
 
 **LM Studio** and **Ollama** are the 2 best choices for running local models on your own machine. Please check out the super simple setup guide [here](local_copilot.md). Don't forget to flex your creativity in custom prompts using local models!
 
@@ -38,9 +42,6 @@ If you enjoy Copilot for Obsidian, please consider [sponsoring this project](htt
 - **Local model** support for **offline chat** using LM Studio and Ollama (experimental feature).
 
 ## 🎬 Demos
-
-<!-- <a href="https://www.youtube.com/watch?v=3yPVDI8wZcI" target="_blank"><img src="./images/thumbnail-local-copilot-lm-studio.png" width="700" /></a> -->
-
 #### 🤗 New to Copilot? Quick Guide for Beginners:
 
 <a href="https://www.youtube.com/watch?v=jRCDAg2sck8" target="_blank"><img src="./images/thumbnail.png" width="700" /></a>
