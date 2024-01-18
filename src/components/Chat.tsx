@@ -43,6 +43,7 @@ import React, {
 interface CreateEffectOptions {
   custom_temperature?: number;
   isVisible?: boolean;
+  ignoreSystemMessage?: boolean;
 }
 
 interface ChatProps {
@@ -203,7 +204,11 @@ const Chat: React.FC<ChatProps> = ({
     options: CreateEffectOptions = {},
   ) => {
     return () => {
-      const { custom_temperature, isVisible = false } = options;
+      const {
+        custom_temperature,
+        isVisible = false,
+        ignoreSystemMessage = true,  // Ignore system message by default for commands
+      } = options;
       const handleSelection = async (selectedText: string, eventSubtype?: string) => {
         // Create a user message with the selected text
         const promptMessage: ChatMessage = {
@@ -231,7 +236,7 @@ const Chat: React.FC<ChatProps> = ({
           setAbortController,
           {
             debug,
-            ignoreSystemMessage: true,
+            ignoreSystemMessage,
           }
         );
       };
