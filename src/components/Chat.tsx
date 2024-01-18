@@ -43,6 +43,7 @@ import React, {
 interface CreateEffectOptions {
   custom_temperature?: number;
   isVisible?: boolean;
+  ignoreSystemMessage?: boolean;
 }
 
 interface ChatProps {
@@ -93,7 +94,7 @@ const Chat: React.FC<ChatProps> = ({
       addMessage,
       setCurrentAiMessage,
       setAbortController,
-      debug,
+      { debug },
     );
   };
 
@@ -196,14 +197,18 @@ const Chat: React.FC<ChatProps> = ({
     };
   }, []);
 
-  // Create an effect for each event type (command)
+  // Create an effect for each event type (Copilot command on selected text)
   const createEffect = (
     eventType: string,
     promptFn: (selectedText: string, eventSubtype?: string) => string,
     options: CreateEffectOptions = {},
   ) => {
     return () => {
-      const { custom_temperature, isVisible = false } = options;
+      const {
+        custom_temperature,
+        isVisible = false,
+        ignoreSystemMessage = true,  // Ignore system message by default for commands
+      } = options;
       const handleSelection = async (selectedText: string, eventSubtype?: string) => {
         // Create a user message with the selected text
         const promptMessage: ChatMessage = {
@@ -229,7 +234,10 @@ const Chat: React.FC<ChatProps> = ({
           addMessage,
           setCurrentAiMessage,
           setAbortController,
-          debug,
+          {
+            debug,
+            ignoreSystemMessage,
+          }
         );
       };
 

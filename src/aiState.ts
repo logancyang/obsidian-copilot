@@ -143,7 +143,7 @@ class AIState {
   }
 
   private initChatPrompt(): void {
-    this.chatPrompt = ChatPromptTemplate.fromPromptMessages([
+    this.chatPrompt = ChatPromptTemplate.fromMessages([
       SystemMessagePromptTemplate.fromTemplate(
         this.langChainParams.systemMessage
       ),
@@ -531,7 +531,6 @@ class AIState {
         }
 
         this.langChainParams.chainType = ChainType.LLM_CHAIN;
-        console.log('Set chain:', ChainType.LLM_CHAIN);
         break;
       }
       case ChainType.RETRIEVAL_QA_CHAIN: {
@@ -666,8 +665,11 @@ class AIState {
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void,
     addMessage: (message: ChatMessage) => void,
-    debug = false,
+    options: { debug?: boolean, ignoreSystemMessage?: boolean } = {},
   ) {
+    const { debug = false, ignoreSystemMessage = false } = options;
+
+    // Check if chat model is initialized
     if (!this.validateChatModel(AIState.chatModel)) {
       const errorMsg = 'Chat model is not initialized properly, check your API key in Copilot setting and make sure you have API access.';
       new Notice(errorMsg);
@@ -691,6 +693,24 @@ class AIState {
       chainType,
     } = this.langChainParams;
 
+    const systemPrompt = ignoreSystemMessage ? '' : systemMessage;
+    // Whether to ignore system prompt (for commands)
+    if (ignoreSystemMessage) {
+      const effectivePrompt = ignoreSystemMessage
+        ? ChatPromptTemplate.fromMessages([
+            new MessagesPlaceholder("history"),
+            HumanMessagePromptTemplate.fromTemplate("{input}"),
+          ])
+        : this.chatPrompt;
+
+      this.setChain(chainType, {
+        ...this.langChainParams.options,
+        prompt: effectivePrompt,
+      });
+    } else {
+      this.setChain(chainType, this.langChainParams.options);
+    }
+
     let fullAIResponse = '';
     const chain = AIState.chain as any;
     try {
@@ -704,7 +724,7 @@ class AIState {
               + `chain type: ${chainType}\n`
               + `temperature: ${temperature}\n`
               + `maxTokens: ${maxTokens}\n`
-              + `system message: ${systemMessage}\n`
+              + `system prompt: ${systemPrompt}\n`
               + `chat context turns: ${chatContextTurns}\n`,
             );
             console.log('chain:', chain);
@@ -733,7 +753,7 @@ class AIState {
               + `chain type: ${chainType}\n`
               + `temperature: ${temperature}\n`
               + `maxTokens: ${maxTokens}\n`
-              + `system message: ${systemMessage}\n`
+              + `system prompt: ${systemPrompt}\n`
               + `chat context turns: ${chatContextTurns}\n`,
             );
             console.log('chain:', chain);
