@@ -93,7 +93,7 @@ const Chat: React.FC<ChatProps> = ({
       addMessage,
       setCurrentAiMessage,
       setAbortController,
-      debug,
+      { debug },
     );
   };
 
@@ -196,7 +196,7 @@ const Chat: React.FC<ChatProps> = ({
     };
   }, []);
 
-  // Create an effect for each event type (command)
+  // Create an effect for each event type (Copilot command on selected text)
   const createEffect = (
     eventType: string,
     promptFn: (selectedText: string, eventSubtype?: string) => string,
@@ -229,7 +229,10 @@ const Chat: React.FC<ChatProps> = ({
           addMessage,
           setCurrentAiMessage,
           setAbortController,
-          debug,
+          {
+            debug,
+            ignoreSystemMessage: true,
+          }
         );
       };
 
