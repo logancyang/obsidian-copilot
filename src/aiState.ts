@@ -28,6 +28,7 @@ import { getModelName, isSupportedChain } from '@/utils';
 import VectorDBManager, { MemoryVector } from '@/vectorDBManager';
 import { CohereEmbeddings } from "@langchain/cohere";
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
+import { HuggingFaceTransformersEmbeddings } from "@langchain/community/embeddings/hf_transformers";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import {
   BaseChain,
@@ -39,7 +40,6 @@ import { ChatAnthropic } from 'langchain/chat_models/anthropic';
 import { BaseChatModel } from 'langchain/chat_models/base';
 import { ChatOpenAI } from 'langchain/chat_models/openai';
 import { Embeddings } from "langchain/embeddings/base";
-import { HuggingFaceInferenceEmbeddings } from "langchain/embeddings/hf";
 import { OpenAIEmbeddings } from "langchain/embeddings/openai";
 import { BufferWindowMemory } from "langchain/memory";
 import {
@@ -355,11 +355,12 @@ class AIState {
         return OpenAIEmbeddingsAPI
       case HUGGINGFACE:
         // TODO: This does not have a timeout param, need to check in the future.
-        return new HuggingFaceInferenceEmbeddings({
-          apiKey: this.langChainParams.huggingfaceApiKey,
-          maxRetries: 3,
-          maxConcurrency: 3,
-        });
+        // return new HuggingFaceInferenceEmbeddings({
+        //   apiKey: this.langChainParams.huggingfaceApiKey,
+        //   maxRetries: 3,
+        //   maxConcurrency: 3,
+        // });
+        return new HuggingFaceTransformersEmbeddings();
       case COHEREAI:
         return new CohereEmbeddings({
           apiKey: this.langChainParams.cohereApiKey,
