@@ -27,6 +27,7 @@ import {
   rewriteShorterSelectionPrompt,
   rewriteTweetSelectionPrompt,
   rewriteTweetThreadSelectionPrompt,
+  sendNoteContentPrompt,
   simplifyPrompt,
   summarizePrompt,
   tocPrompt,
@@ -131,6 +132,56 @@ const Chat: React.FC<ChatProps> = ({
     }
   };
 
+  const handleSendActiveNoteToPrompt = async () => {
+    if (!app) {
+      console.error('App instance is not available.');
+      return;
+    }
+
+    const file = app.workspace.getActiveFile();
+    if (!file) {
+      new Notice('No active note found.');
+      console.error('No active note found.');
+      return;
+    }
+
+    const noteContent = await getFileContent(file);
+    const noteName = getFileName(file);
+    if (!noteContent) {
+      new Notice('No note content found.');
+      console.error('No note content found.');
+      return;
+    }
+
+    // Send the content of the note to AI
+    const promptMessageHidden: ChatMessage = {
+      message: sendNoteContentPrompt(noteName, noteContent),
+      sender: USER_SENDER,
+      isVisible: false,
+    };
+
+    // Visible user message that is not sent to AI
+    const sendNoteContentUserMessage = `Please read this note [[${noteName}]] and be ready to answer questions about it.`;
+    const promptMessageVisible: ChatMessage = {
+      message: sendNoteContentUserMessage,
+      sender: USER_SENDER,
+      isVisible: true,
+    };
+
+    addMessage(promptMessageVisible);
+    addMessage(promptMessageHidden);
+
+    await getAIResponse(
+      promptMessageHidden,
+      chatContext,
+      aiState,
+      addMessage,
+      setCurrentAiMessage,
+      setAbortController,
+      { debug },
+    );
+  };
+
   const forceRebuildActiveNoteContext = async () => {
     if (!app) {
       console.error('App instance is not available.');
@@ -155,7 +206,7 @@ const Chat: React.FC<ChatProps> = ({
     await aiState.buildIndex(noteContent, docHash);
     const activeNoteOnMessage: ChatMessage = {
       sender: AI_SENDER,
-      message: `Reading [[${noteName}]]...\n\n Please switch to "QA: Active Note" in Mode Selection to ask questions about it.`,
+      message: `Indexing [[${noteName}]]...\n\n Please switch to "QA" in Mode Selection to ask questions about it.`,
       isVisible: true,
     };
 
@@ -319,6 +370,7 @@ const Chat: React.FC<ChatProps> = ({
             }
           }
           onSaveAsNote={handleSaveAsNote}
+          onSendActiveNoteToPrompt={handleSendActiveNoteToPrompt}
           onForceRebuildActiveNoteContext={forceRebuildActiveNoteContext}
           addMessage={addMessage}
         />

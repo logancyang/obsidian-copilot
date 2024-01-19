@@ -140,7 +140,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   defaultModelDisplayName: ChatModelDisplayNames.GPT_4_TURBO,
   temperature: 0.1,
   maxTokens: 1000,
-  contextTurns: 3,
+  contextTurns: 15,
   userSystemPrompt: '',
   openAIProxyBaseUrl: '',
   ollamaModel: 'llama2',

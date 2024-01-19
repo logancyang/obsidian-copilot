@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 
 interface ChatInputProps {
@@ -14,7 +14,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
 }) => {
   const [rows, setRows] = useState(1);
   const [shouldFocus, setShouldFocus] = useState(false);
-  const textAreaRef = useRef<HTMLTextAreaElement>(null);;
+  const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputMessage(event.target.value);

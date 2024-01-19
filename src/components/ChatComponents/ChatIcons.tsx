@@ -19,8 +19,9 @@ import {
 import { ChainType } from '@/chainFactory';
 import {
   RefreshIcon, SaveAsNoteIcon,
+  SendActiveNoteToPromptIcon,
   StopIcon,
-  UseActiveNoteAsContextIcon
+  UseActiveNoteAsContextIcon,
 } from '@/components/Icons';
 import { stringToChainType } from '@/utils';
 import React from 'react';
@@ -33,6 +34,7 @@ interface ChatIconsProps {
   onStopGenerating: () => void;
   onNewChat: () => void;
   onSaveAsNote: () => void;
+  onSendActiveNoteToPrompt: () => void;
   onForceRebuildActiveNoteContext: () => void;
   addMessage: (message: ChatMessage) => void;
 }
@@ -45,6 +47,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   onStopGenerating,
   onNewChat,
   onSaveAsNote,
+  onSendActiveNoteToPrompt,
   onForceRebuildActiveNoteContext,
   addMessage,
 }) => {
@@ -81,7 +84,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
 
       const activeNoteOnMessage: ChatMessage = {
         sender: AI_SENDER,
-        message: `OK Feel free to ask me questions about [[${noteName}]].`,
+        message: `OK Feel free to ask me questions about [[${noteName}]]. \n\nPlease note that this is a retrieval-based QA for notes longer than the model context window. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with *Send Note to Prompt* button used with a *long context model* is a more suitable choice. \n\n(This mode will be upgraded to work on the entire vault next)`,
         isVisible: true,
       };
       addMessage(activeNoteOnMessage);
@@ -144,16 +147,24 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             value={currentChain}
             onChange={handleChainChange}
           >
-            <option value='llm_chain'>Conversation</option>
-            <option value='retrieval_qa'>QA: Active Note</option>
+            <option value='llm_chain'>Chat</option>
+            <option value='retrieval_qa'>QA</option>
           </select>
           <span className="tooltip-text">Mode Selection</span>
         </div>
       </div>
-      <button className='chat-icon-button' onClick={onForceRebuildActiveNoteContext}>
-        <UseActiveNoteAsContextIcon className='icon-scaler' />
-        <span className="tooltip-text">Rebuild Index for Active Note</span>
-      </button>
+      {selectedChain === 'llm_chain' && (
+        <button className='chat-icon-button' onClick={onSendActiveNoteToPrompt}>
+          <SendActiveNoteToPromptIcon className='icon-scaler' />
+          <span className="tooltip-text">Send Active Note to Prompt<br/>(use with long context models)</span>
+        </button>
+      )}
+      {selectedChain === 'retrieval_qa' && (
+        <button className='chat-icon-button' onClick={onForceRebuildActiveNoteContext}>
+          <UseActiveNoteAsContextIcon className='icon-scaler' />
+          <span className="tooltip-text">Rebuild Index for Active Note</span>
+        </button>
+      )}
     </div>
   );
 };
