@@ -29,6 +29,34 @@ If your plugin does not need CSS, delete this file.
   text-align: center;
 }
 
+.copilot-setting-item-name {
+  font-weight: bold;
+  display: block;
+  color: var(--inline-title-color);
+  margin-top: 20px;
+  margin-bottom: 10px;
+}
+
+.copilot-setting-item-description {
+  display: block;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.copilot-setting-item-control {
+  width: 50%; /* Adjust the width as needed */
+  max-width: 100%; /* Ensures it doesn't exceed the parent width */
+}
+
+.copilot-setting-item-control::placeholder {
+  color: gray; /* Set the color you want for the placeholder text */
+  opacity: 0.5; /* Adjust for lighter appearance */
+}
+
+.copilot-setting-item-control[type="range"] {
+  width: 70%;
+}
+
 .chat-container {
   display: flex;
   flex-direction: column;

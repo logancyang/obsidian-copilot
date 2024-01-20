@@ -6,7 +6,6 @@ import {
   ANTHROPIC,
   AZURE_MODELS,
   AZURE_OPENAI,
-  CLAUDE_MODELS,
   COHEREAI,
   ChatModelDisplayNames,
   DEFAULT_SYSTEM_PROMPT,
@@ -266,14 +265,6 @@ class AIState {
         hasApiKey: Boolean(this.langChainParams.openAIApiKey),
         AIConstructor: OpenAIChatModel,
         vendor: OPENAI,
-      };
-    }
-
-    for (const modelDisplayNameKey of CLAUDE_MODELS) {
-      modelMap[modelDisplayNameKey] = {
-        hasApiKey: Boolean(this.langChainParams.anthropicApiKey),
-        AIConstructor: ChatAnthropic,
-        vendor: ANTHROPIC,
       };
     }
 
