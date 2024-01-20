@@ -17,6 +17,14 @@ type TextComponentProps = {
   onChange: (value: string) => void;
 };
 
+type TextAreaComponentProps = {
+  name: string;
+  description?: string;
+  placeholder: string;
+  value: string;
+  onChange: (value: string) => void;
+};
+
 type SliderComponentProps = {
   name: string;
   description?: React.ReactNode; // This allows for JSX elements, strings, etc.
@@ -46,7 +54,7 @@ const DropdownComponent: React.FC<DropdownComponentProps> = ({ name, description
       >
         {options.map((option, index) => (
           <option key={index} value={option}>
-            {option}
+            {option.replace(/_/g, ' ').toUpperCase()}
           </option>
         ))}
       </select>
@@ -69,6 +77,23 @@ const TextComponent: React.FC<TextComponentProps> = ({ name, description, placeh
     </div>
   );
 };
+
+const TextAreaComponent: React.FC<TextAreaComponentProps> = ({ name, description, placeholder, value, onChange }) => {
+  return (
+    <div className="copilot-setting-item">
+      <div className="copilot-setting-item-name">{name}</div>
+      <div className="copilot-setting-item-description">{description}</div>
+      <textarea
+        className="copilot-setting-item-control"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  );
+};
+
+
 const SliderComponent: React.FC<SliderComponentProps> = ({ name, description, min, max, step, value, onChange }) => {
   return (
     <div className="copilot-setting-item">
@@ -84,7 +109,7 @@ const SliderComponent: React.FC<SliderComponentProps> = ({ name, description, mi
           value={value}
           onChange={(e) => onChange(parseFloat(e.target.value))}
         />
-        <span style={{ marginLeft: '20px', fontWeight: 'bold' }}>{value}</span>
+        <span style={{ marginLeft: '20px', fontWeight: 'bold', color: 'var(--inline-title-color)' }}>{value}</span>
       </div>
     </div>
   );
@@ -107,5 +132,5 @@ const ToggleComponent: React.FC<ToggleComponentProps> = ({ name, description, va
   );
 };
 
-export { DropdownComponent, SliderComponent, TextComponent, ToggleComponent };
+export { DropdownComponent, SliderComponent, TextAreaComponent, TextComponent, ToggleComponent };
 

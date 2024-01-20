@@ -118,6 +118,13 @@ export const VENDOR_MODELS: Record<string, Set<string>> = {
   [LM_STUDIO]: LM_STUDIO_MODELS,
 };
 
+export const EMBEDDING_PROVIDERS = [
+  OPENAI,
+  AZURE_OPENAI,
+  COHEREAI,
+  HUGGINGFACE,
+];
+
 // Embedding Models
 export const DISTILBERT_NLI = 'sentence-transformers/distilbert-base-nli-mean-tokens';
 export const INSTRUCTOR_XL = 'hkunlp/instructor-xl'; // Inference API is off for this

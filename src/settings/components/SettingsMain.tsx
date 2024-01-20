@@ -2,10 +2,10 @@ import CopilotPlugin from "@/main";
 import { Notice } from 'obsidian';
 import React, { Fragment, useState } from 'react';
 import { ChatModelDisplayNames, DEFAULT_SETTINGS, DISPLAY_NAME_TO_MODEL } from '../../constants';
-// import AdvancedSettings from './AdvancedSettings';
+import AdvancedSettings from './AdvancedSettings';
 import ApiSettings from './ApiSettings';
-// import LocalCopilotSettings from './LocalCopilotSettings';
-// import QASettings from './QASettings';
+import LocalCopilotSettings from './LocalCopilotSettings';
+import QASettings from './QASettings';
 import { DropdownComponent, SliderComponent, TextComponent } from './SettingBlocks';
 
 interface SettingsMainProps {
@@ -32,6 +32,21 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
   const [azureOpenAIApiDeploymentName, setAzureOpenAIApiDeploymentName] = useState(plugin.settings.azureOpenAIApiDeploymentName);
   const [azureOpenAIApiVersion, setAzureOpenAIApiVersion] = useState(plugin.settings.azureOpenAIApiVersion);
 
+  // QA settings
+  const [embeddingProvider, setEmbeddingProvider] = useState(plugin.settings.embeddingProvider);
+  const [ttlDays, setTtlDays] = useState(plugin.settings.ttlDays);
+  const [cohereApiKey, setCohereApiKey] = useState(plugin.settings.cohereApiKey);
+  const [huggingfaceApiKey, setHuggingfaceApiKey] = useState(plugin.settings.huggingfaceApiKey);
+
+  // Advanced settings
+  const [userSystemPrompt, setUserSystemPrompt] = useState(plugin.settings.userSystemPrompt);
+  const [openAIProxyBaseUrl, setOpenAIProxyBaseUrl] = useState(plugin.settings.openAIProxyBaseUrl);
+
+  // Local Copilot Settings
+  const [lmStudioPort, setLmStudioPort] = useState(plugin.settings.lmStudioPort);
+  const [ollamaModel, setOllamaModel] = useState(plugin.settings.ollamaModel);
+
+  // NOTE: When new settings are added, make sure to add them to saveAllSettings
   const saveAllSettings = async () => {
     plugin.settings.defaultModelDisplayName = defaultModelDisplayName;
     plugin.settings.defaultModel = DISPLAY_NAME_TO_MODEL[defaultModelDisplayName];
@@ -49,6 +64,20 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
     plugin.settings.azureOpenAIApiInstanceName = azureOpenAIApiInstanceName;
     plugin.settings.azureOpenAIApiDeploymentName = azureOpenAIApiDeploymentName;
     plugin.settings.azureOpenAIApiVersion = azureOpenAIApiVersion;
+
+    // QA settings
+    plugin.settings.embeddingProvider = embeddingProvider;
+    plugin.settings.ttlDays = ttlDays;
+    plugin.settings.cohereApiKey = cohereApiKey;
+    plugin.settings.huggingfaceApiKey = huggingfaceApiKey;
+
+    // Advanced settings
+    plugin.settings.userSystemPrompt = userSystemPrompt;
+    plugin.settings.openAIProxyBaseUrl = openAIProxyBaseUrl;
+
+    // Local Copilot Settings
+    plugin.settings.lmStudioPort = lmStudioPort;
+    plugin.settings.ollamaModel = ollamaModel;
 
     await plugin.saveSettings();
     await reloadPlugin();
@@ -152,9 +181,28 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
         azureOpenAIApiVersion={azureOpenAIApiVersion}
         setAzureOpenAIApiVersion={setAzureOpenAIApiVersion}
       />
-      {/* <QASettings />
-      <AdvancedSettings />
-      <LocalCopilotSettings /> */}
+      <QASettings
+        embeddingProvider={embeddingProvider}
+        setEmbeddingProvider={setEmbeddingProvider}
+        ttlDays={ttlDays}
+        setTtlDays={setTtlDays}
+        cohereApiKey={cohereApiKey}
+        setCohereApiKey={setCohereApiKey}
+        huggingfaceApiKey={huggingfaceApiKey}
+        setHuggingfaceApiKey={setHuggingfaceApiKey}
+      />
+      <AdvancedSettings
+        openAIProxyBaseUrl={openAIProxyBaseUrl}
+        setOpenAIProxyBaseUrl={setOpenAIProxyBaseUrl}
+        userSystemPrompt={userSystemPrompt}
+        setUserSystemPrompt={setUserSystemPrompt}
+      />
+      <LocalCopilotSettings
+        lmStudioPort={lmStudioPort}
+        setLmStudioPort={setLmStudioPort}
+        ollamaModel={ollamaModel}
+        setOllamaModel={setOllamaModel}
+      />
     </>
   );
 }

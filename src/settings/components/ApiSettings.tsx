@@ -45,6 +45,9 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
       <br/>
       <br/>
       <h1>API Settings</h1>
+      <p>
+        All your API keys are stored locally.
+      </p>
       <div className="warning-message">
         Make sure you have access to the model and the correct API key.
         <br />
@@ -63,12 +66,6 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
             <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">
               https://platform.openai.com/api-keys
             </a>
-            <br />
-            It is stored locally in your vault at
-            <br />
-            <strong>path_to_your_vault/.obsidian/plugins/obsidian-copilot/data.json</strong>
-            <br />
-            and it is only used to make requests to OpenAI.
           </p>
         </div>
         <div className="warning-message">
@@ -79,7 +76,7 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
           <span> to see if you have correct API access first.</span>
         </div>
       </div>
-
+      <br />
       <Collapsible title="Google API Settings">
         <div>
           <ApiSetting
@@ -128,7 +125,7 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
         </div>
       </Collapsible>
 
-      <Collapsible title="Azure API Settings">
+      <Collapsible title="Azure OpenAI API Settings">
         <div>
           <ApiSetting
             title="Azure OpenAI API Key"
