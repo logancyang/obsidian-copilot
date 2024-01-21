@@ -151,6 +151,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   userSystemPrompt: '',
   openAIProxyBaseUrl: '',
   ollamaModel: 'llama2',
+  ollamaBaseUrl: '',
   lmStudioPort: '1234',
   ttlDays: 30,
   stream: true,

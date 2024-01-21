@@ -177,6 +177,7 @@ class AIState {
       googleApiKey,
       openRouterAiApiKey,
       ollamaModel,
+      ollamaBaseUrl,
       openRouterModel,
     } = this.langChainParams;
 
@@ -238,6 +239,7 @@ class AIState {
       case OLLAMA:
         config = {
           ...config,
+          ...(ollamaBaseUrl ? { baseUrl: ollamaBaseUrl } : {}),
           modelName: ollamaModel,
         };
         break;

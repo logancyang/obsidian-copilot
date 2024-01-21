@@ -6,6 +6,8 @@ interface LocalCopilotSettingsProps {
   setLmStudioPort: (value: string) => void;
   ollamaModel: string;
   setOllamaModel: (value: string) => void;
+  ollamaBaseUrl: string;
+  setOllamaBaseUrl: (value: string) => void;
 }
 
 const LocalCopilotSettings: React.FC<LocalCopilotSettingsProps> = ({
@@ -13,6 +15,8 @@ const LocalCopilotSettings: React.FC<LocalCopilotSettingsProps> = ({
   setLmStudioPort,
   ollamaModel,
   setOllamaModel,
+  ollamaBaseUrl,
+  setOllamaBaseUrl,
 }) => {
   return (
     <div>
@@ -47,6 +51,13 @@ const LocalCopilotSettings: React.FC<LocalCopilotSettingsProps> = ({
         value={ollamaModel}
         onChange={setOllamaModel}
         placeholder="llama2"
+      />
+      <TextComponent
+        name="Ollama Base URL"
+        description="Default is http://localhost:11434. If you'd like to use a remote server, provide the URL here."
+        value={ollamaBaseUrl}
+        onChange={setOllamaBaseUrl}
+        placeholder="http://localhost:11434"
       />
     </div>
   );

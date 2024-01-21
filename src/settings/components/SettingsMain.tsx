@@ -45,6 +45,7 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
   // Local Copilot Settings
   const [lmStudioPort, setLmStudioPort] = useState(plugin.settings.lmStudioPort);
   const [ollamaModel, setOllamaModel] = useState(plugin.settings.ollamaModel);
+  const [ollamaBaseUrl, setOllamaBaseUrl] = useState(plugin.settings.ollamaBaseUrl);
 
   // NOTE: When new settings are added, make sure to add them to saveAllSettings
   const saveAllSettings = async () => {
@@ -78,6 +79,7 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
     // Local Copilot Settings
     plugin.settings.lmStudioPort = lmStudioPort;
     plugin.settings.ollamaModel = ollamaModel;
+    plugin.settings.ollamaBaseUrl = ollamaBaseUrl;
 
     await plugin.saveSettings();
     await reloadPlugin();
@@ -202,6 +204,8 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
         setLmStudioPort={setLmStudioPort}
         ollamaModel={ollamaModel}
         setOllamaModel={setOllamaModel}
+        ollamaBaseUrl={ollamaBaseUrl}
+        setOllamaBaseUrl={setOllamaBaseUrl}
       />
     </>
   );
