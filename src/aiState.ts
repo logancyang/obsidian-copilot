@@ -6,7 +6,6 @@ import {
   ANTHROPIC,
   AZURE_MODELS,
   AZURE_OPENAI,
-  CLAUDE_MODELS,
   COHEREAI,
   ChatModelDisplayNames,
   DEFAULT_SYSTEM_PROMPT,
@@ -178,6 +177,7 @@ class AIState {
       googleApiKey,
       openRouterAiApiKey,
       ollamaModel,
+      ollamaBaseUrl,
       openRouterModel,
     } = this.langChainParams;
 
@@ -239,6 +239,7 @@ class AIState {
       case OLLAMA:
         config = {
           ...config,
+          ...(ollamaBaseUrl ? { baseUrl: ollamaBaseUrl } : {}),
           modelName: ollamaModel,
         };
         break;
@@ -266,14 +267,6 @@ class AIState {
         hasApiKey: Boolean(this.langChainParams.openAIApiKey),
         AIConstructor: OpenAIChatModel,
         vendor: OPENAI,
-      };
-    }
-
-    for (const modelDisplayNameKey of CLAUDE_MODELS) {
-      modelMap[modelDisplayNameKey] = {
-        hasApiKey: Boolean(this.langChainParams.anthropicApiKey),
-        AIConstructor: ChatAnthropic,
-        vendor: ANTHROPIC,
       };
     }
 

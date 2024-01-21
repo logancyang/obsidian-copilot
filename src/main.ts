@@ -9,7 +9,7 @@ import { ToneModal } from "@/components/ToneModal";
 import {
   CHAT_VIEWTYPE, DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT,
 } from '@/constants';
-import { CopilotSettingTab } from '@/settings';
+import { CopilotSettingTab, CopilotSettings } from '@/settings/SettingsPage';
 import SharedState from '@/sharedState';
 import { sanitizeSettings } from "@/utils";
 import VectorDBManager, { VectorStoreDocument } from '@/vectorDBManager';
@@ -17,35 +17,6 @@ import { Server } from 'http';
 import { Editor, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
 import PouchDB from 'pouchdb';
 
-
-export interface CopilotSettings {
-  openAIApiKey: string;
-  huggingfaceApiKey: string;
-  cohereApiKey: string;
-  anthropicApiKey: string;
-  azureOpenAIApiKey: string;
-  azureOpenAIApiInstanceName: string;
-  azureOpenAIApiDeploymentName: string;
-  azureOpenAIApiVersion: string;
-  azureOpenAIApiEmbeddingDeploymentName: string;
-  googleApiKey: string;
-  openRouterAiApiKey: string;
-  openRouterModel: string;
-  defaultModel: string;
-  defaultModelDisplayName: string;
-  temperature: number;
-  maxTokens: number;
-  contextTurns: number;
-  userSystemPrompt: string;
-  openAIProxyBaseUrl: string;
-  ollamaModel: string;
-  lmStudioPort: string;
-  ttlDays: number;
-  stream: boolean;
-  embeddingProvider: string;
-  defaultSaveFolder: string;
-  debug: boolean;
-}
 
 interface CustomPrompt {
   _id: string;
@@ -495,6 +466,7 @@ export default class CopilotPlugin extends Plugin {
       contextTurns,
       embeddingProvider,
       ollamaModel,
+      ollamaBaseUrl,
       lmStudioPort,
     } = sanitizeSettings(this.settings);
     return {
@@ -511,6 +483,7 @@ export default class CopilotPlugin extends Plugin {
       openRouterAiApiKey,
       openRouterModel: openRouterModel || DEFAULT_SETTINGS.openRouterModel,
       ollamaModel: ollamaModel || DEFAULT_SETTINGS.ollamaModel,
+      ollamaBaseUrl: ollamaBaseUrl || DEFAULT_SETTINGS.ollamaBaseUrl,
       lmStudioPort: lmStudioPort || DEFAULT_SETTINGS.lmStudioPort,
       model: this.settings.defaultModel,
       modelDisplayName: this.settings.defaultModelDisplayName,

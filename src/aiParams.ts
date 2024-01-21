@@ -18,6 +18,8 @@ export interface ModelConfig {
   apiKey?: string,
   openAIProxyBaseUrl?: string,
   ollamaModel?: string,
+  // OllamaBaseUrl
+  baseUrl?: string,
   openRouterModel?: string,
   lmStudioPort?: string,
 }
@@ -44,6 +46,7 @@ export interface LangChainParams {
   chainType: ChainType,  // Default ChainType is set in main.ts getAIStateParams
   options: SetChainOptions,
   ollamaModel: string,
+  ollamaBaseUrl: string,
   openRouterModel: string,
   lmStudioPort: string,
   openAIProxyBaseUrl?: string,

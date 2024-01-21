@@ -1,16 +1,14 @@
 import { ChainType } from '@/chainFactory';
 import {
-  ANTHROPIC,
   AZURE_MODELS,
   AZURE_OPENAI,
-  CLAUDE_MODELS,
   DEFAULT_SETTINGS,
   DISPLAY_NAME_TO_MODEL,
   OPENAI,
   OPENAI_MODELS,
-  USER_SENDER,
+  USER_SENDER
 } from '@/constants';
-import { CopilotSettings } from '@/main';
+import { CopilotSettings } from '@/settings/SettingsPage';
 import { ChatMessage } from '@/sharedState';
 import {
   BaseChain,
@@ -56,10 +54,6 @@ export const getModelVendorMap = (): Record<string, string> => {
 
   for (const model of AZURE_MODELS) {
     model_to_vendor[model] = AZURE_OPENAI;
-  }
-
-  for (const model of CLAUDE_MODELS) {
-    model_to_vendor[model] = ANTHROPIC;
   }
   return model_to_vendor;
 }
