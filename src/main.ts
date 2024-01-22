@@ -1,5 +1,5 @@
+import ChainManager from '@/LLMProviders/chainManager';
 import { LangChainParams, SetChainOptions } from '@/aiParams';
-import AIState from '@/aiState';
 import { ChainType } from '@/chainFactory';
 import { AddPromptModal } from "@/components/AddPromptModal";
 import CopilotView from '@/components/CopilotView';
@@ -29,7 +29,7 @@ export default class CopilotPlugin extends Plugin {
   // A chat history that stores the messages sent and received
   // Only reset when the user explicitly clicks "New Chat"
   sharedState: SharedState;
-  aiState: AIState;
+  chainManager: ChainManager;
   activateViewPromise: Promise<void> | null = null;
   chatIsVisible = false;
   dbPrompts: PouchDB.Database;
@@ -41,10 +41,10 @@ export default class CopilotPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadSettings();
     this.addSettingTab(new CopilotSettingTab(this.app, this));
-    // Always have one instance of sharedState and aiState in the plugin
+    // Always have one instance of sharedState and chainManager in the plugin
     this.sharedState = new SharedState();
-    const langChainParams = this.getAIStateParams();
-    this.aiState = new AIState(langChainParams);
+    const langChainParams = this.getChainManagerParams();
+    this.chainManager = new ChainManager(langChainParams);
 
     this.dbPrompts = new PouchDB<CustomPrompt>('copilot_custom_prompts');
     this.dbVectorStores = new PouchDB<VectorStoreDocument>('copilot_vector_stores');
@@ -447,7 +447,7 @@ export default class CopilotPlugin extends Plugin {
       .filter(Boolean) as string[];
   }
 
-  getAIStateParams(): LangChainParams {
+  getChainManagerParams(): LangChainParams {
     const {
       openAIApiKey,
       huggingfaceApiKey,

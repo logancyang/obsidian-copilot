@@ -1,4 +1,4 @@
-import AIState from '@/aiState';
+import ChainManager from '@/LLMProviders/chainManager';
 import Chat from '@/components/Chat';
 import { CHAT_VIEWTYPE } from '@/constants';
 import { AppContext } from '@/context';
@@ -12,7 +12,7 @@ import { Root, createRoot } from 'react-dom/client';
 
 export default class CopilotView extends ItemView {
   private sharedState: SharedState;
-  private aiState: AIState;
+  private chainManager: ChainManager;
   private root: Root | null = null;
   private defaultSaveFolder: string;
   private debug = false;
@@ -23,7 +23,7 @@ export default class CopilotView extends ItemView {
     super(leaf);
     this.sharedState = plugin.sharedState;
     this.app = plugin.app;
-    this.aiState = plugin.aiState;
+    this.chainManager = plugin.chainManager;
     this.debug = plugin.settings.debug;
     this.emitter = new EventEmitter();
     this.getChatVisibility = this.getChatVisibility.bind(this);
@@ -63,7 +63,7 @@ export default class CopilotView extends ItemView {
         <React.StrictMode>
           <Chat
             sharedState={this.sharedState}
-            aiState={this.aiState}
+            chainManager={this.chainManager}
             emitter={this.emitter}
             getChatVisibility={this.getChatVisibility}
             defaultSaveFolder={this.defaultSaveFolder}

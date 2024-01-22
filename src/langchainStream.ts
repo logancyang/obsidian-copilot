@@ -1,4 +1,4 @@
-import AIState from '@/aiState';
+import ChainManager from '@/LLMProviders/chainManager';
 import { ChatMessage } from '@/sharedState';
 import { Notice } from 'obsidian';
 
@@ -6,8 +6,7 @@ export type Role = 'assistant' | 'user' | 'system';
 
 export const getAIResponse = async (
   userMessage: ChatMessage,
-  chatContext: ChatMessage[],
-  aiState: AIState,
+  chainManager: ChainManager,
   addMessage: (message: ChatMessage) => void,
   updateCurrentAiMessage: (message: string) => void,
   updateShouldAbort: (abortController: AbortController | null) => void,
@@ -16,10 +15,7 @@ export const getAIResponse = async (
   const abortController = new AbortController();
   updateShouldAbort(abortController);
   try {
-    // TODO: Need to run certain models without langchain
-    // it will mean no retrieval qa mode for those models!
-
-    await aiState.runChain(
+    await chainManager.runChain(
       userMessage.message,
       abortController,
       updateCurrentAiMessage,

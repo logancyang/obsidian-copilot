@@ -1,11 +1,7 @@
 import { ChainType } from '@/chainFactory';
 import {
-  AZURE_MODELS,
-  AZURE_OPENAI,
   DEFAULT_SETTINGS,
   DISPLAY_NAME_TO_MODEL,
-  OPENAI,
-  OPENAI_MODELS,
   USER_SENDER
 } from '@/constants';
 import { CopilotSettings } from '@/settings/SettingsPage';
@@ -43,19 +39,6 @@ export const isSupportedChain = (chain: BaseChain): chain is BaseChain => {
 
 export const getModelName = (modelDisplayName: string): string => {
   return DISPLAY_NAME_TO_MODEL[modelDisplayName];
-}
-
-export const getModelVendorMap = (): Record<string, string> => {
-  const model_to_vendor: Record<string, string> = {};
-
-  for (const model of OPENAI_MODELS) {
-    model_to_vendor[model] = OPENAI;
-  }
-
-  for (const model of AZURE_MODELS) {
-    model_to_vendor[model] = AZURE_OPENAI;
-  }
-  return model_to_vendor;
 }
 
 // Returns the last N messages from the chat history,

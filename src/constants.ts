@@ -11,10 +11,6 @@ export enum ChatModels {
   GPT_4 = 'gpt-4',
   GPT_4_TURBO = 'gpt-4-1106-preview',
   GPT_4_32K = 'gpt-4-32k',
-  // CLAUDE_1 = 'claude-1',
-  // CLAUDE_1_100K = 'claude-1-100k',
-  // CLAUDE_INSTANT_1 = 'claude-instant-1',
-  // CLAUDE_INSTANT_1_100K = 'claude-instant-1-100k',
   AZURE_GPT_35_TURBO = 'gpt-35-turbo',
   AZURE_GPT_35_TURBO_16K = 'gpt-35-turbo-16k',
   GEMINI_PRO = 'gemini-pro',
@@ -27,10 +23,6 @@ export enum ChatModelDisplayNames {
   GPT_4 = 'GPT-4',
   GPT_4_TURBO = 'GPT-4 TURBO',
   GPT_4_32K = 'GPT-4 32K',
-  // CLAUDE_1 = 'CLAUDE-1',
-  // CLAUDE_1_100K = 'CLAUDE-1-100K',
-  // CLAUDE_INSTANT_1 = 'CLAUDE-INSTANT',
-  // CLAUDE_INSTANT_1_100K = 'CLAUDE-INSTANT-100K',
   AZURE_GPT_35_TURBO = 'AZURE GPT-3.5',
   AZURE_GPT_35_TURBO_16K = 'AZURE GPT-3.5-16K',
   AZURE_GPT_4 = 'AZURE GPT-4',
@@ -57,13 +49,6 @@ export const AZURE_MODELS = new Set([
     ChatModelDisplayNames.AZURE_GPT_4_32K,
 ]);
 
-// export const CLAUDE_MODELS = new Set([
-//     ChatModelDisplayNames.CLAUDE_1,
-//     ChatModelDisplayNames.CLAUDE_1_100K,
-//     ChatModelDisplayNames.CLAUDE_INSTANT_1,
-//     ChatModelDisplayNames.CLAUDE_INSTANT_1_100K,
-// ]);
-
 export const GOOGLE_MODELS = new Set([
   ChatModelDisplayNames.GEMINI_PRO,
 ]);
@@ -86,10 +71,6 @@ export const DISPLAY_NAME_TO_MODEL: Record<string, string> = {
   [ChatModelDisplayNames.GPT_4]: ChatModels.GPT_4,
   [ChatModelDisplayNames.GPT_4_TURBO]: ChatModels.GPT_4_TURBO,
   [ChatModelDisplayNames.GPT_4_32K]: ChatModels.GPT_4_32K,
-  // [ChatModelDisplayNames.CLAUDE_1]: ChatModels.CLAUDE_1,
-  // [ChatModelDisplayNames.CLAUDE_1_100K]: ChatModels.CLAUDE_1_100K,
-  // [ChatModelDisplayNames.CLAUDE_INSTANT_1]: ChatModels.CLAUDE_INSTANT_1,
-  // [ChatModelDisplayNames.CLAUDE_INSTANT_1_100K]: ChatModels.CLAUDE_INSTANT_1_100K,
   [ChatModelDisplayNames.AZURE_GPT_35_TURBO]: ChatModels.AZURE_GPT_35_TURBO,
   [ChatModelDisplayNames.AZURE_GPT_35_TURBO_16K]: ChatModels.AZURE_GPT_35_TURBO_16K,
   [ChatModelDisplayNames.AZURE_GPT_4]: ChatModels.GPT_4,
@@ -98,31 +79,32 @@ export const DISPLAY_NAME_TO_MODEL: Record<string, string> = {
 };
 
 // Model Providers
-export const OPENAI = 'openai';
-export const HUGGINGFACE = 'huggingface';
-export const COHEREAI = 'cohereai';
-export const AZURE_OPENAI = 'azure_openai';
-export const ANTHROPIC = 'anthropic';
-export const GOOGLE = 'google';
-export const OPENROUTERAI = 'openrouterai';
-export const LM_STUDIO = 'lm_studio';
-export const OLLAMA = 'ollama';
+export enum ModelProviders {
+  OPENAI = 'openai',
+  HUGGINGFACE = 'huggingface',
+  COHEREAI = 'cohereai',
+  AZURE_OPENAI = 'azure_openai',
+  ANTHROPIC = 'anthropic',
+  GOOGLE = 'google',
+  OPENROUTERAI = 'openrouterai',
+  LM_STUDIO = 'lm_studio',
+  OLLAMA = 'ollama',
+}
 
 export const VENDOR_MODELS: Record<string, Set<string>> = {
-  [OPENAI]: OPENAI_MODELS,
-  [AZURE_OPENAI]: AZURE_MODELS,
-  // [ANTHROPIC]: CLAUDE_MODELS,
-  [GOOGLE]: GOOGLE_MODELS,
-  [OPENROUTERAI]: OPENROUTERAI_MODELS,
-  [OLLAMA]: OLLAMA_MODELS,
-  [LM_STUDIO]: LM_STUDIO_MODELS,
+  [ModelProviders.OPENAI]: OPENAI_MODELS,
+  [ModelProviders.AZURE_OPENAI]: AZURE_MODELS,
+  [ModelProviders.GOOGLE]: GOOGLE_MODELS,
+  [ModelProviders.OPENROUTERAI]: OPENROUTERAI_MODELS,
+  [ModelProviders.OLLAMA]: OLLAMA_MODELS,
+  [ModelProviders.LM_STUDIO]: LM_STUDIO_MODELS,
 };
 
 export const EMBEDDING_PROVIDERS = [
-  OPENAI,
-  AZURE_OPENAI,
-  COHEREAI,
-  HUGGINGFACE,
+  ModelProviders.OPENAI,
+  ModelProviders.AZURE_OPENAI,
+  ModelProviders.COHEREAI,
+  ModelProviders.HUGGINGFACE,
 ];
 
 // Embedding Models
@@ -155,8 +137,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   lmStudioPort: '1234',
   ttlDays: 30,
   stream: true,
-  embeddingProvider: OPENAI,
+  embeddingProvider: ModelProviders.OPENAI,
   defaultSaveFolder: 'copilot-conversations',
   debug: false,
 };
-export const OPEN_AI_API_URL = 'https://api.openai.com/v1/chat/completions';
