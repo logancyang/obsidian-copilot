@@ -10,7 +10,11 @@ interface ChatInputProps {
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
-  inputMessage, setInputMessage, handleKeyDown, handleSendMessage, getChatVisibility,
+  inputMessage,
+  setInputMessage,
+  handleKeyDown,
+  handleSendMessage,
+  getChatVisibility,
 }) => {
   const [rows, setRows] = useState(1);
   const [shouldFocus, setShouldFocus] = useState(false);
@@ -27,7 +31,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
     const minRows = 1;
 
     const rowsNeeded = Math.min(
-      Math.max(text.split('\n').length, minRows), Math.floor(maxHeight / lineHeight)
+      Math.max(text.split('\n').length, minRows),
+      Math.floor(maxHeight / lineHeight)
     );
     setRows(rowsNeeded);
   };

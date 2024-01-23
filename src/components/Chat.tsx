@@ -213,6 +213,17 @@ const Chat: React.FC<ChatProps> = ({
     addMessage(activeNoteOnMessage);
   };
 
+  const editMessage = (index: number, newMessage: string, newSender: string) => {
+    const updatedChatHistory = [...chatHistory];
+    updatedChatHistory[index] = {
+      ...updatedChatHistory[index],
+      message: newMessage,
+      sender: newSender,
+    };
+    clearMessages();
+    updatedChatHistory.forEach((message) => addMessage(message));
+  };
+
   const clearCurrentAiMessage = () => {
     setCurrentAiMessage('');
   };
@@ -349,6 +360,7 @@ const Chat: React.FC<ChatProps> = ({
       <ChatMessages
         chatHistory={chatHistory}
         currentAiMessage={currentAiMessage}
+        editMessage={editMessage}
       />
       <div className='bottom-container'>
         <ChatIcons
