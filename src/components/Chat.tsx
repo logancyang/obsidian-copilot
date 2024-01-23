@@ -1,4 +1,5 @@
-import AIState, { useAIState } from '@/aiState';
+import ChainManager from '@/LLMProviders/chainManager';
+import { useAIState } from '@/aiState';
 import { ChainType } from '@/chainFactory';
 import ChatIcons from '@/components/ChatComponents/ChatIcons';
 import ChatInput from '@/components/ChatComponents/ChatInput';
@@ -17,7 +18,6 @@ import {
   fillInSelectionForCustomPrompt,
   fixGrammarSpellingSelectionPrompt,
   formatDateTime,
-  getChatContext,
   getFileContent,
   getFileName,
   glossaryPrompt,
@@ -30,7 +30,7 @@ import {
   sendNoteContentPrompt,
   simplifyPrompt,
   summarizePrompt,
-  tocPrompt,
+  tocPrompt
 } from '@/utils';
 import VectorDBManager from '@/vectorDBManager';
 import { EventEmitter } from 'events';
@@ -49,7 +49,7 @@ interface CreateEffectOptions {
 
 interface ChatProps {
   sharedState: SharedState;
-  aiState: AIState;
+  chainManager: ChainManager;
   emitter: EventEmitter;
   getChatVisibility: () => Promise<boolean>;
   defaultSaveFolder: string;
@@ -57,21 +57,19 @@ interface ChatProps {
 }
 
 const Chat: React.FC<ChatProps> = ({
-  sharedState, aiState, emitter, getChatVisibility, defaultSaveFolder, debug
+  sharedState, chainManager, emitter, getChatVisibility, defaultSaveFolder, debug
 }) => {
   const [
     chatHistory, addMessage, clearMessages,
   ] = useSharedState(sharedState);
   const [
     currentModel, setModel, currentChain, setChain, clearChatMemory,
-  ] = useAIState(aiState);
+  ] = useAIState(chainManager);
   const [currentAiMessage, setCurrentAiMessage] = useState('');
   const [inputMessage, setInputMessage] = useState('');
   const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   const app = useContext(AppContext);
-
-  const chatContext = getChatContext(chatHistory, aiState.langChainParams.chatContextTurns * 2);
 
   const handleSendMessage = async () => {
     if (!inputMessage) return;
@@ -90,8 +88,7 @@ const Chat: React.FC<ChatProps> = ({
 
     await getAIResponse(
       userMessage,
-      chatContext,
-      aiState,
+      chainManager,
       addMessage,
       setCurrentAiMessage,
       setAbortController,
@@ -173,8 +170,7 @@ const Chat: React.FC<ChatProps> = ({
 
     await getAIResponse(
       promptMessageHidden,
-      chatContext,
-      aiState,
+      chainManager,
       addMessage,
       setCurrentAiMessage,
       setAbortController,
@@ -203,7 +199,7 @@ const Chat: React.FC<ChatProps> = ({
     }
 
     const docHash = VectorDBManager.getDocumentHash(noteContent);
-    await aiState.buildIndex(noteContent, docHash);
+    await chainManager.buildIndex(noteContent, docHash);
     const activeNoteOnMessage: ChatMessage = {
       sender: AI_SENDER,
       message: `Indexing [[${noteName}]]...\n\n Please switch to "QA" in Mode Selection to ask questions about it.`,
@@ -231,7 +227,7 @@ const Chat: React.FC<ChatProps> = ({
   useEffect(() => {
     async function handleSelection(selectedText: string) {
       const wordCount = selectedText.split(' ').length;
-      const tokenCount = await aiState.countTokens(selectedText);
+      const tokenCount = await chainManager.chatModelManager.countTokens(selectedText);
       const tokenCountMessage: ChatMessage = {
         sender: AI_SENDER,
         message: `The selected text contains ${wordCount} words and ${tokenCount} tokens.`,
@@ -273,15 +269,14 @@ const Chat: React.FC<ChatProps> = ({
         }
 
         // Have a hardcoded custom temperature for some commands that need more strictness
-        aiState.langChainParams = {
-          ...aiState.langChainParams,
+        chainManager.langChainParams = {
+          ...chainManager.langChainParams,
           ...(custom_temperature && { temperature: custom_temperature }),
         };
 
         await getAIResponse(
           promptMessage,
-          [],
-          aiState,
+          chainManager,
           addMessage,
           setCurrentAiMessage,
           setAbortController,

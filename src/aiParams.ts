@@ -43,7 +43,7 @@ export interface LangChainParams {
   systemMessage: string,
   chatContextTurns: number,
   embeddingProvider: string,
-  chainType: ChainType,  // Default ChainType is set in main.ts getAIStateParams
+  chainType: ChainType,  // Default ChainType is set in main.ts getChainManagerParams
   options: SetChainOptions,
   ollamaModel: string,
   ollamaBaseUrl: string,
