@@ -6,9 +6,9 @@ import {
 } from '@/constants';
 import { CopilotSettings } from '@/settings/SettingsPage';
 import { ChatMessage } from '@/sharedState';
+import { RunnableSequence } from "@langchain/core/runnables";
 import {
   BaseChain,
-  LLMChain,
   RetrievalQAChain
 } from "langchain/chains";
 import moment from 'moment';
@@ -25,15 +25,15 @@ export const stringToChainType = (chain: string): ChainType => {
   }
 }
 
-export const isLLMChain = (chain: BaseChain): chain is LLMChain => {
-  return (chain as any).llm !== undefined;
+export const isLLMChain = (chain: RunnableSequence): chain is RunnableSequence => {
+  return (chain as any).last.bound.modelName !== undefined;
 }
 
 export const isRetrievalQAChain = (chain: BaseChain): chain is RetrievalQAChain => {
-  return (chain as any).retriever !== undefined;
+  return (chain as any).last.bound.retriever !== undefined;
 }
 
-export const isSupportedChain = (chain: BaseChain): chain is BaseChain => {
+export const isSupportedChain = (chain: RunnableSequence): chain is RunnableSequence => {
     return isLLMChain(chain) || isRetrievalQAChain(chain);
   }
 

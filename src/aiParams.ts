@@ -56,4 +56,5 @@ export interface SetChainOptions {
   prompt?: ChatPromptTemplate;
   noteContent?: string;
   forceNewCreation?: boolean;
+  abortController?: AbortController;
 }
