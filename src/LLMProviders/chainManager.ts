@@ -231,9 +231,16 @@ export default class ChainManager {
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void,
     addMessage: (message: ChatMessage) => void,
-    options: { debug?: boolean, ignoreSystemMessage?: boolean } = {},
+    options: {
+      debug?: boolean,
+      ignoreSystemMessage?: boolean,
+      updateLoading?: (loading: boolean) => void
+    } = {},
   ) {
-    const { debug = false, ignoreSystemMessage = false } = options;
+    const {
+      debug = false,
+      ignoreSystemMessage = false,
+    } = options;
 
     // Check if chat model is initialized
     if (!this.chatModelManager.validateChatModel(this.chatModelManager.getChatModel())) {

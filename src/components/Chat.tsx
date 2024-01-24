@@ -68,6 +68,7 @@ const Chat: React.FC<ChatProps> = ({
   const [currentAiMessage, setCurrentAiMessage] = useState('');
   const [inputMessage, setInputMessage] = useState('');
   const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const app = useContext(AppContext);
 
@@ -82,10 +83,11 @@ const Chat: React.FC<ChatProps> = ({
 
     // Add user message to chat history
     addMessage(userMessage);
-
     // Clear input
     setInputMessage('');
 
+    // Display running dots to indicate loading
+    setLoading(true);
     await getAIResponse(
       userMessage,
       chainManager,
@@ -94,6 +96,7 @@ const Chat: React.FC<ChatProps> = ({
       setAbortController,
       { debug },
     );
+    setLoading(false);
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -168,6 +171,7 @@ const Chat: React.FC<ChatProps> = ({
     addMessage(promptMessageVisible);
     addMessage(promptMessageHidden);
 
+    setLoading(true);
     await getAIResponse(
       promptMessageHidden,
       chainManager,
@@ -176,6 +180,7 @@ const Chat: React.FC<ChatProps> = ({
       setAbortController,
       { debug },
     );
+    setLoading(false);
   };
 
   const forceRebuildActiveNoteContext = async () => {
@@ -274,6 +279,7 @@ const Chat: React.FC<ChatProps> = ({
           ...(custom_temperature && { temperature: custom_temperature }),
         };
 
+        setLoading(true);
         await getAIResponse(
           promptMessage,
           chainManager,
@@ -285,6 +291,7 @@ const Chat: React.FC<ChatProps> = ({
             ignoreSystemMessage,
           }
         );
+        setLoading(false);
       };
 
       emitter.on(eventType, handleSelection);
@@ -349,6 +356,7 @@ const Chat: React.FC<ChatProps> = ({
       <ChatMessages
         chatHistory={chatHistory}
         currentAiMessage={currentAiMessage}
+        loading={loading}
       />
       <div className='bottom-container'>
         <ChatIcons

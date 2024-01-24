@@ -27,10 +27,12 @@ export const stringToChainType = (chain: string): ChainType => {
 }
 
 export const isLLMChain = (chain: RunnableSequence): chain is RunnableSequence => {
-  return (chain as any).last.bound.modelName !== undefined;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (chain as any).last.bound.modelName || (chain as any).last.bound.model;
 }
 
 export const isRetrievalQAChain = (chain: BaseChain): chain is RetrievalQAChain => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (chain as any).last.bound.retriever !== undefined;
 }
 
