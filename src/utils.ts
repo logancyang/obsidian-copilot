@@ -6,9 +6,10 @@ import {
 } from '@/constants';
 import { CopilotSettings } from '@/settings/SettingsPage';
 import { ChatMessage } from '@/sharedState';
+import { MemoryVariables } from "@langchain/core/memory";
+import { RunnableSequence } from "@langchain/core/runnables";
 import {
   BaseChain,
-  LLMChain,
   RetrievalQAChain
 } from "langchain/chains";
 import moment from 'moment';
@@ -25,15 +26,17 @@ export const stringToChainType = (chain: string): ChainType => {
   }
 }
 
-export const isLLMChain = (chain: BaseChain): chain is LLMChain => {
-  return (chain as any).llm !== undefined;
+export const isLLMChain = (chain: RunnableSequence): chain is RunnableSequence => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (chain as any).last.bound.modelName || (chain as any).last.bound.model;
 }
 
 export const isRetrievalQAChain = (chain: BaseChain): chain is RetrievalQAChain => {
-  return (chain as any).retriever !== undefined;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (chain as any).last.bound.retriever !== undefined;
 }
 
-export const isSupportedChain = (chain: BaseChain): chain is BaseChain => {
+export const isSupportedChain = (chain: RunnableSequence): chain is RunnableSequence => {
     return isLLMChain(chain) || isRetrievalQAChain(chain);
   }
 
@@ -217,4 +220,17 @@ export function fillInSelectionForCustomPrompt(prompt?: string) {
     }
     return prompt.replace('{}', selectedText);
   };
+}
+
+export function extractChatHistory(memoryVariables: MemoryVariables): [string, string][] {
+  const chatHistory: [string, string][] = [];
+  const { history } = memoryVariables;
+
+  for (let i = 0; i < history.length; i += 2) {
+    const userMessage = history[i]?.content || '';
+    const aiMessage = history[i + 1]?.content || '';
+    chatHistory.push([userMessage, aiMessage]);
+  }
+
+  return chatHistory;
 }

@@ -1,9 +1,9 @@
 import { LangChainParams } from '@/aiParams';
-import { BufferWindowMemory } from "langchain/memory";
+import { BaseChatMemory, BufferWindowMemory } from "langchain/memory";
 
 export default class MemoryManager {
   private static instance: MemoryManager;
-  private memory: BufferWindowMemory;
+  private memory: BaseChatMemory;
 
   private constructor(
     private langChainParams: LangChainParams
@@ -29,7 +29,7 @@ export default class MemoryManager {
     });
   }
 
-  getMemory(): BufferWindowMemory {
+  getMemory(): BaseChatMemory {
     return this.memory;
   }
 
