@@ -1,7 +1,7 @@
 import ChainManager from '@/LLMProviders/chainManager';
 import { SetChainOptions } from '@/aiParams';
 import { ChainType } from '@/chainFactory';
-import { BufferWindowMemory } from "langchain/memory";
+import { BaseChatMemory } from "langchain/memory";
 import { useState } from 'react';
 
 /**
@@ -19,7 +19,7 @@ export function useAIState(
   const { langChainParams } = chainManager;
   const [currentModel, setCurrentModel] = useState<string>(langChainParams.modelDisplayName);
   const [currentChain, setCurrentChain] = useState<ChainType>(langChainParams.chainType);
-  const [, setChatMemory] = useState<BufferWindowMemory | null>(chainManager.memoryManager.getMemory());
+  const [, setChatMemory] = useState<BaseChatMemory | null>(chainManager.memoryManager.getMemory());
 
   const clearChatMemory = () => {
     chainManager.memoryManager.clearChatMemory();

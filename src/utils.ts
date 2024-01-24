@@ -6,6 +6,7 @@ import {
 } from '@/constants';
 import { CopilotSettings } from '@/settings/SettingsPage';
 import { ChatMessage } from '@/sharedState';
+import { MemoryVariables } from "@langchain/core/memory";
 import { RunnableSequence } from "@langchain/core/runnables";
 import {
   BaseChain,
@@ -217,4 +218,17 @@ export function fillInSelectionForCustomPrompt(prompt?: string) {
     }
     return prompt.replace('{}', selectedText);
   };
+}
+
+export function extractChatHistory(memoryVariables: MemoryVariables): [string, string][] {
+  const chatHistory: [string, string][] = [];
+  const { history } = memoryVariables;
+
+  for (let i = 0; i < history.length; i += 2) {
+    const userMessage = history[i]?.content || '';
+    const aiMessage = history[i + 1]?.content || '';
+    chatHistory.push([userMessage, aiMessage]);
+  }
+
+  return chatHistory;
 }
