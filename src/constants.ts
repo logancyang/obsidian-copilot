@@ -136,7 +136,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   openRouterModel: 'cognitivecomputations/dolphin-mixtral-8x7b',
   defaultModel: ChatModels.GPT_4_TURBO,
   defaultModelDisplayName: ChatModelDisplayNames.GPT_4_TURBO,
-  embeddingModel: ADA_V2,
+  embeddingModel: OPENAI_EMBEDDING_SMALL,
   temperature: 0.1,
   maxTokens: 1000,
   contextTurns: 15,
