@@ -19,6 +19,7 @@ export interface CopilotSettings {
   openRouterModel: string;
   defaultModel: string;
   defaultModelDisplayName: string;
+  embeddingModel: string;
   temperature: number;
   maxTokens: number;
   contextTurns: number;

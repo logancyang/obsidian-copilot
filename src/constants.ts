@@ -9,7 +9,7 @@ export enum ChatModels {
   GPT_35_TURBO = 'gpt-3.5-turbo',
   GPT_35_TURBO_16K = 'gpt-3.5-turbo-16k',
   GPT_4 = 'gpt-4',
-  GPT_4_TURBO = 'gpt-4-1106-preview',
+  GPT_4_TURBO = 'gpt-4-turbo-preview',
   GPT_4_32K = 'gpt-4-32k',
   AZURE_GPT_35_TURBO = 'gpt-35-turbo',
   AZURE_GPT_35_TURBO_16K = 'gpt-35-turbo-16k',
@@ -108,9 +108,18 @@ export const EMBEDDING_PROVIDERS = [
 ];
 
 // Embedding Models
+export const ADA_V2 = 'text-embedding-ada-002';
+export const OPENAI_EMBEDDING_SMALL = 'text-embedding-3-small';
+export const OPENAI_EMBEDDING_LARGE = 'text-embedding-3-large';
 export const DISTILBERT_NLI = 'sentence-transformers/distilbert-base-nli-mean-tokens';
 export const INSTRUCTOR_XL = 'hkunlp/instructor-xl'; // Inference API is off for this
 export const MPNET_V2 = 'sentence-transformers/all-mpnet-base-v2'; // Inference API returns 400
+
+export const OPENAI_EMBEDDING_MODELS = [
+  ADA_V2,
+  OPENAI_EMBEDDING_SMALL,
+  OPENAI_EMBEDDING_LARGE,
+]
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
   openAIApiKey: '',
@@ -127,6 +136,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   openRouterModel: 'cognitivecomputations/dolphin-mixtral-8x7b',
   defaultModel: ChatModels.GPT_4_TURBO,
   defaultModelDisplayName: ChatModelDisplayNames.GPT_4_TURBO,
+  embeddingModel: ADA_V2,
   temperature: 0.1,
   maxTokens: 1000,
   contextTurns: 15,
