@@ -55,7 +55,6 @@ export default class ChainManager {
     this.memoryManager = MemoryManager.getInstance(this.langChainParams);
     this.chatModelManager = ChatModelManager.getInstance(this.langChainParams);
     this.promptManager = PromptManager.getInstance(this.langChainParams);
-    this.embeddingsManager = EmbeddingsManager.getInstance(this.langChainParams);
     this.createChainWithNewModel(this.langChainParams.modelDisplayName);
   }
 
@@ -134,12 +133,15 @@ export default class ChainManager {
       return;
     }
     this.validateChainType(chainType);
+    // MUST set embeddingsManager when switching to QA mode
+    if (chainType === ChainType.RETRIEVAL_QA_CHAIN) {
+      this.embeddingsManager = EmbeddingsManager.getInstance(this.langChainParams);
+    }
 
     // Get chatModel, memory, prompt, and embeddingAPI from respective managers
     const chatModel = this.chatModelManager.getChatModel();
     const memory = this.memoryManager.getMemory();
     const chatPrompt = this.promptManager.getChatPrompt();
-    const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
 
     switch (chainType) {
       case ChainType.LLM_CHAIN: {
@@ -182,8 +184,14 @@ export default class ChainManager {
         const parsedMemoryVectors: MemoryVector[] | undefined = await VectorDBManager.getMemoryVectors(docHash);
         if (parsedMemoryVectors) {
           // Index already exists
+          const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
+          if (!embeddingsAPI) {
+            console.error('Error getting embeddings API.');
+            return;
+          }
           const vectorStore = await VectorDBManager.rebuildMemoryVectorStore(
-            parsedMemoryVectors, embeddingsAPI
+            parsedMemoryVectors,
+            embeddingsAPI,
           );
 
           // Create new conversational retrieval chain
@@ -391,14 +399,19 @@ export default class ChainManager {
   }
 
   async buildIndex(noteContent: string, docHash: string): Promise<void> {
-    const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 1000 });
-
-    const docs = await textSplitter.createDocuments([noteContent]);
-    const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
-
     // Note: HF can give 503 errors frequently (it's free)
     console.log('Creating vector store...');
     try {
+      const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 1000 });
+
+      const docs = await textSplitter.createDocuments([noteContent]);
+      const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
+      if (!embeddingsAPI) {
+        const errorMsg = 'Failed to create vector store, embedding API is not set correctly, please check your settings.';
+        new Notice(errorMsg);
+        console.error(errorMsg);
+        return;
+      }
       this.vectorStore = await MemoryVectorStore.fromDocuments(
         docs, embeddingsAPI,
       );
