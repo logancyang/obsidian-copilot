@@ -31,6 +31,7 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
   const [azureOpenAIApiInstanceName, setAzureOpenAIApiInstanceName] = useState(plugin.settings.azureOpenAIApiInstanceName);
   const [azureOpenAIApiDeploymentName, setAzureOpenAIApiDeploymentName] = useState(plugin.settings.azureOpenAIApiDeploymentName);
   const [azureOpenAIApiVersion, setAzureOpenAIApiVersion] = useState(plugin.settings.azureOpenAIApiVersion);
+  const [azureOpenAIApiEmbeddingDeploymentName, setAzureOpenAIApiEmbeddingDeploymentName] = useState(plugin.settings.azureOpenAIApiEmbeddingDeploymentName);
 
   // QA settings
   const [embeddingProvider, setEmbeddingProvider] = useState(plugin.settings.embeddingProvider);
@@ -66,6 +67,7 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
     plugin.settings.azureOpenAIApiInstanceName = azureOpenAIApiInstanceName;
     plugin.settings.azureOpenAIApiDeploymentName = azureOpenAIApiDeploymentName;
     plugin.settings.azureOpenAIApiVersion = azureOpenAIApiVersion;
+    plugin.settings.azureOpenAIApiEmbeddingDeploymentName = azureOpenAIApiEmbeddingDeploymentName;
 
     // QA settings
     plugin.settings.embeddingProvider = embeddingProvider;
@@ -184,6 +186,8 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
         setAzureOpenAIApiDeploymentName={setAzureOpenAIApiDeploymentName}
         azureOpenAIApiVersion={azureOpenAIApiVersion}
         setAzureOpenAIApiVersion={setAzureOpenAIApiVersion}
+        azureOpenAIApiEmbeddingDeploymentName={azureOpenAIApiEmbeddingDeploymentName}
+        setAzureOpenAIApiEmbeddingDeploymentName={setAzureOpenAIApiEmbeddingDeploymentName}
       />
       <QASettings
         embeddingProvider={embeddingProvider}

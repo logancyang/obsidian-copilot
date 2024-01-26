@@ -33,8 +33,7 @@ export default class EmbeddingManager {
 
     // Note that openAIProxyBaseUrl has the highest priority.
     // If openAIProxyBaseUrl is set, it overrides both chat and embedding models.
-    const hasOpenAiApiKey = openAIApiKey || azureOpenAIApiKey;
-    const OpenAIEmbeddingsAPI = hasOpenAiApiKey ? (
+    const OpenAIEmbeddingsAPI = openAIApiKey ? (
       openAIProxyBaseUrl ?
         new ProxyOpenAIEmbeddings({
           modelName: this.langChainParams.embeddingModel,

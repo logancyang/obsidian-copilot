@@ -20,6 +20,8 @@ interface ApiSettingsProps {
   setAzureOpenAIApiDeploymentName: (value: string) => void;
   azureOpenAIApiVersion: string;
   setAzureOpenAIApiVersion: (value: string) => void;
+  azureOpenAIApiEmbeddingDeploymentName: string;
+  setAzureOpenAIApiEmbeddingDeploymentName: (value: string) => void;
 }
 
 const ApiSettings: React.FC<ApiSettingsProps> = ({
@@ -39,6 +41,8 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
   setAzureOpenAIApiDeploymentName,
   azureOpenAIApiVersion,
   setAzureOpenAIApiVersion,
+  azureOpenAIApiEmbeddingDeploymentName,
+  setAzureOpenAIApiEmbeddingDeploymentName,
 }) => {
   return (
     <div>
@@ -152,6 +156,14 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
             value={azureOpenAIApiVersion}
             setValue={setAzureOpenAIApiVersion}
             placeholder="Enter Azure OpenAI API Version"
+            type="text"
+          />
+          <ApiSetting
+            title="Azure OpenAI API Embedding Deployment Name"
+            description="(Optional) For embedding provider Azure OpenAI"
+            value={azureOpenAIApiEmbeddingDeploymentName}
+            setValue={setAzureOpenAIApiEmbeddingDeploymentName}
+            placeholder="Enter Azure OpenAI API Embedding Deployment Name"
             type="text"
           />
         </div>
