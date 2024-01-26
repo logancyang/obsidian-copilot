@@ -35,6 +35,7 @@ export default class EmbeddingManager {
     // If openAIProxyBaseUrl is set, it overrides both chat and embedding models.
     const OpenAIEmbeddingsAPI = openAIProxyBaseUrl ?
       new ProxyOpenAIEmbeddings({
+        modelName: this.langChainParams.embeddingModel,
         openAIApiKey,
         maxRetries: 3,
         maxConcurrency: 3,
@@ -42,6 +43,7 @@ export default class EmbeddingManager {
         openAIProxyBaseUrl,
       }):
       new OpenAIEmbeddings({
+        modelName: this.langChainParams.embeddingModel,
         openAIApiKey,
         maxRetries: 3,
         maxConcurrency: 3,

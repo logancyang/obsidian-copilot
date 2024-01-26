@@ -1,4 +1,4 @@
-import { EMBEDDING_PROVIDERS } from '@/constants';
+import { EMBEDDING_PROVIDERS, OPENAI_EMBEDDING_MODELS } from '@/constants';
 import React from 'react';
 import ApiSetting from './ApiSetting';
 import Collapsible from './Collapsible';
@@ -7,6 +7,8 @@ import { DropdownComponent, SliderComponent } from './SettingBlocks';
 interface QASettingsProps {
   embeddingProvider: string;
   setEmbeddingProvider: (value: string) => void;
+  embeddingModel: string;
+  setEmbeddingModel: (value: string) => void;
   ttlDays: number;
   setTtlDays: (value: number) => void;
   cohereApiKey: string;
@@ -18,6 +20,8 @@ interface QASettingsProps {
 const QASettings: React.FC<QASettingsProps> = ({
   embeddingProvider,
   setEmbeddingProvider,
+  embeddingModel,
+  setEmbeddingModel,
   ttlDays,
   setTtlDays,
   cohereApiKey,
@@ -43,6 +47,12 @@ const QASettings: React.FC<QASettingsProps> = ({
         value={embeddingProvider}
         onChange={setEmbeddingProvider}
         options={EMBEDDING_PROVIDERS}
+      />
+      <DropdownComponent
+        name="OpenAI Embedding Model"
+        value={embeddingModel}
+        onChange={setEmbeddingModel}
+        options={OPENAI_EMBEDDING_MODELS}
       />
       <SliderComponent
         name="TTL Days"

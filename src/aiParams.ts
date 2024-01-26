@@ -38,6 +38,7 @@ export interface LangChainParams {
   openRouterAiApiKey: string,
   model: string,
   modelDisplayName: string,
+  embeddingModel: string,
   temperature: number,
   maxTokens: number,
   systemMessage: string,
