@@ -21,7 +21,7 @@ export default class EmbeddingManager {
     return EmbeddingManager.instance;
   }
 
-  getEmbeddingsAPI(): Embeddings {
+  getEmbeddingsAPI(): Embeddings | undefined {
     const {
       openAIApiKey,
       azureOpenAIApiKey,
@@ -33,26 +33,32 @@ export default class EmbeddingManager {
 
     // Note that openAIProxyBaseUrl has the highest priority.
     // If openAIProxyBaseUrl is set, it overrides both chat and embedding models.
-    const OpenAIEmbeddingsAPI = openAIProxyBaseUrl ?
-      new ProxyOpenAIEmbeddings({
-        modelName: this.langChainParams.embeddingModel,
-        openAIApiKey,
-        maxRetries: 3,
-        maxConcurrency: 3,
-        timeout: 10000,
-        openAIProxyBaseUrl,
-      }):
-      new OpenAIEmbeddings({
-        modelName: this.langChainParams.embeddingModel,
-        openAIApiKey,
-        maxRetries: 3,
-        maxConcurrency: 3,
-        timeout: 10000,
-      });
+    const OpenAIEmbeddingsAPI = openAIApiKey ? (
+      openAIProxyBaseUrl ?
+        new ProxyOpenAIEmbeddings({
+          modelName: this.langChainParams.embeddingModel,
+          openAIApiKey,
+          maxRetries: 3,
+          maxConcurrency: 3,
+          timeout: 10000,
+          openAIProxyBaseUrl,
+        }) :
+        new OpenAIEmbeddings({
+          modelName: this.langChainParams.embeddingModel,
+          openAIApiKey,
+          maxRetries: 3,
+          maxConcurrency: 3,
+          timeout: 10000,
+        })
+    ) : null;
 
     switch(this.langChainParams.embeddingProvider) {
       case ModelProviders.OPENAI:
-        return OpenAIEmbeddingsAPI
+        if (OpenAIEmbeddingsAPI) {
+          return OpenAIEmbeddingsAPI;
+        }
+        console.error('OpenAI API key is not provided for the embedding model.');
+        break;
       case ModelProviders.HUGGINGFACE:
         return new HuggingFaceInferenceEmbeddings({
           apiKey: this.langChainParams.huggingfaceApiKey,
@@ -66,18 +72,27 @@ export default class EmbeddingManager {
           maxConcurrency: 3,
         });
       case ModelProviders.AZURE_OPENAI:
-        return new OpenAIEmbeddings({
-          azureOpenAIApiKey,
-          azureOpenAIApiInstanceName,
-          azureOpenAIApiDeploymentName: azureOpenAIApiEmbeddingDeploymentName,
-          azureOpenAIApiVersion,
+        if (azureOpenAIApiKey) {
+          return new OpenAIEmbeddings({
+            azureOpenAIApiKey,
+            azureOpenAIApiInstanceName,
+            azureOpenAIApiDeploymentName: azureOpenAIApiEmbeddingDeploymentName,
+            azureOpenAIApiVersion,
+            maxRetries: 3,
+            maxConcurrency: 3,
+          });
+        }
+        console.error('Azure OpenAI API key is not provided for the embedding model.');
+        break;
+      default:
+        console.error('No embedding provider set or no valid API key provided. Defaulting to OpenAI.');
+        return OpenAIEmbeddingsAPI || new OpenAIEmbeddings({
+          modelName: this.langChainParams.embeddingModel,
+          openAIApiKey: 'default-key',
           maxRetries: 3,
           maxConcurrency: 3,
+          timeout: 10000,
         });
-      default:
-        console.error('No embedding provider set. Using OpenAI.');
-        return OpenAIEmbeddingsAPI;
     }
   }
-
 }

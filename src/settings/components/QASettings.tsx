@@ -50,6 +50,7 @@ const QASettings: React.FC<QASettingsProps> = ({
       />
       <DropdownComponent
         name="OpenAI Embedding Model"
+        description="(for when embedding provider is OpenAI)"
         value={embeddingModel}
         onChange={setEmbeddingModel}
         options={OPENAI_EMBEDDING_MODELS}
