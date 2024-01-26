@@ -186,7 +186,7 @@ export default class ChainManager {
           // Index already exists
           const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
           if (!embeddingsAPI) {
-            console.error('Error getting embeddings API.');
+            console.error('Error getting embeddings API. Please check your settings.');
             return;
           }
           const vectorStore = await VectorDBManager.rebuildMemoryVectorStore(
