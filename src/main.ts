@@ -2,6 +2,7 @@ import ChainManager from '@/LLMProviders/chainManager';
 import { LangChainParams, SetChainOptions } from '@/aiParams';
 import { ChainType } from '@/chainFactory';
 import { AddPromptModal } from "@/components/AddPromptModal";
+import { AdhocPromptModal } from "@/components/AdhocPromptModal";
 import { ChatNoteContextModal } from "@/components/ChatNoteContextModal";
 import CopilotView from '@/components/CopilotView';
 import { LanguageModal } from "@/components/LanguageModal";
@@ -268,6 +269,23 @@ export default class CopilotPlugin extends Plugin {
         });
       },
     });
+
+    this.addCommand({
+      id: 'apply-adhoc-prompt',
+      name: 'Apply ad-hoc custom prompt to selection',
+      editorCallback: async (editor: Editor) => {
+          const modal = new AdhocPromptModal(this.app, async (adhocPrompt: string) => {
+              try {
+                  this.processSelection(editor, 'applyAdhocPromptSelection', adhocPrompt);
+              } catch (err) {
+                  console.error(err);
+                  new Notice('An error occurred.');
+              }
+          });
+
+          modal.open();
+      },
+  });
 
     this.addCommand({
       id: 'delete-custom-prompt',
