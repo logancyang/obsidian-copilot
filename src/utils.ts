@@ -238,6 +238,15 @@ export function createChangeToneSelectionPrompt(tone?: string) {
   };
 }
 
+export function createAdhocSelectionPrompt(adhocPrompt?: string) {
+  return (selectedText: string): string => {
+    if (!adhocPrompt) {
+      return selectedText;
+    }
+    return `${adhocPrompt}.\n\n` + `${selectedText}`;
+  };
+}
+
 export function fillInSelectionForCustomPrompt(prompt?: string) {
   return (selectedText: string): string => {
     if (!prompt) {

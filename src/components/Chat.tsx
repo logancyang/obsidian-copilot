@@ -12,6 +12,7 @@ import SharedState, {
   ChatMessage, useSharedState,
 } from '@/sharedState';
 import {
+  createAdhocSelectionPrompt,
   createChangeToneSelectionPrompt,
   createTranslateSelectionPrompt,
   eli5SelectionPrompt,
@@ -373,6 +374,14 @@ const Chat: React.FC<ChatProps> = ({
       // Not showing the custom prompt in the chat UI for now, Leaving it here as an option.
       // To check the prompt, use Debug mode in the setting.
       // { isVisible: true },
+    ),
+    []
+  );
+  useEffect(
+    createEffect(
+      'applyAdhocPromptSelection',
+      (selectedText, prompt) =>
+        createAdhocSelectionPrompt(prompt)(selectedText),
     ),
     []
   );
