@@ -13,21 +13,21 @@ export class AddPromptModal extends Modal {
 
     this.contentEl.createEl('h2', { text: 'User Custom Prompt' });
 
-    const formContainer = this.contentEl.createEl('div', { cls: 'custom-prompt-modal' });
+    const formContainer = this.contentEl.createEl('div', { cls: 'copilot-command-modal' });
 
     const titleContainer = formContainer.createEl(
       'div',
-      { cls: 'custom-prompt-input-container' }
+      { cls: 'copilot-command-input-container' }
     );
 
     titleContainer.createEl(
-      'h3', { text: 'Title', cls: 'custom-prompt-header' }
+      'h3', { text: 'Title', cls: 'copilot-command-header' }
     );
     titleContainer.createEl(
       'p',
       {
         text: 'The title of the prompt, must be unique.',
-        cls: 'custom-prompt-description',
+        cls: 'copilot-command-input-description',
       }
     );
 
@@ -41,17 +41,17 @@ export class AddPromptModal extends Modal {
 
     const promptContainer = formContainer.createEl(
       'div',
-      { cls: 'custom-prompt-input-container' }
+      { cls: 'copilot-command-input-container' }
     );
 
     promptContainer.createEl(
-      'h3', { text: 'Prompt', cls: 'custom-prompt-header' }
+      'h3', { text: 'Prompt', cls: 'copilot-command-header' }
     );
     promptContainer.createEl(
       'p',
       {
         text: 'The content of the prompt. Use "{}" to represent the selected text. For example, "Improve the readability of the following text: {}"',
-        cls: 'custom-prompt-description',
+        cls: 'copilot-command-input-description',
       }
     );
     const promptField = promptContainer.createEl('textarea');
@@ -75,18 +75,18 @@ export class AddPromptModal extends Modal {
     });
 
     const descContainer = promptContainer.createEl('p', {
-      cls: 'custom-prompt-description',
+      cls: 'copilot-command-input-description',
     });
 
     descContainer.appendChild(descFragment);
 
     const saveButtonContainer = formContainer.createEl(
       'div',
-      { cls: 'custom-prompt-save-btn-container' }
+      { cls: 'copilot-command-save-btn-container' }
     );
     const saveButton = saveButtonContainer.createEl(
       'button',
-      { text: 'Save', cls: 'custom-prompt-save-btn' }
+      { text: 'Save', cls: 'copilot-command-save-btn' }
     );
     saveButton.addEventListener('click', () => {
       if (titleField.value && promptField.value) {
