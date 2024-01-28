@@ -16,7 +16,8 @@
     "jsx": "react",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-	"strictNullChecks": true,
+    "strictNullChecks": true,
+    "types": ["jest"],
     "lib": [
       "DOM",
       "ES5",

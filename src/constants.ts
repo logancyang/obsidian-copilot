@@ -149,5 +149,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   stream: true,
   embeddingProvider: ModelProviders.OPENAI,
   defaultSaveFolder: 'copilot-conversations',
+  chatNoteContextPath: '',
   debug: false,
 };

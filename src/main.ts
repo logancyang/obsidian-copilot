@@ -2,6 +2,7 @@ import ChainManager from '@/LLMProviders/chainManager';
 import { LangChainParams, SetChainOptions } from '@/aiParams';
 import { ChainType } from '@/chainFactory';
 import { AddPromptModal } from "@/components/AddPromptModal";
+import { ChatNoteContextModal } from "@/components/ChatNoteContextModal";
 import CopilotView from '@/components/CopilotView';
 import { LanguageModal } from "@/components/LanguageModal";
 import { ListPromptModal } from "@/components/ListPromptModal";
@@ -367,6 +368,18 @@ export default class CopilotPlugin extends Plugin {
           new Notice('An error occurred while clearing the local vector store.');
         }
       }
+    });
+
+    this.addCommand({
+      id: 'set-chat-note-context',
+      name: 'Set note context for Chat mode',
+      callback: async () => {
+        new ChatNoteContextModal(this.app, this.settings, async (path: string) => {
+          // Store the path in the plugin's settings, default to empty string
+          this.settings.chatNoteContextPath = path;
+          await this.saveSettings();
+        }).open();
+      },
     });
   }
 
