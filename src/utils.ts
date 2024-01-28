@@ -15,10 +15,9 @@ import {
 import moment from 'moment';
 import { TFile, Vault } from 'obsidian';
 
-const isFolderMatch = (fileFullpath: string, inputPath: string): boolean => {
-  const fileSegments = fileFullpath.split('/');
-  const fileLastDir = fileSegments[fileSegments.length - 2]?.toLowerCase();
-  return fileLastDir === inputPath;
+export const isFolderMatch = (fileFullpath: string, inputPath: string): boolean => {
+  const fileSegments = fileFullpath.split('/').map(segment => segment.toLowerCase());
+  return fileSegments.includes(inputPath.toLowerCase());
 }
 
 export const getNotesFromPath = async (vault: Vault, path: string): Promise<TFile[]> => {
