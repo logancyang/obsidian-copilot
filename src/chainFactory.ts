@@ -28,9 +28,9 @@ export interface ConversationalRetrievalChainParams {
   llm: BaseLanguageModel;
   retriever: BaseRetriever;
   options?: {
-      returnSourceDocuments?: boolean;
-      questionGeneratorTemplate?: string;
-      qaTemplate?: string;
+    returnSourceDocuments?: boolean;
+    questionGeneratorTemplate?: string;
+    qaTemplate?: string;
   }
 }
 
@@ -49,6 +49,7 @@ export enum ChainType {
   RETRIEVAL_QA_CHAIN = 'retrieval_qa',
   // TODO: Wait for official fix and use conversational retrieval chain instead of retrieval qa.
   CONVERSATIONAL_RETRIEVAL_QA_CHAIN = 'conversational_retrieval_chain',
+  VAULT_QA_CHAIN = 'vault_qa',
 }
 
 class ChainFactory {

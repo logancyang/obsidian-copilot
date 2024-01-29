@@ -19,7 +19,6 @@ import {
   MessagesPlaceholder
 } from "langchain/prompts";
 import { MultiQueryRetriever } from "langchain/retrievers/multi_query";
-import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { Notice } from 'obsidian';
 import ChatModelManager from './chatModelManager';
@@ -134,7 +133,7 @@ export default class ChainManager {
     }
     this.validateChainType(chainType);
     // MUST set embeddingsManager when switching to QA mode
-    if (chainType === ChainType.RETRIEVAL_QA_CHAIN) {
+    if (chainType === ChainType.RETRIEVAL_QA_CHAIN || chainType === ChainType.VAULT_QA_CHAIN) {
       this.embeddingsManager = EmbeddingsManager.getInstance(this.langChainParams);
     }
 
@@ -238,6 +237,29 @@ export default class ChainManager {
         console.log('Set chain:', ChainType.RETRIEVAL_QA_CHAIN);
         break;
       }
+
+      case ChainType.VAULT_QA_CHAIN: {
+        const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
+        if (!embeddingsAPI) {
+          console.error('Error getting embeddings API. Please check your settings.');
+          return;
+        }
+        const vectorStore = await VectorDBManager.getMemoryVectorStore(embeddingsAPI)
+
+        // Create new conversational retrieval chain
+        ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain({
+          llm: chatModel,
+          retriever: vectorStore.asRetriever(4),
+        })
+        console.log(
+          'New conversational retrieval qa chain with multi-query retriever created for entire vault'
+        );
+
+        this.langChainParams.chainType = ChainType.VAULT_QA_CHAIN;
+        console.log('Set chain:', ChainType.VAULT_QA_CHAIN);
+        break;
+      }
+
       default:
         this.validateChainType(chainType);
         break;
@@ -335,6 +357,7 @@ export default class ChainManager {
           }
           break;
         case ChainType.RETRIEVAL_QA_CHAIN:
+        case ChainType.VAULT_QA_CHAIN:
           if (debug) {
             console.log(`*** DEBUG INFO ***\n`
               + `user message: ${userMessage}\n`

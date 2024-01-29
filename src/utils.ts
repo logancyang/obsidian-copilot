@@ -16,11 +16,13 @@ import moment from 'moment';
 import { TFile } from 'obsidian';
 
 export const stringToChainType = (chain: string): ChainType => {
-  switch(chain) {
+  switch (chain) {
     case 'llm_chain':
       return ChainType.LLM_CHAIN;
     case 'retrieval_qa':
       return ChainType.RETRIEVAL_QA_CHAIN;
+    case 'vault_qa':
+      return ChainType.VAULT_QA_CHAIN
     default:
       throw new Error(`Unknown chain type: ${chain}`);
   }
@@ -37,8 +39,8 @@ export const isRetrievalQAChain = (chain: BaseChain): chain is RetrievalQAChain 
 }
 
 export const isSupportedChain = (chain: RunnableSequence): chain is RunnableSequence => {
-    return isLLMChain(chain) || isRetrievalQAChain(chain);
-  }
+  return isLLMChain(chain) || isRetrievalQAChain(chain);
+}
 
 export const getModelName = (modelDisplayName: string): string => {
   return DISPLAY_NAME_TO_MODEL[modelDisplayName];

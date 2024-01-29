@@ -159,6 +159,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           >
             <option value='llm_chain'>Chat</option>
             <option value='retrieval_qa'>QA</option>
+            <option value='vault_qa'>Vault QA</option>
           </select>
           <span className="tooltip-text">Mode Selection</span>
         </div>
