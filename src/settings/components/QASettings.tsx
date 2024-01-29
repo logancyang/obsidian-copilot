@@ -2,15 +2,13 @@ import { EMBEDDING_PROVIDERS, OPENAI_EMBEDDING_MODELS } from '@/constants';
 import React from 'react';
 import ApiSetting from './ApiSetting';
 import Collapsible from './Collapsible';
-import { DropdownComponent, SliderComponent } from './SettingBlocks';
+import { DropdownComponent } from './SettingBlocks';
 
 interface QASettingsProps {
   embeddingProvider: string;
   setEmbeddingProvider: (value: string) => void;
   embeddingModel: string;
   setEmbeddingModel: (value: string) => void;
-  ttlDays: number;
-  setTtlDays: (value: number) => void;
   cohereApiKey: string;
   setCohereApiKey: (value: string) => void;
   huggingfaceApiKey: string;
@@ -22,8 +20,6 @@ const QASettings: React.FC<QASettingsProps> = ({
   setEmbeddingProvider,
   embeddingModel,
   setEmbeddingModel,
-  ttlDays,
-  setTtlDays,
   cohereApiKey,
   setCohereApiKey,
   huggingfaceApiKey,
@@ -55,14 +51,7 @@ const QASettings: React.FC<QASettingsProps> = ({
         onChange={setEmbeddingModel}
         options={OPENAI_EMBEDDING_MODELS}
       />
-      <SliderComponent
-        name="TTL Days"
-        description="The number of days to keep embeddings in the index"
-        value={ttlDays}
-        onChange={setTtlDays}
-        min={1}
-        max={365}
-        step={1}
+      <DropdownComponent
       />
       <br />
       <Collapsible title="Cohere API Settings">

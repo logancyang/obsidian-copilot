@@ -34,19 +34,19 @@ export enum ChatModelDisplayNames {
 }
 
 export const OPENAI_MODELS = new Set([
-    ChatModelDisplayNames.GPT_35_TURBO,
-    ChatModelDisplayNames.GPT_35_TURBO_16K,
-    ChatModelDisplayNames.GPT_4,
-    ChatModelDisplayNames.GPT_4_TURBO,
-    ChatModelDisplayNames.GPT_4_32K,
-    ChatModelDisplayNames.LM_STUDIO,
+  ChatModelDisplayNames.GPT_35_TURBO,
+  ChatModelDisplayNames.GPT_35_TURBO_16K,
+  ChatModelDisplayNames.GPT_4,
+  ChatModelDisplayNames.GPT_4_TURBO,
+  ChatModelDisplayNames.GPT_4_32K,
+  ChatModelDisplayNames.LM_STUDIO,
 ]);
 
 export const AZURE_MODELS = new Set([
-    ChatModelDisplayNames.AZURE_GPT_35_TURBO,
-    ChatModelDisplayNames.AZURE_GPT_35_TURBO_16K,
-    ChatModelDisplayNames.AZURE_GPT_4,
-    ChatModelDisplayNames.AZURE_GPT_4_32K,
+  ChatModelDisplayNames.AZURE_GPT_35_TURBO,
+  ChatModelDisplayNames.AZURE_GPT_35_TURBO_16K,
+  ChatModelDisplayNames.AZURE_GPT_4,
+  ChatModelDisplayNames.AZURE_GPT_4_32K,
 ]);
 
 export const GOOGLE_MODELS = new Set([
@@ -121,6 +121,18 @@ export const OPENAI_EMBEDDING_MODELS = [
   OPENAI_EMBEDDING_LARGE,
 ]
 
+export enum VAULT_VECTOR_STORE_STRATEGY {
+  NEVER = 'Never',
+  ON_STARTUP = 'On Startup',
+  ON_STARTUP_AND_SAVE = 'On Startup and Save',
+}
+
+export const VAULT_VECTOR_STORE_STRATEGIES = [
+  VAULT_VECTOR_STORE_STRATEGY.NEVER,
+  VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP,
+  VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE,
+];
+
 export const DEFAULT_SETTINGS: CopilotSettings = {
   openAIApiKey: '',
   huggingfaceApiKey: '',
@@ -145,9 +157,9 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   ollamaModel: 'llama2',
   ollamaBaseUrl: '',
   lmStudioPort: '1234',
-  ttlDays: 30,
   stream: true,
   embeddingProvider: ModelProviders.OPENAI,
   defaultSaveFolder: 'copilot-conversations',
+  saveVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.NEVER,
   debug: false,
 };

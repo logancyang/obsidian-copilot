@@ -36,7 +36,6 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
   // QA settings
   const [embeddingProvider, setEmbeddingProvider] = useState(plugin.settings.embeddingProvider);
   const [embeddingModel, setEmbeddingModel] = useState(plugin.settings.embeddingModel);
-  const [ttlDays, setTtlDays] = useState(plugin.settings.ttlDays);
   const [cohereApiKey, setCohereApiKey] = useState(plugin.settings.cohereApiKey);
   const [huggingfaceApiKey, setHuggingfaceApiKey] = useState(plugin.settings.huggingfaceApiKey);
 
@@ -72,7 +71,6 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
     // QA settings
     plugin.settings.embeddingProvider = embeddingProvider;
     plugin.settings.embeddingModel = embeddingModel;
-    plugin.settings.ttlDays = ttlDays;
     plugin.settings.cohereApiKey = cohereApiKey;
     plugin.settings.huggingfaceApiKey = huggingfaceApiKey;
 
@@ -194,8 +192,6 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
         setEmbeddingProvider={setEmbeddingProvider}
         embeddingModel={embeddingModel}
         setEmbeddingModel={setEmbeddingModel}
-        ttlDays={ttlDays}
-        setTtlDays={setTtlDays}
         cohereApiKey={cohereApiKey}
         setCohereApiKey={setCohereApiKey}
         huggingfaceApiKey={huggingfaceApiKey}

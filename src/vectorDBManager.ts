@@ -160,44 +160,6 @@ class VectorDBManager {
     }
   }
 
-  public static async removeOldDocuments(ttl: number): Promise<void> {
-    if (!this.db) throw new Error("DB not initialized");
-
-    try {
-      const thresholdTime = Date.now() - ttl;
-
-      // Fetch all documents from the database
-      const allDocsResponse = await this.db.allDocs<{ created_at: number }>({ include_docs: true });
-
-      // Filter out the documents older than 2 weeks
-      const oldDocs = allDocsResponse.rows.filter(row => {
-          // Assert the doc type
-          const doc = row.doc as VectorStoreDocument;
-          return doc && doc.created_at < thresholdTime;
-      });
-
-      if (oldDocs.length === 0) {
-          return;
-      }
-      // Prepare the documents for deletion
-      const docsToDelete = oldDocs.map(row => ({
-          _id: row.id,
-          _rev: (row.doc as VectorStoreDocument)._rev,
-          _deleted: true
-      }));
-
-      // Delete the old documents
-      await this.db.bulkDocs(docsToDelete);
-      console.log("Deleted old documents from VectorDB");
-    }
-     catch (err) {
-      console.error("Error removing old documents from VectorDB:", err);
-    }
-  }
-
-  // TODO: Implement advanced stale document removal.
-  // NOTE: Cannot just rely on note title + ts because a "document" here is a chunk from
-  // the original note. Need a better strategy.
 }
 
 export default VectorDBManager;

@@ -50,10 +50,6 @@ export default class CopilotPlugin extends Plugin {
     this.dbVectorStores = new PouchDB<VectorStoreDocument>('copilot_vector_stores');
 
     VectorDBManager.initializeDB(this.dbVectorStores);
-    // Remove documents older than TTL days on load
-    VectorDBManager.removeOldDocuments(
-      this.settings.ttlDays * 24 * 60 * 60 * 1000
-    );
 
     this.registerView(
       CHAT_VIEWTYPE,

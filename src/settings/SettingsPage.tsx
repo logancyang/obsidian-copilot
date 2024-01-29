@@ -28,7 +28,6 @@ export interface CopilotSettings {
   ollamaModel: string;
   ollamaBaseUrl: string;
   lmStudioPort: string;
-  ttlDays: number;
   stream: boolean;
   embeddingProvider: string;
   defaultSaveFolder: string;
