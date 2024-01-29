@@ -249,7 +249,7 @@ export default class ChainManager {
         // Create new conversational retrieval chain
         ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain({
           llm: chatModel,
-          retriever: vectorStore.asRetriever(4),
+          retriever: vectorStore.asRetriever(3),
         })
         console.log(
           'New conversational retrieval qa chain with multi-query retriever created for entire vault'
