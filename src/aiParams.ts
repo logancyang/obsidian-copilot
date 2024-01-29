@@ -1,5 +1,6 @@
 import { ChainType } from '@/chainFactory';
 import { ChatPromptTemplate } from "langchain/prompts";
+import { NoteFile } from './vectorDBManager';
 
 export interface ModelConfig {
   modelName: string,
@@ -55,7 +56,7 @@ export interface LangChainParams {
 
 export interface SetChainOptions {
   prompt?: ChatPromptTemplate;
-  noteContent?: string;
+  noteFile?: NoteFile;
   forceNewCreation?: boolean;
   abortController?: AbortController;
 }

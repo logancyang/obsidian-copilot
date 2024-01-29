@@ -79,7 +79,17 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         console.error('No active note found.');
         return;
       }
+
       const noteContent = await getFileContent(file);
+      const fileMetadata = app.metadataCache.getFileCache(file)
+      const noteFile = {
+        path: file.path,
+        basename: file.basename,
+        mtime: file.stat.mtime,
+        content: noteContent ?? "",
+        metadata: fileMetadata?.frontmatter ?? {},
+      };
+
       const noteName = getFileName(file);
 
       const activeNoteOnMessage: ChatMessage = {
@@ -89,7 +99,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
       };
       addMessage(activeNoteOnMessage);
       if (noteContent) {
-        setCurrentChain(selectedChain, { noteContent });
+        setCurrentChain(selectedChain, { noteFile });
       }
     };
 

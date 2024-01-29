@@ -2,11 +2,13 @@ import { MD5 } from 'crypto-js';
 import { Document } from "langchain/document";
 import { Embeddings } from 'langchain/embeddings/base';
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
+import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 
 export interface VectorStoreDocument {
     _id: string;
     _rev?: string;
     memory_vectors: string;
+  file_mtime: number;
     created_at: number;
 }
 
@@ -14,6 +16,14 @@ export interface MemoryVector {
     content: string;
     embedding: number[];
     metadata: Record<string, any>;
+}
+
+export interface NoteFile {
+  path: string;
+  basename: string;
+  mtime: number;
+  content: string;
+  metadata: Record<string, any>;
 }
 
 class VectorDBManager {
@@ -54,6 +64,26 @@ class VectorDBManager {
     return memoryVectorStore;
   }
 
+  public static async getMemoryVectorStore(embeddingsAPI: Embeddings): Promise<MemoryVectorStore> {
+    if (!this.db) throw new Error("DB not initialized");
+    const allDocsResponse = await this.db.allDocs({ include_docs: true });
+    const allDocs = allDocsResponse.rows.map(row => row.doc as VectorStoreDocument);
+    const memoryVectors = allDocs.map(doc => JSON.parse(doc.memory_vectors) as MemoryVector[]).flat();
+    const embeddingsArray: number[][] = memoryVectors.map(
+      memoryVector => memoryVector.embedding
+    );
+    const documentsArray = memoryVectors.map(
+      memoryVector => new Document({
+        pageContent: memoryVector.content,
+        metadata: memoryVector.metadata
+      })
+    );
+    // Create a new MemoryVectorStore instance
+    const memoryVectorStore = new MemoryVectorStore(embeddingsAPI);
+    await memoryVectorStore.addVectors(embeddingsArray, documentsArray);
+    return memoryVectorStore;
+  }
+
   public static async setMemoryVectors(memoryVectors: MemoryVector[], docHash: string): Promise<void> {
     if (!this.db) throw new Error("DB not initialized");
     if (!Array.isArray(memoryVectors)) {
@@ -68,6 +98,45 @@ class VectorDBManager {
       const docToSave = {
         _id: docHash,
         memory_vectors: serializedMemoryVectors,
+        created_at: Date.now(),
+        _rev: existingDoc?._rev // Add the current revision if the document exists.
+      };
+
+      // Save the document.
+      await this.db.put(docToSave);
+    } catch (err) {
+      console.error("Error storing vectors in VectorDB:", err);
+    }
+  }
+
+  public static async loadFile(noteFile: NoteFile, embeddingsAPI: Embeddings) {
+    if (!this.db) throw new Error("DB not initialized");
+    const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 5000 })
+    const splitDocument = await textSplitter.createDocuments([noteFile.content])
+    const docVectors = await embeddingsAPI.embedDocuments(splitDocument.map((doc) => doc.pageContent))
+    const memoryVectors = docVectors.map((docVector, i) => (
+      {
+        content: splitDocument[i].pageContent,
+        metadata: {
+          ...noteFile.metadata,
+          title: noteFile.basename,
+          path: noteFile.path,
+
+        },
+        embedding: docVector,
+      }))
+    const docHash = VectorDBManager.getDocumentHash(noteFile.path);
+
+    const serializedMemoryVectors = JSON.stringify(memoryVectors);
+    try {
+      // Attempt to fetch the existing document, if it exists.
+      const existingDoc = await this.db.get(docHash).catch(err => null);
+
+      // Prepare the document to be saved.
+      const docToSave = {
+        _id: docHash,
+        memory_vectors: serializedMemoryVectors,
+        file_mtime: noteFile.mtime,
         created_at: Date.now(),
         _rev: existingDoc?._rev // Add the current revision if the document exists.
       };

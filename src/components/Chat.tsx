@@ -32,7 +32,6 @@ import {
   summarizePrompt,
   tocPrompt
 } from '@/utils';
-import VectorDBManager from '@/vectorDBManager';
 import { EventEmitter } from 'events';
 import { Notice, TFile } from 'obsidian';
 import React, {
@@ -203,8 +202,15 @@ const Chat: React.FC<ChatProps> = ({
       return;
     }
 
-    const docHash = VectorDBManager.getDocumentHash(noteContent);
-    await chainManager.buildIndex(noteContent, docHash);
+    const fileMetadata = app.metadataCache.getFileCache(file)
+    const noteFile = {
+      path: file.path,
+      basename: file.basename,
+      mtime: file.stat.mtime,
+      content: noteContent,
+      metadata: fileMetadata?.frontmatter ?? {},
+    };
+    await chainManager.loadFile(noteFile);
     const activeNoteOnMessage: ChatMessage = {
       sender: AI_SENDER,
       message: `Indexing [[${noteName}]]...\n\n Please switch to "QA" in Mode Selection to ask questions about it.`,
@@ -212,7 +218,8 @@ const Chat: React.FC<ChatProps> = ({
     };
 
     if (currentChain === ChainType.RETRIEVAL_QA_CHAIN) {
-      setChain(ChainType.RETRIEVAL_QA_CHAIN, { noteContent });
+      console.log(noteFile)
+      setChain(ChainType.RETRIEVAL_QA_CHAIN, { noteFile });
     }
 
     addMessage(activeNoteOnMessage);

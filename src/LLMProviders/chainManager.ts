@@ -9,7 +9,7 @@ import {
 import { ProxyChatOpenAI } from '@/langchainWrappers';
 import { ChatMessage } from '@/sharedState';
 import { extractChatHistory, getModelName, isSupportedChain } from '@/utils';
-import VectorDBManager, { MemoryVector } from '@/vectorDBManager';
+import VectorDBManager, { MemoryVector, NoteFile } from '@/vectorDBManager';
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { BaseChatMemory } from "langchain/memory";
@@ -58,8 +58,8 @@ export default class ChainManager {
     this.createChainWithNewModel(this.langChainParams.modelDisplayName);
   }
 
-  private setNoteContent(noteContent: string): void {
-    this.langChainParams.options.noteContent = noteContent;
+  private setNoteFile(noteFile: NoteFile): void {
+    this.langChainParams.options.noteFile = noteFile;
   }
 
   private validateChainType(chainType: ChainType): void {
@@ -174,13 +174,13 @@ export default class ChainManager {
         break;
       }
       case ChainType.RETRIEVAL_QA_CHAIN: {
-        if (!options.noteContent) {
+        if (!options.noteFile) {
           new Notice('No note content provided');
           throw new Error('No note content provided');
         }
 
-        this.setNoteContent(options.noteContent);
-        const docHash = VectorDBManager.getDocumentHash(options.noteContent);
+        this.setNoteFile(options.noteFile);
+        const docHash = VectorDBManager.getDocumentHash(options.noteFile.path);
         const parsedMemoryVectors: MemoryVector[] | undefined = await VectorDBManager.getMemoryVectors(docHash);
         if (parsedMemoryVectors) {
           // Index already exists
@@ -197,12 +197,17 @@ export default class ChainManager {
           // Create new conversational retrieval chain
           ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain({
             llm: chatModel,
-            retriever: vectorStore.asRetriever(),
+            retriever: vectorStore.asRetriever(
+              undefined,
+              (doc) => {
+                return doc.metadata.path === options.noteFile?.path;
+              }
+            ),
           })
           console.log('Existing vector store for document hash: ', docHash);
         } else {
           // Index doesn't exist
-          await this.buildIndex(options.noteContent, docHash);
+          await this.loadFile(options.noteFile);
           if (!this.vectorStore) {
             console.error('Error creating vector store.');
             return;
@@ -210,7 +215,12 @@ export default class ChainManager {
 
           const retriever = MultiQueryRetriever.fromLLM({
             llm: chatModel,
-            retriever: this.vectorStore.asRetriever(),
+            retriever: this.vectorStore.asRetriever(
+              undefined,
+              (doc) => {
+                return doc.metadata.path === options.noteFile?.path;
+              }
+            ),
             verbose: false,
           });
 
@@ -398,30 +408,14 @@ export default class ChainManager {
     return fullAIResponse;
   }
 
-  async buildIndex(noteContent: string, docHash: string): Promise<void> {
-    // Note: HF can give 503 errors frequently (it's free)
-    console.log('Creating vector store...');
-    try {
-      const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 1000 });
-
-      const docs = await textSplitter.createDocuments([noteContent]);
+  async loadFile(noteFile: NoteFile): Promise<void> {
       const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
       if (!embeddingsAPI) {
-        const errorMsg = 'Failed to create vector store, embedding API is not set correctly, please check your settings.';
+      const errorMsg = 'Failed to load file, embedding API is not set correctly, please check your settings.';
         new Notice(errorMsg);
         console.error(errorMsg);
         return;
       }
-      this.vectorStore = await MemoryVectorStore.fromDocuments(
-        docs, embeddingsAPI,
-      );
-      // Serialize and save vector store to PouchDB
-      VectorDBManager.setMemoryVectors(this.vectorStore.memoryVectors, docHash);
-      console.log('Vector store created successfully.');
-      new Notice('Vector store created successfully.');
-    } catch (error) {
-      new Notice('Failed to create vector store, please try again:', error);
-      console.error('Failed to create vector store, please try again.:', error);
-    }
+    await VectorDBManager.loadFile(noteFile, embeddingsAPI);
   }
 }
