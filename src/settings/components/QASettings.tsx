@@ -1,4 +1,4 @@
-import { EMBEDDING_PROVIDERS, OPENAI_EMBEDDING_MODELS } from '@/constants';
+import { EMBEDDING_PROVIDERS, OPENAI_EMBEDDING_MODELS, VAULT_VECTOR_STORE_STRATEGIES } from '@/constants';
 import React from 'react';
 import ApiSetting from './ApiSetting';
 import Collapsible from './Collapsible';
@@ -13,6 +13,8 @@ interface QASettingsProps {
   setCohereApiKey: (value: string) => void;
   huggingfaceApiKey: string;
   setHuggingfaceApiKey: (value: string) => void;
+  saveVaultToVectorStore: string;
+  setSaveVaultToVectorStore: (value: string) => void;
 }
 
 const QASettings: React.FC<QASettingsProps> = ({
@@ -24,11 +26,13 @@ const QASettings: React.FC<QASettingsProps> = ({
   setCohereApiKey,
   huggingfaceApiKey,
   setHuggingfaceApiKey,
+  saveVaultToVectorStore,
+  setSaveVaultToVectorStore,
 }) => {
   return (
     <div>
-      <br/>
-      <br/>
+      <br />
+      <br />
       <h1>QA Settings</h1>
       <div className="warning-message">
         YOU MUST REBUILD YOUR INDEX AFTER SWITCHING EMBEDDING PROVIDERS!
@@ -52,6 +56,11 @@ const QASettings: React.FC<QASettingsProps> = ({
         options={OPENAI_EMBEDDING_MODELS}
       />
       <DropdownComponent
+        name="Auto-save vault to vector store"
+        description="Automatically save the vault to the vector store after each change."
+        value={saveVaultToVectorStore}
+        onChange={setSaveVaultToVectorStore}
+        options={VAULT_VECTOR_STORE_STRATEGIES}
       />
       <br />
       <Collapsible title="Cohere API Settings">

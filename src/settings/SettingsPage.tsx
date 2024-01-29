@@ -31,6 +31,7 @@ export interface CopilotSettings {
   stream: boolean;
   embeddingProvider: string;
   defaultSaveFolder: string;
+  saveVaultToVectorStore: string;
   debug: boolean;
 }
 

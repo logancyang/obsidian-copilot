@@ -5,17 +5,17 @@ import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 
 export interface VectorStoreDocument {
-    _id: string;
-    _rev?: string;
-    memory_vectors: string;
+  _id: string;
+  _rev?: string;
+  memory_vectors: string;
   file_mtime: number;
-    created_at: number;
+  created_at: number;
 }
 
 export interface MemoryVector {
-    content: string;
-    embedding: number[];
-    metadata: Record<string, any>;
+  content: string;
+  embedding: number[];
+  metadata: Record<string, any>;
 }
 
 export interface NoteFile {
@@ -145,6 +145,54 @@ class VectorDBManager {
       await this.db.put(docToSave);
     } catch (err) {
       console.error("Error storing vectors in VectorDB:", err);
+    }
+  }
+
+  public static async getNoteFiles(): Promise<NoteFile[]> {
+    if (!this.db) throw new Error("DB not initialized");
+    try {
+      const allDocsResponse = await this.db.allDocs<VectorStoreDocument>({ include_docs: true });
+      const allDocs = allDocsResponse.rows.map(row => row.doc as VectorStoreDocument);
+      const noteFiles = allDocs.map(doc => {
+        const memoryVectors = JSON.parse(doc.memory_vectors) as MemoryVector[];
+        const noteFile: NoteFile = {
+          path: memoryVectors[0].metadata.path,
+          basename: memoryVectors[0].metadata.title,
+          mtime: doc.file_mtime,
+          content: memoryVectors[0].content,
+          metadata: memoryVectors[0].metadata,
+        }
+        return noteFile;
+      });
+      return noteFiles;
+    } catch (err) {
+      console.error("Error getting note files from VectorDB:", err);
+      return [];
+    }
+  }
+
+  public static async removeMemoryVectors(docHash: string): Promise<void> {
+    if (!this.db) throw new Error("DB not initialized");
+    try {
+      const doc = await this.db.get(docHash);
+      if (doc) {
+        await this.db.remove(doc);
+      }
+    } catch (err) {
+      console.error("Error removing file from VectorDB:", err);
+    }
+  }
+
+  public static async getLatestFileMtime(): Promise<number> {
+    if (!this.db) throw new Error("DB not initialized");
+    try {
+      const allDocsResponse = await this.db.allDocs<VectorStoreDocument>({ include_docs: true });
+      const allDocs = allDocsResponse.rows.map(row => row.doc as VectorStoreDocument);
+      const newestFileMtime = allDocs.map(doc => doc.file_mtime).sort((a, b) => b - a)[0];
+      return newestFileMtime;
+    } catch (err) {
+      console.error("Error getting newest file mtime from VectorDB:", err);
+      return 0;
     }
   }
 

@@ -1,4 +1,5 @@
 import ChainManager from '@/LLMProviders/chainManager';
+import EmbeddingsManager from '@/LLMProviders/embeddingManager';
 import { LangChainParams, SetChainOptions } from '@/aiParams';
 import { ChainType } from '@/chainFactory';
 import { AddPromptModal } from "@/components/AddPromptModal";
@@ -7,14 +8,14 @@ import { LanguageModal } from "@/components/LanguageModal";
 import { ListPromptModal } from "@/components/ListPromptModal";
 import { ToneModal } from "@/components/ToneModal";
 import {
-  CHAT_VIEWTYPE, DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT,
+  CHAT_VIEWTYPE, DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT, VAULT_VECTOR_STORE_STRATEGY,
 } from '@/constants';
 import { CopilotSettingTab, CopilotSettings } from '@/settings/SettingsPage';
 import SharedState from '@/sharedState';
 import { sanitizeSettings } from "@/utils";
 import VectorDBManager, { VectorStoreDocument } from '@/vectorDBManager';
 import { Server } from 'http';
-import { Editor, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
+import { Editor, Notice, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
 import PouchDB from 'pouchdb';
 
 
@@ -34,7 +35,8 @@ export default class CopilotPlugin extends Plugin {
   chatIsVisible = false;
   dbPrompts: PouchDB.Database;
   dbVectorStores: PouchDB.Database;
-  server: Server| null = null;
+  embeddingsManager: EmbeddingsManager;
+  server: Server | null = null;
 
   isChatVisible = () => this.chatIsVisible;
 
@@ -48,6 +50,7 @@ export default class CopilotPlugin extends Plugin {
 
     this.dbPrompts = new PouchDB<CustomPrompt>('copilot_custom_prompts');
     this.dbVectorStores = new PouchDB<VectorStoreDocument>('copilot_vector_stores');
+    this.embeddingsManager = EmbeddingsManager.getInstance(langChainParams);
 
     VectorDBManager.initializeDB(this.dbVectorStores);
 
@@ -364,6 +367,154 @@ export default class CopilotPlugin extends Plugin {
         }
       }
     });
+
+    this.addCommand({
+      id: 'garbage-collect-vector-store',
+      name: 'Garbage collect vector store (remove files that no longer exist in vault)',
+      callback: async () => {
+        try {
+          const files = this.app.vault.getMarkdownFiles()
+          const filePaths = files.map((file) => file.path)
+          const indexedFiles = await VectorDBManager.getNoteFiles()
+          const indexedFilePaths = indexedFiles.map((file) => file.path)
+          const filesToDelete = indexedFilePaths.filter((filePath) => !filePaths.includes(filePath))
+
+          const deletePromises = filesToDelete.map(async (filePath) => {
+            VectorDBManager.removeMemoryVectors(VectorDBManager.getDocumentHash(filePath));
+          })
+
+          await Promise.all(deletePromises);
+
+          new Notice('Local vector store garbage collected successfully.');
+          console.log('Local vector store garbage collected successfully, new instance created.');
+        } catch (err) {
+          console.error("Error clearing the local vector store:", err);
+          new Notice('An error occurred while clearing the local vector store.');
+        }
+      }
+    });
+
+    this.addCommand({
+      id: 'save-vault-to-vector-store',
+      name: 'Save vault to vector store',
+      callback: async () => {
+        try {
+          const indexedFileCount = await this.saveVaultToVectorStore();
+
+          new Notice(`${indexedFileCount} vault files saved to vector store successfully.`);
+          console.log(`${indexedFileCount} vault files saved to vector store successfully.`);
+        } catch (err) {
+          console.error("Error saving vault to vector store:", err);
+          new Notice('An error occurred while saving vault to vector store.');
+        }
+      }
+    })
+
+    this.registerEvent(this.app.vault.on('delete', (file) => {
+      const docHash = VectorDBManager.getDocumentHash(file.path)
+      VectorDBManager.removeMemoryVectors(docHash);
+    }))
+
+    this.registerEvent(this.app.vault.on('rename', async (abstractFile, oldPath) => {
+      if (this.settings.saveVaultToVectorStore !== VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE) return;
+
+      const file = this.app.vault.getFiles().filter((file) => file.path === abstractFile.path).pop()
+      if (!file) {
+        new Notice('File not found.');
+        return;
+      }
+
+      await this.saveFileToVectorStore(file)
+
+      const oldDocHash = VectorDBManager.getDocumentHash(oldPath)
+      await VectorDBManager.removeMemoryVectors(oldDocHash);
+    }))
+
+    this.registerEvent(this.app.vault.on('create', async (abstractFile) => {
+      if (this.settings.saveVaultToVectorStore !== VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE) return;
+
+      const file = this.app.vault.getFiles().filter((file) => file.path === abstractFile.path).pop()
+      if (!file) {
+        new Notice('File not found.');
+        return;
+      }
+
+      await this.saveFileToVectorStore(file)
+    }))
+
+    this.registerEvent(this.app.vault.on('modify', async (abstractFile) => {
+      if (this.settings.saveVaultToVectorStore !== VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE) return;
+
+      const file = this.app.vault.getFiles().filter((file) => file.path === abstractFile.path).pop()
+      if (!file) {
+        new Notice('File not found.');
+        return;
+      }
+
+      await this.saveFileToVectorStore(file)
+    }))
+
+    // Save vault to vector store on startup and after loading all commands
+    // This can take a while, so we don't want to block the startup process
+    if (this.settings.saveVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP || this.settings.saveVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE) {
+      try {
+        await this.saveVaultToVectorStore();
+      } catch (err) {
+        console.error("Error saving vault to vector store:", err);
+        new Notice('An error occurred while saving vault to vector store.');
+      }
+    }
+
+  }
+
+  async saveFileToVectorStore(file: TFile): Promise<void> {
+    const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
+    if (!embeddingInstance) {
+      new Notice('Embedding instance not found.');
+      return;
+    }
+    const fileContent = await this.app.vault.cachedRead(file)
+    const fileMetadata = this.app.metadataCache.getFileCache(file)
+    const noteFile = {
+      basename: file.basename,
+      path: file.path,
+      mtime: file.stat.mtime,
+      content: fileContent,
+      metadata: fileMetadata?.frontmatter ?? {},
+    }
+    VectorDBManager.loadFile(noteFile, embeddingInstance)
+  }
+
+  async saveVaultToVectorStore(overwrite?: boolean): Promise<number> {
+    const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
+    if (!embeddingInstance) {
+      throw new Error('Embedding instance not found.');
+    }
+    const latestMtime = await VectorDBManager.getLatestFileMtime()
+
+    const files = this.app.vault.getMarkdownFiles().filter((file) => {
+      if (!latestMtime || overwrite) return true
+      return file.stat.mtime > latestMtime
+    })
+    const fileContents: string[] = await Promise.all(
+      files.map((file) => this.app.vault.cachedRead(file))
+    )
+    const fileMetadatas = files.map((file) => this.app.metadataCache.getFileCache(file))
+
+    const loadPromises = files.map(async (file, index) => {
+      const noteFile = {
+        basename: file.basename,
+        path: file.path,
+        mtime: file.stat.mtime,
+        content: fileContents[index],
+        metadata: fileMetadatas[index]?.frontmatter ?? {},
+      }
+      return VectorDBManager.loadFile(noteFile, embeddingInstance)
+    })
+
+    await Promise.all(loadPromises);
+
+    return files.length;
   }
 
   processSelection(editor: Editor, eventType: string, eventSubtype?: string) {
