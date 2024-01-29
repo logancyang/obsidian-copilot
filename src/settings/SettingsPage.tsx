@@ -32,6 +32,7 @@ export interface CopilotSettings {
   embeddingProvider: string;
   defaultSaveFolder: string;
   saveVaultToVectorStore: string;
+  chatNoteContextPath: string;
   debug: boolean;
 }
 

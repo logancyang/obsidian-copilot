@@ -13,7 +13,30 @@ import {
   RetrievalQAChain
 } from "langchain/chains";
 import moment from 'moment';
-import { TFile } from 'obsidian';
+import { TFile, Vault } from 'obsidian';
+
+export const isFolderMatch = (fileFullpath: string, inputPath: string): boolean => {
+  const fileSegments = fileFullpath.split('/').map(segment => segment.toLowerCase());
+  return fileSegments.includes(inputPath.toLowerCase());
+}
+
+export const getNotesFromPath = async (vault: Vault, path: string): Promise<TFile[]> => {
+  const files = await vault.getMarkdownFiles();
+
+  // Special handling for the root path '/'
+  if (path === '/') {
+    return files;
+  }
+
+  // Split the path to get the last folder name
+  const pathSegments = path.split('/');
+  const lastSegment = pathSegments[pathSegments.length - 1].toLowerCase();
+
+  return files.filter(file => {
+    // Split the file path and get the last directory name
+    return isFolderMatch(file.path, lastSegment) || file.basename === lastSegment;
+  });
+}
 
 export const stringToChainType = (chain: string): ChainType => {
   switch (chain) {
@@ -75,7 +98,7 @@ export const formatDateTime = (now: Date, timezone: 'local' | 'utc' = 'local') =
 
 export async function getFileContent(file: TFile): Promise<string | null> {
   if (file.extension != "md") return null;
-  return await this.app.vault.read(file);
+  return await this.app.vault.cachedRead(file);
 }
 
 export function getFileName(file: TFile): string {
@@ -119,17 +142,19 @@ export function sendNoteContentPrompt(
     + `Feel free to ask related questions, such as 'give me a summary of this note in bullet points', 'what key questions does it answer', etc. "\n`
 }
 
-export function useNoteAsContextPrompt(
-  noteName: string,
-  noteContent: string | null,
-): string {
-  return `Please read the note below and be ready to answer questions about it. `
+export function sendNotesContentPrompt(notes: { name: string; content: string }[]): string {
+  return `Please read the notes below and be ready to answer questions about them. `
     + `If there's no information about a certain topic, just say the note `
     + `does not mention it. `
-    + `The content of the note is between "/***/":\n\n/***/\n\n${noteContent}\n\n/***/\n\n`
+    + `The content of the note is between "/***/":\n\n/***/\n\n${JSON.stringify(notes)}\n\n/***/\n\n`
     + `Please reply with the following word for word:`
-    + `"OK I've read this note titled [[ ${noteName} ]]. `
-    + `Feel free to ask **specific** questions about it. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with *context sent in the prompt* is a better choice."\n`
+    + `"OK I've read these notes. `
+    + `Feel free to ask related questions, such as 'give me a summary of these notes in bullet points', 'what key questions does these notes answer', etc. "\n`
+}
+
+export function getSendChatContextNotesPrompt(notes: { name: string; content: string }[]): string {
+  const noteTitles = notes.map(note => `[[${note.name}]]`).join('\n\n');
+  return `Please read the notes below and be ready to answer questions about them. \n\n${noteTitles}`;
 }
 
 export function fixGrammarSpellingSelectionPrompt(selectedText: string): string {
@@ -212,6 +237,15 @@ export function createTranslateSelectionPrompt(language?: string) {
 export function createChangeToneSelectionPrompt(tone?: string) {
   return (selectedText: string): string => {
     return `Please change the tone of the following text to ${tone}. Output in the same language as the source, do not output English if it is not English:\n\n` + `${selectedText}`;
+  };
+}
+
+export function createAdhocSelectionPrompt(adhocPrompt?: string) {
+  return (selectedText: string): string => {
+    if (!adhocPrompt) {
+      return selectedText;
+    }
+    return `${adhocPrompt}.\n\n` + `${selectedText}`;
   };
 }
 

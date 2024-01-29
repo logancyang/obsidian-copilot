@@ -7,10 +7,12 @@ import ChatMessages from '@/components/ChatComponents/ChatMessages';
 import { AI_SENDER, USER_SENDER } from '@/constants';
 import { AppContext } from '@/context';
 import { getAIResponse } from '@/langchainStream';
+import { CopilotSettings } from '@/settings/SettingsPage';
 import SharedState, {
   ChatMessage, useSharedState,
 } from '@/sharedState';
 import {
+  createAdhocSelectionPrompt,
   createChangeToneSelectionPrompt,
   createTranslateSelectionPrompt,
   eli5SelectionPrompt,
@@ -20,6 +22,8 @@ import {
   formatDateTime,
   getFileContent,
   getFileName,
+  getNotesFromPath,
+  getSendChatContextNotesPrompt,
   glossaryPrompt,
   removeUrlsFromSelectionPrompt,
   rewriteLongerSelectionPrompt,
@@ -27,13 +31,13 @@ import {
   rewriteShorterSelectionPrompt,
   rewriteTweetSelectionPrompt,
   rewriteTweetThreadSelectionPrompt,
-  sendNoteContentPrompt,
+  sendNotesContentPrompt,
   simplifyPrompt,
   summarizePrompt,
-  tocPrompt
+  tocPrompt,
 } from '@/utils';
 import { EventEmitter } from 'events';
-import { Notice, TFile } from 'obsidian';
+import { Notice, TFile, Vault } from 'obsidian';
 import React, {
   useContext,
   useEffect,
@@ -48,15 +52,24 @@ interface CreateEffectOptions {
 
 interface ChatProps {
   sharedState: SharedState;
+  settings: CopilotSettings;
   chainManager: ChainManager;
   emitter: EventEmitter;
   getChatVisibility: () => Promise<boolean>;
   defaultSaveFolder: string;
+  vault: Vault;
   debug: boolean;
 }
 
 const Chat: React.FC<ChatProps> = ({
-  sharedState, chainManager, emitter, getChatVisibility, defaultSaveFolder, debug
+  sharedState,
+  settings,
+  chainManager,
+  emitter,
+  getChatVisibility,
+  defaultSaveFolder,
+  vault,
+  debug
 }) => {
   const [
     chatHistory, addMessage, clearMessages,
@@ -137,30 +150,45 @@ const Chat: React.FC<ChatProps> = ({
       return;
     }
 
-    const file = app.workspace.getActiveFile();
-    if (!file) {
-      new Notice('No active note found.');
-      console.error('No active note found.');
-      return;
+    let noteFiles: TFile[] = [];
+    if (debug) {
+      console.log('Chat note context path:', settings.chatNoteContextPath);
+    }
+    if (settings.chatNoteContextPath) {
+      // Recursively get all note TFiles in the path
+      noteFiles = await getNotesFromPath(vault, settings.chatNoteContextPath);
     }
 
-    const noteContent = await getFileContent(file);
-    const noteName = getFileName(file);
-    if (!noteContent) {
-      new Notice('No note content found.');
-      console.error('No note content found.');
-      return;
+    const file = app.workspace.getActiveFile();
+    // If no note context provided, default to the active note
+    if (noteFiles.length === 0) {
+      if (!file) {
+        new Notice('No active note found.');
+        console.error('No active note found.');
+        return;
+      }
+      new Notice('No valid Chat context provided. Defaulting to the active note.');
+      noteFiles = [file];
+    }
+
+    const notes = [];
+    for (const file of noteFiles) {
+      const content = await getFileContent(file);
+      if (content) {
+        notes.push({ name: getFileName(file), content });
+      }
     }
 
     // Send the content of the note to AI
     const promptMessageHidden: ChatMessage = {
-      message: sendNoteContentPrompt(noteName, noteContent),
+      message: sendNotesContentPrompt(notes),
       sender: USER_SENDER,
       isVisible: false,
     };
 
     // Visible user message that is not sent to AI
-    const sendNoteContentUserMessage = `Please read this note [[${noteName}]] and be ready to answer questions about it.`;
+    // const sendNoteContentUserMessage = `Please read the following notes [[${activeNoteContent}]] and be ready to answer questions about it.`;
+    const sendNoteContentUserMessage = getSendChatContextNotesPrompt(notes);
     const promptMessageVisible: ChatMessage = {
       message: sendNoteContentUserMessage,
       sender: USER_SENDER,
@@ -353,6 +381,14 @@ const Chat: React.FC<ChatProps> = ({
       // Not showing the custom prompt in the chat UI for now, Leaving it here as an option.
       // To check the prompt, use Debug mode in the setting.
       // { isVisible: true },
+    ),
+    []
+  );
+  useEffect(
+    createEffect(
+      'applyAdhocPromptSelection',
+      (selectedText, prompt) =>
+        createAdhocSelectionPrompt(prompt)(selectedText),
     ),
     []
   );

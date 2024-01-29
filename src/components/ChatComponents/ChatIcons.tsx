@@ -167,7 +167,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
       {selectedChain === 'llm_chain' && (
         <button className='chat-icon-button' onClick={onSendActiveNoteToPrompt}>
           <SendActiveNoteToPromptIcon className='icon-scaler' />
-          <span className="tooltip-text">Send Active Note to Prompt<br/>(use with long context models)</span>
+          <span className="tooltip-text">Send Note(s) to Prompt<br/>(Set with Copilot command.<br/>Default is active note)</span>
         </button>
       )}
       {selectedChain === 'retrieval_qa' && (

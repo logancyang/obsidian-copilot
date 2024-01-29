@@ -3,9 +3,10 @@ import Chat from '@/components/Chat';
 import { CHAT_VIEWTYPE } from '@/constants';
 import { AppContext } from '@/context';
 import CopilotPlugin from '@/main';
+import { CopilotSettings } from '@/settings/SettingsPage';
 import SharedState from '@/sharedState';
 import { EventEmitter } from 'events';
-import { ItemView, WorkspaceLeaf } from 'obsidian';
+import { ItemView, Vault, WorkspaceLeaf } from 'obsidian';
 import * as React from 'react';
 import { Root, createRoot } from 'react-dom/client';
 
@@ -14,6 +15,8 @@ export default class CopilotView extends ItemView {
   private sharedState: SharedState;
   private chainManager: ChainManager;
   private root: Root | null = null;
+  private vault: Vault;
+  private settings: CopilotSettings;
   private defaultSaveFolder: string;
   private debug = false;
   emitter: EventEmitter;
@@ -22,12 +25,14 @@ export default class CopilotView extends ItemView {
   constructor(leaf: WorkspaceLeaf, private plugin: CopilotPlugin) {
     super(leaf);
     this.sharedState = plugin.sharedState;
+    this.settings = plugin.settings;
     this.app = plugin.app;
     this.chainManager = plugin.chainManager;
     this.debug = plugin.settings.debug;
     this.emitter = new EventEmitter();
     this.getChatVisibility = this.getChatVisibility.bind(this);
     this.userSystemPrompt = plugin.settings.userSystemPrompt;
+    this.vault = plugin.app.vault;
     this.defaultSaveFolder = plugin.settings.defaultSaveFolder;
   }
 
@@ -63,10 +68,12 @@ export default class CopilotView extends ItemView {
         <React.StrictMode>
           <Chat
             sharedState={this.sharedState}
+            settings={this.settings}
             chainManager={this.chainManager}
             emitter={this.emitter}
             getChatVisibility={this.getChatVisibility}
             defaultSaveFolder={this.defaultSaveFolder}
+            vault={this.vault}
             debug={this.debug}
           />
         </React.StrictMode>

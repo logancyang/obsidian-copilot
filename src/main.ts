@@ -3,6 +3,8 @@ import EmbeddingsManager from '@/LLMProviders/embeddingManager';
 import { LangChainParams, SetChainOptions } from '@/aiParams';
 import { ChainType } from '@/chainFactory';
 import { AddPromptModal } from "@/components/AddPromptModal";
+import { AdhocPromptModal } from "@/components/AdhocPromptModal";
+import { ChatNoteContextModal } from "@/components/ChatNoteContextModal";
 import CopilotView from '@/components/CopilotView';
 import { LanguageModal } from "@/components/LanguageModal";
 import { ListPromptModal } from "@/components/ListPromptModal";
@@ -268,6 +270,23 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: 'apply-adhoc-prompt',
+      name: 'Apply ad-hoc custom prompt to selection',
+      editorCallback: async (editor: Editor) => {
+        const modal = new AdhocPromptModal(this.app, async (adhocPrompt: string) => {
+          try {
+            this.processSelection(editor, 'applyAdhocPromptSelection', adhocPrompt);
+          } catch (err) {
+            console.error(err);
+            new Notice('An error occurred.');
+          }
+        });
+
+        modal.open();
+      },
+    });
+
+    this.addCommand({
       id: 'delete-custom-prompt',
       name: 'Delete custom prompt',
       checkCallback: (checking: boolean) => {
@@ -409,6 +428,18 @@ export default class CopilotPlugin extends Plugin {
         }
       }
     })
+
+    this.addCommand({
+      id: 'set-chat-note-context',
+      name: 'Set note context for Chat mode',
+      callback: async () => {
+        new ChatNoteContextModal(this.app, this.settings, async (path: string) => {
+          // Store the path in the plugin's settings, default to empty string
+          this.settings.chatNoteContextPath = path;
+          await this.saveSettings();
+        }).open();
+      },
+    });
 
     this.registerEvent(this.app.vault.on('delete', (file) => {
       const docHash = VectorDBManager.getDocumentHash(file.path)
