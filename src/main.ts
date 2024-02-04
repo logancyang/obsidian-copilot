@@ -513,7 +513,7 @@ export default class CopilotPlugin extends Plugin {
       content: fileContent,
       metadata: fileMetadata?.frontmatter ?? {},
     }
-    VectorDBManager.loadFile(noteFile, embeddingInstance)
+    VectorDBManager.indexFile(noteFile, embeddingInstance)
   }
 
   async saveVaultToVectorStore(overwrite?: boolean): Promise<number> {
@@ -540,7 +540,7 @@ export default class CopilotPlugin extends Plugin {
         content: fileContents[index],
         metadata: fileMetadatas[index]?.frontmatter ?? {},
       }
-      return VectorDBManager.loadFile(noteFile, embeddingInstance)
+      return VectorDBManager.indexFile(noteFile, embeddingInstance)
     })
 
     await Promise.all(loadPromises);

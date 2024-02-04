@@ -99,7 +99,7 @@ export default class ChainManager {
       // Create a new chain with the new chatModel
       this.createChain(
         this.langChainParams.chainType,
-        {...this.langChainParams.options, forceNewCreation: true},
+        { ...this.langChainParams.options, forceNewCreation: true },
       )
       console.log(`Setting model to ${newModelDisplayName}: ${newModel}`);
     } catch (error) {
@@ -206,7 +206,7 @@ export default class ChainManager {
           console.log('Existing vector store for document hash: ', docHash);
         } else {
           // Index doesn't exist
-          await this.loadFile(options.noteFile);
+          await this.indexFile(options.noteFile);
           if (!this.vectorStore) {
             console.error('Error creating vector store.');
             return;
@@ -313,9 +313,9 @@ export default class ChainManager {
     if (ignoreSystemMessage) {
       const effectivePrompt = ignoreSystemMessage
         ? ChatPromptTemplate.fromMessages([
-            new MessagesPlaceholder("history"),
-            HumanMessagePromptTemplate.fromTemplate("{input}"),
-          ])
+          new MessagesPlaceholder("history"),
+          HumanMessagePromptTemplate.fromTemplate("{input}"),
+        ])
         : chatPrompt;
 
       this.setChain(chainType, {
@@ -333,7 +333,7 @@ export default class ChainManager {
     const chatStream = await ChainManager.chain.stream({ input: userMessage } as any);
 
     try {
-      switch(chainType) {
+      switch (chainType) {
         case ChainType.LLM_CHAIN:
           if (debug) {
             console.log(`*** DEBUG INFO ***\n`
@@ -431,14 +431,14 @@ export default class ChainManager {
     return fullAIResponse;
   }
 
-  async loadFile(noteFile: NoteFile): Promise<void> {
-      const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
-      if (!embeddingsAPI) {
+  async indexFile(noteFile: NoteFile): Promise<void> {
+    const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
+    if (!embeddingsAPI) {
       const errorMsg = 'Failed to load file, embedding API is not set correctly, please check your settings.';
-        new Notice(errorMsg);
-        console.error(errorMsg);
-        return;
-      }
-    await VectorDBManager.loadFile(noteFile, embeddingsAPI);
+      new Notice(errorMsg);
+      console.error(errorMsg);
+      return;
+    }
+    await VectorDBManager.indexFile(noteFile, embeddingsAPI);
   }
 }

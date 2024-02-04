@@ -109,7 +109,7 @@ class VectorDBManager {
     }
   }
 
-  public static async loadFile(noteFile: NoteFile, embeddingsAPI: Embeddings) {
+  public static async indexFile(noteFile: NoteFile, embeddingsAPI: Embeddings) {
     if (!this.db) throw new Error("DB not initialized");
     const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 5000 })
     const splitDocument = await textSplitter.createDocuments([noteFile.content])
@@ -153,8 +153,11 @@ class VectorDBManager {
     try {
       const allDocsResponse = await this.db.allDocs<VectorStoreDocument>({ include_docs: true });
       const allDocs = allDocsResponse.rows.map(row => row.doc as VectorStoreDocument);
-      const noteFiles = allDocs.map(doc => {
-        const memoryVectors = JSON.parse(doc.memory_vectors) as MemoryVector[];
+      const memoryVectors = allDocs.map(doc => JSON.parse(doc.memory_vectors) as MemoryVector[])
+        .filter(memoryVectors => memoryVectors.length > 0);
+
+      const noteFiles = memoryVectors.map((memoryVectors, i) => {
+        const doc = allDocs[i];
         const noteFile: NoteFile = {
           path: memoryVectors[0].metadata.path,
           basename: memoryVectors[0].metadata.title,
@@ -163,7 +166,7 @@ class VectorDBManager {
           metadata: memoryVectors[0].metadata,
         }
         return noteFile;
-      });
+      }).filter((noteFile): noteFile is NoteFile => noteFile !== undefined);
       return noteFiles;
     } catch (err) {
       console.error("Error getting note files from VectorDB:", err);

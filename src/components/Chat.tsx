@@ -238,7 +238,7 @@ const Chat: React.FC<ChatProps> = ({
       content: noteContent,
       metadata: fileMetadata?.frontmatter ?? {},
     };
-    await chainManager.loadFile(noteFile);
+    await chainManager.indexFile(noteFile);
     const activeNoteOnMessage: ChatMessage = {
       sender: AI_SENDER,
       message: `Indexing [[${noteName}]]...\n\n Please switch to "QA" in Mode Selection to ask questions about it.`,
