@@ -2,7 +2,7 @@ import { EMBEDDING_PROVIDERS, OPENAI_EMBEDDING_MODELS, VAULT_VECTOR_STORE_STRATE
 import React from 'react';
 import ApiSetting from './ApiSetting';
 import Collapsible from './Collapsible';
-import { DropdownComponent } from './SettingBlocks';
+import { DropdownComponent, SliderComponent } from './SettingBlocks';
 
 interface QASettingsProps {
   embeddingProvider: string;
@@ -15,6 +15,8 @@ interface QASettingsProps {
   setHuggingfaceApiKey: (value: string) => void;
   saveVaultToVectorStore: string;
   setSaveVaultToVectorStore: (value: string) => void;
+  embeddingChunkSize: number;
+  setEmbeddingChunkSize: (value: number) => void;
 }
 
 const QASettings: React.FC<QASettingsProps> = ({
@@ -28,6 +30,8 @@ const QASettings: React.FC<QASettingsProps> = ({
   setHuggingfaceApiKey,
   saveVaultToVectorStore,
   setSaveVaultToVectorStore,
+  embeddingChunkSize,
+  setEmbeddingChunkSize,
 }) => {
   return (
     <div>
@@ -61,6 +65,15 @@ const QASettings: React.FC<QASettingsProps> = ({
         value={saveVaultToVectorStore}
         onChange={setSaveVaultToVectorStore}
         options={VAULT_VECTOR_STORE_STRATEGIES}
+      />
+      <SliderComponent
+        name="Embedding Chunk Size"
+        description="The number of documents to send to the embedding API at once"
+        min={500}
+        max={30000}
+        step={100}
+        value={embeddingChunkSize}
+        onChange={setEmbeddingChunkSize}
       />
       <br />
       <Collapsible title="Cohere API Settings">

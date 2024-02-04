@@ -55,6 +55,7 @@ export default class CopilotPlugin extends Plugin {
     this.embeddingsManager = EmbeddingsManager.getInstance(langChainParams);
 
     VectorDBManager.initializeDB(this.dbVectorStores);
+    VectorDBManager.setChunkSize(this.settings.embeddingChunkSize);
 
     this.registerView(
       CHAT_VIEWTYPE,

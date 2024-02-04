@@ -39,6 +39,7 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
   const [cohereApiKey, setCohereApiKey] = useState(plugin.settings.cohereApiKey);
   const [huggingfaceApiKey, setHuggingfaceApiKey] = useState(plugin.settings.huggingfaceApiKey);
   const [saveVaultToVectorStore, setSaveVaultToVectorStore] = useState(plugin.settings.saveVaultToVectorStore);
+  const [embeddingChunkSize, setEmbeddingChunkSize] = useState(plugin.settings.embeddingChunkSize);
 
   // Advanced settings
   const [userSystemPrompt, setUserSystemPrompt] = useState(plugin.settings.userSystemPrompt);
@@ -75,6 +76,7 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
     plugin.settings.cohereApiKey = cohereApiKey;
     plugin.settings.huggingfaceApiKey = huggingfaceApiKey;
     plugin.settings.saveVaultToVectorStore = saveVaultToVectorStore;
+    plugin.settings.embeddingChunkSize = embeddingChunkSize;
 
     // Advanced settings
     plugin.settings.userSystemPrompt = userSystemPrompt;
@@ -200,6 +202,8 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
         setHuggingfaceApiKey={setHuggingfaceApiKey}
         saveVaultToVectorStore={saveVaultToVectorStore}
         setSaveVaultToVectorStore={setSaveVaultToVectorStore}
+        embeddingChunkSize={embeddingChunkSize}
+        setEmbeddingChunkSize={setEmbeddingChunkSize}
       />
       <AdvancedSettings
         openAIProxyBaseUrl={openAIProxyBaseUrl}

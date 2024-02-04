@@ -28,6 +28,7 @@ export interface NoteFile {
 
 class VectorDBManager {
   public static db: PouchDB.Database | null = null;
+  public static chunkSize: number | null = null;
 
   public static initializeDB(db: PouchDB.Database): void {
     this.db = db;
@@ -35,6 +36,10 @@ class VectorDBManager {
 
   public static updateDBInstance(newDb: PouchDB.Database): void {
     this.db = newDb;
+  }
+
+  public static setChunkSize(chunkSize: number): void {
+    this.chunkSize = chunkSize;
   }
 
   public static getDocumentHash(sourceDocument: string): string {
@@ -111,6 +116,7 @@ class VectorDBManager {
 
   public static async indexFile(noteFile: NoteFile, embeddingsAPI: Embeddings) {
     if (!this.db) throw new Error("DB not initialized");
+    if (!this.chunkSize) throw new Error("Chunk size not set");
     const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 5000 })
     const splitDocument = await textSplitter.createDocuments([noteFile.content])
     const docVectors = await embeddingsAPI.embedDocuments(splitDocument.map((doc) => doc.pageContent))

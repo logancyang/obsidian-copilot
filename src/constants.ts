@@ -161,6 +161,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   embeddingProvider: ModelProviders.OPENAI,
   defaultSaveFolder: 'copilot-conversations',
   saveVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.NEVER,
+  embeddingChunkSize: 5000,
   chatNoteContextPath: '',
   debug: false,
 };
