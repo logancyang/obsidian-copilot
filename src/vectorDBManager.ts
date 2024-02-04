@@ -3,12 +3,14 @@ import { Document } from "langchain/document";
 import { Embeddings } from 'langchain/embeddings/base';
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
+import { ModelProviders } from './constants';
 
 export interface VectorStoreDocument {
   _id: string;
   _rev?: string;
   memory_vectors: string;
   file_mtime: number;
+  embeddingProvider: ModelProviders;
   created_at: number;
 }
 
@@ -29,6 +31,7 @@ export interface NoteFile {
 class VectorDBManager {
   public static db: PouchDB.Database | null = null;
   public static chunkSize: number | null = null;
+  public static embeddingProvider: string | null = null;
 
   public static initializeDB(db: PouchDB.Database): void {
     this.db = db;
@@ -40,6 +43,10 @@ class VectorDBManager {
 
   public static setChunkSize(chunkSize: number): void {
     this.chunkSize = chunkSize;
+  }
+
+  public static setEmbeddingProvider(embeddingProvider: string): void {
+    this.embeddingProvider = embeddingProvider;
   }
 
   public static getDocumentHash(sourceDocument: string): string {
@@ -71,8 +78,11 @@ class VectorDBManager {
 
   public static async getMemoryVectorStore(embeddingsAPI: Embeddings): Promise<MemoryVectorStore> {
     if (!this.db) throw new Error("DB not initialized");
+    if (!this.embeddingProvider) throw new Error("Embedding provider not set");
+
     const allDocsResponse = await this.db.allDocs({ include_docs: true });
-    const allDocs = allDocsResponse.rows.map(row => row.doc as VectorStoreDocument);
+    const allDocs = allDocsResponse.rows.map(row => row.doc as VectorStoreDocument)
+      .filter(doc => doc.embeddingProvider === this.embeddingProvider);
     const memoryVectors = allDocs.map(doc => JSON.parse(doc.memory_vectors) as MemoryVector[]).flat();
     const embeddingsArray: number[][] = memoryVectors.map(
       memoryVector => memoryVector.embedding
@@ -117,6 +127,8 @@ class VectorDBManager {
   public static async indexFile(noteFile: NoteFile, embeddingsAPI: Embeddings) {
     if (!this.db) throw new Error("DB not initialized");
     if (!this.chunkSize) throw new Error("Chunk size not set");
+    if (!this.embeddingProvider) throw new Error("Embedding provider not set");
+
     const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 5000 })
     const splitDocument = await textSplitter.createDocuments([noteFile.content])
     const docVectors = await embeddingsAPI.embedDocuments(splitDocument.map((doc) => doc.pageContent))
@@ -127,7 +139,6 @@ class VectorDBManager {
           ...noteFile.metadata,
           title: noteFile.basename,
           path: noteFile.path,
-
         },
         embedding: docVector,
       }))
@@ -143,6 +154,7 @@ class VectorDBManager {
         _id: docHash,
         memory_vectors: serializedMemoryVectors,
         file_mtime: noteFile.mtime,
+        embeddingProvider: this.embeddingProvider,
         created_at: Date.now(),
         _rev: existingDoc?._rev // Add the current revision if the document exists.
       };
@@ -194,9 +206,12 @@ class VectorDBManager {
 
   public static async getLatestFileMtime(): Promise<number> {
     if (!this.db) throw new Error("DB not initialized");
+    if (!this.embeddingProvider) throw new Error("Embedding provider not set");
+
     try {
       const allDocsResponse = await this.db.allDocs<VectorStoreDocument>({ include_docs: true });
-      const allDocs = allDocsResponse.rows.map(row => row.doc as VectorStoreDocument);
+      const allDocs = allDocsResponse.rows.map(row => row.doc as VectorStoreDocument)
+        .filter(doc => doc.embeddingProvider === this.embeddingProvider);
       const newestFileMtime = allDocs.map(doc => doc.file_mtime).sort((a, b) => b - a)[0];
       return newestFileMtime;
     } catch (err) {
