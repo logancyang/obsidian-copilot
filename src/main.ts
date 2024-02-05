@@ -11,6 +11,7 @@ import { ToneModal } from "@/components/ToneModal";
 import {
   CHAT_VIEWTYPE, DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT,
 } from '@/constants';
+import { CustomPrompt } from '@/customPromptProcessor';
 import { CopilotSettingTab, CopilotSettings } from '@/settings/SettingsPage';
 import SharedState from '@/sharedState';
 import { sanitizeSettings } from "@/utils";
@@ -18,13 +19,6 @@ import VectorDBManager, { VectorStoreDocument } from '@/vectorDBManager';
 import { Server } from 'http';
 import { Editor, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
 import PouchDB from 'pouchdb';
-
-
-interface CustomPrompt {
-  _id: string;
-  _rev?: string;
-  prompt: string;
-}
 
 export default class CopilotPlugin extends Plugin {
   settings: CopilotSettings;
@@ -49,6 +43,7 @@ export default class CopilotPlugin extends Plugin {
     this.chainManager = new ChainManager(langChainParams);
 
     this.dbPrompts = new PouchDB<CustomPrompt>('copilot_custom_prompts');
+
     this.dbVectorStores = new PouchDB<VectorStoreDocument>('copilot_vector_stores');
 
     VectorDBManager.initializeDB(this.dbVectorStores);
@@ -402,10 +397,6 @@ export default class CopilotPlugin extends Plugin {
   }
 
   processSelection(editor: Editor, eventType: string, eventSubtype?: string) {
-    if (editor.somethingSelected() === false) {
-      new Notice('Please select some text to rewrite.');
-      return;
-    }
     const selectedText = editor.getSelection();
 
     const isChatWindowActive = this.app.workspace
