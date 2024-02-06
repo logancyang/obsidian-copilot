@@ -252,10 +252,11 @@ export function extractChatHistory(memoryVariables: MemoryVariables): [string, s
 }
 
 export function processVariableName(variableName: string): string {
+  variableName = variableName.trim();
   // Check if the variable name is enclosed in double brackets indicating it's a note
   if (variableName.startsWith('[[') && variableName.endsWith(']]')) {
     // It's a note, so we remove the brackets and append '.md'
-    return `${variableName.slice(2, -2)}.md`;
+    return `${variableName.slice(2, -2).trim()}.md`;
   }
   // It's a path, so we just return it as is
   return variableName;
