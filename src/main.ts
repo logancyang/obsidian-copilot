@@ -498,7 +498,7 @@ export default class CopilotPlugin extends Plugin {
       embeddingProvider,
       ollamaModel,
       ollamaBaseUrl,
-      lmStudioPort,
+      lmStudioBaseUrl,
     } = sanitizeSettings(this.settings);
     return {
       openAIApiKey,
@@ -515,7 +515,7 @@ export default class CopilotPlugin extends Plugin {
       openRouterModel: openRouterModel || DEFAULT_SETTINGS.openRouterModel,
       ollamaModel: ollamaModel || DEFAULT_SETTINGS.ollamaModel,
       ollamaBaseUrl: ollamaBaseUrl || DEFAULT_SETTINGS.ollamaBaseUrl,
-      lmStudioPort: lmStudioPort || DEFAULT_SETTINGS.lmStudioPort,
+      lmStudioBaseUrl: lmStudioBaseUrl || DEFAULT_SETTINGS.lmStudioBaseUrl,
       model: this.settings.defaultModel,
       modelDisplayName: this.settings.defaultModelDisplayName,
       embeddingModel: embeddingModel || DEFAULT_SETTINGS.embeddingModel,
