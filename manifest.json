@@ -1,7 +1,7 @@
 {
 	"id": "copilot",
 	"name": "Copilot",
-	"version": "2.4.15",
+	"version": "2.4.16",
 	"minAppVersion": "0.15.0",
 	"description": "A ChatGPT Copilot in Obsidian.",
 	"author": "Logan Yang",
