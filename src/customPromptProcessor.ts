@@ -73,7 +73,7 @@ export class CustomPromptProcessor {
     }
 
     for (let i = 0; i < index; i++) {
-      additionalInfo += `\n\nnoteCollection${i}:\n\n ${variablesWithContent[i]}`;
+      additionalInfo += `\n\nnoteCollection${i}:\n\n${variablesWithContent[i]}`;
     }
 
     return processedPrompt + '\n\n' + additionalInfo;

@@ -31,8 +31,8 @@ describe('CustomPromptProcessor', () => {
     const result = await processor.processCustomPrompt(doc.prompt, selectedText);
 
     expect(result).toContain('This is a {noteCollection0} and {selectedText}.');
-    expect(result).toContain('selectedText: here is some selected text 12345');
-    expect(result).toContain('noteCollection0: here is the note content for note0');
+    expect(result).toContain('here is some selected text 12345');
+    expect(result).toContain('here is the note content for note0');
   });
 
   it('should replace placeholders with 2 noteCollection and no selectedText', async () => {
@@ -51,8 +51,8 @@ describe('CustomPromptProcessor', () => {
     const result = await processor.processCustomPrompt(doc.prompt, selectedText);
 
     expect(result).toContain('This is a {noteCollection0} and {noteCollection1}.');
-    expect(result).toContain('noteCollection0: here is the note content for note0');
-    expect(result).toContain('noteCollection1: note content for note1');
+    expect(result).toContain('here is the note content for note0');
+    expect(result).toContain('note content for note1');
   });
 
   it('should replace placeholders with 1 selectedText and no noteCollection', async () => {
@@ -71,9 +71,9 @@ describe('CustomPromptProcessor', () => {
     const result = await processor.processCustomPrompt(doc.prompt, selectedText);
 
     expect(result).toContain('Rewrite the following text {selectedText}');
-    expect(result).toContain('selectedText: here is some selected text 12345');
-    expect(result).not.toContain('noteCollection0: here is the note content for note0');
-    expect(result).not.toContain('noteCollection1: note content for note1');
+    expect(result).toContain('here is some selected text 12345');
+    expect(result).not.toContain('here is the note content for note0');
+    expect(result).not.toContain('note content for note1');
   });
 
   // This is not an expected use case but it's possible
@@ -93,9 +93,9 @@ describe('CustomPromptProcessor', () => {
     const result = await processor.processCustomPrompt(doc.prompt, selectedText);
 
     expect(result).toContain('Rewrite the following text {selectedText} and {selectedText}');
-    expect(result).toContain('selectedText: here is some selected text 12345');
-    expect(result).not.toContain('noteCollection0: here is the note content for note0');
-    expect(result).not.toContain('noteCollection1: note content for note1');
+    expect(result).toContain('here is some selected text 12345');
+    expect(result).not.toContain('here is the note content for note0');
+    expect(result).not.toContain('note content for note1');
   });
 
   it('should handle prompts without variables', async () => {
