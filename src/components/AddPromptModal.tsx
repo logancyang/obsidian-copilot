@@ -47,13 +47,30 @@ export class AddPromptModal extends Modal {
     promptContainer.createEl(
       'h3', { text: 'Prompt', cls: 'copilot-command-header' }
     );
-    promptContainer.createEl(
-      'p',
-      {
-        text: 'The content of the prompt. Use "{}" to represent the selected text. For example, "Improve the readability of the following text: {}"',
-        cls: 'copilot-command-input-description',
-      }
-    );
+
+    const promptDescFragment = createFragment((frag) => {
+      frag.createEl(
+        'strong',
+        { text: '- {} represents the selected text (not required). ' }
+      );
+      frag.createEl('br');
+      frag.createEl(
+        'strong',
+        { text: '- {[[Note Title]]} represents a note. ' }
+      );
+      frag.createEl('br');
+      frag.createEl(
+        'strong',
+        { text: '- {FolderPath} represents a folder of notes. ' }
+      );
+      frag.createEl('br');
+      frag.createEl('br');
+      frag.appendText('Tip: turn on debug mode to show the processed prompt in the chat window.');
+      frag.createEl('br');
+      frag.createEl('br');
+    });
+    promptContainer.appendChild(promptDescFragment);
+
     const promptField = promptContainer.createEl('textarea');
     if (initialPrompt) {
       promptField.value = initialPrompt;

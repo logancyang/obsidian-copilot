@@ -4,7 +4,7 @@ export class AdhocPromptModal extends Modal {
     result: string;
     onSubmit: (result: string) => void;
 
-    private placeholderText = 'Please enter your custom ad-hoc prompt to process the selection.';
+    private placeholderText = 'Please enter your custom ad-hoc prompt here, press enter to send.';
 
     constructor(app: App, onSubmit: (result: string) => void) {
         super(app);
@@ -13,6 +13,28 @@ export class AdhocPromptModal extends Modal {
 
     onOpen() {
         const { contentEl } = this;
+
+        const promptDescFragment = createFragment((frag) => {
+          frag.createEl(
+            'strong',
+            { text: '- {} represents the selected text (not required). ' }
+          );
+          frag.createEl('br');
+          frag.createEl(
+            'strong',
+            { text: '- {[[Note Title]]} represents a note. ' }
+          );
+          frag.createEl('br');
+          frag.createEl(
+            'strong',
+            { text: '- {FolderPath} represents a folder of notes. ' }
+          );
+          frag.createEl('br');
+          frag.appendText('Tip: turn on debug mode to show the processed prompt in the chat window.');
+          frag.createEl('br');
+          frag.createEl('br');
+        });
+        contentEl.appendChild(promptDescFragment);
 
         const textareaEl = contentEl.createEl('textarea', { attr: { placeholder: this.placeholderText } });
         textareaEl.style.width = '100%';
