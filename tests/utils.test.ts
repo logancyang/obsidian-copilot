@@ -1,5 +1,5 @@
 import * as Obsidian from 'obsidian';
-import { getNotesFromPath, isFolderMatch } from '../src/utils';
+import { getNotesFromPath, isFolderMatch, processVariableName } from '../src/utils';
 
 
 describe('isFolderMatch', () => {
@@ -93,5 +93,52 @@ describe('getNotesFromPath', () => {
     const vault = new Obsidian.Vault();
     const files = await getNotesFromPath(vault, '');
     expect(files).toEqual([]);
+  });
+
+  describe('processVariableName', () => {
+    it('should return the note md filename', () => {
+      const variableName = processVariableName('[[test]]');
+      expect(variableName).toEqual('test.md');
+    });
+
+    it('should return the note md filename with extra spaces 1', () => {
+      const variableName = processVariableName(' [[  test]]');
+      expect(variableName).toEqual('test.md');
+    });
+
+    it('should return the note md filename with extra spaces 2', () => {
+      const variableName = processVariableName('[[ test   ]] ');
+      expect(variableName).toEqual('test.md');
+    });
+
+    it('should return the note md filename with extra spaces 2', () => {
+      const variableName = processVariableName(' [[ test note   ]] ');
+      expect(variableName).toEqual('test note.md');
+    });
+
+    it('should return the note md filename with extra spaces 2', () => {
+      const variableName = processVariableName(' [[    test_note note   ]] ');
+      expect(variableName).toEqual('test_note note.md');
+    });
+
+    it('should return folder path with leading slash', () => {
+      const variableName = processVariableName('/testfolder');
+      expect(variableName).toEqual('/testfolder');
+    });
+
+    it('should return folder path without slash', () => {
+      const variableName = processVariableName('testfolder');
+      expect(variableName).toEqual('testfolder');
+    });
+
+    it('should return folder path with trailing slash', () => {
+      const variableName = processVariableName('testfolder/');
+      expect(variableName).toEqual('testfolder/');
+    });
+
+    it('should return folder path with leading spaces', () => {
+      const variableName = processVariableName('  testfolder ');
+      expect(variableName).toEqual('testfolder');
+    });
   });
 });
