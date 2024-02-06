@@ -1,4 +1,4 @@
-import { getFileContent, getFileName, getNotesFromPath } from '@/utils';
+import { getFileContent, getFileName, getNotesFromPath, processVariableName } from '@/utils';
 import { Notice, Vault } from 'obsidian';
 
 export interface CustomPrompt {
@@ -34,7 +34,8 @@ export class CustomPromptProcessor {
 
     while ((match = variableRegex.exec(customPrompt)) !== null) {
       const variableName = match[1].trim();
-      const noteFiles = await getNotesFromPath(this.vault, variableName);
+      const processedVariableName = processVariableName(variableName);
+      const noteFiles = await getNotesFromPath(this.vault, processedVariableName);
       const notes = [];
 
       for (const file of noteFiles) {
@@ -68,11 +69,11 @@ export class CustomPromptProcessor {
     if (processedPrompt.includes('{}')) {
       // Replace {} with {selectedText}
       processedPrompt = processedPrompt.replace(/\{\}/g, '{selectedText}');
-      additionalInfo += `\n\nselectedText: ${selectedText}`;
+      additionalInfo += `selectedText:\n\n ${selectedText}`;
     }
 
     for (let i = 0; i < index; i++) {
-      additionalInfo += `\n\nnoteCollection${i}: ${variablesWithContent[i]}`;
+      additionalInfo += `\n\nnoteCollection${i}:\n\n ${variablesWithContent[i]}`;
     }
 
     return processedPrompt + '\n\n' + additionalInfo;

@@ -220,7 +220,7 @@ export default class CopilotPlugin extends Plugin {
 
     this.addCommand({
       id: 'add-custom-prompt',
-      name: 'Add custom prompt for selection',
+      name: 'Add custom prompt',
       editorCallback: (editor: Editor) => {
         new AddPromptModal(this.app, async (title: string, prompt: string) => {
           try {
@@ -237,7 +237,7 @@ export default class CopilotPlugin extends Plugin {
 
     this.addCommand({
       id: 'apply-custom-prompt',
-      name: 'Apply custom prompt to selection',
+      name: 'Apply custom prompt',
       editorCallback: (editor: Editor) => {
         this.fetchPromptTitles().then((promptTitles: string[]) => {
           new ListPromptModal(this.app, promptTitles, async (promptTitle: string) => {
@@ -251,7 +251,7 @@ export default class CopilotPlugin extends Plugin {
                 new Notice(`No prompt found with the title "${promptTitle}".`);
                 return;
               }
-              this.processSelection(editor, 'applyCustomPromptSelection', doc.prompt);
+              this.processCustomPrompt(editor, 'applyCustomPrompt', doc.prompt);
             } catch (err) {
               if (err.name === 'not_found') {
                 new Notice(`No prompt found with the title "${promptTitle}".`);
@@ -267,11 +267,11 @@ export default class CopilotPlugin extends Plugin {
 
     this.addCommand({
       id: 'apply-adhoc-prompt',
-      name: 'Apply ad-hoc custom prompt to selection',
+      name: 'Apply ad-hoc custom prompt',
       editorCallback: async (editor: Editor) => {
           const modal = new AdhocPromptModal(this.app, async (adhocPrompt: string) => {
               try {
-                  this.processSelection(editor, 'applyAdhocPromptSelection', adhocPrompt);
+                  this.processCustomPrompt(editor, 'applyAdhocPrompt', adhocPrompt);
               } catch (err) {
                   console.error(err);
                   new Notice('An error occurred.');
@@ -396,25 +396,33 @@ export default class CopilotPlugin extends Plugin {
     });
   }
 
-  processSelection(editor: Editor, eventType: string, eventSubtype?: string) {
+  async processText(editor: Editor, eventType: string, eventSubtype?: string, checkSelectedText = true) {
     const selectedText = editor.getSelection();
 
     const isChatWindowActive = this.app.workspace
       .getLeavesOfType(CHAT_VIEWTYPE).length > 0;
 
     if (!isChatWindowActive) {
-      this.activateView();
+      await this.activateView();
     }
 
+    // Without the timeout, the view is not yet active
     setTimeout(() => {
-      // Without the timeout, the view is not yet active
       const activeCopilotView = this.app.workspace
         .getLeavesOfType(CHAT_VIEWTYPE)
         .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
-      if (selectedText && activeCopilotView) {
+      if (activeCopilotView && (!checkSelectedText || selectedText)) {
         activeCopilotView.emitter.emit(eventType, selectedText, eventSubtype);
       }
     }, 0);
+  }
+
+  processSelection(editor: Editor, eventType: string, eventSubtype?: string) {
+    this.processText(editor, eventType, eventSubtype);
+  }
+
+  processCustomPrompt(editor: Editor, eventType: string, customPrompt: string) {
+    this.processText(editor, eventType, customPrompt, false);
   }
 
   toggleView() {
