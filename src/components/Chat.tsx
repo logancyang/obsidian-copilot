@@ -6,18 +6,17 @@ import ChatInput from '@/components/ChatComponents/ChatInput';
 import ChatMessages from '@/components/ChatComponents/ChatMessages';
 import { AI_SENDER, USER_SENDER } from '@/constants';
 import { AppContext } from '@/context';
+import { CustomPromptProcessor } from '@/customPromptProcessor';
 import { getAIResponse } from '@/langchainStream';
 import { CopilotSettings } from '@/settings/SettingsPage';
 import SharedState, {
   ChatMessage, useSharedState,
 } from '@/sharedState';
 import {
-  createAdhocSelectionPrompt,
   createChangeToneSelectionPrompt,
   createTranslateSelectionPrompt,
   eli5SelectionPrompt,
   emojifyPrompt,
-  fillInSelectionForCustomPrompt,
   fixGrammarSpellingSelectionPrompt,
   formatDateTime,
   getFileContent,
@@ -34,7 +33,7 @@ import {
   sendNotesContentPrompt,
   simplifyPrompt,
   summarizePrompt,
-  tocPrompt,
+  tocPrompt
 } from '@/utils';
 import VectorDBManager from '@/vectorDBManager';
 import { EventEmitter } from 'events';
@@ -280,7 +279,7 @@ const Chat: React.FC<ChatProps> = ({
   // Create an effect for each event type (Copilot command on selected text)
   const createEffect = (
     eventType: string,
-    promptFn: (selectedText: string, eventSubtype?: string) => string,
+    promptFn: (selectedText: string, eventSubtype?: string) => string | Promise<string>,
     options: CreateEffectOptions = {},
   ) => {
     return () => {
@@ -290,9 +289,10 @@ const Chat: React.FC<ChatProps> = ({
         ignoreSystemMessage = true,  // Ignore system message by default for commands
       } = options;
       const handleSelection = async (selectedText: string, eventSubtype?: string) => {
+        const messageWithPrompt = await promptFn(selectedText, eventSubtype);
         // Create a user message with the selected text
         const promptMessage: ChatMessage = {
-          message: promptFn(selectedText, eventSubtype),
+          message: messageWithPrompt,
           sender: USER_SENDER,
           isVisible: isVisible,
         };
@@ -366,22 +366,32 @@ const Chat: React.FC<ChatProps> = ({
     ),
     []
   );
+
+  const customPromptProcessor = CustomPromptProcessor.getInstance(vault);
   useEffect(
     createEffect(
-      'applyCustomPromptSelection',
-      (selectedText, prompt) =>
-        fillInSelectionForCustomPrompt(prompt)(selectedText),
-      // Not showing the custom prompt in the chat UI for now, Leaving it here as an option.
-      // To check the prompt, use Debug mode in the setting.
-      // { isVisible: true },
+      'applyCustomPrompt',
+      async (selectedText, customPrompt) => {
+        if (!customPrompt) {
+          return selectedText;
+        }
+        return await customPromptProcessor.processCustomPrompt(customPrompt, selectedText);
+      },
+      { isVisible: debug, ignoreSystemMessage: true, custom_temperature: 0.1 },
     ),
     []
   );
+
   useEffect(
     createEffect(
-      'applyAdhocPromptSelection',
-      (selectedText, prompt) =>
-        createAdhocSelectionPrompt(prompt)(selectedText),
+      'applyAdhocPrompt',
+      async (selectedText, customPrompt) => {
+        if (!customPrompt) {
+          return selectedText;
+        }
+        return await customPromptProcessor.processCustomPrompt(customPrompt, selectedText);
+      },
+      { isVisible: debug, ignoreSystemMessage: true, custom_temperature: 0.1 },
     ),
     []
   );
