@@ -27,7 +27,7 @@ export interface CopilotSettings {
   openAIProxyBaseUrl: string;
   ollamaModel: string;
   ollamaBaseUrl: string;
-  lmStudioPort: string;
+  lmStudioBaseUrl: string;
   ttlDays: number;
   stream: boolean;
   embeddingProvider: string;

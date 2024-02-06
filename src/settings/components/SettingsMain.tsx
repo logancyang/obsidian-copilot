@@ -45,7 +45,7 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
   const [openAIProxyBaseUrl, setOpenAIProxyBaseUrl] = useState(plugin.settings.openAIProxyBaseUrl);
 
   // Local Copilot Settings
-  const [lmStudioPort, setLmStudioPort] = useState(plugin.settings.lmStudioPort);
+  const [lmStudioBaseUrl, setlmStudioBaseUrl] = useState(plugin.settings.lmStudioBaseUrl);
   const [ollamaModel, setOllamaModel] = useState(plugin.settings.ollamaModel);
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState(plugin.settings.ollamaBaseUrl);
 
@@ -81,7 +81,7 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
     plugin.settings.openAIProxyBaseUrl = openAIProxyBaseUrl;
 
     // Local Copilot Settings
-    plugin.settings.lmStudioPort = lmStudioPort;
+    plugin.settings.lmStudioBaseUrl = lmStudioBaseUrl;
     plugin.settings.ollamaModel = ollamaModel;
     plugin.settings.ollamaBaseUrl = ollamaBaseUrl;
 
@@ -208,8 +208,8 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
         setUserSystemPrompt={setUserSystemPrompt}
       />
       <LocalCopilotSettings
-        lmStudioPort={lmStudioPort}
-        setLmStudioPort={setLmStudioPort}
+        lmStudioBaseUrl={lmStudioBaseUrl}
+        setlmStudioBaseUrl={setlmStudioBaseUrl}
         ollamaModel={ollamaModel}
         setOllamaModel={setOllamaModel}
         ollamaBaseUrl={ollamaBaseUrl}
