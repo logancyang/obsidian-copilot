@@ -80,7 +80,7 @@ export default class ChatModelManager {
       },
       [ModelProviders.LM_STUDIO]: {
         openAIApiKey: 'placeholder',
-        openAIProxyBaseUrl: `http://localhost:${params.lmStudioPort}/v1`,
+        openAIProxyBaseUrl: `${params.lmStudioBaseUrl}`,
       },
       [ModelProviders.OLLAMA]: {
         ...(params.ollamaBaseUrl ? { baseUrl: params.ollamaBaseUrl } : {}),

@@ -22,7 +22,7 @@ export interface ModelConfig {
   // OllamaBaseUrl
   baseUrl?: string,
   openRouterModel?: string,
-  lmStudioPort?: string,
+  lmStudioBaseUrl?: string,
 }
 
 export interface LangChainParams {
@@ -50,7 +50,7 @@ export interface LangChainParams {
   ollamaModel: string,
   ollamaBaseUrl: string,
   openRouterModel: string,
-  lmStudioPort: string,
+  lmStudioBaseUrl: string,
   openAIProxyBaseUrl?: string,
 }
 

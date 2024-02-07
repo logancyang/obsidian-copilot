@@ -156,7 +156,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   openAIProxyBaseUrl: '',
   ollamaModel: 'llama2',
   ollamaBaseUrl: '',
-  lmStudioPort: '1234',
+  lmStudioBaseUrl: 'http://localhost:1234/v1',
   stream: true,
   embeddingProvider: ModelProviders.OPENAI,
   defaultSaveFolder: 'copilot-conversations',

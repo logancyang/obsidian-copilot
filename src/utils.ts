@@ -240,24 +240,6 @@ export function createChangeToneSelectionPrompt(tone?: string) {
   };
 }
 
-export function createAdhocSelectionPrompt(adhocPrompt?: string) {
-  return (selectedText: string): string => {
-    if (!adhocPrompt) {
-      return selectedText;
-    }
-    return `${adhocPrompt}.\n\n` + `${selectedText}`;
-  };
-}
-
-export function fillInSelectionForCustomPrompt(prompt?: string) {
-  return (selectedText: string): string => {
-    if (!prompt) {
-      return selectedText;
-    }
-    return prompt.replace('{}', selectedText);
-  };
-}
-
 export function extractChatHistory(memoryVariables: MemoryVariables): [string, string][] {
   const chatHistory: [string, string][] = [];
   const { history } = memoryVariables;
@@ -269,4 +251,15 @@ export function extractChatHistory(memoryVariables: MemoryVariables): [string, s
   }
 
   return chatHistory;
+}
+
+export function processVariableName(variableName: string): string {
+  variableName = variableName.trim();
+  // Check if the variable name is enclosed in double brackets indicating it's a note
+  if (variableName.startsWith('[[') && variableName.endsWith(']]')) {
+    // It's a note, so we remove the brackets and append '.md'
+    return `${variableName.slice(2, -2).trim()}.md`;
+  }
+  // It's a path, so we just return it as is
+  return variableName;
 }
