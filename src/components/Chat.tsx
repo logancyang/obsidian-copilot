@@ -151,33 +151,56 @@ const Chat: React.FC<ChatProps> = ({
     }
 
     let noteFiles: TFile[] = [];
-    if (debug) {
-      console.log('Chat note context path:', settings.chatNoteContextPath);
-    }
-    if (settings.chatNoteContextPath) {
-      // Recursively get all note TFiles in the path
-      noteFiles = await getNotesFromPath(vault, settings.chatNoteContextPath);
-    }
 
-    const file = app.workspace.getActiveFile();
-    // If no note context provided, default to the active note
-    if (noteFiles.length === 0) {
-      if (!file) {
-        new Notice('No active note found.');
-        console.error('No active note found.');
-        return;
-      }
-      new Notice('No valid Chat context provided. Defaulting to the active note.');
-      noteFiles = [file];
-    }
+		if (debug) {
+			console.log('Chat note context path:', settings.chatNoteContextPath);
+			console.log(`Chat note context tags: '${settings.chatNoteContextTags}'`);
+		}
+		if (settings.chatNoteContextPath) {
+			// Recursively get all note TFiles in the path
+			noteFiles = [...noteFiles, ...(await getNotesFromPath(vault, settings.chatNoteContextPath))];
+		}
+		if (settings.chatNoteContextTags) {
+			const tags = settings.chatNoteContextTags.split(',');
+			// TODO: there should probably be a better way, obsidian has native link support.
+			const allFiles = app.vault.getFiles();
+			for (const file of allFiles) {
+				try {
+					const content = await getFileContent(file);
+					for (const tag of tags) {
+						if (content?.includes(tag)) {
+							noteFiles.push(file);
+							break;
+						}
+					}
+				} catch (e) {
+					console.log(`Failed to read a file ${file}`)
+				}
+			}
+		}
 
-    const notes = [];
-    for (const file of noteFiles) {
-      const content = await getFileContent(file);
-      if (content) {
-        notes.push({ name: getFileName(file), content });
-      }
-    }
+		const file = app.workspace.getActiveFile();
+		// If no note context provided, default to the active note
+		if (noteFiles.length === 0) {
+			if (!file) {
+				new Notice('No active note found.');
+				console.error('No active note found.');
+				return;
+			}
+			new Notice('No valid Chat context provided. Defaulting to the active note.');
+			noteFiles = [file];
+		}
+
+		const notes = [];
+		for (const file of noteFiles) {
+			const content = await getFileContent(file);
+			const fileName = getFileName(file);
+			if (content) {
+				if (notes.find(s => s.name === fileName) == undefined) {
+					notes.push({name: fileName, content});
+				}
+			}
+		}
 
     // Send the content of the note to AI
     const promptMessageHidden: ChatMessage = {

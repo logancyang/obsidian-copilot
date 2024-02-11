@@ -4,7 +4,9 @@ import React from 'react';
 import { createRoot } from "react-dom/client";
 import SettingsMain from "./components/SettingsMain";
 
-export interface CopilotSettings {
+export type CopilotSettings = MainSettings & ChatNoteContextSettings;
+
+interface MainSettings {
   openAIApiKey: string;
   huggingfaceApiKey: string;
   cohereApiKey: string;
@@ -32,8 +34,12 @@ export interface CopilotSettings {
   stream: boolean;
   embeddingProvider: string;
   defaultSaveFolder: string;
-  chatNoteContextPath: string;
   debug: boolean;
+}
+
+interface ChatNoteContextSettings {
+	chatNoteContextPath: string;
+	chatNoteContextTags: string;
 }
 
 export class CopilotSettingTab extends PluginSettingTab {

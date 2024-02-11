@@ -49,6 +49,9 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
   const [ollamaModel, setOllamaModel] = useState(plugin.settings.ollamaModel);
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState(plugin.settings.ollamaBaseUrl);
 
+	// Context note chat settings
+	const [chatNoteContextTags, setChatNoteContextTags] = useState(plugin.settings.chatNoteContextTags);
+
   // NOTE: When new settings are added, make sure to add them to saveAllSettings
   const saveAllSettings = async () => {
     plugin.settings.defaultModelDisplayName = defaultModelDisplayName;
@@ -84,6 +87,9 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
     plugin.settings.lmStudioBaseUrl = lmStudioBaseUrl;
     plugin.settings.ollamaModel = ollamaModel;
     plugin.settings.ollamaBaseUrl = ollamaBaseUrl;
+
+		// Context note chat settings
+		plugin.settings.chatNoteContextTags = chatNoteContextTags;
 
     await plugin.saveSettings();
     await reloadPlugin();
@@ -215,6 +221,13 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
         ollamaBaseUrl={ollamaBaseUrl}
         setOllamaBaseUrl={setOllamaBaseUrl}
       />
+			<TextComponent
+				name="Chat note context tags"
+				description="Comma-separated list of tags that will be fetched alongside active notes for context."
+				placeholder="#copilot_notes,#copilot_other_notes"
+				value={chatNoteContextTags}
+				onChange={setChatNoteContextTags}
+			/>
     </>
   );
 }
