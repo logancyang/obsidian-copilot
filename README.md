@@ -17,9 +17,13 @@ If you enjoy Copilot for Obsidian, please consider [sponsoring this project](htt
 
 <a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
 
-#### 🎉 NEW in v2.4.9: FREE Models with OpenRouter.ai, LM Studio and Ollama! 🎉🎉🎉
+#### 🎉 NEW in v2.4.16: Advanced Custom Prompt! 🎉🎉🎉
 
-<a href="https://www.youtube.com/watch?v=TuiPnNZ-gMA" target="_blank"><img src="./images/thumbnail-open-source-models.png" width="700" /></a>
+<a href="https://youtu.be/liJ0MAv7QP0?si=ArejqXQbqznl3WyP" target="_blank"><img src="./images/thumbnail-adv-prompt.png" width="700" /></a>
+
+This video is a case study of Advanced Custom Prompt - mimicking someone's writing style. This form of templating enables a lot more possibilities with long context window models. If you have your own creative cool use cases, don't hesitate to share them in the discussion or in the youtube comment section!
+
+#### FREE Models
 
 **OpenRouter.ai** hosts some of the best open-source models at the moment, such as MistralAI's new models, check out their websites for all the good stuff they have!
 
@@ -52,6 +56,10 @@ If you enjoy Copilot for Obsidian, please consider [sponsoring this project](htt
 - Generate glossary, table of contents
 - Translate to a language of your choosing
 - You can find all Copilot commands in your command palette
+
+To use Copilot, you need API keys from one of the LLM providers such as OpenAI, Azure OpenAI, Gemini, OpenRouter (Free!). You can also use it offline with LM Studio or Ollama!
+
+Once you put your valid API key in the Copilot setting, don't forget to click Save and Reload. If you are a new user and have trouble setting it up, please open an issue and describe it in detail.
 
 #### 💬 User Custom Prompt: Create as Many Copilot Commands as You Like!
 
