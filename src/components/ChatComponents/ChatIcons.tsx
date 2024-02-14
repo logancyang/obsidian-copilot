@@ -10,7 +10,7 @@ import {
   getFileContent,
   getFileName,
 } from '@/utils';
-import { Notice } from 'obsidian';
+import { Notice, Vault } from 'obsidian';
 import {
   useEffect,
   useState,
@@ -37,6 +37,7 @@ interface ChatIconsProps {
   onSendActiveNoteToPrompt: () => void;
   onForceRebuildActiveNoteContext: () => void;
   addMessage: (message: ChatMessage) => void;
+  vault: Vault;
 }
 
 const ChatIcons: React.FC<ChatIconsProps> = ({
@@ -50,6 +51,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   onSendActiveNoteToPrompt,
   onForceRebuildActiveNoteContext,
   addMessage,
+  vault,
 }) => {
   const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
 
@@ -79,7 +81,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         console.error('No active note found.');
         return;
       }
-      const noteContent = await getFileContent(file);
+      const noteContent = await getFileContent(file, vault);
       const noteName = getFileName(file);
 
       const activeNoteOnMessage: ChatMessage = {

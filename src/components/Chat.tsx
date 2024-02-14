@@ -22,7 +22,9 @@ import {
   getFileContent,
   getFileName,
   getNotesFromPath,
+  getNotesFromTags,
   getSendChatContextNotesPrompt,
+  getTagsFromNote,
   glossaryPrompt,
   removeUrlsFromSelectionPrompt,
   rewriteLongerSelectionPrompt,
@@ -153,12 +155,18 @@ const Chat: React.FC<ChatProps> = ({
     let noteFiles: TFile[] = [];
     if (debug) {
       console.log('Chat note context path:', settings.chatNoteContextPath);
+      console.log('Chat note context tags:', settings.chatNoteContextTags);
     }
     if (settings.chatNoteContextPath) {
       // Recursively get all note TFiles in the path
       noteFiles = await getNotesFromPath(vault, settings.chatNoteContextPath);
     }
-
+    if (settings.chatNoteContextTags) {
+      // Get all notes with the specified tags
+      // If path is provided, get all notes with the specified tags in the path
+      // If path is not provided, get all notes with the specified tags
+      noteFiles = await getNotesFromTags(vault, settings.chatNoteContextTags, noteFiles);
+    }
     const file = app.workspace.getActiveFile();
     // If no note context provided, default to the active note
     if (noteFiles.length === 0) {
@@ -173,9 +181,11 @@ const Chat: React.FC<ChatProps> = ({
 
     const notes = [];
     for (const file of noteFiles) {
-      const content = await getFileContent(file);
+      // Get the content of the note
+      const content = await getFileContent(file, vault);
+      const tags = await getTagsFromNote(file, vault);
       if (content) {
-        notes.push({ name: getFileName(file), content });
+        notes.push({ name: getFileName(file), content, tags});
       }
     }
 
@@ -188,7 +198,11 @@ const Chat: React.FC<ChatProps> = ({
 
     // Visible user message that is not sent to AI
     // const sendNoteContentUserMessage = `Please read the following notes [[${activeNoteContent}]] and be ready to answer questions about it.`;
-    const sendNoteContentUserMessage = getSendChatContextNotesPrompt(notes);
+    const sendNoteContentUserMessage = getSendChatContextNotesPrompt(
+      notes,
+      settings.chatNoteContextPath,
+      settings.chatNoteContextTags,
+    );
     const promptMessageVisible: ChatMessage = {
       message: sendNoteContentUserMessage,
       sender: USER_SENDER,
@@ -222,7 +236,7 @@ const Chat: React.FC<ChatProps> = ({
       console.error('No active note found.');
       return;
     }
-    const noteContent = await getFileContent(file);
+    const noteContent = await getFileContent(file, vault);
     const noteName = getFileName(file);
     if (!noteContent) {
       new Notice('No note content found.');
@@ -422,6 +436,7 @@ const Chat: React.FC<ChatProps> = ({
           onSendActiveNoteToPrompt={handleSendActiveNoteToPrompt}
           onForceRebuildActiveNoteContext={forceRebuildActiveNoteContext}
           addMessage={addMessage}
+          vault={vault}
         />
         <ChatInput
           inputMessage={inputMessage}

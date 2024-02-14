@@ -150,5 +150,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   embeddingProvider: ModelProviders.OPENAI,
   defaultSaveFolder: 'copilot-conversations',
   chatNoteContextPath: '',
+  chatNoteContextTags: [],
   debug: false,
 };

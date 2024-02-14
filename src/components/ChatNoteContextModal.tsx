@@ -3,9 +3,9 @@ import { App, Modal } from "obsidian";
 
 export class ChatNoteContextModal extends Modal {
   private settings: CopilotSettings;
-  private onSubmit: (path: string) => void;
+  private onSubmit: (path: string, tags: string[]) => void;
 
-  constructor(app: App, settings: CopilotSettings, onSubmit: (path: string) => void) {
+  constructor(app: App, settings: CopilotSettings, onSubmit: (path: string, tags: string[]) => void) {
     super(app);
     this.settings = settings;
     this.onSubmit = onSubmit;
@@ -15,7 +15,7 @@ export class ChatNoteContextModal extends Modal {
     const formContainer = this.contentEl.createEl('div', { cls: 'copilot-command-modal' });
     const pathContainer = formContainer.createEl('div', { cls: 'copilot-command-input-container' });
 
-    pathContainer.createEl('h3', { text: 'Folder Path', cls: 'copilot-command-header' });
+    pathContainer.createEl('h3', { text: 'Filter by Folder Path', cls: 'copilot-command-header' });
     const descFragment = createFragment((frag) => {
       frag.appendText('All notes under the path will be sent to the prompt when the ');
       frag.createEl(
@@ -41,6 +41,27 @@ export class ChatNoteContextModal extends Modal {
     );
     pathField.setAttribute('name', 'folderPath');
 
+    pathContainer.createEl('h3', { text: 'Filter by Tags', cls: 'copilot-command-header' });
+    const descTagsFragment = createFragment((frag) => {
+      frag.createEl('p', { text: 'All notes under the path above are further filtered by the specified tags. If no path is provided, only tags are used. Multiple tags should be separated by commas.' });
+      frag.createEl(
+        'strong',
+        { text: 'Tags are treated as an OR filter, ' }
+      );
+      frag.appendText(' meaning any note that matches one of the tags will be sent to the prompt when button is clicked in Chat mode.');
+    });
+    pathContainer.appendChild(descTagsFragment);
+
+    const tagsField = pathContainer.createEl(
+      'input',
+      {
+        type: 'text',
+        cls: 'copilot-command-input',
+        value: this.settings.chatNoteContextTags.join(','),
+      }
+    );
+    tagsField.setAttribute('name', 'tags');
+
     const submitButtonContainer = formContainer.createEl('div', { cls: 'copilot-command-save-btn-container' });
     const submitButton = submitButtonContainer.createEl('button', { text: 'Submit', cls: 'copilot-command-save-btn' });
 
@@ -50,7 +71,14 @@ export class ChatNoteContextModal extends Modal {
       if (pathValue.startsWith('/') && pathValue.length > 1) {
         pathValue = pathValue.slice(1);
       }
-      this.onSubmit(pathValue);
+
+      const tagsValue = tagsField.value
+        .split(',')
+        .map(tag => tag.trim())
+        .map(tag => tag.replace('#', ''))
+        .filter(tag => tag !== '');
+
+      this.onSubmit(pathValue, tagsValue);
       this.close();
     });
   }

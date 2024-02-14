@@ -33,6 +33,7 @@ export interface CopilotSettings {
   embeddingProvider: string;
   defaultSaveFolder: string;
   chatNoteContextPath: string;
+  chatNoteContextTags: string[];
   debug: boolean;
 }
 

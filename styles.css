@@ -285,7 +285,7 @@ If your plugin does not need CSS, delete this file.
 .copilot-command-input-container textarea {
   display: block;
   width: 100%;
-  margin-top: 5px;
+  margin-top: 10px;
 }
 
 .copilot-command-input-container textarea {
