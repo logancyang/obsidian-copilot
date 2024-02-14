@@ -43,12 +43,16 @@ export class ChatNoteContextModal extends Modal {
 
     pathContainer.createEl('h3', { text: 'Filter by Tags', cls: 'copilot-command-header' });
     const descTagsFragment = createFragment((frag) => {
-      frag.createEl('p', { text: 'All notes under the path above are further filtered by the specified tags. If no path is provided, only tags are used. Multiple tags should be separated by commas.' });
       frag.createEl(
         'strong',
-        { text: 'Tags are treated as an OR filter, ' }
+        { text: 'Only tags in note property are used, tags in note content are not used.' }
+      )
+      frag.createEl('p', { text: 'All notes under the path above are further filtered by the specified tags. If no path is provided, only tags are used. Multiple tags should be separated by commas. ' });
+      frag.createEl(
+        'strong',
+        { text: 'Tags function as an OR filter, ' }
       );
-      frag.appendText(' meaning any note that matches one of the tags will be sent to the prompt when button is clicked in Chat mode.');
+      frag.appendText(' any note that matches one of the tags will be sent to the prompt when button is clicked in Chat mode.');
     });
     pathContainer.appendChild(descTagsFragment);
 
