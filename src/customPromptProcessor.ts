@@ -39,7 +39,7 @@ export class CustomPromptProcessor {
       const notes = [];
 
       for (const file of noteFiles) {
-        const content = await getFileContent(file);
+        const content = await getFileContent(file, this.vault);
         if (content) {
           notes.push({ name: getFileName(file), content });
         }
