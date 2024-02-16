@@ -18,7 +18,7 @@ describe('CustomPromptProcessor', () => {
     processor = CustomPromptProcessor.getInstance(mockVault);
   });
 
-  it('should replace placeholders with 1 noteCollection and selectedText', async () => {
+  it('should replace placeholders with 1 context and selectedText', async () => {
     const doc: CustomPrompt = {
       _id: 'test-prompt',
       prompt: 'This is a {variable} and {}.'
@@ -30,12 +30,12 @@ describe('CustomPromptProcessor', () => {
 
     const result = await processor.processCustomPrompt(doc.prompt, selectedText);
 
-    expect(result).toContain('This is a {noteCollection0} and {selectedText}.');
+    expect(result).toContain('This is a {context0} and {selectedText}.');
     expect(result).toContain('here is some selected text 12345');
     expect(result).toContain('here is the note content for note0');
   });
 
-  it('should replace placeholders with 2 noteCollection and no selectedText', async () => {
+  it('should replace placeholders with 2 context and no selectedText', async () => {
     const doc: CustomPrompt = {
       _id: 'test-prompt',
       prompt: 'This is a {variable} and {var2}.'
@@ -50,12 +50,12 @@ describe('CustomPromptProcessor', () => {
 
     const result = await processor.processCustomPrompt(doc.prompt, selectedText);
 
-    expect(result).toContain('This is a {noteCollection0} and {noteCollection1}.');
+    expect(result).toContain('This is a {context0} and {context1}.');
     expect(result).toContain('here is the note content for note0');
     expect(result).toContain('note content for note1');
   });
 
-  it('should replace placeholders with 1 selectedText and no noteCollection', async () => {
+  it('should replace placeholders with 1 selectedText and no context', async () => {
     const doc: CustomPrompt = {
       _id: 'test-prompt',
       prompt: 'Rewrite the following text {}'
@@ -77,7 +77,7 @@ describe('CustomPromptProcessor', () => {
   });
 
   // This is not an expected use case but it's possible
-  it('should replace placeholders with 2 selectedText and no noteCollection', async () => {
+  it('should replace placeholders with 2 selectedText and no context', async () => {
     const doc: CustomPrompt = {
       _id: 'test-prompt',
       prompt: 'Rewrite the following text {} and {}'

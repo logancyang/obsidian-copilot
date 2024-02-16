@@ -299,7 +299,7 @@ export function extractChatHistory(memoryVariables: MemoryVariables): [string, s
   return chatHistory;
 }
 
-export function processVariableName(variableName: string): string {
+export function processVariableNameForNotePath(variableName: string): string {
   variableName = variableName.trim();
   // Check if the variable name is enclosed in double brackets indicating it's a note
   if (variableName.startsWith('[[') && variableName.endsWith(']]')) {
