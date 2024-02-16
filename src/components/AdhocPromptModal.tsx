@@ -30,6 +30,12 @@ export class AdhocPromptModal extends Modal {
             { text: '- {FolderPath} represents a folder of notes. ' }
           );
           frag.createEl('br');
+          frag.createEl(
+            'strong',
+            { text: '- {#tag1, #tag2} represents ALL notes with ANY of the specified tags in their property (an OR operation). ' }
+          );
+          frag.createEl('br');
+          frag.createEl('br');
           frag.appendText('Tip: turn on debug mode to show the processed prompt in the chat window.');
           frag.createEl('br');
           frag.createEl('br');

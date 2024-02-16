@@ -1,5 +1,11 @@
-import { getFileContent, getFileName, getNotesFromPath, processVariableName } from '@/utils';
-import { Notice, Vault } from 'obsidian';
+import {
+  getFileContent,
+  getFileName,
+  getNotesFromPath,
+  getNotesFromTags,
+  processVariableNameForNotePath,
+} from "@/utils";
+import { Notice, Vault } from "obsidian";
 
 export interface CustomPrompt {
   _id: string;
@@ -34,48 +40,75 @@ export class CustomPromptProcessor {
 
     while ((match = variableRegex.exec(customPrompt)) !== null) {
       const variableName = match[1].trim();
-      const processedVariableName = processVariableName(variableName);
-      const noteFiles = await getNotesFromPath(this.vault, processedVariableName);
       const notes = [];
 
-      for (const file of noteFiles) {
-        const content = await getFileContent(file, this.vault);
-        if (content) {
-          notes.push({ name: getFileName(file), content });
+      if (variableName.startsWith("#")) {
+        // Handle tag-based variable for multiple tags
+        const tagNames = variableName
+          .slice(1)
+          .split(",")
+          .map((tag) => tag.trim());
+        const noteFiles = await getNotesFromTags(this.vault, tagNames);
+        for (const file of noteFiles) {
+          const content = await getFileContent(file, this.vault);
+          if (content) {
+            notes.push({ name: getFileName(file), content });
+          }
+        }
+      } else {
+        const processedVariableName =
+          processVariableNameForNotePath(variableName);
+        const noteFiles = await getNotesFromPath(
+          this.vault,
+          processedVariableName
+        );
+        for (const file of noteFiles) {
+          const content = await getFileContent(file, this.vault);
+          if (content) {
+            notes.push({ name: getFileName(file), content });
+          }
         }
       }
 
       if (notes.length > 0) {
         variablesWithContent.push(JSON.stringify(notes));
       } else {
-        new Notice(`Warning: No valid notes found for the provided path '${variableName}'.`);
+        new Notice(
+          `Warning: No valid notes found for the provided path '${variableName}'.`
+        );
       }
     }
 
     return variablesWithContent;
   }
 
-  async processCustomPrompt(customPrompt: string, selectedText: string): Promise<string> {
-    const variablesWithContent = await this.extractVariablesFromPrompt(customPrompt);
+  async processCustomPrompt(
+    customPrompt: string,
+    selectedText: string
+  ): Promise<string> {
+    const variablesWithContent = await this.extractVariablesFromPrompt(
+      customPrompt
+    );
     let processedPrompt = customPrompt;
-    let index = 0; // Start with 0 for noteCollection0, noteCollection1, etc.
+    let index = 0; // Start with 0 for context0, context1, etc.
 
-    // Replace placeholders with noteCollectionX
+    // Replace placeholders with contextX
     processedPrompt = processedPrompt.replace(/\{([^}]+)\}/g, () => {
-      return `{noteCollection${index++}}`;
+      return `{context${index++}}`;
     });
 
-    let additionalInfo = '';
-    if (processedPrompt.includes('{}')) {
+    let additionalInfo = "";
+    if (processedPrompt.includes("{}")) {
       // Replace {} with {selectedText}
-      processedPrompt = processedPrompt.replace(/\{\}/g, '{selectedText}');
+      processedPrompt = processedPrompt.replace(/\{\}/g, "{selectedText}");
       additionalInfo += `selectedText:\n\n ${selectedText}`;
     }
 
     for (let i = 0; i < index; i++) {
-      additionalInfo += `\n\nnoteCollection${i}:\n\n${variablesWithContent[i]}`;
+      additionalInfo += `\n\ncontext${i}:\n\n${variablesWithContent[i]}`;
     }
 
-    return processedPrompt + '\n\n' + additionalInfo;
+    const endLine = "\nAvoid mentioning the variable names 'selectedText' or 'contextX' in the reply. ";
+    return processedPrompt + "\n\n" + additionalInfo + (index > 0 ? endLine : "");
   }
 }

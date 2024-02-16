@@ -4,7 +4,7 @@ import {
   getNotesFromPath,
   getNotesFromTags,
   isFolderMatch,
-  processVariableName
+  processVariableNameForNotePath,
 } from '../src/utils';
 
 describe('isFolderMatch', () => {
@@ -100,49 +100,49 @@ describe('getNotesFromPath', () => {
     expect(files).toEqual([]);
   });
 
-  describe('processVariableName', () => {
+  describe('processVariableNameForNotePath', () => {
     it('should return the note md filename', () => {
-      const variableName = processVariableName('[[test]]');
+      const variableName = processVariableNameForNotePath('[[test]]');
       expect(variableName).toEqual('test.md');
     });
 
     it('should return the note md filename with extra spaces 1', () => {
-      const variableName = processVariableName(' [[  test]]');
+      const variableName = processVariableNameForNotePath(' [[  test]]');
       expect(variableName).toEqual('test.md');
     });
 
     it('should return the note md filename with extra spaces 2', () => {
-      const variableName = processVariableName('[[ test   ]] ');
+      const variableName = processVariableNameForNotePath('[[ test   ]] ');
       expect(variableName).toEqual('test.md');
     });
 
     it('should return the note md filename with extra spaces 2', () => {
-      const variableName = processVariableName(' [[ test note   ]] ');
+      const variableName = processVariableNameForNotePath(' [[ test note   ]] ');
       expect(variableName).toEqual('test note.md');
     });
 
     it('should return the note md filename with extra spaces 2', () => {
-      const variableName = processVariableName(' [[    test_note note   ]] ');
+      const variableName = processVariableNameForNotePath(' [[    test_note note   ]] ');
       expect(variableName).toEqual('test_note note.md');
     });
 
     it('should return folder path with leading slash', () => {
-      const variableName = processVariableName('/testfolder');
+      const variableName = processVariableNameForNotePath('/testfolder');
       expect(variableName).toEqual('/testfolder');
     });
 
     it('should return folder path without slash', () => {
-      const variableName = processVariableName('testfolder');
+      const variableName = processVariableNameForNotePath('testfolder');
       expect(variableName).toEqual('testfolder');
     });
 
     it('should return folder path with trailing slash', () => {
-      const variableName = processVariableName('testfolder/');
+      const variableName = processVariableNameForNotePath('testfolder/');
       expect(variableName).toEqual('testfolder/');
     });
 
     it('should return folder path with leading spaces', () => {
-      const variableName = processVariableName('  testfolder ');
+      const variableName = processVariableNameForNotePath('  testfolder ');
       expect(variableName).toEqual('testfolder');
     });
   });
