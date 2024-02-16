@@ -112,4 +112,48 @@ describe('CustomPromptProcessor', () => {
 
     expect(result).toBe('This is a test prompt with no variables.\n\n');
   });
+
+  it("should process a single tag variable correctly", async () => {
+    const customPrompt = "Notes related to {#tag} are:";
+    const selectedText = "";
+
+    // Mock the extractVariablesFromPrompt method to simulate tag processing
+    jest
+      .spyOn(processor, "extractVariablesFromPrompt")
+      .mockResolvedValue([
+        '[{"name":"note","content":"Note content for #tag"}]',
+      ]);
+
+    const result = await processor.processCustomPrompt(
+      customPrompt,
+      selectedText
+    );
+
+    expect(result).toContain("Notes related to {context0} are:");
+    expect(result).toContain(
+      '[{"name":"note","content":"Note content for #tag"}]'
+    );
+  });
+
+  it("should process multiple tag variables correctly", async () => {
+    const customPrompt = "Notes related to {#tag1,#tag2,   #tag3} are:";
+    const selectedText = "";
+
+    // Mock the extractVariablesFromPrompt method to simulate processing of multiple tags
+    jest
+      .spyOn(processor, "extractVariablesFromPrompt")
+      .mockResolvedValue([
+        '[{"name":"note1","content":"Note content for #tag1"},{"name":"note2","content":"Note content for #tag2"}]',
+      ]);
+
+    const result = await processor.processCustomPrompt(
+      customPrompt,
+      selectedText
+    );
+
+    expect(result).toContain("Notes related to {context0} are:");
+    expect(result).toContain(
+      '[{"name":"note1","content":"Note content for #tag1"},{"name":"note2","content":"Note content for #tag2"}]'
+    );
+  });
 });
