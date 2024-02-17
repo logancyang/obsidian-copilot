@@ -189,6 +189,6 @@ export default class ChatModelManager {
   }
 
   async countTokens(inputStr: string): Promise<number> {
-    return ChatModelManager.chatOpenAI.getNumTokens(inputStr);
+    return ChatModelManager.chatModel.getNumTokens(inputStr);
   }
 }
