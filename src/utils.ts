@@ -183,12 +183,17 @@ export function sendNotesContentPrompt(notes: { name: string; content: string }[
 }
 
 function getNoteTitleAndTags(noteWithTag: { name: string; content: string, tags?: string[] }): string {
-  return `[[${noteWithTag.name}]]` + (noteWithTag.tags ? `\ntags: ${noteWithTag.tags.join(',')}` : '');
+  return (
+    `[[${noteWithTag.name}]]` +
+    (noteWithTag.tags && noteWithTag.tags.length > 0
+      ? `\ntags: ${noteWithTag.tags.join(",")}`
+      : "")
+  );
 }
 
 function getChatContextStr(chatNoteContextPath: string, chatNoteContextTags: string[]): string {
   const pathStr = (chatNoteContextPath ? `\nChat context by path: ${chatNoteContextPath}` : '');
-  const tagsStr = (chatNoteContextTags ? `\nChat context by tags: ${chatNoteContextTags}` : '');
+  const tagsStr = (chatNoteContextTags?.length > 0 ? `\nChat context by tags: ${chatNoteContextTags}` : '');
   return pathStr + tagsStr;
 }
 
