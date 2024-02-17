@@ -146,6 +146,7 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
           />
           <ApiSetting
             title="Azure OpenAI API Deployment Name"
+            description="This is your actual model, no need to pass a model name separately."
             value={azureOpenAIApiDeploymentName}
             setValue={setAzureOpenAIApiDeploymentName}
             placeholder="Enter Azure OpenAI API Deployment Name"
