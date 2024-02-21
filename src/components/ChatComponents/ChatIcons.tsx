@@ -86,7 +86,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
 
       const activeNoteOnMessage: ChatMessage = {
         sender: AI_SENDER,
-        message: `OK Feel free to ask me questions about [[${noteName}]]. \n\nPlease note that this is a retrieval-based QA for notes longer than the model context window. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with *Send Note to Prompt* button used with a *long context model* is a more suitable choice. \n\n(This mode will be upgraded to work on the entire vault next)`,
+        message: `OK Feel free to ask me questions about [[${noteName}]]. \n\nPlease note that this is a retrieval-based QA for notes longer than the model context window. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with *Send Note to Prompt* button used with a *long context model* is a more suitable choice. \n\n(A new mode will be added to work on the entire vault next)`,
         isVisible: true,
       };
       addMessage(activeNoteOnMessage);
