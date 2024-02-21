@@ -43,6 +43,9 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
   // Advanced settings
   const [userSystemPrompt, setUserSystemPrompt] = useState(plugin.settings.userSystemPrompt);
   const [openAIProxyBaseUrl, setOpenAIProxyBaseUrl] = useState(plugin.settings.openAIProxyBaseUrl);
+  const [openAIProxyModelName, setOpenAIProxyModelName] = useState(plugin.settings.openAIProxyModelName);
+  const [openAIEmbeddingProxyBaseUrl, setOpenAIEmbeddingProxyBaseUrl] = useState(plugin.settings.openAIEmbeddingProxyBaseUrl);
+  const [openAIEmbeddingProxyModelName, setOpenAIEmbeddingProxyModelName] = useState(plugin.settings.openAIEmbeddingProxyModelName);
 
   // Local Copilot Settings
   const [lmStudioBaseUrl, setlmStudioBaseUrl] = useState(plugin.settings.lmStudioBaseUrl);
@@ -79,6 +82,9 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
     // Advanced settings
     plugin.settings.userSystemPrompt = userSystemPrompt;
     plugin.settings.openAIProxyBaseUrl = openAIProxyBaseUrl;
+    plugin.settings.openAIProxyModelName = openAIProxyModelName;
+    plugin.settings.openAIEmbeddingProxyBaseUrl = openAIEmbeddingProxyBaseUrl;
+    plugin.settings.openAIEmbeddingProxyModelName = openAIEmbeddingProxyModelName;
 
     // Local Copilot Settings
     plugin.settings.lmStudioBaseUrl = lmStudioBaseUrl;
@@ -204,6 +210,12 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
       <AdvancedSettings
         openAIProxyBaseUrl={openAIProxyBaseUrl}
         setOpenAIProxyBaseUrl={setOpenAIProxyBaseUrl}
+        openAIProxyModelName={openAIProxyModelName}
+        setOpenAIProxyModelName={setOpenAIProxyModelName}
+        openAIEmbeddingProxyBaseUrl={openAIEmbeddingProxyBaseUrl}
+        setOpenAIEmbeddingProxyBaseUrl={setOpenAIEmbeddingProxyBaseUrl}
+        openAIEmbeddingProxyModelName={openAIEmbeddingProxyModelName}
+        setOpenAIEmbeddingProxyModelName={setOpenAIEmbeddingProxyModelName}
         userSystemPrompt={userSystemPrompt}
         setUserSystemPrompt={setUserSystemPrompt}
       />
