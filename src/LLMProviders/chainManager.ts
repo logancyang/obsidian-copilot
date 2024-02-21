@@ -6,6 +6,7 @@ import {
   AI_SENDER,
   ChatModelDisplayNames
 } from '@/constants';
+import EncryptionService from '@/encryptionService';
 import { ProxyChatOpenAI } from '@/langchainWrappers';
 import { ChatMessage } from '@/sharedState';
 import { extractChatHistory, getModelName, isSupportedChain } from '@/utils';
@@ -48,12 +49,13 @@ export default class ChainManager {
    * @return {void}
    */
   constructor(
-    langChainParams: LangChainParams
+    langChainParams: LangChainParams,
+    encryptionService: EncryptionService,
   ) {
     // Instantiate singletons
     this.langChainParams = langChainParams;
     this.memoryManager = MemoryManager.getInstance(this.langChainParams);
-    this.chatModelManager = ChatModelManager.getInstance(this.langChainParams);
+    this.chatModelManager = ChatModelManager.getInstance(this.langChainParams, encryptionService);
     this.promptManager = PromptManager.getInstance(this.langChainParams);
     this.createChainWithNewModel(this.langChainParams.modelDisplayName);
   }
