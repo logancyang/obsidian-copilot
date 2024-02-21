@@ -161,7 +161,7 @@ const Chat: React.FC<ChatProps> = ({
       // Recursively get all note TFiles in the path
       noteFiles = await getNotesFromPath(vault, settings.chatNoteContextPath);
     }
-    if (settings.chatNoteContextTags.length > 0) { //prevent overriding chatNoteContextPath if not tags are used
+    if (settings.chatNoteContextTags?.length > 0) {
       // Get all notes with the specified tags
       // If path is provided, get all notes with the specified tags in the path
       // If path is not provided, get all notes with the specified tags

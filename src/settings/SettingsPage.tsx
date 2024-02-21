@@ -25,6 +25,9 @@ export interface CopilotSettings {
   contextTurns: number;
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;
+  openAIProxyModelName: string;
+  openAIEmbeddingProxyBaseUrl: string;
+  openAIEmbeddingProxyModelName: string;
   ollamaModel: string;
   ollamaBaseUrl: string;
   lmStudioBaseUrl: string;

@@ -28,23 +28,22 @@ export default class EmbeddingManager {
       azureOpenAIApiInstanceName,
       azureOpenAIApiVersion,
       azureOpenAIApiEmbeddingDeploymentName,
-      openAIProxyBaseUrl,
+      openAIEmbeddingProxyBaseUrl,
+      openAIEmbeddingProxyModelName,
     } = this.langChainParams;
 
-    // Note that openAIProxyBaseUrl has the highest priority.
-    // If openAIProxyBaseUrl is set, it overrides both chat and embedding models.
     const OpenAIEmbeddingsAPI = openAIApiKey ? (
-      openAIProxyBaseUrl ?
+      openAIEmbeddingProxyBaseUrl ?
         new ProxyOpenAIEmbeddings({
-          modelName: this.langChainParams.embeddingModel,
+          modelName: openAIEmbeddingProxyModelName || this.langChainParams.embeddingModel,
           openAIApiKey,
           maxRetries: 3,
           maxConcurrency: 3,
           timeout: 10000,
-          openAIProxyBaseUrl,
+          openAIEmbeddingProxyBaseUrl,
         }) :
         new OpenAIEmbeddings({
-          modelName: this.langChainParams.embeddingModel,
+          modelName: openAIEmbeddingProxyModelName || this.langChainParams.embeddingModel,
           openAIApiKey,
           maxRetries: 3,
           maxConcurrency: 3,
@@ -87,7 +86,7 @@ export default class EmbeddingManager {
       default:
         console.error('No embedding provider set or no valid API key provided. Defaulting to OpenAI.');
         return OpenAIEmbeddingsAPI || new OpenAIEmbeddings({
-          modelName: this.langChainParams.embeddingModel,
+          modelName: openAIEmbeddingProxyModelName || this.langChainParams.embeddingModel,
           openAIApiKey: 'default-key',
           maxRetries: 3,
           maxConcurrency: 3,

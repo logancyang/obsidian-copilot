@@ -57,6 +57,7 @@ export default class ChatModelManager {
 
     const providerConfig = {
       [ModelProviders.OPENAI]: {
+        modelName: params.openAIProxyModelName || params.model,
         openAIApiKey: params.openAIApiKey,
         maxTokens: params.maxTokens,
         openAIProxyBaseUrl: params.openAIProxyBaseUrl,
