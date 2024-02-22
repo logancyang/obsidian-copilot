@@ -12,6 +12,7 @@ import {
   CHAT_VIEWTYPE, DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT,
 } from '@/constants';
 import { CustomPrompt } from '@/customPromptProcessor';
+import EncryptionService from '@/encryptionService';
 import { CopilotSettingTab, CopilotSettings } from '@/settings/SettingsPage';
 import SharedState from '@/sharedState';
 import { sanitizeSettings } from "@/utils";
@@ -30,6 +31,7 @@ export default class CopilotPlugin extends Plugin {
   chatIsVisible = false;
   dbPrompts: PouchDB.Database;
   dbVectorStores: PouchDB.Database;
+  encryptionService: EncryptionService;
   server: Server| null = null;
 
   isChatVisible = () => this.chatIsVisible;
@@ -40,7 +42,12 @@ export default class CopilotPlugin extends Plugin {
     // Always have one instance of sharedState and chainManager in the plugin
     this.sharedState = new SharedState();
     const langChainParams = this.getChainManagerParams();
-    this.chainManager = new ChainManager(langChainParams);
+    this.encryptionService = new EncryptionService(this.settings);
+    this.chainManager = new ChainManager(langChainParams, this.encryptionService);
+
+    if (this.settings.enableEncryption) {
+      await this.saveSettings();
+    }
 
     this.dbPrompts = new PouchDB<CustomPrompt>('copilot_custom_prompts');
 
@@ -468,6 +475,10 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async saveSettings(): Promise<void> {
+    if (this.settings.enableEncryption) {
+      // Encrypt all API keys before saving
+      this.encryptionService.encryptAllKeys();
+    }
     await this.saveData(this.settings);
   }
 

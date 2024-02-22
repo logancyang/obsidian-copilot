@@ -8,6 +8,7 @@ import {
   OPENAI_MODELS,
   OPENROUTERAI_MODELS,
 } from '@/constants';
+import EncryptionService from '@/encryptionService';
 import { ProxyChatOpenAI } from '@/langchainWrappers';
 import { getModelName } from '@/utils';
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
@@ -17,6 +18,7 @@ import { ChatOpenAI } from 'langchain/chat_models/openai';
 import { Notice } from 'obsidian';
 
 export default class ChatModelManager {
+  private encryptionService: EncryptionService;
   private static instance: ChatModelManager;
   private static chatModel: BaseChatModel;
   private static chatOpenAI: ChatOpenAI;
@@ -31,21 +33,25 @@ export default class ChatModelManager {
 
 
   private constructor(
-    private langChainParams: LangChainParams
+    private langChainParams: LangChainParams,
+    encryptionService: EncryptionService
   ) {
+    this.encryptionService = encryptionService;
     this.buildModelMap();
   }
 
   static getInstance(
-    langChainParams: LangChainParams
+    langChainParams: LangChainParams,
+    encryptionService: EncryptionService,
   ): ChatModelManager {
     if (!ChatModelManager.instance) {
-      ChatModelManager.instance = new ChatModelManager(langChainParams);
+      ChatModelManager.instance = new ChatModelManager(langChainParams, encryptionService);
     }
     return ChatModelManager.instance;
   }
 
   private getModelConfig(chatModelProvider: string): ModelConfig {
+    const decrypt = (key: string) => this.encryptionService.getDecryptedKey(key);
     const params = this.langChainParams;
     const baseConfig: ModelConfig = {
       modelName: params.model,
@@ -58,26 +64,26 @@ export default class ChatModelManager {
     const providerConfig = {
       [ModelProviders.OPENAI]: {
         modelName: params.openAIProxyModelName || params.model,
-        openAIApiKey: params.openAIApiKey,
+        openAIApiKey: decrypt(params.openAIApiKey),
         maxTokens: params.maxTokens,
         openAIProxyBaseUrl: params.openAIProxyBaseUrl,
       },
       [ModelProviders.ANTHROPIC]: {
-        anthropicApiKey: params.anthropicApiKey,
+        anthropicApiKey: decrypt(params.anthropicApiKey),
       },
       [ModelProviders.AZURE_OPENAI]: {
         maxTokens: params.maxTokens,
-        azureOpenAIApiKey: params.azureOpenAIApiKey,
+        azureOpenAIApiKey: decrypt(params.azureOpenAIApiKey),
         azureOpenAIApiInstanceName: params.azureOpenAIApiInstanceName,
         azureOpenAIApiDeploymentName: params.azureOpenAIApiDeploymentName,
         azureOpenAIApiVersion: params.azureOpenAIApiVersion,
       },
       [ModelProviders.GOOGLE]: {
-        apiKey: params.googleApiKey,
+        apiKey: decrypt(params.googleApiKey),
       },
       [ModelProviders.OPENROUTERAI]: {
         modelName: params.openRouterModel,
-        openAIApiKey: params.openRouterAiApiKey,
+        openAIApiKey: decrypt(params.openRouterAiApiKey),
         openAIProxyBaseUrl: 'https://openrouter.ai/api/v1',
       },
       [ModelProviders.LM_STUDIO]: {

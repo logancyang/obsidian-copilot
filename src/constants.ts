@@ -144,4 +144,5 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   chatNoteContextPath: '',
   chatNoteContextTags: [],
   debug: false,
+  enableEncryption: false,
 };
