@@ -30,7 +30,21 @@ You can download your model by running either `ollama run <model_name>` or `olla
 
 The `ollama run mistral` command downloads and starts a chat with Mistral 7B right inside the terminal. But that is not what we want. We want a local server for our plugin.
 
+#### Important note about setting context window
+
+AFAIK `ollama serve` doesn't have a consolidated way to configure context window for all the models at a single place. The current best way is to run `ollama run <modelname>` and then `/set parameter num_ctx 32768` (this is the max for Mistral, set it based on your model requirement), and don't forget to `/save` for each model individually.
+
+Remember that you MUST set this parameter for Ollama models, or they will silently fail and you will think your long prompt successfully reached the model!
+
+Look for this parameter `llama_new_context_with_model: n_ctx` in your server log, it is your true context window setting:
+
+<img src="./images/ollama-context-window.png" alt="Ollama context window">
+
+#### Start Ollama server for Obsidian
+
 Now, **start the local server with `OLLAMA_ORIGINS=app://obsidian.md* ollama serve`, this will allow the Obsidian app to access the local server without CORS issues**.
+
+Again, `OLLAMA_ORIGINS=app://obsidian.md*` is required!
 
 <img src="./images/ollama-serve.png" alt="Ollama">
 
