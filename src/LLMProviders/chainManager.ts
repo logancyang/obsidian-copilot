@@ -38,6 +38,7 @@ export default class ChainManager {
   private vectorStore: MemoryVectorStore;
   private promptManager: PromptManager;
   private embeddingsManager: EmbeddingsManager;
+  private encryptionService: EncryptionService;
   public chatModelManager: ChatModelManager;
   public langChainParams: LangChainParams;
   public memoryManager: MemoryManager;
@@ -55,6 +56,7 @@ export default class ChainManager {
     // Instantiate singletons
     this.langChainParams = langChainParams;
     this.memoryManager = MemoryManager.getInstance(this.langChainParams);
+    this.encryptionService = encryptionService;
     this.chatModelManager = ChatModelManager.getInstance(this.langChainParams, encryptionService);
     this.promptManager = PromptManager.getInstance(this.langChainParams);
     this.createChainWithNewModel(this.langChainParams.modelDisplayName);
@@ -137,7 +139,7 @@ export default class ChainManager {
     this.validateChainType(chainType);
     // MUST set embeddingsManager when switching to QA mode
     if (chainType === ChainType.RETRIEVAL_QA_CHAIN) {
-      this.embeddingsManager = EmbeddingsManager.getInstance(this.langChainParams);
+      this.embeddingsManager = EmbeddingsManager.getInstance(this.langChainParams, this.encryptionService);
     }
 
     // Get chatModel, memory, prompt, and embeddingAPI from respective managers
