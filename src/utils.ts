@@ -214,7 +214,7 @@ export function fixGrammarSpellingSelectionPrompt(selectedText: string): string 
 }
 
 export function summarizePrompt(selectedText: string): string {
-  return `Please summarize the following text into bullet points and return it without any other changes. Output in the same language as the source, do not output English if it is not English:\n\n`
+  return `Summarize the following text into bullet points and return it without any other changes. Identify the input language, and return the summary in the same language. If the input is English, return the summary in English. Otherwise, return in the same language as the input. Return ONLY the summary, DO NOT return the name of the language:\n\n`
     + `${selectedText}`;
 }
 
