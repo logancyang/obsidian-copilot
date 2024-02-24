@@ -10,7 +10,7 @@ import EncryptionService from '@/encryptionService';
 import { ProxyChatOpenAI } from '@/langchainWrappers';
 import { ChatMessage } from '@/sharedState';
 import { extractChatHistory, getModelName, isSupportedChain } from '@/utils';
-import VectorDBManager, { MemoryVector, NoteFile } from '@/vectorDBManager';
+import VectorDBManager, { MemoryVector, NoteFile, VectorStoreDocument } from '@/vectorDBManager';
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { BaseChatMemory } from "langchain/memory";
@@ -185,13 +185,13 @@ export default class ChainManager {
         this.setNoteFile(options.noteFile);
         const docHash = VectorDBManager.getDocumentHash(options.noteFile.path);
         const parsedMemoryVectors: MemoryVector[] | undefined = await VectorDBManager.getMemoryVectors(docHash);
+        const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
+        if (!embeddingsAPI) {
+          console.error('Error getting embeddings API. Please check your settings.');
+          return;
+        }
         if (parsedMemoryVectors) {
           // Index already exists
-          const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
-          if (!embeddingsAPI) {
-            console.error('Error getting embeddings API. Please check your settings.');
-            return;
-          }
           const vectorStore = await VectorDBManager.rebuildMemoryVectorStore(
             parsedMemoryVectors,
             embeddingsAPI,
@@ -210,7 +210,11 @@ export default class ChainManager {
           console.log('Existing vector store for document hash: ', docHash);
         } else {
           // Index doesn't exist
-          await this.indexFile(options.noteFile);
+          const vectorStoreDoc = await this.indexFile(options.noteFile);
+          this.vectorStore = await VectorDBManager.getMemoryVectorStore(
+            embeddingsAPI,
+            vectorStoreDoc?._id,
+          );
           if (!this.vectorStore) {
             console.error('Error creating vector store.');
             return;
@@ -232,7 +236,7 @@ export default class ChainManager {
             retriever: retriever,
           })
           console.log(
-            'New conversational retrieval qa chain with multi-query retriever created for '
+            'New conversational retrieval QA chain with multi-query retriever created for '
             + 'document hash: ', docHash
           );
         }
@@ -256,7 +260,7 @@ export default class ChainManager {
           retriever: vectorStore.asRetriever(3),
         })
         console.log(
-          'New conversational retrieval qa chain with multi-query retriever created for entire vault'
+          'New conversational retrieval QA chain with multi-query retriever created for entire vault'
         );
 
         this.langChainParams.chainType = ChainType.VAULT_QA_CHAIN;
@@ -435,7 +439,7 @@ export default class ChainManager {
     return fullAIResponse;
   }
 
-  async indexFile(noteFile: NoteFile): Promise<void> {
+  async indexFile(noteFile: NoteFile): Promise<VectorStoreDocument | undefined> {
     const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
     if (!embeddingsAPI) {
       const errorMsg = 'Failed to load file, embedding API is not set correctly, please check your settings.';
@@ -443,6 +447,6 @@ export default class ChainManager {
       console.error(errorMsg);
       return;
     }
-    await VectorDBManager.indexFile(noteFile, embeddingsAPI);
+    return await VectorDBManager.indexFile(noteFile, embeddingsAPI);
   }
 }

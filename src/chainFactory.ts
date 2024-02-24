@@ -172,8 +172,6 @@ class ChainFactory {
     ]);
 
     const conversationalRetrievalQAChain = standaloneQuestionChain.pipe(answerChain);
-    console.log('New Conversational Retrieval QA Chain created.');
-
     return conversationalRetrievalQAChain as RunnableSequence;
   }
 }

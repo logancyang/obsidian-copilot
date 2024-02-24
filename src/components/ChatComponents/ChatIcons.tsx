@@ -96,7 +96,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
 
       const activeNoteOnMessage: ChatMessage = {
         sender: AI_SENDER,
-        message: `OK Feel free to ask me questions about [[${noteName}]]. \n\nPlease note that this is a retrieval-based QA for notes longer than the model context window. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with *Send Note to Prompt* button used with a *long context model* is a more suitable choice. \n\n(A new mode will be added to work on the entire vault next)`,
+        message: `OK Feel free to ask me questions about [[${noteName}]]. \n\nPlease note that this is a retrieval-based QA for notes longer than the model context window. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with *Send Note to Prompt* button used with a *long context model* is a more suitable choice.`,
         isVisible: true,
       };
       addMessage(activeNoteOnMessage);
@@ -165,10 +165,10 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           <span className="tooltip-text">Send Note(s) to Prompt<br/>(Set with Copilot command: <br/>set note context <br/>in Chat mode.<br/>Default is active note)</span>
         </button>
       )}
-      {selectedChain === 'retrieval_qa' && (
+      {['retrieval_qa', 'vault_qa'].includes(selectedChain) && (
         <button className='chat-icon-button' onClick={onForceRebuildActiveNoteContext}>
           <UseActiveNoteAsContextIcon className='icon-scaler' />
-          <span className="tooltip-text">Rebuild Index for Active Note</span>
+          <span className="tooltip-text">Refresh Index</span>
         </button>
       )}
     </div>

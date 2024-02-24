@@ -3,14 +3,13 @@ import { Document } from "langchain/document";
 import { Embeddings } from 'langchain/embeddings/base';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
-import { ModelProviders } from './constants';
 
 export interface VectorStoreDocument {
   _id: string;
   _rev?: string;
   memory_vectors: string;
   file_mtime: number;
-  embeddingProvider: ModelProviders;
+  embeddingProvider: string;
   created_at: number;
 }
 
@@ -73,11 +72,23 @@ class VectorDBManager {
     return memoryVectorStore;
   }
 
-  public static async getMemoryVectorStore(embeddingsAPI: Embeddings): Promise<MemoryVectorStore> {
+  public static async getMemoryVectorStore(
+    embeddingsAPI: Embeddings,
+    docHash?: string,
+  ): Promise<MemoryVectorStore> {
     if (!this.db) throw new Error("DB not initialized");
     if (!this.embeddingProvider) throw new Error("Embedding provider not set");
 
-    const allDocsResponse = await this.db.allDocs({ include_docs: true });
+    let allDocsResponse;
+    if (docHash) {
+      // Fetch a single document by its _id
+      const doc = await this.db.get(docHash);
+      allDocsResponse = { rows: [{ doc }] };
+    } else {
+      // Fetch all documents
+      allDocsResponse = await this.db.allDocs({ include_docs: true });
+    }
+
     const allDocs = allDocsResponse.rows.map(row => row.doc as VectorStoreDocument)
       .filter(doc => doc.embeddingProvider === this.embeddingProvider);
     const memoryVectors = allDocs.map(doc => JSON.parse(doc.memory_vectors) as MemoryVector[]).flat();
@@ -139,7 +150,7 @@ class VectorDBManager {
         appendChunkOverlapHeader: true,
       },
     );
-    const docVectors = await embeddingsAPI.embedDocuments(splitDocument.map((doc) => doc.pageContent))
+    const docVectors = await embeddingsAPI.embedDocuments(splitDocument.map(doc => doc.pageContent));
     const memoryVectors = docVectors.map((docVector, i) => (
       {
         content: splitDocument[i].pageContent,
@@ -149,7 +160,7 @@ class VectorDBManager {
           path: noteFile.path,
         },
         embedding: docVector,
-      }))
+      }));
     const docHash = VectorDBManager.getDocumentHash(noteFile.path);
 
     const serializedMemoryVectors = JSON.stringify(memoryVectors);
@@ -158,7 +169,7 @@ class VectorDBManager {
       const existingDoc = await this.db.get(docHash).catch(err => null);
 
       // Prepare the document to be saved.
-      const docToSave = {
+      const docToSave: VectorStoreDocument = {
         _id: docHash,
         memory_vectors: serializedMemoryVectors,
         file_mtime: noteFile.mtime,
@@ -169,6 +180,7 @@ class VectorDBManager {
 
       // Save the document.
       await this.db.put(docToSave);
+      return docToSave;
     } catch (err) {
       console.error("Error storing vectors in VectorDB:", err);
     }
