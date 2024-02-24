@@ -61,7 +61,6 @@ export default class CopilotPlugin extends Plugin {
     this.dbPrompts = new PouchDB<CustomPrompt>("copilot_custom_prompts");
 
     VectorDBManager.initializeDB(this.dbVectorStores);
-    VectorDBManager.setChunkSize(this.settings.embeddingChunkSize);
     VectorDBManager.setEmbeddingProvider(this.settings.embeddingProvider);
 
     this.registerView(

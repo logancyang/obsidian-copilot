@@ -1,8 +1,8 @@
 import { MD5 } from 'crypto-js';
 import { Document } from "langchain/document";
 import { Embeddings } from 'langchain/embeddings/base';
-import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
+import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { ModelProviders } from './constants';
 
 export interface VectorStoreDocument {
@@ -17,6 +17,7 @@ export interface VectorStoreDocument {
 export interface MemoryVector {
   content: string;
   embedding: number[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   metadata: Record<string, any>;
 }
 
@@ -25,12 +26,12 @@ export interface NoteFile {
   basename: string;
   mtime: number;
   content: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   metadata: Record<string, any>;
 }
 
 class VectorDBManager {
   public static db: PouchDB.Database | null = null;
-  public static chunkSize: number | null = null;
   public static embeddingProvider: string | null = null;
 
   public static initializeDB(db: PouchDB.Database): void {
@@ -39,10 +40,6 @@ class VectorDBManager {
 
   public static updateDBInstance(newDb: PouchDB.Database): void {
     this.db = newDb;
-  }
-
-  public static setChunkSize(chunkSize: number): void {
-    this.chunkSize = chunkSize;
   }
 
   public static setEmbeddingProvider(embeddingProvider: string): void {
@@ -126,11 +123,22 @@ class VectorDBManager {
 
   public static async indexFile(noteFile: NoteFile, embeddingsAPI: Embeddings) {
     if (!this.db) throw new Error("DB not initialized");
-    if (!this.chunkSize) throw new Error("Chunk size not set");
     if (!this.embeddingProvider) throw new Error("Embedding provider not set");
 
-    const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 5000 })
-    const splitDocument = await textSplitter.createDocuments([noteFile.content])
+    // Markdown splitter: https://js.langchain.com/docs/modules/data_connection/document_transformers/code_splitter#markdown
+    const textSplitter = RecursiveCharacterTextSplitter.fromLanguage("markdown", {
+      chunkSize: 5000,
+    });
+    // Add note title as contextual chunk headers
+    // https://js.langchain.com/docs/modules/data_connection/document_transformers/contextual_chunk_headers
+    const splitDocument = await textSplitter.createDocuments(
+      [noteFile.content],
+      [],
+      {
+        chunkHeader: '[[' + noteFile.basename + ']]' + '\n\n---\n\n',
+        appendChunkOverlapHeader: true,
+      },
+    );
     const docVectors = await embeddingsAPI.embedDocuments(splitDocument.map((doc) => doc.pageContent))
     const memoryVectors = docVectors.map((docVector, i) => (
       {
