@@ -13,7 +13,7 @@ import {
   RetrievalQAChain
 } from "langchain/chains";
 import moment from 'moment';
-import { TFile, Vault, parseYaml } from 'obsidian';
+import { App, TFile, Vault } from 'obsidian';
 
 
 export const isFolderMatch = (fileFullpath: string, inputPath: string): boolean => {
@@ -39,16 +39,15 @@ export const getNotesFromPath = async (vault: Vault, path: string): Promise<TFil
   });
 }
 
-export async function getTagsFromNote(file: TFile, vault: Vault): Promise<string[]> {
-  const fileContent = await vault.cachedRead(file);
-  const frontMatter = parseYaml(fileContent.split('---')?.[1] ?? '') || {};
-  const tags = frontMatter.tags || [];
+export async function getTagsFromNote(file: TFile, app: App): Promise<string[]> {
+  const frontMatter = app.metadataCache.getFileCache(file)?.frontmatter
+  const tags = frontMatter?.tags || [];
   // Strip any '#' from the frontmatter tags. Obsidian sometimes has '#' sometimes doesn't...
   return tags.map((tag: string) => tag.replace('#', ''));
 }
 
 export async function getNotesFromTags(
-  vault: Vault, tags: string[], noteFiles?: TFile[]
+  app: App, vault: Vault, tags: string[], noteFiles?: TFile[]
 ): Promise<TFile[]> {
   if (tags.length === 0) {
     return [];
@@ -61,7 +60,7 @@ export async function getNotesFromTags(
   const filesWithTag = [];
 
   for (const file of files) {
-    const noteTags = await getTagsFromNote(file, vault);
+    const noteTags = await getTagsFromNote(file, app);
     if (tags.some(tag => noteTags.includes(tag))) {
       filesWithTag.push(file);
     }
