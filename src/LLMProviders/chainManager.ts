@@ -6,6 +6,7 @@ import {
   AI_SENDER,
   ChatModelDisplayNames
 } from '@/constants';
+import EncryptionService from '@/encryptionService';
 import { ProxyChatOpenAI } from '@/langchainWrappers';
 import { ChatMessage } from '@/sharedState';
 import { extractChatHistory, getModelName, isSupportedChain } from '@/utils';
@@ -36,6 +37,7 @@ export default class ChainManager {
   private vectorStore: MemoryVectorStore;
   private promptManager: PromptManager;
   private embeddingsManager: EmbeddingsManager;
+  private encryptionService: EncryptionService;
   public chatModelManager: ChatModelManager;
   public langChainParams: LangChainParams;
   public memoryManager: MemoryManager;
@@ -47,12 +49,14 @@ export default class ChainManager {
    * @return {void}
    */
   constructor(
-    langChainParams: LangChainParams
+    langChainParams: LangChainParams,
+    encryptionService: EncryptionService,
   ) {
     // Instantiate singletons
     this.langChainParams = langChainParams;
     this.memoryManager = MemoryManager.getInstance(this.langChainParams);
-    this.chatModelManager = ChatModelManager.getInstance(this.langChainParams);
+    this.encryptionService = encryptionService;
+    this.chatModelManager = ChatModelManager.getInstance(this.langChainParams, encryptionService);
     this.promptManager = PromptManager.getInstance(this.langChainParams);
     this.createChainWithNewModel(this.langChainParams.modelDisplayName);
   }
@@ -134,7 +138,7 @@ export default class ChainManager {
     this.validateChainType(chainType);
     // MUST set embeddingsManager when switching to QA mode
     if (chainType === ChainType.RETRIEVAL_QA_CHAIN || chainType === ChainType.VAULT_QA_CHAIN) {
-      this.embeddingsManager = EmbeddingsManager.getInstance(this.langChainParams);
+      this.embeddingsManager = EmbeddingsManager.getInstance(this.langChainParams, this.encryptionService);
     }
 
     // Get chatModel, memory, prompt, and embeddingAPI from respective managers

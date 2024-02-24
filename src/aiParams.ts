@@ -52,6 +52,9 @@ export interface LangChainParams {
   openRouterModel: string,
   lmStudioBaseUrl: string,
   openAIProxyBaseUrl?: string,
+  openAIProxyModelName?: string,
+  openAIEmbeddingProxyBaseUrl?: string,
+  openAIEmbeddingProxyModelName?: string,
 }
 
 export interface SetChainOptions {

@@ -1,5 +1,6 @@
 import { LangChainParams } from '@/aiParams';
 import { ModelProviders } from '@/constants';
+import EncryptionService from '@/encryptionService';
 import { ProxyOpenAIEmbeddings } from '@/langchainWrappers';
 import { CohereEmbeddings } from "@langchain/cohere";
 import { Embeddings } from "langchain/embeddings/base";
@@ -9,43 +10,45 @@ import { OpenAIEmbeddings } from "langchain/embeddings/openai";
 export default class EmbeddingManager {
   private static instance: EmbeddingManager;
   private constructor(
-    private langChainParams: LangChainParams
+    private langChainParams: LangChainParams,
+    private encryptionService: EncryptionService,
   ) {}
 
   static getInstance(
-    langChainParams: LangChainParams
+    langChainParams: LangChainParams,
+    encryptionService: EncryptionService,
   ): EmbeddingManager {
     if (!EmbeddingManager.instance) {
-      EmbeddingManager.instance = new EmbeddingManager(langChainParams);
+      EmbeddingManager.instance = new EmbeddingManager(langChainParams, encryptionService);
     }
     return EmbeddingManager.instance;
   }
 
   getEmbeddingsAPI(): Embeddings | undefined {
+    const decrypt = (key: string) => this.encryptionService.getDecryptedKey(key);
     const {
       openAIApiKey,
       azureOpenAIApiKey,
       azureOpenAIApiInstanceName,
       azureOpenAIApiVersion,
       azureOpenAIApiEmbeddingDeploymentName,
-      openAIProxyBaseUrl,
+      openAIEmbeddingProxyBaseUrl,
+      openAIEmbeddingProxyModelName,
     } = this.langChainParams;
 
-    // Note that openAIProxyBaseUrl has the highest priority.
-    // If openAIProxyBaseUrl is set, it overrides both chat and embedding models.
     const OpenAIEmbeddingsAPI = openAIApiKey ? (
-      openAIProxyBaseUrl ?
+      openAIEmbeddingProxyBaseUrl ?
         new ProxyOpenAIEmbeddings({
-          modelName: this.langChainParams.embeddingModel,
-          openAIApiKey,
+          modelName: openAIEmbeddingProxyModelName || this.langChainParams.embeddingModel,
+          openAIApiKey: decrypt(openAIApiKey),
           maxRetries: 3,
           maxConcurrency: 3,
           timeout: 10000,
-          openAIProxyBaseUrl,
+          openAIEmbeddingProxyBaseUrl,
         }) :
         new OpenAIEmbeddings({
-          modelName: this.langChainParams.embeddingModel,
-          openAIApiKey,
+          modelName: openAIEmbeddingProxyModelName || this.langChainParams.embeddingModel,
+          openAIApiKey: decrypt(openAIApiKey),
           maxRetries: 3,
           maxConcurrency: 3,
           timeout: 10000,
@@ -61,20 +64,20 @@ export default class EmbeddingManager {
         break;
       case ModelProviders.HUGGINGFACE:
         return new HuggingFaceInferenceEmbeddings({
-          apiKey: this.langChainParams.huggingfaceApiKey,
+          apiKey: decrypt(this.langChainParams.huggingfaceApiKey),
           maxRetries: 3,
           maxConcurrency: 3,
         });
       case ModelProviders.COHEREAI:
         return new CohereEmbeddings({
-          apiKey: this.langChainParams.cohereApiKey,
+          apiKey: decrypt(this.langChainParams.cohereApiKey),
           maxRetries: 3,
           maxConcurrency: 3,
         });
       case ModelProviders.AZURE_OPENAI:
         if (azureOpenAIApiKey) {
           return new OpenAIEmbeddings({
-            azureOpenAIApiKey,
+            azureOpenAIApiKey: decrypt(azureOpenAIApiKey),
             azureOpenAIApiInstanceName,
             azureOpenAIApiDeploymentName: azureOpenAIApiEmbeddingDeploymentName,
             azureOpenAIApiVersion,
@@ -87,7 +90,7 @@ export default class EmbeddingManager {
       default:
         console.error('No embedding provider set or no valid API key provided. Defaulting to OpenAI.');
         return OpenAIEmbeddingsAPI || new OpenAIEmbeddings({
-          modelName: this.langChainParams.embeddingModel,
+          modelName: openAIEmbeddingProxyModelName || this.langChainParams.embeddingModel,
           openAIApiKey: 'default-key',
           maxRetries: 3,
           maxConcurrency: 3,

@@ -25,6 +25,9 @@ export interface CopilotSettings {
   contextTurns: number;
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;
+  openAIProxyModelName: string;
+  openAIEmbeddingProxyBaseUrl: string;
+  openAIEmbeddingProxyModelName: string;
   ollamaModel: string;
   ollamaBaseUrl: string;
   lmStudioBaseUrl: string;
@@ -34,7 +37,9 @@ export interface CopilotSettings {
   saveVaultToVectorStore: string;
   embeddingChunkSize: number;
   chatNoteContextPath: string;
+  chatNoteContextTags: string[];
   debug: boolean;
+  enableEncryption: boolean;
 }
 
 export class CopilotSettingTab extends PluginSettingTab {
@@ -75,8 +80,23 @@ export class CopilotSettingTab extends PluginSettingTab {
       <SettingsMain plugin={this.plugin} reloadPlugin={this.reloadPlugin.bind(this)} />
     );
 
-    const devModeHeader = containerEl.createEl('h1', { text: 'Development mode' });
+    const devModeHeader = containerEl.createEl('h1', { text: 'Additional Settings' });
     devModeHeader.style.marginTop = '40px';
+
+    new Setting(containerEl)
+      .setName("Enable Encryption")
+      .setDesc(
+        createFragment((frag) => {
+          frag.appendText("Enable encryption for the API keys.");
+        })
+      )
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.enableEncryption)
+        .onChange(async (value) => {
+          this.plugin.settings.enableEncryption = value;
+          await this.plugin.saveSettings();
+        })
+      );
 
     new Setting(containerEl)
       .setName("Debug mode")

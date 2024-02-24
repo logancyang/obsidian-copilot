@@ -1,6 +1,11 @@
 import * as Obsidian from 'obsidian';
-import { getNotesFromPath, isFolderMatch, processVariableName } from '../src/utils';
-
+import { TFile } from 'obsidian';
+import {
+  getNotesFromPath,
+  getNotesFromTags,
+  isFolderMatch,
+  processVariableNameForNotePath,
+} from '../src/utils';
 
 describe('isFolderMatch', () => {
   it('should return file from the folder name 1', async () => {
@@ -95,50 +100,114 @@ describe('getNotesFromPath', () => {
     expect(files).toEqual([]);
   });
 
-  describe('processVariableName', () => {
+  describe('processVariableNameForNotePath', () => {
     it('should return the note md filename', () => {
-      const variableName = processVariableName('[[test]]');
+      const variableName = processVariableNameForNotePath('[[test]]');
       expect(variableName).toEqual('test.md');
     });
 
     it('should return the note md filename with extra spaces 1', () => {
-      const variableName = processVariableName(' [[  test]]');
+      const variableName = processVariableNameForNotePath(' [[  test]]');
       expect(variableName).toEqual('test.md');
     });
 
     it('should return the note md filename with extra spaces 2', () => {
-      const variableName = processVariableName('[[ test   ]] ');
+      const variableName = processVariableNameForNotePath('[[ test   ]] ');
       expect(variableName).toEqual('test.md');
     });
 
     it('should return the note md filename with extra spaces 2', () => {
-      const variableName = processVariableName(' [[ test note   ]] ');
+      const variableName = processVariableNameForNotePath(' [[ test note   ]] ');
       expect(variableName).toEqual('test note.md');
     });
 
     it('should return the note md filename with extra spaces 2', () => {
-      const variableName = processVariableName(' [[    test_note note   ]] ');
+      const variableName = processVariableNameForNotePath(' [[    test_note note   ]] ');
       expect(variableName).toEqual('test_note note.md');
     });
 
     it('should return folder path with leading slash', () => {
-      const variableName = processVariableName('/testfolder');
+      const variableName = processVariableNameForNotePath('/testfolder');
       expect(variableName).toEqual('/testfolder');
     });
 
     it('should return folder path without slash', () => {
-      const variableName = processVariableName('testfolder');
+      const variableName = processVariableNameForNotePath('testfolder');
       expect(variableName).toEqual('testfolder');
     });
 
     it('should return folder path with trailing slash', () => {
-      const variableName = processVariableName('testfolder/');
+      const variableName = processVariableNameForNotePath('testfolder/');
       expect(variableName).toEqual('testfolder/');
     });
 
     it('should return folder path with leading spaces', () => {
-      const variableName = processVariableName('  testfolder ');
+      const variableName = processVariableNameForNotePath('  testfolder ');
       expect(variableName).toEqual('testfolder');
     });
+  });
+});
+
+describe('getNotesFromTags', () => {
+  it('should return files with specified tags 1', async () => {
+    const mockVault = new Obsidian.Vault();
+    const tags = ['tag1'];
+    const expectedPaths = ['test/test2/note1.md', 'note4.md'];
+
+    const result = await getNotesFromTags(mockVault, tags);
+    const resultPaths = result.map(fileWithTags => fileWithTags.path);
+
+    expect(resultPaths).toEqual(expect.arrayContaining(expectedPaths));
+    expect(resultPaths.length).toEqual(expectedPaths.length);
+  });
+
+  it('should return files with specified tags 2', async () => {
+    const mockVault = new Obsidian.Vault();
+    const tags = ['#tag3'];
+    const expectedPaths = ['test/note2.md'];
+
+    const result = await getNotesFromTags(mockVault, tags);
+    const resultPaths = result.map(fileWithTags => fileWithTags.path);
+
+    expect(resultPaths).toEqual(expect.arrayContaining(expectedPaths));
+    expect(resultPaths.length).toEqual(expectedPaths.length);
+  });
+
+  it('should return an empty array if no files match the specified nonexistent tags', async () => {
+    const mockVault = new Obsidian.Vault();
+    const tags = ['nonexistentTag'];
+    const expected: string[] = [];
+
+    const result = await getNotesFromTags(mockVault, tags);
+
+    expect(result).toEqual(expected);
+  });
+
+  it('should handle multiple tags, returning files that match any of them', async () => {
+    const mockVault = new Obsidian.Vault();
+    const tags = ['tag2', 'tag4']; // Files that include 'tag2' or 'tag4'
+    const expectedPaths = ['test/test2/note1.md', 'test/note2.md', 'note4.md'];
+
+    const result = await getNotesFromTags(mockVault, tags);
+    const resultPaths = result.map(fileWithTags => fileWithTags.path);
+
+    expect(resultPaths).toEqual(expect.arrayContaining(expectedPaths));
+    expect(resultPaths.length).toEqual(expectedPaths.length);
+  });
+
+  it('should handle both path and tags, returning files under the specified path with the specified tags', async () => {
+    const mockVault = new Obsidian.Vault();
+    const tags = ['tag1'];
+    const noteFiles = [
+      { path: 'test/test2/note1.md' },
+      { path: 'test/note2.md' },
+    ] as TFile[];
+    const expectedPaths = ['test/test2/note1.md'];
+
+    const result = await getNotesFromTags(mockVault, tags, noteFiles);
+    const resultPaths = result.map(fileWithTags => fileWithTags.path);
+
+    expect(resultPaths).toEqual(expect.arrayContaining(expectedPaths));
+    expect(resultPaths.length).toEqual(expectedPaths.length);
   });
 });

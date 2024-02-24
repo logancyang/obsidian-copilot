@@ -13,7 +13,8 @@ import {
   RetrievalQAChain
 } from "langchain/chains";
 import moment from 'moment';
-import { TFile, Vault } from 'obsidian';
+import { TFile, Vault, parseYaml } from 'obsidian';
+
 
 export const isFolderMatch = (fileFullpath: string, inputPath: string): boolean => {
   const fileSegments = fileFullpath.split('/').map(segment => segment.toLowerCase());
@@ -36,6 +37,37 @@ export const getNotesFromPath = async (vault: Vault, path: string): Promise<TFil
     // Split the file path and get the last directory name
     return isFolderMatch(file.path, lastSegment) || file.basename === lastSegment;
   });
+}
+
+export async function getTagsFromNote(file: TFile, vault: Vault): Promise<string[]> {
+  const fileContent = await vault.cachedRead(file);
+  const frontMatter = parseYaml(fileContent.split('---')?.[1] ?? '') || {};
+  const tags = frontMatter.tags || [];
+  // Strip any '#' from the frontmatter tags. Obsidian sometimes has '#' sometimes doesn't...
+  return tags.map((tag: string) => tag.replace('#', ''));
+}
+
+export async function getNotesFromTags(
+  vault: Vault, tags: string[], noteFiles?: TFile[]
+): Promise<TFile[]> {
+  if (tags.length === 0) {
+    return [];
+  }
+
+  // Strip any '#' from the tags set from the user
+  tags = tags.map(tag => tag.replace('#', ''));
+
+  const files = noteFiles && noteFiles.length > 0 ? noteFiles : await getNotesFromPath(vault, '/');
+  const filesWithTag = [];
+
+  for (const file of files) {
+    const noteTags = await getTagsFromNote(file, vault);
+    if (tags.some(tag => noteTags.includes(tag))) {
+      filesWithTag.push(file);
+    }
+  }
+
+  return filesWithTag;
 }
 
 export const stringToChainType = (chain: string): ChainType => {
@@ -96,9 +128,9 @@ export const formatDateTime = (now: Date, timezone: 'local' | 'utc' = 'local') =
   return formattedDateTime.format('YYYY_MM_DD-HH_mm_ss');
 };
 
-export async function getFileContent(file: TFile): Promise<string | null> {
+export async function getFileContent(file: TFile, vault: Vault): Promise<string | null> {
   if (file.extension != "md") return null;
-  return await this.app.vault.cachedRead(file);
+  return await vault.cachedRead(file);
 }
 
 export function getFileName(file: TFile): string {
@@ -152,9 +184,30 @@ export function sendNotesContentPrompt(notes: { name: string; content: string }[
     + `Feel free to ask related questions, such as 'give me a summary of these notes in bullet points', 'what key questions does these notes answer', etc. "\n`
 }
 
-export function getSendChatContextNotesPrompt(notes: { name: string; content: string }[]): string {
-  const noteTitles = notes.map(note => `[[${note.name}]]`).join('\n\n');
-  return `Please read the notes below and be ready to answer questions about them. \n\n${noteTitles}`;
+function getNoteTitleAndTags(noteWithTag: { name: string; content: string, tags?: string[] }): string {
+  return (
+    `[[${noteWithTag.name}]]` +
+    (noteWithTag.tags && noteWithTag.tags.length > 0
+      ? `\ntags: ${noteWithTag.tags.join(",")}`
+      : "")
+  );
+}
+
+function getChatContextStr(chatNoteContextPath: string, chatNoteContextTags: string[]): string {
+  const pathStr = (chatNoteContextPath ? `\nChat context by path: ${chatNoteContextPath}` : '');
+  const tagsStr = (chatNoteContextTags?.length > 0 ? `\nChat context by tags: ${chatNoteContextTags}` : '');
+  return pathStr + tagsStr;
+}
+
+export function getSendChatContextNotesPrompt(
+  notes: { name: string; content: string }[],
+  chatNoteContextPath: string,
+  chatNoteContextTags: string[],
+): string {
+  const noteTitles = notes.map(note => getNoteTitleAndTags(note)).join('\n\n');
+  return `Please read the notes below and be ready to answer questions about them. `
+    + getChatContextStr(chatNoteContextPath, chatNoteContextTags)
+    + `\n\n${noteTitles}`;
 }
 
 export function fixGrammarSpellingSelectionPrompt(selectedText: string): string {
@@ -163,7 +216,7 @@ export function fixGrammarSpellingSelectionPrompt(selectedText: string): string 
 }
 
 export function summarizePrompt(selectedText: string): string {
-  return `Please summarize the following text into bullet points and return it without any other changes. Output in the same language as the source, do not output English if it is not English:\n\n`
+  return `Summarize the following text into bullet points and return it without any other changes. Identify the input language, and return the summary in the same language. If the input is English, return the summary in English. Otherwise, return in the same language as the input. Return ONLY the summary, DO NOT return the name of the language:\n\n`
     + `${selectedText}`;
 }
 
@@ -253,7 +306,7 @@ export function extractChatHistory(memoryVariables: MemoryVariables): [string, s
   return chatHistory;
 }
 
-export function processVariableName(variableName: string): string {
+export function processVariableNameForNotePath(variableName: string): string {
   variableName = variableName.trim();
   // Check if the variable name is enclosed in double brackets indicating it's a note
   if (variableName.startsWith('[[') && variableName.endsWith(']]')) {

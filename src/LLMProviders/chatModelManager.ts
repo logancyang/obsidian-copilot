@@ -6,9 +6,11 @@ import {
   ModelProviders,
   OLLAMA_MODELS,
   OPENAI_MODELS,
-  OPENROUTERAI_MODELS
+  OPENROUTERAI_MODELS,
 } from '@/constants';
+import EncryptionService from '@/encryptionService';
 import { ProxyChatOpenAI } from '@/langchainWrappers';
+import { getModelName } from '@/utils';
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { BaseChatModel } from 'langchain/chat_models/base';
@@ -16,6 +18,7 @@ import { ChatOpenAI } from 'langchain/chat_models/openai';
 import { Notice } from 'obsidian';
 
 export default class ChatModelManager {
+  private encryptionService: EncryptionService;
   private static instance: ChatModelManager;
   private static chatModel: BaseChatModel;
   private static chatOpenAI: ChatOpenAI;
@@ -30,21 +33,25 @@ export default class ChatModelManager {
 
 
   private constructor(
-    private langChainParams: LangChainParams
+    private langChainParams: LangChainParams,
+    encryptionService: EncryptionService
   ) {
+    this.encryptionService = encryptionService;
     this.buildModelMap();
   }
 
   static getInstance(
-    langChainParams: LangChainParams
+    langChainParams: LangChainParams,
+    encryptionService: EncryptionService,
   ): ChatModelManager {
     if (!ChatModelManager.instance) {
-      ChatModelManager.instance = new ChatModelManager(langChainParams);
+      ChatModelManager.instance = new ChatModelManager(langChainParams, encryptionService);
     }
     return ChatModelManager.instance;
   }
 
   private getModelConfig(chatModelProvider: string): ModelConfig {
+    const decrypt = (key: string) => this.encryptionService.getDecryptedKey(key);
     const params = this.langChainParams;
     const baseConfig: ModelConfig = {
       modelName: params.model,
@@ -56,26 +63,27 @@ export default class ChatModelManager {
 
     const providerConfig = {
       [ModelProviders.OPENAI]: {
-        openAIApiKey: params.openAIApiKey,
+        modelName: params.openAIProxyModelName || params.model,
+        openAIApiKey: decrypt(params.openAIApiKey),
         maxTokens: params.maxTokens,
         openAIProxyBaseUrl: params.openAIProxyBaseUrl,
       },
       [ModelProviders.ANTHROPIC]: {
-        anthropicApiKey: params.anthropicApiKey,
+        anthropicApiKey: decrypt(params.anthropicApiKey),
       },
       [ModelProviders.AZURE_OPENAI]: {
         maxTokens: params.maxTokens,
-        azureOpenAIApiKey: params.azureOpenAIApiKey,
+        azureOpenAIApiKey: decrypt(params.azureOpenAIApiKey),
         azureOpenAIApiInstanceName: params.azureOpenAIApiInstanceName,
         azureOpenAIApiDeploymentName: params.azureOpenAIApiDeploymentName,
         azureOpenAIApiVersion: params.azureOpenAIApiVersion,
       },
       [ModelProviders.GOOGLE]: {
-        apiKey: params.googleApiKey,
+        apiKey: decrypt(params.googleApiKey),
       },
       [ModelProviders.OPENROUTERAI]: {
         modelName: params.openRouterModel,
-        openAIApiKey: params.openRouterAiApiKey,
+        openAIApiKey: decrypt(params.openRouterAiApiKey),
         openAIProxyBaseUrl: 'https://openrouter.ai/api/v1',
       },
       [ModelProviders.LM_STUDIO]: {
@@ -156,6 +164,8 @@ export default class ChatModelManager {
     if (!ChatModelManager.modelMap.hasOwnProperty(modelDisplayName)) {
       throw new Error(`No model found for: ${modelDisplayName}`);
     }
+    // MUST update it since chatModelManager is a singleton.
+    this.langChainParams.model = getModelName(modelDisplayName);
 
     // Create and return the appropriate model
     const selectedModel = ChatModelManager.modelMap[modelDisplayName];
@@ -189,6 +199,6 @@ export default class ChatModelManager {
   }
 
   async countTokens(inputStr: string): Promise<number> {
-    return ChatModelManager.chatOpenAI.getNumTokens(inputStr);
+    return ChatModelManager.chatModel.getNumTokens(inputStr);
   }
 }

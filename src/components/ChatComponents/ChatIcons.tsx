@@ -10,7 +10,7 @@ import {
   getFileContent,
   getFileName,
 } from '@/utils';
-import { Notice } from 'obsidian';
+import { Notice, Vault } from 'obsidian';
 import {
   useEffect,
   useState,
@@ -37,6 +37,7 @@ interface ChatIconsProps {
   onSendActiveNoteToPrompt: () => void;
   onForceRebuildActiveNoteContext: () => void;
   addMessage: (message: ChatMessage) => void;
+  vault: Vault;
 }
 
 const ChatIcons: React.FC<ChatIconsProps> = ({
@@ -50,6 +51,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   onSendActiveNoteToPrompt,
   onForceRebuildActiveNoteContext,
   addMessage,
+  vault,
 }) => {
   const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
 
@@ -80,7 +82,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         return;
       }
 
-      const noteContent = await getFileContent(file);
+      const noteContent = await getFileContent(file, vault);
       const fileMetadata = app.metadataCache.getFileCache(file)
       const noteFile = {
         path: file.path,
@@ -94,7 +96,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
 
       const activeNoteOnMessage: ChatMessage = {
         sender: AI_SENDER,
-        message: `OK Feel free to ask me questions about [[${noteName}]]. \n\nPlease note that this is a retrieval-based QA for notes longer than the model context window. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with *Send Note to Prompt* button used with a *long context model* is a more suitable choice. \n\n(This mode will be upgraded to work on the entire vault next)`,
+        message: `OK Feel free to ask me questions about [[${noteName}]]. \n\nPlease note that this is a retrieval-based QA for notes longer than the model context window. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with *Send Note to Prompt* button used with a *long context model* is a more suitable choice. \n\n(A new mode will be added to work on the entire vault next)`,
         isVisible: true,
       };
       addMessage(activeNoteOnMessage);
@@ -121,14 +123,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             <option value={ChatModelDisplayNames.GPT_4}>{ChatModelDisplayNames.GPT_4}</option>
             <option value={ChatModelDisplayNames.GPT_4_TURBO}>{ChatModelDisplayNames.GPT_4_TURBO}</option>
             <option value={ChatModelDisplayNames.GPT_4_32K}>{ChatModelDisplayNames.GPT_4_32K}</option>
-            {/* <option value={ChatModelDisplayNames.CLAUDE_1}>{ChatModelDisplayNames.CLAUDE_1}</option>
-            <option value={ChatModelDisplayNames.CLAUDE_1_100K}>{ChatModelDisplayNames.CLAUDE_1_100K}</option>
-            <option value={ChatModelDisplayNames.CLAUDE_INSTANT_1}>{ChatModelDisplayNames.CLAUDE_INSTANT_1}</option>
-            <option value={ChatModelDisplayNames.CLAUDE_INSTANT_1_100K}>{ChatModelDisplayNames.CLAUDE_INSTANT_1_100K}</option> */}
-            <option value={ChatModelDisplayNames.AZURE_GPT_35_TURBO}>{ChatModelDisplayNames.AZURE_GPT_35_TURBO}</option>
-            <option value={ChatModelDisplayNames.AZURE_GPT_35_TURBO_16K}>{ChatModelDisplayNames.AZURE_GPT_35_TURBO_16K}</option>
-            <option value={ChatModelDisplayNames.AZURE_GPT_4}>{ChatModelDisplayNames.AZURE_GPT_4}</option>
-            <option value={ChatModelDisplayNames.AZURE_GPT_4_32K}>{ChatModelDisplayNames.AZURE_GPT_4_32K}</option>
+            <option value={ChatModelDisplayNames.AZURE_OPENAI}>{ChatModelDisplayNames.AZURE_OPENAI}</option>
             <option value={ChatModelDisplayNames.GEMINI_PRO}>{ChatModelDisplayNames.GEMINI_PRO}</option>
             <option value={ChatModelDisplayNames.OPENROUTERAI}>{ChatModelDisplayNames.OPENROUTERAI}</option>
             <option value={ChatModelDisplayNames.LM_STUDIO}>{ChatModelDisplayNames.LM_STUDIO}</option>
@@ -167,7 +162,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
       {selectedChain === 'llm_chain' && (
         <button className='chat-icon-button' onClick={onSendActiveNoteToPrompt}>
           <SendActiveNoteToPromptIcon className='icon-scaler' />
-          <span className="tooltip-text">Send Note(s) to Prompt<br/>(Set with Copilot command.<br/>Default is active note)</span>
+          <span className="tooltip-text">Send Note(s) to Prompt<br/>(Set with Copilot command: <br/>set note context <br/>in Chat mode.<br/>Default is active note)</span>
         </button>
       )}
       {selectedChain === 'retrieval_qa' && (

@@ -11,8 +11,6 @@ export enum ChatModels {
   GPT_4 = 'gpt-4',
   GPT_4_TURBO = 'gpt-4-turbo-preview',
   GPT_4_32K = 'gpt-4-32k',
-  AZURE_GPT_35_TURBO = 'gpt-35-turbo',
-  AZURE_GPT_35_TURBO_16K = 'gpt-35-turbo-16k',
   GEMINI_PRO = 'gemini-pro',
   OLLAMA = 'ollama',
 }
@@ -23,10 +21,7 @@ export enum ChatModelDisplayNames {
   GPT_4 = 'GPT-4',
   GPT_4_TURBO = 'GPT-4 TURBO',
   GPT_4_32K = 'GPT-4 32K',
-  AZURE_GPT_35_TURBO = 'AZURE GPT-3.5',
-  AZURE_GPT_35_TURBO_16K = 'AZURE GPT-3.5-16K',
-  AZURE_GPT_4 = 'AZURE GPT-4',
-  AZURE_GPT_4_32K = 'AZURE GPT-4 32K',
+  AZURE_OPENAI = 'AZURE OPENAI',
   GEMINI_PRO = 'GEMINI PRO',
   OPENROUTERAI = 'OPENROUTER.AI',
   OLLAMA = 'OLLAMA (LOCAL)',
@@ -43,10 +38,7 @@ export const OPENAI_MODELS = new Set([
 ]);
 
 export const AZURE_MODELS = new Set([
-  ChatModelDisplayNames.AZURE_GPT_35_TURBO,
-  ChatModelDisplayNames.AZURE_GPT_35_TURBO_16K,
-  ChatModelDisplayNames.AZURE_GPT_4,
-  ChatModelDisplayNames.AZURE_GPT_4_32K,
+    ChatModelDisplayNames.AZURE_OPENAI,
 ]);
 
 export const GOOGLE_MODELS = new Set([
@@ -71,10 +63,7 @@ export const DISPLAY_NAME_TO_MODEL: Record<string, string> = {
   [ChatModelDisplayNames.GPT_4]: ChatModels.GPT_4,
   [ChatModelDisplayNames.GPT_4_TURBO]: ChatModels.GPT_4_TURBO,
   [ChatModelDisplayNames.GPT_4_32K]: ChatModels.GPT_4_32K,
-  [ChatModelDisplayNames.AZURE_GPT_35_TURBO]: ChatModels.AZURE_GPT_35_TURBO,
-  [ChatModelDisplayNames.AZURE_GPT_35_TURBO_16K]: ChatModels.AZURE_GPT_35_TURBO_16K,
-  [ChatModelDisplayNames.AZURE_GPT_4]: ChatModels.GPT_4,
-  [ChatModelDisplayNames.AZURE_GPT_4_32K]: ChatModels.GPT_4_32K,
+  [ChatModelDisplayNames.AZURE_OPENAI]: 'azure_openai',
   [ChatModelDisplayNames.GEMINI_PRO]: ChatModels.GEMINI_PRO,
 };
 
@@ -154,6 +143,9 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   contextTurns: 15,
   userSystemPrompt: '',
   openAIProxyBaseUrl: '',
+  openAIProxyModelName: '',
+  openAIEmbeddingProxyBaseUrl: '',
+  openAIEmbeddingProxyModelName: '',
   ollamaModel: 'llama2',
   ollamaBaseUrl: '',
   lmStudioBaseUrl: 'http://localhost:1234/v1',
@@ -163,5 +155,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   saveVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.NEVER,
   embeddingChunkSize: 5000,
   chatNoteContextPath: '',
+  chatNoteContextTags: [],
   debug: false,
+  enableEncryption: false,
 };
