@@ -367,12 +367,10 @@ export default class CopilotPlugin extends Plugin {
 
   async activateView() {
     this.app.workspace.detachLeavesOfType(CHAT_VIEWTYPE);
-    this.activateViewPromise = this.app.workspace
-      .getRightLeaf(false)
-      .setViewState({
+    this.activateViewPromise = this.app.workspace.getRightLeaf(false)?.setViewState({
         type: CHAT_VIEWTYPE,
         active: true,
-      });
+      }) ?? null;
     await this.activateViewPromise;
     this.app.workspace.revealLeaf(
       this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]

@@ -13,7 +13,7 @@ import {
   RetrievalQAChain
 } from "langchain/chains";
 import moment from 'moment';
-import { App, TFile, Vault } from 'obsidian';
+import { TFile, Vault, App } from 'obsidian';
 
 
 export const isFolderMatch = (fileFullpath: string, inputPath: string): boolean => {
@@ -125,9 +125,12 @@ export const formatDateTime = (now: Date, timezone: 'local' | 'utc' = 'local') =
   return formattedDateTime.format('YYYY_MM_DD-HH_mm_ss');
 };
 
-export async function getFileContent(file: TFile, vault: Vault): Promise<string | null> {
+export async function getFileContent(file: TFile, vault: Vault, app: App): Promise<string | null> {
   if (file.extension != "md") return null;
-  return await vault.cachedRead(file);
+  const content = await vault.cachedRead(file);
+  const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
+  if (frontmatter) return content.slice(frontmatter.position.end.line + 1);
+  return content;
 }
 
 export function getFileName(file: TFile): string {
