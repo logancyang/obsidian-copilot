@@ -153,8 +153,8 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             onChange={handleChainChange}
           >
             <option value='llm_chain'>Chat</option>
-            <option value='retrieval_qa'>QA</option>
-            <option value='vault_qa'>Vault QA</option>
+            <option value='retrieval_qa'>Long Note QA</option>
+            <option value='vault_qa'>Vault QA (BETA)</option>
           </select>
           <span className="tooltip-text">Mode Selection</span>
         </div>
