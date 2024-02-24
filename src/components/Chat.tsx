@@ -169,7 +169,6 @@ const Chat: React.FC<ChatProps> = ({
       );
     }
     const file = app.workspace.getActiveFile();
-    console.log("Active file:", file?.path);
     // If no note context provided, default to the active note
     if (noteFiles.length === 0) {
       if (!file) {
