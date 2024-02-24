@@ -129,7 +129,7 @@ export async function getFileContent(file: TFile, vault: Vault, app: App): Promi
   if (file.extension != "md") return null;
   const content = await vault.cachedRead(file);
   const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
-  if (frontmatter) return content.replace(`---\n${stringifyYaml(frontmatter)}\n---`, '')
+  if (frontmatter) return content.replace(`---\n${stringifyYaml(frontmatter)}---\n`, '')
   return content;
 }
 
