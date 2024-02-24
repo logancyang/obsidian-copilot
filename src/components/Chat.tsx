@@ -416,7 +416,7 @@ const Chat: React.FC<ChatProps> = ({
     []
   );
 
-  const customPromptProcessor = CustomPromptProcessor.getInstance(vault);
+  const customPromptProcessor = CustomPromptProcessor.getInstance(vault, app);
   useEffect(
     createEffect(
       "applyCustomPrompt",
