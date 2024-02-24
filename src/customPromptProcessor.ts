@@ -90,12 +90,7 @@ export class CustomPromptProcessor {
       customPrompt
     );
     let processedPrompt = customPrompt;
-    let index = 0; // Start with 0 for context0, context1, etc.
-
-    // Replace placeholders with contextX
-    processedPrompt = processedPrompt.replace(/\{([^}]+)\}/g, () => {
-      return `{context${index++}}`;
-    });
+    const matches = [...processedPrompt.matchAll(/\{([^}]+)\}/g)];
 
     let additionalInfo = "";
     if (processedPrompt.includes("{}")) {
@@ -104,11 +99,13 @@ export class CustomPromptProcessor {
       additionalInfo += `selectedText:\n\n ${selectedText}`;
     }
 
-    for (let i = 0; i < index; i++) {
-      additionalInfo += `\n\ncontext${i}:\n\n${variablesWithContent[i]}`;
+    for (let i = 0; i < variablesWithContent.length; i++) {
+      if (matches[i]) {
+        const varname = matches[i][1];
+        additionalInfo += `\n\n${varname}:\n\n${variablesWithContent[i]}`;
+      }
     }
 
-    const endLine = "\nAvoid mentioning the variable names 'selectedText' or 'contextX' in the reply. ";
-    return processedPrompt + "\n\n" + additionalInfo + (index > 0 ? endLine : "");
+    return processedPrompt + "\n\n" + additionalInfo;
   }
 }
