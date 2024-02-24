@@ -13,7 +13,7 @@ import {
   RetrievalQAChain
 } from "langchain/chains";
 import moment from 'moment';
-import { TFile, Vault, App } from 'obsidian';
+import { TFile, Vault, App, stringifyYaml } from 'obsidian';
 
 
 export const isFolderMatch = (fileFullpath: string, inputPath: string): boolean => {
@@ -129,7 +129,7 @@ export async function getFileContent(file: TFile, vault: Vault, app: App): Promi
   if (file.extension != "md") return null;
   const content = await vault.cachedRead(file);
   const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
-  if (frontmatter) return content.slice(frontmatter.position.end.line + 1);
+  if (frontmatter) return content.replace(`---\n${stringifyYaml(frontmatter)}\n---`, '')
   return content;
 }
 

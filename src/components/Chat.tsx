@@ -153,7 +153,7 @@ const Chat: React.FC<ChatProps> = ({
       console.log("Chat note context path:", settings.chatNoteContextPath);
       console.log("Chat note context tags:", settings.chatNoteContextTags);
     }
-    if (settings.chatNoteContextPath) {
+    if (settings.chatNoteContextPath?.length > 0) {
       // Recursively get all note TFiles in the path
       noteFiles = await getNotesFromPath(vault, settings.chatNoteContextPath);
     }
@@ -169,6 +169,7 @@ const Chat: React.FC<ChatProps> = ({
       );
     }
     const file = app.workspace.getActiveFile();
+    console.log("Active file:", file?.path);
     // If no note context provided, default to the active note
     if (noteFiles.length === 0) {
       if (!file) {
@@ -181,11 +182,11 @@ const Chat: React.FC<ChatProps> = ({
       );
       noteFiles = [file];
     }
-
     const notes = [];
     for (const file of noteFiles) {
       // Get the content of the note
-      const content = await getFileContent(file, vault);
+      const content = await getFileContent(file, vault, app);
+      console.log(content);
       const tags = await getTagsFromNote(file, app);
       if (content) {
         notes.push({ name: getFileName(file), content, tags });
@@ -239,7 +240,7 @@ const Chat: React.FC<ChatProps> = ({
       console.error("No active note found.");
       return;
     }
-    const noteContent = await getFileContent(file, vault);
+    const noteContent = await getFileContent(file, vault, app);
     const noteName = getFileName(file);
     if (!noteContent) {
       new Notice("No note content found.");
