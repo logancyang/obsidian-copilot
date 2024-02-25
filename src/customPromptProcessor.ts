@@ -51,9 +51,9 @@ export class CustomPromptProcessor {
           .slice(1)
           .split(",")
           .map((tag) => tag.trim());
-        const noteFiles = await getNotesFromTags(this.app, this.vault, tagNames);
+        const noteFiles = await getNotesFromTags(this.app, tagNames, undefined);
         for (const file of noteFiles) {
-          const content = await getFileContent(file, this.vault, this.app);
+          const content = await getFileContent(file, this.app);
           if (content) {
             notes.push({ name: getFileName(file), content });
           }
@@ -66,7 +66,7 @@ export class CustomPromptProcessor {
           processedVariableName
         );
         for (const file of noteFiles) {
-          const content = await getFileContent(file, this.vault, this.app);
+          const content = await getFileContent(file, this.app);
           if (content) {
             notes.push({ name: getFileName(file), content });
           }

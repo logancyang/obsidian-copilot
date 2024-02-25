@@ -73,7 +73,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         console.error("No active note found.");
         return;
       }
-      const noteContent = await getFileContent(file, vault, app);
+      const noteContent = await getFileContent(file, app);
       const noteName = getFileName(file);
 
       const activeNoteOnMessage: ChatMessage = {

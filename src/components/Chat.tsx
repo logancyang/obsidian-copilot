@@ -163,7 +163,6 @@ const Chat: React.FC<ChatProps> = ({
       // If path is not provided, get all notes with the specified tags
       noteFiles = await getNotesFromTags(
         app,
-        vault,
         settings.chatNoteContextTags,
         noteFiles
       );
@@ -184,7 +183,7 @@ const Chat: React.FC<ChatProps> = ({
     const notes = [];
     for (const file of noteFiles) {
       // Get the content of the note
-      const content = await getFileContent(file, vault, app);
+      const content = await getFileContent(file, app);
       console.log(content);
       const tags = await getTagsFromNote(file, app);
       if (content) {
@@ -239,7 +238,7 @@ const Chat: React.FC<ChatProps> = ({
       console.error("No active note found.");
       return;
     }
-    const noteContent = await getFileContent(file, vault, app);
+    const noteContent = await getFileContent(file, app);
     const noteName = getFileName(file);
     if (!noteContent) {
       new Notice("No note content found.");

@@ -46,17 +46,14 @@ export async function getTagsFromNote(file: TFile, app: App): Promise<string[]> 
   return tags.map((tag: string) => tag.replace('#', ''));
 }
 
-export async function getNotesFromTags(
-  app: App, vault: Vault, tags: string[], noteFiles?: TFile[]
-): Promise<TFile[]> {
+export async function getNotesFromTags(app: App, tags: string[], noteFiles?: TFile[]): Promise<TFile[]> {
   if (tags.length === 0) {
     return [];
   }
 
   // Strip any '#' from the tags set from the user
   tags = tags.map(tag => tag.replace('#', ''));
-
-  const files = noteFiles && noteFiles.length > 0 ? noteFiles : await getNotesFromPath(vault, '/');
+  const files = noteFiles && noteFiles.length > 0 ? noteFiles : await getNotesFromPath(app.vault, '/');
   const filesWithTag = [];
 
   for (const file of files) {
@@ -125,8 +122,9 @@ export const formatDateTime = (now: Date, timezone: 'local' | 'utc' = 'local') =
   return formattedDateTime.format('YYYY_MM_DD-HH_mm_ss');
 };
 
-export async function getFileContent(file: TFile, vault: Vault, app: App): Promise<string | null> {
+export async function getFileContent(file: TFile, app: App): Promise<string | null> {
   if (file.extension != "md") return null;
+  const vault = app.vault;
   const content = await vault.cachedRead(file);
   const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
   if (frontmatter) return content.replace(`---\n${stringifyYaml(frontmatter)}---\n`, '')
