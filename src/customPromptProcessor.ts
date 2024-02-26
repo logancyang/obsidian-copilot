@@ -17,14 +17,16 @@ export class CustomPromptProcessor {
   private vault: Vault;
   private app?: App;
   private static instance: CustomPromptProcessor | null = null;
-  private constructor(vault: Vault, app?: App) {
+  private removeFrontmatter: boolean;
+  private constructor(vault: Vault, removeFrontmatter: boolean, app?: App) {
     this.vault = vault;
     this.app = app;
+    this.removeFrontmatter = removeFrontmatter;
   }
 
-  public static getInstance(vault: Vault, app?: App): CustomPromptProcessor {
+  public static getInstance(vault: Vault, removeFrontmatter : boolean, app?: App): CustomPromptProcessor {
     if (!CustomPromptProcessor.instance) {
-      CustomPromptProcessor.instance = new CustomPromptProcessor(vault, app);
+      CustomPromptProcessor.instance = new CustomPromptProcessor(vault, removeFrontmatter,  app);
     }
     return CustomPromptProcessor.instance;
   }
@@ -53,7 +55,7 @@ export class CustomPromptProcessor {
           .map((tag) => tag.trim());
         const noteFiles = await getNotesFromTags(this.app, tagNames, undefined);
         for (const file of noteFiles) {
-          const content = await getFileContent(file, this.app);
+          const content = await getFileContent(file, this.app, this.removeFrontmatter);
           if (content) {
             notes.push({ name: getFileName(file), content });
           }
@@ -66,7 +68,7 @@ export class CustomPromptProcessor {
           processedVariableName
         );
         for (const file of noteFiles) {
-          const content = await getFileContent(file, this.app);
+          const content = await getFileContent(file, this.app, this.removeFrontmatter);
           if (content) {
             notes.push({ name: getFileName(file), content });
           }

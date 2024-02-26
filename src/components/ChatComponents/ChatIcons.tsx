@@ -28,6 +28,8 @@ interface ChatIconsProps {
   onForceRebuildActiveNoteContext: () => void;
   addMessage: (message: ChatMessage) => void;
   vault: Vault;
+  removeFrontmatter: boolean;
+  
 }
 
 const ChatIcons: React.FC<ChatIconsProps> = ({
@@ -42,6 +44,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   onForceRebuildActiveNoteContext,
   addMessage,
   vault,
+  removeFrontmatter,
 }) => {
   const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
 
@@ -73,7 +76,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         console.error("No active note found.");
         return;
       }
-      const noteContent = await getFileContent(file, app);
+      const noteContent = await getFileContent(file, app, removeFrontmatter);
       const noteName = getFileName(file);
 
       const activeNoteOnMessage: ChatMessage = {

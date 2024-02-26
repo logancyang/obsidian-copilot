@@ -1,11 +1,11 @@
 import { CopilotSettings } from "@/settings/SettingsPage";
-import { App, Modal } from "obsidian";
+import { App, Modal, Setting } from "obsidian";
 
 export class ChatNoteContextModal extends Modal {
   private settings: CopilotSettings;
-  private onSubmit: (path: string, tags: string[]) => void;
+  private onSubmit: (path: string, tags: string[], removeFrontmatter: boolean) => void;
 
-  constructor(app: App, settings: CopilotSettings, onSubmit: (path: string, tags: string[]) => void) {
+  constructor(app: App, settings: CopilotSettings, onSubmit: (path: string, tags: string[], removeFrontmatter: boolean) => void) {
     super(app);
     this.settings = settings;
     this.onSubmit = onSubmit;
@@ -66,6 +66,20 @@ export class ChatNoteContextModal extends Modal {
     );
     tagsField.setAttribute('name', 'tags');
 
+    //add checkbox/toggle for removeFrontmatter settings (this.settings.removeFrontmatter)
+    let removeFrontmatter = this.settings.removeFrontmatter;
+    new Setting(pathContainer)
+      .setName('Remove Frontmatter')
+      .setDesc("If checked, frontmatter will be removed from the note before sending to the prompt.")
+      .setHeading()
+      .addToggle(toggle => toggle
+        .setValue(this.settings.removeFrontmatter)
+        .onChange(async (value) => {
+          removeFrontmatter = value;
+        })
+      );
+
+
     const submitButtonContainer = formContainer.createEl('div', { cls: 'copilot-command-save-btn-container' });
     const submitButton = submitButtonContainer.createEl('button', { text: 'Submit', cls: 'copilot-command-save-btn' });
 
@@ -82,7 +96,7 @@ export class ChatNoteContextModal extends Modal {
         .map(tag => tag.replace('#', ''))
         .filter(tag => tag !== '');
 
-      this.onSubmit(pathValue, tagsValue);
+      this.onSubmit(pathValue, tagsValue, removeFrontmatter);
       this.close();
     });
   }

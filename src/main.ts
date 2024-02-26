@@ -315,10 +315,11 @@ export default class CopilotPlugin extends Plugin {
         new ChatNoteContextModal(
           this.app,
           this.settings,
-          async (path: string, tags: string[]) => {
+          async (path: string, tags: string[], removeFrontmatter: boolean) => {
             // Store the path in the plugin's settings, default to empty string
             this.settings.chatNoteContextPath = path;
             this.settings.chatNoteContextTags = tags;
+            this.settings.removeFrontmatter = removeFrontmatter;
             await this.saveSettings();
           }
         ).open();

@@ -122,12 +122,12 @@ export const formatDateTime = (now: Date, timezone: 'local' | 'utc' = 'local') =
   return formattedDateTime.format('YYYY_MM_DD-HH_mm_ss');
 };
 
-export async function getFileContent(file: TFile, app: App): Promise<string | null> {
+export async function getFileContent(file: TFile, app: App, removeFrontmatter: boolean): Promise<string | null> {
   if (file.extension != "md") return null;
   const vault = app.vault;
   const content = await vault.cachedRead(file);
   const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
-  if (frontmatter) return content.replace(`---\n${stringifyYaml(frontmatter)}---\n`, '')
+  if (removeFrontmatter && frontmatter)return content.replace(`---\n${stringifyYaml(frontmatter)}---\n`, '')
   return content;
 }
 

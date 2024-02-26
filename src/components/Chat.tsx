@@ -183,7 +183,7 @@ const Chat: React.FC<ChatProps> = ({
     const notes = [];
     for (const file of noteFiles) {
       // Get the content of the note
-      const content = await getFileContent(file, app);
+      const content = await getFileContent(file, app, settings.removeFrontmatter);
       console.log(content);
       const tags = await getTagsFromNote(file, app);
       if (content) {
@@ -238,7 +238,7 @@ const Chat: React.FC<ChatProps> = ({
       console.error("No active note found.");
       return;
     }
-    const noteContent = await getFileContent(file, app);
+    const noteContent = await getFileContent(file, app, settings.removeFrontmatter);
     const noteName = getFileName(file);
     if (!noteContent) {
       new Notice("No note content found.");
@@ -414,7 +414,7 @@ const Chat: React.FC<ChatProps> = ({
     []
   );
 
-  const customPromptProcessor = CustomPromptProcessor.getInstance(vault, app);
+  const customPromptProcessor = CustomPromptProcessor.getInstance(vault, settings.removeFrontmatter, app);
   useEffect(
     createEffect(
       "applyCustomPrompt",
@@ -473,6 +473,7 @@ const Chat: React.FC<ChatProps> = ({
           onForceRebuildActiveNoteContext={forceRebuildActiveNoteContext}
           addMessage={addMessage}
           vault={vault}
+          removeFrontmatter={settings.removeFrontmatter}
         />
         <ChatInput
           inputMessage={inputMessage}

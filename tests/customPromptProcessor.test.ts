@@ -15,7 +15,7 @@ describe('CustomPromptProcessor', () => {
     jest.clearAllMocks();
 
     // Create an instance of CustomPromptProcessor with mocked dependencies
-    processor = CustomPromptProcessor.getInstance(mockVault);
+    processor = CustomPromptProcessor.getInstance(mockVault, false);
   });
 
   it('should add 1 context and selectedText', async () => {
