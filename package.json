@@ -43,6 +43,7 @@
     "@langchain/cohere": "^0.0.2",
     "@langchain/community": "^0.0.16",
     "@langchain/google-genai": "^0.0.7",
+    "@langchain/mistralai": "^0.0.7",
     "@tabler/icons-react": "^2.14.0",
     "@types/pouchdb": "^6.4.0",
     "axios": "^1.3.4",

@@ -12,6 +12,10 @@ interface ApiSettingsProps {
   setOpenRouterAiApiKey: (value: string) => void;
   openRouterModel: string;
   setOpenRouterModel: (value: string) => void;
+  mistralAiApiKey: string;
+  setMistralAiApiKey: (value: string) => void;
+  mistralAiModel: string;
+  setMistralAiModel: (value: string) => void;
   azureOpenAIApiKey: string;
   setAzureOpenAIApiKey: (value: string) => void;
   azureOpenAIApiInstanceName: string;
@@ -29,6 +33,10 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
   setOpenAIApiKey,
   googleApiKey,
   setGoogleApiKey,
+  mistralAiApiKey,
+  setMistralAiApiKey,
+  mistralAiModel,
+  setMistralAiModel,
   openRouterAiApiKey,
   setOpenRouterAiApiKey,
   openRouterModel,
@@ -96,6 +104,35 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
             </a>.
             <br />
             Your API key is stored locally and is only used to make requests to Google's services.
+          </p>
+        </div>
+      </Collapsible>
+
+      <Collapsible title="MistralAI API Settings">
+        <div>
+          <ApiSetting
+            title="MistralAI API Key"
+            value={mistralAiApiKey}
+            setValue={setMistralAiApiKey}
+            placeholder="Enter MistralAI API Key"
+          />
+          <ApiSetting
+            title="MistralAI Model"
+            value={mistralAiModel}
+            // @ts-ignore
+            setValue={setMistralAiModel}
+            placeholder={DEFAULT_SETTINGS.mistralAiModel}
+            type="text"
+          />
+          <p>
+            You can get your MistralAI key {' '}
+            <a href="https://console.mistral.ai/api-keys/" target="_blank" rel="noopener noreferrer">
+              here
+            </a>.
+            <br />
+            Find models <a href="https://docs.mistral.ai/guides/model-selection/" target="_blank" rel="noopener noreferrer">
+              here
+            </a>.
           </p>
         </div>
       </Collapsible>

@@ -23,6 +23,7 @@ export enum ChatModelDisplayNames {
   GPT_4_32K = 'GPT-4 32K',
   AZURE_OPENAI = 'AZURE OPENAI',
   GEMINI_PRO = 'GEMINI PRO',
+  MISTRALAI = 'MISTRALAI',
   OPENROUTERAI = 'OPENROUTER.AI',
   OLLAMA = 'OLLAMA (LOCAL)',
   LM_STUDIO = 'LM STUDIO (LOCAL)',
@@ -43,6 +44,10 @@ export const AZURE_MODELS = new Set([
 
 export const GOOGLE_MODELS = new Set([
   ChatModelDisplayNames.GEMINI_PRO,
+]);
+
+export const MISTRALAI_MODELS = new Set([
+  ChatModelDisplayNames.MISTRALAI,
 ]);
 
 export const OPENROUTERAI_MODELS = new Set([
@@ -75,6 +80,7 @@ export enum ModelProviders {
   AZURE_OPENAI = 'azure_openai',
   ANTHROPIC = 'anthropic',
   GOOGLE = 'google',
+  MISTRALAI = 'mistralai',
   OPENROUTERAI = 'openrouterai',
   LM_STUDIO = 'lm_studio',
   OLLAMA = 'ollama',
@@ -121,6 +127,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   azureOpenAIApiVersion: '',
   azureOpenAIApiEmbeddingDeploymentName: '',
   googleApiKey: '',
+  mistralAiApiKey: '',
+  mistralAiModel: 'mistral-small',
   openRouterAiApiKey: '',
   openRouterModel: 'cognitivecomputations/dolphin-mixtral-8x7b',
   defaultModel: ChatModels.GPT_4_TURBO,
