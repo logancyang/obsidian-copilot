@@ -1,4 +1,4 @@
-import { ChainType } from '@/chainFactory';
+import { ChainType, Document } from '@/chainFactory';
 import {
   DEFAULT_SETTINGS,
   DISPLAY_NAME_TO_MODEL,
@@ -315,4 +315,16 @@ export function processVariableNameForNotePath(variableName: string): string {
   }
   // It's a path, so we just return it as is
   return variableName;
+}
+
+export function extractTitlesFromDocs(docs: Document[]) {
+  const titles: string[] = [];
+
+  docs.forEach(doc => {
+    if (doc.metadata?.title) {
+      titles.push(doc.metadata?.title);
+    }
+  });
+
+  return titles;
 }

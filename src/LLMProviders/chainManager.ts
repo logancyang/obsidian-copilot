@@ -10,7 +10,12 @@ import {
 import EncryptionService from '@/encryptionService';
 import { ProxyChatOpenAI } from '@/langchainWrappers';
 import { ChatMessage } from '@/sharedState';
-import { extractChatHistory, getModelName, isSupportedChain } from '@/utils';
+import {
+  extractChatHistory,
+  extractTitlesFromDocs,
+  getModelName,
+  isSupportedChain
+} from '@/utils';
 import VectorDBManager, { MemoryVector, NoteFile, VectorStoreDocument } from '@/vectorDBManager';
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { RunnableSequence } from "@langchain/core/runnables";
@@ -22,7 +27,7 @@ import {
 } from "langchain/prompts";
 import { MultiQueryRetriever } from "langchain/retrievers/multi_query";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
-import { Notice } from 'obsidian';
+import { App, Notice } from 'obsidian';
 import ChatModelManager from './chatModelManager';
 import EmbeddingsManager from './embeddingManager';
 import MemoryManager from './memoryManager';
@@ -36,6 +41,7 @@ export default class ChainManager {
   private static isOllamaModelActive = false;
   private static isOpenRouterModelActive = false;
 
+  private app: App;
   private vectorStore: MemoryVectorStore;
   private promptManager: PromptManager;
   private embeddingsManager: EmbeddingsManager;
@@ -51,10 +57,12 @@ export default class ChainManager {
    * @return {void}
    */
   constructor(
+    app: App,
     langChainParams: LangChainParams,
     encryptionService: EncryptionService,
   ) {
     // Instantiate singletons
+    this.app = app;
     this.langChainParams = langChainParams;
     this.memoryManager = MemoryManager.getInstance(this.langChainParams);
     this.encryptionService = encryptionService;
@@ -72,7 +80,6 @@ export default class ChainManager {
   }
 
   static storeRetrieverDocuments(documents: Document[]) {
-    console.log("Storing retrieved documents: ", documents);
     ChainManager.retrievedDocuments = documents;
   }
 
@@ -452,6 +459,12 @@ export default class ChainManager {
       fullAIResponse += chunk.content;
       updateCurrentAiMessage(fullAIResponse);
     }
+
+    const docTitles = extractTitlesFromDocs(ChainManager.retrievedDocuments);
+    const markdownLinks = docTitles.map(title =>
+      `[${title}](obsidian://open?vault=${this.app.vault.getName()}&file=${encodeURIComponent(title)})`
+    ).join('\n');
+    fullAIResponse += '\n\n**Source notes**:\n' + markdownLinks;
     return fullAIResponse;
   }
 

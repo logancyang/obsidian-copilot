@@ -40,7 +40,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({ message }) => {
           {message.sender === USER_SENDER ? (
             <span>{message.message}</span>
           ) : (
-            <ReactMarkdown>{message.message}</ReactMarkdown>
+            <ReactMarkdown
+              transformLinkUri={null}
+            >{message.message}</ReactMarkdown>
           )}
         </div>
       </div>

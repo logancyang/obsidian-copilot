@@ -48,6 +48,7 @@ export default class CopilotPlugin extends Plugin {
     const langChainParams = this.getChainManagerParams();
     this.encryptionService = new EncryptionService(this.settings);
     this.chainManager = new ChainManager(
+      this.app,
       langChainParams,
       this.encryptionService
     );
