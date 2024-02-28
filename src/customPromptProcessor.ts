@@ -5,7 +5,7 @@ import {
   getNotesFromTags,
   processVariableNameForNotePath,
 } from "@/utils";
-import { Notice, Vault } from "obsidian";
+import { App, Notice, Vault } from "obsidian";
 
 export interface CustomPrompt {
   _id: string;
@@ -15,14 +15,18 @@ export interface CustomPrompt {
 
 export class CustomPromptProcessor {
   private vault: Vault;
+  private app?: App;
   private static instance: CustomPromptProcessor | null = null;
-  private constructor(vault: Vault) {
+  private removeFrontmatter: boolean;
+  private constructor(vault: Vault, removeFrontmatter: boolean, app?: App) {
     this.vault = vault;
+    this.app = app;
+    this.removeFrontmatter = removeFrontmatter;
   }
 
-  public static getInstance(vault: Vault): CustomPromptProcessor {
+  public static getInstance(vault: Vault, removeFrontmatter : boolean, app?: App): CustomPromptProcessor {
     if (!CustomPromptProcessor.instance) {
-      CustomPromptProcessor.instance = new CustomPromptProcessor(vault);
+      CustomPromptProcessor.instance = new CustomPromptProcessor(vault, removeFrontmatter,  app);
     }
     return CustomPromptProcessor.instance;
   }
@@ -34,6 +38,7 @@ export class CustomPromptProcessor {
    * @return {Promise<string[]>} the processed custom prompt
    */
   async extractVariablesFromPrompt(customPrompt: string): Promise<string[]> {
+    if (!this.app) return []
     const variablesWithContent: string[] = [];
     const variableRegex = /\{([^}]+)\}/g;
     let match;
@@ -48,9 +53,9 @@ export class CustomPromptProcessor {
           .slice(1)
           .split(",")
           .map((tag) => tag.trim());
-        const noteFiles = await getNotesFromTags(this.vault, tagNames);
+        const noteFiles = await getNotesFromTags(this.app, tagNames, undefined);
         for (const file of noteFiles) {
-          const content = await getFileContent(file, this.vault);
+          const content = await getFileContent(file, this.app, this.removeFrontmatter);
           if (content) {
             notes.push({ name: getFileName(file), content });
           }
@@ -63,7 +68,7 @@ export class CustomPromptProcessor {
           processedVariableName
         );
         for (const file of noteFiles) {
-          const content = await getFileContent(file, this.vault);
+          const content = await getFileContent(file, this.app, this.removeFrontmatter);
           if (content) {
             notes.push({ name: getFileName(file), content });
           }

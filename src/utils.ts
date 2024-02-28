@@ -13,7 +13,7 @@ import {
   RetrievalQAChain
 } from "langchain/chains";
 import moment from 'moment';
-import { TFile, Vault, parseYaml } from 'obsidian';
+import { TFile, Vault, App, stringifyYaml } from 'obsidian';
 
 
 export const isFolderMatch = (fileFullpath: string, inputPath: string): boolean => {
@@ -39,29 +39,25 @@ export const getNotesFromPath = async (vault: Vault, path: string): Promise<TFil
   });
 }
 
-export async function getTagsFromNote(file: TFile, vault: Vault): Promise<string[]> {
-  const fileContent = await vault.cachedRead(file);
-  const frontMatter = parseYaml(fileContent.split('---')?.[1] ?? '') || {};
-  const tags = frontMatter.tags || [];
+export async function getTagsFromNote(file: TFile, app: App): Promise<string[]> {
+  const frontMatter = app.metadataCache.getFileCache(file)?.frontmatter
+  const tags = frontMatter?.tags || [];
   // Strip any '#' from the frontmatter tags. Obsidian sometimes has '#' sometimes doesn't...
   return tags.map((tag: string) => tag.replace('#', ''));
 }
 
-export async function getNotesFromTags(
-  vault: Vault, tags: string[], noteFiles?: TFile[]
-): Promise<TFile[]> {
+export async function getNotesFromTags(app: App, tags: string[], noteFiles?: TFile[]): Promise<TFile[]> {
   if (tags.length === 0) {
     return [];
   }
 
   // Strip any '#' from the tags set from the user
   tags = tags.map(tag => tag.replace('#', ''));
-
-  const files = noteFiles && noteFiles.length > 0 ? noteFiles : await getNotesFromPath(vault, '/');
+  const files = noteFiles && noteFiles.length > 0 ? noteFiles : await getNotesFromPath(app.vault, '/');
   const filesWithTag = [];
 
   for (const file of files) {
-    const noteTags = await getTagsFromNote(file, vault);
+    const noteTags = await getTagsFromNote(file, app);
     if (tags.some(tag => noteTags.includes(tag))) {
       filesWithTag.push(file);
     }
@@ -126,9 +122,13 @@ export const formatDateTime = (now: Date, timezone: 'local' | 'utc' = 'local') =
   return formattedDateTime.format('YYYY_MM_DD-HH_mm_ss');
 };
 
-export async function getFileContent(file: TFile, vault: Vault): Promise<string | null> {
+export async function getFileContent(file: TFile, app: App, removeFrontmatter: boolean): Promise<string | null> {
   if (file.extension != "md") return null;
-  return await vault.cachedRead(file);
+  const vault = app.vault;
+  const content = await vault.cachedRead(file);
+  const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
+  if (removeFrontmatter && frontmatter)return content.replace(`---\n${stringifyYaml(frontmatter)}---\n`, '')
+  return content;
 }
 
 export function getFileName(file: TFile): string {

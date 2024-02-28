@@ -39,6 +39,7 @@ export interface CopilotSettings {
   chatNoteContextTags: string[];
   debug: boolean;
   enableEncryption: boolean;
+  removeFrontmatter: boolean;
 }
 
 export class CopilotSettingTab extends PluginSettingTab {
