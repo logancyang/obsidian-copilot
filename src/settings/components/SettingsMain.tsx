@@ -24,6 +24,9 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
   const [openAIApiKey, setOpenAIApiKey] = useState(plugin.settings.openAIApiKey);
   const [googleApiKey, setGoogleApiKey] = useState(plugin.settings.googleApiKey);
 
+  const [mistralAiApiKey, setMistralAiApiKey] = useState(plugin.settings.mistralAiApiKey);
+  const [mistralAiModel, setMistralAiModel] = useState(plugin.settings.mistralAiModel);
+
   const [openRouterAiApiKey, setOpenRouterAiApiKey] = useState(plugin.settings.openRouterAiApiKey);
   const [openRouterModel, setOpenRouterModel] = useState(plugin.settings.openRouterModel);
 
@@ -64,6 +67,8 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
     // API settings
     plugin.settings.openAIApiKey = openAIApiKey;
     plugin.settings.googleApiKey = googleApiKey;
+    plugin.settings.mistralAiApiKey = mistralAiApiKey;
+    plugin.settings.mistralAiModel = mistralAiModel;
     plugin.settings.openRouterAiApiKey = openRouterAiApiKey;
     plugin.settings.openRouterModel = openRouterModel;
     plugin.settings.azureOpenAIApiKey = azureOpenAIApiKey;
@@ -180,6 +185,10 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
         setOpenAIApiKey={setOpenAIApiKey}
         googleApiKey={googleApiKey}
         setGoogleApiKey={setGoogleApiKey}
+        mistralAiApiKey={mistralAiApiKey}
+        setMistralAiApiKey={setMistralAiApiKey}
+        mistralAiModel={mistralAiModel}
+        setMistralAiModel={setMistralAiModel}
         openRouterAiApiKey={openRouterAiApiKey}
         setOpenRouterAiApiKey={setOpenRouterAiApiKey}
         openRouterModel={openRouterModel}

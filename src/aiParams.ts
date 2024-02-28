@@ -14,12 +14,13 @@ export interface ModelConfig {
   azureOpenAIApiInstanceName?: string,
   azureOpenAIApiDeploymentName?: string,
   azureOpenAIApiVersion?: string,
-  // Google and TogetherAI API key share this property
+  // Google, MistralAI and TogetherAI API key share this property
   apiKey?: string,
   openAIProxyBaseUrl?: string,
   ollamaModel?: string,
   // OllamaBaseUrl
   baseUrl?: string,
+  mistralAiModel?: string,
   openRouterModel?: string,
   lmStudioBaseUrl?: string,
 }
@@ -35,6 +36,7 @@ export interface LangChainParams {
   azureOpenAIApiVersion: string,
   azureOpenAIApiEmbeddingDeploymentName: string,
   googleApiKey: string,
+  mistralAiApiKey: string,
   openRouterAiApiKey: string,
   model: string,
   modelDisplayName: string,
@@ -48,6 +50,7 @@ export interface LangChainParams {
   options: SetChainOptions,
   ollamaModel: string,
   ollamaBaseUrl: string,
+  mistralAiModel: string,
   openRouterModel: string,
   lmStudioBaseUrl: string,
   openAIProxyBaseUrl?: string,

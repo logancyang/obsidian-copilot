@@ -3,6 +3,7 @@ import {
   AZURE_MODELS,
   GOOGLE_MODELS,
   LM_STUDIO_MODELS,
+  MISTRALAI_MODELS,
   ModelProviders,
   OLLAMA_MODELS,
   OPENAI_MODELS,
@@ -13,6 +14,7 @@ import { ProxyChatOpenAI } from '@/langchainWrappers';
 import { getModelName } from '@/utils';
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { ChatMistralAI } from "@langchain/mistralai";
 import { BaseChatModel } from 'langchain/chat_models/base';
 import { ChatOpenAI } from 'langchain/chat_models/openai';
 import { Notice } from 'obsidian';
@@ -81,6 +83,10 @@ export default class ChatModelManager {
       [ModelProviders.GOOGLE]: {
         apiKey: decrypt(params.googleApiKey),
       },
+      [ModelProviders.MISTRALAI]: {
+        apiKey: decrypt(params.mistralAiApiKey),
+        modelName: params.mistralAiModel,
+      },
       [ModelProviders.OPENROUTERAI]: {
         modelName: params.openRouterModel,
         openAIApiKey: decrypt(params.openRouterAiApiKey),
@@ -124,6 +130,12 @@ export default class ChatModelManager {
         apiKey: this.langChainParams.googleApiKey,
         constructor: ChatGoogleGenerativeAI,
         vendor: ModelProviders.GOOGLE,
+      },
+      {
+        models: MISTRALAI_MODELS,
+        apiKey: this.langChainParams.mistralAiApiKey,
+        constructor: ChatMistralAI,
+        vendor: ModelProviders.MISTRALAI,
       },
       {
         models: OPENROUTERAI_MODELS,
