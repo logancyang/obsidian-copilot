@@ -17,11 +17,11 @@ If you enjoy Copilot for Obsidian, please consider [sponsoring this project](htt
 
 <a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
 
-#### 🎉 NEW in v2.4.16: Advanced Custom Prompt! 🎉🎉🎉
+#### 🎉 NEW in v2.4.18: Advanced Custom Prompt! 🎉🎉🎉
 
-<a href="https://youtu.be/liJ0MAv7QP0?si=ArejqXQbqznl3WyP" target="_blank"><img src="./images/thumbnail-adv-prompt.png" width="700" /></a>
+<a href="https://youtu.be/VPNlXeCsH74?si=eYjJhO2cZtU7VrQz" target="_blank"><img src="./images/thumbnail-adv-prompt-tutorial.png" width="700" /></a>
 
-This video is a case study of Advanced Custom Prompt - mimicking someone's writing style. This form of templating enables a lot more possibilities with long context window models. If you have your own creative cool use cases, don't hesitate to share them in the discussion or in the youtube comment section!
+This video shows how Advanced Custom Prompt works. This form of templating enables a lot more possibilities with long context window models. If you have your own creative cool use cases, don't hesitate to share them in the discussion or in the youtube comment section!
 
 #### FREE Models
 
