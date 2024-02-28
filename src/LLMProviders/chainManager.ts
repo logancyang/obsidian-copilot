@@ -1,6 +1,7 @@
 import { LangChainParams, SetChainOptions } from '@/aiParams';
 import ChainFactory, {
-  ChainType
+  ChainType,
+  Document,
 } from '@/chainFactory';
 import {
   AI_SENDER,
@@ -30,6 +31,7 @@ import PromptManager from './promptManager';
 export default class ChainManager {
   private static chain: RunnableSequence;
   private static retrievalChain: RunnableSequence;
+  private static retrievedDocuments: Document[] = [];
 
   private static isOllamaModelActive = false;
   private static isOpenRouterModelActive = false;
@@ -67,6 +69,11 @@ export default class ChainManager {
 
   private validateChainType(chainType: ChainType): void {
     if (chainType === undefined || chainType === null) throw new Error('No chain type set');
+  }
+
+  static storeRetrieverDocuments(documents: Document[]) {
+    console.log("Storing retrieved documents: ", documents);
+    ChainManager.retrievedDocuments = documents;
   }
 
   /**
@@ -198,15 +205,18 @@ export default class ChainManager {
           );
 
           // Create new conversational retrieval chain
-          ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain({
-            llm: chatModel,
-            retriever: vectorStore.asRetriever(
-              undefined,
-              (doc) => {
-                return doc.metadata.path === options.noteFile?.path;
-              }
-            ),
-          })
+          ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain(
+            {
+              llm: chatModel,
+              retriever: vectorStore.asRetriever(
+                undefined,
+                (doc) => {
+                  return doc.metadata.path === options.noteFile?.path;
+                }
+              ),
+            },
+            ChainManager.storeRetrieverDocuments.bind(ChainManager),
+          )
           console.log('Existing vector store for document hash: ', docHash);
         } else {
           // Index doesn't exist
@@ -231,10 +241,13 @@ export default class ChainManager {
             verbose: false,
           });
 
-          ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain({
-            llm: chatModel,
-            retriever: retriever,
-          })
+          ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain(
+            {
+              llm: chatModel,
+              retriever: retriever,
+            },
+            ChainManager.storeRetrieverDocuments.bind(ChainManager)
+          )
           console.log(
             'New conversational retrieval QA chain with multi-query retriever created for '
             + 'document hash: ', docHash
@@ -255,10 +268,13 @@ export default class ChainManager {
         const vectorStore = await VectorDBManager.getMemoryVectorStore(embeddingsAPI)
 
         // Create new conversational retrieval chain
-        ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain({
-          llm: chatModel,
-          retriever: vectorStore.asRetriever(3),
-        })
+        ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain(
+          {
+            llm: chatModel,
+            retriever: vectorStore.asRetriever(3),
+          },
+          ChainManager.storeRetrieverDocuments.bind(ChainManager)
+        )
         console.log(
           'New conversational retrieval QA chain with multi-query retriever created for entire vault'
         );

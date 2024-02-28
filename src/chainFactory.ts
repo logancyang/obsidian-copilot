@@ -34,6 +34,13 @@ export interface ConversationalRetrievalChainParams {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export interface Document<T = Record<string, any>> {
+  // Structure of Document, possibly including pageContent, metadata, etc.
+  pageContent: string;
+  metadata: T;
+}
+
 type ConversationalRetrievalQAChainInput = {
   question: string;
   chat_history: [string, string][];
@@ -123,7 +130,8 @@ class ChainFactory {
    * @return {RunnableSequence} a new conversational retrieval chain
    */
   public static createConversationalRetrievalChain(
-    args: ConversationalRetrievalChainParams
+    args: ConversationalRetrievalChainParams,
+    onDocumentsRetrieved: (documents: Document[]) => void,
   ): RunnableSequence {
     const { llm, retriever } = args;
 
@@ -162,9 +170,15 @@ class ChainFactory {
       new StringOutputParser(),
     ]);
 
+    const formatDocumentsAsStringAndStore = async (documents: Document[]) => {
+      // Store or log documents for debugging
+      onDocumentsRetrieved(documents);
+      return formatDocumentsAsString(documents);
+    };
+
     const answerChain = RunnableSequence.from([
       {
-        context: retriever.pipe(formatDocumentsAsString),
+        context: retriever.pipe(formatDocumentsAsStringAndStore),
         question: new RunnablePassthrough(),
       },
       ANSWER_PROMPT,
