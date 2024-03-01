@@ -26,6 +26,7 @@ import {
   MessagesPlaceholder
 } from "langchain/prompts";
 import { MultiQueryRetriever } from "langchain/retrievers/multi_query";
+import { ScoreThresholdRetriever } from "langchain/retrievers/score_threshold";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { App, Notice } from 'obsidian';
 import ChatModelManager from './chatModelManager';
@@ -273,12 +274,17 @@ export default class ChainManager {
           return;
         }
         const vectorStore = await VectorDBManager.getMemoryVectorStore(embeddingsAPI)
+        const retriever = ScoreThresholdRetriever.fromVectorStore(vectorStore, {
+          minSimilarityScore: 0.3, // TODO: Make this a user setting
+          maxK: 10, // The maximum number of docs (chunks) to retrieve
+          kIncrement: 2,
+        });
 
         // Create new conversational retrieval chain
         ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain(
           {
             llm: chatModel,
-            retriever: vectorStore.asRetriever(3),
+            retriever: retriever,
           },
           ChainManager.storeRetrieverDocuments.bind(ChainManager)
         )
