@@ -463,11 +463,14 @@ export default class ChainManager {
     // TODO: This only returns unique note titles, but actual retrieved docs are chunks.
     // That means multiple chunks can be from the same note. A more advanced logic is needed
     // to show specific chunks in the future.
-    const docTitles = extractUniqueTitlesFromDocs(ChainManager.retrievedDocuments);
-    const markdownLinks = docTitles.map(title =>
-      `[${title}](obsidian://open?vault=${this.app.vault.getName()}&file=${encodeURIComponent(title)})`
-    ).join('\n');
-    fullAIResponse += '\n\n**Source Notes**:\n' + markdownLinks;
+    if (this.langChainParams.chainType === ChainType.VAULT_QA_CHAIN) {
+      const docTitles = extractUniqueTitlesFromDocs(ChainManager.retrievedDocuments);
+      const markdownLinks = docTitles.map(title =>
+        `[${title}](obsidian://open?vault=${this.app.vault.getName()}&file=${encodeURIComponent(title)})`
+      ).join('\n');
+      fullAIResponse += '\n\n**Source**:\n' + markdownLinks;
+    }
+
     return fullAIResponse;
   }
 
