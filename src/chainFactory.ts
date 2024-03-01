@@ -53,9 +53,7 @@ type ConversationalRetrievalQAChainInput = {
 // Add new chain types here
 export enum ChainType {
   LLM_CHAIN = 'llm_chain',
-  RETRIEVAL_QA_CHAIN = 'retrieval_qa',
-  // TODO: Wait for official fix and use conversational retrieval chain instead of retrieval qa.
-  CONVERSATIONAL_RETRIEVAL_QA_CHAIN = 'conversational_retrieval_chain',
+  LONG_NOTE_QA_CHAIN = 'long_note_qa',
   VAULT_QA_CHAIN = 'vault_qa',
 }
 

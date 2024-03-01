@@ -258,8 +258,8 @@ const Chat: React.FC<ChatProps> = ({
       isVisible: true,
     };
 
-    if (currentChain === ChainType.RETRIEVAL_QA_CHAIN) {
-      setChain(ChainType.RETRIEVAL_QA_CHAIN, { noteFile });
+    if (currentChain === ChainType.LONG_NOTE_QA_CHAIN) {
+      setChain(ChainType.LONG_NOTE_QA_CHAIN, { noteFile });
     }
 
     addMessage(activeNoteOnMessage);

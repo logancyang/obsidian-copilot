@@ -13,8 +13,8 @@ interface QASettingsProps {
   setCohereApiKey: (value: string) => void;
   huggingfaceApiKey: string;
   setHuggingfaceApiKey: (value: string) => void;
-  saveVaultToVectorStore: string;
-  setSaveVaultToVectorStore: (value: string) => void;
+  indexVaultToVectorStore: string;
+  setIndexVaultToVectorStore: (value: string) => void;
 }
 
 const QASettings: React.FC<QASettingsProps> = ({
@@ -26,8 +26,8 @@ const QASettings: React.FC<QASettingsProps> = ({
   setCohereApiKey,
   huggingfaceApiKey,
   setHuggingfaceApiKey,
-  saveVaultToVectorStore,
-  setSaveVaultToVectorStore,
+  indexVaultToVectorStore,
+  setIndexVaultToVectorStore,
 }) => {
   return (
     <div>
@@ -58,8 +58,8 @@ const QASettings: React.FC<QASettingsProps> = ({
       <DropdownComponent
         name="Auto-save vault to vector store strategy"
         description="Decide how you want the vault to be saved to the vector store. Beware that using On Save will call the embedding API every time you save a file."
-        value={saveVaultToVectorStore}
-        onChange={setSaveVaultToVectorStore}
+        value={indexVaultToVectorStore}
+        onChange={setIndexVaultToVectorStore}
         options={VAULT_VECTOR_STORE_STRATEGIES}
       />
       <br />

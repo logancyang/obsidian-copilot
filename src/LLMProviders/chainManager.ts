@@ -152,7 +152,7 @@ export default class ChainManager {
     }
     this.validateChainType(chainType);
     // MUST set embeddingsManager when switching to QA mode
-    if (chainType === ChainType.RETRIEVAL_QA_CHAIN || chainType === ChainType.VAULT_QA_CHAIN) {
+    if (chainType === ChainType.LONG_NOTE_QA_CHAIN || chainType === ChainType.VAULT_QA_CHAIN) {
       this.embeddingsManager = EmbeddingsManager.getInstance(this.langChainParams, this.encryptionService);
     }
 
@@ -191,7 +191,7 @@ export default class ChainManager {
         this.langChainParams.chainType = ChainType.LLM_CHAIN;
         break;
       }
-      case ChainType.RETRIEVAL_QA_CHAIN: {
+      case ChainType.LONG_NOTE_QA_CHAIN: {
         if (!options.noteFile) {
           new Notice('No note content provided');
           throw new Error('No note content provided');
@@ -262,8 +262,8 @@ export default class ChainManager {
           );
         }
 
-        this.langChainParams.chainType = ChainType.RETRIEVAL_QA_CHAIN;
-        console.log('Set chain:', ChainType.RETRIEVAL_QA_CHAIN);
+        this.langChainParams.chainType = ChainType.LONG_NOTE_QA_CHAIN;
+        console.log('Set chain:', ChainType.LONG_NOTE_QA_CHAIN);
         break;
       }
 
@@ -393,7 +393,7 @@ export default class ChainManager {
             updateCurrentAiMessage(fullAIResponse);
           }
           break;
-        case ChainType.RETRIEVAL_QA_CHAIN:
+        case ChainType.LONG_NOTE_QA_CHAIN:
         case ChainType.VAULT_QA_CHAIN:
           if (debug) {
             console.log(`*** DEBUG INFO ***\n`
@@ -475,13 +475,14 @@ export default class ChainManager {
 
     // TODO: This only returns unique note titles, but actual retrieved docs are chunks.
     // That means multiple chunks can be from the same note. A more advanced logic is needed
-    // to show specific chunks in the future.
+    // to show specific chunks in the future. E.g. collapsed note title when clicked,
+    // expand and reveal the chunk
     if (this.langChainParams.chainType === ChainType.VAULT_QA_CHAIN) {
       const docTitles = extractUniqueTitlesFromDocs(ChainManager.retrievedDocuments);
       const markdownLinks = docTitles.map(title =>
         `[${title}](obsidian://open?vault=${this.app.vault.getName()}&file=${encodeURIComponent(title)})`
       ).join('\n');
-      fullAIResponse += '\n\n**Source**:\n' + markdownLinks;
+      fullAIResponse += '\n\n**Sources**:\n' + markdownLinks;
     }
 
     return fullAIResponse;

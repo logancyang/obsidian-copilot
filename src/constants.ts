@@ -152,7 +152,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   stream: true,
   embeddingProvider: ModelProviders.OPENAI,
   defaultSaveFolder: 'copilot-conversations',
-  saveVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.NEVER,
+  indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.NEVER,
   chatNoteContextPath: '',
   chatNoteContextTags: [],
   debug: false,

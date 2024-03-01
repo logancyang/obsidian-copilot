@@ -334,11 +334,11 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'save-vault-to-vector-store',
-      name: 'Save vault to vector store',
+      id: 'index-vault-to-vector-store',
+      name: 'Index vault for QA',
       callback: async () => {
         try {
-          const indexedFileCount = await this.saveVaultToVectorStore();
+          const indexedFileCount = await this.indexVaultToVectorStore();
 
           new Notice(`${indexedFileCount} vault files saved to vector store successfully.`);
           console.log(`${indexedFileCount} vault files saved to vector store successfully.`);
@@ -372,7 +372,7 @@ export default class CopilotPlugin extends Plugin {
     }))
 
     this.registerEvent(this.app.vault.on('rename', async (abstractFile, oldPath) => {
-      if (this.settings.saveVaultToVectorStore !== VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE) return;
+      if (this.settings.indexVaultToVectorStore !== VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE) return;
 
       const file = this.app.vault.getFiles().filter((file) => file.path === abstractFile.path).pop()
       if (!file) {
@@ -387,7 +387,7 @@ export default class CopilotPlugin extends Plugin {
     }))
 
     this.registerEvent(this.app.vault.on('create', async (abstractFile) => {
-      if (this.settings.saveVaultToVectorStore !== VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE) return;
+      if (this.settings.indexVaultToVectorStore !== VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE) return;
 
       const file = this.app.vault.getFiles().filter((file) => file.path === abstractFile.path).pop()
       if (!file) {
@@ -399,7 +399,7 @@ export default class CopilotPlugin extends Plugin {
     }))
 
     this.registerEvent(this.app.vault.on('modify', async (abstractFile) => {
-      if (this.settings.saveVaultToVectorStore !== VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE) return;
+      if (this.settings.indexVaultToVectorStore !== VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE) return;
 
       const file = this.app.vault.getFiles().filter((file) => file.path === abstractFile.path).pop()
       if (!file) {
@@ -410,11 +410,11 @@ export default class CopilotPlugin extends Plugin {
       await this.saveFileToVectorStore(file)
     }))
 
-    // Save vault to vector store on startup and after loading all commands
+    // Index vault to vector store on startup and after loading all commands
     // This can take a while, so we don't want to block the startup process
-    if (this.settings.saveVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP || this.settings.saveVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE) {
+    if (this.settings.indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP || this.settings.indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE) {
       try {
-        await this.saveVaultToVectorStore();
+        await this.indexVaultToVectorStore();
       } catch (err) {
         console.error("Error saving vault to vector store:", err);
         new Notice('An error occurred while saving vault to vector store.');
@@ -441,7 +441,7 @@ export default class CopilotPlugin extends Plugin {
     VectorDBManager.indexFile(noteFile, embeddingInstance)
   }
 
-  async saveVaultToVectorStore(overwrite?: boolean): Promise<number> {
+  async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
     const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
     if (!embeddingInstance) {
       throw new Error('Embedding instance not found.');

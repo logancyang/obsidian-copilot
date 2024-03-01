@@ -70,7 +70,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         return;
       }
 
-      if (selectedChain === ChainType.RETRIEVAL_QA_CHAIN) {
+      if (selectedChain === ChainType.LONG_NOTE_QA_CHAIN) {
         const file = app.workspace.getActiveFile();
         if (!file) {
           new Notice('No active note found.');
@@ -99,6 +99,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         if (noteContent) {
           setCurrentChain(selectedChain, { noteFile });
         }
+        return;
       } else if (selectedChain === ChainType.VAULT_QA_CHAIN) {
         // TODO: Trigger index refresh of entire vault
         console.log('Handling VAULT_QA_CHAIN');
@@ -161,7 +162,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             onChange={handleChainChange}
           >
             <option value='llm_chain'>Chat</option>
-            <option value='retrieval_qa'>Long Note QA</option>
+            <option value='long_note_qa'>Long Note QA</option>
             <option value='vault_qa'>Vault QA (BETA)</option>
           </select>
           <span className="tooltip-text">Mode Selection</span>
@@ -173,7 +174,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           <span className="tooltip-text">Send Note(s) to Prompt<br/>(Set with Copilot command: <br/>set note context <br/>in Chat mode.<br/>Default is active note)</span>
         </button>
       )}
-      {['retrieval_qa', 'vault_qa'].includes(selectedChain) && (
+      {['long_note_qa', 'vault_qa'].includes(selectedChain) && (
         <button className='chat-icon-button' onClick={onForceRebuildActiveNoteContext}>
           <UseActiveNoteAsContextIcon className='icon-scaler' />
           <span className="tooltip-text">Refresh Index</span>
