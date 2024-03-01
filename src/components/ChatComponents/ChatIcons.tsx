@@ -64,48 +64,56 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   }
 
   useEffect(() => {
-    const handleRetrievalQAChain = async () => {
-      if (selectedChain !== ChainType.RETRIEVAL_QA_CHAIN) {
-        setCurrentChain(selectedChain);
-        return;
-      }
-
+  const handleChainSelection = async () => {
       if (!app) {
         console.error('App instance is not available.');
         return;
       }
 
-      const file = app.workspace.getActiveFile();
-      if (!file) {
-        new Notice('No active note found.');
-        console.error('No active note found.');
-        return;
+      if (selectedChain === ChainType.RETRIEVAL_QA_CHAIN) {
+        const file = app.workspace.getActiveFile();
+        if (!file) {
+          new Notice('No active note found.');
+          console.error('No active note found.');
+          return;
+        }
+
+        const noteContent = await getFileContent(file, vault);
+        const fileMetadata = app.metadataCache.getFileCache(file)
+        const noteFile = {
+          path: file.path,
+          basename: file.basename,
+          mtime: file.stat.mtime,
+          content: noteContent ?? "",
+          metadata: fileMetadata?.frontmatter ?? {},
+        };
+
+        const noteName = getFileName(file);
+
+        const activeNoteOnMessage: ChatMessage = {
+          sender: AI_SENDER,
+          message: `OK Feel free to ask me questions about [[${noteName}]]. \n\nPlease note that this is a retrieval-based QA for notes longer than the model context window. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with *Send Note to Prompt* button used with a *long context model* is a more suitable choice.`,
+          isVisible: true,
+        };
+        addMessage(activeNoteOnMessage);
+        if (noteContent) {
+          setCurrentChain(selectedChain, { noteFile });
+        }
+      } else if (selectedChain === ChainType.VAULT_QA_CHAIN) {
+        // TODO: Trigger index refresh of entire vault
+        console.log('Handling VAULT_QA_CHAIN');
+        const activeNoteOnMessage: ChatMessage = {
+          sender: AI_SENDER,
+          message: `OK Feel free to ask me questions about your vault: **${app.vault.getName()}**. \n\nPlease note that this is a retrieval-based QA. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with *Send Note to Prompt* button used with a *long context model* is a more suitable choice.`,
+          isVisible: true,
+        };
+        addMessage(activeNoteOnMessage);
       }
 
-      const noteContent = await getFileContent(file, vault);
-      const fileMetadata = app.metadataCache.getFileCache(file)
-      const noteFile = {
-        path: file.path,
-        basename: file.basename,
-        mtime: file.stat.mtime,
-        content: noteContent ?? "",
-        metadata: fileMetadata?.frontmatter ?? {},
-      };
+      setCurrentChain(selectedChain);
+  };
 
-      const noteName = getFileName(file);
-
-      const activeNoteOnMessage: ChatMessage = {
-        sender: AI_SENDER,
-        message: `OK Feel free to ask me questions about [[${noteName}]]. \n\nPlease note that this is a retrieval-based QA for notes longer than the model context window. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with *Send Note to Prompt* button used with a *long context model* is a more suitable choice.`,
-        isVisible: true,
-      };
-      addMessage(activeNoteOnMessage);
-      if (noteContent) {
-        setCurrentChain(selectedChain, { noteFile });
-      }
-    };
-
-    handleRetrievalQAChain();
+  handleChainSelection();
   }, [selectedChain]);
 
   return (
