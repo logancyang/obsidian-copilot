@@ -317,14 +317,13 @@ export function processVariableNameForNotePath(variableName: string): string {
   return variableName;
 }
 
-export function extractTitlesFromDocs(docs: Document[]) {
-  const titles: string[] = [];
-
-  docs.forEach(doc => {
+export function extractUniqueTitlesFromDocs(docs: Document[]): string[] {
+ const titlesSet = new Set<string>();
+ docs.forEach(doc => {
     if (doc.metadata?.title) {
-      titles.push(doc.metadata?.title);
+      titlesSet.add(doc.metadata?.title);
     }
-  });
+ });
 
-  return titles;
+ return Array.from(titlesSet);
 }

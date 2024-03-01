@@ -12,7 +12,7 @@ import { ProxyChatOpenAI } from '@/langchainWrappers';
 import { ChatMessage } from '@/sharedState';
 import {
   extractChatHistory,
-  extractTitlesFromDocs,
+  extractUniqueTitlesFromDocs,
   getModelName,
   isSupportedChain
 } from '@/utils';
@@ -460,11 +460,14 @@ export default class ChainManager {
       updateCurrentAiMessage(fullAIResponse);
     }
 
-    const docTitles = extractTitlesFromDocs(ChainManager.retrievedDocuments);
+    // TODO: This only returns unique note titles, but actual retrieved docs are chunks.
+    // That means multiple chunks can be from the same note. A more advanced logic is needed
+    // to show specific chunks in the future.
+    const docTitles = extractUniqueTitlesFromDocs(ChainManager.retrievedDocuments);
     const markdownLinks = docTitles.map(title =>
       `[${title}](obsidian://open?vault=${this.app.vault.getName()}&file=${encodeURIComponent(title)})`
     ).join('\n');
-    fullAIResponse += '\n\n**Source notes**:\n' + markdownLinks;
+    fullAIResponse += '\n\n**Source Notes**:\n' + markdownLinks;
     return fullAIResponse;
   }
 
