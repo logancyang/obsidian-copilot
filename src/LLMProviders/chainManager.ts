@@ -403,7 +403,7 @@ export default class ChainManager {
             console.log('embedding provider:', this.langChainParams.embeddingProvider);
           }
           fullAIResponse = await this.runRetrievalChain(
-            userMessage, memory, updateCurrentAiMessage, abortController
+            userMessage, memory, updateCurrentAiMessage, abortController, { debug },
           );
           break;
         default:
@@ -443,6 +443,9 @@ export default class ChainManager {
     memory: BaseChatMemory,
     updateCurrentAiMessage: (message: string) => void,
     abortController: AbortController,
+    options: {
+      debug?: boolean,
+    } = {},
   ): Promise<string> {
     const memoryVariables = await memory.loadMemoryVariables({});
     const chatHistory = extractChatHistory(memoryVariables);
@@ -458,6 +461,10 @@ export default class ChainManager {
       if (abortController.signal.aborted) break;
       fullAIResponse += chunk.content;
       updateCurrentAiMessage(fullAIResponse);
+    }
+
+    if (options.debug) {
+      console.log('Retrieved chunks:', ChainManager.retrievedDocuments);
     }
 
     // TODO: This only returns unique note titles, but actual retrieved docs are chunks.

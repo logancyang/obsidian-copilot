@@ -259,7 +259,6 @@ const Chat: React.FC<ChatProps> = ({
     };
 
     if (currentChain === ChainType.RETRIEVAL_QA_CHAIN) {
-      console.log(noteFile)
       setChain(ChainType.RETRIEVAL_QA_CHAIN, { noteFile });
     }
 
