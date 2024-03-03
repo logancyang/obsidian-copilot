@@ -35,7 +35,7 @@ const QASettings: React.FC<QASettingsProps> = ({
       <br />
       <h1>QA Settings</h1>
       <div className="warning-message">
-        YOU MUST REBUILD YOUR INDEX AFTER SWITCHING EMBEDDING PROVIDERS!
+        Vault QA is in BETA and may not be stable. If you have issues please report in the github repo.
       </div>
       <p>QA mode relies a <em>local</em> vector index (experimental)
         <br />
@@ -56,8 +56,8 @@ const QASettings: React.FC<QASettingsProps> = ({
         options={OPENAI_EMBEDDING_MODELS}
       />
       <DropdownComponent
-        name="Auto-save vault to vector store strategy"
-        description="Decide how you want the vault to be saved to the vector store. Beware that using On Save will call the embedding API every time you save a file."
+        name="Auto-index vault strategy"
+        description="Decide when you want the vault to be indexed. Beware that using On Save will call the embedding API every time you save a file."
         value={indexVaultToVectorStore}
         onChange={setIndexVaultToVectorStore}
         options={VAULT_VECTOR_STORE_STRATEGIES}

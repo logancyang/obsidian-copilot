@@ -335,16 +335,32 @@ export default class CopilotPlugin extends Plugin {
 
     this.addCommand({
       id: 'index-vault-to-vector-store',
-      name: 'Index vault for QA',
+      name: 'Index (refresh) vault for QA',
       callback: async () => {
         try {
           const indexedFileCount = await this.indexVaultToVectorStore();
 
-          new Notice(`${indexedFileCount} vault files saved to vector store successfully.`);
-          console.log(`${indexedFileCount} vault files saved to vector store successfully.`);
+          new Notice(`${indexedFileCount} vault files indexed to vector store successfully.`);
+          console.log(`${indexedFileCount} vault files indexed to vector store successfully.`);
         } catch (err) {
-          console.error("Error saving vault to vector store:", err);
-          new Notice('An error occurred while saving vault to vector store.');
+          console.error("Error indexing vault to vector store:", err);
+          new Notice('An error occurred while indexing vault to vector store.');
+        }
+      }
+    })
+
+    this.addCommand({
+      id: 'force-reindex-vault-to-vector-store',
+      name: 'Force re-index vault for QA',
+      callback: async () => {
+        try {
+          const indexedFileCount = await this.indexVaultToVectorStore(true);
+
+          new Notice(`${indexedFileCount} vault files indexed to vector store successfully.`);
+          console.log(`${indexedFileCount} vault files indexed to vector store successfully.`);
+        } catch (err) {
+          console.error("Error re-indexing vault to vector store:", err);
+          new Notice('An error occurred while re-indexing vault to vector store.');
         }
       }
     })
