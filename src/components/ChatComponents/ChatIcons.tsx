@@ -105,7 +105,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         console.log('Handling VAULT_QA_CHAIN');
         const activeNoteOnMessage: ChatMessage = {
           sender: AI_SENDER,
-          message: `OK Feel free to ask me questions about your vault: **${app.vault.getName()}**. \n\nPlease note that this is a retrieval-based QA. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with *Send Note to Prompt* button used with a *long context model* is a more suitable choice.`,
+          message: `OK Feel free to ask me questions about your vault: **${app.vault.getName()}**. \n\nIf you have *NEVER* as your auto-index strategy, you must click the *Refresh Index* button below, or run Copilot command: *Index vault for QA* first before you proceed!\n\nPlease note that this is a retrieval-based QA. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with *Send Note to Prompt* button used with a *long context model* is a more suitable choice.`,
           isVisible: true,
         };
         addMessage(activeNoteOnMessage);
