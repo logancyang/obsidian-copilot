@@ -103,7 +103,6 @@ export enum EmbeddingModels {
   OPENAI_EMBEDDING_LARGE = 'text-embedding-3-large',
   AZURE_OPENAI = 'azure-openai',
   COHEREAI = 'cohereai',
-  HUGGINGFACE = 'huggingface',
   OLLAMA_NOMIC = 'ollama-nomic-embed-text',
 }
 
@@ -113,7 +112,6 @@ export const EMBEDDING_MODEL_TO_PROVIDERS: Record<string, string> = {
   [EmbeddingModels.OPENAI_EMBEDDING_LARGE]: ModelProviders.OPENAI,
   [EmbeddingModels.AZURE_OPENAI]: ModelProviders.AZURE_OPENAI,
   [EmbeddingModels.COHEREAI]: ModelProviders.COHEREAI,
-  [EmbeddingModels.HUGGINGFACE]: ModelProviders.HUGGINGFACE,
   [EmbeddingModels.OLLAMA_NOMIC]: ModelProviders.OLLAMA,
 }
 

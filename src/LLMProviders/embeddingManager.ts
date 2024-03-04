@@ -8,7 +8,6 @@ import EncryptionService from '@/encryptionService';
 import { ProxyOpenAIEmbeddings } from '@/langchainWrappers';
 import { CohereEmbeddings } from "@langchain/cohere";
 import { Embeddings } from "langchain/embeddings/base";
-import { HuggingFaceInferenceEmbeddings } from "langchain/embeddings/hf";
 import { OllamaEmbeddings } from "langchain/embeddings/ollama";
 import { OpenAIEmbeddings } from "langchain/embeddings/openai";
 
@@ -80,12 +79,6 @@ export default class EmbeddingManager {
         }
         console.error('OpenAI API key is not provided for the embedding model.');
         break;
-      case ModelProviders.HUGGINGFACE:
-        return new HuggingFaceInferenceEmbeddings({
-          apiKey: decrypt(this.langChainParams.huggingfaceApiKey),
-          maxRetries: 3,
-          maxConcurrency: 3,
-        });
       case ModelProviders.COHEREAI:
         return new CohereEmbeddings({
           apiKey: decrypt(this.langChainParams.cohereApiKey),

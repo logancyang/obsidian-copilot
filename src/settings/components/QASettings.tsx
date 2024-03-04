@@ -105,24 +105,6 @@ const QASettings: React.FC<QASettingsProps> = ({
           </a>
         </p>
       </Collapsible>
-      <Collapsible title="Huggingface Inference API Settings">
-        <ApiSetting
-          title="Huggingface Inference API Key"
-          value={huggingfaceApiKey}
-          setValue={setHuggingfaceApiKey}
-          placeholder="Enter Huggingface Inference API key"
-        />
-        <p>
-          Get your Huggingface Inference API key{' '}
-          <a
-            href="https://hf.co/settings/tokens"
-            target="_blank"
-            rel="noreferrer"
-          >
-            here
-          </a>
-        </p>
-      </Collapsible>
     </div>
   );
 };
