@@ -2,6 +2,7 @@ import { SetChainOptions } from '@/aiParams';
 import {
   AI_SENDER,
   ChatModelDisplayNames,
+  VAULT_VECTOR_STORE_STRATEGY,
 } from '@/constants';
 import {
   ChatMessage
@@ -39,6 +40,7 @@ interface ChatIconsProps {
   onRefreshVaultContext: () => void;
   addMessage: (message: ChatMessage) => void;
   vault: Vault;
+  vault_qa_strategy: string;
 }
 
 const ChatIcons: React.FC<ChatIconsProps> = ({
@@ -54,6 +56,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   onRefreshVaultContext,
   addMessage,
   vault,
+  vault_qa_strategy,
 }) => {
   const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
 
@@ -103,8 +106,9 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         }
         return;
       } else if (selectedChain === ChainType.VAULT_QA_CHAIN) {
-        // TODO: Trigger index refresh of entire vault
-        console.log('Handling VAULT_QA_CHAIN');
+        if (vault_qa_strategy === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_MODE_SWITCH) {
+          await onRefreshVaultContext();
+        }
         const activeNoteOnMessage: ChatMessage = {
           sender: AI_SENDER,
           message: `OK Feel free to ask me questions about your vault: **${app.vault.getName()}**. \n\nIf you have *NEVER* as your auto-index strategy, you must click the *Refresh Index* button below, or run Copilot command: *Index vault for QA* first before you proceed!\n\nPlease note that this is a retrieval-based QA. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with *Send Note to Prompt* button used with a *long context model* is a more suitable choice.`,

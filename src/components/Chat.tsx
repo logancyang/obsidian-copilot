@@ -455,6 +455,7 @@ const Chat: React.FC<ChatProps> = ({
           onRefreshVaultContext={refreshVaultContext}
           addMessage={addMessage}
           vault={app.vault}
+          vault_qa_strategy={plugin.settings.indexVaultToVectorStore}
         />
         <ChatInput
           inputMessage={inputMessage}

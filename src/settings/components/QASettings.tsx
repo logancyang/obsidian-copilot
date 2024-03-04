@@ -60,9 +60,12 @@ const QASettings: React.FC<QASettingsProps> = ({
         <br /><br />
         <strong>NEVER</strong>: Notes are never indexed to the vector store unless users run the command <em>Index vault for QA</em> explicitly, or hit the <em>Refresh Index</em> button.
         <br /><br />
-        <strong>ON STARTUP</strong>: Notes are indexed (refreshed) on plugin load/reload.
+        <strong>ON STARTUP</strong>: Vault index is refreshed on plugin load/reload.
         <br /><br />
-        When you get bad results, try running the command "Clear vector store" and "Force re-index for QA" to completely rebuild the index. But beware of the cost if you are not using local embedding models and have a large vault!
+        <strong>ON STARTUP AND MODE SWITCH (Recommended)</strong>: Vault index is refreshed on plugin load/reload, and on switch to Vault QA mode.
+        <br /><br />
+        By "refreshed", it means the vault index is not rebuilt from scratch but rather updated incrementally with new/modified notes since the last index. If you need a complete rebuild, run the commands "Clear vector store" and "Force re-index for QA" manually. This helps reduce costs when using paid embedding models.<br /><br />
+        Beware of the cost if you are not using a local embedding model and have a large vault!
       </p>
       <DropdownComponent
         name="Auto-index vault strategy"
