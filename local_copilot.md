@@ -64,4 +64,15 @@ ollama pull <model>
 $env:OLLAMA_ORIGINS="app://obsidian.md*"; ollama serve
 ```
 
-#### Now, go crazy with local models using your custom prompts!
+## Ollama for Local Embeddings
+Ollama has added support for local embeddings for RAG since v0.1.26! It's super easy to setup, just run
+
+```
+ollama pull nomic-embed-text
+```
+
+and start your local Ollama server as before. Now you can set your embedding model in Copilot settings as `ollama-nomic-embed-text`, and it will use your local embeddings!
+
+With this one Ollama server running, you can set your Chat model as Ollama too, meaning it handles both chat streaming and embedding! You can then have a **completely offline QA** experience!
+
+#### Now, go crazy with local models in Chat mode and QA modes!

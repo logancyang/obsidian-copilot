@@ -40,6 +40,8 @@ const QASettings: React.FC<QASettingsProps> = ({
       <p>QA mode relies a <em>local</em> vector index.</p>
       <h2>Long Note QA vs. Vault QA (BETA)</h2>
       <p>Long Note QA mode uses the Active Note as context. Vault QA (BETA) uses your entire vault as context. Please ask questions as specific as possible, avoid vague questions to get better results.</p>
+      <h2>Local Embedding Model</h2>
+      <p>Check the <a href='https://github.com/logancyang/obsidian-copilot/blob/master/local_copilot.md'>local copilot</a> setup guide to setup Ollama's local embedding model (requires Ollama v0.1.26 or above).</p>
       <DropdownComponent
         name="Embedding Models"
         description="The embedding API/model to use"
