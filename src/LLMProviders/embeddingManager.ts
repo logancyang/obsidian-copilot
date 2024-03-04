@@ -30,10 +30,11 @@ export default class EmbeddingManager {
   }
 
   static getModelName(embeddingsInstance: Embeddings): string {
-    if ('model' in embeddingsInstance && embeddingsInstance.model) {
-      return embeddingsInstance.model as string;
-    } else if ('modelName' in embeddingsInstance && embeddingsInstance.modelName) {
-      return embeddingsInstance.modelName as string;
+    const emb = embeddingsInstance as any;
+    if ('model' in emb && emb.model) {
+      return emb.model as string;
+    } else if ('modelName' in emb && emb.modelName) {
+      return emb.modelName as string;
     } else {
       throw new Error(`Embeddings instance missing model or modelName properties: ${embeddingsInstance}`);
     }
