@@ -86,7 +86,7 @@ const QASettings: React.FC<QASettingsProps> = ({
       <SliderComponent
         name="Max Sources"
         description="Default is 3 (Recommended). Increase if you want more context sources. A higher number can lead to irrelevant sources and lower quality responses, it also fills up the context window faster."
-        min={0}
+        min={1}
         max={10}
         step={1}
         value={maxSourceChunks}
