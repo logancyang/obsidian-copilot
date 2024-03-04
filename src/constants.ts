@@ -126,13 +126,11 @@ export const NOMIC_EMBED_TEXT = 'nomic-embed-text';
 export enum VAULT_VECTOR_STORE_STRATEGY {
   NEVER = 'Never',
   ON_STARTUP = 'On Startup',
-  ON_STARTUP_AND_SAVE = 'On Startup and Save',
 }
 
 export const VAULT_VECTOR_STORE_STRATEGIES = [
   VAULT_VECTOR_STORE_STRATEGY.NEVER,
   VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP,
-  VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE,
 ];
 
 export const DEFAULT_SETTINGS: CopilotSettings = {

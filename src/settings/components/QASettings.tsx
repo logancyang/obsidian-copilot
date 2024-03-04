@@ -58,9 +58,7 @@ const QASettings: React.FC<QASettingsProps> = ({
         <br /><br />
         <strong>NEVER</strong>: Notes are never indexed to the vector store unless users run the command <em>Index vault for QA</em> explicitly, or hit the <em>Refresh Index</em> button.
         <br /><br />
-        <strong>ON STARTUP</strong>: Notes are indexed (refreshed) to the vector store on app load.
-        <br /><br />
-        <strong>ON STARTUP AND SAVE</strong>: Same as above but it also triggers indexing whenever the user saves a note.
+        <strong>ON STARTUP</strong>: Notes are indexed (refreshed) on plugin load/reload.
         <br /><br />
         When you get bad results, try running the command "Clear vector store" and "Force re-index for QA" to completely rebuild the index. But beware of the cost if you are not using local embedding models and have a large vault!
       </p>
@@ -74,7 +72,7 @@ const QASettings: React.FC<QASettingsProps> = ({
       <br />
       <SliderComponent
         name="Max Sources"
-        description="Default is 3 (Recommended). Increase if you want more context sources. A higher number can lead to irrelevant sources and lower quality responses, it also fills up the context window faster."
+        description="Default is 3 (Recommended). Increase if you want more sources from your notes. A higher number can lead to irrelevant sources and lower quality responses, it also fills up the context window faster."
         min={1}
         max={10}
         step={1}

@@ -413,79 +413,11 @@ export default class CopilotPlugin extends Plugin {
       })
     );
 
-    this.registerEvent(
-      this.app.vault.on("rename", async (abstractFile, oldPath) => {
-        if (
-          this.settings.indexVaultToVectorStore !==
-          VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE
-        )
-          return;
-
-        const file = this.app.vault
-          .getFiles()
-          .filter((file) => file.path === abstractFile.path)
-          .pop();
-        if (!file) {
-          new Notice("File not found.");
-          return;
-        }
-
-        await this.saveFileToVectorStore(file);
-
-        const oldDocHash = VectorDBManager.getDocumentHash(oldPath);
-        await VectorDBManager.removeMemoryVectors(oldDocHash);
-      })
-    );
-
-    this.registerEvent(
-      this.app.vault.on("create", async (abstractFile) => {
-        if (
-          this.settings.indexVaultToVectorStore !==
-          VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE
-        )
-          return;
-
-        const file = this.app.vault
-          .getFiles()
-          .filter((file) => file.path === abstractFile.path)
-          .pop();
-        if (!file) {
-          new Notice("File not found.");
-          return;
-        }
-
-        await this.saveFileToVectorStore(file);
-      })
-    );
-
-    this.registerEvent(
-      this.app.vault.on("modify", async (abstractFile) => {
-        if (
-          this.settings.indexVaultToVectorStore !==
-          VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE
-        )
-          return;
-
-        const file = this.app.vault
-          .getFiles()
-          .filter((file) => file.path === abstractFile.path)
-          .pop();
-        if (!file) {
-          new Notice("File not found.");
-          return;
-        }
-
-        await this.saveFileToVectorStore(file);
-      })
-    );
-
     // Index vault to vector store on startup and after loading all commands
     // This can take a while, so we don't want to block the startup process
     if (
       this.settings.indexVaultToVectorStore ===
-        VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP ||
-      this.settings.indexVaultToVectorStore ===
-        VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE
+        VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP
     ) {
       try {
         await this.indexVaultToVectorStore();
