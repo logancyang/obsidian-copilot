@@ -410,7 +410,7 @@ export default class ChainManager {
               + `chat context turns: ${chatContextTurns}\n`,
             );
             console.log('chain RunnableSequence:', ChainManager.chain);
-            console.log('embedding provider:', this.langChainParams.embeddingProvider);
+            console.log('embedding model:', this.langChainParams.embeddingModel);
           }
           fullAIResponse = await this.runRetrievalChain(
             userMessage, memory, updateCurrentAiMessage, abortController, { debug },

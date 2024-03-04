@@ -2,7 +2,8 @@ import { ChainType, Document } from '@/chainFactory';
 import {
   DEFAULT_SETTINGS,
   DISPLAY_NAME_TO_MODEL,
-  USER_SENDER
+  NOMIC_EMBED_TEXT,
+  USER_SENDER,
 } from '@/constants';
 import { CopilotSettings } from '@/settings/SettingsPage';
 import { ChatMessage } from '@/sharedState';
@@ -135,6 +136,17 @@ export async function getFileContent(file: TFile, vault: Vault): Promise<string 
 
 export function getFileName(file: TFile): string {
   return file.basename;
+}
+
+export function areEmbeddingModelsSame(
+  model1: string | undefined,
+  model2: string | undefined,
+): boolean {
+  if (!model1 || !model2) return false;
+  if (model1.contains(NOMIC_EMBED_TEXT) && model2.contains(NOMIC_EMBED_TEXT)) {
+    return true;
+  }
+  return model1 === model2;
 }
 
 export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {

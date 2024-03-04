@@ -54,7 +54,7 @@ const DropdownComponent: React.FC<DropdownComponentProps> = ({ name, description
       >
         {options.map((option, index) => (
           <option key={index} value={option}>
-            {option.replace(/_/g, ' ').toUpperCase()}
+            {option}
           </option>
         ))}
       </select>

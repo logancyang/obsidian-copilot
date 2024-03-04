@@ -1,12 +1,10 @@
-import { EMBEDDING_PROVIDERS, OPENAI_EMBEDDING_MODELS, VAULT_VECTOR_STORE_STRATEGIES } from '@/constants';
+import { EmbeddingModels, VAULT_VECTOR_STORE_STRATEGIES } from '@/constants';
 import React from 'react';
 import ApiSetting from './ApiSetting';
 import Collapsible from './Collapsible';
 import { DropdownComponent, SliderComponent } from './SettingBlocks';
 
 interface QASettingsProps {
-  embeddingProvider: string;
-  setEmbeddingProvider: (value: string) => void;
   embeddingModel: string;
   setEmbeddingModel: (value: string) => void;
   cohereApiKey: string;
@@ -20,8 +18,6 @@ interface QASettingsProps {
 }
 
 const QASettings: React.FC<QASettingsProps> = ({
-  embeddingProvider,
-  setEmbeddingProvider,
   embeddingModel,
   setEmbeddingModel,
   cohereApiKey,
@@ -45,18 +41,11 @@ const QASettings: React.FC<QASettingsProps> = ({
       <h2>Long Note QA vs. Vault QA (BETA)</h2>
       <p>Long Note QA mode uses the Active Note as context. Vault QA (BETA) uses your entire vault as context. Please ask questions as specific as possible, avoid vague questions to get better results.</p>
       <DropdownComponent
-        name="Embedding Provider"
-        description="The embedding API to call"
-        value={embeddingProvider}
-        onChange={setEmbeddingProvider}
-        options={EMBEDDING_PROVIDERS}
-      />
-      <DropdownComponent
-        name="OpenAI Embedding Model"
-        description="(for when embedding provider is OpenAI)"
+        name="Embedding Models"
+        description="The embedding API/model to use"
         value={embeddingModel}
         onChange={setEmbeddingModel}
-        options={OPENAI_EMBEDDING_MODELS}
+        options={Object.values(EmbeddingModels)}
       />
       <h1>How Indexing Works</h1>
       <div className="warning-message">

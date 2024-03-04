@@ -97,19 +97,31 @@ export const EMBEDDING_PROVIDERS = [
   ModelProviders.OLLAMA,
 ];
 
-// Embedding Models
-export const ADA_V2 = 'text-embedding-ada-002';
-export const OPENAI_EMBEDDING_SMALL = 'text-embedding-3-small';
-export const OPENAI_EMBEDDING_LARGE = 'text-embedding-3-large';
-export const DISTILBERT_NLI = 'sentence-transformers/distilbert-base-nli-mean-tokens';
-export const INSTRUCTOR_XL = 'hkunlp/instructor-xl'; // Inference API is off for this
-export const MPNET_V2 = 'sentence-transformers/all-mpnet-base-v2'; // Inference API returns 400
+export enum EmbeddingModels {
+  OPENAI_EMBEDDING_ADA_V2 = 'text-embedding-ada-002',
+  OPENAI_EMBEDDING_SMALL = 'text-embedding-3-small',
+  OPENAI_EMBEDDING_LARGE = 'text-embedding-3-large',
+  AZURE_OPENAI = 'azure-openai',
+  COHEREAI = 'cohereai',
+  HUGGINGFACE = 'huggingface',
+  OLLAMA_NOMIC = 'ollama-nomic-embed-text',
+}
 
-export const OPENAI_EMBEDDING_MODELS = [
-  ADA_V2,
-  OPENAI_EMBEDDING_SMALL,
-  OPENAI_EMBEDDING_LARGE,
-]
+export const EMBEDDING_MODEL_TO_PROVIDERS: Record<string, string> = {
+  [EmbeddingModels.OPENAI_EMBEDDING_ADA_V2]: ModelProviders.OPENAI,
+  [EmbeddingModels.OPENAI_EMBEDDING_SMALL]: ModelProviders.OPENAI,
+  [EmbeddingModels.OPENAI_EMBEDDING_LARGE]: ModelProviders.OPENAI,
+  [EmbeddingModels.AZURE_OPENAI]: ModelProviders.AZURE_OPENAI,
+  [EmbeddingModels.COHEREAI]: ModelProviders.COHEREAI,
+  [EmbeddingModels.HUGGINGFACE]: ModelProviders.HUGGINGFACE,
+  [EmbeddingModels.OLLAMA_NOMIC]: ModelProviders.OLLAMA,
+}
+
+// Embedding Models
+export const NOMIC_EMBED_TEXT = 'nomic-embed-text';
+// export const DISTILBERT_NLI = 'sentence-transformers/distilbert-base-nli-mean-tokens';
+// export const INSTRUCTOR_XL = 'hkunlp/instructor-xl'; // Inference API is off for this
+// export const MPNET_V2 = 'sentence-transformers/all-mpnet-base-v2'; // Inference API returns 400
 
 export enum VAULT_VECTOR_STORE_STRATEGY {
   NEVER = 'Never',
@@ -138,7 +150,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   openRouterModel: 'cognitivecomputations/dolphin-mixtral-8x7b',
   defaultModel: ChatModels.GPT_4_TURBO,
   defaultModelDisplayName: ChatModelDisplayNames.GPT_4_TURBO,
-  embeddingModel: OPENAI_EMBEDDING_SMALL,
+  embeddingModel: EmbeddingModels.OPENAI_EMBEDDING_SMALL,
   temperature: 0.1,
   maxTokens: 1000,
   contextTurns: 15,
@@ -151,7 +163,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   ollamaBaseUrl: '',
   lmStudioBaseUrl: 'http://localhost:1234/v1',
   stream: true,
-  embeddingProvider: ModelProviders.OPENAI,
   defaultSaveFolder: 'copilot-conversations',
   indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.NEVER,
   chatNoteContextPath: '',

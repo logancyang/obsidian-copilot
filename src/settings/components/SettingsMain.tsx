@@ -34,7 +34,6 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
   const [azureOpenAIApiEmbeddingDeploymentName, setAzureOpenAIApiEmbeddingDeploymentName] = useState(plugin.settings.azureOpenAIApiEmbeddingDeploymentName);
 
   // QA settings
-  const [embeddingProvider, setEmbeddingProvider] = useState(plugin.settings.embeddingProvider);
   const [embeddingModel, setEmbeddingModel] = useState(plugin.settings.embeddingModel);
   const [cohereApiKey, setCohereApiKey] = useState(plugin.settings.cohereApiKey);
   const [huggingfaceApiKey, setHuggingfaceApiKey] = useState(plugin.settings.huggingfaceApiKey);
@@ -74,7 +73,6 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
     plugin.settings.azureOpenAIApiEmbeddingDeploymentName = azureOpenAIApiEmbeddingDeploymentName;
 
     // QA settings
-    plugin.settings.embeddingProvider = embeddingProvider;
     plugin.settings.embeddingModel = embeddingModel;
     plugin.settings.cohereApiKey = cohereApiKey;
     plugin.settings.huggingfaceApiKey = huggingfaceApiKey;
@@ -198,8 +196,6 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
         setAzureOpenAIApiEmbeddingDeploymentName={setAzureOpenAIApiEmbeddingDeploymentName}
       />
       <QASettings
-        embeddingProvider={embeddingProvider}
-        setEmbeddingProvider={setEmbeddingProvider}
         embeddingModel={embeddingModel}
         setEmbeddingModel={setEmbeddingModel}
         cohereApiKey={cohereApiKey}

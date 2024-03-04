@@ -1,5 +1,9 @@
 import { LangChainParams } from '@/aiParams';
-import { ModelProviders } from '@/constants';
+import {
+  EMBEDDING_MODEL_TO_PROVIDERS,
+  ModelProviders,
+  NOMIC_EMBED_TEXT,
+} from '@/constants';
 import EncryptionService from '@/encryptionService';
 import { ProxyOpenAIEmbeddings } from '@/langchainWrappers';
 import { CohereEmbeddings } from "@langchain/cohere";
@@ -23,6 +27,16 @@ export default class EmbeddingManager {
       EmbeddingManager.instance = new EmbeddingManager(langChainParams, encryptionService);
     }
     return EmbeddingManager.instance;
+  }
+
+  static getModelName(embeddingsInstance: Embeddings): string {
+    if ('model' in embeddingsInstance && embeddingsInstance.model) {
+      return embeddingsInstance.model as string;
+    } else if ('modelName' in embeddingsInstance && embeddingsInstance.modelName) {
+      return embeddingsInstance.modelName as string;
+    } else {
+      throw new Error(`Embeddings instance missing model or modelName properties: ${embeddingsInstance}`);
+    }
   }
 
   getEmbeddingsAPI(): Embeddings | undefined {
@@ -56,7 +70,9 @@ export default class EmbeddingManager {
         })
     ) : null;
 
-    switch(this.langChainParams.embeddingProvider) {
+    const embeddingProvder = EMBEDDING_MODEL_TO_PROVIDERS[this.langChainParams.embeddingModel];
+
+    switch(embeddingProvder) {
       case ModelProviders.OPENAI:
         if (OpenAIEmbeddingsAPI) {
           return OpenAIEmbeddingsAPI;
@@ -92,7 +108,7 @@ export default class EmbeddingManager {
         return new OllamaEmbeddings({
           ...(this.langChainParams.ollamaBaseUrl ? { baseUrl: this.langChainParams.ollamaBaseUrl } : {}),
           // TODO: Add custom ollama embedding model setting once they have other models
-          model: 'nomic-embed-text',
+          model: NOMIC_EMBED_TEXT,
         })
       default:
         console.error('No embedding provider set or no valid API key provided. Defaulting to OpenAI.');

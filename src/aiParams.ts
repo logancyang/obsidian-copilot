@@ -44,7 +44,6 @@ export interface LangChainParams {
   maxTokens: number,
   systemMessage: string,
   chatContextTurns: number,
-  embeddingProvider: string,
   chainType: ChainType,  // Default ChainType is set in main.ts getChainManagerParams
   options: SetChainOptions,
   ollamaModel: string,

@@ -32,7 +32,6 @@ export interface CopilotSettings {
   ollamaBaseUrl: string;
   lmStudioBaseUrl: string;
   stream: boolean;
-  embeddingProvider: string;
   defaultSaveFolder: string;
   indexVaultToVectorStore: string;
   chatNoteContextPath: string;

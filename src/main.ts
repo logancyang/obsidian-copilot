@@ -12,13 +12,13 @@ import {
   CHAT_VIEWTYPE,
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
-  VAULT_VECTOR_STORE_STRATEGY,
+  VAULT_VECTOR_STORE_STRATEGY
 } from "@/constants";
 import { CustomPrompt } from "@/customPromptProcessor";
 import EncryptionService from "@/encryptionService";
 import { CopilotSettingTab, CopilotSettings } from "@/settings/SettingsPage";
 import SharedState from "@/sharedState";
-import { sanitizeSettings } from "@/utils";
+import { areEmbeddingModelsSame, sanitizeSettings } from "@/utils";
 import VectorDBManager, { VectorStoreDocument } from "@/vectorDBManager";
 import { Server } from "http";
 import { Editor, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
@@ -68,7 +68,7 @@ export default class CopilotPlugin extends Plugin {
     this.dbPrompts = new PouchDB<CustomPrompt>("copilot_custom_prompts");
 
     VectorDBManager.initializeDB(this.dbVectorStores);
-    VectorDBManager.setEmbeddingProvider(this.settings.embeddingProvider);
+    VectorDBManager.setEmbeddingModel(this.settings.embeddingModel);
 
     this.registerView(
       CHAT_VIEWTYPE,
@@ -519,6 +519,41 @@ export default class CopilotPlugin extends Plugin {
     if (!embeddingInstance) {
       throw new Error("Embedding instance not found.");
     }
+
+    // Check if embedding model has changed
+    const prevEmbeddingModel = await VectorDBManager.checkEmbeddingModel();
+    // TODO: Remove this when Ollama model is dynamically set
+    const currEmbeddingModel = EmbeddingsManager.getModelName(embeddingInstance);
+
+    console.log(
+      'Prev vs Current embedding models:', prevEmbeddingModel, currEmbeddingModel
+    );
+
+    if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
+      // Model has changed, clear DB and reindex from scratch
+      overwrite = true;
+      // Clear the current vector store with mixed embeddings
+      try {
+        // Clear the vectorstore db
+        await this.dbVectorStores.destroy();
+        // Reinitialize the database
+        this.dbVectorStores = new PouchDB<VectorStoreDocument>(
+          "copilot_vector_stores"
+        );
+        // Make sure to update the instance with VectorDBManager
+        VectorDBManager.updateDBInstance(this.dbVectorStores);
+        new Notice("Detected change in embedding model. Rebuild vector store from scratch.");
+        console.log(
+          "Detected change in embedding model. Rebuild vector store from scratch."
+        );
+      } catch (err) {
+        console.error("Error clearing vector store for reindexing:", err);
+        new Notice(
+          "Error clearing vector store for reindexing."
+        );
+      }
+    }
+
     const latestMtime = await VectorDBManager.getLatestFileMtime();
 
     const files = this.app.vault.getMarkdownFiles().filter((file) => {
@@ -684,7 +719,6 @@ export default class CopilotPlugin extends Plugin {
       temperature,
       maxTokens,
       contextTurns,
-      embeddingProvider,
       ollamaModel,
       ollamaBaseUrl,
       lmStudioBaseUrl,
@@ -712,7 +746,6 @@ export default class CopilotPlugin extends Plugin {
       maxTokens: Number(maxTokens),
       systemMessage: this.settings.userSystemPrompt || DEFAULT_SYSTEM_PROMPT,
       chatContextTurns: Number(contextTurns),
-      embeddingProvider: embeddingProvider,
       chainType: ChainType.LLM_CHAIN, // Set LLM_CHAIN as default ChainType
       options: { forceNewCreation: true } as SetChainOptions,
       openAIProxyBaseUrl: this.settings.openAIProxyBaseUrl,
