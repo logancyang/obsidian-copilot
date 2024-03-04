@@ -106,7 +106,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         }
         return;
       } else if (selectedChain === ChainType.VAULT_QA_CHAIN) {
-        if (vault_qa_strategy === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_MODE_SWITCH) {
+        if (vault_qa_strategy === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH) {
           await onRefreshVaultContext();
         }
         const activeNoteOnMessage: ChatMessage = {

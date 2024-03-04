@@ -49,31 +49,34 @@ const QASettings: React.FC<QASettingsProps> = ({
         onChange={setEmbeddingModel}
         options={Object.values(EmbeddingModels)}
       />
-      <h1>How Indexing Works</h1>
+      <h1>Auto-Index Strategy</h1>
       <div className="warning-message">
         If you are using a paid embedding provider, beware of costs for large vaults!
       </div>
       <p>
-        When you switch to Long Note QA mode, your active note is indexed.
+        When you switch to <strong>Long Note QA</strong> mode, your active note is indexed automatically upon mode switch.
         <br />
-        When you switch to Vault QA mode, your vault is indexed based on the auto-index strategy you select below:
-        <br /><br />
-        <strong>NEVER</strong>: Notes are never indexed to the vector store unless users run the command <em>Index vault for QA</em> explicitly, or hit the <em>Refresh Index</em> button.
-        <br /><br />
-        <strong>ON STARTUP</strong>: Vault index is refreshed on plugin load/reload.
-        <br /><br />
-        <strong>ON STARTUP AND MODE SWITCH (Recommended)</strong>: Vault index is refreshed on plugin load/reload, and on switch to Vault QA mode.
-        <br /><br />
-        By "refreshed", it means the vault index is not rebuilt from scratch but rather updated incrementally with new/modified notes since the last index. If you need a complete rebuild, run the commands "Clear vector store" and "Force re-index for QA" manually. This helps reduce costs when using paid embedding models.<br /><br />
-        Beware of the cost if you are not using a local embedding model and have a large vault!
+        When you switch to <strong>Vault QA</strong> mode, your vault is indexed <em>based on the auto-index strategy you select below</em>.
+        <br />
       </p>
       <DropdownComponent
         name="Auto-index vault strategy"
-        description="Decide when you want the vault to be indexed. Beware that using On Save will call the embedding API every time you save a file."
+        description="Decide when you want the vault to be indexed."
         value={indexVaultToVectorStore}
         onChange={setIndexVaultToVectorStore}
         options={VAULT_VECTOR_STORE_STRATEGIES}
       />
+      <br />
+      <p>
+        <strong>NEVER</strong>: Notes are never indexed to the vector store unless users run the command <em>Index vault for QA</em> explicitly, or hit the <em>Refresh Index</em> button.
+        <br /><br />
+        <strong>ON STARTUP</strong>: Vault index is refreshed on plugin load/reload.
+        <br /><br />
+        <strong>ON MODE SWITCH (Recommended)</strong>: Vault index is refreshed when switching to Vault QA mode.
+        <br /><br />
+        By "refreshed", it means the vault index is not rebuilt from scratch but rather updated incrementally with new/modified notes since the last index. If you need a complete rebuild, run the commands "Clear vector store" and "Force re-index for QA" manually. This helps reduce costs when using paid embedding models.<br /><br />
+        Beware of the cost if you are not using a local embedding model and have a large vault!
+      </p>
       <br />
       <SliderComponent
         name="Max Sources"

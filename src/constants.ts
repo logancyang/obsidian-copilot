@@ -122,15 +122,15 @@ export const NOMIC_EMBED_TEXT = 'nomic-embed-text';
 // export const MPNET_V2 = 'sentence-transformers/all-mpnet-base-v2'; // Inference API returns 400
 
 export enum VAULT_VECTOR_STORE_STRATEGY {
-  NEVER = 'Never',
-  ON_STARTUP = 'On Startup',
-  ON_STARTUP_AND_MODE_SWITCH = 'On Startup and Model Switch',
+  NEVER = 'NEVER',
+  ON_STARTUP = 'ON STARTUP',
+  ON_MODE_SWITCH = 'ON MODE SWITCH',
 }
 
 export const VAULT_VECTOR_STORE_STRATEGIES = [
   VAULT_VECTOR_STORE_STRATEGY.NEVER,
   VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP,
-  VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_MODE_SWITCH,
+  VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH,
 ];
 
 export const DEFAULT_SETTINGS: CopilotSettings = {

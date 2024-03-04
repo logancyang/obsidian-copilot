@@ -143,7 +143,14 @@ export function areEmbeddingModelsSame(
   model2: string | undefined,
 ): boolean {
   if (!model1 || !model2) return false;
-  if (model1.contains(NOMIC_EMBED_TEXT) && model2.contains(NOMIC_EMBED_TEXT)) {
+  // TODO: Hacks to handle different embedding model names for the same model. Need better handling.
+  if (model1.includes(NOMIC_EMBED_TEXT) && model2.includes(NOMIC_EMBED_TEXT)) {
+    return true;
+  }
+  if (
+    (model1 === "small" && model2 === "cohereai") ||
+    (model1 === "cohereai" && model2 === "small")
+  ) {
     return true;
   }
   return model1 === model2;
