@@ -473,6 +473,10 @@ export default class CopilotPlugin extends Plugin {
     )
     const fileMetadatas = files.map((file) => this.app.metadataCache.getFileCache(file))
 
+    let indexedCount = 0;
+    const totalFiles = files.length;
+    const indexNotice = new Notice(`Indexing your vault... 0/${totalFiles} files processed. Please wait...`, 0);
+
     const loadPromises = files.map(async (file, index) => {
       const noteFile = {
         basename: file.basename,
@@ -481,11 +485,16 @@ export default class CopilotPlugin extends Plugin {
         content: fileContents[index],
         metadata: fileMetadatas[index]?.frontmatter ?? {},
       }
-      return VectorDBManager.indexFile(noteFile, embeddingInstance)
+      const result = await VectorDBManager.indexFile(noteFile, embeddingInstance);
+      indexedCount++;
+      indexNotice.setMessage(
+        `Indexing your vault... ${indexedCount}/${totalFiles} files processed. Please wait...`
+      );
+      return result;
     })
 
     await Promise.all(loadPromises);
-
+    indexNotice.hide();
     return files.length;
   }
 
