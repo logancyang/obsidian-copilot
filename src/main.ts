@@ -340,8 +340,8 @@ export default class CopilotPlugin extends Plugin {
         try {
           const indexedFileCount = await this.indexVaultToVectorStore();
 
-          new Notice(`${indexedFileCount} vault files indexed to vector store successfully.`);
-          console.log(`${indexedFileCount} vault files indexed to vector store successfully.`);
+          new Notice(`${indexedFileCount} vault files indexed to vector store.`);
+          console.log(`${indexedFileCount} vault files indexed to vector store.`);
         } catch (err) {
           console.error("Error indexing vault to vector store:", err);
           new Notice('An error occurred while indexing vault to vector store.');
@@ -356,8 +356,8 @@ export default class CopilotPlugin extends Plugin {
         try {
           const indexedFileCount = await this.indexVaultToVectorStore(true);
 
-          new Notice(`${indexedFileCount} vault files indexed to vector store successfully.`);
-          console.log(`${indexedFileCount} vault files indexed to vector store successfully.`);
+          new Notice(`${indexedFileCount} vault files indexed to vector store.`);
+          console.log(`${indexedFileCount} vault files indexed to vector store.`);
         } catch (err) {
           console.error("Error re-indexing vault to vector store:", err);
           new Notice('An error occurred while re-indexing vault to vector store.');

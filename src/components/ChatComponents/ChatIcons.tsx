@@ -36,6 +36,7 @@ interface ChatIconsProps {
   onSaveAsNote: () => void;
   onSendActiveNoteToPrompt: () => void;
   onForceRebuildActiveNoteContext: () => void;
+  onRefreshVaultContext: () => void;
   addMessage: (message: ChatMessage) => void;
   vault: Vault;
 }
@@ -50,6 +51,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   onSaveAsNote,
   onSendActiveNoteToPrompt,
   onForceRebuildActiveNoteContext,
+  onRefreshVaultContext,
   addMessage,
   vault,
 }) => {
@@ -174,10 +176,16 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           <span className="tooltip-text">Send Note(s) to Prompt<br/>(Set with Copilot command: <br/>set note context <br/>in Chat mode.<br/>Default is active note)</span>
         </button>
       )}
-      {['long_note_qa', 'vault_qa'].includes(selectedChain) && (
+      {selectedChain === 'long_note_qa' && (
         <button className='chat-icon-button' onClick={onForceRebuildActiveNoteContext}>
           <UseActiveNoteAsContextIcon className='icon-scaler' />
-          <span className="tooltip-text">Refresh Index</span>
+          <span className="tooltip-text">Refresh Index<br/>for Active Note</span>
+        </button>
+      )}
+      {selectedChain === 'vault_qa' && (
+        <button className='chat-icon-button' onClick={onRefreshVaultContext}>
+          <UseActiveNoteAsContextIcon className='icon-scaler' />
+          <span className="tooltip-text">Refresh Index<br/>for Vault</span>
         </button>
       )}
     </div>
