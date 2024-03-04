@@ -1,5 +1,5 @@
 import ChainManager from "@/LLMProviders/chainManager";
-import EmbeddingsManager from '@/LLMProviders/embeddingManager';
+import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { LangChainParams, SetChainOptions } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { registerBuiltInCommands } from "@/commands";
@@ -57,8 +57,13 @@ export default class CopilotPlugin extends Plugin {
       await this.saveSettings();
     }
 
-    this.dbVectorStores = new PouchDB<VectorStoreDocument>('copilot_vector_stores');
-    this.embeddingsManager = EmbeddingsManager.getInstance(langChainParams, this.encryptionService);
+    this.dbVectorStores = new PouchDB<VectorStoreDocument>(
+      "copilot_vector_stores"
+    );
+    this.embeddingsManager = EmbeddingsManager.getInstance(
+      langChainParams,
+      this.encryptionService
+    );
     this.dbPrompts = new PouchDB<CustomPrompt>("copilot_custom_prompts");
 
     VectorDBManager.initializeDB(this.dbVectorStores);
@@ -308,66 +313,84 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'garbage-collect-vector-store',
-      name: 'Garbage collect vector store (remove files that no longer exist in vault)',
+      id: "garbage-collect-vector-store",
+      name: "Garbage collect vector store (remove files that no longer exist in vault)",
       callback: async () => {
         try {
-          const files = this.app.vault.getMarkdownFiles()
-          const filePaths = files.map((file) => file.path)
-          const indexedFiles = await VectorDBManager.getNoteFiles()
-          const indexedFilePaths = indexedFiles.map((file) => file.path)
-          const filesToDelete = indexedFilePaths.filter((filePath) => !filePaths.includes(filePath))
+          const files = this.app.vault.getMarkdownFiles();
+          const filePaths = files.map((file) => file.path);
+          const indexedFiles = await VectorDBManager.getNoteFiles();
+          const indexedFilePaths = indexedFiles.map((file) => file.path);
+          const filesToDelete = indexedFilePaths.filter(
+            (filePath) => !filePaths.includes(filePath)
+          );
 
           const deletePromises = filesToDelete.map(async (filePath) => {
-            VectorDBManager.removeMemoryVectors(VectorDBManager.getDocumentHash(filePath));
-          })
+            VectorDBManager.removeMemoryVectors(
+              VectorDBManager.getDocumentHash(filePath)
+            );
+          });
 
           await Promise.all(deletePromises);
 
-          new Notice('Local vector store garbage collected successfully.');
-          console.log('Local vector store garbage collected successfully, new instance created.');
+          new Notice("Local vector store garbage collected successfully.");
+          console.log(
+            "Local vector store garbage collected successfully, new instance created."
+          );
         } catch (err) {
           console.error("Error clearing the local vector store:", err);
-          new Notice('An error occurred while clearing the local vector store.');
+          new Notice(
+            "An error occurred while clearing the local vector store."
+          );
         }
-      }
+      },
     });
 
     this.addCommand({
-      id: 'index-vault-to-vector-store',
-      name: 'Index (refresh) vault for QA',
+      id: "index-vault-to-vector-store",
+      name: "Index (refresh) vault for QA",
       callback: async () => {
         try {
           const indexedFileCount = await this.indexVaultToVectorStore();
 
-          new Notice(`${indexedFileCount} vault files indexed to vector store.`);
-          console.log(`${indexedFileCount} vault files indexed to vector store.`);
+          new Notice(
+            `${indexedFileCount} vault files indexed to vector store.`
+          );
+          console.log(
+            `${indexedFileCount} vault files indexed to vector store.`
+          );
         } catch (err) {
           console.error("Error indexing vault to vector store:", err);
-          new Notice('An error occurred while indexing vault to vector store.');
+          new Notice("An error occurred while indexing vault to vector store.");
         }
-      }
-    })
+      },
+    });
 
     this.addCommand({
-      id: 'force-reindex-vault-to-vector-store',
-      name: 'Force re-index vault for QA',
+      id: "force-reindex-vault-to-vector-store",
+      name: "Force re-index vault for QA",
       callback: async () => {
         try {
           const indexedFileCount = await this.indexVaultToVectorStore(true);
 
-          new Notice(`${indexedFileCount} vault files indexed to vector store.`);
-          console.log(`${indexedFileCount} vault files indexed to vector store.`);
+          new Notice(
+            `${indexedFileCount} vault files indexed to vector store.`
+          );
+          console.log(
+            `${indexedFileCount} vault files indexed to vector store.`
+          );
         } catch (err) {
           console.error("Error re-indexing vault to vector store:", err);
-          new Notice('An error occurred while re-indexing vault to vector store.');
+          new Notice(
+            "An error occurred while re-indexing vault to vector store."
+          );
         }
-      }
-    })
+      },
+    });
 
     this.addCommand({
-      id: 'set-chat-note-context',
-      name: 'Set note context for Chat mode',
+      id: "set-chat-note-context",
+      name: "Set note context for Chat mode",
       callback: async () => {
         new ChatNoteContextModal(
           this.app,
@@ -382,100 +405,143 @@ export default class CopilotPlugin extends Plugin {
       },
     });
 
-    this.registerEvent(this.app.vault.on('delete', (file) => {
-      const docHash = VectorDBManager.getDocumentHash(file.path)
-      VectorDBManager.removeMemoryVectors(docHash);
-    }))
+    this.registerEvent(
+      this.app.vault.on("delete", (file) => {
+        const docHash = VectorDBManager.getDocumentHash(file.path);
+        VectorDBManager.removeMemoryVectors(docHash);
+      })
+    );
 
-    this.registerEvent(this.app.vault.on('rename', async (abstractFile, oldPath) => {
-      if (this.settings.indexVaultToVectorStore !== VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE) return;
+    this.registerEvent(
+      this.app.vault.on("rename", async (abstractFile, oldPath) => {
+        if (
+          this.settings.indexVaultToVectorStore !==
+          VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE
+        )
+          return;
 
-      const file = this.app.vault.getFiles().filter((file) => file.path === abstractFile.path).pop()
-      if (!file) {
-        new Notice('File not found.');
-        return;
-      }
+        const file = this.app.vault
+          .getFiles()
+          .filter((file) => file.path === abstractFile.path)
+          .pop();
+        if (!file) {
+          new Notice("File not found.");
+          return;
+        }
 
-      await this.saveFileToVectorStore(file)
+        await this.saveFileToVectorStore(file);
 
-      const oldDocHash = VectorDBManager.getDocumentHash(oldPath)
-      await VectorDBManager.removeMemoryVectors(oldDocHash);
-    }))
+        const oldDocHash = VectorDBManager.getDocumentHash(oldPath);
+        await VectorDBManager.removeMemoryVectors(oldDocHash);
+      })
+    );
 
-    this.registerEvent(this.app.vault.on('create', async (abstractFile) => {
-      if (this.settings.indexVaultToVectorStore !== VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE) return;
+    this.registerEvent(
+      this.app.vault.on("create", async (abstractFile) => {
+        if (
+          this.settings.indexVaultToVectorStore !==
+          VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE
+        )
+          return;
 
-      const file = this.app.vault.getFiles().filter((file) => file.path === abstractFile.path).pop()
-      if (!file) {
-        new Notice('File not found.');
-        return;
-      }
+        const file = this.app.vault
+          .getFiles()
+          .filter((file) => file.path === abstractFile.path)
+          .pop();
+        if (!file) {
+          new Notice("File not found.");
+          return;
+        }
 
-      await this.saveFileToVectorStore(file)
-    }))
+        await this.saveFileToVectorStore(file);
+      })
+    );
 
-    this.registerEvent(this.app.vault.on('modify', async (abstractFile) => {
-      if (this.settings.indexVaultToVectorStore !== VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE) return;
+    this.registerEvent(
+      this.app.vault.on("modify", async (abstractFile) => {
+        if (
+          this.settings.indexVaultToVectorStore !==
+          VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE
+        )
+          return;
 
-      const file = this.app.vault.getFiles().filter((file) => file.path === abstractFile.path).pop()
-      if (!file) {
-        new Notice('File not found.');
-        return;
-      }
+        const file = this.app.vault
+          .getFiles()
+          .filter((file) => file.path === abstractFile.path)
+          .pop();
+        if (!file) {
+          new Notice("File not found.");
+          return;
+        }
 
-      await this.saveFileToVectorStore(file)
-    }))
+        await this.saveFileToVectorStore(file);
+      })
+    );
 
     // Index vault to vector store on startup and after loading all commands
     // This can take a while, so we don't want to block the startup process
-    if (this.settings.indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP || this.settings.indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE) {
+    if (
+      this.settings.indexVaultToVectorStore ===
+        VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP ||
+      this.settings.indexVaultToVectorStore ===
+        VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP_AND_SAVE
+    ) {
       try {
         await this.indexVaultToVectorStore();
       } catch (err) {
         console.error("Error saving vault to vector store:", err);
-        new Notice('An error occurred while saving vault to vector store.');
+        new Notice("An error occurred while saving vault to vector store.");
       }
     }
-
   }
 
   async saveFileToVectorStore(file: TFile): Promise<void> {
     const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
     if (!embeddingInstance) {
-      new Notice('Embedding instance not found.');
+      new Notice("Embedding instance not found.");
       return;
     }
-    const fileContent = await this.app.vault.cachedRead(file)
-    const fileMetadata = this.app.metadataCache.getFileCache(file)
+    const fileContent = await this.app.vault.cachedRead(file);
+    const fileMetadata = this.app.metadataCache.getFileCache(file);
     const noteFile = {
       basename: file.basename,
       path: file.path,
       mtime: file.stat.mtime,
       content: fileContent,
       metadata: fileMetadata?.frontmatter ?? {},
-    }
-    VectorDBManager.indexFile(noteFile, embeddingInstance)
+    };
+    VectorDBManager.indexFile(noteFile, embeddingInstance);
   }
 
   async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
     const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
     if (!embeddingInstance) {
-      throw new Error('Embedding instance not found.');
+      throw new Error("Embedding instance not found.");
     }
-    const latestMtime = await VectorDBManager.getLatestFileMtime()
+    const latestMtime = await VectorDBManager.getLatestFileMtime();
 
     const files = this.app.vault.getMarkdownFiles().filter((file) => {
-      if (!latestMtime || overwrite) return true
-      return file.stat.mtime > latestMtime
-    })
+      if (!latestMtime || overwrite) return true;
+      return file.stat.mtime > latestMtime;
+    });
     const fileContents: string[] = await Promise.all(
       files.map((file) => this.app.vault.cachedRead(file))
-    )
-    const fileMetadatas = files.map((file) => this.app.metadataCache.getFileCache(file))
+    );
+    const fileMetadatas = files.map((file) =>
+      this.app.metadataCache.getFileCache(file)
+    );
+
+    const totalFiles = files.length;
+    if (totalFiles === 0) {
+      new Notice("Copilot vault index is up-to-date.");
+      return 0;
+    }
 
     let indexedCount = 0;
-    const totalFiles = files.length;
-    const indexNotice = new Notice(`Indexing your vault... 0/${totalFiles} files processed. Please wait...`, 0);
+    const indexNotice = new Notice(
+      `Copilot is indexing your vault... 0/${totalFiles} files processed.`,
+      0
+    );
 
     const loadPromises = files.map(async (file, index) => {
       const noteFile = {
@@ -484,17 +550,22 @@ export default class CopilotPlugin extends Plugin {
         mtime: file.stat.mtime,
         content: fileContents[index],
         metadata: fileMetadatas[index]?.frontmatter ?? {},
-      }
-      const result = await VectorDBManager.indexFile(noteFile, embeddingInstance);
+      };
+      const result = await VectorDBManager.indexFile(
+        noteFile,
+        embeddingInstance
+      );
       indexedCount++;
       indexNotice.setMessage(
-        `Indexing your vault... ${indexedCount}/${totalFiles} files processed. Please wait...`
+        `Copilot is indexing your vault... ${indexedCount}/${totalFiles} files processed.`
       );
       return result;
-    })
+    });
 
     await Promise.all(loadPromises);
-    indexNotice.hide();
+    setTimeout(() => {
+      indexNotice.hide();
+    }, 2000);
     return files.length;
   }
 
