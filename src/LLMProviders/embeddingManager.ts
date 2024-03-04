@@ -5,6 +5,7 @@ import { ProxyOpenAIEmbeddings } from '@/langchainWrappers';
 import { CohereEmbeddings } from "@langchain/cohere";
 import { Embeddings } from "langchain/embeddings/base";
 import { HuggingFaceInferenceEmbeddings } from "langchain/embeddings/hf";
+import { OllamaEmbeddings } from "langchain/embeddings/ollama";
 import { OpenAIEmbeddings } from "langchain/embeddings/openai";
 
 export default class EmbeddingManager {
@@ -87,6 +88,12 @@ export default class EmbeddingManager {
         }
         console.error('Azure OpenAI API key is not provided for the embedding model.');
         break;
+      case ModelProviders.OLLAMA:
+        return new OllamaEmbeddings({
+          ...(this.langChainParams.ollamaBaseUrl ? { baseUrl: this.langChainParams.ollamaBaseUrl } : {}),
+          // TODO: Add custom ollama embedding model setting once they have other models
+          model: 'nomic-embed-text',
+        })
       default:
         console.error('No embedding provider set or no valid API key provided. Defaulting to OpenAI.');
         return OpenAIEmbeddingsAPI || new OpenAIEmbeddings({

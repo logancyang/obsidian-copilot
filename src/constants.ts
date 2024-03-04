@@ -94,6 +94,7 @@ export const EMBEDDING_PROVIDERS = [
   ModelProviders.AZURE_OPENAI,
   ModelProviders.COHEREAI,
   ModelProviders.HUGGINGFACE,
+  ModelProviders.OLLAMA,
 ];
 
 // Embedding Models
