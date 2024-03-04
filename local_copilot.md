@@ -32,7 +32,7 @@ The `ollama run mistral` command downloads and starts a chat with Mistral 7B rig
 
 #### Important note about setting context window
 
-AFAIK `ollama serve` doesn't have a consolidated way to configure context window for all the models at a single place. The current best way is to run `ollama run <modelname>` and then `/set parameter num_ctx 32768` (this is the max for Mistral, set it based on your model requirement), and don't forget to `/save` for each model individually.
+AFAIK `ollama serve` doesn't have a consolidated way to configure context window for all the models at a single place. The current best way is to run `ollama run <modelname>` and then `/set parameter num_ctx 32768` (this is the max for Mistral, set it based on your model requirement), and don't forget to `/save <modelname>` for each model individually.
 
 Remember that you MUST set this parameter for Ollama models, or they will silently fail and you will think your long prompt successfully reached the model!
 
@@ -56,7 +56,7 @@ Pick OLLAMA (LOCAL) in the model dropdown and start chatting!
 
 #### Ollama for Windows (Preview)
 
-Ollama has released a Windows preview version! Just download it to your Windows machine, open your PowerShell, and 
+Ollama has released a Windows preview version! Just download it to your Windows machine, open your PowerShell, and
 
 ```
 ollama pull <model>

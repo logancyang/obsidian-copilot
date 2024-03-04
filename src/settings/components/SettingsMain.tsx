@@ -39,6 +39,7 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
   const [cohereApiKey, setCohereApiKey] = useState(plugin.settings.cohereApiKey);
   const [huggingfaceApiKey, setHuggingfaceApiKey] = useState(plugin.settings.huggingfaceApiKey);
   const [indexVaultToVectorStore, setIndexVaultToVectorStore] = useState(plugin.settings.indexVaultToVectorStore);
+  const [maxSourceChunks, setMaxSourceChunks] = useState(plugin.settings.maxSourceChunks);
 
   // Advanced settings
   const [userSystemPrompt, setUserSystemPrompt] = useState(plugin.settings.userSystemPrompt);
@@ -78,6 +79,7 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
     plugin.settings.cohereApiKey = cohereApiKey;
     plugin.settings.huggingfaceApiKey = huggingfaceApiKey;
     plugin.settings.indexVaultToVectorStore = indexVaultToVectorStore;
+    plugin.settings.maxSourceChunks = maxSourceChunks;
 
     // Advanced settings
     plugin.settings.userSystemPrompt = userSystemPrompt;
@@ -206,6 +208,8 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
         setHuggingfaceApiKey={setHuggingfaceApiKey}
         indexVaultToVectorStore={indexVaultToVectorStore}
         setIndexVaultToVectorStore={setIndexVaultToVectorStore}
+        maxSourceChunks={maxSourceChunks}
+        setMaxSourceChunks={setMaxSourceChunks}
       />
       <AdvancedSettings
         openAIProxyBaseUrl={openAIProxyBaseUrl}

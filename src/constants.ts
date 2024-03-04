@@ -158,4 +158,5 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   chatNoteContextTags: [],
   debug: false,
   enableEncryption: false,
+  maxSourceChunks: 3,
 };

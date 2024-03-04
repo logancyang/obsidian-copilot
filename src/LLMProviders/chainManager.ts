@@ -9,6 +9,7 @@ import {
 } from '@/constants';
 import EncryptionService from '@/encryptionService';
 import { ProxyChatOpenAI } from '@/langchainWrappers';
+import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChatMessage } from '@/sharedState';
 import {
   extractChatHistory,
@@ -43,6 +44,7 @@ export default class ChainManager {
   private static isOpenRouterModelActive = false;
 
   private app: App;
+  private settings: CopilotSettings;
   private vectorStore: MemoryVectorStore;
   private promptManager: PromptManager;
   private embeddingsManager: EmbeddingsManager;
@@ -61,10 +63,12 @@ export default class ChainManager {
     app: App,
     langChainParams: LangChainParams,
     encryptionService: EncryptionService,
+    settings: CopilotSettings,
   ) {
     // Instantiate singletons
     this.app = app;
     this.langChainParams = langChainParams;
+    this.settings = settings;
     this.memoryManager = MemoryManager.getInstance(this.langChainParams);
     this.encryptionService = encryptionService;
     this.chatModelManager = ChatModelManager.getInstance(this.langChainParams, encryptionService);
@@ -276,7 +280,7 @@ export default class ChainManager {
         const vectorStore = await VectorDBManager.getMemoryVectorStore(embeddingsAPI)
         const retriever = ScoreThresholdRetriever.fromVectorStore(vectorStore, {
           minSimilarityScore: 0.3, // TODO: Make this a user setting
-          maxK: 10, // The maximum number of docs (chunks) to retrieve
+          maxK: this.settings.maxSourceChunks, // The maximum number of docs (chunks) to retrieve
           kIncrement: 2,
         });
 
@@ -470,6 +474,7 @@ export default class ChainManager {
     }
 
     if (options.debug) {
+      console.log('Max source chunks:', this.settings.maxSourceChunks);
       console.log('Retrieved chunks:', ChainManager.retrievedDocuments);
     }
 
@@ -479,10 +484,15 @@ export default class ChainManager {
     // expand and reveal the chunk
     if (this.langChainParams.chainType === ChainType.VAULT_QA_CHAIN) {
       const docTitles = extractUniqueTitlesFromDocs(ChainManager.retrievedDocuments);
-      const markdownLinks = docTitles.map(title =>
-        `[${title}](obsidian://open?vault=${this.app.vault.getName()}&file=${encodeURIComponent(title)})`
-      ).join('\n');
-      fullAIResponse += '\n\n**Sources**:\n' + markdownLinks;
+      const markdownLinks = docTitles
+        .map(
+          (title) =>
+            `[${title}](obsidian://open?vault=${this.app.vault.getName()}&file=${encodeURIComponent(
+              title
+            )})`
+        )
+        .join("\n");
+      fullAIResponse += "\n\n**Sources**:\n" + markdownLinks;
     }
 
     return fullAIResponse;

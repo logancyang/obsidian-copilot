@@ -2,7 +2,7 @@ import { EMBEDDING_PROVIDERS, OPENAI_EMBEDDING_MODELS, VAULT_VECTOR_STORE_STRATE
 import React from 'react';
 import ApiSetting from './ApiSetting';
 import Collapsible from './Collapsible';
-import { DropdownComponent } from './SettingBlocks';
+import { DropdownComponent, SliderComponent } from './SettingBlocks';
 
 interface QASettingsProps {
   embeddingProvider: string;
@@ -15,6 +15,8 @@ interface QASettingsProps {
   setHuggingfaceApiKey: (value: string) => void;
   indexVaultToVectorStore: string;
   setIndexVaultToVectorStore: (value: string) => void;
+  maxSourceChunks: number;
+  setMaxSourceChunks: (value: number) => void;
 }
 
 const QASettings: React.FC<QASettingsProps> = ({
@@ -28,6 +30,8 @@ const QASettings: React.FC<QASettingsProps> = ({
   setHuggingfaceApiKey,
   indexVaultToVectorStore,
   setIndexVaultToVectorStore,
+  maxSourceChunks,
+  setMaxSourceChunks,
 }) => {
   return (
     <div>
@@ -77,6 +81,18 @@ const QASettings: React.FC<QASettingsProps> = ({
         value={indexVaultToVectorStore}
         onChange={setIndexVaultToVectorStore}
         options={VAULT_VECTOR_STORE_STRATEGIES}
+      />
+      <br />
+      <SliderComponent
+        name="Max Sources"
+        description="Default is 3 (Recommended). Increase if you want more context sources. A higher number can lead to irrelevant sources and lower quality responses, it also fills up the context window faster."
+        min={0}
+        max={10}
+        step={1}
+        value={maxSourceChunks}
+        onChange={async (value) => {
+          setMaxSourceChunks(value);
+        }}
       />
       <br />
       <Collapsible title="Cohere API Settings">

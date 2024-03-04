@@ -39,6 +39,7 @@ export interface CopilotSettings {
   chatNoteContextTags: string[];
   debug: boolean;
   enableEncryption: boolean;
+  maxSourceChunks: number;
 }
 
 export class CopilotSettingTab extends PluginSettingTab {
