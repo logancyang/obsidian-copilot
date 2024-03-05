@@ -22,6 +22,7 @@ export enum ChatModelDisplayNames {
   GPT_4_TURBO = 'GPT-4 TURBO',
   GPT_4_32K = 'GPT-4 32K',
   AZURE_OPENAI = 'AZURE OPENAI',
+  CLAUDE = 'CLAUDE 3',
   GEMINI_PRO = 'GEMINI PRO',
   OPENROUTERAI = 'OPENROUTER.AI',
   OLLAMA = 'OLLAMA (LOCAL)',
@@ -43,6 +44,10 @@ export const AZURE_MODELS = new Set([
 
 export const GOOGLE_MODELS = new Set([
   ChatModelDisplayNames.GEMINI_PRO,
+]);
+
+export const ANTHROPIC_MODELS = new Set([
+  ChatModelDisplayNames.CLAUDE,
 ]);
 
 export const OPENROUTERAI_MODELS = new Set([
@@ -84,6 +89,7 @@ export const VENDOR_MODELS: Record<string, Set<string>> = {
   [ModelProviders.OPENAI]: OPENAI_MODELS,
   [ModelProviders.AZURE_OPENAI]: AZURE_MODELS,
   [ModelProviders.GOOGLE]: GOOGLE_MODELS,
+  [ModelProviders.ANTHROPIC]: ANTHROPIC_MODELS,
   [ModelProviders.OPENROUTERAI]: OPENROUTERAI_MODELS,
   [ModelProviders.OLLAMA]: OLLAMA_MODELS,
   [ModelProviders.LM_STUDIO]: LM_STUDIO_MODELS,
@@ -133,11 +139,14 @@ export const VAULT_VECTOR_STORE_STRATEGIES = [
   VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH,
 ];
 
+export const PROXY_SERVER_PORT = 53001;
+
 export const DEFAULT_SETTINGS: CopilotSettings = {
   openAIApiKey: '',
   huggingfaceApiKey: '',
   cohereApiKey: '',
   anthropicApiKey: '',
+  anthropicModel: 'claude-3-sonnet-20240229',
   azureOpenAIApiKey: '',
   azureOpenAIApiInstanceName: '',
   azureOpenAIApiDeploymentName: '',

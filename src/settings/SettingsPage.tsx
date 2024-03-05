@@ -9,6 +9,7 @@ export interface CopilotSettings {
   huggingfaceApiKey: string;
   cohereApiKey: string;
   anthropicApiKey: string;
+  anthropicModel: string;
   azureOpenAIApiKey: string;
   azureOpenAIApiInstanceName: string;
   azureOpenAIApiDeploymentName: string;
