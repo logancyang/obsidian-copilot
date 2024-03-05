@@ -75,7 +75,7 @@ const QASettings: React.FC<QASettingsProps> = ({
         <strong>ON MODE SWITCH (Recommended)</strong>: Vault index is refreshed when switching to Vault QA mode.
         <br /><br />
         By "refreshed", it means the vault index is not rebuilt from scratch but rather updated incrementally with new/modified notes since the last index. If you need a complete rebuild, run the commands "Clear vector store" and "Force re-index for QA" manually. This helps reduce costs when using paid embedding models.<br /><br />
-        Beware of the cost if you are not using a local embedding model and have a large vault!
+        Beware of the cost if you are using a paid embedding model and have a large vault! You can run Copilot command <em>Count total tokens in your vault</em> and refer to your selected embedding model pricing to estimate indexing costs.
       </p>
       <br />
       <SliderComponent
