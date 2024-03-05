@@ -17,11 +17,19 @@ If you enjoy Copilot for Obsidian, please consider [sponsoring this project](htt
 
 <a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
 
-#### 🎉 NEW in v2.4.18: Advanced Custom Prompt! 🎉🎉🎉
+#### 🎉 HIGHLY ANTICIPATED v2.5.0: Vault QA (BETA) mode (with local embedding support)! Claude 3! 🎉🎉🎉
 
-<a href="https://youtu.be/VPNlXeCsH74?si=eYjJhO2cZtU7VrQz" target="_blank"><img src="./images/thumbnail-adv-prompt-tutorial.png" width="700" /></a>
+*VIDEO DEMO COMING*
 
-This video shows how Advanced Custom Prompt works. This form of templating enables a lot more possibilities with long context window models. If you have your own creative cool use cases, don't hesitate to share them in the discussion or in the youtube comment section!
+The highly anticipated biggest update of all is here!
+
+The brand new **Vault QA (BETA)** mode allows you to chat with your whole vault, powered by a **local** vector store. Ask questions and get answers with **cited sources**!
+
+What's more, with Ollama **local embeddings** and **local chat models**, this mode works **completely offline**! This is a huge step toward truly private and local AI assistance inside Obsidian!
+
+Since Claude 3 models are announced today (3/4/2024), I managed to add them in this release too. Go to Anthropic's site to get your API key, you can now find it in the settings.
+
+(Huge shoutout to @AntoineDao for working with me on Vault QA mode!)
 
 #### FREE Models
 
@@ -33,17 +41,18 @@ This video shows how Advanced Custom Prompt works. This form of templating enabl
 - Chat with ChatGPT right inside Obsidian in the Copilot Chat window.
 - No repetitive login. Use your own API key (stored locally).
 - No monthly fee. Pay only for what you use.
-- Model selection of OpenAI, Azure and **local** models powered by LM Studio and Ollama.
+- Model selection of OpenAI, Azure, Google, Claude 3, OpenRouter and **local** models powered by LM Studio and Ollama.
 - No need to buy ChatGPT Plus to use GPT-4.
 - No usage cap for GPT-4 like ChatGPT Plus.
 - One-click copying any message as markdown.
 - One-click saving the entire conversation as a note.
-- Use a super long note as context, and start a discussion around it by switching to "QA" in the Mode Selection menu.
-  - This feature is powered by retrieval augmentation with a **local** vector store. No sending your data to a cloud-based vector search service!
+- Use a super long note as context, and start a discussion around it by switching to "Long Note QA" in the Mode Selection menu.
+- **Chat with your whole vault** by selecting "Vault QA" mode. Ask questions and get **cited responses**!
+- All QA modes are powered by retrieval augmentation with a **local vector store**. No sending your data to a cloud-based vector search service!
 - Easy commands to **simplify, emojify, summarize, translate, change tone, fix grammar, rewrite into a tweet/thread, count tokens** and more.
 - Set your own parameters like LLM temperature, max tokens, conversation context based on your need (**pls be mindful of the API cost**).
 - **User custom prompt**! You can *add, apply, edit, delete* your custom prompts, persisted in your local Obsidian environment! Be creative with your own prompt templates, sky is the limit!
-- **Local model** support for **offline chat** using LM Studio and Ollama (experimental feature).
+- **Local model** support for **offline chat** using LM Studio and Ollama.
 
 ## 🎬 Demos
 #### 🤗 New to Copilot? Quick Guide for Beginners:
@@ -67,6 +76,12 @@ You can add, apply, edit and delete your own custom Copilot commands, all persis
 Check out this demo video below!
 
 <a href="https://www.youtube.com/watch?v=apuV1Jz6ObE" target="_blank"><img src="./images/thumbnail2.png" width="700" /></a>
+
+#### 🧠 Advanced Custom Prompt! Unleash your creativity and fully leverage the long context window!
+
+<a href="https://youtu.be/VPNlXeCsH74?si=eYjJhO2cZtU7VrQz" target="_blank"><img src="./images/thumbnail-adv-prompt-tutorial.png" width="700" /></a>
+
+This video shows how Advanced Custom Prompt works. This form of templating enables a lot more possibilities with long context window models. If you have your own creative cool use cases, don't hesitate to share them in the discussion or in the youtube comment section!
 
 #### 🔧 Copilot Settings
 
