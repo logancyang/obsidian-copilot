@@ -139,6 +139,8 @@ export const VAULT_VECTOR_STORE_STRATEGIES = [
   VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH,
 ];
 
+export const PROXY_SERVER_PORT = 53001;
+
 export const DEFAULT_SETTINGS: CopilotSettings = {
   openAIApiKey: '',
   huggingfaceApiKey: '',

@@ -8,6 +8,7 @@ import {
   OLLAMA_MODELS,
   OPENAI_MODELS,
   OPENROUTERAI_MODELS,
+  PROXY_SERVER_PORT,
 } from '@/constants';
 import EncryptionService from '@/encryptionService';
 import { ProxyChatOpenAI } from '@/langchainWrappers';
@@ -71,6 +72,7 @@ export default class ChatModelManager {
         openAIProxyBaseUrl: params.openAIProxyBaseUrl,
       },
       [ModelProviders.ANTHROPIC]: {
+        anthropicApiUrl: `http://localhost:${PROXY_SERVER_PORT}`,
         anthropicApiKey: decrypt(params.anthropicApiKey),
         modelName: params.anthropicModel,
       },
