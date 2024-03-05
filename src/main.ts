@@ -18,7 +18,7 @@ import { CustomPrompt } from "@/customPromptProcessor";
 import EncryptionService from "@/encryptionService";
 import { CopilotSettingTab, CopilotSettings } from "@/settings/SettingsPage";
 import SharedState from "@/sharedState";
-import { areEmbeddingModelsSame, sanitizeSettings } from "@/utils";
+import { areEmbeddingModelsSame, getAllNotesContent, sanitizeSettings } from "@/utils";
 import VectorDBManager, { VectorStoreDocument } from "@/vectorDBManager";
 import { Server } from "http";
 import { Editor, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
@@ -631,6 +631,17 @@ export default class CopilotPlugin extends Plugin {
     return response.rows
       .map((row) => (row.doc as CustomPrompt)?._id)
       .filter(Boolean) as string[];
+  }
+
+  async countTotalTokens(): Promise<number> {
+    try {
+      const allContent = await getAllNotesContent(this.app.vault);
+      const totalTokens = await this.chainManager.chatModelManager.countTokens(allContent);
+      return totalTokens;
+    } catch (error) {
+      console.error('Error counting tokens: ', error);
+      return 0;
+    }
   }
 
   getChainManagerParams(): LangChainParams {

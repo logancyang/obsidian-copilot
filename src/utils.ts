@@ -138,6 +138,19 @@ export function getFileName(file: TFile): string {
   return file.basename;
 }
 
+export async function getAllNotesContent(vault: Vault): Promise<string> {
+  let allContent = '';
+
+  const markdownFiles = vault.getMarkdownFiles();
+
+  for (const file of markdownFiles) {
+    const fileContent = await vault.cachedRead(file);
+    allContent += fileContent + ' ';
+  }
+
+  return allContent;
+}
+
 export function areEmbeddingModelsSame(
   model1: string | undefined,
   model2: string | undefined,
