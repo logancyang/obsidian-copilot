@@ -1,5 +1,6 @@
 import { LangChainParams, ModelConfig } from '@/aiParams';
 import {
+  ANTHROPIC_MODELS,
   AZURE_MODELS,
   GOOGLE_MODELS,
   LM_STUDIO_MODELS,
@@ -11,6 +12,7 @@ import {
 import EncryptionService from '@/encryptionService';
 import { ProxyChatOpenAI } from '@/langchainWrappers';
 import { getModelName } from '@/utils';
+import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { BaseChatModel } from 'langchain/chat_models/base';
@@ -70,6 +72,7 @@ export default class ChatModelManager {
       },
       [ModelProviders.ANTHROPIC]: {
         anthropicApiKey: decrypt(params.anthropicApiKey),
+        modelName: params.anthropicModel,
       },
       [ModelProviders.AZURE_OPENAI]: {
         maxTokens: params.maxTokens,
@@ -124,6 +127,12 @@ export default class ChatModelManager {
         apiKey: this.langChainParams.googleApiKey,
         constructor: ChatGoogleGenerativeAI,
         vendor: ModelProviders.GOOGLE,
+      },
+      {
+        models: ANTHROPIC_MODELS,
+        apiKey: this.langChainParams.anthropicApiKey,
+        constructor: ChatAnthropic,
+        vendor: ModelProviders.ANTHROPIC,
       },
       {
         models: OPENROUTERAI_MODELS,

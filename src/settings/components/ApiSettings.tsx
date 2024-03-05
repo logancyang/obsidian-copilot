@@ -8,6 +8,10 @@ interface ApiSettingsProps {
   setOpenAIApiKey: (value: string) => void;
   googleApiKey: string;
   setGoogleApiKey: (value: string) => void;
+  anthropicApiKey: string;
+  setAnthropicApiKey: (value: string) => void;
+  anthropicModel: string;
+  setAnthropicModel: (value: string) => void;
   openRouterAiApiKey: string;
   setOpenRouterAiApiKey: (value: string) => void;
   openRouterModel: string;
@@ -29,6 +33,10 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
   setOpenAIApiKey,
   googleApiKey,
   setGoogleApiKey,
+  anthropicApiKey,
+  setAnthropicApiKey,
+  anthropicModel,
+  setAnthropicModel,
   openRouterAiApiKey,
   setOpenRouterAiApiKey,
   openRouterModel,
@@ -96,6 +104,33 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
             </a>.
             <br />
             Your API key is stored locally and is only used to make requests to Google's services.
+          </p>
+        </div>
+      </Collapsible>
+
+      <Collapsible title="Anthropic API Settings">
+        <div>
+          <ApiSetting
+            title="Anthropic API Key"
+            value={anthropicApiKey}
+            setValue={setAnthropicApiKey}
+            placeholder="Enter Anthropic API Key"
+          />
+          <ApiSetting
+            title="Anthropic Model"
+            value={anthropicModel}
+            // @ts-ignore
+            setValue={setAnthropicModel}
+            placeholder={DEFAULT_SETTINGS.anthropicModel}
+            type="text"
+          />
+          <p>
+            If you have Anthropic API access, you can get the API key {' '}
+            <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">
+              here
+            </a>.
+            <br />
+            Your API key is stored locally and is only used to make requests to Anthropic's services.
           </p>
         </div>
       </Collapsible>
