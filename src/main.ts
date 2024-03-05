@@ -1,4 +1,5 @@
 import ChainManager from "@/LLMProviders/chainManager";
+import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { LangChainParams, SetChainOptions } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { registerBuiltInCommands } from "@/commands";
@@ -11,15 +12,16 @@ import {
   CHAT_VIEWTYPE,
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
+  VAULT_VECTOR_STORE_STRATEGY
 } from "@/constants";
 import { CustomPrompt } from "@/customPromptProcessor";
 import EncryptionService from "@/encryptionService";
 import { CopilotSettingTab, CopilotSettings } from "@/settings/SettingsPage";
 import SharedState from "@/sharedState";
-import { sanitizeSettings } from "@/utils";
+import { areEmbeddingModelsSame, getAllNotesContent, sanitizeSettings } from "@/utils";
 import VectorDBManager, { VectorStoreDocument } from "@/vectorDBManager";
 import { Server } from "http";
-import { Editor, Notice, Plugin, WorkspaceLeaf } from "obsidian";
+import { Editor, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import PouchDB from "pouchdb";
 
 export default class CopilotPlugin extends Plugin {
@@ -32,6 +34,7 @@ export default class CopilotPlugin extends Plugin {
   chatIsVisible = false;
   dbPrompts: PouchDB.Database;
   dbVectorStores: PouchDB.Database;
+  embeddingsManager: EmbeddingsManager;
   encryptionService: EncryptionService;
   server: Server | null = null;
 
@@ -45,25 +48,27 @@ export default class CopilotPlugin extends Plugin {
     const langChainParams = this.getChainManagerParams();
     this.encryptionService = new EncryptionService(this.settings);
     this.chainManager = new ChainManager(
+      this.app,
       langChainParams,
-      this.encryptionService
+      this.encryptionService,
+      this.settings,
     );
 
     if (this.settings.enableEncryption) {
       await this.saveSettings();
     }
 
-    this.dbPrompts = new PouchDB<CustomPrompt>("copilot_custom_prompts");
-
     this.dbVectorStores = new PouchDB<VectorStoreDocument>(
       "copilot_vector_stores"
     );
+    this.embeddingsManager = EmbeddingsManager.getInstance(
+      langChainParams,
+      this.encryptionService
+    );
+    this.dbPrompts = new PouchDB<CustomPrompt>("copilot_custom_prompts");
 
     VectorDBManager.initializeDB(this.dbVectorStores);
-    // Remove documents older than TTL days on load
-    VectorDBManager.removeOldDocuments(
-      this.settings.ttlDays * 24 * 60 * 60 * 1000
-    );
+    VectorDBManager.setEmbeddingModel(this.settings.embeddingModel);
 
     this.registerView(
       CHAT_VIEWTYPE,
@@ -309,6 +314,82 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "garbage-collect-vector-store",
+      name: "Garbage collect vector store (remove files that no longer exist in vault)",
+      callback: async () => {
+        try {
+          const files = this.app.vault.getMarkdownFiles();
+          const filePaths = files.map((file) => file.path);
+          const indexedFiles = await VectorDBManager.getNoteFiles();
+          const indexedFilePaths = indexedFiles.map((file) => file.path);
+          const filesToDelete = indexedFilePaths.filter(
+            (filePath) => !filePaths.includes(filePath)
+          );
+
+          const deletePromises = filesToDelete.map(async (filePath) => {
+            VectorDBManager.removeMemoryVectors(
+              VectorDBManager.getDocumentHash(filePath)
+            );
+          });
+
+          await Promise.all(deletePromises);
+
+          new Notice("Local vector store garbage collected successfully.");
+          console.log(
+            "Local vector store garbage collected successfully, new instance created."
+          );
+        } catch (err) {
+          console.error("Error clearing the local vector store:", err);
+          new Notice(
+            "An error occurred while clearing the local vector store."
+          );
+        }
+      },
+    });
+
+    this.addCommand({
+      id: "index-vault-to-vector-store",
+      name: "Index (refresh) vault for QA",
+      callback: async () => {
+        try {
+          const indexedFileCount = await this.indexVaultToVectorStore();
+
+          new Notice(
+            `${indexedFileCount} vault files indexed to vector store.`
+          );
+          console.log(
+            `${indexedFileCount} vault files indexed to vector store.`
+          );
+        } catch (err) {
+          console.error("Error indexing vault to vector store:", err);
+          new Notice("An error occurred while indexing vault to vector store.");
+        }
+      },
+    });
+
+    this.addCommand({
+      id: "force-reindex-vault-to-vector-store",
+      name: "Force re-index vault for QA",
+      callback: async () => {
+        try {
+          const indexedFileCount = await this.indexVaultToVectorStore(true);
+
+          new Notice(
+            `${indexedFileCount} vault files indexed to vector store.`
+          );
+          console.log(
+            `${indexedFileCount} vault files indexed to vector store.`
+          );
+        } catch (err) {
+          console.error("Error re-indexing vault to vector store:", err);
+          new Notice(
+            "An error occurred while re-indexing vault to vector store."
+          );
+        }
+      },
+    });
+
+    this.addCommand({
       id: "set-chat-note-context",
       name: "Set note context for Chat mode",
       callback: async () => {
@@ -324,6 +405,136 @@ export default class CopilotPlugin extends Plugin {
         ).open();
       },
     });
+
+    this.registerEvent(
+      this.app.vault.on("delete", (file) => {
+        const docHash = VectorDBManager.getDocumentHash(file.path);
+        VectorDBManager.removeMemoryVectors(docHash);
+      })
+    );
+
+    // Index vault to vector store on startup and after loading all commands
+    // This can take a while, so we don't want to block the startup process
+    if (
+      this.settings.indexVaultToVectorStore ===
+        VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP
+    ) {
+      try {
+        await this.indexVaultToVectorStore();
+      } catch (err) {
+        console.error("Error saving vault to vector store:", err);
+        new Notice("An error occurred while saving vault to vector store.");
+      }
+    }
+  }
+
+  async saveFileToVectorStore(file: TFile): Promise<void> {
+    const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
+    if (!embeddingInstance) {
+      new Notice("Embedding instance not found.");
+      return;
+    }
+    const fileContent = await this.app.vault.cachedRead(file);
+    const fileMetadata = this.app.metadataCache.getFileCache(file);
+    const noteFile = {
+      basename: file.basename,
+      path: file.path,
+      mtime: file.stat.mtime,
+      content: fileContent,
+      metadata: fileMetadata?.frontmatter ?? {},
+    };
+    VectorDBManager.indexFile(noteFile, embeddingInstance);
+  }
+
+  async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
+    const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
+    if (!embeddingInstance) {
+      throw new Error("Embedding instance not found.");
+    }
+
+    // Check if embedding model has changed
+    const prevEmbeddingModel = await VectorDBManager.checkEmbeddingModel();
+    // TODO: Remove this when Ollama model is dynamically set
+    const currEmbeddingModel = EmbeddingsManager.getModelName(embeddingInstance);
+
+    console.log(
+      'Prev vs Current embedding models:', prevEmbeddingModel, currEmbeddingModel
+    );
+
+    if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
+      // Model has changed, clear DB and reindex from scratch
+      overwrite = true;
+      // Clear the current vector store with mixed embeddings
+      try {
+        // Clear the vectorstore db
+        await this.dbVectorStores.destroy();
+        // Reinitialize the database
+        this.dbVectorStores = new PouchDB<VectorStoreDocument>(
+          "copilot_vector_stores"
+        );
+        // Make sure to update the instance with VectorDBManager
+        VectorDBManager.updateDBInstance(this.dbVectorStores);
+        new Notice("Detected change in embedding model. Rebuild vector store from scratch.");
+        console.log(
+          "Detected change in embedding model. Rebuild vector store from scratch."
+        );
+      } catch (err) {
+        console.error("Error clearing vector store for reindexing:", err);
+        new Notice(
+          "Error clearing vector store for reindexing."
+        );
+      }
+    }
+
+    const latestMtime = await VectorDBManager.getLatestFileMtime();
+
+    const files = this.app.vault.getMarkdownFiles().filter((file) => {
+      if (!latestMtime || overwrite) return true;
+      return file.stat.mtime > latestMtime;
+    });
+    const fileContents: string[] = await Promise.all(
+      files.map((file) => this.app.vault.cachedRead(file))
+    );
+    const fileMetadatas = files.map((file) =>
+      this.app.metadataCache.getFileCache(file)
+    );
+
+    const totalFiles = files.length;
+    if (totalFiles === 0) {
+      new Notice("Copilot vault index is up-to-date.");
+      return 0;
+    }
+
+    let indexedCount = 0;
+    const indexNotice = new Notice(
+      `Copilot is indexing your vault... 0/${totalFiles} files processed.`,
+      0
+    );
+
+    const loadPromises = files.map(async (file, index) => {
+      const noteFile = {
+        basename: file.basename,
+        path: file.path,
+        mtime: file.stat.mtime,
+        content: fileContents[index],
+        metadata: fileMetadatas[index]?.frontmatter ?? {},
+      };
+      const result = await VectorDBManager.indexFile(
+        noteFile,
+        embeddingInstance
+      );
+      indexedCount++;
+      indexNotice.setMessage(
+        `Copilot is indexing your vault... ${indexedCount}/${totalFiles} files processed.`
+      );
+      return result;
+    });
+
+    await Promise.all(loadPromises);
+    setTimeout(() => {
+      indexNotice.hide();
+    }, 2000);
+    return files.length;
   }
 
   async processText(
@@ -422,6 +633,17 @@ export default class CopilotPlugin extends Plugin {
       .filter(Boolean) as string[];
   }
 
+  async countTotalTokens(): Promise<number> {
+    try {
+      const allContent = await getAllNotesContent(this.app.vault);
+      const totalTokens = await this.chainManager.chatModelManager.countTokens(allContent);
+      return totalTokens;
+    } catch (error) {
+      console.error('Error counting tokens: ', error);
+      return 0;
+    }
+  }
+
   getChainManagerParams(): LangChainParams {
     const {
       openAIApiKey,
@@ -440,7 +662,6 @@ export default class CopilotPlugin extends Plugin {
       temperature,
       maxTokens,
       contextTurns,
-      embeddingProvider,
       ollamaModel,
       ollamaBaseUrl,
       lmStudioBaseUrl,
@@ -468,7 +689,6 @@ export default class CopilotPlugin extends Plugin {
       maxTokens: Number(maxTokens),
       systemMessage: this.settings.userSystemPrompt || DEFAULT_SYSTEM_PROMPT,
       chatContextTurns: Number(contextTurns),
-      embeddingProvider: embeddingProvider,
       chainType: ChainType.LLM_CHAIN, // Set LLM_CHAIN as default ChainType
       options: { forceNewCreation: true } as SetChainOptions,
       openAIProxyBaseUrl: this.settings.openAIProxyBaseUrl,

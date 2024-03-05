@@ -34,11 +34,11 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
   const [azureOpenAIApiEmbeddingDeploymentName, setAzureOpenAIApiEmbeddingDeploymentName] = useState(plugin.settings.azureOpenAIApiEmbeddingDeploymentName);
 
   // QA settings
-  const [embeddingProvider, setEmbeddingProvider] = useState(plugin.settings.embeddingProvider);
   const [embeddingModel, setEmbeddingModel] = useState(plugin.settings.embeddingModel);
-  const [ttlDays, setTtlDays] = useState(plugin.settings.ttlDays);
   const [cohereApiKey, setCohereApiKey] = useState(plugin.settings.cohereApiKey);
   const [huggingfaceApiKey, setHuggingfaceApiKey] = useState(plugin.settings.huggingfaceApiKey);
+  const [indexVaultToVectorStore, setIndexVaultToVectorStore] = useState(plugin.settings.indexVaultToVectorStore);
+  const [maxSourceChunks, setMaxSourceChunks] = useState(plugin.settings.maxSourceChunks);
 
   // Advanced settings
   const [userSystemPrompt, setUserSystemPrompt] = useState(plugin.settings.userSystemPrompt);
@@ -73,11 +73,11 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
     plugin.settings.azureOpenAIApiEmbeddingDeploymentName = azureOpenAIApiEmbeddingDeploymentName;
 
     // QA settings
-    plugin.settings.embeddingProvider = embeddingProvider;
     plugin.settings.embeddingModel = embeddingModel;
-    plugin.settings.ttlDays = ttlDays;
     plugin.settings.cohereApiKey = cohereApiKey;
     plugin.settings.huggingfaceApiKey = huggingfaceApiKey;
+    plugin.settings.indexVaultToVectorStore = indexVaultToVectorStore;
+    plugin.settings.maxSourceChunks = maxSourceChunks;
 
     // Advanced settings
     plugin.settings.userSystemPrompt = userSystemPrompt;
@@ -196,16 +196,16 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
         setAzureOpenAIApiEmbeddingDeploymentName={setAzureOpenAIApiEmbeddingDeploymentName}
       />
       <QASettings
-        embeddingProvider={embeddingProvider}
-        setEmbeddingProvider={setEmbeddingProvider}
         embeddingModel={embeddingModel}
         setEmbeddingModel={setEmbeddingModel}
-        ttlDays={ttlDays}
-        setTtlDays={setTtlDays}
         cohereApiKey={cohereApiKey}
         setCohereApiKey={setCohereApiKey}
         huggingfaceApiKey={huggingfaceApiKey}
         setHuggingfaceApiKey={setHuggingfaceApiKey}
+        indexVaultToVectorStore={indexVaultToVectorStore}
+        setIndexVaultToVectorStore={setIndexVaultToVectorStore}
+        maxSourceChunks={maxSourceChunks}
+        setMaxSourceChunks={setMaxSourceChunks}
       />
       <AdvancedSettings
         openAIProxyBaseUrl={openAIProxyBaseUrl}

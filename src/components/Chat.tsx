@@ -8,6 +8,7 @@ import { AI_SENDER, USER_SENDER } from '@/constants';
 import { AppContext } from '@/context';
 import { CustomPromptProcessor } from '@/customPromptProcessor';
 import { getAIResponse } from '@/langchainStream';
+import CopilotPlugin from '@/main';
 import { CopilotSettings } from '@/settings/SettingsPage';
 import SharedState, {
   ChatMessage, useSharedState,
@@ -37,9 +38,8 @@ import {
   summarizePrompt,
   tocPrompt
 } from '@/utils';
-import VectorDBManager from '@/vectorDBManager';
 import { EventEmitter } from 'events';
-import { Notice, TFile, Vault } from 'obsidian';
+import { Notice, TFile } from 'obsidian';
 import React, {
   useContext,
   useEffect,
@@ -59,7 +59,7 @@ interface ChatProps {
   emitter: EventEmitter;
   getChatVisibility: () => Promise<boolean>;
   defaultSaveFolder: string;
-  vault: Vault;
+  plugin: CopilotPlugin;
   debug: boolean;
 }
 
@@ -70,7 +70,7 @@ const Chat: React.FC<ChatProps> = ({
   emitter,
   getChatVisibility,
   defaultSaveFolder,
-  vault,
+  plugin,
   debug
 }) => {
   const [
@@ -84,7 +84,7 @@ const Chat: React.FC<ChatProps> = ({
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const app = useContext(AppContext);
+  const app = plugin.app || useContext(AppContext);
 
   const handleSendMessage = async () => {
     if (!inputMessage) return;
@@ -159,13 +159,13 @@ const Chat: React.FC<ChatProps> = ({
     }
     if (settings.chatNoteContextPath) {
       // Recursively get all note TFiles in the path
-      noteFiles = await getNotesFromPath(vault, settings.chatNoteContextPath);
+      noteFiles = await getNotesFromPath(app.vault, settings.chatNoteContextPath);
     }
     if (settings.chatNoteContextTags?.length > 0) {
       // Get all notes with the specified tags
       // If path is provided, get all notes with the specified tags in the path
       // If path is not provided, get all notes with the specified tags
-      noteFiles = await getNotesFromTags(vault, settings.chatNoteContextTags, noteFiles);
+      noteFiles = await getNotesFromTags(app.vault, settings.chatNoteContextTags, noteFiles);
     }
     const file = app.workspace.getActiveFile();
     // If no note context provided, default to the active note
@@ -182,8 +182,8 @@ const Chat: React.FC<ChatProps> = ({
     const notes = [];
     for (const file of noteFiles) {
       // Get the content of the note
-      const content = await getFileContent(file, vault);
-      const tags = await getTagsFromNote(file, vault);
+      const content = await getFileContent(file, app.vault);
+      const tags = await getTagsFromNote(file, app.vault);
       if (content) {
         notes.push({ name: getFileName(file), content, tags});
       }
@@ -236,7 +236,7 @@ const Chat: React.FC<ChatProps> = ({
       console.error('No active note found.');
       return;
     }
-    const noteContent = await getFileContent(file, vault);
+    const noteContent = await getFileContent(file, app.vault);
     const noteName = getFileName(file);
     if (!noteContent) {
       new Notice('No note content found.');
@@ -244,20 +244,37 @@ const Chat: React.FC<ChatProps> = ({
       return;
     }
 
-    const docHash = VectorDBManager.getDocumentHash(noteContent);
-    await chainManager.buildIndex(noteContent, docHash);
+    const fileMetadata = app.metadataCache.getFileCache(file)
+    const noteFile = {
+      path: file.path,
+      basename: file.basename,
+      mtime: file.stat.mtime,
+      content: noteContent,
+      metadata: fileMetadata?.frontmatter ?? {},
+    };
+    await chainManager.indexFile(noteFile);
     const activeNoteOnMessage: ChatMessage = {
       sender: AI_SENDER,
       message: `Indexing [[${noteName}]]...\n\n Please switch to "QA" in Mode Selection to ask questions about it.`,
       isVisible: true,
     };
 
-    if (currentChain === ChainType.RETRIEVAL_QA_CHAIN) {
-      setChain(ChainType.RETRIEVAL_QA_CHAIN, { noteContent });
+    if (currentChain === ChainType.LONG_NOTE_QA_CHAIN) {
+      setChain(ChainType.LONG_NOTE_QA_CHAIN, { noteFile });
     }
 
     addMessage(activeNoteOnMessage);
   };
+
+  const refreshVaultContext = async () => {
+    if (!app) {
+      console.error('App instance is not available.');
+      return;
+    }
+
+    await plugin.indexVaultToVectorStore();
+    new Notice('Vault index refreshed.');
+  }
 
   const clearCurrentAiMessage = () => {
     setCurrentAiMessage('');
@@ -381,7 +398,7 @@ const Chat: React.FC<ChatProps> = ({
     []
   );
 
-  const customPromptProcessor = CustomPromptProcessor.getInstance(vault);
+  const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
   useEffect(
     createEffect(
       'applyCustomPrompt',
@@ -435,8 +452,10 @@ const Chat: React.FC<ChatProps> = ({
           onSaveAsNote={handleSaveAsNote}
           onSendActiveNoteToPrompt={handleSendActiveNoteToPrompt}
           onForceRebuildActiveNoteContext={forceRebuildActiveNoteContext}
+          onRefreshVaultContext={refreshVaultContext}
           addMessage={addMessage}
-          vault={vault}
+          vault={app.vault}
+          vault_qa_strategy={plugin.settings.indexVaultToVectorStore}
         />
         <ChatInput
           inputMessage={inputMessage}

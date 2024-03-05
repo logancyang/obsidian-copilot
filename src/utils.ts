@@ -1,8 +1,9 @@
-import { ChainType } from '@/chainFactory';
+import { ChainType, Document } from '@/chainFactory';
 import {
   DEFAULT_SETTINGS,
   DISPLAY_NAME_TO_MODEL,
-  USER_SENDER
+  NOMIC_EMBED_TEXT,
+  USER_SENDER,
 } from '@/constants';
 import { CopilotSettings } from '@/settings/SettingsPage';
 import { ChatMessage } from '@/sharedState';
@@ -71,11 +72,13 @@ export async function getNotesFromTags(
 }
 
 export const stringToChainType = (chain: string): ChainType => {
-  switch(chain) {
+  switch (chain) {
     case 'llm_chain':
       return ChainType.LLM_CHAIN;
-    case 'retrieval_qa':
-      return ChainType.RETRIEVAL_QA_CHAIN;
+    case 'long_note_qa':
+      return ChainType.LONG_NOTE_QA_CHAIN;
+    case 'vault_qa':
+      return ChainType.VAULT_QA_CHAIN
     default:
       throw new Error(`Unknown chain type: ${chain}`);
   }
@@ -92,8 +95,8 @@ export const isRetrievalQAChain = (chain: BaseChain): chain is RetrievalQAChain 
 }
 
 export const isSupportedChain = (chain: RunnableSequence): chain is RunnableSequence => {
-    return isLLMChain(chain) || isRetrievalQAChain(chain);
-  }
+  return isLLMChain(chain) || isRetrievalQAChain(chain);
+}
 
 export const getModelName = (modelDisplayName: string): string => {
   return DISPLAY_NAME_TO_MODEL[modelDisplayName];
@@ -133,6 +136,37 @@ export async function getFileContent(file: TFile, vault: Vault): Promise<string 
 
 export function getFileName(file: TFile): string {
   return file.basename;
+}
+
+export async function getAllNotesContent(vault: Vault): Promise<string> {
+  let allContent = '';
+
+  const markdownFiles = vault.getMarkdownFiles();
+
+  for (const file of markdownFiles) {
+    const fileContent = await vault.cachedRead(file);
+    allContent += fileContent + ' ';
+  }
+
+  return allContent;
+}
+
+export function areEmbeddingModelsSame(
+  model1: string | undefined,
+  model2: string | undefined,
+): boolean {
+  if (!model1 || !model2) return false;
+  // TODO: Hacks to handle different embedding model names for the same model. Need better handling.
+  if (model1.includes(NOMIC_EMBED_TEXT) && model2.includes(NOMIC_EMBED_TEXT)) {
+    return true;
+  }
+  if (
+    (model1 === "small" && model2 === "cohereai") ||
+    (model1 === "cohereai" && model2 === "small")
+  ) {
+    return true;
+  }
+  return model1 === model2;
 }
 
 export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
@@ -313,4 +347,15 @@ export function processVariableNameForNotePath(variableName: string): string {
   }
   // It's a path, so we just return it as is
   return variableName;
+}
+
+export function extractUniqueTitlesFromDocs(docs: Document[]): string[] {
+ const titlesSet = new Set<string>();
+ docs.forEach(doc => {
+    if (doc.metadata?.title) {
+      titlesSet.add(doc.metadata?.title);
+    }
+ });
+
+ return Array.from(titlesSet);
 }

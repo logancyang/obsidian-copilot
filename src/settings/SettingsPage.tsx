@@ -31,14 +31,14 @@ export interface CopilotSettings {
   ollamaModel: string;
   ollamaBaseUrl: string;
   lmStudioBaseUrl: string;
-  ttlDays: number;
   stream: boolean;
-  embeddingProvider: string;
   defaultSaveFolder: string;
+  indexVaultToVectorStore: string;
   chatNoteContextPath: string;
   chatNoteContextTags: string[];
   debug: boolean;
   enableEncryption: boolean;
+  maxSourceChunks: number;
 }
 
 export class CopilotSettingTab extends PluginSettingTab {

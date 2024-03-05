@@ -1,5 +1,6 @@
 import { ChainType } from '@/chainFactory';
 import { ChatPromptTemplate } from "langchain/prompts";
+import { NoteFile } from './vectorDBManager';
 
 export interface ModelConfig {
   modelName: string,
@@ -43,7 +44,6 @@ export interface LangChainParams {
   maxTokens: number,
   systemMessage: string,
   chatContextTurns: number,
-  embeddingProvider: string,
   chainType: ChainType,  // Default ChainType is set in main.ts getChainManagerParams
   options: SetChainOptions,
   ollamaModel: string,
@@ -58,7 +58,7 @@ export interface LangChainParams {
 
 export interface SetChainOptions {
   prompt?: ChatPromptTemplate;
-  noteContent?: string;
+  noteFile?: NoteFile;
   forceNewCreation?: boolean;
   abortController?: AbortController;
 }

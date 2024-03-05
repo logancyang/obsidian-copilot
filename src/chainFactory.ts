@@ -28,10 +28,17 @@ export interface ConversationalRetrievalChainParams {
   llm: BaseLanguageModel;
   retriever: BaseRetriever;
   options?: {
-      returnSourceDocuments?: boolean;
-      questionGeneratorTemplate?: string;
-      qaTemplate?: string;
+    returnSourceDocuments?: boolean;
+    questionGeneratorTemplate?: string;
+    qaTemplate?: string;
   }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export interface Document<T = Record<string, any>> {
+  // Structure of Document, possibly including pageContent, metadata, etc.
+  pageContent: string;
+  metadata: T;
 }
 
 type ConversationalRetrievalQAChainInput = {
@@ -46,9 +53,8 @@ type ConversationalRetrievalQAChainInput = {
 // Add new chain types here
 export enum ChainType {
   LLM_CHAIN = 'llm_chain',
-  RETRIEVAL_QA_CHAIN = 'retrieval_qa',
-  // TODO: Wait for official fix and use conversational retrieval chain instead of retrieval qa.
-  CONVERSATIONAL_RETRIEVAL_QA_CHAIN = 'conversational_retrieval_chain',
+  LONG_NOTE_QA_CHAIN = 'long_note_qa',
+  VAULT_QA_CHAIN = 'vault_qa',
 }
 
 class ChainFactory {
@@ -122,7 +128,8 @@ class ChainFactory {
    * @return {RunnableSequence} a new conversational retrieval chain
    */
   public static createConversationalRetrievalChain(
-    args: ConversationalRetrievalChainParams
+    args: ConversationalRetrievalChainParams,
+    onDocumentsRetrieved: (documents: Document[]) => void,
   ): RunnableSequence {
     const { llm, retriever } = args;
 
@@ -161,9 +168,15 @@ class ChainFactory {
       new StringOutputParser(),
     ]);
 
+    const formatDocumentsAsStringAndStore = async (documents: Document[]) => {
+      // Store or log documents for debugging
+      onDocumentsRetrieved(documents);
+      return formatDocumentsAsString(documents);
+    };
+
     const answerChain = RunnableSequence.from([
       {
-        context: retriever.pipe(formatDocumentsAsString),
+        context: retriever.pipe(formatDocumentsAsStringAndStore),
         question: new RunnablePassthrough(),
       },
       ANSWER_PROMPT,
@@ -171,8 +184,6 @@ class ChainFactory {
     ]);
 
     const conversationalRetrievalQAChain = standaloneQuestionChain.pipe(answerChain);
-    console.log('New Conversational Retrieval QA Chain created.');
-
     return conversationalRetrievalQAChain as RunnableSequence;
   }
 }

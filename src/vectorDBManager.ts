@@ -1,23 +1,41 @@
 import { MD5 } from 'crypto-js';
 import { Document } from "langchain/document";
 import { Embeddings } from 'langchain/embeddings/base';
+import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 
+// TODOs
+// 1. Use embeddingModel rather than embeddingProvider
+// 2. embeddingModel should be on MemoryVector metadata
+// 3. VectorDBManager should have a public method checking existing embeddingModel on a MemoryVector
 export interface VectorStoreDocument {
-    _id: string;
-    _rev?: string;
-    memory_vectors: string;
-    created_at: number;
+  _id: string;
+  _rev?: string;
+  memory_vectors: string;
+  file_mtime: number;
+  embeddingModel: string;
+  created_at: number;
 }
 
 export interface MemoryVector {
-    content: string;
-    embedding: number[];
-    metadata: Record<string, any>;
+  content: string;
+  embedding: number[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  metadata: Record<string, any>;
+}
+
+export interface NoteFile {
+  path: string;
+  basename: string;
+  mtime: number;
+  content: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  metadata: Record<string, any>;
 }
 
 class VectorDBManager {
   public static db: PouchDB.Database | null = null;
+  public static embeddingModel: string | null = null;
 
   public static initializeDB(db: PouchDB.Database): void {
     this.db = db;
@@ -27,25 +45,31 @@ class VectorDBManager {
     this.db = newDb;
   }
 
+  public static setEmbeddingModel(embeddingModel: string): void {
+    this.embeddingModel = embeddingModel;
+  }
+
   public static getDocumentHash(sourceDocument: string): string {
     return MD5(sourceDocument).toString();
   }
 
   public static async rebuildMemoryVectorStore(
-    memoryVectors: MemoryVector[], embeddingsAPI: Embeddings
+    memoryVectors: MemoryVector[],
+    embeddingsAPI: Embeddings
   ) {
     if (!Array.isArray(memoryVectors)) {
       throw new TypeError("Expected memoryVectors to be an array");
     }
     // Extract the embeddings and documents from the deserialized memoryVectors
     const embeddingsArray: number[][] = memoryVectors.map(
-      memoryVector => memoryVector.embedding
+      (memoryVector) => memoryVector.embedding
     );
     const documentsArray = memoryVectors.map(
-      memoryVector => new Document({
-        pageContent: memoryVector.content,
-        metadata: memoryVector.metadata
-      })
+      (memoryVector) =>
+        new Document({
+          pageContent: memoryVector.content,
+          metadata: memoryVector.metadata,
+        })
     );
 
     // Create a new MemoryVectorStore instance
@@ -54,7 +78,49 @@ class VectorDBManager {
     return memoryVectorStore;
   }
 
-  public static async setMemoryVectors(memoryVectors: MemoryVector[], docHash: string): Promise<void> {
+  public static async getMemoryVectorStore(
+    embeddingsAPI: Embeddings,
+    docHash?: string
+  ): Promise<MemoryVectorStore> {
+    if (!this.db) throw new Error("DB not initialized");
+    if (!this.embeddingModel) throw new Error("Embedding model not set");
+
+    let allDocsResponse;
+    if (docHash) {
+      // Fetch a single document by its _id
+      const doc = await this.db.get(docHash);
+      allDocsResponse = { rows: [{ doc }] };
+    } else {
+      // Fetch all documents
+      allDocsResponse = await this.db.allDocs({ include_docs: true });
+    }
+
+    const allDocs = allDocsResponse.rows
+      .map((row) => row.doc as VectorStoreDocument)
+      .filter((doc) => doc.embeddingModel === this.embeddingModel);
+    const memoryVectors = allDocs
+      .map((doc) => JSON.parse(doc.memory_vectors) as MemoryVector[])
+      .flat();
+    const embeddingsArray: number[][] = memoryVectors.map(
+      (memoryVector) => memoryVector.embedding
+    );
+    const documentsArray = memoryVectors.map(
+      (memoryVector) =>
+        new Document({
+          pageContent: memoryVector.content,
+          metadata: memoryVector.metadata,
+        })
+    );
+    // Create a new MemoryVectorStore instance
+    const memoryVectorStore = new MemoryVectorStore(embeddingsAPI);
+    await memoryVectorStore.addVectors(embeddingsArray, documentsArray);
+    return memoryVectorStore;
+  }
+
+  public static async setMemoryVectors(
+    memoryVectors: MemoryVector[],
+    docHash: string
+  ): Promise<void> {
     if (!this.db) throw new Error("DB not initialized");
     if (!Array.isArray(memoryVectors)) {
       throw new TypeError("Expected memoryVectors to be an array");
@@ -62,14 +128,14 @@ class VectorDBManager {
     const serializedMemoryVectors = JSON.stringify(memoryVectors);
     try {
       // Attempt to fetch the existing document, if it exists.
-      const existingDoc = await this.db.get(docHash).catch(err => null);
+      const existingDoc = await this.db.get(docHash).catch((err) => null);
 
       // Prepare the document to be saved.
       const docToSave = {
         _id: docHash,
         memory_vectors: serializedMemoryVectors,
         created_at: Date.now(),
-        _rev: existingDoc?._rev // Add the current revision if the document exists.
+        _rev: existingDoc?._rev, // Add the current revision if the document exists.
       };
 
       // Save the document.
@@ -79,7 +145,164 @@ class VectorDBManager {
     }
   }
 
-  public static async getMemoryVectors(docHash: string): Promise<MemoryVector[] | undefined> {
+  public static async indexFile(noteFile: NoteFile, embeddingsAPI: Embeddings) {
+    if (!this.db) throw new Error("DB not initialized");
+    if (!this.embeddingModel) throw new Error("Embedding model not set");
+
+    // Markdown splitter: https://js.langchain.com/docs/modules/data_connection/document_transformers/code_splitter#markdown
+    const textSplitter = RecursiveCharacterTextSplitter.fromLanguage(
+      "markdown",
+      {
+        chunkSize: 5000,
+      }
+    );
+    // Add note title as contextual chunk headers
+    // https://js.langchain.com/docs/modules/data_connection/document_transformers/contextual_chunk_headers
+    const splitDocument = await textSplitter.createDocuments(
+      [noteFile.content],
+      [],
+      {
+        chunkHeader: "[[" + noteFile.basename + "]]" + "\n\n---\n\n",
+        appendChunkOverlapHeader: true,
+      }
+    );
+    const docVectors = await embeddingsAPI.embedDocuments(
+      splitDocument.map((doc) => doc.pageContent)
+    );
+    const memoryVectors = docVectors.map((docVector, i) => ({
+      content: splitDocument[i].pageContent,
+      metadata: {
+        ...noteFile.metadata,
+        title: noteFile.basename,
+        path: noteFile.path,
+      },
+      embedding: docVector,
+    }));
+    const docHash = VectorDBManager.getDocumentHash(noteFile.path);
+
+    const serializedMemoryVectors = JSON.stringify(memoryVectors);
+    try {
+      // Attempt to fetch the existing document, if it exists.
+      const existingDoc = await this.db.get(docHash).catch((err) => null);
+
+      // Prepare the document to be saved.
+      const docToSave: VectorStoreDocument = {
+        _id: docHash,
+        memory_vectors: serializedMemoryVectors,
+        file_mtime: noteFile.mtime,
+        embeddingModel: this.embeddingModel,
+        created_at: Date.now(),
+        _rev: existingDoc?._rev, // Add the current revision if the document exists.
+      };
+
+      // Save the document.
+      await this.db.put(docToSave);
+      return docToSave;
+    } catch (err) {
+      console.error("Error storing vectors in VectorDB:", err);
+    }
+  }
+
+  public static async getNoteFiles(): Promise<NoteFile[]> {
+    if (!this.db) throw new Error("DB not initialized");
+    try {
+      const allDocsResponse = await this.db.allDocs<VectorStoreDocument>({
+        include_docs: true,
+      });
+      const allDocs = allDocsResponse.rows.map(
+        (row) => row.doc as VectorStoreDocument
+      );
+      const memoryVectors = allDocs
+        .map((doc) => JSON.parse(doc.memory_vectors) as MemoryVector[])
+        .filter((memoryVectors) => memoryVectors.length > 0);
+
+      const noteFiles = memoryVectors
+        .map((memoryVectors, i) => {
+          const doc = allDocs[i];
+          const noteFile: NoteFile = {
+            path: memoryVectors[0].metadata.path,
+            basename: memoryVectors[0].metadata.title,
+            mtime: doc.file_mtime,
+            content: memoryVectors[0].content,
+            metadata: memoryVectors[0].metadata,
+          };
+          return noteFile;
+        })
+        .filter((noteFile): noteFile is NoteFile => noteFile !== undefined);
+      return noteFiles;
+    } catch (err) {
+      console.error("Error getting note files from VectorDB:", err);
+      return [];
+    }
+  }
+
+  public static async removeMemoryVectors(docHash: string): Promise<void> {
+    if (!this.db) throw new Error("DB not initialized");
+    try {
+      const doc = await this.db.get(docHash);
+      if (doc) {
+        await this.db.remove(doc);
+      }
+    } catch (err) {
+      console.error("Error removing file from VectorDB:", err);
+    }
+  }
+
+  public static async getLatestFileMtime(): Promise<number> {
+    if (!this.db) throw new Error("DB not initialized");
+    if (!this.embeddingModel) throw new Error("Embedding provider not set");
+
+    try {
+      const allDocsResponse = await this.db.allDocs<VectorStoreDocument>({
+        include_docs: true,
+      });
+      const allDocs = allDocsResponse.rows
+        .map((row) => row.doc as VectorStoreDocument)
+        .filter((doc) => doc.embeddingModel === this.embeddingModel);
+      const newestFileMtime = allDocs
+        .map((doc) => doc.file_mtime)
+        .sort((a, b) => b - a)[0];
+      return newestFileMtime;
+    } catch (err) {
+      console.error("Error getting newest file mtime from VectorDB:", err);
+      return 0;
+    }
+  }
+
+  public static async checkEmbeddingModel(): Promise<string | undefined> {
+    if (!this.db) throw new Error("DB not initialized");
+
+    try {
+      // Fetch all documents
+      const allDocsResponse = await this.db.allDocs<VectorStoreDocument>({
+        include_docs: true,
+      });
+      const allDocs = allDocsResponse.rows.map(
+        (row) => row.doc as VectorStoreDocument
+      );
+
+      // Check if there are any documents
+      if (allDocs.length === 0) {
+        return undefined;
+      }
+
+      // Extract the embeddingModel from all documents
+      const embeddingModels = allDocs.map((doc) => doc.embeddingModel);
+
+      // Check if all documents have the same embeddingModel
+      const allSame = embeddingModels.every(
+        (model) => model === embeddingModels[0]
+      );
+      return allSame ? embeddingModels[0] : undefined;
+    } catch (err) {
+      console.error("Error checking last embedding model from VectorDB:", err);
+      return undefined;
+    }
+  }
+
+  public static async getMemoryVectors(
+    docHash: string
+  ): Promise<MemoryVector[] | undefined> {
     if (!this.db) throw new Error("DB not initialized");
     try {
       const doc: VectorStoreDocument = await this.db.get(docHash);
@@ -90,45 +313,6 @@ class VectorDBManager {
       console.log("No vectors found in VectorDB for dochash:", docHash);
     }
   }
-
-  public static async removeOldDocuments(ttl: number): Promise<void> {
-    if (!this.db) throw new Error("DB not initialized");
-
-    try {
-      const thresholdTime = Date.now() - ttl;
-
-      // Fetch all documents from the database
-      const allDocsResponse = await this.db.allDocs<{ created_at: number }>({ include_docs: true });
-
-      // Filter out the documents older than 2 weeks
-      const oldDocs = allDocsResponse.rows.filter(row => {
-          // Assert the doc type
-          const doc = row.doc as VectorStoreDocument;
-          return doc && doc.created_at < thresholdTime;
-      });
-
-      if (oldDocs.length === 0) {
-          return;
-      }
-      // Prepare the documents for deletion
-      const docsToDelete = oldDocs.map(row => ({
-          _id: row.id,
-          _rev: (row.doc as VectorStoreDocument)._rev,
-          _deleted: true
-      }));
-
-      // Delete the old documents
-      await this.db.bulkDocs(docsToDelete);
-      console.log("Deleted old documents from VectorDB");
-    }
-     catch (err) {
-      console.error("Error removing old documents from VectorDB:", err);
-    }
-  }
-
-  // TODO: Implement advanced stale document removal.
-  // NOTE: Cannot just rely on note title + ts because a "document" here is a chunk from
-  // the original note. Need a better strategy.
 }
 
 export default VectorDBManager;
