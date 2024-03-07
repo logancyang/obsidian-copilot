@@ -19,7 +19,7 @@ If you enjoy Copilot for Obsidian, please consider [sponsoring this project](htt
 
 #### 🎉 HIGHLY ANTICIPATED v2.5.0: Vault QA (BETA) mode (with local embedding support)! Claude 3! 🎉🎉🎉
 
-*VIDEO DEMO COMING*
+<a href="https://youtu.be/NSoKRYNlOls" target="_blank"><img src="./images/thumbnail-vault-qa.png" width="700" /></a>
 
 The highly anticipated biggest update of all is here!
 
