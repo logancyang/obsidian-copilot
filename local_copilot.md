@@ -64,6 +64,16 @@ ollama pull <model>
 $env:OLLAMA_ORIGINS="app://obsidian.md*"; ollama serve
 ```
 
+If you want to use CMD, type the following commands
+
+```
+ollama pull mistral
+ollama pull nomic-embed-text
+# Remember to close the Ollama app first to free up the port
+set OLLAMA_ORIGINS=app://obsidian.md*
+ollama serve
+```
+
 ## Ollama for Local Embeddings
 Ollama has added support for local embeddings for RAG since v0.1.26! It's super easy to setup, just run
 
