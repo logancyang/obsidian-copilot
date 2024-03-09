@@ -1,39 +1,37 @@
-import { LangChainParams, SetChainOptions } from '@/aiParams';
-import ChainFactory, {
-  ChainType,
-  Document,
-} from '@/chainFactory';
-import {
-  AI_SENDER,
-  ChatModelDisplayNames
-} from '@/constants';
-import EncryptionService from '@/encryptionService';
-import { ProxyChatOpenAI } from '@/langchainWrappers';
+import { LangChainParams, SetChainOptions } from "@/aiParams";
+import ChainFactory, { ChainType, Document } from "@/chainFactory";
+import { AI_SENDER, ChatModelDisplayNames } from "@/constants";
+import EncryptionService from "@/encryptionService";
+import { ProxyChatOpenAI } from "@/langchainWrappers";
 import { CopilotSettings } from "@/settings/SettingsPage";
-import { ChatMessage } from '@/sharedState';
+import { ChatMessage } from "@/sharedState";
 import {
   extractChatHistory,
   extractUniqueTitlesFromDocs,
   getModelName,
-  isSupportedChain
-} from '@/utils';
-import VectorDBManager, { MemoryVector, NoteFile, VectorStoreDocument } from '@/vectorDBManager';
+  isSupportedChain,
+} from "@/utils";
+import VectorDBManager, {
+  MemoryVector,
+  NoteFile,
+  VectorStoreDocument,
+} from "@/vectorDBManager";
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { BaseChatMemory } from "langchain/memory";
 import {
   ChatPromptTemplate,
   HumanMessagePromptTemplate,
-  MessagesPlaceholder
+  MessagesPlaceholder,
 } from "langchain/prompts";
 import { MultiQueryRetriever } from "langchain/retrievers/multi_query";
 import { ScoreThresholdRetriever } from "langchain/retrievers/score_threshold";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
-import { App, Notice } from 'obsidian';
-import ChatModelManager from './chatModelManager';
-import EmbeddingsManager from './embeddingManager';
-import MemoryManager from './memoryManager';
-import PromptManager from './promptManager';
+import { App, Notice } from "obsidian";
+import ChatModelManager from "./chatModelManager";
+import EmbeddingsManager from "./embeddingManager";
+import MemoryManager from "./memoryManager";
+import PromptManager from "./promptManager";
 
 export default class ChainManager {
   private static chain: RunnableSequence;
@@ -52,6 +50,7 @@ export default class ChainManager {
   public chatModelManager: ChatModelManager;
   public langChainParams: LangChainParams;
   public memoryManager: MemoryManager;
+  private getDbVectorStores: () => PouchDB.Database<VectorStoreDocument>;
 
   /**
    * Constructor for initializing langChainParams and instantiating singletons.
@@ -64,6 +63,8 @@ export default class ChainManager {
     langChainParams: LangChainParams,
     encryptionService: EncryptionService,
     settings: CopilotSettings,
+    // Ensure ChainManager always has the up-to-date dbVectorStores
+    getDbVectorStores: () => PouchDB.Database<VectorStoreDocument>,
   ) {
     // Instantiate singletons
     this.app = app;
@@ -71,8 +72,12 @@ export default class ChainManager {
     this.settings = settings;
     this.memoryManager = MemoryManager.getInstance(this.langChainParams);
     this.encryptionService = encryptionService;
-    this.chatModelManager = ChatModelManager.getInstance(this.langChainParams, encryptionService);
+    this.chatModelManager = ChatModelManager.getInstance(
+      this.langChainParams,
+      encryptionService,
+    );
     this.promptManager = PromptManager.getInstance(this.langChainParams);
+    this.getDbVectorStores = getDbVectorStores;
     this.createChainWithNewModel(this.langChainParams.modelDisplayName);
   }
 
@@ -81,7 +86,8 @@ export default class ChainManager {
   }
 
   private validateChainType(chainType: ChainType): void {
-    if (chainType === undefined || chainType === null) throw new Error('No chain type set');
+    if (chainType === undefined || chainType === null)
+      throw new Error("No chain type set");
   }
 
   static storeRetrieverDocuments(documents: Document[]) {
@@ -96,8 +102,10 @@ export default class ChainManager {
    * @return {void}
    */
   createChainWithNewModel(newModelDisplayName: string): void {
-    ChainManager.isOllamaModelActive = newModelDisplayName === ChatModelDisplayNames.OLLAMA;
-    ChainManager.isOpenRouterModelActive = newModelDisplayName === ChatModelDisplayNames.OPENROUTERAI;
+    ChainManager.isOllamaModelActive =
+      newModelDisplayName === ChatModelDisplayNames.OLLAMA;
+    ChainManager.isOpenRouterModelActive =
+      newModelDisplayName === ChatModelDisplayNames.OPENROUTERAI;
     // model and model display name must be update at the same time!
     let newModel = getModelName(newModelDisplayName);
 
@@ -106,7 +114,7 @@ export default class ChainManager {
         newModel = this.langChainParams.ollamaModel;
         break;
       case ChatModelDisplayNames.LM_STUDIO:
-        newModel = 'check_model_in_lm_studio_ui';
+        newModel = "check_model_in_lm_studio_ui";
         break;
       case ChatModelDisplayNames.OPENROUTERAI:
         newModel = this.langChainParams.openRouterModel;
@@ -120,10 +128,10 @@ export default class ChainManager {
       // Must update the chatModel for chain because ChainFactory always
       // retrieves the old chain without the chatModel change if it exists!
       // Create a new chain with the new chatModel
-      this.createChain(
-        this.langChainParams.chainType,
-        { ...this.langChainParams.options, forceNewCreation: true },
-      )
+      this.createChain(this.langChainParams.chainType, {
+        ...this.langChainParams.options,
+        forceNewCreation: true,
+      });
       console.log(`Setting model to ${newModelDisplayName}: ${newModel}`);
     } catch (error) {
       console.error("createChainWithNewModel failed: ", error);
@@ -132,16 +140,13 @@ export default class ChainManager {
   }
 
   /* Create a new chain, or update chain with new model */
-  createChain(
-    chainType: ChainType,
-    options?: SetChainOptions,
-  ): void {
+  createChain(chainType: ChainType, options?: SetChainOptions): void {
     this.validateChainType(chainType);
     try {
       this.setChain(chainType, options);
     } catch (error) {
-      new Notice('Error creating chain:', error);
-      console.error('Error creating chain:', error);
+      new Notice("Error creating chain:", error);
+      console.error("Error creating chain:", error);
     }
   }
 
@@ -149,15 +154,25 @@ export default class ChainManager {
     chainType: ChainType,
     options: SetChainOptions = {},
   ): Promise<void> {
-    if (!this.chatModelManager.validateChatModel(this.chatModelManager.getChatModel())) {
+    if (
+      !this.chatModelManager.validateChatModel(
+        this.chatModelManager.getChatModel(),
+      )
+    ) {
       // No need to throw error and trigger multiple Notices to user
-      console.error('setChain failed: No chat model set.');
+      console.error("setChain failed: No chat model set.");
       return;
     }
     this.validateChainType(chainType);
     // MUST set embeddingsManager when switching to QA mode
-    if (chainType === ChainType.LONG_NOTE_QA_CHAIN || chainType === ChainType.VAULT_QA_CHAIN) {
-      this.embeddingsManager = EmbeddingsManager.getInstance(this.langChainParams, this.encryptionService);
+    if (
+      chainType === ChainType.LONG_NOTE_QA_CHAIN ||
+      chainType === ChainType.VAULT_QA_CHAIN
+    ) {
+      this.embeddingsManager = EmbeddingsManager.getInstance(
+        this.langChainParams,
+        this.encryptionService,
+      );
     }
 
     // Get chatModel, memory, prompt, and embeddingAPI from respective managers
@@ -173,7 +188,8 @@ export default class ChainManager {
           if (ChainManager.isOllamaModelActive) {
             (chatModel as ChatOllama).model = this.langChainParams.ollamaModel;
           } else if (ChainManager.isOpenRouterModelActive) {
-            (chatModel as ProxyChatOpenAI).modelName = this.langChainParams.openRouterModel;
+            (chatModel as ProxyChatOpenAI).modelName =
+              this.langChainParams.openRouterModel;
           }
 
           ChainManager.chain = ChainFactory.createNewLLMChain({
@@ -197,16 +213,22 @@ export default class ChainManager {
       }
       case ChainType.LONG_NOTE_QA_CHAIN: {
         if (!options.noteFile) {
-          new Notice('No note content provided');
-          throw new Error('No note content provided');
+          new Notice("No note content provided");
+          throw new Error("No note content provided");
         }
 
         this.setNoteFile(options.noteFile);
         const docHash = VectorDBManager.getDocumentHash(options.noteFile.path);
-        const parsedMemoryVectors: MemoryVector[] | undefined = await VectorDBManager.getMemoryVectors(docHash);
+        const parsedMemoryVectors: MemoryVector[] | undefined =
+          await VectorDBManager.getMemoryVectors(
+            this.getDbVectorStores(),
+            docHash,
+          );
         const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
         if (!embeddingsAPI) {
-          console.error('Error getting embeddings API. Please check your settings.');
+          console.error(
+            "Error getting embeddings API. Please check your settings.",
+          );
           return;
         }
         if (parsedMemoryVectors) {
@@ -217,67 +239,70 @@ export default class ChainManager {
           );
 
           // Create new conversational retrieval chain
-          ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain(
-            {
-              llm: chatModel,
-              retriever: vectorStore.asRetriever(
-                undefined,
-                (doc) => {
+          ChainManager.retrievalChain =
+            ChainFactory.createConversationalRetrievalChain(
+              {
+                llm: chatModel,
+                retriever: vectorStore.asRetriever(undefined, (doc) => {
                   return doc.metadata.path === options.noteFile?.path;
-                }
-              ),
-            },
-            ChainManager.storeRetrieverDocuments.bind(ChainManager),
-          )
-          console.log('Existing vector store for document hash: ', docHash);
+                }),
+              },
+              ChainManager.storeRetrieverDocuments.bind(ChainManager),
+            );
+          console.log("Existing vector store for document hash: ", docHash);
         } else {
           // Index doesn't exist
           const vectorStoreDoc = await this.indexFile(options.noteFile);
           this.vectorStore = await VectorDBManager.getMemoryVectorStore(
+            this.getDbVectorStores(),
             embeddingsAPI,
             vectorStoreDoc?._id,
           );
           if (!this.vectorStore) {
-            console.error('Error creating vector store.');
+            console.error("Error creating vector store.");
             return;
           }
 
           const retriever = MultiQueryRetriever.fromLLM({
             llm: chatModel,
-            retriever: this.vectorStore.asRetriever(
-              undefined,
-              (doc) => {
-                return doc.metadata.path === options.noteFile?.path;
-              }
-            ),
+            retriever: this.vectorStore.asRetriever(undefined, (doc) => {
+              return doc.metadata.path === options.noteFile?.path;
+            }),
             verbose: false,
           });
 
-          ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain(
-            {
-              llm: chatModel,
-              retriever: retriever,
-            },
-            ChainManager.storeRetrieverDocuments.bind(ChainManager)
-          )
+          ChainManager.retrievalChain =
+            ChainFactory.createConversationalRetrievalChain(
+              {
+                llm: chatModel,
+                retriever: retriever,
+              },
+              ChainManager.storeRetrieverDocuments.bind(ChainManager),
+            );
           console.log(
-            'New conversational retrieval QA chain with multi-query retriever created for '
-            + 'document hash: ', docHash
+            "New conversational retrieval QA chain with multi-query retriever created for " +
+              "document hash: ",
+            docHash,
           );
         }
 
         this.langChainParams.chainType = ChainType.LONG_NOTE_QA_CHAIN;
-        console.log('Set chain:', ChainType.LONG_NOTE_QA_CHAIN);
+        console.log("Set chain:", ChainType.LONG_NOTE_QA_CHAIN);
         break;
       }
 
       case ChainType.VAULT_QA_CHAIN: {
         const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
         if (!embeddingsAPI) {
-          console.error('Error getting embeddings API. Please check your settings.');
+          console.error(
+            "Error getting embeddings API. Please check your settings.",
+          );
           return;
         }
-        const vectorStore = await VectorDBManager.getMemoryVectorStore(embeddingsAPI)
+        const vectorStore = await VectorDBManager.getMemoryVectorStore(
+          this.getDbVectorStores(),
+          embeddingsAPI,
+        );
         const retriever = ScoreThresholdRetriever.fromVectorStore(vectorStore, {
           minSimilarityScore: 0.3, // TODO: Make this a user setting
           maxK: this.settings.maxSourceChunks, // The maximum number of docs (chunks) to retrieve
@@ -285,19 +310,20 @@ export default class ChainManager {
         });
 
         // Create new conversational retrieval chain
-        ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain(
-          {
-            llm: chatModel,
-            retriever: retriever,
-          },
-          ChainManager.storeRetrieverDocuments.bind(ChainManager)
-        )
+        ChainManager.retrievalChain =
+          ChainFactory.createConversationalRetrievalChain(
+            {
+              llm: chatModel,
+              retriever: retriever,
+            },
+            ChainManager.storeRetrieverDocuments.bind(ChainManager),
+          );
         console.log(
-          'New conversational retrieval QA chain with multi-query retriever created for entire vault'
+          "New conversational retrieval QA chain with multi-query retriever created for entire vault",
         );
 
         this.langChainParams.chainType = ChainType.VAULT_QA_CHAIN;
-        console.log('Set chain:', ChainType.VAULT_QA_CHAIN);
+        console.log("Set chain:", ChainType.VAULT_QA_CHAIN);
         break;
       }
 
@@ -313,19 +339,21 @@ export default class ChainManager {
     updateCurrentAiMessage: (message: string) => void,
     addMessage: (message: ChatMessage) => void,
     options: {
-      debug?: boolean,
-      ignoreSystemMessage?: boolean,
-      updateLoading?: (loading: boolean) => void
+      debug?: boolean;
+      ignoreSystemMessage?: boolean;
+      updateLoading?: (loading: boolean) => void;
     } = {},
   ) {
-    const {
-      debug = false,
-      ignoreSystemMessage = false,
-    } = options;
+    const { debug = false, ignoreSystemMessage = false } = options;
 
     // Check if chat model is initialized
-    if (!this.chatModelManager.validateChatModel(this.chatModelManager.getChatModel())) {
-      const errorMsg = 'Chat model is not initialized properly, check your API key in Copilot setting and make sure you have API access.';
+    if (
+      !this.chatModelManager.validateChatModel(
+        this.chatModelManager.getChatModel(),
+      )
+    ) {
+      const errorMsg =
+        "Chat model is not initialized properly, check your API key in Copilot setting and make sure you have API access.";
       new Notice(errorMsg);
       console.error(errorMsg);
       return;
@@ -333,10 +361,13 @@ export default class ChainManager {
     // Check if chain is initialized properly
     if (!ChainManager.chain || !isSupportedChain(ChainManager.chain)) {
       console.error(
-        'Chain is not initialized properly, re-initializing chain: ',
-        this.langChainParams.chainType
+        "Chain is not initialized properly, re-initializing chain: ",
+        this.langChainParams.chainType,
       );
-      this.setChain(this.langChainParams.chainType, this.langChainParams.options);
+      this.setChain(
+        this.langChainParams.chainType,
+        this.langChainParams.options,
+      );
     }
 
     const {
@@ -349,14 +380,14 @@ export default class ChainManager {
 
     const memory = this.memoryManager.getMemory();
     const chatPrompt = this.promptManager.getChatPrompt();
-    const systemPrompt = ignoreSystemMessage ? '' : systemMessage;
+    const systemPrompt = ignoreSystemMessage ? "" : systemMessage;
     // Whether to ignore system prompt (for commands)
     if (ignoreSystemMessage) {
       const effectivePrompt = ignoreSystemMessage
         ? ChatPromptTemplate.fromMessages([
-          new MessagesPlaceholder("history"),
-          HumanMessagePromptTemplate.fromTemplate("{input}"),
-        ])
+            new MessagesPlaceholder("history"),
+            HumanMessagePromptTemplate.fromTemplate("{input}"),
+          ])
         : chatPrompt;
 
       this.setChain(chainType, {
@@ -367,28 +398,31 @@ export default class ChainManager {
       this.setChain(chainType, this.langChainParams.options);
     }
 
-    let fullAIResponse = '';
+    let fullAIResponse = "";
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const chatModel = (ChainManager.chain as any).last.bound;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const chatStream = await ChainManager.chain.stream({ input: userMessage } as any);
+    const chatStream = await ChainManager.chain.stream({
+      input: userMessage,
+    } as any);
 
     try {
       switch (chainType) {
         case ChainType.LLM_CHAIN:
           if (debug) {
-            console.log(`*** DEBUG INFO ***\n`
-              + `user message: ${userMessage}\n`
-              // ChatOpenAI has modelName, some other ChatModels like ChatOllama have model
-              + `model: ${chatModel.modelName || chatModel.model}\n`
-              + `chain type: ${chainType}\n`
-              + `temperature: ${temperature}\n`
-              + `maxTokens: ${maxTokens}\n`
-              + `system prompt: ${systemPrompt}\n`
-              + `chat context turns: ${chatContextTurns}\n`,
+            console.log(
+              `*** DEBUG INFO ***\n` +
+                `user message: ${userMessage}\n` +
+                // ChatOpenAI has modelName, some other ChatModels like ChatOllama have model
+                `model: ${chatModel.modelName || chatModel.model}\n` +
+                `chain type: ${chainType}\n` +
+                `temperature: ${temperature}\n` +
+                `maxTokens: ${maxTokens}\n` +
+                `system prompt: ${systemPrompt}\n` +
+                `chat context turns: ${chatContextTurns}\n`,
             );
-            console.log('chain RunnableSequence:', ChainManager.chain);
-            console.log('Chat memory:', memory);
+            console.log("chain RunnableSequence:", ChainManager.chain);
+            console.log("Chat memory:", memory);
           }
 
           for await (const chunk of chatStream) {
@@ -400,30 +434,42 @@ export default class ChainManager {
         case ChainType.LONG_NOTE_QA_CHAIN:
         case ChainType.VAULT_QA_CHAIN:
           if (debug) {
-            console.log(`*** DEBUG INFO ***\n`
-              + `user message: ${userMessage}\n`
-              + `model: ${chatModel.modelName || chatModel.model}\n`
-              + `chain type: ${chainType}\n`
-              + `temperature: ${temperature}\n`
-              + `maxTokens: ${maxTokens}\n`
-              + `system prompt: ${systemPrompt}\n`
-              + `chat context turns: ${chatContextTurns}\n`,
+            console.log(
+              `*** DEBUG INFO ***\n` +
+                `user message: ${userMessage}\n` +
+                `model: ${chatModel.modelName || chatModel.model}\n` +
+                `chain type: ${chainType}\n` +
+                `temperature: ${temperature}\n` +
+                `maxTokens: ${maxTokens}\n` +
+                `system prompt: ${systemPrompt}\n` +
+                `chat context turns: ${chatContextTurns}\n`,
             );
-            console.log('chain RunnableSequence:', ChainManager.chain);
-            console.log('embedding model:', this.langChainParams.embeddingModel);
+            console.log("chain RunnableSequence:", ChainManager.chain);
+            console.log(
+              "embedding model:",
+              this.langChainParams.embeddingModel,
+            );
           }
           fullAIResponse = await this.runRetrievalChain(
-            userMessage, memory, updateCurrentAiMessage, abortController, { debug },
+            userMessage,
+            memory,
+            updateCurrentAiMessage,
+            abortController,
+            { debug },
           );
           break;
         default:
-          console.error('Chain type not supported:', this.langChainParams.chainType);
+          console.error(
+            "Chain type not supported:",
+            this.langChainParams.chainType,
+          );
       }
     } catch (error) {
       const errorData = error?.response?.data?.error || error;
       const errorCode = errorData?.code || error;
-      if (errorCode === 'model_not_found') {
-        const modelNotFoundMsg = "You do not have access to this model or the model does not exist, please check with your API provider.";
+      if (errorCode === "model_not_found") {
+        const modelNotFoundMsg =
+          "You do not have access to this model or the model does not exist, please check with your API provider.";
         new Notice(modelNotFoundMsg);
         console.error(modelNotFoundMsg);
       } else {
@@ -435,7 +481,7 @@ export default class ChainManager {
         // This line is a must for memory to work with RunnableSequence!
         await memory.saveContext(
           { input: userMessage },
-          { output: fullAIResponse }
+          { output: fullAIResponse },
         );
         addMessage({
           message: fullAIResponse,
@@ -443,7 +489,7 @@ export default class ChainManager {
           isVisible: true,
         });
       }
-      updateCurrentAiMessage('');
+      updateCurrentAiMessage("");
     }
     return fullAIResponse;
   }
@@ -454,7 +500,7 @@ export default class ChainManager {
     updateCurrentAiMessage: (message: string) => void,
     abortController: AbortController,
     options: {
-      debug?: boolean,
+      debug?: boolean;
     } = {},
   ): Promise<string> {
     const memoryVariables = await memory.loadMemoryVariables({});
@@ -465,7 +511,7 @@ export default class ChainManager {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
-    let fullAIResponse = '';
+    let fullAIResponse = "";
 
     for await (const chunk of qaStream) {
       if (abortController.signal.aborted) break;
@@ -474,8 +520,8 @@ export default class ChainManager {
     }
 
     if (options.debug) {
-      console.log('Max source chunks:', this.settings.maxSourceChunks);
-      console.log('Retrieved chunks:', ChainManager.retrievedDocuments);
+      console.log("Max source chunks:", this.settings.maxSourceChunks);
+      console.log("Retrieved chunks:", ChainManager.retrievedDocuments);
     }
 
     // TODO: This only returns unique note titles, but actual retrieved docs are chunks.
@@ -483,13 +529,15 @@ export default class ChainManager {
     // to show specific chunks in the future. E.g. collapsed note title when clicked,
     // expand and reveal the chunk
     if (this.langChainParams.chainType === ChainType.VAULT_QA_CHAIN) {
-      const docTitles = extractUniqueTitlesFromDocs(ChainManager.retrievedDocuments);
+      const docTitles = extractUniqueTitlesFromDocs(
+        ChainManager.retrievedDocuments,
+      );
       const markdownLinks = docTitles
         .map(
           (title) =>
             `[${title}](obsidian://open?vault=${this.app.vault.getName()}&file=${encodeURIComponent(
-              title
-            )})`
+              title,
+            )})`,
         )
         .join("\n");
       fullAIResponse += "\n\n**Sources**:\n" + markdownLinks;
@@ -498,14 +546,21 @@ export default class ChainManager {
     return fullAIResponse;
   }
 
-  async indexFile(noteFile: NoteFile): Promise<VectorStoreDocument | undefined> {
+  async indexFile(
+    noteFile: NoteFile,
+  ): Promise<VectorStoreDocument | undefined> {
     const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
     if (!embeddingsAPI) {
-      const errorMsg = 'Failed to load file, embedding API is not set correctly, please check your settings.';
+      const errorMsg =
+        "Failed to load file, embedding API is not set correctly, please check your settings.";
       new Notice(errorMsg);
       console.error(errorMsg);
       return;
     }
-    return await VectorDBManager.indexFile(noteFile, embeddingsAPI);
+    return await VectorDBManager.indexFile(
+      this.getDbVectorStores(),
+      embeddingsAPI,
+      noteFile,
+    );
   }
 }
