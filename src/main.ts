@@ -12,10 +12,12 @@ import {
   CHAT_VIEWTYPE,
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
+  PROXY_SERVER_PORT,
   VAULT_VECTOR_STORE_STRATEGY,
 } from "@/constants";
 import { CustomPrompt } from "@/customPromptProcessor";
 import EncryptionService from "@/encryptionService";
+import { ProxyServer } from "@/proxyServer";
 import { CopilotSettingTab, CopilotSettings } from "@/settings/SettingsPage";
 import SharedState from "@/sharedState";
 import {
@@ -25,7 +27,6 @@ import {
 } from "@/utils";
 import VectorDBManager, { VectorStoreDocument } from "@/vectorDBManager";
 import { MD5 } from "crypto-js";
-import { Server } from "http";
 import { Editor, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import PouchDB from "pouchdb";
 
@@ -41,12 +42,13 @@ export default class CopilotPlugin extends Plugin {
   dbVectorStores: PouchDB.Database<VectorStoreDocument>;
   embeddingsManager: EmbeddingsManager;
   encryptionService: EncryptionService;
-  server: Server | null = null;
+  proxyServer: ProxyServer;
 
   isChatVisible = () => this.chatIsVisible;
 
   async onload(): Promise<void> {
     await this.loadSettings();
+    this.proxyServer = new ProxyServer(PROXY_SERVER_PORT);
     this.addSettingTab(new CopilotSettingTab(this.app, this));
     // Always have one instance of sharedState and chainManager in the plugin
     this.sharedState = new SharedState();

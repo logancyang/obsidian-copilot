@@ -185,7 +185,7 @@ const Chat: React.FC<ChatProps> = ({
       const content = await getFileContent(file, app.vault);
       const tags = await getTagsFromNote(file, app.vault);
       if (content) {
-        notes.push({ name: getFileName(file), content, tags});
+        notes.push({ name: getFileName(file), content, tags });
       }
     }
 
@@ -456,6 +456,7 @@ const Chat: React.FC<ChatProps> = ({
           addMessage={addMessage}
           vault={app.vault}
           vault_qa_strategy={plugin.settings.indexVaultToVectorStore}
+          proxyServer={plugin.proxyServer}
         />
         <ChatInput
           inputMessage={inputMessage}

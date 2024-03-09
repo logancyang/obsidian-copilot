@@ -2,7 +2,6 @@ import { SetChainOptions } from "@/aiParams";
 import {
   AI_SENDER,
   ChatModelDisplayNames,
-  PROXY_SERVER_PORT,
   VAULT_VECTOR_STORE_STRATEGY,
 } from "@/constants";
 import { ProxyServer } from "@/proxyServer";
@@ -36,6 +35,7 @@ interface ChatIconsProps {
   addMessage: (message: ChatMessage) => void;
   vault: Vault;
   vault_qa_strategy: string;
+  proxyServer: ProxyServer;
 }
 
 const ChatIcons: React.FC<ChatIconsProps> = ({
@@ -52,9 +52,9 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   addMessage,
   vault,
   vault_qa_strategy,
+  proxyServer,
 }) => {
   const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
-  const proxyServer = new ProxyServer(PROXY_SERVER_PORT);
 
   const handleModelChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedModel = event.target.value;
@@ -68,6 +68,23 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
       await proxyServer.stopProxyServer();
     }
   };
+
+  useEffect(() => {
+    // If Claude is the default, start the proxy server
+    const startProxyServerForClaude = async () => {
+      if (currentModel === ChatModelDisplayNames.CLAUDE) {
+        await proxyServer.startProxyServer('https://api.anthropic.com/');
+      }
+    };
+
+    // Call the function on component mount
+    startProxyServerForClaude();
+
+    // Cleanup function to stop the proxy server when the component unmounts
+    return () => {
+      proxyServer.stopProxyServer().catch(console.error);
+    };
+  }, [currentModel, proxyServer]);
 
   const handleChainChange = async (
     event: React.ChangeEvent<HTMLSelectElement>
