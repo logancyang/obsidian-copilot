@@ -4,6 +4,7 @@ import {
   getNotesFromPath,
   getNotesFromTags,
   isFolderMatch,
+  isPathInList,
   processVariableNameForNotePath,
 } from "../src/utils";
 
@@ -211,5 +212,61 @@ describe("getNotesFromTags", () => {
 
     expect(resultPaths).toEqual(expect.arrayContaining(expectedPaths));
     expect(resultPaths.length).toEqual(expectedPaths.length);
+  });
+});
+
+describe("isPathInList", () => {
+  it("should exclude a file path that exactly matches an excluded path", () => {
+    const result = isPathInList("test/folder/note.md", "test/folder");
+    expect(result).toBe(true);
+  });
+
+  it("should not exclude a file path if there is no match", () => {
+    const result = isPathInList("test/folder/note.md", "another/folder");
+    expect(result).toBe(false);
+  });
+
+  it("should exclude a file path that matches an excluded path with leading slash", () => {
+    const result = isPathInList("test/folder/note.md", "/test/folder");
+    expect(result).toBe(true);
+  });
+
+  it("should exclude a note title that matches an excluded path with surrounding [[ and ]]", () => {
+    const result = isPathInList("test/folder/note1.md", "[[note1]]");
+    expect(result).toBe(true);
+  });
+
+  it("should be case insensitive when excluding a file path", () => {
+    const result = isPathInList("Test/Folder/Note.md", "test/folder");
+    expect(result).toBe(true);
+  });
+
+  it("should handle multiple excluded paths separated by commas", () => {
+    const result = isPathInList(
+      "test/folder/note.md",
+      "another/folder,test/folder",
+    );
+    expect(result).toBe(true);
+  });
+
+  it("should not exclude a file path if it partially matches an excluded path without proper segmentation", () => {
+    const result = isPathInList("test/folder123/note.md", "test/folder");
+    expect(result).toBe(false);
+  });
+
+  it("should exclude a file path that matches any one of multiple excluded paths", () => {
+    const result = isPathInList(
+      "test/folder/note.md",
+      "another/folder, test/folder, yet/another/folder",
+    );
+    expect(result).toBe(true);
+  });
+
+  it("should trim spaces around excluded paths", () => {
+    const result = isPathInList(
+      "test/folder/note.md",
+      " another/folder , test/folder ",
+    );
+    expect(result).toBe(true);
   });
 });

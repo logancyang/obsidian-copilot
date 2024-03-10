@@ -40,6 +40,7 @@ export interface CopilotSettings {
   debug: boolean;
   enableEncryption: boolean;
   maxSourceChunks: number;
+  qaExclusionPaths: string;
 }
 
 export class CopilotSettingTab extends PluginSettingTab {

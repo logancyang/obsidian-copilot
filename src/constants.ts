@@ -1,32 +1,33 @@
-import { CopilotSettings } from '@/settings/SettingsPage';
+import { CopilotSettings } from "@/settings/SettingsPage";
 
-export const CHAT_VIEWTYPE = 'copilot-chat-view';
-export const USER_SENDER = 'user';
-export const AI_SENDER = 'ai';
-export const DEFAULT_SYSTEM_PROMPT = 'You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.';
+export const CHAT_VIEWTYPE = "copilot-chat-view";
+export const USER_SENDER = "user";
+export const AI_SENDER = "ai";
+export const DEFAULT_SYSTEM_PROMPT =
+  "You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.";
 
 export enum ChatModels {
-  GPT_35_TURBO = 'gpt-3.5-turbo',
-  GPT_35_TURBO_16K = 'gpt-3.5-turbo-16k',
-  GPT_4 = 'gpt-4',
-  GPT_4_TURBO = 'gpt-4-turbo-preview',
-  GPT_4_32K = 'gpt-4-32k',
-  GEMINI_PRO = 'gemini-pro',
-  OLLAMA = 'ollama',
+  GPT_35_TURBO = "gpt-3.5-turbo",
+  GPT_35_TURBO_16K = "gpt-3.5-turbo-16k",
+  GPT_4 = "gpt-4",
+  GPT_4_TURBO = "gpt-4-turbo-preview",
+  GPT_4_32K = "gpt-4-32k",
+  GEMINI_PRO = "gemini-pro",
+  OLLAMA = "ollama",
 }
 
 export enum ChatModelDisplayNames {
-  GPT_35_TURBO = 'GPT-3.5',
-  GPT_35_TURBO_16K = 'GPT-3.5 16K',
-  GPT_4 = 'GPT-4',
-  GPT_4_TURBO = 'GPT-4 TURBO',
-  GPT_4_32K = 'GPT-4 32K',
-  AZURE_OPENAI = 'AZURE OPENAI',
-  CLAUDE = 'CLAUDE 3',
-  GEMINI_PRO = 'GEMINI PRO',
-  OPENROUTERAI = 'OPENROUTER.AI',
-  OLLAMA = 'OLLAMA (LOCAL)',
-  LM_STUDIO = 'LM STUDIO (LOCAL)',
+  GPT_35_TURBO = "GPT-3.5",
+  GPT_35_TURBO_16K = "GPT-3.5 16K",
+  GPT_4 = "GPT-4",
+  GPT_4_TURBO = "GPT-4 TURBO",
+  GPT_4_32K = "GPT-4 32K",
+  AZURE_OPENAI = "AZURE OPENAI",
+  CLAUDE = "CLAUDE 3",
+  GEMINI_PRO = "GEMINI PRO",
+  OPENROUTERAI = "OPENROUTER.AI",
+  OLLAMA = "OLLAMA (LOCAL)",
+  LM_STUDIO = "LM STUDIO (LOCAL)",
 }
 
 export const OPENAI_MODELS = new Set([
@@ -38,29 +39,19 @@ export const OPENAI_MODELS = new Set([
   ChatModelDisplayNames.LM_STUDIO,
 ]);
 
-export const AZURE_MODELS = new Set([
-    ChatModelDisplayNames.AZURE_OPENAI,
-]);
+export const AZURE_MODELS = new Set([ChatModelDisplayNames.AZURE_OPENAI]);
 
-export const GOOGLE_MODELS = new Set([
-  ChatModelDisplayNames.GEMINI_PRO,
-]);
+export const GOOGLE_MODELS = new Set([ChatModelDisplayNames.GEMINI_PRO]);
 
-export const ANTHROPIC_MODELS = new Set([
-  ChatModelDisplayNames.CLAUDE,
-]);
+export const ANTHROPIC_MODELS = new Set([ChatModelDisplayNames.CLAUDE]);
 
 export const OPENROUTERAI_MODELS = new Set([
   ChatModelDisplayNames.OPENROUTERAI,
-])
-
-export const OLLAMA_MODELS = new Set([
-  ChatModelDisplayNames.OLLAMA,
 ]);
 
-export const LM_STUDIO_MODELS = new Set([
-  ChatModelDisplayNames.LM_STUDIO,
-]);
+export const OLLAMA_MODELS = new Set([ChatModelDisplayNames.OLLAMA]);
+
+export const LM_STUDIO_MODELS = new Set([ChatModelDisplayNames.LM_STUDIO]);
 
 export const DISPLAY_NAME_TO_MODEL: Record<string, string> = {
   [ChatModelDisplayNames.GPT_35_TURBO]: ChatModels.GPT_35_TURBO,
@@ -68,21 +59,21 @@ export const DISPLAY_NAME_TO_MODEL: Record<string, string> = {
   [ChatModelDisplayNames.GPT_4]: ChatModels.GPT_4,
   [ChatModelDisplayNames.GPT_4_TURBO]: ChatModels.GPT_4_TURBO,
   [ChatModelDisplayNames.GPT_4_32K]: ChatModels.GPT_4_32K,
-  [ChatModelDisplayNames.AZURE_OPENAI]: 'azure_openai',
+  [ChatModelDisplayNames.AZURE_OPENAI]: "azure_openai",
   [ChatModelDisplayNames.GEMINI_PRO]: ChatModels.GEMINI_PRO,
 };
 
 // Model Providers
 export enum ModelProviders {
-  OPENAI = 'openai',
-  HUGGINGFACE = 'huggingface',
-  COHEREAI = 'cohereai',
-  AZURE_OPENAI = 'azure_openai',
-  ANTHROPIC = 'anthropic',
-  GOOGLE = 'google',
-  OPENROUTERAI = 'openrouterai',
-  LM_STUDIO = 'lm_studio',
-  OLLAMA = 'ollama',
+  OPENAI = "openai",
+  HUGGINGFACE = "huggingface",
+  COHEREAI = "cohereai",
+  AZURE_OPENAI = "azure_openai",
+  ANTHROPIC = "anthropic",
+  GOOGLE = "google",
+  OPENROUTERAI = "openrouterai",
+  LM_STUDIO = "lm_studio",
+  OLLAMA = "ollama",
 }
 
 export const VENDOR_MODELS: Record<string, Set<string>> = {
@@ -104,12 +95,12 @@ export const EMBEDDING_PROVIDERS = [
 ];
 
 export enum EmbeddingModels {
-  OPENAI_EMBEDDING_ADA_V2 = 'text-embedding-ada-002',
-  OPENAI_EMBEDDING_SMALL = 'text-embedding-3-small',
-  OPENAI_EMBEDDING_LARGE = 'text-embedding-3-large',
-  AZURE_OPENAI = 'azure-openai',
-  COHEREAI = 'cohereai',
-  OLLAMA_NOMIC = 'ollama-nomic-embed-text',
+  OPENAI_EMBEDDING_ADA_V2 = "text-embedding-ada-002",
+  OPENAI_EMBEDDING_SMALL = "text-embedding-3-small",
+  OPENAI_EMBEDDING_LARGE = "text-embedding-3-large",
+  AZURE_OPENAI = "azure-openai",
+  COHEREAI = "cohereai",
+  OLLAMA_NOMIC = "ollama-nomic-embed-text",
 }
 
 export const EMBEDDING_MODEL_TO_PROVIDERS: Record<string, string> = {
@@ -119,18 +110,18 @@ export const EMBEDDING_MODEL_TO_PROVIDERS: Record<string, string> = {
   [EmbeddingModels.AZURE_OPENAI]: ModelProviders.AZURE_OPENAI,
   [EmbeddingModels.COHEREAI]: ModelProviders.COHEREAI,
   [EmbeddingModels.OLLAMA_NOMIC]: ModelProviders.OLLAMA,
-}
+};
 
 // Embedding Models
-export const NOMIC_EMBED_TEXT = 'nomic-embed-text';
+export const NOMIC_EMBED_TEXT = "nomic-embed-text";
 // export const DISTILBERT_NLI = 'sentence-transformers/distilbert-base-nli-mean-tokens';
 // export const INSTRUCTOR_XL = 'hkunlp/instructor-xl'; // Inference API is off for this
 // export const MPNET_V2 = 'sentence-transformers/all-mpnet-base-v2'; // Inference API returns 400
 
 export enum VAULT_VECTOR_STORE_STRATEGY {
-  NEVER = 'NEVER',
-  ON_STARTUP = 'ON STARTUP',
-  ON_MODE_SWITCH = 'ON MODE SWITCH',
+  NEVER = "NEVER",
+  ON_STARTUP = "ON STARTUP",
+  ON_MODE_SWITCH = "ON MODE SWITCH",
 }
 
 export const VAULT_VECTOR_STORE_STRATEGIES = [
@@ -142,37 +133,38 @@ export const VAULT_VECTOR_STORE_STRATEGIES = [
 export const PROXY_SERVER_PORT = 53001;
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
-  openAIApiKey: '',
-  huggingfaceApiKey: '',
-  cohereApiKey: '',
-  anthropicApiKey: '',
-  anthropicModel: 'claude-3-sonnet-20240229',
-  azureOpenAIApiKey: '',
-  azureOpenAIApiInstanceName: '',
-  azureOpenAIApiDeploymentName: '',
-  azureOpenAIApiVersion: '',
-  azureOpenAIApiEmbeddingDeploymentName: '',
-  googleApiKey: '',
-  openRouterAiApiKey: '',
-  openRouterModel: 'cognitivecomputations/dolphin-mixtral-8x7b',
+  openAIApiKey: "",
+  huggingfaceApiKey: "",
+  cohereApiKey: "",
+  anthropicApiKey: "",
+  anthropicModel: "claude-3-sonnet-20240229",
+  azureOpenAIApiKey: "",
+  azureOpenAIApiInstanceName: "",
+  azureOpenAIApiDeploymentName: "",
+  azureOpenAIApiVersion: "",
+  azureOpenAIApiEmbeddingDeploymentName: "",
+  googleApiKey: "",
+  openRouterAiApiKey: "",
+  openRouterModel: "cognitivecomputations/dolphin-mixtral-8x7b",
   defaultModel: ChatModels.GPT_4_TURBO,
   defaultModelDisplayName: ChatModelDisplayNames.GPT_4_TURBO,
   embeddingModel: EmbeddingModels.OPENAI_EMBEDDING_SMALL,
   temperature: 0.1,
   maxTokens: 1000,
   contextTurns: 15,
-  userSystemPrompt: '',
-  openAIProxyBaseUrl: '',
-  openAIProxyModelName: '',
-  openAIEmbeddingProxyBaseUrl: '',
-  openAIEmbeddingProxyModelName: '',
-  ollamaModel: 'llama2',
-  ollamaBaseUrl: '',
-  lmStudioBaseUrl: 'http://localhost:1234/v1',
+  userSystemPrompt: "",
+  openAIProxyBaseUrl: "",
+  openAIProxyModelName: "",
+  openAIEmbeddingProxyBaseUrl: "",
+  openAIEmbeddingProxyModelName: "",
+  ollamaModel: "llama2",
+  ollamaBaseUrl: "",
+  lmStudioBaseUrl: "http://localhost:1234/v1",
   stream: true,
-  defaultSaveFolder: 'copilot-conversations',
+  defaultSaveFolder: "copilot-conversations",
   indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.NEVER,
-  chatNoteContextPath: '',
+  qaExclusionPaths: "",
+  chatNoteContextPath: "",
   chatNoteContextTags: [],
   debug: false,
   enableEncryption: false,
