@@ -79,6 +79,7 @@ export class ChatNoteContextModal extends Modal {
       const tagsValue = tagsField.value
         .split(',')
         .map(tag => tag.trim())
+        .map(tag => tag.toLowerCase())
         .map(tag => tag.replace('#', ''))
         .filter(tag => tag !== '');
 
