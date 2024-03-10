@@ -27,7 +27,7 @@ export const getNotesFromPath = async (
   vault: Vault,
   path: string,
 ): Promise<TFile[]> => {
-  const files = await vault.getMarkdownFiles();
+  const files = vault.getMarkdownFiles();
 
   // Special handling for the root path '/'
   if (path === "/") {
