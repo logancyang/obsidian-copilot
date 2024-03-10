@@ -8,6 +8,7 @@ import { AdhocPromptModal } from "@/components/AdhocPromptModal";
 import { ChatNoteContextModal } from "@/components/ChatNoteContextModal";
 import CopilotView from "@/components/CopilotView";
 import { ListPromptModal } from "@/components/ListPromptModal";
+import { QAExclusionModal } from "@/components/QAExclusionModal";
 import {
   CHAT_VIEWTYPE,
   DEFAULT_SETTINGS,
@@ -23,6 +24,7 @@ import SharedState from "@/sharedState";
 import {
   areEmbeddingModelsSame,
   getAllNotesContent,
+  isPathInList,
   sanitizeSettings,
 } from "@/utils";
 import VectorDBManager, { VectorStoreDocument } from "@/vectorDBManager";
@@ -412,6 +414,18 @@ export default class CopilotPlugin extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: "set-vault-qa-exclusion",
+      name: "Set exclusion for Vault QA mode",
+      callback: async () => {
+        new QAExclusionModal(this.app, this.settings, async (paths: string) => {
+          // Store the path in the plugin's settings, default to empty string
+          this.settings.qaExclusionPaths = paths;
+          await this.saveSettings();
+        }).open();
+      },
+    });
+
     this.registerEvent(
       this.app.vault.on("delete", (file) => {
         const docHash = VectorDBManager.getDocumentHash(file.path);
@@ -471,11 +485,12 @@ export default class CopilotPlugin extends Plugin {
     const currEmbeddingModel =
       EmbeddingsManager.getModelName(embeddingInstance);
 
-    console.log(
-      "Prev vs Current embedding models:",
-      prevEmbeddingModel,
-      currEmbeddingModel,
-    );
+    if (this.settings.debug)
+      console.log(
+        "Prev vs Current embedding models:",
+        prevEmbeddingModel,
+        currEmbeddingModel,
+      );
 
     if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
       // Model has changed, clear DB and reindex from scratch
@@ -504,10 +519,18 @@ export default class CopilotPlugin extends Plugin {
       this.dbVectorStores,
     );
 
-    const files = this.app.vault.getMarkdownFiles().filter((file) => {
-      if (!latestMtime || overwrite) return true;
-      return file.stat.mtime > latestMtime;
-    });
+    const files = this.app.vault
+      .getMarkdownFiles()
+      .filter((file) => {
+        if (!latestMtime || overwrite) return true;
+        return file.stat.mtime > latestMtime;
+      })
+      // file not in qaExclusionPaths
+      .filter((file) => {
+        if (!this.settings.qaExclusionPaths) return true;
+        return !isPathInList(file.path, this.settings.qaExclusionPaths);
+      });
+
     const fileContents: string[] = await Promise.all(
       files.map((file) => this.app.vault.cachedRead(file)),
     );
@@ -540,6 +563,8 @@ export default class CopilotPlugin extends Plugin {
         embeddingInstance,
         noteFile,
       );
+      if (this.settings.debug) console.log(`Indexed: [[${file.basename}]].`);
+
       indexedCount++;
       indexNotice.setMessage(
         `Copilot is indexing your vault...\n${indexedCount}/${totalFiles} files processed.`,

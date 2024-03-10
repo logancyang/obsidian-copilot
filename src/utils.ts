@@ -101,6 +101,39 @@ export async function getNotesFromTags(
   return filesWithTag;
 }
 
+export function isPathInList(filePath: string, pathList: string): boolean {
+  if (!pathList) return false;
+
+  // Extract the file name from the filePath
+  const fileName = filePath.split("/").pop()?.toLowerCase();
+
+  // Normalize the file path for case-insensitive comparison
+  const normalizedFilePath = filePath.toLowerCase();
+
+  return pathList
+    .split(",")
+    .map(
+      (path) =>
+        path
+          .trim() // Trim whitespace
+          .replace(/^\[\[|\]\]$/g, "") // Remove surrounding [[ and ]]
+          .replace(/^\//, "") // Remove leading slash
+          .toLowerCase(), // Convert to lowercase for case-insensitive comparison
+    )
+    .some((normalizedPath) => {
+      // Check for exact match or proper segmentation
+      const isExactMatch =
+        normalizedFilePath === normalizedPath ||
+        normalizedFilePath.startsWith(normalizedPath + "/") ||
+        normalizedFilePath.endsWith("/" + normalizedPath) ||
+        normalizedFilePath.includes("/" + normalizedPath + "/");
+      // Check for file name match (for cases like [[note1]])
+      const isFileNameMatch = fileName === normalizedPath + ".md";
+
+      return isExactMatch || isFileNameMatch;
+    });
+}
+
 export const stringToChainType = (chain: string): ChainType => {
   switch (chain) {
     case "llm_chain":
