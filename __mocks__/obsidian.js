@@ -16,10 +16,10 @@ module.exports = {
       cachedRead: jest.fn().mockImplementation((file) => {
         // Simulate reading file contents. You can adjust the content as needed for your tests.
         const fileContents = {
-          'test/test2/note1.md': '---\ntags: [tag1, tag2]\n---\nContent of note1',
+          'test/test2/note1.md': '---\ntags: [Tag1, tag2]\n---\nContent of note1',
           'test/note2.md': '---\ntags: [tag2, tag3]\n---\nContent of note2',
           'test2/note3.md': 'something else ---\ntags: [false_tag]\n---\nContent of note3',
-          'note4.md': '---\ntags: [tag1, tag4]\n---\nContent of note4',
+          'note4.md': '---\ntags: [tag1, Tag4]\n---\nContent of note4',
         };
         return Promise.resolve(fileContents[file.path]);
       }),

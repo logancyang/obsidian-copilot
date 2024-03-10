@@ -61,7 +61,9 @@ export async function getTagsFromNote(
         const frontMatter = parseYaml(frontMatterContent) || {};
         const tags = frontMatter.tags || [];
         // Strip any '#' from the frontmatter tags. Obsidian sometimes has '#' sometimes doesn't...
-        return tags.map((tag: string) => tag.replace("#", ""));
+        return tags
+          .map((tag: string) => tag.replace("#", ""))
+          .map((tag: string) => tag.toLowerCase());
       } catch (error) {
         console.error("Error parsing YAML frontmatter:", error);
         return [];
