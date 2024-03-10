@@ -147,7 +147,7 @@ export function registerBuiltInCommands(plugin: CopilotPlugin) {
   plugin.addCommand({
     id: "count-total-vault-tokens",
     name: "Count total tokens in your vault",
-    editorCallback: async (editor: Editor) => {
+    callback: async () => {
       const totalTokens = await plugin.countTotalTokens();
       new Notice(`Total tokens in your vault: ${totalTokens}`);
     },
