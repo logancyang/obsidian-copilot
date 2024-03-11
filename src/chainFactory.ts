@@ -133,7 +133,12 @@ class ChainFactory {
   ): RunnableSequence {
     const { llm, retriever } = args;
 
-    const condenseQuestionTemplate = `Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
+    // NOTE: This is a tricky part of the Conversational RAG. Weaker models may fail this instruction
+    // and lose the follow up question altogether.
+    const condenseQuestionTemplate = `Given the following conversation and a follow up question,
+    summarize the conversation as context and keep the follow up question unchanged, in its original language.
+    Then combine the summary and the follow up question to construct a standalone question.
+    Make sure to keep any [[]] wrapped note titles in the question unchanged.
 
     Chat History:
     {chat_history}
@@ -185,10 +190,7 @@ class ChainFactory {
     const answerChain = RunnableSequence.from([
       {
         context: retriever.pipe(formatDocumentsAsStringAndStore),
-        question: new RunnablePassthrough((question: string) => {
-          if (debug) console.log("Question for Answer Chain: ", question);
-          return question;
-        }),
+        question: new RunnablePassthrough(),
       },
       ANSWER_PROMPT,
       llm,

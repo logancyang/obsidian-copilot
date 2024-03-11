@@ -1,3 +1,4 @@
+import { getNotePathFromTitle } from "@/utils";
 import VectorDBManager from "@/vectorDBManager";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { VectorStore } from "@langchain/core/vectorstores";
@@ -6,13 +7,16 @@ import {
   ScoreThresholdRetriever,
   ScoreThresholdRetrieverInput,
 } from "langchain/retrievers/score_threshold";
+import { Vault } from "obsidian";
 
 export class HybridRetriever<V extends VectorStore> extends BaseRetriever {
   public lc_namespace = ["hybrid_retriever"];
 
   constructor(
     private db: PouchDB.Database,
+    private vault: Vault,
     private options: ScoreThresholdRetrieverInput<V>,
+    private debug?: boolean,
   ) {
     super();
   }
@@ -22,6 +26,18 @@ export class HybridRetriever<V extends VectorStore> extends BaseRetriever {
     const noteTitles = this.extractNoteTitles(query);
     // Retrieve chunks for explicitly mentioned note titles
     const explicitChunks = await this.getExplicitChunks(noteTitles);
+    if (this.debug) {
+      console.log("*** HYBRID RETRIEVER DEBUG INFO: ***");
+      console.log(
+        "Hybrid Retriever Query: " +
+          query +
+          "\nNote Titles extracted: " +
+          noteTitles +
+          "\nExplicit Chunks: " +
+          explicitChunks,
+      );
+    }
+
     // Perform vector similarity search using ScoreThresholdRetriever
     const vectorChunks = await this.getVectorChunks(query);
 
@@ -52,7 +68,8 @@ export class HybridRetriever<V extends VectorStore> extends BaseRetriever {
   private async getExplicitChunks(noteTitles: string[]): Promise<Document[]> {
     const explicitChunks: Document[] = [];
     for (const noteTitle of noteTitles) {
-      const docHash = VectorDBManager.getDocumentHash(noteTitle);
+      const notePath = getNotePathFromTitle(this.vault, noteTitle);
+      const docHash = VectorDBManager.getDocumentHash(notePath ?? "");
       const memoryVectors = await VectorDBManager.getMemoryVectors(
         this.db,
         docHash,

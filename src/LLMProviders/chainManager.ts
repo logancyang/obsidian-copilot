@@ -305,12 +305,17 @@ export default class ChainManager {
           this.getDbVectorStores(),
           embeddingsAPI,
         );
-        const retriever = new HybridRetriever(this.getDbVectorStores(), {
-          vectorStore: vectorStore,
-          minSimilarityScore: 0.3,
-          maxK: this.settings.maxSourceChunks, // The maximum number of docs (chunks) to retrieve
-          kIncrement: 2,
-        });
+        const retriever = new HybridRetriever(
+          this.getDbVectorStores(),
+          this.app.vault,
+          {
+            vectorStore: vectorStore,
+            minSimilarityScore: 0.3, // TODO: Make this a setting
+            maxK: this.settings.maxSourceChunks, // The maximum number of docs (chunks) to retrieve
+            kIncrement: 2,
+          },
+          options.debug,
+        );
 
         // Create new conversational retrieval chain
         ChainManager.retrievalChain =
@@ -408,6 +413,7 @@ export default class ChainManager {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const chatStream = await ChainManager.chain.stream({
       input: userMessage,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
     try {

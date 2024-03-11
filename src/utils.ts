@@ -23,6 +23,20 @@ export const isFolderMatch = (
   return fileSegments.includes(inputPath.toLowerCase());
 };
 
+export function getNotePathFromTitle(
+  vault: Vault,
+  noteTitle: string,
+): string | null {
+  const noteFileName = `${noteTitle}.md`; // TODO: Support other file extensions
+  const abstractFile = vault.getAbstractFileByPath(noteFileName);
+
+  if (abstractFile) {
+    return abstractFile.path;
+  } else {
+    return null; // Note not found
+  }
+}
+
 export const getNotesFromPath = async (
   vault: Vault,
   path: string,
