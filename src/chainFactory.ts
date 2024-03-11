@@ -21,7 +21,7 @@ export interface RetrievalChainParams {
   retriever: BaseRetriever;
   options?: {
     returnSourceDocuments?: boolean;
-  }
+  };
 }
 
 export interface ConversationalRetrievalChainParams {
@@ -31,7 +31,7 @@ export interface ConversationalRetrievalChainParams {
     returnSourceDocuments?: boolean;
     questionGeneratorTemplate?: string;
     qaTemplate?: string;
-  }
+  };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -52,9 +52,9 @@ type ConversationalRetrievalQAChainInput = {
 
 // Add new chain types here
 export enum ChainType {
-  LLM_CHAIN = 'llm_chain',
-  LONG_NOTE_QA_CHAIN = 'long_note_qa',
-  VAULT_QA_CHAIN = 'vault_qa',
+  LLM_CHAIN = "llm_chain",
+  LONG_NOTE_QA_CHAIN = "long_note_qa",
+  VAULT_QA_CHAIN = "vault_qa",
 }
 
 class ChainFactory {
@@ -83,7 +83,7 @@ class ChainFactory {
       model,
     ]);
     ChainFactory.instances.set(ChainType.LLM_CHAIN, instance);
-    console.log('New LLM chain created.');
+    console.log("New LLM chain created.");
     return instance;
   }
 
@@ -100,7 +100,6 @@ class ChainFactory {
     }
     return instance;
   }
-
 
   /**
    * Create a conversational retrieval chain with the given parameters. Not a singleton.
@@ -130,6 +129,7 @@ class ChainFactory {
   public static createConversationalRetrievalChain(
     args: ConversationalRetrievalChainParams,
     onDocumentsRetrieved: (documents: Document[]) => void,
+    debug?: boolean,
   ): RunnableSequence {
     const { llm, retriever } = args;
 
@@ -140,7 +140,7 @@ class ChainFactory {
     Follow Up Input: {question}
     Standalone question:`;
     const CONDENSE_QUESTION_PROMPT = PromptTemplate.fromTemplate(
-      condenseQuestionTemplate
+      condenseQuestionTemplate,
     );
 
     const answerTemplate = `Answer the question with as detailed as possible based only on the following context:
@@ -152,16 +152,24 @@ class ChainFactory {
 
     const formatChatHistory = (chatHistory: [string, string][]) => {
       const formattedDialogueTurns = chatHistory.map(
-        (dialogueTurn) => `Human: ${dialogueTurn[0]}\nAssistant: ${dialogueTurn[1]}`
+        (dialogueTurn) =>
+          `Human: ${dialogueTurn[0]}\nAssistant: ${dialogueTurn[1]}`,
       );
       return formattedDialogueTurns.join("\n");
     };
 
     const standaloneQuestionChain = RunnableSequence.from([
       {
-        question: (input: ConversationalRetrievalQAChainInput) => input.question,
-        chat_history: (input: ConversationalRetrievalQAChainInput) =>
-          formatChatHistory(input.chat_history),
+        question: (input: ConversationalRetrievalQAChainInput) => {
+          if (debug) console.log("Input Question: ", input.question);
+          return input.question;
+        },
+        chat_history: (input: ConversationalRetrievalQAChainInput) => {
+          const formattedChatHistory = formatChatHistory(input.chat_history);
+          if (debug)
+            console.log("Formatted Chat History: ", formattedChatHistory);
+          return formattedChatHistory;
+        },
       },
       CONDENSE_QUESTION_PROMPT,
       llm,
@@ -177,13 +185,17 @@ class ChainFactory {
     const answerChain = RunnableSequence.from([
       {
         context: retriever.pipe(formatDocumentsAsStringAndStore),
-        question: new RunnablePassthrough(),
+        question: new RunnablePassthrough((question: string) => {
+          if (debug) console.log("Question for Answer Chain: ", question);
+          return question;
+        }),
       },
       ANSWER_PROMPT,
       llm,
     ]);
 
-    const conversationalRetrievalQAChain = standaloneQuestionChain.pipe(answerChain);
+    const conversationalRetrievalQAChain =
+      standaloneQuestionChain.pipe(answerChain);
     return conversationalRetrievalQAChain as RunnableSequence;
   }
 }

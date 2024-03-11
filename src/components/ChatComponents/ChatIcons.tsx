@@ -36,6 +36,7 @@ interface ChatIconsProps {
   vault: Vault;
   vault_qa_strategy: string;
   proxyServer: ProxyServer;
+  debug?: boolean;
 }
 
 const ChatIcons: React.FC<ChatIconsProps> = ({
@@ -53,6 +54,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   vault,
   vault_qa_strategy,
   proxyServer,
+  debug,
 }) => {
   const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
 
@@ -126,7 +128,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         };
         addMessage(activeNoteOnMessage);
         if (noteContent) {
-          setCurrentChain(selectedChain, { noteFile });
+          setCurrentChain(selectedChain, { noteFile, debug });
         }
         return;
       } else if (selectedChain === ChainType.VAULT_QA_CHAIN) {
@@ -141,7 +143,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         addMessage(activeNoteOnMessage);
       }
 
-      setCurrentChain(selectedChain);
+      setCurrentChain(selectedChain, { debug });
     };
 
     handleChainSelection();

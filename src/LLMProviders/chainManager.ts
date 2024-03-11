@@ -248,6 +248,7 @@ export default class ChainManager {
                 }),
               },
               ChainManager.storeRetrieverDocuments.bind(ChainManager),
+              options.debug,
             );
           console.log("Existing vector store for document hash: ", docHash);
         } else {
@@ -278,6 +279,7 @@ export default class ChainManager {
                 retriever: retriever,
               },
               ChainManager.storeRetrieverDocuments.bind(ChainManager),
+              options.debug,
             );
           console.log(
             "New Long Note QA chain with multi-query retriever created for " +
@@ -318,6 +320,7 @@ export default class ChainManager {
               retriever: retriever,
             },
             ChainManager.storeRetrieverDocuments.bind(ChainManager),
+            options.debug,
           );
         console.log(
           "New Vault QA chain with hybrid retriever created for entire vault",
