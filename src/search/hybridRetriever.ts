@@ -27,14 +27,14 @@ export class HybridRetriever<V extends VectorStore> extends BaseRetriever {
     // Retrieve chunks for explicitly mentioned note titles
     const explicitChunks = await this.getExplicitChunks(noteTitles);
     if (this.debug) {
-      console.log("*** HYBRID RETRIEVER DEBUG INFO: ***");
       console.log(
-        "Hybrid Retriever Query: " +
-          query +
-          "\nNote Titles extracted: " +
-          noteTitles +
-          "\nExplicit Chunks: " +
-          explicitChunks,
+        "*** HYBRID RETRIEVER DEBUG INFO: ***",
+        "\nHybrid Retriever Query: ",
+        query,
+        "\nNote Titles extracted: ",
+        noteTitles,
+        "\nExplicit Chunks:",
+        explicitChunks,
       );
     }
 
@@ -55,7 +55,8 @@ export class HybridRetriever<V extends VectorStore> extends BaseRetriever {
       }
     }
 
-    return combinedChunks;
+    // Make sure the combined chunks are at most maxK
+    return combinedChunks.slice(0, this.options.maxK);
   }
 
   private extractNoteTitles(query: string): string[] {
