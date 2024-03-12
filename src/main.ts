@@ -550,32 +550,44 @@ export default class CopilotPlugin extends Plugin {
       0,
     );
 
+    const errors: string[] = [];
     const loadPromises = files.map(async (file, index) => {
-      const noteFile = {
-        basename: file.basename,
-        path: file.path,
-        mtime: file.stat.mtime,
-        content: fileContents[index],
-        metadata: fileMetadatas[index]?.frontmatter ?? {},
-      };
-      const result = await VectorDBManager.indexFile(
-        this.dbVectorStores,
-        embeddingInstance,
-        noteFile,
-      );
-      if (this.settings.debug) console.log(`Indexed: [[${file.basename}]].`);
+      try {
+        const noteFile = {
+          basename: file.basename,
+          path: file.path,
+          mtime: file.stat.mtime,
+          content: fileContents[index],
+          metadata: fileMetadatas[index]?.frontmatter ?? {},
+        };
+        const result = await VectorDBManager.indexFile(
+          this.dbVectorStores,
+          embeddingInstance,
+          noteFile,
+        );
 
-      indexedCount++;
-      indexNotice.setMessage(
-        `Copilot is indexing your vault...\n${indexedCount}/${totalFiles} files processed.`,
-      );
-      return result;
+        indexedCount++;
+        indexNotice.setMessage(
+          `Copilot is indexing your vault...\n${indexedCount}/${totalFiles} files processed.`,
+        );
+        return result;
+      } catch (err) {
+        console.error("Error indexing file:", err);
+        errors.push(`Error indexing file: ${file.basename}`);
+      }
     });
 
     await Promise.all(loadPromises);
     setTimeout(() => {
       indexNotice.hide();
     }, 2000);
+
+    if (errors.length > 0) {
+      new Notice(
+        `Indexing completed with errors. Check the console for details.`,
+      );
+      console.log("Indexing Errors:", errors.join("\n"));
+    }
     return files.length;
   }
 

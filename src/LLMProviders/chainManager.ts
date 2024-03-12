@@ -3,6 +3,7 @@ import ChainFactory, { ChainType, Document } from "@/chainFactory";
 import { AI_SENDER, ChatModelDisplayNames } from "@/constants";
 import EncryptionService from "@/encryptionService";
 import { ProxyChatOpenAI } from "@/langchainWrappers";
+import { HybridRetriever } from "@/search/hybridRetriever";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChatMessage } from "@/sharedState";
 import {
@@ -25,7 +26,6 @@ import {
   MessagesPlaceholder,
 } from "langchain/prompts";
 import { MultiQueryRetriever } from "langchain/retrievers/multi_query";
-import { ScoreThresholdRetriever } from "langchain/retrievers/score_threshold";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { App, Notice } from "obsidian";
 import ChatModelManager from "./chatModelManager";
@@ -248,6 +248,7 @@ export default class ChainManager {
                 }),
               },
               ChainManager.storeRetrieverDocuments.bind(ChainManager),
+              options.debug,
             );
           console.log("Existing vector store for document hash: ", docHash);
         } else {
@@ -278,9 +279,10 @@ export default class ChainManager {
                 retriever: retriever,
               },
               ChainManager.storeRetrieverDocuments.bind(ChainManager),
+              options.debug,
             );
           console.log(
-            "New conversational retrieval QA chain with multi-query retriever created for " +
+            "New Long Note QA chain with multi-query retriever created for " +
               "document hash: ",
             docHash,
           );
@@ -303,11 +305,17 @@ export default class ChainManager {
           this.getDbVectorStores(),
           embeddingsAPI,
         );
-        const retriever = ScoreThresholdRetriever.fromVectorStore(vectorStore, {
-          minSimilarityScore: 0.3, // TODO: Make this a user setting
-          maxK: this.settings.maxSourceChunks, // The maximum number of docs (chunks) to retrieve
-          kIncrement: 2,
-        });
+        const retriever = new HybridRetriever(
+          this.getDbVectorStores(),
+          this.app.vault,
+          {
+            vectorStore: vectorStore,
+            minSimilarityScore: 0.3, // TODO: Make this a setting
+            maxK: this.settings.maxSourceChunks, // The maximum number of docs (chunks) to retrieve
+            kIncrement: 2,
+          },
+          options.debug,
+        );
 
         // Create new conversational retrieval chain
         ChainManager.retrievalChain =
@@ -317,9 +325,10 @@ export default class ChainManager {
               retriever: retriever,
             },
             ChainManager.storeRetrieverDocuments.bind(ChainManager),
+            options.debug,
           );
         console.log(
-          "New conversational retrieval QA chain with multi-query retriever created for entire vault",
+          "New Vault QA chain with hybrid retriever created for entire vault",
         );
 
         this.langChainParams.chainType = ChainType.VAULT_QA_CHAIN;
@@ -404,6 +413,7 @@ export default class ChainManager {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const chatStream = await ChainManager.chain.stream({
       input: userMessage,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
     try {
