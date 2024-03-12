@@ -1,5 +1,5 @@
+import { NoteTitleModal } from '@/components/ NoteTitleModal';
 import React, { useEffect, useRef, useState } from 'react';
-
 
 interface ChatInputProps {
   inputMessage: string;
@@ -17,8 +17,30 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInputMessage(event.target.value);
-    updateRows(event.target.value);
+    const inputValue = event.target.value;
+    setInputMessage(inputValue);
+    updateRows(inputValue);
+
+    // Check if the user typed `[[`
+    if (inputValue.slice(-2) === '[[') {
+      showNoteTitleModal();
+    }
+  };
+
+  const showNoteTitleModal = () => {
+    const fetchNoteTitles = async () => {
+      const noteTitles = app.vault.getMarkdownFiles().map(file => file.basename);
+
+      new NoteTitleModal(
+        app,
+        noteTitles,
+        (noteTitle: string) => {
+          setInputMessage(inputMessage.slice(0, -2) + ` [[${noteTitle}]]`);
+        }
+      ).open();
+    };
+
+    fetchNoteTitles();
   };
 
   const updateRows = (text: string) => {
