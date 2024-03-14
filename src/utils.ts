@@ -493,6 +493,22 @@ export function extractChatHistory(
   return chatHistory;
 }
 
+export function extractNoteTitles(query: string): string[] {
+  // Use a regular expression to extract note titles wrapped in [[]]
+  const regex = /\[\[(.*?)\]\]/g;
+  const matches = query.match(regex);
+  const uniqueTitles = new Set(
+    matches ? matches.map((match) => match.slice(2, -2)) : [],
+  );
+  return Array.from(uniqueTitles);
+}
+
+/**
+ * Process the variable name to generate a note path if it's enclosed in double brackets, otherwise return the variable name as is.
+ *
+ * @param {string} variableName - The name of the variable to process
+ * @return {string} The processed note path or the variable name itself
+ */
 export function processVariableNameForNotePath(variableName: string): string {
   variableName = variableName.trim();
   // Check if the variable name is enclosed in double brackets indicating it's a note

@@ -1,6 +1,7 @@
 import * as Obsidian from "obsidian";
 import { TFile } from "obsidian";
 import {
+  extractNoteTitles,
   getNotesFromPath,
   getNotesFromTags,
   isFolderMatch,
@@ -268,5 +269,50 @@ describe("isPathInList", () => {
       " another/folder , test/folder ",
     );
     expect(result).toBe(true);
+  });
+});
+
+describe("extractNoteTitles", () => {
+  it("should extract single note title", () => {
+    const query = "Please refer to [[Note1]] for more information.";
+    const expected = ["Note1"];
+    const result = extractNoteTitles(query);
+    expect(result).toEqual(expected);
+  });
+
+  it("should extract multiple note titles", () => {
+    const query =
+      "Please refer to [[Note1]] and [[Note2]] for more information.";
+    const expected = ["Note1", "Note2"];
+    const result = extractNoteTitles(query);
+    expect(result).toEqual(expected);
+  });
+
+  it("should handle note titles with spaces", () => {
+    const query = "Check out [[Note 1]] and [[Another Note]] for details.";
+    const expected = ["Note 1", "Another Note"];
+    const result = extractNoteTitles(query);
+    expect(result).toEqual(expected);
+  });
+
+  it("should ignore duplicates and return unique titles", () => {
+    const query = "Refer to [[Note1]], [[Note2]], and [[Note1]] again.";
+    const expected = ["Note1", "Note2"];
+    const result = extractNoteTitles(query);
+    expect(result).toEqual(expected);
+  });
+
+  it("should return an empty array if no note titles are found", () => {
+    const query = "There are no note titles in this string.";
+    const expected: string[] = [];
+    const result = extractNoteTitles(query);
+    expect(result).toEqual(expected);
+  });
+
+  it("should extract note titles with special characters", () => {
+    const query = "Important notes: [[Note-1]], [[Note_2]], and [[Note#3]].";
+    const expected = ["Note-1", "Note_2", "Note#3"];
+    const result = extractNoteTitles(query);
+    expect(result).toEqual(expected);
   });
 });

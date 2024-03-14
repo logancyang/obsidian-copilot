@@ -18,10 +18,12 @@ import {
   createTranslateSelectionPrompt,
   eli5SelectionPrompt,
   emojifyPrompt,
+  extractNoteTitles,
   fixGrammarSpellingSelectionPrompt,
   formatDateTime,
   getFileContent,
   getFileName,
+  getNotePathFromTitle,
   getNotesFromPath,
   getNotesFromTags,
   getSendChatContextNotesPrompt,
@@ -36,7 +38,7 @@ import {
   sendNotesContentPrompt,
   simplifyPrompt,
   summarizePrompt,
-  tocPrompt
+  tocPrompt,
 } from '@/utils';
 import { EventEmitter } from 'events';
 import { Notice, TFile } from 'obsidian';
@@ -89,21 +91,45 @@ const Chat: React.FC<ChatProps> = ({
   const handleSendMessage = async () => {
     if (!inputMessage) return;
 
+    let processedUserMessage = inputMessage;
+    // If in Chat mode and user input has [[note title]]'s, append the note content
+    // below the original user message
+    if (currentChain === ChainType.LLM_CHAIN) {
+      const noteTitles = extractNoteTitles(inputMessage);
+      for (const noteTitle of noteTitles) {
+        const notePath = getNotePathFromTitle(app.vault, noteTitle);
+        if (notePath) {
+          const abstractFile = app.vault.getAbstractFileByPath(notePath);
+          if (abstractFile instanceof TFile) {
+            const noteContent = await getFileContent(abstractFile, app.vault);
+            processedUserMessage = `${processedUserMessage}\n\n[[${noteTitle}]]: \n${noteContent}`;
+          }
+        }
+      }
+    }
+
     const userMessage: ChatMessage = {
       message: inputMessage,
       sender: USER_SENDER,
       isVisible: true,
     };
 
+    const promptMessageHidden: ChatMessage = {
+      message: processedUserMessage,
+      sender: USER_SENDER,
+      isVisible: false,
+    };
+
     // Add user message to chat history
     addMessage(userMessage);
+    addMessage(promptMessageHidden);
     // Clear input
     setInputMessage('');
 
     // Display running dots to indicate loading
     setLoading(true);
     await getAIResponse(
-      userMessage,
+      promptMessageHidden,
       chainManager,
       addMessage,
       setCurrentAiMessage,

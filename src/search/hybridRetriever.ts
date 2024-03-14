@@ -1,4 +1,4 @@
-import { getNotePathFromTitle } from "@/utils";
+import { extractNoteTitles, getNotePathFromTitle } from "@/utils";
 import VectorDBManager from "@/vectorDBManager";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { VectorStore } from "@langchain/core/vectorstores";
@@ -23,7 +23,7 @@ export class HybridRetriever<V extends VectorStore> extends BaseRetriever {
 
   async getRelevantDocuments(query: string): Promise<Document[]> {
     // Extract note titles wrapped in [[]] from the query
-    const noteTitles = this.extractNoteTitles(query);
+    const noteTitles = extractNoteTitles(query);
     // Retrieve chunks for explicitly mentioned note titles
     const explicitChunks = await this.getExplicitChunks(noteTitles);
     if (this.debug) {
@@ -57,13 +57,6 @@ export class HybridRetriever<V extends VectorStore> extends BaseRetriever {
 
     // Make sure the combined chunks are at most maxK
     return combinedChunks.slice(0, this.options.maxK);
-  }
-
-  private extractNoteTitles(query: string): string[] {
-    // Use a regular expression to extract note titles wrapped in [[]]
-    const regex = /\[\[(.*?)\]\]/g;
-    const matches = query.match(regex);
-    return matches ? matches.map((match) => match.slice(2, -2)) : [];
   }
 
   private async getExplicitChunks(noteTitles: string[]): Promise<Document[]> {
