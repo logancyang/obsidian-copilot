@@ -1,4 +1,4 @@
-import { extractNoteTitles, getNotePathFromTitle } from "@/utils";
+import { extractNoteTitles, getNoteFileFromTitle } from "@/utils";
 import VectorDBManager from "@/vectorDBManager";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { VectorStore } from "@langchain/core/vectorstores";
@@ -62,8 +62,8 @@ export class HybridRetriever<V extends VectorStore> extends BaseRetriever {
   private async getExplicitChunks(noteTitles: string[]): Promise<Document[]> {
     const explicitChunks: Document[] = [];
     for (const noteTitle of noteTitles) {
-      const notePath = getNotePathFromTitle(this.vault, noteTitle);
-      const docHash = VectorDBManager.getDocumentHash(notePath ?? "");
+      const noteFile = await getNoteFileFromTitle(this.vault, noteTitle);
+      const docHash = VectorDBManager.getDocumentHash(noteFile?.path ?? "");
       const memoryVectors = await VectorDBManager.getMemoryVectors(
         this.db,
         docHash,
