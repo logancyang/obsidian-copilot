@@ -23,7 +23,7 @@ import {
   formatDateTime,
   getFileContent,
   getFileName,
-  getNotePathFromTitle,
+  getNoteFileFromTitle,
   getNotesFromPath,
   getNotesFromTags,
   getSendChatContextNotesPrompt,
@@ -97,13 +97,10 @@ const Chat: React.FC<ChatProps> = ({
     if (currentChain === ChainType.LLM_CHAIN) {
       const noteTitles = extractNoteTitles(inputMessage);
       for (const noteTitle of noteTitles) {
-        const notePath = getNotePathFromTitle(app.vault, noteTitle);
-        if (notePath) {
-          const abstractFile = app.vault.getAbstractFileByPath(notePath);
-          if (abstractFile instanceof TFile) {
-            const noteContent = await getFileContent(abstractFile, app.vault);
-            processedUserMessage = `${processedUserMessage}\n\n[[${noteTitle}]]: \n${noteContent}`;
-          }
+        const noteFile = await getNoteFileFromTitle(app.vault, noteTitle);
+        if (noteFile) {
+          const noteContent = await getFileContent(noteFile, app.vault);
+          processedUserMessage = `${processedUserMessage}\n\n[[${noteTitle}]]: \n${noteContent}`;
         }
       }
     }

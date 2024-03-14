@@ -23,18 +23,26 @@ export const isFolderMatch = (
   return fileSegments.includes(inputPath.toLowerCase());
 };
 
-export function getNotePathFromTitle(
+export async function getNoteFileFromTitle(
   vault: Vault,
   noteTitle: string,
-): string | null {
-  const noteFileName = `${noteTitle}.md`; // TODO: Support other file extensions
-  const abstractFile = vault.getAbstractFileByPath(noteFileName);
+): Promise<TFile | null> {
+  // Get all markdown files in the vault
+  const files = vault.getMarkdownFiles();
 
-  if (abstractFile) {
-    return abstractFile.path;
-  } else {
-    return null; // Note not found
+  // Iterate through all files to find a match by title
+  for (const file of files) {
+    // Extract the title from the filename by removing the extension
+    const title = file.basename;
+
+    if (title === noteTitle) {
+      // If a match is found, return the file path
+      return file;
+    }
   }
+
+  // If no match is found, return null
+  return null;
 }
 
 export const getNotesFromPath = async (
