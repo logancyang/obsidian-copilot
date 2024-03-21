@@ -545,7 +545,7 @@ export default class ChainManager {
       const markdownLinks = docTitles
         .map(
           (title) =>
-            `[${title}](obsidian://open?vault=${this.app.vault.getName()}&file=${encodeURIComponent(
+            `[${title}](obsidian://open?vault=${encodeURIComponent(this.app.vault.getName())}&file=${encodeURIComponent(
               title,
             )})`,
         )
