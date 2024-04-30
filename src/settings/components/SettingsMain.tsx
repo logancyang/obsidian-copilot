@@ -22,6 +22,7 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
 
   // API settings
   const [openAIApiKey, setOpenAIApiKey] = useState(plugin.settings.openAIApiKey);
+  const [openAIOrgId, setOpenAIOrgId] = useState(plugin.settings.openAIOrgId);
   const [googleApiKey, setGoogleApiKey] = useState(plugin.settings.googleApiKey);
 
   const [anthropicApiKey, setAnthropicApiKey] = useState(plugin.settings.anthropicApiKey);
@@ -66,6 +67,7 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
 
     // API settings
     plugin.settings.openAIApiKey = openAIApiKey;
+    plugin.settings.openAIOrgId = openAIOrgId;
     plugin.settings.googleApiKey = googleApiKey;
     plugin.settings.anthropicApiKey = anthropicApiKey;
     plugin.settings.anthropicModel = anthropicModel;
@@ -183,6 +185,8 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
       <ApiSettings
         openAIApiKey={openAIApiKey}
         setOpenAIApiKey={setOpenAIApiKey}
+        openAIOrgId={openAIOrgId}
+        setOpenAIOrgId={setOpenAIOrgId}
         googleApiKey={googleApiKey}
         setGoogleApiKey={setGoogleApiKey}
         anthropicApiKey={anthropicApiKey}

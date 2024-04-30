@@ -6,6 +6,7 @@ import SettingsMain from "./components/SettingsMain";
 
 export interface CopilotSettings {
   openAIApiKey: string;
+  openAIOrgId: string;
   huggingfaceApiKey: string;
   cohereApiKey: string;
   anthropicApiKey: string;

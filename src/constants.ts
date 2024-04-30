@@ -134,6 +134,7 @@ export const PROXY_SERVER_PORT = 53001;
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
   openAIApiKey: "",
+  openAIOrgId: "",
   huggingfaceApiKey: "",
   cohereApiKey: "",
   anthropicApiKey: "",
