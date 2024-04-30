@@ -702,6 +702,7 @@ export default class CopilotPlugin extends Plugin {
   getChainManagerParams(): LangChainParams {
     const {
       openAIApiKey,
+      openAIOrgId,
       huggingfaceApiKey,
       cohereApiKey,
       anthropicApiKey,
@@ -724,6 +725,7 @@ export default class CopilotPlugin extends Plugin {
     } = sanitizeSettings(this.settings);
     return {
       openAIApiKey,
+      openAIOrgId,
       huggingfaceApiKey,
       cohereApiKey,
       anthropicApiKey,

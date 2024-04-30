@@ -68,6 +68,7 @@ export default class ChatModelManager {
       [ModelProviders.OPENAI]: {
         modelName: params.openAIProxyModelName || params.model,
         openAIApiKey: decrypt(params.openAIApiKey),
+        openAIOrgId: decrypt(params.openAIOrgId),
         maxTokens: params.maxTokens,
         openAIProxyBaseUrl: params.openAIProxyBaseUrl,
       },
@@ -115,6 +116,7 @@ export default class ChatModelManager {
       {
         models: OPENAI_MODELS,
         apiKey: this.langChainParams.openAIApiKey,
+        organization: this.langChainParams.openAIOrgId,
         constructor: OpenAIChatModel,
         vendor: ModelProviders.OPENAI,
       },
