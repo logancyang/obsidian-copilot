@@ -24,6 +24,8 @@ export interface ModelConfig {
   baseUrl?: string;
   openRouterModel?: string;
   lmStudioBaseUrl?: string;
+  groqApiKey?: string;
+  groqModel?: string;
 }
 
 export interface LangChainParams {
@@ -56,6 +58,8 @@ export interface LangChainParams {
   openAIProxyModelName?: string;
   openAIEmbeddingProxyBaseUrl?: string;
   openAIEmbeddingProxyModelName?: string;
+  groqApiKey: string;
+  groqModel: string;
 }
 
 export interface SetChainOptions {

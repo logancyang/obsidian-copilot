@@ -721,6 +721,8 @@ export default class CopilotPlugin extends Plugin {
       ollamaModel,
       ollamaBaseUrl,
       lmStudioBaseUrl,
+      groqApiKey,
+      groqModel,
     } = sanitizeSettings(this.settings);
     return {
       openAIApiKey,
@@ -728,6 +730,8 @@ export default class CopilotPlugin extends Plugin {
       cohereApiKey,
       anthropicApiKey,
       anthropicModel: anthropicModel || DEFAULT_SETTINGS.anthropicModel,
+      groqApiKey,
+      groqModel,
       azureOpenAIApiKey,
       azureOpenAIApiInstanceName,
       azureOpenAIApiDeploymentName,

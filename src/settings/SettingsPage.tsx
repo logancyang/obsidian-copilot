@@ -41,6 +41,8 @@ export interface CopilotSettings {
   enableEncryption: boolean;
   maxSourceChunks: number;
   qaExclusionPaths: string;
+  groqModel: string;
+  groqApiKey: string;
 }
 
 export class CopilotSettingTab extends PluginSettingTab {

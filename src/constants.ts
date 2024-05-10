@@ -14,6 +14,7 @@ export enum ChatModels {
   GPT_4_32K = "gpt-4-32k",
   GEMINI_PRO = "gemini-pro",
   OLLAMA = "ollama",
+  Groq = "llama3-70b-8192",
 }
 
 export enum ChatModelDisplayNames {
@@ -28,6 +29,7 @@ export enum ChatModelDisplayNames {
   OPENROUTERAI = "OPENROUTER.AI",
   OLLAMA = "OLLAMA (LOCAL)",
   LM_STUDIO = "LM STUDIO (LOCAL)",
+  GROQ = "Groq",
 }
 
 export const OPENAI_MODELS = new Set([
@@ -63,6 +65,8 @@ export const DISPLAY_NAME_TO_MODEL: Record<string, string> = {
   [ChatModelDisplayNames.GEMINI_PRO]: ChatModels.GEMINI_PRO,
 };
 
+export const GROQ_MODELS = new Set([ChatModelDisplayNames.GROQ]);
+
 // Model Providers
 export enum ModelProviders {
   OPENAI = "openai",
@@ -74,6 +78,7 @@ export enum ModelProviders {
   OPENROUTERAI = "openrouterai",
   LM_STUDIO = "lm_studio",
   OLLAMA = "ollama",
+  GROQ = "groq",
 }
 
 export const VENDOR_MODELS: Record<string, Set<string>> = {
@@ -84,6 +89,7 @@ export const VENDOR_MODELS: Record<string, Set<string>> = {
   [ModelProviders.OPENROUTERAI]: OPENROUTERAI_MODELS,
   [ModelProviders.OLLAMA]: OLLAMA_MODELS,
   [ModelProviders.LM_STUDIO]: LM_STUDIO_MODELS,
+  [ModelProviders.GROQ]: GROQ_MODELS,
 };
 
 export const EMBEDDING_PROVIDERS = [
@@ -166,7 +172,9 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   qaExclusionPaths: "",
   chatNoteContextPath: "",
   chatNoteContextTags: [],
-  debug: false,
+  debug: true,
   enableEncryption: false,
   maxSourceChunks: 3,
+  groqModel: "llama3-70b-8192",
+  groqApiKey: "",
 };
