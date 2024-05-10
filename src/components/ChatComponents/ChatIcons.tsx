@@ -192,6 +192,9 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             <option value={ChatModelDisplayNames.OLLAMA}>
               {ChatModelDisplayNames.OLLAMA}
             </option>
+            <option value={ChatModelDisplayNames.GROQ}>
+              {ChatModelDisplayNames.GROQ}
+            </option>
           </select>
           <span className="tooltip-text">Model Selection</span>
         </div>
