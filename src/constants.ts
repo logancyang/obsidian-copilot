@@ -172,7 +172,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   qaExclusionPaths: "",
   chatNoteContextPath: "",
   chatNoteContextTags: [],
-  debug: true,
+  debug: false,
   enableEncryption: false,
   maxSourceChunks: 3,
   groqModel: "llama3-70b-8192",
