@@ -200,13 +200,11 @@ export default class ChatModelManager {
     }
 
     const modelConfig = this.getModelConfig(selectedModel.vendor);
-    console.log(modelConfig);
     new Notice(`Setting model: ${modelDisplayName}`);
     try {
       const newModelInstance = new selectedModel.AIConstructor({
         ...modelConfig,
       });
-      console.log(newModelInstance);
       // Set the new model
       ChatModelManager.chatModel = newModelInstance;
     } catch (error) {
