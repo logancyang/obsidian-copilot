@@ -168,7 +168,10 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             <option value={ChatModelDisplayNames.GPT_4}>
               {ChatModelDisplayNames.GPT_4}
             </option>
-            <option value={ChatModelDisplayNames.GPT_4_TURBO}>
+            <option value={ChatModelDisplayNames.GPT_4o}>
+              {ChatModelDisplayNames.GPT_4o}
+            </option>
+             <option value={ChatModelDisplayNames.GPT_4_TURBO}>
               {ChatModelDisplayNames.GPT_4_TURBO}
             </option>
             <option value={ChatModelDisplayNames.GPT_4_32K}>
