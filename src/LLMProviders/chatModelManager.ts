@@ -9,6 +9,7 @@ import {
   OPENAI_MODELS,
   OPENROUTERAI_MODELS,
   PROXY_SERVER_PORT,
+  GROQ_MODELS,
 } from '@/constants';
 import EncryptionService from '@/encryptionService';
 import { ProxyChatOpenAI } from '@/langchainWrappers';
@@ -18,6 +19,7 @@ import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { BaseChatModel } from 'langchain/chat_models/base';
 import { ChatOpenAI } from 'langchain/chat_models/openai';
+import { ChatGroq } from "@langchain/groq";
 import { Notice } from 'obsidian';
 
 export default class ChatModelManager {
@@ -100,6 +102,10 @@ export default class ChatModelManager {
         ...(params.ollamaBaseUrl ? { baseUrl: params.ollamaBaseUrl } : {}),
         modelName: params.ollamaModel,
       },
+      [ModelProviders.GROQ]: {
+        apiKey: decrypt(params.groqApiKey),
+        modelName: params.groqModel,
+      },
     };
 
     return { ...baseConfig, ...(providerConfig[chatModelProvider as keyof typeof providerConfig] || {}) };
@@ -156,6 +162,12 @@ export default class ChatModelManager {
         constructor: ProxyChatOpenAI,
         vendor: ModelProviders.LM_STUDIO,
       },
+      {
+        models: GROQ_MODELS,
+        apiKey: this.langChainParams.groqApiKey,
+        constructor: ChatGroq,
+        vendor: ModelProviders.GROQ,
+      },
     ];
 
     modelConfigurations.forEach(({ models, apiKey, constructor, vendor }) => {
@@ -175,7 +187,7 @@ export default class ChatModelManager {
 
   setChatModel(modelDisplayName: string): void {
     if (!ChatModelManager.modelMap.hasOwnProperty(modelDisplayName)) {
-      throw new Error(`No model found for: ${modelDisplayName}`);
+      throw new Error(`No model found for: ${modelDisplayName}`); 
     }
     // MUST update it since chatModelManager is a singleton.
     this.langChainParams.model = getModelName(modelDisplayName);
@@ -190,12 +202,11 @@ export default class ChatModelManager {
     }
 
     const modelConfig = this.getModelConfig(selectedModel.vendor);
-
+    new Notice(`Setting model: ${modelDisplayName}`);
     try {
       const newModelInstance = new selectedModel.AIConstructor({
         ...modelConfig,
       });
-
       // Set the new model
       ChatModelManager.chatModel = newModelInstance;
     } catch (error) {

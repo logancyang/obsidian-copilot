@@ -37,6 +37,9 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
   const [azureOpenAIApiVersion, setAzureOpenAIApiVersion] = useState(plugin.settings.azureOpenAIApiVersion);
   const [azureOpenAIApiEmbeddingDeploymentName, setAzureOpenAIApiEmbeddingDeploymentName] = useState(plugin.settings.azureOpenAIApiEmbeddingDeploymentName);
 
+  const [groqApiKey, setGroqApiKey] = useState(plugin.settings.groqApiKey);
+  const [groqModel, setGroqModel] = useState(plugin.settings.groqModel);
+
   // QA settings
   const [embeddingModel, setEmbeddingModel] = useState(plugin.settings.embeddingModel);
   const [cohereApiKey, setCohereApiKey] = useState(plugin.settings.cohereApiKey);
@@ -78,6 +81,8 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
     plugin.settings.azureOpenAIApiDeploymentName = azureOpenAIApiDeploymentName;
     plugin.settings.azureOpenAIApiVersion = azureOpenAIApiVersion;
     plugin.settings.azureOpenAIApiEmbeddingDeploymentName = azureOpenAIApiEmbeddingDeploymentName;
+    plugin.settings.groqApiKey = groqApiKey;
+    plugin.settings.groqModel = groqModel;
 
     // QA settings
     plugin.settings.embeddingModel = embeddingModel;
@@ -207,6 +212,10 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
         setAzureOpenAIApiVersion={setAzureOpenAIApiVersion}
         azureOpenAIApiEmbeddingDeploymentName={azureOpenAIApiEmbeddingDeploymentName}
         setAzureOpenAIApiEmbeddingDeploymentName={setAzureOpenAIApiEmbeddingDeploymentName}
+        groqApiKey={groqApiKey}
+        setGroqApiKey={setGroqApiKey}
+        groqModel={groqModel}
+        setGroqModel={setGroqModel}
       />
       <QASettings
         embeddingModel={embeddingModel}

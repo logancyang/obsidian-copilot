@@ -28,6 +28,10 @@ interface ApiSettingsProps {
   setAzureOpenAIApiVersion: (value: string) => void;
   azureOpenAIApiEmbeddingDeploymentName: string;
   setAzureOpenAIApiEmbeddingDeploymentName: (value: string) => void;
+  groqApiKey: string;
+  setGroqApiKey: (value: string) => void;
+  groqModel: string;
+  setGroqModel: (value: string) => void;
 }
 
 const ApiSettings: React.FC<ApiSettingsProps> = ({
@@ -55,6 +59,10 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
   setAzureOpenAIApiVersion,
   azureOpenAIApiEmbeddingDeploymentName,
   setAzureOpenAIApiEmbeddingDeploymentName,
+  groqApiKey,
+  setGroqApiKey,
+  groqModel,
+  setGroqModel,
 }) => {
   return (
     <div>
@@ -212,6 +220,32 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
             placeholder="Enter Azure OpenAI API Embedding Deployment Name"
             type="text"
           />
+        </div>
+      </Collapsible>
+
+      <Collapsible title="Groq API Settings">
+        <div>
+          <ApiSetting
+            title="Groq API Key"
+            value={groqApiKey}
+            setValue={setGroqApiKey}
+            placeholder="Enter Groq API Key"
+          />
+          <ApiSetting
+            title="Groq Model"
+            value={groqModel}
+            setValue={setGroqModel}
+            placeholder="Enter Groq Model"
+            type="text"
+          />
+          <p>
+            If you have Groq API access, you can get the API key {' '}
+            <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer">
+              here
+            </a>.
+            <br />
+            Your API key is stored locally and is only used to make requests to Groq's services.
+          </p>
         </div>
       </Collapsible>
     </div>
