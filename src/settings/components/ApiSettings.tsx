@@ -6,6 +6,8 @@ import Collapsible from './Collapsible';
 interface ApiSettingsProps {
   openAIApiKey: string;
   setOpenAIApiKey: (value: string) => void;
+  openAIOrgId: string;
+  setOpenAIOrgId: (value: string) => void;
   googleApiKey: string;
   setGoogleApiKey: (value: string) => void;
   anthropicApiKey: string;
@@ -31,6 +33,8 @@ interface ApiSettingsProps {
 const ApiSettings: React.FC<ApiSettingsProps> = ({
   openAIApiKey,
   setOpenAIApiKey,
+  openAIOrgId,
+  setOpenAIOrgId,
   googleApiKey,
   setGoogleApiKey,
   anthropicApiKey,
@@ -79,6 +83,12 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
               https://platform.openai.com/api-keys
             </a>
           </p>
+          <ApiSetting
+            title="OpenAI Organization ID"
+            value={openAIOrgId}
+            setValue={setOpenAIOrgId}
+            placeholder="Enter OpenAI Organization ID if applicable"
+          />
         </div>
         <div className="warning-message">
           <span>If you are a new user, try </span>

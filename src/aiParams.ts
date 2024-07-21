@@ -10,6 +10,7 @@ export interface ModelConfig {
   maxConcurrency: number;
   maxTokens?: number;
   openAIApiKey?: string;
+  openAIOrgId?: string;
   anthropicApiKey?: string;
   anthropicModel?: string;
   azureOpenAIApiKey?: string;
@@ -28,6 +29,7 @@ export interface ModelConfig {
 
 export interface LangChainParams {
   openAIApiKey: string;
+  openAIOrgId: string;
   huggingfaceApiKey: string;
   cohereApiKey: string;
   anthropicApiKey: string;
