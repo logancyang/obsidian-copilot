@@ -29,7 +29,7 @@ import {
 } from "@/utils";
 import VectorDBManager, { VectorStoreDocument } from "@/vectorDBManager";
 import { MD5 } from "crypto-js";
-import { Editor, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import { Editor, Notice, Plugin, TFile, WorkspaceLeaf, Menu } from "obsidian";
 import PouchDB from "pouchdb";
 
 export default class CopilotPlugin extends Plugin {
@@ -446,6 +446,11 @@ export default class CopilotPlugin extends Plugin {
         new Notice("An error occurred while saving vault to vector store.");
       }
     }
+
+    this.registerEvent(
+			this.app.workspace.on("editor-menu", this.handleContextMenu)
+		);
+
   }
 
   private getVaultIdentifier(): string {
@@ -698,6 +703,28 @@ export default class CopilotPlugin extends Plugin {
       return 0;
     }
   }
+
+  handleContextMenu = (
+		menu: Menu,
+		editor: Editor
+	  ): void => {
+		this.addContextMenu(menu, editor, this);
+	  };
+
+  addContextMenu = (
+      menu: Menu,
+      editor: Editor,
+        plugin: this,
+      ): void => {
+      menu.addItem((item) => {
+        item
+        .setTitle("Copilot: Summarize Selection")
+            .setIcon("bot")
+        .onClick(async (e) => {
+          plugin.processSelection(editor, "summarizeSelection");
+        });
+      });
+    }
 
   getChainManagerParams(): LangChainParams {
     const {
