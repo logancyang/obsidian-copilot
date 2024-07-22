@@ -17,6 +17,9 @@ If you enjoy Copilot for Obsidian, please consider [sponsoring this project](htt
 
 <a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
 
+SPECIAL THANKS TO OUR SPONSORS:
+@Arlorean, @dashinja, @emaynard, @scmarinelli, @borthwick
+
 #### 🎉 HIGHLY ANTICIPATED v2.5.0: Vault QA (BETA) mode (with local embedding support)! Claude 3! 🎉🎉🎉
 
 <a href="https://youtu.be/NSoKRYNlOls" target="_blank"><img src="./images/thumbnail-vault-qa.png" width="700" /></a>
