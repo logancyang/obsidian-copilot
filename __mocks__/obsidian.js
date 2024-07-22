@@ -1,4 +1,5 @@
 // __mocks__/obsidian.js
+/* eslint-disable no-undef */
 import yaml from 'js-yaml';
 
 module.exports = {
