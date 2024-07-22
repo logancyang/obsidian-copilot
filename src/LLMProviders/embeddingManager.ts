@@ -1,11 +1,12 @@
-import { LangChainParams } from '@/aiParams';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { LangChainParams } from "@/aiParams";
 import {
   EMBEDDING_MODEL_TO_PROVIDERS,
   ModelProviders,
   NOMIC_EMBED_TEXT,
-} from '@/constants';
-import EncryptionService from '@/encryptionService';
-import { ProxyOpenAIEmbeddings } from '@/langchainWrappers';
+} from "@/constants";
+import EncryptionService from "@/encryptionService";
+import { ProxyOpenAIEmbeddings } from "@/langchainWrappers";
 import { CohereEmbeddings } from "@langchain/cohere";
 import { Embeddings } from "langchain/embeddings/base";
 import { OllamaEmbeddings } from "langchain/embeddings/ollama";
@@ -15,17 +16,17 @@ export default class EmbeddingManager {
   private static instance: EmbeddingManager;
   private constructor(
     private langChainParams: LangChainParams,
-    private encryptionService: EncryptionService
+    private encryptionService: EncryptionService,
   ) {}
 
   static getInstance(
     langChainParams: LangChainParams,
-    encryptionService: EncryptionService
+    encryptionService: EncryptionService,
   ): EmbeddingManager {
     if (!EmbeddingManager.instance) {
       EmbeddingManager.instance = new EmbeddingManager(
         langChainParams,
-        encryptionService
+        encryptionService,
       );
     }
     return EmbeddingManager.instance;
@@ -39,7 +40,7 @@ export default class EmbeddingManager {
       return emb.modelName as string;
     } else {
       throw new Error(
-        `Embeddings instance missing model or modelName properties: ${embeddingsInstance}`
+        `Embeddings instance missing model or modelName properties: ${embeddingsInstance}`,
       );
     }
   }
@@ -58,7 +59,7 @@ export default class EmbeddingManager {
     if (openAIEmbeddingProxyBaseUrl) {
       return new ProxyOpenAIEmbeddings({
         modelName: openAIEmbeddingProxyModelName || embeddingModel,
-        openAIApiKey: openAIApiKey? decrypt(openAIApiKey) : 'default-key',
+        openAIApiKey: openAIApiKey ? decrypt(openAIApiKey) : "default-key",
         maxRetries: 3,
         maxConcurrency: 3,
         timeout: 10000,
@@ -67,8 +68,7 @@ export default class EmbeddingManager {
     } else if (openAIApiKey) {
       // No proxy URL; now check if the API key exists
       return new OpenAIEmbeddings({
-        modelName:
-          openAIEmbeddingProxyModelName || embeddingModel,
+        modelName: openAIEmbeddingProxyModelName || embeddingModel,
         openAIApiKey: decrypt(openAIApiKey),
         maxRetries: 3,
         maxConcurrency: 3,
@@ -99,7 +99,7 @@ export default class EmbeddingManager {
           return OpenAIEmbeddingsAPI;
         }
         console.error(
-          "OpenAI API key is not provided for the embedding model."
+          "OpenAI API key is not provided for the embedding model.",
         );
         break;
       case ModelProviders.COHEREAI:
@@ -120,7 +120,7 @@ export default class EmbeddingManager {
           });
         }
         console.error(
-          "Azure OpenAI API key is not provided for the embedding model."
+          "Azure OpenAI API key is not provided for the embedding model.",
         );
         break;
       case ModelProviders.OLLAMA:
@@ -133,7 +133,7 @@ export default class EmbeddingManager {
         });
       default:
         console.error(
-          "No embedding provider set or no valid API key provided. Defaulting to OpenAI."
+          "No embedding provider set or no valid API key provided. Defaulting to OpenAI.",
         );
         return (
           OpenAIEmbeddingsAPI ||

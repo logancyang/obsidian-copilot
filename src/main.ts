@@ -29,7 +29,7 @@ import {
 } from "@/utils";
 import VectorDBManager, { VectorStoreDocument } from "@/vectorDBManager";
 import { MD5 } from "crypto-js";
-import { Editor, Notice, Plugin, TFile, WorkspaceLeaf, Menu } from "obsidian";
+import { Editor, Menu, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import PouchDB from "pouchdb";
 
 export default class CopilotPlugin extends Plugin {
@@ -57,14 +57,14 @@ export default class CopilotPlugin extends Plugin {
     const langChainParams = this.getChainManagerParams();
     this.encryptionService = new EncryptionService(this.settings);
     this.dbVectorStores = new PouchDB<VectorStoreDocument>(
-      `copilot_vector_stores_${this.getVaultIdentifier()}`,
+      `copilot_vector_stores_${this.getVaultIdentifier()}`
     );
     this.chainManager = new ChainManager(
       this.app,
       langChainParams,
       this.encryptionService,
       this.settings,
-      () => this.dbVectorStores,
+      () => this.dbVectorStores
     );
 
     if (this.settings.enableEncryption) {
@@ -73,13 +73,13 @@ export default class CopilotPlugin extends Plugin {
 
     this.embeddingsManager = EmbeddingsManager.getInstance(
       langChainParams,
-      this.encryptionService,
+      this.encryptionService
     );
     this.dbPrompts = new PouchDB<CustomPrompt>("copilot_custom_prompts");
 
     this.registerView(
       CHAT_VIEWTYPE,
-      (leaf: WorkspaceLeaf) => new CopilotView(leaf, this),
+      (leaf: WorkspaceLeaf) => new CopilotView(leaf, this)
     );
 
     this.addCommand({
@@ -115,7 +115,7 @@ export default class CopilotPlugin extends Plugin {
             new Notice("Custom prompt saved successfully.");
           } catch (e) {
             new Notice(
-              "Error saving custom prompt. Please check if the title already exists.",
+              "Error saving custom prompt. Please check if the title already exists."
             );
             console.error(e);
           }
@@ -138,30 +138,30 @@ export default class CopilotPlugin extends Plugin {
               }
               try {
                 const doc = (await this.dbPrompts.get(
-                  promptTitle,
+                  promptTitle
                 )) as CustomPrompt;
                 if (!doc.prompt) {
                   new Notice(
-                    `No prompt found with the title "${promptTitle}".`,
+                    `No prompt found with the title "${promptTitle}".`
                   );
                   return;
                 }
                 this.processCustomPrompt(
                   editor,
                   "applyCustomPrompt",
-                  doc.prompt,
+                  doc.prompt
                 );
               } catch (err) {
                 if (err.name === "not_found") {
                   new Notice(
-                    `No prompt found with the title "${promptTitle}".`,
+                    `No prompt found with the title "${promptTitle}".`
                   );
                 } else {
                   console.error(err);
                   new Notice("An error occurred.");
                 }
               }
-            },
+            }
           ).open();
         });
       },
@@ -180,7 +180,7 @@ export default class CopilotPlugin extends Plugin {
               console.error(err);
               new Notice("An error occurred.");
             }
-          },
+          }
         );
 
         modal.open();
@@ -209,25 +209,25 @@ export default class CopilotPlugin extends Plugin {
                 const doc = await this.dbPrompts.get(promptTitle);
                 if (doc._rev) {
                   await this.dbPrompts.remove(
-                    doc as PouchDB.Core.RemoveDocument,
+                    doc as PouchDB.Core.RemoveDocument
                   );
                   new Notice(`Prompt "${promptTitle}" has been deleted.`);
                 } else {
                   new Notice(
-                    `Failed to delete prompt "${promptTitle}": No revision found.`,
+                    `Failed to delete prompt "${promptTitle}": No revision found.`
                   );
                 }
               } catch (err) {
                 if (err.name === "not_found") {
                   new Notice(
-                    `No prompt found with the title "${promptTitle}".`,
+                    `No prompt found with the title "${promptTitle}".`
                   );
                 } else {
                   console.error(err);
                   new Notice("An error occurred while deleting the prompt.");
                 }
               }
-            },
+            }
           ).open();
         });
 
@@ -255,7 +255,7 @@ export default class CopilotPlugin extends Plugin {
 
               try {
                 const doc = (await this.dbPrompts.get(
-                  promptTitle,
+                  promptTitle
                 )) as CustomPrompt;
                 if (doc.prompt) {
                   new AddPromptModal(
@@ -269,24 +269,24 @@ export default class CopilotPlugin extends Plugin {
                     },
                     doc._id,
                     doc.prompt,
-                    true,
+                    true
                   ).open();
                 } else {
                   new Notice(
-                    `No prompt found with the title "${promptTitle}".`,
+                    `No prompt found with the title "${promptTitle}".`
                   );
                 }
               } catch (err) {
                 if (err.name === "not_found") {
                   new Notice(
-                    `No prompt found with the title "${promptTitle}".`,
+                    `No prompt found with the title "${promptTitle}".`
                   );
                 } else {
                   console.error(err);
                   new Notice("An error occurred.");
                 }
               }
-            },
+            }
           ).open();
         });
 
@@ -303,16 +303,16 @@ export default class CopilotPlugin extends Plugin {
           await this.dbVectorStores.destroy();
           // Reinitialize the database
           this.dbVectorStores = new PouchDB<VectorStoreDocument>(
-            `copilot_vector_stores_${this.getVaultIdentifier()}`,
+            `copilot_vector_stores_${this.getVaultIdentifier()}`
           );
           new Notice("Local vector store cleared successfully.");
           console.log(
-            "Local vector store cleared successfully, new instance created.",
+            "Local vector store cleared successfully, new instance created."
           );
         } catch (err) {
           console.error("Error clearing the local vector store:", err);
           new Notice(
-            "An error occurred while clearing the local vector store.",
+            "An error occurred while clearing the local vector store."
           );
         }
       },
@@ -326,17 +326,17 @@ export default class CopilotPlugin extends Plugin {
           const files = this.app.vault.getMarkdownFiles();
           const filePaths = files.map((file) => file.path);
           const indexedFiles = await VectorDBManager.getNoteFiles(
-            this.dbVectorStores,
+            this.dbVectorStores
           );
           const indexedFilePaths = indexedFiles.map((file) => file.path);
           const filesToDelete = indexedFilePaths.filter(
-            (filePath) => !filePaths.includes(filePath),
+            (filePath) => !filePaths.includes(filePath)
           );
 
           const deletePromises = filesToDelete.map(async (filePath) => {
             VectorDBManager.removeMemoryVectors(
               this.dbVectorStores,
-              VectorDBManager.getDocumentHash(filePath),
+              VectorDBManager.getDocumentHash(filePath)
             );
           });
 
@@ -344,12 +344,12 @@ export default class CopilotPlugin extends Plugin {
 
           new Notice("Local vector store garbage collected successfully.");
           console.log(
-            "Local vector store garbage collected successfully, new instance created.",
+            "Local vector store garbage collected successfully, new instance created."
           );
         } catch (err) {
           console.error("Error clearing the local vector store:", err);
           new Notice(
-            "An error occurred while clearing the local vector store.",
+            "An error occurred while clearing the local vector store."
           );
         }
       },
@@ -363,10 +363,10 @@ export default class CopilotPlugin extends Plugin {
           const indexedFileCount = await this.indexVaultToVectorStore();
 
           new Notice(
-            `${indexedFileCount} vault files indexed to vector store.`,
+            `${indexedFileCount} vault files indexed to vector store.`
           );
           console.log(
-            `${indexedFileCount} vault files indexed to vector store.`,
+            `${indexedFileCount} vault files indexed to vector store.`
           );
         } catch (err) {
           console.error("Error indexing vault to vector store:", err);
@@ -383,15 +383,15 @@ export default class CopilotPlugin extends Plugin {
           const indexedFileCount = await this.indexVaultToVectorStore(true);
 
           new Notice(
-            `${indexedFileCount} vault files indexed to vector store.`,
+            `${indexedFileCount} vault files indexed to vector store.`
           );
           console.log(
-            `${indexedFileCount} vault files indexed to vector store.`,
+            `${indexedFileCount} vault files indexed to vector store.`
           );
         } catch (err) {
           console.error("Error re-indexing vault to vector store:", err);
           new Notice(
-            "An error occurred while re-indexing vault to vector store.",
+            "An error occurred while re-indexing vault to vector store."
           );
         }
       },
@@ -409,7 +409,7 @@ export default class CopilotPlugin extends Plugin {
             this.settings.chatNoteContextPath = path;
             this.settings.chatNoteContextTags = tags;
             await this.saveSettings();
-          },
+          }
         ).open();
       },
     });
@@ -430,7 +430,7 @@ export default class CopilotPlugin extends Plugin {
       this.app.vault.on("delete", (file) => {
         const docHash = VectorDBManager.getDocumentHash(file.path);
         VectorDBManager.removeMemoryVectors(this.dbVectorStores, docHash);
-      }),
+      })
     );
 
     // Index vault to vector store on startup and after loading all commands
@@ -448,9 +448,8 @@ export default class CopilotPlugin extends Plugin {
     }
 
     this.registerEvent(
-			this.app.workspace.on("editor-menu", this.handleContextMenu)
-		);
-
+      this.app.workspace.on("editor-menu", this.handleContextMenu)
+    );
   }
 
   private getVaultIdentifier(): string {
@@ -484,7 +483,7 @@ export default class CopilotPlugin extends Plugin {
 
     // Check if embedding model has changed
     const prevEmbeddingModel = await VectorDBManager.checkEmbeddingModel(
-      this.dbVectorStores,
+      this.dbVectorStores
     );
     // TODO: Remove this when Ollama model is dynamically set
     const currEmbeddingModel =
@@ -494,7 +493,7 @@ export default class CopilotPlugin extends Plugin {
       console.log(
         "Prev vs Current embedding models:",
         prevEmbeddingModel,
-        currEmbeddingModel,
+        currEmbeddingModel
       );
 
     if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
@@ -506,13 +505,13 @@ export default class CopilotPlugin extends Plugin {
         await this.dbVectorStores.destroy();
         // Reinitialize the database
         this.dbVectorStores = new PouchDB<VectorStoreDocument>(
-          `copilot_vector_stores_${this.getVaultIdentifier()}`,
+          `copilot_vector_stores_${this.getVaultIdentifier()}`
         );
         new Notice(
-          "Detected change in embedding model. Rebuild vector store from scratch.",
+          "Detected change in embedding model. Rebuild vector store from scratch."
         );
         console.log(
-          "Detected change in embedding model. Rebuild vector store from scratch.",
+          "Detected change in embedding model. Rebuild vector store from scratch."
         );
       } catch (err) {
         console.error("Error clearing vector store for reindexing:", err);
@@ -521,7 +520,7 @@ export default class CopilotPlugin extends Plugin {
     }
 
     const latestMtime = await VectorDBManager.getLatestFileMtime(
-      this.dbVectorStores,
+      this.dbVectorStores
     );
 
     const files = this.app.vault
@@ -537,10 +536,10 @@ export default class CopilotPlugin extends Plugin {
       });
 
     const fileContents: string[] = await Promise.all(
-      files.map((file) => this.app.vault.cachedRead(file)),
+      files.map((file) => this.app.vault.cachedRead(file))
     );
     const fileMetadatas = files.map((file) =>
-      this.app.metadataCache.getFileCache(file),
+      this.app.metadataCache.getFileCache(file)
     );
 
     const totalFiles = files.length;
@@ -552,7 +551,7 @@ export default class CopilotPlugin extends Plugin {
     let indexedCount = 0;
     const indexNotice = new Notice(
       `Copilot is indexing your vault...\n0/${totalFiles} files processed.`,
-      0,
+      0
     );
 
     const errors: string[] = [];
@@ -568,12 +567,12 @@ export default class CopilotPlugin extends Plugin {
         const result = await VectorDBManager.indexFile(
           this.dbVectorStores,
           embeddingInstance,
-          noteFile,
+          noteFile
         );
 
         indexedCount++;
         indexNotice.setMessage(
-          `Copilot is indexing your vault...\n${indexedCount}/${totalFiles} files processed.`,
+          `Copilot is indexing your vault...\n${indexedCount}/${totalFiles} files processed.`
         );
         return result;
       } catch (err) {
@@ -589,7 +588,7 @@ export default class CopilotPlugin extends Plugin {
 
     if (errors.length > 0) {
       new Notice(
-        `Indexing completed with errors. Check the console for details.`,
+        `Indexing completed with errors. Check the console for details.`
       );
       console.log("Indexing Errors:", errors.join("\n"));
     }
@@ -600,7 +599,7 @@ export default class CopilotPlugin extends Plugin {
     editor: Editor,
     eventType: string,
     eventSubtype?: string,
-    checkSelectedText = true,
+    checkSelectedText = true
   ) {
     const selectedText = editor.getSelection();
 
@@ -645,7 +644,7 @@ export default class CopilotPlugin extends Plugin {
       });
     await this.activateViewPromise;
     this.app.workspace.revealLeaf(
-      this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0],
+      this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]
     );
     this.chatIsVisible = true;
   }
@@ -668,7 +667,7 @@ export default class CopilotPlugin extends Plugin {
     });
     await this.activateViewPromise;
     this.app.workspace.revealLeaf(
-      this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0],
+      this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]
     );
     this.chatIsVisible = true;
   }
@@ -695,8 +694,9 @@ export default class CopilotPlugin extends Plugin {
   async countTotalTokens(): Promise<number> {
     try {
       const allContent = await getAllNotesContent(this.app.vault);
-      const totalTokens =
-        await this.chainManager.chatModelManager.countTokens(allContent);
+      const totalTokens = await this.chainManager.chatModelManager.countTokens(
+        allContent
+      );
       return totalTokens;
     } catch (error) {
       console.error("Error counting tokens: ", error);
@@ -704,27 +704,20 @@ export default class CopilotPlugin extends Plugin {
     }
   }
 
-  handleContextMenu = (
-		menu: Menu,
-		editor: Editor
-	  ): void => {
-		this.addContextMenu(menu, editor, this);
-	  };
+  handleContextMenu = (menu: Menu, editor: Editor): void => {
+    this.addContextMenu(menu, editor, this);
+  };
 
-  addContextMenu = (
-      menu: Menu,
-      editor: Editor,
-        plugin: this,
-      ): void => {
-      menu.addItem((item) => {
-        item
+  addContextMenu = (menu: Menu, editor: Editor, plugin: this): void => {
+    menu.addItem((item) => {
+      item
         .setTitle("Copilot: Summarize Selection")
-            .setIcon("bot")
+        .setIcon("bot")
         .onClick(async (e) => {
           plugin.processSelection(editor, "summarizeSelection");
         });
-      });
-    }
+    });
+  };
 
   getChainManagerParams(): LangChainParams {
     const {
