@@ -50,7 +50,7 @@ export default class CopilotPlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
-    this.proxyServer = new ProxyServer(PROXY_SERVER_PORT);
+    this.proxyServer = new ProxyServer(this.settings, PROXY_SERVER_PORT);
     this.addSettingTab(new CopilotSettingTab(this.app, this));
     // Always have one instance of sharedState and chainManager in the plugin
     this.sharedState = new SharedState();
@@ -775,6 +775,7 @@ export default class CopilotPlugin extends Plugin {
       chainType: ChainType.LLM_CHAIN, // Set LLM_CHAIN as default ChainType
       options: { forceNewCreation: true } as SetChainOptions,
       openAIProxyBaseUrl: this.settings.openAIProxyBaseUrl,
+      useOpenAILocalProxy: this.settings.useOpenAILocalProxy,
       openAIProxyModelName: this.settings.openAIProxyModelName,
       openAIEmbeddingProxyBaseUrl: this.settings.openAIEmbeddingProxyBaseUrl,
       openAIEmbeddingProxyModelName:
