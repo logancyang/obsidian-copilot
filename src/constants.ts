@@ -169,6 +169,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   contextTurns: 15,
   userSystemPrompt: "",
   openAIProxyBaseUrl: "",
+  useOpenAILocalProxy: false,
   openAIProxyModelName: "",
   openAIEmbeddingProxyBaseUrl: "",
   openAIEmbeddingProxyModelName: "",

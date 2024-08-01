@@ -480,6 +480,7 @@ const Chat: React.FC<ChatProps> = ({
           vault={app.vault}
           vault_qa_strategy={plugin.settings.indexVaultToVectorStore}
           proxyServer={plugin.proxyServer}
+          settings={settings}
           debug={debug}
         />
         <ChatInput
