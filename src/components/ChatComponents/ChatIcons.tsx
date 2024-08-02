@@ -19,7 +19,6 @@ import {
   UseActiveNoteAsContextIcon,
 } from "@/components/Icons";
 import { stringToChainType } from "@/utils";
-import { CopilotSettings } from "@/settings/SettingsPage";
 
 interface ChatIconsProps {
   currentModel: string;
@@ -36,7 +35,6 @@ interface ChatIconsProps {
   vault: Vault;
   vault_qa_strategy: string;
   proxyServer: ProxyServer;
-  settings: CopilotSettings;
   debug?: boolean;
 }
 
@@ -55,7 +53,6 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   vault,
   vault_qa_strategy,
   proxyServer,
-  settings,
   debug,
 }) => {
   const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
@@ -74,7 +71,6 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   };
 
   useEffect(() => {
-    // Start proxy server based on the selected model & settings
     const startProxyServerForClaude = async (proxyServerURL: string) => {
       await proxyServer.startProxyServer(proxyServerURL, currentModel !== ChatModelDisplayNames.CLAUDE);
     };
@@ -89,7 +85,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
     return () => {
       proxyServer.stopProxyServer().catch(console.error);
     };
-  }, [currentModel, proxyServer]);
+  }, []);
 
   const handleChainChange = async (
     event: React.ChangeEvent<HTMLSelectElement>
