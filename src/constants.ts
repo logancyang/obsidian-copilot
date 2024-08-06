@@ -14,7 +14,8 @@ export enum ChatModels {
   GPT_4o_mini = "gpt-4o-mini",
   GPT_4_TURBO = "gpt-4-turbo-preview",
   GPT_4_32K = "gpt-4-32k",
-  GEMINI_PRO = "gemini-pro",
+  GEMINI_PRO = "gemini-1.5-pro",
+  GEMINI_FLASH = "gemini-1.5-flash",
   GROQ = "llama3-70b-8192",
   OLLAMA = "ollama",
 }
@@ -29,7 +30,8 @@ export enum ChatModelDisplayNames {
   GPT_4_32K = "GPT-4 32K",
   AZURE_OPENAI = "AZURE OPENAI",
   CLAUDE = "CLAUDE",
-  GEMINI_PRO = "GEMINI PRO",
+  GEMINI_PRO = "GEMINI 1.5 PRO",
+  GEMINI_FLASH = "GEMINI 1.5 FLASH",
   OPENROUTERAI = "OPENROUTER.AI",
   GROQ = "GROQ",
   OLLAMA = "OLLAMA (LOCAL)",
@@ -49,7 +51,10 @@ export const OPENAI_MODELS = new Set([
 
 export const AZURE_MODELS = new Set([ChatModelDisplayNames.AZURE_OPENAI]);
 
-export const GOOGLE_MODELS = new Set([ChatModelDisplayNames.GEMINI_PRO]);
+export const GOOGLE_MODELS = new Set([
+  ChatModelDisplayNames.GEMINI_PRO,
+  ChatModelDisplayNames.GEMINI_FLASH
+]);
 
 export const ANTHROPIC_MODELS = new Set([ChatModelDisplayNames.CLAUDE]);
 
@@ -71,6 +76,7 @@ export const DISPLAY_NAME_TO_MODEL: Record<string, string> = {
   [ChatModelDisplayNames.GPT_4_32K]: ChatModels.GPT_4_32K,
   [ChatModelDisplayNames.AZURE_OPENAI]: "azure_openai",
   [ChatModelDisplayNames.GEMINI_PRO]: ChatModels.GEMINI_PRO,
+  [ChatModelDisplayNames.GEMINI_FLASH]: ChatModels.GEMINI_FLASH,
 };
 
 export const GROQ_MODELS = new Set([ChatModelDisplayNames.GROQ]);
