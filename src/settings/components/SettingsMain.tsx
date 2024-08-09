@@ -50,6 +50,7 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
   // Advanced settings
   const [userSystemPrompt, setUserSystemPrompt] = useState(plugin.settings.userSystemPrompt);
   const [openAIProxyBaseUrl, setOpenAIProxyBaseUrl] = useState(plugin.settings.openAIProxyBaseUrl);
+  const [useOpenAILocalProxy, setUseOpenAILocalProxy] = useState(plugin.settings.useOpenAILocalProxy);
   const [openAIProxyModelName, setOpenAIProxyModelName] = useState(plugin.settings.openAIProxyModelName);
   const [openAIEmbeddingProxyBaseUrl, setOpenAIEmbeddingProxyBaseUrl] = useState(plugin.settings.openAIEmbeddingProxyBaseUrl);
   const [openAIEmbeddingProxyModelName, setOpenAIEmbeddingProxyModelName] = useState(plugin.settings.openAIEmbeddingProxyModelName);
@@ -94,6 +95,7 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
     // Advanced settings
     plugin.settings.userSystemPrompt = userSystemPrompt;
     plugin.settings.openAIProxyBaseUrl = openAIProxyBaseUrl;
+    plugin.settings.useOpenAILocalProxy = useOpenAILocalProxy;
     plugin.settings.openAIProxyModelName = openAIProxyModelName;
     plugin.settings.openAIEmbeddingProxyBaseUrl = openAIEmbeddingProxyBaseUrl;
     plugin.settings.openAIEmbeddingProxyModelName = openAIEmbeddingProxyModelName;
@@ -232,6 +234,8 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
       <AdvancedSettings
         openAIProxyBaseUrl={openAIProxyBaseUrl}
         setOpenAIProxyBaseUrl={setOpenAIProxyBaseUrl}
+        useOpenAILocalProxy={useOpenAILocalProxy}
+        setUseOpenAILocalProxy={setUseOpenAILocalProxy}
         openAIProxyModelName={openAIProxyModelName}
         setOpenAIProxyModelName={setOpenAIProxyModelName}
         openAIEmbeddingProxyBaseUrl={openAIEmbeddingProxyBaseUrl}
