@@ -189,6 +189,9 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             <option value={ChatModelDisplayNames.GEMINI_PRO}>
               {ChatModelDisplayNames.GEMINI_PRO}
             </option>
+            <option value={ChatModelDisplayNames.GEMINI_FLASH}>
+              {ChatModelDisplayNames.GEMINI_FLASH}
+            </option>
             <option value={ChatModelDisplayNames.OPENROUTERAI}>
               {ChatModelDisplayNames.OPENROUTERAI}
             </option>
