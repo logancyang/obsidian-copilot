@@ -108,7 +108,22 @@ export default class ChatModelManager {
       },
     };
 
-    return { ...baseConfig, ...(providerConfig[chatModelProvider as keyof typeof providerConfig] || {}) };
+    const selectedProviderConfig =
+      providerConfig[chatModelProvider as keyof typeof providerConfig] || {};
+
+    // When useOpenAILocalProxy is enabled, use local proxy server
+    // Local proxy server will proxy requests to openAIProxyBaseUrl
+    if (
+      chatModelProvider === ModelProviders.OPENAI &&
+      params.useOpenAILocalProxy &&
+      params.openAIProxyBaseUrl
+    ) {
+      (
+        selectedProviderConfig as (typeof providerConfig)[ModelProviders.OPENAI]
+      ).openAIProxyBaseUrl = `http://localhost:${PROXY_SERVER_PORT}`;
+    }
+
+    return { ...baseConfig, ...selectedProviderConfig };
   }
 
   private buildModelMap() {
@@ -116,7 +131,8 @@ export default class ChatModelManager {
     const modelMap = ChatModelManager.modelMap;
 
     const OpenAIChatModel = this.langChainParams.openAIProxyBaseUrl
-      ? ProxyChatOpenAI : ChatOpenAI;
+      ? ProxyChatOpenAI
+      : ChatOpenAI;
 
     const modelConfigurations = [
       {

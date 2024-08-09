@@ -1,9 +1,15 @@
 import React from 'react';
-import { TextAreaComponent, TextComponent } from './SettingBlocks';
+import {
+  TextAreaComponent,
+  TextComponent,
+  ToggleComponent,
+} from './SettingBlocks';
 
 interface AdvancedSettingsProps {
   openAIProxyBaseUrl: string;
   setOpenAIProxyBaseUrl: (value: string) => void;
+  useOpenAILocalProxy: boolean;
+  setUseOpenAILocalProxy: (value: boolean) => void;
   openAIProxyModelName: string;
   setOpenAIProxyModelName: (value: string) => void;
   openAIEmbeddingProxyBaseUrl: string;
@@ -17,6 +23,8 @@ interface AdvancedSettingsProps {
 const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
   openAIProxyBaseUrl,
   setOpenAIProxyBaseUrl,
+  useOpenAILocalProxy,
+  setUseOpenAILocalProxy,
   openAIProxyModelName,
   setOpenAIProxyModelName,
   openAIEmbeddingProxyBaseUrl,
@@ -40,6 +48,12 @@ const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
         value={openAIProxyBaseUrl}
         onChange={setOpenAIProxyBaseUrl}
         placeholder="https://openai.example.com/v1"
+      />
+      <ToggleComponent
+        name="Use local proxy server for OpenAI"
+        description="Enable if your proxy base URL results in CORS errors."
+        value={useOpenAILocalProxy}
+        onChange={setUseOpenAILocalProxy}
       />
       <TextComponent
         name="OpenAI Proxy Model Name"

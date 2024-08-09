@@ -8,7 +8,7 @@ import { ProxyServer } from "@/proxyServer";
 import { ChatMessage } from "@/sharedState";
 import { getFileContent, getFileName } from "@/utils";
 import { Notice, Vault } from "obsidian";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 import { ChainType } from "@/chainFactory";
 import {
@@ -19,7 +19,6 @@ import {
   UseActiveNoteAsContextIcon,
 } from "@/components/Icons";
 import { stringToChainType } from "@/utils";
-import React from "react";
 
 interface ChatIconsProps {
   currentModel: string;
@@ -62,31 +61,31 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
     const selectedModel = event.target.value;
     setCurrentModel(event.target.value);
 
-    if (selectedModel === ChatModelDisplayNames.CLAUDE) {
-      // Start the proxy server when CLAUDE is selected
-      await proxyServer.startProxyServer('https://api.anthropic.com/');
+    // Start proxy server based on the selected model & settings
+    const proxyServerURL = proxyServer.getProxyURL(selectedModel);
+    if (proxyServerURL) {
+      await proxyServer.startProxyServer(proxyServerURL, selectedModel !== ChatModelDisplayNames.CLAUDE);
     } else {
-      // Stop the proxy server when another model is selected
       await proxyServer.stopProxyServer();
     }
   };
 
   useEffect(() => {
-    // If Claude is the default, start the proxy server
-    const startProxyServerForClaude = async () => {
-      if (currentModel === ChatModelDisplayNames.CLAUDE) {
-        await proxyServer.startProxyServer('https://api.anthropic.com/');
-      }
+    const startProxyServerForClaude = async (proxyServerURL: string) => {
+      await proxyServer.startProxyServer(proxyServerURL, currentModel !== ChatModelDisplayNames.CLAUDE);
     };
 
     // Call the function on component mount
-    startProxyServerForClaude();
+    const proxyServerURL = proxyServer.getProxyURL(currentModel);
+    if (proxyServerURL) {
+      startProxyServerForClaude(proxyServerURL);
+    }
 
     // Cleanup function to stop the proxy server when the component unmounts
     return () => {
       proxyServer.stopProxyServer().catch(console.error);
     };
-  }, [currentModel, proxyServer]);
+  }, []);
 
   const handleChainChange = async (
     event: React.ChangeEvent<HTMLSelectElement>
