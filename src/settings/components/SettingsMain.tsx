@@ -23,7 +23,10 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
   // API settings
   const [openAIApiKey, setOpenAIApiKey] = useState(plugin.settings.openAIApiKey);
   const [openAIOrgId, setOpenAIOrgId] = useState(plugin.settings.openAIOrgId);
+  const [openAICustomModel, setOpenAICustomModel] = useState(plugin.settings.openAICustomModel);
+
   const [googleApiKey, setGoogleApiKey] = useState(plugin.settings.googleApiKey);
+  const [googleCustomModel, setGoogleCustomModel] = useState(plugin.settings.googleCustomModel);
 
   const [anthropicApiKey, setAnthropicApiKey] = useState(plugin.settings.anthropicApiKey);
   const [anthropicModel, setAnthropicModel] = useState(plugin.settings.anthropicModel);
@@ -72,7 +75,11 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
     // API settings
     plugin.settings.openAIApiKey = openAIApiKey;
     plugin.settings.openAIOrgId = openAIOrgId;
+    plugin.settings.openAICustomModel = openAICustomModel;
+
     plugin.settings.googleApiKey = googleApiKey;
+    plugin.settings.googleCustomModel = googleCustomModel;
+
     plugin.settings.anthropicApiKey = anthropicApiKey;
     plugin.settings.anthropicModel = anthropicModel;
     plugin.settings.openRouterAiApiKey = openRouterAiApiKey;
@@ -194,8 +201,12 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
         setOpenAIApiKey={setOpenAIApiKey}
         openAIOrgId={openAIOrgId}
         setOpenAIOrgId={setOpenAIOrgId}
+        openAICustomModel={openAICustomModel}
+        setOpenAICustomModel={setOpenAICustomModel}
         googleApiKey={googleApiKey}
         setGoogleApiKey={setGoogleApiKey}
+        googleCustomModel={googleCustomModel}
+        setGoogleCustomModel={setGoogleCustomModel}
         anthropicApiKey={anthropicApiKey}
         setAnthropicApiKey={setAnthropicApiKey}
         anthropicModel={anthropicModel}

@@ -32,6 +32,7 @@ export interface ModelConfig {
 export interface LangChainParams {
   openAIApiKey: string;
   openAIOrgId: string;
+  openAICustomModel: string;
   huggingfaceApiKey: string;
   cohereApiKey: string;
   anthropicApiKey: string;
@@ -42,6 +43,7 @@ export interface LangChainParams {
   azureOpenAIApiVersion: string;
   azureOpenAIApiEmbeddingDeploymentName: string;
   googleApiKey: string;
+  googleCustomModel: string;
   openRouterAiApiKey: string;
   model: string;
   modelDisplayName: string;

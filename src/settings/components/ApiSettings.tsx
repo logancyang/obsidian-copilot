@@ -8,8 +8,12 @@ interface ApiSettingsProps {
   setOpenAIApiKey: (value: string) => void;
   openAIOrgId: string;
   setOpenAIOrgId: (value: string) => void;
+  openAICustomModel: string;
+  setOpenAICustomModel: (value: string) => void;
   googleApiKey: string;
   setGoogleApiKey: (value: string) => void;
+  googleCustomModel: string;
+  setGoogleCustomModel: (value: string) => void;
   anthropicApiKey: string;
   setAnthropicApiKey: (value: string) => void;
   anthropicModel: string;
@@ -39,8 +43,12 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
   setOpenAIApiKey,
   openAIOrgId,
   setOpenAIOrgId,
+  openAICustomModel,
+  setOpenAICustomModel,
   googleApiKey,
   setGoogleApiKey,
+  googleCustomModel,
+  setGoogleCustomModel,
   anthropicApiKey,
   setAnthropicApiKey,
   anthropicModel,
@@ -66,8 +74,8 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
 }) => {
   return (
     <div>
-      <br/>
-      <br/>
+      <br />
+      <br />
       <h1>API Settings</h1>
       <p>
         All your API keys are stored locally.
@@ -92,7 +100,15 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
             </a>
           </p>
           <ApiSetting
-            title="OpenAI Organization ID"
+            title="OpenAI Custom Model Name (optional)"
+            description="Warning: overrides any OpenAI model in the dropdown if set."
+            value={openAICustomModel}
+            setValue={setOpenAICustomModel}
+            placeholder="Enter custom model name"
+            type="text"
+          />
+          <ApiSetting
+            title="OpenAI Organization ID (optional)"
             value={openAIOrgId}
             setValue={setOpenAIOrgId}
             placeholder="Enter OpenAI Organization ID if applicable"
@@ -123,6 +139,14 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
             <br />
             Your API key is stored locally and is only used to make requests to Google's services.
           </p>
+          <ApiSetting
+            title="Google Custom Model Name (optional)"
+            description="Warning: overrides any Google model in the dropdown if set."
+            value={googleCustomModel}
+            setValue={setGoogleCustomModel}
+            placeholder="Enter custom model name"
+            type="text"
+          />
         </div>
       </Collapsible>
 

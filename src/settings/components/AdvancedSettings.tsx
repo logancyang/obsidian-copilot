@@ -36,11 +36,15 @@ const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
 }) => {
   return (
     <div>
-      <br/>
-      <br/>
+      <br />
+      <br />
       <h1>Advanced Settings</h1>
       <div className="warning-message">
         OpenAI Proxy settings override the default OpenAI parameters, meaning now your OpenAI models are routed to this provider instead! Clear these fields to use OpenAI again.
+        <br />
+        This is in effect only when you pick any OpenAI model in the model dropdown.
+        <br />
+        If your provider needs an API key, use the OpenAI API key field above.
       </div>
       <TextComponent
         name="OpenAI Proxy Base URL"
@@ -60,7 +64,7 @@ const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
         description="The actual model name you want to use with your provider. Overrides the OpenAI model name you pick in the Copilot Chat model selection. Note: non-OpenAI models picked will not be overridden!"
         value={openAIProxyModelName}
         onChange={setOpenAIProxyModelName}
-        placeholder="gpt-3.5-turbo"
+        placeholder="gpt-4o-mini"
       />
       <TextComponent
         name="OpenAI Embedding Proxy Base URL"
