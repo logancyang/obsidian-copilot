@@ -144,6 +144,26 @@ export const VAULT_VECTOR_STORE_STRATEGIES = [
 
 export const PROXY_SERVER_PORT = 53001;
 
+export const COMMAND_IDS = {
+  FIX_GRAMMAR: "fix-grammar-prompt",
+  SUMMARIZE: "summarize-prompt",
+  GENERATE_TOC: "generate-toc-prompt",
+  GENERATE_GLOSSARY: "generate-glossary-prompt",
+  SIMPLIFY: "simplify-prompt",
+  EMOJIFY: "emojify-prompt",
+  REMOVE_URLS: "remove-urls-prompt",
+  REWRITE_TWEET: "rewrite-tweet-prompt",
+  REWRITE_TWEET_THREAD: "rewrite-tweet-thread-prompt",
+  MAKE_SHORTER: "make-shorter-prompt",
+  MAKE_LONGER: "make-longer-prompt",
+  ELI5: "eli5-prompt",
+  PRESS_RELEASE: "press-release-prompt",
+  TRANSLATE: "translate-selection-prompt",
+  CHANGE_TONE: "change-tone-prompt",
+  COUNT_TOKENS: "count-tokens",
+  COUNT_TOTAL_VAULT_TOKENS: "count-total-vault-tokens",
+};
+
 export const DEFAULT_SETTINGS: CopilotSettings = {
   openAIApiKey: "",
   openAIOrgId: "",
@@ -161,8 +181,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   googleCustomModel: "",
   openRouterAiApiKey: "",
   openRouterModel: "cognitivecomputations/dolphin-mixtral-8x7b",
-  defaultModel: ChatModels.GPT_4_TURBO,
-  defaultModelDisplayName: ChatModelDisplayNames.GPT_4_TURBO,
+  defaultModel: ChatModels.GPT_4o,
+  defaultModelDisplayName: ChatModelDisplayNames.GPT_4o,
   embeddingModel: EmbeddingModels.OPENAI_EMBEDDING_SMALL,
   temperature: 0.1,
   maxTokens: 1000,
@@ -187,4 +207,66 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   maxSourceChunks: 3,
   groqModel: "llama3-70b-8192",
   groqApiKey: "",
+  enabledCommands: {
+    [COMMAND_IDS.FIX_GRAMMAR]: {
+      enabled: true,
+      name: "Fix grammar and spelling of selection",
+    },
+    [COMMAND_IDS.SUMMARIZE]: {
+      enabled: true,
+      name: "Summarize selection",
+    },
+    [COMMAND_IDS.GENERATE_TOC]: {
+      enabled: true,
+      name: "Generate table of contents for selection",
+    },
+    [COMMAND_IDS.GENERATE_GLOSSARY]: {
+      enabled: true,
+      name: "Generate glossary for selection",
+    },
+    [COMMAND_IDS.SIMPLIFY]: {
+      enabled: true,
+      name: "Simplify selection",
+    },
+    [COMMAND_IDS.EMOJIFY]: {
+      enabled: true,
+      name: "Emojify selection",
+    },
+    [COMMAND_IDS.REMOVE_URLS]: {
+      enabled: true,
+      name: "Remove URLs from selection",
+    },
+    [COMMAND_IDS.REWRITE_TWEET]: {
+      enabled: true,
+      name: "Rewrite selection to a tweet",
+    },
+    [COMMAND_IDS.REWRITE_TWEET_THREAD]: {
+      enabled: true,
+      name: "Rewrite selection to a tweet thread",
+    },
+    [COMMAND_IDS.MAKE_SHORTER]: {
+      enabled: true,
+      name: "Make selection shorter",
+    },
+    [COMMAND_IDS.MAKE_LONGER]: {
+      enabled: true,
+      name: "Make selection longer",
+    },
+    [COMMAND_IDS.ELI5]: {
+      enabled: true,
+      name: "Explain selection like I'm 5",
+    },
+    [COMMAND_IDS.PRESS_RELEASE]: {
+      enabled: true,
+      name: "Rewrite selection to a press release",
+    },
+    [COMMAND_IDS.TRANSLATE]: {
+      enabled: true,
+      name: "Translate selection",
+    },
+    [COMMAND_IDS.CHANGE_TONE]: {
+      enabled: true,
+      name: "Change tone of selection",
+    },
+  },
 };

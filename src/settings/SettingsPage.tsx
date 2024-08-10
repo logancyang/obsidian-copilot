@@ -47,6 +47,7 @@ export interface CopilotSettings {
   qaExclusionPaths: string;
   groqModel: string;
   groqApiKey: string;
+  enabledCommands: Record<string, { enabled: boolean; name: string; }>;
 }
 
 export class CopilotSettingTab extends PluginSettingTab {

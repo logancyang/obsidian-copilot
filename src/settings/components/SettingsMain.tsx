@@ -4,6 +4,7 @@ import React, { Fragment, useState } from 'react';
 import { ChatModelDisplayNames, DEFAULT_SETTINGS, DISPLAY_NAME_TO_MODEL } from '../../constants';
 import AdvancedSettings from './AdvancedSettings';
 import ApiSettings from './ApiSettings';
+import CommandToggleSettings from './CommandToggleSettings';
 import LocalCopilotSettings from './LocalCopilotSettings';
 import QASettings from './QASettings';
 import { DropdownComponent, SliderComponent, TextComponent } from './SettingBlocks';
@@ -63,6 +64,9 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
   const [ollamaModel, setOllamaModel] = useState(plugin.settings.ollamaModel);
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState(plugin.settings.ollamaBaseUrl);
 
+  // Built-in Command Toggles
+  const [enabledCommands, setEnabledCommands] = useState(plugin.settings.enabledCommands);
+
   // NOTE: When new settings are added, make sure to add them to saveAllSettings
   const saveAllSettings = async () => {
     plugin.settings.defaultModelDisplayName = defaultModelDisplayName;
@@ -111,6 +115,8 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
     plugin.settings.lmStudioBaseUrl = lmStudioBaseUrl;
     plugin.settings.ollamaModel = ollamaModel;
     plugin.settings.ollamaBaseUrl = ollamaBaseUrl;
+
+    plugin.settings.enabledCommands = enabledCommands;
 
     await plugin.saveSettings();
     await reloadPlugin();
@@ -193,6 +199,10 @@ export default function SettingsMain({ plugin, reloadPlugin }: SettingsMainProps
           onChange={async (value) => {
             setContextTurns(value);
           }}
+        />
+        <CommandToggleSettings
+          enabledCommands={enabledCommands}
+          setEnabledCommands={setEnabledCommands}
         />
       </div>
 
