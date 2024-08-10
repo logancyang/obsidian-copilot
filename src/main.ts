@@ -29,7 +29,15 @@ import {
 } from "@/utils";
 import VectorDBManager, { VectorStoreDocument } from "@/vectorDBManager";
 import { MD5 } from "crypto-js";
-import { Editor, Menu, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import {
+  Editor,
+  MarkdownView,
+  Menu,
+  Notice,
+  Plugin,
+  TFile,
+  WorkspaceLeaf,
+} from "obsidian";
 import PouchDB from "pouchdb";
 
 export default class CopilotPlugin extends Plugin {
@@ -107,7 +115,7 @@ export default class CopilotPlugin extends Plugin {
     this.addCommand({
       id: "add-custom-prompt",
       name: "Add custom prompt",
-      editorCallback: (editor: Editor) => {
+      callback: () => {
         new AddPromptModal(this.app, async (title: string, prompt: string) => {
           try {
             // Save the prompt to the database
@@ -126,7 +134,7 @@ export default class CopilotPlugin extends Plugin {
     this.addCommand({
       id: "apply-custom-prompt",
       name: "Apply custom prompt",
-      editorCallback: (editor: Editor) => {
+      callback: () => {
         this.fetchPromptTitles().then((promptTitles: string[]) => {
           new ListPromptModal(
             this.app,
@@ -146,11 +154,7 @@ export default class CopilotPlugin extends Plugin {
                   );
                   return;
                 }
-                this.processCustomPrompt(
-                  editor,
-                  "applyCustomPrompt",
-                  doc.prompt,
-                );
+                this.processCustomPrompt("applyCustomPrompt", doc.prompt);
               } catch (err) {
                 if (err.name === "not_found") {
                   new Notice(
@@ -170,12 +174,12 @@ export default class CopilotPlugin extends Plugin {
     this.addCommand({
       id: "apply-adhoc-prompt",
       name: "Apply ad-hoc custom prompt",
-      editorCallback: async (editor: Editor) => {
+      callback: async () => {
         const modal = new AdhocPromptModal(
           this.app,
           async (adhocPrompt: string) => {
             try {
-              this.processCustomPrompt(editor, "applyAdhocPrompt", adhocPrompt);
+              this.processCustomPrompt("applyAdhocPrompt", adhocPrompt);
             } catch (err) {
               console.error(err);
               new Notice("An error occurred.");
@@ -601,7 +605,7 @@ export default class CopilotPlugin extends Plugin {
     eventSubtype?: string,
     checkSelectedText = true,
   ) {
-    const selectedText = editor.getSelection();
+    const selectedText = await editor.getSelection();
 
     const isChatWindowActive =
       this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE).length > 0;
@@ -625,7 +629,24 @@ export default class CopilotPlugin extends Plugin {
     this.processText(editor, eventType, eventSubtype);
   }
 
-  processCustomPrompt(editor: Editor, eventType: string, customPrompt: string) {
+  private getCurrentEditorOrDummy(): Editor {
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    return {
+      getSelection: () => {
+        const selection = activeView?.editor?.getSelection();
+        if (selection) return selection;
+        // Default to the entire active file if no selection
+        const activeFile = this.app.workspace.getActiveFile();
+        return activeFile ? this.app.vault.cachedRead(activeFile) : "";
+      },
+      replaceSelection:
+        activeView?.editor?.replaceSelection.bind(activeView.editor) ||
+        (() => {}),
+    } as Partial<Editor> as Editor;
+  }
+
+  processCustomPrompt(eventType: string, customPrompt: string) {
+    const editor = this.getCurrentEditorOrDummy();
     this.processText(editor, eventType, customPrompt, false);
   }
 
