@@ -7,6 +7,7 @@ import SettingsMain from "./components/SettingsMain";
 export interface CopilotSettings {
   openAIApiKey: string;
   openAIOrgId: string;
+  openAICustomModel: string;
   huggingfaceApiKey: string;
   cohereApiKey: string;
   anthropicApiKey: string;
@@ -17,6 +18,7 @@ export interface CopilotSettings {
   azureOpenAIApiVersion: string;
   azureOpenAIApiEmbeddingDeploymentName: string;
   googleApiKey: string;
+  googleCustomModel: string;
   openRouterAiApiKey: string;
   openRouterModel: string;
   defaultModel: string;

@@ -53,7 +53,7 @@ export const AZURE_MODELS = new Set([ChatModelDisplayNames.AZURE_OPENAI]);
 
 export const GOOGLE_MODELS = new Set([
   ChatModelDisplayNames.GEMINI_PRO,
-  ChatModelDisplayNames.GEMINI_FLASH
+  ChatModelDisplayNames.GEMINI_FLASH,
 ]);
 
 export const ANTHROPIC_MODELS = new Set([ChatModelDisplayNames.CLAUDE]);
@@ -155,6 +155,7 @@ export const PROXY_SERVER_PORT = 53001;
 export const DEFAULT_SETTINGS: CopilotSettings = {
   openAIApiKey: "",
   openAIOrgId: "",
+  openAICustomModel: "",
   huggingfaceApiKey: "",
   cohereApiKey: "",
   anthropicApiKey: "",
@@ -165,6 +166,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   azureOpenAIApiVersion: "",
   azureOpenAIApiEmbeddingDeploymentName: "",
   googleApiKey: "",
+  googleCustomModel: "",
   openRouterAiApiKey: "",
   openRouterModel: "cognitivecomputations/dolphin-mixtral-8x7b",
   defaultModel: ChatModels.GPT_4_TURBO,
