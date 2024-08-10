@@ -149,8 +149,13 @@ const Chat: React.FC<ChatProps> = ({
       console.error('App instance is not available.');
       return;
     }
+
     // Save the chat history as a new note in the vault
-    const chatContent = chatHistory.map((message) => `**${message.sender}**: ${message.message}`).join('\n\n');
+    // Only visible messages are included
+    const chatContent = chatHistory
+      .filter(message => message.isVisible)
+      .map((message) => `**${message.sender}**: ${message.message}`)
+      .join('\n\n');
 
     try {
       // Check if the default folder exists or create it
