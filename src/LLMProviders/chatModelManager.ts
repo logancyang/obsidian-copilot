@@ -13,7 +13,6 @@ import {
 } from "@/constants";
 import EncryptionService from "@/encryptionService";
 import { ProxyChatOpenAI } from "@/langchainWrappers";
-import { getModelName } from "@/utils";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
@@ -212,8 +211,6 @@ export default class ChatModelManager {
     if (!ChatModelManager.modelMap.hasOwnProperty(modelDisplayName)) {
       throw new Error(`No model found for: ${modelDisplayName}`);
     }
-    // MUST update it since chatModelManager is a singleton.
-    this.langChainParams.model = getModelName(modelDisplayName);
 
     // Create and return the appropriate model
     const selectedModel = ChatModelManager.modelMap[modelDisplayName];
@@ -225,7 +222,11 @@ export default class ChatModelManager {
     }
 
     const modelConfig = this.getModelConfig(selectedModel.vendor);
-    new Notice(`Setting model: ${modelDisplayName}`);
+
+    // Update the langChainParams.model with the prioritized model name
+    // MUST update it since chatModelManager is a singleton.
+    this.langChainParams.model = modelConfig.modelName;
+    new Notice(`Setting model: ${modelConfig.modelName}`);
     try {
       const newModelInstance = new selectedModel.AIConstructor({
         ...modelConfig,
