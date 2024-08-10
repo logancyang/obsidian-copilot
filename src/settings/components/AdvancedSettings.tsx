@@ -64,7 +64,7 @@ const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
         description="The actual model name you want to use with your provider. Overrides the OpenAI model name you pick in the Copilot Chat model selection. Note: non-OpenAI models picked will not be overridden!"
         value={openAIProxyModelName}
         onChange={setOpenAIProxyModelName}
-        placeholder="gpt-3.5-turbo"
+        placeholder="gpt-4o-mini"
       />
       <TextComponent
         name="OpenAI Embedding Proxy Base URL"

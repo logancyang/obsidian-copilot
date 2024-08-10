@@ -7,8 +7,6 @@ export const DEFAULT_SYSTEM_PROMPT =
   "You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.";
 
 export enum ChatModels {
-  GPT_35_TURBO = "gpt-3.5-turbo",
-  GPT_35_TURBO_16K = "gpt-3.5-turbo-16k",
   GPT_4 = "gpt-4",
   GPT_4o = "gpt-4o",
   GPT_4o_mini = "gpt-4o-mini",
@@ -21,8 +19,6 @@ export enum ChatModels {
 }
 
 export enum ChatModelDisplayNames {
-  GPT_35_TURBO = "GPT-3.5",
-  GPT_35_TURBO_16K = "GPT-3.5 16K",
   GPT_4 = "GPT-4",
   GPT_4o = "GPT-4o",
   GPT_4o_mini = "GPT-4o mini",
@@ -39,8 +35,6 @@ export enum ChatModelDisplayNames {
 }
 
 export const OPENAI_MODELS = new Set([
-  ChatModelDisplayNames.GPT_35_TURBO,
-  ChatModelDisplayNames.GPT_35_TURBO_16K,
   ChatModelDisplayNames.GPT_4,
   ChatModelDisplayNames.GPT_4o,
   ChatModelDisplayNames.GPT_4o_mini,
@@ -67,8 +61,6 @@ export const OLLAMA_MODELS = new Set([ChatModelDisplayNames.OLLAMA]);
 export const LM_STUDIO_MODELS = new Set([ChatModelDisplayNames.LM_STUDIO]);
 
 export const DISPLAY_NAME_TO_MODEL: Record<string, string> = {
-  [ChatModelDisplayNames.GPT_35_TURBO]: ChatModels.GPT_35_TURBO,
-  [ChatModelDisplayNames.GPT_35_TURBO_16K]: ChatModels.GPT_35_TURBO_16K,
   [ChatModelDisplayNames.GPT_4]: ChatModels.GPT_4,
   [ChatModelDisplayNames.GPT_4o]: ChatModels.GPT_4o,
   [ChatModelDisplayNames.GPT_4o_mini]: ChatModels.GPT_4o_mini,

@@ -158,12 +158,6 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             value={currentModel}
             onChange={handleModelChange}
           >
-            <option value={ChatModelDisplayNames.GPT_35_TURBO}>
-              {ChatModelDisplayNames.GPT_35_TURBO}
-            </option>
-            <option value={ChatModelDisplayNames.GPT_35_TURBO_16K}>
-              {ChatModelDisplayNames.GPT_35_TURBO_16K}
-            </option>
             <option value={ChatModelDisplayNames.GPT_4}>
               {ChatModelDisplayNames.GPT_4}
             </option>
