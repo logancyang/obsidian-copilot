@@ -100,6 +100,25 @@ describe("getNotesFromPath", () => {
     expect(files).toEqual([]);
   });
 
+  it("should return only files from the specified subfolder path", async () => {
+    const vault = new Obsidian.Vault();
+    // Mock the getMarkdownFiles method to return our test structure
+    vault.getMarkdownFiles = jest
+      .fn()
+      .mockReturnValue([
+        { path: "folder/subfolder 1/eng/1.md" },
+        { path: "folder/subfolder 2/eng/3.md" },
+        { path: "folder/subfolder 1/eng/2.md" },
+        { path: "folder/other/note.md" },
+      ]);
+
+    const files = await getNotesFromPath(vault, "folder/subfolder 1/eng");
+    expect(files).toEqual([
+      { path: "folder/subfolder 1/eng/1.md" },
+      { path: "folder/subfolder 1/eng/2.md" },
+    ]);
+  });
+
   describe("processVariableNameForNotePath", () => {
     it("should return the note md filename", () => {
       const variableName = processVariableNameForNotePath("[[test]]");
