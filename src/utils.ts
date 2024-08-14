@@ -56,15 +56,30 @@ export const getNotesFromPath = async (
     return files;
   }
 
-  // Split the path to get the last folder name
-  const pathSegments = path.split("/");
-  const lastSegment = pathSegments[pathSegments.length - 1].toLowerCase();
+  // Normalize the input path
+  const normalizedPath = path.toLowerCase().replace(/^\/|\/$/g, "");
 
   return files.filter((file) => {
-    // Split the file path and get the last directory name
-    return (
-      isFolderMatch(file.path, lastSegment) || file.basename === lastSegment
-    );
+    // Normalize the file path
+    const normalizedFilePath = file.path.toLowerCase();
+    const filePathParts = normalizedFilePath.split("/");
+    const pathParts = normalizedPath.split("/");
+
+    // Check if the file path contains all parts of the input path in order
+    let filePathIndex = 0;
+    for (const pathPart of pathParts) {
+      while (filePathIndex < filePathParts.length) {
+        if (filePathParts[filePathIndex] === pathPart) {
+          break;
+        }
+        filePathIndex++;
+      }
+      if (filePathIndex >= filePathParts.length) {
+        return false;
+      }
+    }
+
+    return true;
   });
 };
 
@@ -512,7 +527,8 @@ export function extractNoteTitles(query: string): string[] {
 }
 
 /**
- * Process the variable name to generate a note path if it's enclosed in double brackets, otherwise return the variable name as is.
+ * Process the variable name to generate a note path if it's enclosed in double brackets,
+ * otherwise return the variable name as is.
  *
  * @param {string} variableName - The name of the variable to process
  * @return {string} The processed note path or the variable name itself
