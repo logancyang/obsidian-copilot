@@ -539,13 +539,6 @@ export default class CopilotPlugin extends Plugin {
         return !isPathInList(file.path, this.settings.qaExclusionPaths);
       });
 
-    const fileContents: string[] = await Promise.all(
-      files.map((file) => this.app.vault.cachedRead(file)),
-    );
-    const fileMetadatas = files.map((file) =>
-      this.app.metadataCache.getFileCache(file),
-    );
-
     const totalFiles = files.length;
     if (totalFiles === 0) {
       new Notice("Copilot vault index is up-to-date.");
@@ -559,36 +552,43 @@ export default class CopilotPlugin extends Plugin {
     );
 
     const errors: string[] = [];
-    const loadPromises = files.map(async (file, index) => {
+    for (const file of files) {
       try {
+        const fileContent = await this.app.vault.cachedRead(file);
+        const fileMetadata = this.app.metadataCache.getFileCache(file);
         const noteFile = {
           basename: file.basename,
           path: file.path,
           mtime: file.stat.mtime,
-          content: fileContents[index],
-          metadata: fileMetadatas[index]?.frontmatter ?? {},
+          content: fileContent,
+          metadata: fileMetadata?.frontmatter ?? {},
         };
-        const result = await VectorDBManager.indexFile(
+
+        await VectorDBManager.indexFile(
           this.dbVectorStores,
           embeddingInstance,
           noteFile,
         );
 
+        if (this.settings.debug)
+          console.log(`Finished indexing file: ${file.path}`);
+
         indexedCount++;
         indexNotice.setMessage(
           `Copilot is indexing your vault...\n${indexedCount}/${totalFiles} files processed.`,
         );
-        return result;
+
+        // TODO: Make the delay configurable. 1ms for now to avoid LM Studio issue.
+        await new Promise((resolve) => setTimeout(resolve, 1));
       } catch (err) {
-        console.error("Error indexing file:", err);
+        console.error("Error indexing file:", file.basename, "Error:", err);
         errors.push(`Error indexing file: ${file.basename}`);
       }
-    });
+    }
 
-    await Promise.all(loadPromises);
     setTimeout(() => {
       indexNotice.hide();
-    }, 2000);
+    }, 3000);
 
     if (errors.length > 0) {
       new Notice(

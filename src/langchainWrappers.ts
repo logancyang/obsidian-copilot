@@ -23,7 +23,7 @@ export class ProxyOpenAIEmbeddings extends OpenAIEmbeddings {
     // Reinitialize the client with the updated clientConfig
     this["client"] = new OpenAI({
       ...this["clientConfig"],
-      baseURL: fields.openAIEmbeddingProxyBaseUrl,
+      baseURL: fields.baseUrl || fields.openAIEmbeddingProxyBaseUrl,
     });
   }
 }

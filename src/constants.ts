@@ -112,7 +112,10 @@ export enum EmbeddingModels {
   OPENAI_EMBEDDING_LARGE = "text-embedding-3-large",
   AZURE_OPENAI = "azure-openai",
   COHEREAI = "cohereai",
-  OLLAMA_NOMIC = "ollama-nomic-embed-text",
+  OLLAMA_NOMIC = "ollama/nomic-embed-text (local API)",
+  // LM STUDIO Embedding Models do not support configurable context length yet
+  LM_STUDIO_NOMIC_EMBED_TEXT_V1_5 = "lmstudio/nomic-embed-text-v1.5-GGUF (local API)",
+  LM_STUDIO_BGE_LARGE_EN_V1_5 = "lmstudio/bge-large-en-v1.5-gguf (local API)", // only 512 context length
 }
 
 export const EMBEDDING_MODEL_TO_PROVIDERS: Record<string, string> = {
@@ -122,10 +125,16 @@ export const EMBEDDING_MODEL_TO_PROVIDERS: Record<string, string> = {
   [EmbeddingModels.AZURE_OPENAI]: ModelProviders.AZURE_OPENAI,
   [EmbeddingModels.COHEREAI]: ModelProviders.COHEREAI,
   [EmbeddingModels.OLLAMA_NOMIC]: ModelProviders.OLLAMA,
+  [EmbeddingModels.LM_STUDIO_NOMIC_EMBED_TEXT_V1_5]: ModelProviders.LM_STUDIO,
+  [EmbeddingModels.LM_STUDIO_BGE_LARGE_EN_V1_5]: ModelProviders.LM_STUDIO,
 };
 
 // Embedding Models
 export const NOMIC_EMBED_TEXT = "nomic-embed-text";
+export const LM_STUDIO_NOMIC_EMBED_TEXT_V1_5 =
+  "nomic-ai/nomic-embed-text-v1.5-GGUF";
+export const LM_STUDIO_BGE_LARGE_EN_V1_5 =
+  "CompendiumLabs/bge-large-en-v1.5-gguf";
 // export const DISTILBERT_NLI = 'sentence-transformers/distilbert-base-nli-mean-tokens';
 // export const INSTRUCTOR_XL = 'hkunlp/instructor-xl'; // Inference API is off for this
 // export const MPNET_V2 = 'sentence-transformers/all-mpnet-base-v2'; // Inference API returns 400

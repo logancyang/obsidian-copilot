@@ -2,6 +2,9 @@
 import { LangChainParams } from "@/aiParams";
 import {
   EMBEDDING_MODEL_TO_PROVIDERS,
+  EmbeddingModels,
+  LM_STUDIO_BGE_LARGE_EN_V1_5,
+  LM_STUDIO_NOMIC_EMBED_TEXT_V1_5,
   ModelProviders,
   NOMIC_EMBED_TEXT,
 } from "@/constants";
@@ -130,6 +133,19 @@ export default class EmbeddingManager {
             : {}),
           // TODO: Add custom ollama embedding model setting once they have other models
           model: NOMIC_EMBED_TEXT,
+        });
+      case ModelProviders.LM_STUDIO:
+        return new ProxyOpenAIEmbeddings({
+          openAIApiKey: "lm-studio",
+          ...(this.langChainParams.lmStudioBaseUrl
+            ? { baseUrl: this.langChainParams.lmStudioBaseUrl }
+            : {}),
+          // TODO: Add custom LM Studio embedding model setting once they have other models
+          model:
+            this.langChainParams.embeddingModel ==
+            EmbeddingModels.LM_STUDIO_NOMIC_EMBED_TEXT_V1_5
+              ? LM_STUDIO_NOMIC_EMBED_TEXT_V1_5
+              : LM_STUDIO_BGE_LARGE_EN_V1_5,
         });
       default:
         console.error(
