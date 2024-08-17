@@ -47,7 +47,6 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
 }) => {
   const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
 
-
   const handleChainChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedChain(stringToChainType(event.target.value));
   };
@@ -115,7 +114,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             id="aiModelSelect"
             className="chat-icon-selection"
             value={currentModel}
-            // onChange={handleModelChange}
+            onChange={handleModelChange}
           >
             <option value={ChatModelDisplayNames.GPT_4}>{ChatModelDisplayNames.GPT_4}</option>
             <option value={ChatModelDisplayNames.GPT_4o}>{ChatModelDisplayNames.GPT_4o}</option>
