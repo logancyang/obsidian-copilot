@@ -1,6 +1,5 @@
 import { SetChainOptions } from "@/aiParams";
 import { AI_SENDER, ChatModelDisplayNames, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
-import { ProxyServer } from "@/proxyServer";
 import { ChatMessage } from "@/sharedState";
 import { getFileContent, getFileName } from "@/utils";
 import { Notice, Vault } from "obsidian";
@@ -28,7 +27,6 @@ interface ChatIconsProps {
   addMessage: (message: ChatMessage) => void;
   vault: Vault;
   vault_qa_strategy: string;
-  proxyServer: ProxyServer;
   debug?: boolean;
 }
 
@@ -45,46 +43,10 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   addMessage,
   vault,
   vault_qa_strategy,
-  proxyServer,
   debug,
 }) => {
   const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
 
-  const handleModelChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedModel = event.target.value;
-    setCurrentModel(event.target.value);
-
-    // Start proxy server based on the selected model & settings
-    const proxyServerURL = proxyServer.getProxyURL(selectedModel);
-    if (proxyServerURL) {
-      await proxyServer.startProxyServer(
-        proxyServerURL,
-        selectedModel !== ChatModelDisplayNames.CLAUDE
-      );
-    } else {
-      await proxyServer.stopProxyServer();
-    }
-  };
-
-  useEffect(() => {
-    const startProxyServerForClaude = async (proxyServerURL: string) => {
-      await proxyServer.startProxyServer(
-        proxyServerURL,
-        currentModel !== ChatModelDisplayNames.CLAUDE
-      );
-    };
-
-    // Call the function on component mount
-    const proxyServerURL = proxyServer.getProxyURL(currentModel);
-    if (proxyServerURL) {
-      startProxyServerForClaude(proxyServerURL);
-    }
-
-    // Cleanup function to stop the proxy server when the component unmounts
-    return () => {
-      proxyServer.stopProxyServer().catch(console.error);
-    };
-  }, []);
 
   const handleChainChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedChain(stringToChainType(event.target.value));
@@ -153,7 +115,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             id="aiModelSelect"
             className="chat-icon-selection"
             value={currentModel}
-            onChange={handleModelChange}
+            // onChange={handleModelChange}
           >
             <option value={ChatModelDisplayNames.GPT_4}>{ChatModelDisplayNames.GPT_4}</option>
             <option value={ChatModelDisplayNames.GPT_4o}>{ChatModelDisplayNames.GPT_4o}</option>

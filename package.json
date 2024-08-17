@@ -59,6 +59,7 @@
     "web-streams-polyfill": "^3.3.2"
   },
   "dependencies": {
+    "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
     "@huggingface/inference": "^2.6.4",
     "@koa/cors": "^5.0.0",
     "@langchain/anthropic": "^0.1.1",

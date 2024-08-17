@@ -1,5 +1,5 @@
 {
-  "id": "copilot",
+  "id": "copilot-dev",
   "name": "Copilot",
   "version": "2.5.5",
   "minAppVersion": "0.15.0",
@@ -9,6 +9,5 @@
   "fundingUrl": {
     "Buy Me a Coffee": "https://www.buymeacoffee.com/logancyang",
     "GitHub Sponsor": "https://github.com/sponsors/logancyang"
-  },
-  "isDesktopOnly": true
+  }
 }
