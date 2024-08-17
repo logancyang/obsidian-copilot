@@ -1,6 +1,6 @@
 {
-	"id": "copilot",
-	"name": "Copilot",
+	"id": "copilot-dev",
+	"name": "Copilot Dev",
 	"version": "2.5.4",
 	"minAppVersion": "0.15.0",
 	"description": "A ChatGPT Copilot in Obsidian.",
@@ -9,6 +9,5 @@
 	"fundingUrl": {
 		"Buy Me a Coffee": "https://www.buymeacoffee.com/logancyang",
 		"GitHub Sponsor": "https://github.com/sponsors/logancyang"
-	},
-	"isDesktopOnly": true
+	}
 }

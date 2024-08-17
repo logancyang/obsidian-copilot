@@ -1,4 +1,3 @@
-import builtins from "builtin-modules";
 import esbuild from "esbuild";
 import svgPlugin from "esbuild-plugin-svg";
 import process from "process";
@@ -32,8 +31,7 @@ const context = await esbuild.context({
     "@codemirror/view",
     "@lezer/common",
     "@lezer/highlight",
-    "@lezer/lr",
-    ...builtins],
+    "@lezer/lr"],
   format: "cjs",
   target: "es2018",
   logLevel: "info",
@@ -41,6 +39,9 @@ const context = await esbuild.context({
   treeShaking: true,
   outfile: "main.js",
   plugins: [svgPlugin(), wasmPlugin],
+  define: {
+    'global': 'window',
+  },
 });
 
 if (prod) {
