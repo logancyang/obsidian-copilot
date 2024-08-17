@@ -122,7 +122,7 @@ If your plugin does not need CSS, delete this file.
   display: flex;
   justify-content: center;
   align-items: center;
-  width: 32px;
+  width: 52px;
   height: 32px;
   background-color: transparent;
   border: none;
