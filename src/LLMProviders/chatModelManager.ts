@@ -12,7 +12,7 @@ import {
   PROXY_SERVER_PORT,
 } from "@/constants";
 import EncryptionService from "@/encryptionService";
-import { ProxyChatOpenAI } from "@/langchainWrappers";
+import { ChatAnthropicWrapped, ProxyChatOpenAI } from "@/langchainWrappers";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
@@ -73,7 +73,7 @@ export default class ChatModelManager {
         openAIProxyBaseUrl: params.openAIProxyBaseUrl,
       },
       [ModelProviders.ANTHROPIC]: {
-        anthropicApiUrl: `http://localhost:${PROXY_SERVER_PORT}`,
+        anthropicApiUrl: 'https://api.anthropic.com',
         anthropicApiKey: decrypt(params.anthropicApiKey),
         modelName: params.anthropicModel,
       },
@@ -154,7 +154,7 @@ export default class ChatModelManager {
       {
         models: ANTHROPIC_MODELS,
         apiKey: this.langChainParams.anthropicApiKey,
-        constructor: ChatAnthropic,
+        constructor: ChatAnthropicWrapped,
         vendor: ModelProviders.ANTHROPIC,
       },
       {

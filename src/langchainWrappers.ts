@@ -1,7 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { AnthropicInput, ChatAnthropic } from "@langchain/anthropic";
 import { ChatOpenAI } from "langchain/chat_models/openai";
 import { OpenAIEmbeddings } from "langchain/embeddings/openai";
+import { requestUrl } from "obsidian";
 import OpenAI from "openai";
+import { isObject } from "util";
 
 // Migrated to OpenAI v4 client from v3: https://github.com/openai/openai-node/discussions/217
 export class ProxyChatOpenAI extends ChatOpenAI {
@@ -26,4 +29,54 @@ export class ProxyOpenAIEmbeddings extends OpenAIEmbeddings {
       baseURL: fields.openAIEmbeddingProxyBaseUrl,
     });
   }
+}
+
+export class ChatAnthropicWrapped extends ChatAnthropic {
+  constructor(fields?: Partial<AnthropicInput>) {
+    super(fields);
+
+    // Override the client with a custom one that uses myFetch
+    this.clientOptions.fetch = safeFetch as any;
+  }
+}
+
+async function safeFetch(url: string, options: RequestInit): Promise<Response> {
+  // Necessary to remove 'content-length' in order to make headers compatible with requestUrl()
+  delete (options.headers as Record<string, string>)['content-length'];
+  // return requestUrl({ url, contentType: 'application/json', headers: options.headers as Record<string, string>, throw: true, method: options.method?.toUpperCase(), body: options.body?.toString() });
+  const response = await requestUrl({ url, contentType: 'application/json', headers: options.headers as Record<string, string>, method: 'POST', body: options.body });
+
+  return {
+    ok: response.status >= 200 && response.status < 300,
+    status: response.status,
+    statusText: response.status.toString(),
+    headers: new Headers(response.headers),
+    url: url,
+    type: 'basic',
+    redirected: false,
+    body: createReadableStreamFromString(response.text),
+    bodyUsed: true,
+    json: () => { throw new Error('not implemented') }, 
+    text: async () => response.text, 
+    clone: () => { throw new Error('not implemented') }, 
+    arrayBuffer: () => { throw new Error('not implemented') },
+    blob: () => { throw new Error('not implemented') },
+    formData: () => { throw new Error('not implemented') }
+  };
+}
+
+function createReadableStreamFromString(input: string) {
+  return new ReadableStream({
+    start(controller) {
+      // Convert the input string to a Uint8Array
+      const encoder = new TextEncoder();
+      const uint8Array = encoder.encode(input);
+
+      // Push the data to the stream
+      controller.enqueue(uint8Array);
+
+      // Close the stream
+      controller.close();
+    }
+  });
 }

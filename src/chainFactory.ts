@@ -5,6 +5,8 @@ import { BaseLanguageModel } from "langchain/base_language";
 import { BaseChatMemory } from "langchain/memory";
 import { ChatPromptTemplate, PromptTemplate } from "langchain/prompts";
 import { formatDocumentsAsString } from "langchain/util/document";
+import { requestUrl } from "obsidian";
+import { Tool } from "langchain/tools";
 
 export interface LLMChainInput {
   llm: BaseLanguageModel;
@@ -191,6 +193,20 @@ class ChainFactory {
 
     const conversationalRetrievalQAChain = standaloneQuestionChain.pipe(answerChain);
     return conversationalRetrievalQAChain as RunnableSequence;
+  }
+}
+
+class ObsidianRequestTool extends Tool {
+  name = "ObsidianRequest";
+  description = "Make HTTP requests using Obsidian's requestUrl function";
+
+  async _call(url: string) {
+    try {
+      const response = await requestUrl({ url });
+      return JSON.stringify(response.json);
+    } catch (error) {
+      return `Error making request: ${error.message}`;
+    }
   }
 }
 
