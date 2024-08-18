@@ -84,7 +84,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           )}
         </div>
       </div>
-      <button onClick={copyToClipboard} className="copy-message-button">
+      <button onClick={copyToClipboard} className="copy-message-button clickable-icon">
         {isCopied ? <CheckIcon /> : <CopyClipboardIcon />}
       </button>
     </div>

@@ -114,7 +114,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             id="aiModelSelect"
             className="chat-icon-selection"
             value={currentModel}
-            onChange={handleModelChange}
+            onChange={handleChainChange}
           >
             <option value={ChatModelDisplayNames.GPT_4}>{ChatModelDisplayNames.GPT_4}</option>
             <option value={ChatModelDisplayNames.GPT_4o}>{ChatModelDisplayNames.GPT_4o}</option>
@@ -149,7 +149,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           <span className="tooltip-text">Model Selection</span>
         </div>
       </div>
-      <button className="chat-icon-button" onClick={onNewChat}>
+      <button className="chat-icon-button clickable-icon" onClick={onNewChat}>
         <RefreshIcon className="icon-scaler" />
         <span className="tooltip-text">
           New Chat
@@ -157,7 +157,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           (unsaved history will be lost)
         </span>
       </button>
-      <button className="chat-icon-button" onClick={onSaveAsNote}>
+      <button className="chat-icon-button clickable-icon" onClick={onSaveAsNote}>
         <SaveAsNoteIcon className="icon-scaler" />
         <span className="tooltip-text">Save as Note</span>
       </button>
@@ -177,7 +177,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         </div>
       </div>
       {selectedChain === "llm_chain" && (
-        <button className="chat-icon-button" onClick={onSendActiveNoteToPrompt}>
+        <button className="chat-icon-button clickable-icon" onClick={onSendActiveNoteToPrompt}>
           <SendActiveNoteToPromptIcon className="icon-scaler" />
           <span className="tooltip-text">
             Send Note(s) to Prompt
@@ -191,7 +191,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         </button>
       )}
       {selectedChain === "long_note_qa" && (
-        <button className="chat-icon-button" onClick={onForceRebuildActiveNoteContext}>
+        <button className="chat-icon-button clickable-icon" onClick={onForceRebuildActiveNoteContext}>
           <UseActiveNoteAsContextIcon className="icon-scaler" />
           <span className="tooltip-text">
             Refresh Index
@@ -201,7 +201,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         </button>
       )}
       {selectedChain === "vault_qa" && (
-        <button className="chat-icon-button" onClick={onRefreshVaultContext}>
+        <button className="chat-icon-button clickable-icon" onClick={onRefreshVaultContext}>
           <UseActiveNoteAsContextIcon className="icon-scaler" />
           <span className="tooltip-text">
             Refresh Index

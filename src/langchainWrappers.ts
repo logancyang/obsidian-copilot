@@ -43,8 +43,7 @@ export class ChatAnthropicWrapped extends ChatAnthropic {
 async function safeFetch(url: string, options: RequestInit): Promise<Response> {
   // Necessary to remove 'content-length' in order to make headers compatible with requestUrl()
   delete (options.headers as Record<string, string>)['content-length'];
-  // return requestUrl({ url, contentType: 'application/json', headers: options.headers as Record<string, string>, throw: true, method: options.method?.toUpperCase(), body: options.body?.toString() });
-  const response = await requestUrl({ url, contentType: 'application/json', headers: options.headers as Record<string, string>, method: 'POST', body: options.body });
+  const response = await requestUrl({ url, contentType: 'application/json', headers: options.headers as Record<string, string>, method: 'POST', body: options.body as string });
 
   return {
     ok: response.status >= 200 && response.status < 300,
