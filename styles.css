@@ -122,12 +122,17 @@ If your plugin does not need CSS, delete this file.
   display: flex;
   justify-content: center;
   align-items: center;
-  width: 52px;
+  width: 32px;
   height: 32px;
   background-color: transparent;
   border: none;
   cursor: pointer;
   position: relative;
+}
+
+.is-tablet .chat-icon-button {
+  width: 52px;
+  height: 40px;
 }
 
 .chat-icon-selection {
