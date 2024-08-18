@@ -172,11 +172,11 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           <span className="tooltip-text">Model Selection</span>
         </div>
       </div>
-      <button className="chat-icon-button" onClick={onStopGenerating}>
+      <button className="chat-icon-button clickable-icon" onClick={onStopGenerating}>
         <StopIcon className="icon-scaler" />
         <span className="tooltip-text">Stop Generating</span>
       </button>
-      <button className="chat-icon-button" onClick={onNewChat}>
+      <button className="chat-icon-button clickable-icon" onClick={onNewChat}>
         <RefreshIcon className="icon-scaler" />
         <span className="tooltip-text">
           New Chat
@@ -184,7 +184,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           (unsaved history will be lost)
         </span>
       </button>
-      <button className="chat-icon-button" onClick={onSaveAsNote}>
+      <button className="chat-icon-button clickable-icon" onClick={onSaveAsNote}>
         <SaveAsNoteIcon className="icon-scaler" />
         <span className="tooltip-text">Save as Note</span>
       </button>
@@ -204,7 +204,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         </div>
       </div>
       {selectedChain === "llm_chain" && (
-        <button className="chat-icon-button" onClick={onSendActiveNoteToPrompt}>
+        <button className="chat-icon-button clickable-icon" onClick={onSendActiveNoteToPrompt}>
           <SendActiveNoteToPromptIcon className="icon-scaler" />
           <span className="tooltip-text">
             Send Note(s) to Prompt
@@ -219,7 +219,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
       )}
       {selectedChain === "long_note_qa" && (
         <button
-          className="chat-icon-button"
+          className="chat-icon-button clickable-icon"
           onClick={onForceRebuildActiveNoteContext}
         >
           <UseActiveNoteAsContextIcon className="icon-scaler" />
@@ -231,7 +231,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         </button>
       )}
       {selectedChain === "vault_qa" && (
-        <button className="chat-icon-button" onClick={onRefreshVaultContext}>
+        <button className="chat-icon-button clickable-icon" onClick={onRefreshVaultContext}>
           <UseActiveNoteAsContextIcon className="icon-scaler" />
           <span className="tooltip-text">
             Refresh Index

@@ -130,11 +130,6 @@ If your plugin does not need CSS, delete this file.
   position: relative;
 }
 
-.is-tablet .chat-icon-button {
-  width: 52px;
-  height: 40px;
-}
-
 .chat-icon-selection {
   color: var(--inline-title-color);
 }
