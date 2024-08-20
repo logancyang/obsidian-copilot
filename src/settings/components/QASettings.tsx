@@ -1,8 +1,8 @@
-import { EmbeddingModels, VAULT_VECTOR_STORE_STRATEGIES } from '@/constants';
-import React from 'react';
-import ApiSetting from './ApiSetting';
-import Collapsible from './Collapsible';
-import { DropdownComponent, SliderComponent } from './SettingBlocks';
+import { EmbeddingModels, VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
+import React from "react";
+import ApiSetting from "./ApiSetting";
+import Collapsible from "./Collapsible";
+import { DropdownComponent, SliderComponent } from "./SettingBlocks";
 
 interface QASettingsProps {
   embeddingModel: string;
@@ -35,13 +35,26 @@ const QASettings: React.FC<QASettingsProps> = ({
       <br />
       <h1>QA Settings</h1>
       <div className="warning-message">
-        Vault QA is in BETA and may not be stable. If you have issues please report in the github repo.
+        Vault QA is in BETA and may not be stable. If you have issues please report in the github
+        repo.
       </div>
-      <p>QA mode relies a <em>local</em> vector index.</p>
+      <p>
+        QA mode relies a <em>local</em> vector index.
+      </p>
       <h2>Long Note QA vs. Vault QA (BETA)</h2>
-      <p>Long Note QA mode uses the Active Note as context. Vault QA (BETA) uses your entire vault as context. Please ask questions as specific as possible, avoid vague questions to get better results.</p>
+      <p>
+        Long Note QA mode uses the Active Note as context. Vault QA (BETA) uses your entire vault as
+        context. Please ask questions as specific as possible, avoid vague questions to get better
+        results.
+      </p>
       <h2>Local Embedding Model</h2>
-      <p>Check the <a href='https://github.com/logancyang/obsidian-copilot/blob/master/local_copilot.md'>local copilot</a> setup guide to setup Ollama's local embedding model (requires Ollama v0.1.26 or above).</p>
+      <p>
+        Check the{" "}
+        <a href="https://github.com/logancyang/obsidian-copilot/blob/master/local_copilot.md">
+          local copilot
+        </a>{" "}
+        setup guide to setup Ollama's local embedding model (requires Ollama v0.1.26 or above).
+      </p>
       <DropdownComponent
         name="Embedding Models"
         description="The embedding API/model to use"
@@ -54,9 +67,11 @@ const QASettings: React.FC<QASettingsProps> = ({
         If you are using a paid embedding provider, beware of costs for large vaults!
       </div>
       <p>
-        When you switch to <strong>Long Note QA</strong> mode, your active note is indexed automatically upon mode switch.
+        When you switch to <strong>Long Note QA</strong> mode, your active note is indexed
+        automatically upon mode switch.
         <br />
-        When you switch to <strong>Vault QA</strong> mode, your vault is indexed <em>based on the auto-index strategy you select below</em>.
+        When you switch to <strong>Vault QA</strong> mode, your vault is indexed{" "}
+        <em>based on the auto-index strategy you select below</em>.
         <br />
       </p>
       <DropdownComponent
@@ -68,14 +83,26 @@ const QASettings: React.FC<QASettingsProps> = ({
       />
       <br />
       <p>
-        <strong>NEVER</strong>: Notes are never indexed to the vector store unless users run the command <em>Index vault for QA</em> explicitly, or hit the <em>Refresh Index</em> button.
-        <br /><br />
+        <strong>NEVER</strong>: Notes are never indexed to the vector store unless users run the
+        command <em>Index vault for QA</em> explicitly, or hit the <em>Refresh Index</em> button.
+        <br />
+        <br />
         <strong>ON STARTUP</strong>: Vault index is refreshed on plugin load/reload.
-        <br /><br />
-        <strong>ON MODE SWITCH (Recommended)</strong>: Vault index is refreshed when switching to Vault QA mode.
-        <br /><br />
-        By "refreshed", it means the vault index is not rebuilt from scratch but rather updated incrementally with new/modified notes since the last index. If you need a complete rebuild, run the commands "Clear vector store" and "Force re-index for QA" manually. This helps reduce costs when using paid embedding models.<br /><br />
-        Beware of the cost if you are using a paid embedding model and have a large vault! You can run Copilot command <em>Count total tokens in your vault</em> and refer to your selected embedding model pricing to estimate indexing costs.
+        <br />
+        <br />
+        <strong>ON MODE SWITCH (Recommended)</strong>: Vault index is refreshed when switching to
+        Vault QA mode.
+        <br />
+        <br />
+        By "refreshed", it means the vault index is not rebuilt from scratch but rather updated
+        incrementally with new/modified notes since the last index. If you need a complete rebuild,
+        run the commands "Clear vector store" and "Force re-index for QA" manually. This helps
+        reduce costs when using paid embedding models.
+        <br />
+        <br />
+        Beware of the cost if you are using a paid embedding model and have a large vault! You can
+        run Copilot command <em>Count total tokens in your vault</em> and refer to your selected
+        embedding model pricing to estimate indexing costs.
       </p>
       <br />
       <SliderComponent
@@ -98,12 +125,8 @@ const QASettings: React.FC<QASettingsProps> = ({
           placeholder="Enter Cohere API Key"
         />
         <p>
-          Get your free Cohere API key{' '}
-          <a
-            href="https://dashboard.cohere.ai/api-keys"
-            target="_blank"
-            rel="noreferrer"
-          >
+          Get your free Cohere API key{" "}
+          <a href="https://dashboard.cohere.ai/api-keys" target="_blank" rel="noreferrer">
             here
           </a>
         </p>

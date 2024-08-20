@@ -1,5 +1,5 @@
-import React from 'react';
-import { TextComponent } from './SettingBlocks';
+import React from "react";
+import { TextComponent } from "./SettingBlocks";
 
 const ApiSetting: React.FC<{
   title: string;
@@ -17,8 +17,8 @@ const ApiSetting: React.FC<{
         value={value}
         // @ts-ignore
         onChange={setValue}
-        placeholder={placeholder || ''}
-        type={type || 'password'}
+        placeholder={placeholder || ""}
+        type={type || "password"}
       />
     </div>
   );

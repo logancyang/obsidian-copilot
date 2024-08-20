@@ -1,7 +1,7 @@
 import { DEFAULT_SETTINGS } from "@/constants";
-import React from 'react';
-import ApiSetting from './ApiSetting';
-import Collapsible from './Collapsible';
+import React from "react";
+import ApiSetting from "./ApiSetting";
+import Collapsible from "./Collapsible";
 
 interface ApiSettingsProps {
   openAIApiKey: string;
@@ -77,13 +77,12 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
       <br />
       <br />
       <h1>API Settings</h1>
-      <p>
-        All your API keys are stored locally.
-      </p>
+      <p>All your API keys are stored locally.</p>
       <div className="warning-message">
         Make sure you have access to the model and the correct API key.
         <br />
-        If errors occur, please re-enter the API key, save and reload the plugin to see if it resolves the issue.
+        If errors occur, please re-enter the API key, save and reload the plugin to see if it
+        resolves the issue.
       </div>
       <div>
         <div>
@@ -94,8 +93,12 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
             placeholder="Enter OpenAI API Key"
           />
           <p>
-            You can find your API key at{' '}
-            <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">
+            You can find your API key at{" "}
+            <a
+              href="https://platform.openai.com/api-keys"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               https://platform.openai.com/api-keys
             </a>
           </p>
@@ -116,7 +119,11 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
         </div>
         <div className="warning-message">
           <span>If you are a new user, try </span>
-          <a href="https://platform.openai.com/playground?mode=chat" target="_blank" rel="noopener noreferrer">
+          <a
+            href="https://platform.openai.com/playground?mode=chat"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             OpenAI playground
           </a>
           <span> to see if you have correct API access first.</span>
@@ -132,10 +139,15 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
             placeholder="Enter Google API Key"
           />
           <p>
-            If you have Google Cloud, you can get Gemini API key {' '}
-            <a href="https://makersuite.google.com/app/apikey" target="_blank" rel="noopener noreferrer">
+            If you have Google Cloud, you can get Gemini API key{" "}
+            <a
+              href="https://makersuite.google.com/app/apikey"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               here
-            </a>.
+            </a>
+            .
             <br />
             Your API key is stored locally and is only used to make requests to Google's services.
           </p>
@@ -167,12 +179,18 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
             type="text"
           />
           <p>
-            If you have Anthropic API access, you can get the API key {' '}
-            <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">
+            If you have Anthropic API access, you can get the API key{" "}
+            <a
+              href="https://console.anthropic.com/settings/keys"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               here
-            </a>.
+            </a>
+            .
             <br />
-            Your API key is stored locally and is only used to make requests to Anthropic's services.
+            Your API key is stored locally and is only used to make requests to Anthropic's
+            services.
           </p>
         </div>
       </Collapsible>
@@ -194,14 +212,17 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
             type="text"
           />
           <p>
-            You can get your OpenRouterAI key {' '}
+            You can get your OpenRouterAI key{" "}
             <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">
               here
-            </a>.
+            </a>
+            .
             <br />
-            Find models <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer">
+            Find models{" "}
+            <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer">
               here
-            </a>.
+            </a>
+            .
           </p>
         </div>
       </Collapsible>
@@ -263,10 +284,11 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
             type="text"
           />
           <p>
-            If you have Groq API access, you can get the API key {' '}
+            If you have Groq API access, you can get the API key{" "}
             <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer">
               here
-            </a>.
+            </a>
+            .
             <br />
             Your API key is stored locally and is only used to make requests to Groq's services.
           </p>

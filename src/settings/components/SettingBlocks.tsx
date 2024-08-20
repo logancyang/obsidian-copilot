@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 
 type DropdownComponentProps = {
   name: string;
@@ -40,9 +40,15 @@ type ToggleComponentProps = {
   description?: string;
   value: boolean;
   onChange: (value: boolean) => void;
-}
+};
 
-const DropdownComponent: React.FC<DropdownComponentProps> = ({ name, description, options, value, onChange }) => {
+const DropdownComponent: React.FC<DropdownComponentProps> = ({
+  name,
+  description,
+  options,
+  value,
+  onChange,
+}) => {
   return (
     <div className="copilot-setting-item">
       <div className="copilot-setting-item-name">{name}</div>
@@ -62,13 +68,20 @@ const DropdownComponent: React.FC<DropdownComponentProps> = ({ name, description
   );
 };
 
-const TextComponent: React.FC<TextComponentProps> = ({ name, description, placeholder, value, type, onChange }) => {
+const TextComponent: React.FC<TextComponentProps> = ({
+  name,
+  description,
+  placeholder,
+  value,
+  type,
+  onChange,
+}) => {
   return (
     <div className="copilot-setting-item">
       <div className="copilot-setting-item-name">{name}</div>
       <div className="copilot-setting-item-description">{description}</div>
       <input
-        type={type || 'text'}
+        type={type || "text"}
         className="copilot-setting-item-control"
         placeholder={placeholder}
         value={value}
@@ -78,7 +91,13 @@ const TextComponent: React.FC<TextComponentProps> = ({ name, description, placeh
   );
 };
 
-const TextAreaComponent: React.FC<TextAreaComponentProps> = ({ name, description, placeholder, value, onChange }) => {
+const TextAreaComponent: React.FC<TextAreaComponentProps> = ({
+  name,
+  description,
+  placeholder,
+  value,
+  onChange,
+}) => {
   return (
     <div className="copilot-setting-item">
       <div className="copilot-setting-item-name">{name}</div>
@@ -93,13 +112,20 @@ const TextAreaComponent: React.FC<TextAreaComponentProps> = ({ name, description
   );
 };
 
-
-const SliderComponent: React.FC<SliderComponentProps> = ({ name, description, min, max, step, value, onChange }) => {
+const SliderComponent: React.FC<SliderComponentProps> = ({
+  name,
+  description,
+  min,
+  max,
+  step,
+  value,
+  onChange,
+}) => {
   return (
     <div className="copilot-setting-item">
       <div className="copilot-setting-item-name">{name}</div>
       <div className="copilot-setting-item-description">{description}</div>
-      <div style={{ display: 'flex', alignItems: 'center' }}>
+      <div style={{ display: "flex", alignItems: "center" }}>
         <input
           type="range"
           className="copilot-setting-item-control"
@@ -109,23 +135,28 @@ const SliderComponent: React.FC<SliderComponentProps> = ({ name, description, mi
           value={value}
           onChange={(e) => onChange(parseFloat(e.target.value))}
         />
-        <span style={{ marginLeft: '20px', fontWeight: 'bold', color: 'var(--inline-title-color)' }}>{value}</span>
+        <span
+          style={{ marginLeft: "20px", fontWeight: "bold", color: "var(--inline-title-color)" }}
+        >
+          {value}
+        </span>
       </div>
     </div>
   );
 };
 
-const ToggleComponent: React.FC<ToggleComponentProps> = ({ name, description, value, onChange }) => {
+const ToggleComponent: React.FC<ToggleComponentProps> = ({
+  name,
+  description,
+  value,
+  onChange,
+}) => {
   return (
     <div className="copilot-setting-item">
       <div className="copilot-setting-item-name">{name}</div>
       <div className="copilot-setting-item-description">{description}</div>
       <label className="switch">
-        <input
-          type="checkbox"
-          checked={value}
-          onChange={(e) => onChange(e.target.checked)}
-        />
+        <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
         <span className="slider round"></span>
       </label>
     </div>
@@ -133,4 +164,3 @@ const ToggleComponent: React.FC<ToggleComponentProps> = ({ name, description, va
 };
 
 export { DropdownComponent, SliderComponent, TextAreaComponent, TextComponent, ToggleComponent };
-

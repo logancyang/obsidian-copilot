@@ -52,9 +52,7 @@ export const GOOGLE_MODELS = new Set([
 
 export const ANTHROPIC_MODELS = new Set([ChatModelDisplayNames.CLAUDE]);
 
-export const OPENROUTERAI_MODELS = new Set([
-  ChatModelDisplayNames.OPENROUTERAI,
-]);
+export const OPENROUTERAI_MODELS = new Set([ChatModelDisplayNames.OPENROUTERAI]);
 
 export const OLLAMA_MODELS = new Set([ChatModelDisplayNames.OLLAMA]);
 
@@ -198,7 +196,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   lmStudioBaseUrl: "http://localhost:1234/v1",
   stream: true,
   defaultSaveFolder: "copilot-conversations",
-  indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.NEVER,
+  indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH,
   qaExclusionPaths: "",
   chatNoteContextPath: "",
   chatNoteContextTags: [],
