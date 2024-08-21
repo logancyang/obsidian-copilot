@@ -306,14 +306,3 @@ If your plugin does not need CSS, delete this file.
 .copilot-command-save-btn {
   margin-top: 15px;
 }
-
-.copy-code-button {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  background-color: rgba(0, 0, 0, 0.5);
-  border: none;
-  padding: 4px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-}
