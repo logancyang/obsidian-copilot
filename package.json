@@ -11,7 +11,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "version": "node version-bump.mjs && git add manifest.json versions.json",
-    "test": "jest"
+    "test": "jest",
+    "prepare": "husky"
   },
   "keywords": [],
   "author": "Logan Yang",
