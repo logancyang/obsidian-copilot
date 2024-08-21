@@ -1,13 +1,6 @@
 import { App, FuzzySuggestModal } from "obsidian";
 
-
-const TONES: string[] = [
-  "Professional",
-  "Casual",
-  "Straightforward",
-  "Confident",
-  "Friendly",
-];
+const TONES: string[] = ["Professional", "Casual", "Straightforward", "Confident", "Friendly"];
 
 export class ToneModal extends FuzzySuggestModal<string> {
   private onChooseTone: (tone: string) => void;

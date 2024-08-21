@@ -29,15 +29,7 @@ import {
 } from "@/utils";
 import VectorDBManager, { VectorStoreDocument } from "@/vectorDBManager";
 import { MD5 } from "crypto-js";
-import {
-  Editor,
-  MarkdownView,
-  Menu,
-  Notice,
-  Plugin,
-  TFile,
-  WorkspaceLeaf,
-} from "obsidian";
+import { Editor, MarkdownView, Menu, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import PouchDB from "pouchdb";
 
 export default class CopilotPlugin extends Plugin {
@@ -65,30 +57,24 @@ export default class CopilotPlugin extends Plugin {
     const langChainParams = this.getChainManagerParams();
     this.encryptionService = new EncryptionService(this.settings);
     this.dbVectorStores = new PouchDB<VectorStoreDocument>(
-      `copilot_vector_stores_${this.getVaultIdentifier()}`,
+      `copilot_vector_stores_${this.getVaultIdentifier()}`
     );
     this.chainManager = new ChainManager(
       this.app,
       langChainParams,
       this.encryptionService,
       this.settings,
-      () => this.dbVectorStores,
+      () => this.dbVectorStores
     );
 
     if (this.settings.enableEncryption) {
       await this.saveSettings();
     }
 
-    this.embeddingsManager = EmbeddingsManager.getInstance(
-      langChainParams,
-      this.encryptionService,
-    );
+    this.embeddingsManager = EmbeddingsManager.getInstance(langChainParams, this.encryptionService);
     this.dbPrompts = new PouchDB<CustomPrompt>("copilot_custom_prompts");
 
-    this.registerView(
-      CHAT_VIEWTYPE,
-      (leaf: WorkspaceLeaf) => new CopilotView(leaf, this),
-    );
+    this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
 
     this.addCommand({
       id: "chat-toggle-window",
@@ -122,9 +108,7 @@ export default class CopilotPlugin extends Plugin {
             await this.dbPrompts.put({ _id: title, prompt: prompt });
             new Notice("Custom prompt saved successfully.");
           } catch (e) {
-            new Notice(
-              "Error saving custom prompt. Please check if the title already exists.",
-            );
+            new Notice("Error saving custom prompt. Please check if the title already exists.");
             console.error(e);
           }
         }).open();
@@ -136,37 +120,27 @@ export default class CopilotPlugin extends Plugin {
       name: "Apply custom prompt",
       callback: () => {
         this.fetchPromptTitles().then((promptTitles: string[]) => {
-          new ListPromptModal(
-            this.app,
-            promptTitles,
-            async (promptTitle: string) => {
-              if (!promptTitle) {
-                new Notice("Please select a prompt title.");
+          new ListPromptModal(this.app, promptTitles, async (promptTitle: string) => {
+            if (!promptTitle) {
+              new Notice("Please select a prompt title.");
+              return;
+            }
+            try {
+              const doc = (await this.dbPrompts.get(promptTitle)) as CustomPrompt;
+              if (!doc.prompt) {
+                new Notice(`No prompt found with the title "${promptTitle}".`);
                 return;
               }
-              try {
-                const doc = (await this.dbPrompts.get(
-                  promptTitle,
-                )) as CustomPrompt;
-                if (!doc.prompt) {
-                  new Notice(
-                    `No prompt found with the title "${promptTitle}".`,
-                  );
-                  return;
-                }
-                this.processCustomPrompt("applyCustomPrompt", doc.prompt);
-              } catch (err) {
-                if (err.name === "not_found") {
-                  new Notice(
-                    `No prompt found with the title "${promptTitle}".`,
-                  );
-                } else {
-                  console.error(err);
-                  new Notice("An error occurred.");
-                }
+              this.processCustomPrompt("applyCustomPrompt", doc.prompt);
+            } catch (err) {
+              if (err.name === "not_found") {
+                new Notice(`No prompt found with the title "${promptTitle}".`);
+              } else {
+                console.error(err);
+                new Notice("An error occurred.");
               }
-            },
-          ).open();
+            }
+          }).open();
         });
       },
     });
@@ -175,17 +149,14 @@ export default class CopilotPlugin extends Plugin {
       id: "apply-adhoc-prompt",
       name: "Apply ad-hoc custom prompt",
       callback: async () => {
-        const modal = new AdhocPromptModal(
-          this.app,
-          async (adhocPrompt: string) => {
-            try {
-              this.processCustomPrompt("applyAdhocPrompt", adhocPrompt);
-            } catch (err) {
-              console.error(err);
-              new Notice("An error occurred.");
-            }
-          },
-        );
+        const modal = new AdhocPromptModal(this.app, async (adhocPrompt: string) => {
+          try {
+            this.processCustomPrompt("applyAdhocPrompt", adhocPrompt);
+          } catch (err) {
+            console.error(err);
+            new Notice("An error occurred.");
+          }
+        });
 
         modal.open();
       },
@@ -200,39 +171,29 @@ export default class CopilotPlugin extends Plugin {
         }
 
         this.fetchPromptTitles().then((promptTitles: string[]) => {
-          new ListPromptModal(
-            this.app,
-            promptTitles,
-            async (promptTitle: string) => {
-              if (!promptTitle) {
-                new Notice("Please select a prompt title.");
-                return;
-              }
+          new ListPromptModal(this.app, promptTitles, async (promptTitle: string) => {
+            if (!promptTitle) {
+              new Notice("Please select a prompt title.");
+              return;
+            }
 
-              try {
-                const doc = await this.dbPrompts.get(promptTitle);
-                if (doc._rev) {
-                  await this.dbPrompts.remove(
-                    doc as PouchDB.Core.RemoveDocument,
-                  );
-                  new Notice(`Prompt "${promptTitle}" has been deleted.`);
-                } else {
-                  new Notice(
-                    `Failed to delete prompt "${promptTitle}": No revision found.`,
-                  );
-                }
-              } catch (err) {
-                if (err.name === "not_found") {
-                  new Notice(
-                    `No prompt found with the title "${promptTitle}".`,
-                  );
-                } else {
-                  console.error(err);
-                  new Notice("An error occurred while deleting the prompt.");
-                }
+            try {
+              const doc = await this.dbPrompts.get(promptTitle);
+              if (doc._rev) {
+                await this.dbPrompts.remove(doc as PouchDB.Core.RemoveDocument);
+                new Notice(`Prompt "${promptTitle}" has been deleted.`);
+              } else {
+                new Notice(`Failed to delete prompt "${promptTitle}": No revision found.`);
               }
-            },
-          ).open();
+            } catch (err) {
+              if (err.name === "not_found") {
+                new Notice(`No prompt found with the title "${promptTitle}".`);
+              } else {
+                console.error(err);
+                new Notice("An error occurred while deleting the prompt.");
+              }
+            }
+          }).open();
         });
 
         return true;
@@ -248,50 +209,40 @@ export default class CopilotPlugin extends Plugin {
         }
 
         this.fetchPromptTitles().then((promptTitles: string[]) => {
-          new ListPromptModal(
-            this.app,
-            promptTitles,
-            async (promptTitle: string) => {
-              if (!promptTitle) {
-                new Notice("Please select a prompt title.");
-                return;
-              }
+          new ListPromptModal(this.app, promptTitles, async (promptTitle: string) => {
+            if (!promptTitle) {
+              new Notice("Please select a prompt title.");
+              return;
+            }
 
-              try {
-                const doc = (await this.dbPrompts.get(
-                  promptTitle,
-                )) as CustomPrompt;
-                if (doc.prompt) {
-                  new AddPromptModal(
-                    this.app,
-                    (title: string, newPrompt: string) => {
-                      this.dbPrompts.put({
-                        ...doc,
-                        prompt: newPrompt,
-                      });
-                      new Notice(`Prompt "${title}" has been updated.`);
-                    },
-                    doc._id,
-                    doc.prompt,
-                    true,
-                  ).open();
-                } else {
-                  new Notice(
-                    `No prompt found with the title "${promptTitle}".`,
-                  );
-                }
-              } catch (err) {
-                if (err.name === "not_found") {
-                  new Notice(
-                    `No prompt found with the title "${promptTitle}".`,
-                  );
-                } else {
-                  console.error(err);
-                  new Notice("An error occurred.");
-                }
+            try {
+              const doc = (await this.dbPrompts.get(promptTitle)) as CustomPrompt;
+              if (doc.prompt) {
+                new AddPromptModal(
+                  this.app,
+                  (title: string, newPrompt: string) => {
+                    this.dbPrompts.put({
+                      ...doc,
+                      prompt: newPrompt,
+                    });
+                    new Notice(`Prompt "${title}" has been updated.`);
+                  },
+                  doc._id,
+                  doc.prompt,
+                  true
+                ).open();
+              } else {
+                new Notice(`No prompt found with the title "${promptTitle}".`);
               }
-            },
-          ).open();
+            } catch (err) {
+              if (err.name === "not_found") {
+                new Notice(`No prompt found with the title "${promptTitle}".`);
+              } else {
+                console.error(err);
+                new Notice("An error occurred.");
+              }
+            }
+          }).open();
         });
 
         return true;
@@ -307,17 +258,13 @@ export default class CopilotPlugin extends Plugin {
           await this.dbVectorStores.destroy();
           // Reinitialize the database
           this.dbVectorStores = new PouchDB<VectorStoreDocument>(
-            `copilot_vector_stores_${this.getVaultIdentifier()}`,
+            `copilot_vector_stores_${this.getVaultIdentifier()}`
           );
           new Notice("Local vector store cleared successfully.");
-          console.log(
-            "Local vector store cleared successfully, new instance created.",
-          );
+          console.log("Local vector store cleared successfully, new instance created.");
         } catch (err) {
           console.error("Error clearing the local vector store:", err);
-          new Notice(
-            "An error occurred while clearing the local vector store.",
-          );
+          new Notice("An error occurred while clearing the local vector store.");
         }
       },
     });
@@ -329,32 +276,26 @@ export default class CopilotPlugin extends Plugin {
         try {
           const files = this.app.vault.getMarkdownFiles();
           const filePaths = files.map((file) => file.path);
-          const indexedFiles = await VectorDBManager.getNoteFiles(
-            this.dbVectorStores,
-          );
+          const indexedFiles = await VectorDBManager.getNoteFiles(this.dbVectorStores);
           const indexedFilePaths = indexedFiles.map((file) => file.path);
           const filesToDelete = indexedFilePaths.filter(
-            (filePath) => !filePaths.includes(filePath),
+            (filePath) => !filePaths.includes(filePath)
           );
 
           const deletePromises = filesToDelete.map(async (filePath) => {
             VectorDBManager.removeMemoryVectors(
               this.dbVectorStores,
-              VectorDBManager.getDocumentHash(filePath),
+              VectorDBManager.getDocumentHash(filePath)
             );
           });
 
           await Promise.all(deletePromises);
 
           new Notice("Local vector store garbage collected successfully.");
-          console.log(
-            "Local vector store garbage collected successfully, new instance created.",
-          );
+          console.log("Local vector store garbage collected successfully, new instance created.");
         } catch (err) {
           console.error("Error clearing the local vector store:", err);
-          new Notice(
-            "An error occurred while clearing the local vector store.",
-          );
+          new Notice("An error occurred while clearing the local vector store.");
         }
       },
     });
@@ -366,12 +307,8 @@ export default class CopilotPlugin extends Plugin {
         try {
           const indexedFileCount = await this.indexVaultToVectorStore();
 
-          new Notice(
-            `${indexedFileCount} vault files indexed to vector store.`,
-          );
-          console.log(
-            `${indexedFileCount} vault files indexed to vector store.`,
-          );
+          new Notice(`${indexedFileCount} vault files indexed to vector store.`);
+          console.log(`${indexedFileCount} vault files indexed to vector store.`);
         } catch (err) {
           console.error("Error indexing vault to vector store:", err);
           new Notice("An error occurred while indexing vault to vector store.");
@@ -386,17 +323,11 @@ export default class CopilotPlugin extends Plugin {
         try {
           const indexedFileCount = await this.indexVaultToVectorStore(true);
 
-          new Notice(
-            `${indexedFileCount} vault files indexed to vector store.`,
-          );
-          console.log(
-            `${indexedFileCount} vault files indexed to vector store.`,
-          );
+          new Notice(`${indexedFileCount} vault files indexed to vector store.`);
+          console.log(`${indexedFileCount} vault files indexed to vector store.`);
         } catch (err) {
           console.error("Error re-indexing vault to vector store:", err);
-          new Notice(
-            "An error occurred while re-indexing vault to vector store.",
-          );
+          new Notice("An error occurred while re-indexing vault to vector store.");
         }
       },
     });
@@ -405,16 +336,12 @@ export default class CopilotPlugin extends Plugin {
       id: "set-chat-note-context",
       name: "Set note context for Chat mode",
       callback: async () => {
-        new ChatNoteContextModal(
-          this.app,
-          this.settings,
-          async (path: string, tags: string[]) => {
-            // Store the path in the plugin's settings, default to empty string
-            this.settings.chatNoteContextPath = path;
-            this.settings.chatNoteContextTags = tags;
-            await this.saveSettings();
-          },
-        ).open();
+        new ChatNoteContextModal(this.app, this.settings, async (path: string, tags: string[]) => {
+          // Store the path in the plugin's settings, default to empty string
+          this.settings.chatNoteContextPath = path;
+          this.settings.chatNoteContextTags = tags;
+          await this.saveSettings();
+        }).open();
       },
     });
 
@@ -434,15 +361,12 @@ export default class CopilotPlugin extends Plugin {
       this.app.vault.on("delete", (file) => {
         const docHash = VectorDBManager.getDocumentHash(file.path);
         VectorDBManager.removeMemoryVectors(this.dbVectorStores, docHash);
-      }),
+      })
     );
 
     // Index vault to vector store on startup and after loading all commands
     // This can take a while, so we don't want to block the startup process
-    if (
-      this.settings.indexVaultToVectorStore ===
-      VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP
-    ) {
+    if (this.settings.indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP) {
       try {
         await this.indexVaultToVectorStore();
       } catch (err) {
@@ -451,9 +375,7 @@ export default class CopilotPlugin extends Plugin {
       }
     }
 
-    this.registerEvent(
-      this.app.workspace.on("editor-menu", this.handleContextMenu),
-    );
+    this.registerEvent(this.app.workspace.on("editor-menu", this.handleContextMenu));
   }
 
   private getVaultIdentifier(): string {
@@ -486,19 +408,12 @@ export default class CopilotPlugin extends Plugin {
     }
 
     // Check if embedding model has changed
-    const prevEmbeddingModel = await VectorDBManager.checkEmbeddingModel(
-      this.dbVectorStores,
-    );
+    const prevEmbeddingModel = await VectorDBManager.checkEmbeddingModel(this.dbVectorStores);
     // TODO: Remove this when Ollama model is dynamically set
-    const currEmbeddingModel =
-      EmbeddingsManager.getModelName(embeddingInstance);
+    const currEmbeddingModel = EmbeddingsManager.getModelName(embeddingInstance);
 
     if (this.settings.debug)
-      console.log(
-        "Prev vs Current embedding models:",
-        prevEmbeddingModel,
-        currEmbeddingModel,
-      );
+      console.log("Prev vs Current embedding models:", prevEmbeddingModel, currEmbeddingModel);
 
     if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
       // Model has changed, clear DB and reindex from scratch
@@ -509,23 +424,17 @@ export default class CopilotPlugin extends Plugin {
         await this.dbVectorStores.destroy();
         // Reinitialize the database
         this.dbVectorStores = new PouchDB<VectorStoreDocument>(
-          `copilot_vector_stores_${this.getVaultIdentifier()}`,
+          `copilot_vector_stores_${this.getVaultIdentifier()}`
         );
-        new Notice(
-          "Detected change in embedding model. Rebuild vector store from scratch.",
-        );
-        console.log(
-          "Detected change in embedding model. Rebuild vector store from scratch.",
-        );
+        new Notice("Detected change in embedding model. Rebuild vector store from scratch.");
+        console.log("Detected change in embedding model. Rebuild vector store from scratch.");
       } catch (err) {
         console.error("Error clearing vector store for reindexing:", err);
         new Notice("Error clearing vector store for reindexing.");
       }
     }
 
-    const latestMtime = await VectorDBManager.getLatestFileMtime(
-      this.dbVectorStores,
-    );
+    const latestMtime = await VectorDBManager.getLatestFileMtime(this.dbVectorStores);
 
     const files = this.app.vault
       .getMarkdownFiles()
@@ -540,11 +449,9 @@ export default class CopilotPlugin extends Plugin {
       });
 
     const fileContents: string[] = await Promise.all(
-      files.map((file) => this.app.vault.cachedRead(file)),
+      files.map((file) => this.app.vault.cachedRead(file))
     );
-    const fileMetadatas = files.map((file) =>
-      this.app.metadataCache.getFileCache(file),
-    );
+    const fileMetadatas = files.map((file) => this.app.metadataCache.getFileCache(file));
 
     const totalFiles = files.length;
     if (totalFiles === 0) {
@@ -555,7 +462,7 @@ export default class CopilotPlugin extends Plugin {
     let indexedCount = 0;
     const indexNotice = new Notice(
       `Copilot is indexing your vault...\n0/${totalFiles} files processed.`,
-      0,
+      0
     );
 
     const errors: string[] = [];
@@ -571,12 +478,12 @@ export default class CopilotPlugin extends Plugin {
         const result = await VectorDBManager.indexFile(
           this.dbVectorStores,
           embeddingInstance,
-          noteFile,
+          noteFile
         );
 
         indexedCount++;
         indexNotice.setMessage(
-          `Copilot is indexing your vault...\n${indexedCount}/${totalFiles} files processed.`,
+          `Copilot is indexing your vault...\n${indexedCount}/${totalFiles} files processed.`
         );
         return result;
       } catch (err) {
@@ -591,9 +498,7 @@ export default class CopilotPlugin extends Plugin {
     }, 2000);
 
     if (errors.length > 0) {
-      new Notice(
-        `Indexing completed with errors. Check the console for details.`,
-      );
+      new Notice(`Indexing completed with errors. Check the console for details.`);
       console.log("Indexing Errors:", errors.join("\n"));
     }
     return files.length;
@@ -603,12 +508,11 @@ export default class CopilotPlugin extends Plugin {
     editor: Editor,
     eventType: string,
     eventSubtype?: string,
-    checkSelectedText = true,
+    checkSelectedText = true
   ) {
     const selectedText = await editor.getSelection();
 
-    const isChatWindowActive =
-      this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE).length > 0;
+    const isChatWindowActive = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE).length > 0;
 
     if (!isChatWindowActive) {
       await this.activateView();
@@ -639,9 +543,7 @@ export default class CopilotPlugin extends Plugin {
         const activeFile = this.app.workspace.getActiveFile();
         return activeFile ? this.app.vault.cachedRead(activeFile) : "";
       },
-      replaceSelection:
-        activeView?.editor?.replaceSelection.bind(activeView.editor) ||
-        (() => {}),
+      replaceSelection: activeView?.editor?.replaceSelection.bind(activeView.editor) || (() => {}),
     } as Partial<Editor> as Editor;
   }
 
@@ -657,16 +559,12 @@ export default class CopilotPlugin extends Plugin {
 
   async activateView() {
     this.app.workspace.detachLeavesOfType(CHAT_VIEWTYPE);
-    this.activateViewPromise = this.app.workspace
-      .getRightLeaf(false)
-      .setViewState({
-        type: CHAT_VIEWTYPE,
-        active: true,
-      });
+    this.activateViewPromise = this.app.workspace.getRightLeaf(false).setViewState({
+      type: CHAT_VIEWTYPE,
+      active: true,
+    });
     await this.activateViewPromise;
-    this.app.workspace.revealLeaf(
-      this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0],
-    );
+    this.app.workspace.revealLeaf(this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]);
     this.chatIsVisible = true;
   }
 
@@ -687,9 +585,7 @@ export default class CopilotPlugin extends Plugin {
       active: true,
     });
     await this.activateViewPromise;
-    this.app.workspace.revealLeaf(
-      this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0],
-    );
+    this.app.workspace.revealLeaf(this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]);
     this.chatIsVisible = true;
   }
 
@@ -707,16 +603,13 @@ export default class CopilotPlugin extends Plugin {
 
   async fetchPromptTitles(): Promise<string[]> {
     const response = await this.dbPrompts.allDocs({ include_docs: true });
-    return response.rows
-      .map((row) => (row.doc as CustomPrompt)?._id)
-      .filter(Boolean) as string[];
+    return response.rows.map((row) => (row.doc as CustomPrompt)?._id).filter(Boolean) as string[];
   }
 
   async countTotalTokens(): Promise<number> {
     try {
       const allContent = await getAllNotesContent(this.app.vault);
-      const totalTokens =
-        await this.chainManager.chatModelManager.countTokens(allContent);
+      const totalTokens = await this.chainManager.chatModelManager.countTokens(allContent);
       return totalTokens;
     } catch (error) {
       console.error("Error counting tokens: ", error);
@@ -802,8 +695,7 @@ export default class CopilotPlugin extends Plugin {
       useOpenAILocalProxy: this.settings.useOpenAILocalProxy,
       openAIProxyModelName: this.settings.openAIProxyModelName,
       openAIEmbeddingProxyBaseUrl: this.settings.openAIEmbeddingProxyBaseUrl,
-      openAIEmbeddingProxyModelName:
-        this.settings.openAIEmbeddingProxyModelName,
+      openAIEmbeddingProxyModelName: this.settings.openAIEmbeddingProxyModelName,
     };
   }
 }

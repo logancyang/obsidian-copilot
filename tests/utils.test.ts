@@ -64,19 +64,13 @@ describe("getNotesFromPath", () => {
   it("should return filtered markdown files 1", async () => {
     const vault = new Obsidian.Vault();
     const files = await getNotesFromPath(vault, "test2");
-    expect(files).toEqual([
-      { path: "test/test2/note1.md" },
-      { path: "test2/note3.md" },
-    ]);
+    expect(files).toEqual([{ path: "test/test2/note1.md" }, { path: "test2/note3.md" }]);
   });
 
   it("should return filtered markdown files 2", async () => {
     const vault = new Obsidian.Vault();
     const files = await getNotesFromPath(vault, "test");
-    expect(files).toEqual([
-      { path: "test/test2/note1.md" },
-      { path: "test/note2.md" },
-    ]);
+    expect(files).toEqual([{ path: "test/test2/note1.md" }, { path: "test/note2.md" }]);
   });
 
   it("should return filtered markdown files 3", async () => {
@@ -88,10 +82,7 @@ describe("getNotesFromPath", () => {
   it("should return filtered markdown files 4", async () => {
     const vault = new Obsidian.Vault();
     const files = await getNotesFromPath(vault, "/test");
-    expect(files).toEqual([
-      { path: "test/test2/note1.md" },
-      { path: "test/note2.md" },
-    ]);
+    expect(files).toEqual([{ path: "test/test2/note1.md" }, { path: "test/note2.md" }]);
   });
 
   it("should not return markdown files", async () => {
@@ -136,16 +127,12 @@ describe("getNotesFromPath", () => {
     });
 
     it("should return the note md filename with extra spaces 2", () => {
-      const variableName = processVariableNameForNotePath(
-        " [[ test note   ]] ",
-      );
+      const variableName = processVariableNameForNotePath(" [[ test note   ]] ");
       expect(variableName).toEqual("test note.md");
     });
 
     it("should return the note md filename with extra spaces 2", () => {
-      const variableName = processVariableNameForNotePath(
-        " [[    test_note note   ]] ",
-      );
+      const variableName = processVariableNameForNotePath(" [[    test_note note   ]] ");
       expect(variableName).toEqual("test_note note.md");
     });
 
@@ -221,10 +208,7 @@ describe("getNotesFromTags", () => {
   it("should handle both path and tags, returning files under the specified path with the specified tags", async () => {
     const mockVault = new Obsidian.Vault();
     const tags = ["tag1"];
-    const noteFiles = [
-      { path: "test/test2/note1.md" },
-      { path: "test/note2.md" },
-    ] as TFile[];
+    const noteFiles = [{ path: "test/test2/note1.md" }, { path: "test/note2.md" }] as TFile[];
     const expectedPaths = ["test/test2/note1.md"];
 
     const result = await getNotesFromTags(mockVault, tags, noteFiles);
@@ -262,10 +246,7 @@ describe("isPathInList", () => {
   });
 
   it("should handle multiple excluded paths separated by commas", () => {
-    const result = isPathInList(
-      "test/folder/note.md",
-      "another/folder,test/folder",
-    );
+    const result = isPathInList("test/folder/note.md", "another/folder,test/folder");
     expect(result).toBe(true);
   });
 
@@ -277,16 +258,13 @@ describe("isPathInList", () => {
   it("should exclude a file path that matches any one of multiple excluded paths", () => {
     const result = isPathInList(
       "test/folder/note.md",
-      "another/folder, test/folder, yet/another/folder",
+      "another/folder, test/folder, yet/another/folder"
     );
     expect(result).toBe(true);
   });
 
   it("should trim spaces around excluded paths", () => {
-    const result = isPathInList(
-      "test/folder/note.md",
-      " another/folder , test/folder ",
-    );
+    const result = isPathInList("test/folder/note.md", " another/folder , test/folder ");
     expect(result).toBe(true);
   });
 });
@@ -300,8 +278,7 @@ describe("extractNoteTitles", () => {
   });
 
   it("should extract multiple note titles", () => {
-    const query =
-      "Please refer to [[Note1]] and [[Note2]] for more information.";
+    const query = "Please refer to [[Note1]] and [[Note2]] for more information.";
     const expected = ["Note1", "Note2"];
     const result = extractNoteTitles(query);
     expect(result).toEqual(expected);

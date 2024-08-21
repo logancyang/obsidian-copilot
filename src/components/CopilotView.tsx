@@ -1,15 +1,14 @@
-import ChainManager from '@/LLMProviders/chainManager';
-import Chat from '@/components/Chat';
-import { CHAT_VIEWTYPE } from '@/constants';
-import { AppContext } from '@/context';
-import CopilotPlugin from '@/main';
-import { CopilotSettings } from '@/settings/SettingsPage';
-import SharedState from '@/sharedState';
-import { EventEmitter } from 'events';
-import { ItemView, WorkspaceLeaf } from 'obsidian';
-import * as React from 'react';
-import { Root, createRoot } from 'react-dom/client';
-
+import ChainManager from "@/LLMProviders/chainManager";
+import Chat from "@/components/Chat";
+import { CHAT_VIEWTYPE } from "@/constants";
+import { AppContext } from "@/context";
+import CopilotPlugin from "@/main";
+import { CopilotSettings } from "@/settings/SettingsPage";
+import SharedState from "@/sharedState";
+import { EventEmitter } from "events";
+import { ItemView, WorkspaceLeaf } from "obsidian";
+import * as React from "react";
+import { Root, createRoot } from "react-dom/client";
 
 export default class CopilotView extends ItemView {
   private sharedState: SharedState;
@@ -19,9 +18,12 @@ export default class CopilotView extends ItemView {
   private defaultSaveFolder: string;
   private debug = false;
   emitter: EventEmitter;
-  userSystemPrompt = '';
+  userSystemPrompt = "";
 
-  constructor(leaf: WorkspaceLeaf, private plugin: CopilotPlugin) {
+  constructor(
+    leaf: WorkspaceLeaf,
+    private plugin: CopilotPlugin
+  ) {
     super(leaf);
     this.sharedState = plugin.sharedState;
     this.settings = plugin.settings;
@@ -41,19 +43,19 @@ export default class CopilotView extends ItemView {
 
   // Return an icon for this view
   getIcon(): string {
-    return 'message-square';
+    return "message-square";
   }
 
   // Return a title for this view
   getTitle(): string {
-    return 'Copilot Chat';
+    return "Copilot Chat";
   }
 
   getDisplayText(): string {
-    return 'Copilot';
+    return "Copilot";
   }
 
-  async getChatVisibility(){
+  async getChatVisibility() {
     if (this.plugin.activateViewPromise) {
       await this.plugin.activateViewPromise;
     }

@@ -41,21 +41,19 @@ class VectorDBManager {
 
   public static async rebuildMemoryVectorStore(
     memoryVectors: MemoryVector[],
-    embeddingsAPI: Embeddings,
+    embeddingsAPI: Embeddings
   ) {
     if (!Array.isArray(memoryVectors)) {
       throw new TypeError("Expected memoryVectors to be an array");
     }
     // Extract the embeddings and documents from the deserialized memoryVectors
-    const embeddingsArray: number[][] = memoryVectors.map(
-      (memoryVector) => memoryVector.embedding,
-    );
+    const embeddingsArray: number[][] = memoryVectors.map((memoryVector) => memoryVector.embedding);
     const documentsArray = memoryVectors.map(
       (memoryVector) =>
         new Document({
           pageContent: memoryVector.content,
           metadata: memoryVector.metadata,
-        }),
+        })
     );
 
     // Create a new MemoryVectorStore instance
@@ -67,7 +65,7 @@ class VectorDBManager {
   public static async getMemoryVectorStore(
     db: PouchDB.Database,
     embeddingsAPI: Embeddings,
-    docHash?: string,
+    docHash?: string
   ): Promise<MemoryVectorStore> {
     if (!db) throw new Error("DB not initialized");
 
@@ -82,23 +80,20 @@ class VectorDBManager {
     }
 
     const embeddingModel = EmbeddingManager.getModelName(embeddingsAPI);
-    if (!embeddingModel)
-      console.error("EmbeddingManager could not determine model name!");
+    if (!embeddingModel) console.error("EmbeddingManager could not determine model name!");
     const allDocs = allDocsResponse.rows
       .map((row) => row.doc as VectorStoreDocument)
       .filter((doc) => doc.embeddingModel === embeddingModel);
     const memoryVectors = allDocs
       .map((doc) => JSON.parse(doc.memory_vectors) as MemoryVector[])
       .flat();
-    const embeddingsArray: number[][] = memoryVectors.map(
-      (memoryVector) => memoryVector.embedding,
-    );
+    const embeddingsArray: number[][] = memoryVectors.map((memoryVector) => memoryVector.embedding);
     const documentsArray = memoryVectors.map(
       (memoryVector) =>
         new Document({
           pageContent: memoryVector.content,
           metadata: memoryVector.metadata,
-        }),
+        })
     );
     // Create a new MemoryVectorStore instance
     const memoryVectorStore = new MemoryVectorStore(embeddingsAPI);
@@ -109,7 +104,7 @@ class VectorDBManager {
   public static async setMemoryVectors(
     db: PouchDB.Database,
     memoryVectors: MemoryVector[],
-    docHash: string,
+    docHash: string
   ): Promise<void> {
     if (!db) throw new Error("DB not initialized");
     if (!Array.isArray(memoryVectors)) {
@@ -138,33 +133,25 @@ class VectorDBManager {
   public static async indexFile(
     db: PouchDB.Database,
     embeddingsAPI: Embeddings,
-    noteFile: NoteFile,
+    noteFile: NoteFile
   ): Promise<VectorStoreDocument | undefined> {
     if (!db) throw new Error("DB not initialized");
 
     const embeddingModel = EmbeddingManager.getModelName(embeddingsAPI);
-    if (!embeddingModel)
-      console.error("EmbeddingManager could not determine model name!");
+    if (!embeddingModel) console.error("EmbeddingManager could not determine model name!");
 
     // Markdown splitter: https://js.langchain.com/docs/modules/data_connection/document_transformers/code_splitter#markdown
-    const textSplitter = RecursiveCharacterTextSplitter.fromLanguage(
-      "markdown",
-      {
-        chunkSize: 5000,
-      },
-    );
+    const textSplitter = RecursiveCharacterTextSplitter.fromLanguage("markdown", {
+      chunkSize: 5000,
+    });
     // Add note title as contextual chunk headers
     // https://js.langchain.com/docs/modules/data_connection/document_transformers/contextual_chunk_headers
-    const splitDocument = await textSplitter.createDocuments(
-      [noteFile.content],
-      [],
-      {
-        chunkHeader: "[[" + noteFile.basename + "]]" + "\n\n---\n\n",
-        appendChunkOverlapHeader: true,
-      },
-    );
+    const splitDocument = await textSplitter.createDocuments([noteFile.content], [], {
+      chunkHeader: "[[" + noteFile.basename + "]]" + "\n\n---\n\n",
+      appendChunkOverlapHeader: true,
+    });
     const docVectors = await embeddingsAPI.embedDocuments(
-      splitDocument.map((doc) => doc.pageContent),
+      splitDocument.map((doc) => doc.pageContent)
     );
     const memoryVectors = docVectors.map((docVector, i) => ({
       content: splitDocument[i].pageContent,
@@ -206,9 +193,7 @@ class VectorDBManager {
       const allDocsResponse = await db.allDocs<VectorStoreDocument>({
         include_docs: true,
       });
-      const allDocs = allDocsResponse.rows.map(
-        (row) => row.doc as VectorStoreDocument,
-      );
+      const allDocs = allDocsResponse.rows.map((row) => row.doc as VectorStoreDocument);
       const memoryVectors = allDocs
         .map((doc) => JSON.parse(doc.memory_vectors) as MemoryVector[])
         .filter((memoryVectors) => memoryVectors.length > 0);
@@ -233,10 +218,7 @@ class VectorDBManager {
     }
   }
 
-  public static async removeMemoryVectors(
-    db: PouchDB.Database,
-    docHash: string,
-  ): Promise<void> {
+  public static async removeMemoryVectors(db: PouchDB.Database, docHash: string): Promise<void> {
     if (!db) throw new Error("DB not initialized");
     try {
       const doc = await db.get(docHash);
@@ -248,21 +230,15 @@ class VectorDBManager {
     }
   }
 
-  public static async getLatestFileMtime(
-    db: PouchDB.Database,
-  ): Promise<number> {
+  public static async getLatestFileMtime(db: PouchDB.Database): Promise<number> {
     if (!db) throw new Error("DB not initialized");
 
     try {
       const allDocsResponse = await db.allDocs<VectorStoreDocument>({
         include_docs: true,
       });
-      const allDocs = allDocsResponse.rows.map(
-        (row) => row.doc as VectorStoreDocument,
-      );
-      const newestFileMtime = allDocs
-        .map((doc) => doc.file_mtime)
-        .sort((a, b) => b - a)[0];
+      const allDocs = allDocsResponse.rows.map((row) => row.doc as VectorStoreDocument);
+      const newestFileMtime = allDocs.map((doc) => doc.file_mtime).sort((a, b) => b - a)[0];
       return newestFileMtime;
     } catch (err) {
       console.error("Error getting newest file mtime from VectorDB:", err);
@@ -270,9 +246,7 @@ class VectorDBManager {
     }
   }
 
-  public static async checkEmbeddingModel(
-    db: PouchDB.Database,
-  ): Promise<string | undefined> {
+  public static async checkEmbeddingModel(db: PouchDB.Database): Promise<string | undefined> {
     if (!db) throw new Error("DB not initialized");
 
     try {
@@ -280,9 +254,7 @@ class VectorDBManager {
       const allDocsResponse = await db.allDocs<VectorStoreDocument>({
         include_docs: true,
       });
-      const allDocs = allDocsResponse.rows.map(
-        (row) => row.doc as VectorStoreDocument,
-      );
+      const allDocs = allDocsResponse.rows.map((row) => row.doc as VectorStoreDocument);
 
       // Check if there are any documents
       if (allDocs.length === 0) {
@@ -293,9 +265,7 @@ class VectorDBManager {
       const embeddingModels = allDocs.map((doc) => doc.embeddingModel);
 
       // Check if all documents have the same embeddingModel
-      const allSame = embeddingModels.every(
-        (model) => model === embeddingModels[0],
-      );
+      const allSame = embeddingModels.every((model) => model === embeddingModels[0]);
       return allSame ? embeddingModels[0] : undefined;
     } catch (err) {
       console.error("Error checking last embedding model from VectorDB:", err);
@@ -305,7 +275,7 @@ class VectorDBManager {
 
   public static async getMemoryVectors(
     db: PouchDB.Database,
-    docHash: string,
+    docHash: string
   ): Promise<MemoryVector[] | undefined> {
     if (!db) throw new Error("DB not initialized");
     try {

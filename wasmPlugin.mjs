@@ -1,38 +1,38 @@
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import * as fs from "fs/promises";
+import * as path from "path";
 
 const wasmPlugin = {
-  name: 'wasm',
+  name: "wasm",
   setup(build) {
-    build.onResolve({ filter: /\.wasm$/ }, args => {
-      if (args.namespace === 'wasm-stub') {
+    build.onResolve({ filter: /\.wasm$/ }, (args) => {
+      if (args.namespace === "wasm-stub") {
         return {
           path: args.path,
-          namespace: 'wasm-binary',
-        }
+          namespace: "wasm-binary",
+        };
       }
 
-      if (args.resolveDir === '') {
-        return
+      if (args.resolveDir === "") {
+        return;
       }
       return {
         path: path.isAbsolute(args.path) ? args.path : path.join(args.resolveDir, args.path),
-        namespace: 'wasm-stub',
-      }
-    })
+        namespace: "wasm-stub",
+      };
+    });
 
-    build.onLoad({ filter: /.*/, namespace: 'wasm-stub' }, async (args) => ({
+    build.onLoad({ filter: /.*/, namespace: "wasm-stub" }, async (args) => ({
       contents: `import wasm from ${JSON.stringify(args.path)}
         export default (imports) =>
           WebAssembly.instantiate(wasm, imports).then(
             result => result.instance.exports)`,
-    }))
+    }));
 
-    build.onLoad({ filter: /.*/, namespace: 'wasm-binary' }, async (args) => ({
+    build.onLoad({ filter: /.*/, namespace: "wasm-binary" }, async (args) => ({
       contents: await fs.readFile(args.path),
-      loader: 'binary',
-    }))
+      loader: "binary",
+    }));
   },
-}
+};
 
 export default wasmPlugin;

@@ -16,7 +16,7 @@ export class HybridRetriever<V extends VectorStore> extends BaseRetriever {
     private db: PouchDB.Database,
     private vault: Vault,
     private options: ScoreThresholdRetrieverInput<V>,
-    private debug?: boolean,
+    private debug?: boolean
   ) {
     super();
   }
@@ -34,7 +34,7 @@ export class HybridRetriever<V extends VectorStore> extends BaseRetriever {
         "\nNote Titles extracted: ",
         noteTitles,
         "\nExplicit Chunks:",
-        explicitChunks,
+        explicitChunks
       );
     }
 
@@ -42,9 +42,7 @@ export class HybridRetriever<V extends VectorStore> extends BaseRetriever {
     const vectorChunks = await this.getVectorChunks(query);
 
     // Combine explicit and vector chunks, removing duplicates while maintaining order
-    const uniqueChunks = new Set<string>(
-      explicitChunks.map((chunk) => chunk.pageContent),
-    );
+    const uniqueChunks = new Set<string>(explicitChunks.map((chunk) => chunk.pageContent));
     const combinedChunks: Document[] = [...explicitChunks];
 
     for (const chunk of vectorChunks) {
@@ -64,17 +62,14 @@ export class HybridRetriever<V extends VectorStore> extends BaseRetriever {
     for (const noteTitle of noteTitles) {
       const noteFile = await getNoteFileFromTitle(this.vault, noteTitle);
       const docHash = VectorDBManager.getDocumentHash(noteFile?.path ?? "");
-      const memoryVectors = await VectorDBManager.getMemoryVectors(
-        this.db,
-        docHash,
-      );
+      const memoryVectors = await VectorDBManager.getMemoryVectors(this.db, docHash);
       if (memoryVectors) {
         const matchingChunks = memoryVectors.map(
           (memoryVector) =>
             new Document({
               pageContent: memoryVector.content,
               metadata: memoryVector.metadata,
-            }),
+            })
         );
         explicitChunks.push(...matchingChunks);
       }
@@ -83,14 +78,11 @@ export class HybridRetriever<V extends VectorStore> extends BaseRetriever {
   }
 
   private async getVectorChunks(query: string): Promise<Document[]> {
-    const retriever = ScoreThresholdRetriever.fromVectorStore(
-      this.options.vectorStore,
-      {
-        minSimilarityScore: this.options.minSimilarityScore,
-        maxK: this.options.maxK,
-        kIncrement: this.options.kIncrement,
-      },
-    );
+    const retriever = ScoreThresholdRetriever.fromVectorStore(this.options.vectorStore, {
+      minSimilarityScore: this.options.minSimilarityScore,
+      maxK: this.options.maxK,
+      kIncrement: this.options.kIncrement,
+    });
     const vectorChunks = await retriever.getRelevantDocuments(query);
     return vectorChunks;
   }

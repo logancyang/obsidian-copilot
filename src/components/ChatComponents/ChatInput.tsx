@@ -1,5 +1,5 @@
-import { NoteTitleModal } from '@/components/ NoteTitleModal';
-import React, { useEffect, useRef, useState } from 'react';
+import { NoteTitleModal } from "@/components/NoteTitleModal";
+import React, { useEffect, useRef, useState } from "react";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -10,7 +10,11 @@ interface ChatInputProps {
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
-  inputMessage, setInputMessage, handleKeyDown, handleSendMessage, getChatVisibility,
+  inputMessage,
+  setInputMessage,
+  handleKeyDown,
+  handleSendMessage,
+  getChatVisibility,
 }) => {
   const [rows, setRows] = useState(1);
   const [shouldFocus, setShouldFocus] = useState(false);
@@ -22,22 +26,18 @@ const ChatInput: React.FC<ChatInputProps> = ({
     updateRows(inputValue);
 
     // Check if the user typed `[[`
-    if (inputValue.slice(-2) === '[[') {
+    if (inputValue.slice(-2) === "[[") {
       showNoteTitleModal();
     }
   };
 
   const showNoteTitleModal = () => {
     const fetchNoteTitles = async () => {
-      const noteTitles = app.vault.getMarkdownFiles().map(file => file.basename);
+      const noteTitles = app.vault.getMarkdownFiles().map((file) => file.basename);
 
-      new NoteTitleModal(
-        app,
-        noteTitles,
-        (noteTitle: string) => {
-          setInputMessage(inputMessage.slice(0, -2) + ` [[${noteTitle}]]`);
-        }
-      ).open();
+      new NoteTitleModal(app, noteTitles, (noteTitle: string) => {
+        setInputMessage(inputMessage.slice(0, -2) + ` [[${noteTitle}]]`);
+      }).open();
     };
 
     fetchNoteTitles();
@@ -49,7 +49,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
     const minRows = 1;
 
     const rowsNeeded = Math.min(
-      Math.max(text.split('\n').length, minRows), Math.floor(maxHeight / lineHeight)
+      Math.max(text.split("\n").length, minRows),
+      Math.floor(maxHeight / lineHeight)
     );
     setRows(rowsNeeded);
   };
@@ -87,4 +88,3 @@ const ChatInput: React.FC<ChatInputProps> = ({
 };
 
 export default ChatInput;
-

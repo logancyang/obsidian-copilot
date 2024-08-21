@@ -5,10 +5,7 @@ import { Editor, Notice } from "obsidian";
 import { COMMAND_IDS } from "./constants";
 
 export function registerBuiltInCommands(plugin: CopilotPlugin) {
-  const addCommandIfEnabled = (
-    id: string,
-    callback: (editor: Editor) => void,
-  ) => {
+  const addCommandIfEnabled = (id: string, callback: (editor: Editor) => void) => {
     const commandSettings = plugin.settings.enabledCommands[id];
     if (commandSettings && commandSettings.enabled) {
       plugin.addCommand({

@@ -1,1 +1,1 @@
-declare module 'sse';
+declare module "sse";
