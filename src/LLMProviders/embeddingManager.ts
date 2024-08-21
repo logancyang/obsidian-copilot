@@ -1,10 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { LangChainParams } from "@/aiParams";
-import {
-  EMBEDDING_MODEL_TO_PROVIDERS,
-  ModelProviders,
-  NOMIC_EMBED_TEXT,
-} from "@/constants";
+import { EMBEDDING_MODEL_TO_PROVIDERS, ModelProviders, NOMIC_EMBED_TEXT } from "@/constants";
 import EncryptionService from "@/encryptionService";
 import { ProxyOpenAIEmbeddings } from "@/langchainWrappers";
 import { CohereEmbeddings } from "@langchain/cohere";
@@ -16,18 +12,15 @@ export default class EmbeddingManager {
   private static instance: EmbeddingManager;
   private constructor(
     private langChainParams: LangChainParams,
-    private encryptionService: EncryptionService,
+    private encryptionService: EncryptionService
   ) {}
 
   static getInstance(
     langChainParams: LangChainParams,
-    encryptionService: EncryptionService,
+    encryptionService: EncryptionService
   ): EmbeddingManager {
     if (!EmbeddingManager.instance) {
-      EmbeddingManager.instance = new EmbeddingManager(
-        langChainParams,
-        encryptionService,
-      );
+      EmbeddingManager.instance = new EmbeddingManager(langChainParams, encryptionService);
     }
     return EmbeddingManager.instance;
   }
@@ -40,14 +33,13 @@ export default class EmbeddingManager {
       return emb.modelName as string;
     } else {
       throw new Error(
-        `Embeddings instance missing model or modelName properties: ${embeddingsInstance}`,
+        `Embeddings instance missing model or modelName properties: ${embeddingsInstance}`
       );
     }
   }
 
   getOpenAIEmbeddingAPI(): OpenAIEmbeddings | undefined {
-    const decrypt = (key: string) =>
-      this.encryptionService.getDecryptedKey(key);
+    const decrypt = (key: string) => this.encryptionService.getDecryptedKey(key);
 
     const {
       openAIApiKey,
@@ -78,8 +70,7 @@ export default class EmbeddingManager {
   }
 
   getEmbeddingsAPI(): Embeddings | undefined {
-    const decrypt = (key: string) =>
-      this.encryptionService.getDecryptedKey(key);
+    const decrypt = (key: string) => this.encryptionService.getDecryptedKey(key);
     const {
       azureOpenAIApiKey,
       azureOpenAIApiInstanceName,
@@ -90,17 +81,14 @@ export default class EmbeddingManager {
 
     const OpenAIEmbeddingsAPI = this.getOpenAIEmbeddingAPI();
 
-    const embeddingProvder =
-      EMBEDDING_MODEL_TO_PROVIDERS[this.langChainParams.embeddingModel];
+    const embeddingProvder = EMBEDDING_MODEL_TO_PROVIDERS[this.langChainParams.embeddingModel];
 
     switch (embeddingProvder) {
       case ModelProviders.OPENAI:
         if (OpenAIEmbeddingsAPI) {
           return OpenAIEmbeddingsAPI;
         }
-        console.error(
-          "OpenAI API key is not provided for the embedding model.",
-        );
+        console.error("OpenAI API key is not provided for the embedding model.");
         break;
       case ModelProviders.COHEREAI:
         return new CohereEmbeddings({
@@ -119,9 +107,7 @@ export default class EmbeddingManager {
             maxConcurrency: 3,
           });
         }
-        console.error(
-          "Azure OpenAI API key is not provided for the embedding model.",
-        );
+        console.error("Azure OpenAI API key is not provided for the embedding model.");
         break;
       case ModelProviders.OLLAMA:
         return new OllamaEmbeddings({
@@ -133,14 +119,12 @@ export default class EmbeddingManager {
         });
       default:
         console.error(
-          "No embedding provider set or no valid API key provided. Defaulting to OpenAI.",
+          "No embedding provider set or no valid API key provided. Defaulting to OpenAI."
         );
         return (
           OpenAIEmbeddingsAPI ||
           new OpenAIEmbeddings({
-            modelName:
-              openAIEmbeddingProxyModelName ||
-              this.langChainParams.embeddingModel,
+            modelName: openAIEmbeddingProxyModelName || this.langChainParams.embeddingModel,
             openAIApiKey: "default-key",
             maxRetries: 3,
             maxConcurrency: 3,

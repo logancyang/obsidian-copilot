@@ -1,9 +1,6 @@
 import { StringOutputParser } from "@langchain/core/output_parsers";
 import { BaseRetriever } from "@langchain/core/retrievers";
-import {
-  RunnablePassthrough,
-  RunnableSequence,
-} from "@langchain/core/runnables";
+import { RunnablePassthrough, RunnableSequence } from "@langchain/core/runnables";
 import { BaseLanguageModel } from "langchain/base_language";
 import { BaseChatMemory } from "langchain/memory";
 import { ChatPromptTemplate, PromptTemplate } from "langchain/prompts";
@@ -129,7 +126,7 @@ class ChainFactory {
   public static createConversationalRetrievalChain(
     args: ConversationalRetrievalChainParams,
     onDocumentsRetrieved: (documents: Document[]) => void,
-    debug?: boolean,
+    debug?: boolean
   ): RunnableSequence {
     const { llm, retriever } = args;
 
@@ -144,9 +141,7 @@ class ChainFactory {
     {chat_history}
     Follow Up Input: {question}
     Standalone question:`;
-    const CONDENSE_QUESTION_PROMPT = PromptTemplate.fromTemplate(
-      condenseQuestionTemplate,
-    );
+    const CONDENSE_QUESTION_PROMPT = PromptTemplate.fromTemplate(condenseQuestionTemplate);
 
     const answerTemplate = `Answer the question with as detailed as possible based only on the following context:
     {context}
@@ -157,8 +152,7 @@ class ChainFactory {
 
     const formatChatHistory = (chatHistory: [string, string][]) => {
       const formattedDialogueTurns = chatHistory.map(
-        (dialogueTurn) =>
-          `Human: ${dialogueTurn[0]}\nAssistant: ${dialogueTurn[1]}`,
+        (dialogueTurn) => `Human: ${dialogueTurn[0]}\nAssistant: ${dialogueTurn[1]}`
       );
       return formattedDialogueTurns.join("\n");
     };
@@ -171,8 +165,7 @@ class ChainFactory {
         },
         chat_history: (input: ConversationalRetrievalQAChainInput) => {
           const formattedChatHistory = formatChatHistory(input.chat_history);
-          if (debug)
-            console.log("Formatted Chat History: ", formattedChatHistory);
+          if (debug) console.log("Formatted Chat History: ", formattedChatHistory);
           return formattedChatHistory;
         },
       },
@@ -196,8 +189,7 @@ class ChainFactory {
       llm,
     ]);
 
-    const conversationalRetrievalQAChain =
-      standaloneQuestionChain.pipe(answerChain);
+    const conversationalRetrievalQAChain = standaloneQuestionChain.pipe(answerChain);
     return conversationalRetrievalQAChain as RunnableSequence;
   }
 }

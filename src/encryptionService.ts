@@ -29,9 +29,7 @@ export default class EncryptionService {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private isDecrypted(keyBuffer: any): boolean {
-    return (
-      keyBuffer.startsWith(EncryptionService.DECRYPTION_PREFIX)
-    );
+    return keyBuffer.startsWith(EncryptionService.DECRYPTION_PREFIX);
   }
 
   public encryptAllKeys(): void {
@@ -65,9 +63,7 @@ export default class EncryptionService {
     }
     const encryptedBuffer = safeStorage.encryptString(apiKey) as Buffer;
     // Convert the encrypted buffer to a Base64 string and prepend the prefix
-    return (
-      EncryptionService.ENCRYPTION_PREFIX + encryptedBuffer.toString("base64")
-    );
+    return EncryptionService.ENCRYPTION_PREFIX + encryptedBuffer.toString("base64");
   }
 
   // Get the actual key for use in the LLM chain
@@ -83,10 +79,7 @@ export default class EncryptionService {
     }
 
     // Remove the prefix and convert from Base64 to a buffer before decryption
-    const base64Data = apiKey.replace(
-      EncryptionService.ENCRYPTION_PREFIX,
-      ""
-    );
+    const base64Data = apiKey.replace(EncryptionService.ENCRYPTION_PREFIX, "");
     try {
       const buffer = Buffer.from(base64Data, "base64");
       return safeStorage.decryptString(buffer) as string;

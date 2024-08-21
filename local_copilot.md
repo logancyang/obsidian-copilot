@@ -5,6 +5,7 @@
 [LM Studio](https://lmstudio.ai/) has the best UI for running local models, it has support for Apple Silicon, Windows, and Linux (in beta). After you download the correct version of LM Studio to your machine, the first thing is to download a model. Find something small to start with, such as Mistral 7B, and work your way up if you have a beefy machine.
 
 A rule of thumb to determine how large a model you can run:
+
 - If you are on an Apple Silicon Mac, look at your RAM
 - If you are on a Windows PC with a GPU, look at your VRAM.
 
@@ -77,6 +78,7 @@ ollama serve
 ```
 
 ## Ollama for Local Embeddings
+
 Ollama has added support for local embeddings for RAG since v0.1.26! It's super easy to setup, just run
 
 ```

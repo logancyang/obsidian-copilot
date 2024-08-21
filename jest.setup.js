@@ -1,1 +1,1 @@
-import 'web-streams-polyfill/dist/polyfill.min.js';
+import "web-streams-polyfill/dist/polyfill.min.js";

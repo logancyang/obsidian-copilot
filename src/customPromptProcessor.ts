@@ -56,12 +56,8 @@ export class CustomPromptProcessor {
           }
         }
       } else {
-        const processedVariableName =
-          processVariableNameForNotePath(variableName);
-        const noteFiles = await getNotesFromPath(
-          this.vault,
-          processedVariableName
-        );
+        const processedVariableName = processVariableNameForNotePath(variableName);
+        const noteFiles = await getNotesFromPath(this.vault, processedVariableName);
         for (const file of noteFiles) {
           const content = await getFileContent(file, this.vault);
           if (content) {
@@ -73,22 +69,15 @@ export class CustomPromptProcessor {
       if (notes.length > 0) {
         variablesWithContent.push(JSON.stringify(notes));
       } else {
-        new Notice(
-          `Warning: No valid notes found for the provided path '${variableName}'.`
-        );
+        new Notice(`Warning: No valid notes found for the provided path '${variableName}'.`);
       }
     }
 
     return variablesWithContent;
   }
 
-  async processCustomPrompt(
-    customPrompt: string,
-    selectedText: string
-  ): Promise<string> {
-    const variablesWithContent = await this.extractVariablesFromPrompt(
-      customPrompt
-    );
+  async processCustomPrompt(customPrompt: string, selectedText: string): Promise<string> {
+    const variablesWithContent = await this.extractVariablesFromPrompt(customPrompt);
     let processedPrompt = customPrompt;
     const matches = [...processedPrompt.matchAll(/\{([^}]+)\}/g)];
 

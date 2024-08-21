@@ -13,20 +13,12 @@ import { BaseChain, RetrievalQAChain } from "langchain/chains";
 import moment from "moment";
 import { TFile, Vault, parseYaml } from "obsidian";
 
-export const isFolderMatch = (
-  fileFullpath: string,
-  inputPath: string,
-): boolean => {
-  const fileSegments = fileFullpath
-    .split("/")
-    .map((segment) => segment.toLowerCase());
+export const isFolderMatch = (fileFullpath: string, inputPath: string): boolean => {
+  const fileSegments = fileFullpath.split("/").map((segment) => segment.toLowerCase());
   return fileSegments.includes(inputPath.toLowerCase());
 };
 
-export async function getNoteFileFromTitle(
-  vault: Vault,
-  noteTitle: string,
-): Promise<TFile | null> {
+export async function getNoteFileFromTitle(vault: Vault, noteTitle: string): Promise<TFile | null> {
   // Get all markdown files in the vault
   const files = vault.getMarkdownFiles();
 
@@ -45,10 +37,7 @@ export async function getNoteFileFromTitle(
   return null;
 }
 
-export const getNotesFromPath = async (
-  vault: Vault,
-  path: string,
-): Promise<TFile[]> => {
+export const getNotesFromPath = async (vault: Vault, path: string): Promise<TFile[]> => {
   const files = vault.getMarkdownFiles();
 
   // Special handling for the root path '/'
@@ -83,10 +72,7 @@ export const getNotesFromPath = async (
   });
 };
 
-export async function getTagsFromNote(
-  file: TFile,
-  vault: Vault,
-): Promise<string[]> {
+export async function getTagsFromNote(file: TFile, vault: Vault): Promise<string[]> {
   const fileContent = await vault.cachedRead(file);
   // Check if the file starts with frontmatter delimiter
   if (fileContent.startsWith("---")) {
@@ -113,7 +99,7 @@ export async function getTagsFromNote(
 export async function getNotesFromTags(
   vault: Vault,
   tags: string[],
-  noteFiles?: TFile[],
+  noteFiles?: TFile[]
 ): Promise<TFile[]> {
   if (tags.length === 0) {
     return [];
@@ -122,10 +108,7 @@ export async function getNotesFromTags(
   // Strip any '#' from the tags set from the user
   tags = tags.map((tag) => tag.replace("#", ""));
 
-  const files =
-    noteFiles && noteFiles.length > 0
-      ? noteFiles
-      : await getNotesFromPath(vault, "/");
+  const files = noteFiles && noteFiles.length > 0 ? noteFiles : await getNotesFromPath(vault, "/");
   const filesWithTag = [];
 
   for (const file of files) {
@@ -155,7 +138,7 @@ export function isPathInList(filePath: string, pathList: string): boolean {
           .trim() // Trim whitespace
           .replace(/^\[\[|\]\]$/g, "") // Remove surrounding [[ and ]]
           .replace(/^\//, "") // Remove leading slash
-          .toLowerCase(), // Convert to lowercase for case-insensitive comparison
+          .toLowerCase() // Convert to lowercase for case-insensitive comparison
     )
     .some((normalizedPath) => {
       // Check for exact match or proper segmentation
@@ -184,23 +167,17 @@ export const stringToChainType = (chain: string): ChainType => {
   }
 };
 
-export const isLLMChain = (
-  chain: RunnableSequence,
-): chain is RunnableSequence => {
+export const isLLMChain = (chain: RunnableSequence): chain is RunnableSequence => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (chain as any).last.bound.modelName || (chain as any).last.bound.model;
 };
 
-export const isRetrievalQAChain = (
-  chain: BaseChain,
-): chain is RetrievalQAChain => {
+export const isRetrievalQAChain = (chain: BaseChain): chain is RetrievalQAChain => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (chain as any).last.bound.retriever !== undefined;
 };
 
-export const isSupportedChain = (
-  chain: RunnableSequence,
-): chain is RunnableSequence => {
+export const isSupportedChain = (chain: RunnableSequence): chain is RunnableSequence => {
   return isLLMChain(chain) || isRetrievalQAChain(chain);
 };
 
@@ -210,10 +187,7 @@ export const getModelName = (modelDisplayName: string): string => {
 
 // Returns the last N messages from the chat history,
 // last one being the newest ai message
-export const getChatContext = (
-  chatHistory: ChatMessage[],
-  contextSize: number,
-) => {
+export const getChatContext = (chatHistory: ChatMessage[], contextSize: number) => {
   if (chatHistory.length === 0) {
     return [];
   }
@@ -231,10 +205,7 @@ export const getChatContext = (
   return chatHistory.slice(startIndex, lastIndex + 1);
 };
 
-export const formatDateTime = (
-  now: Date,
-  timezone: "local" | "utc" = "local",
-) => {
+export const formatDateTime = (now: Date, timezone: "local" | "utc" = "local") => {
   const formattedDateTime = moment(now);
 
   if (timezone === "utc") {
@@ -244,10 +215,7 @@ export const formatDateTime = (
   return formattedDateTime.format("YYYY_MM_DD-HH_mm_ss");
 };
 
-export async function getFileContent(
-  file: TFile,
-  vault: Vault,
-): Promise<string | null> {
+export async function getFileContent(file: TFile, vault: Vault): Promise<string | null> {
   if (file.extension != "md") return null;
   return await vault.cachedRead(file);
 }
@@ -271,7 +239,7 @@ export async function getAllNotesContent(vault: Vault): Promise<string> {
 
 export function areEmbeddingModelsSame(
   model1: string | undefined,
-  model2: string | undefined,
+  model2: string | undefined
 ): boolean {
   if (!model1 || !model2) return false;
   // TODO: Hacks to handle different embedding model names for the same model. Need better handling.
@@ -292,14 +260,10 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
   // Stuff in settings are string even when the interface has number type!
   const temperature = Number(settings.temperature);
-  sanitizedSettings.temperature = isNaN(temperature)
-    ? DEFAULT_SETTINGS.temperature
-    : temperature;
+  sanitizedSettings.temperature = isNaN(temperature) ? DEFAULT_SETTINGS.temperature : temperature;
 
   const maxTokens = Number(settings.maxTokens);
-  sanitizedSettings.maxTokens = isNaN(maxTokens)
-    ? DEFAULT_SETTINGS.maxTokens
-    : maxTokens;
+  sanitizedSettings.maxTokens = isNaN(maxTokens) ? DEFAULT_SETTINGS.maxTokens : maxTokens;
 
   const contextTurns = Number(settings.contextTurns);
   sanitizedSettings.contextTurns = isNaN(contextTurns)
@@ -311,10 +275,7 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
 // Basic prompts
 // Note that GPT4 is much better at following instructions than GPT3.5!
-export function sendNoteContentPrompt(
-  noteName: string,
-  noteContent: string | null,
-): string {
+export function sendNoteContentPrompt(noteName: string, noteContent: string | null): string {
   return (
     `Please read the note below and be ready to answer questions about it. ` +
     `If there's no information about a certain topic, just say the note ` +
@@ -326,9 +287,7 @@ export function sendNoteContentPrompt(
   );
 }
 
-export function sendNotesContentPrompt(
-  notes: { name: string; content: string }[],
-): string {
+export function sendNotesContentPrompt(notes: { name: string; content: string }[]): string {
   return (
     `Please read the notes below and be ready to answer questions about them. ` +
     `If there's no information about a certain topic, just say the note ` +
@@ -347,34 +306,23 @@ function getNoteTitleAndTags(noteWithTag: {
 }): string {
   return (
     `[[${noteWithTag.name}]]` +
-    (noteWithTag.tags && noteWithTag.tags.length > 0
-      ? `\ntags: ${noteWithTag.tags.join(",")}`
-      : "")
+    (noteWithTag.tags && noteWithTag.tags.length > 0 ? `\ntags: ${noteWithTag.tags.join(",")}` : "")
   );
 }
 
-function getChatContextStr(
-  chatNoteContextPath: string,
-  chatNoteContextTags: string[],
-): string {
-  const pathStr = chatNoteContextPath
-    ? `\nChat context by path: ${chatNoteContextPath}`
-    : "";
+function getChatContextStr(chatNoteContextPath: string, chatNoteContextTags: string[]): string {
+  const pathStr = chatNoteContextPath ? `\nChat context by path: ${chatNoteContextPath}` : "";
   const tagsStr =
-    chatNoteContextTags?.length > 0
-      ? `\nChat context by tags: ${chatNoteContextTags}`
-      : "";
+    chatNoteContextTags?.length > 0 ? `\nChat context by tags: ${chatNoteContextTags}` : "";
   return pathStr + tagsStr;
 }
 
 export function getSendChatContextNotesPrompt(
   notes: { name: string; content: string }[],
   chatNoteContextPath: string,
-  chatNoteContextTags: string[],
+  chatNoteContextTags: string[]
 ): string {
-  const noteTitles = notes
-    .map((note) => getNoteTitleAndTags(note))
-    .join("\n\n");
+  const noteTitles = notes.map((note) => getNoteTitleAndTags(note)).join("\n\n");
   return (
     `Please read the notes below and be ready to answer questions about them. ` +
     getChatContextStr(chatNoteContextPath, chatNoteContextTags) +
@@ -382,9 +330,7 @@ export function getSendChatContextNotesPrompt(
   );
 }
 
-export function fixGrammarSpellingSelectionPrompt(
-  selectedText: string,
-): string {
+export function fixGrammarSpellingSelectionPrompt(selectedText: string): string {
   return (
     `Please fix the grammar and spelling of the following text and return it without any other changes:\n\n` +
     `${selectedText}`
@@ -439,9 +385,7 @@ export function rewriteTweetSelectionPrompt(selectedText: string): string {
     + ${selectedText}`;
 }
 
-export function rewriteTweetThreadSelectionPrompt(
-  selectedText: string,
-): string {
+export function rewriteTweetThreadSelectionPrompt(selectedText: string): string {
   return (
     `Please follow the instructions closely step by step and rewrite the content to a thread. ` +
     `1. Each paragraph must be under 240 characters. ` +
@@ -474,9 +418,7 @@ export function eli5SelectionPrompt(selectedText: string): string {
   );
 }
 
-export function rewritePressReleaseSelectionPrompt(
-  selectedText: string,
-): string {
+export function rewritePressReleaseSelectionPrompt(selectedText: string): string {
   return (
     `Please rewrite the following text to make it sound like a press release. Output in the same language as the source, do not output English if it is not English:\n\n` +
     `${selectedText}`
@@ -485,10 +427,7 @@ export function rewritePressReleaseSelectionPrompt(
 
 export function createTranslateSelectionPrompt(language?: string) {
   return (selectedText: string): string => {
-    return (
-      `Please translate the following text to ${language}:\n\n` +
-      `${selectedText}`
-    );
+    return `Please translate the following text to ${language}:\n\n` + `${selectedText}`;
   };
 }
 
@@ -501,9 +440,7 @@ export function createChangeToneSelectionPrompt(tone?: string) {
   };
 }
 
-export function extractChatHistory(
-  memoryVariables: MemoryVariables,
-): [string, string][] {
+export function extractChatHistory(memoryVariables: MemoryVariables): [string, string][] {
   const chatHistory: [string, string][] = [];
   const { history } = memoryVariables;
 
@@ -520,9 +457,7 @@ export function extractNoteTitles(query: string): string[] {
   // Use a regular expression to extract note titles wrapped in [[]]
   const regex = /\[\[(.*?)\]\]/g;
   const matches = query.match(regex);
-  const uniqueTitles = new Set(
-    matches ? matches.map((match) => match.slice(2, -2)) : [],
-  );
+  const uniqueTitles = new Set(matches ? matches.map((match) => match.slice(2, -2)) : []);
   return Array.from(uniqueTitles);
 }
 

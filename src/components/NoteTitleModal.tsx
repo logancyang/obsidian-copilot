@@ -4,11 +4,7 @@ export class NoteTitleModal extends FuzzySuggestModal<string> {
   private onChooseNoteTitle: (noteTitle: string) => void;
   private noteTitles: string[];
 
-  constructor(
-    app: App,
-    noteTitles: string[],
-    onChooseNoteTitle: (noteTitle: string) => void
-  ) {
+  constructor(app: App, noteTitles: string[], onChooseNoteTitle: (noteTitle: string) => void) {
     super(app);
     this.noteTitles = noteTitles;
     this.onChooseNoteTitle = onChooseNoteTitle;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
 export interface ChatMessage {
   message: string;
@@ -24,17 +24,11 @@ class SharedState {
 
 export function useSharedState(
   sharedState: SharedState
-): [
-  ChatMessage[],
-  (message: ChatMessage) => void,
-  () => void
-] {
+): [ChatMessage[], (message: ChatMessage) => void, () => void] {
   // Initializes the local chatHistory state with the current
   // sharedState chatHistory using the useState hook
   // setChatHistory is used to update the *local* state
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>(
-    sharedState.getMessages()
-  );
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>(sharedState.getMessages());
 
   // The useEffect hook ensures that the local state is synchronized
   // with the shared state when the component is mounted.
@@ -56,11 +50,7 @@ export function useSharedState(
     setChatHistory([]);
   };
 
-  return [
-    chatHistory,
-    addMessage,
-    clearMessages,
-  ];
+  return [chatHistory, addMessage, clearMessages];
 }
 
 export default SharedState;

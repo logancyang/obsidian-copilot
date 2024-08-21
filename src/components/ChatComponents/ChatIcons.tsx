@@ -1,9 +1,5 @@
 import { SetChainOptions } from "@/aiParams";
-import {
-  AI_SENDER,
-  ChatModelDisplayNames,
-  VAULT_VECTOR_STORE_STRATEGY,
-} from "@/constants";
+import { AI_SENDER, ChatModelDisplayNames, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { ProxyServer } from "@/proxyServer";
 import { ChatMessage } from "@/sharedState";
 import { getFileContent, getFileName } from "@/utils";
@@ -64,7 +60,10 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
     // Start proxy server based on the selected model & settings
     const proxyServerURL = proxyServer.getProxyURL(selectedModel);
     if (proxyServerURL) {
-      await proxyServer.startProxyServer(proxyServerURL, selectedModel !== ChatModelDisplayNames.CLAUDE);
+      await proxyServer.startProxyServer(
+        proxyServerURL,
+        selectedModel !== ChatModelDisplayNames.CLAUDE
+      );
     } else {
       await proxyServer.stopProxyServer();
     }
@@ -72,7 +71,10 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
 
   useEffect(() => {
     const startProxyServerForClaude = async (proxyServerURL: string) => {
-      await proxyServer.startProxyServer(proxyServerURL, currentModel !== ChatModelDisplayNames.CLAUDE);
+      await proxyServer.startProxyServer(
+        proxyServerURL,
+        currentModel !== ChatModelDisplayNames.CLAUDE
+      );
     };
 
     // Call the function on component mount
@@ -87,9 +89,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
     };
   }, []);
 
-  const handleChainChange = async (
-    event: React.ChangeEvent<HTMLSelectElement>
-  ) => {
+  const handleChainChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedChain(stringToChainType(event.target.value));
   };
 
@@ -158,12 +158,8 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             value={currentModel}
             onChange={handleModelChange}
           >
-            <option value={ChatModelDisplayNames.GPT_4}>
-              {ChatModelDisplayNames.GPT_4}
-            </option>
-            <option value={ChatModelDisplayNames.GPT_4o}>
-              {ChatModelDisplayNames.GPT_4o}
-            </option>
+            <option value={ChatModelDisplayNames.GPT_4}>{ChatModelDisplayNames.GPT_4}</option>
+            <option value={ChatModelDisplayNames.GPT_4o}>{ChatModelDisplayNames.GPT_4o}</option>
             <option value={ChatModelDisplayNames.GPT_4o_mini}>
               {ChatModelDisplayNames.GPT_4o_mini}
             </option>
@@ -176,9 +172,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             <option value={ChatModelDisplayNames.AZURE_OPENAI}>
               {ChatModelDisplayNames.AZURE_OPENAI}
             </option>
-            <option value={ChatModelDisplayNames.CLAUDE}>
-              {ChatModelDisplayNames.CLAUDE}
-            </option>
+            <option value={ChatModelDisplayNames.CLAUDE}>{ChatModelDisplayNames.CLAUDE}</option>
             <option value={ChatModelDisplayNames.GEMINI_PRO}>
               {ChatModelDisplayNames.GEMINI_PRO}
             </option>
@@ -188,15 +182,11 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             <option value={ChatModelDisplayNames.OPENROUTERAI}>
               {ChatModelDisplayNames.OPENROUTERAI}
             </option>
-            <option value={ChatModelDisplayNames.GROQ}>
-              {ChatModelDisplayNames.GROQ}
-            </option>
+            <option value={ChatModelDisplayNames.GROQ}>{ChatModelDisplayNames.GROQ}</option>
             <option value={ChatModelDisplayNames.LM_STUDIO}>
               {ChatModelDisplayNames.LM_STUDIO}
             </option>
-            <option value={ChatModelDisplayNames.OLLAMA}>
-              {ChatModelDisplayNames.OLLAMA}
-            </option>
+            <option value={ChatModelDisplayNames.OLLAMA}>{ChatModelDisplayNames.OLLAMA}</option>
           </select>
           <span className="tooltip-text">Model Selection</span>
         </div>
@@ -247,10 +237,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         </button>
       )}
       {selectedChain === "long_note_qa" && (
-        <button
-          className="chat-icon-button"
-          onClick={onForceRebuildActiveNoteContext}
-        >
+        <button className="chat-icon-button" onClick={onForceRebuildActiveNoteContext}>
           <UseActiveNoteAsContextIcon className="icon-scaler" />
           <span className="tooltip-text">
             Refresh Index

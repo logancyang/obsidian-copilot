@@ -1,14 +1,14 @@
-import ChainManager from '@/LLMProviders/chainManager';
-import { SetChainOptions } from '@/aiParams';
-import { ChainType } from '@/chainFactory';
+import ChainManager from "@/LLMProviders/chainManager";
+import { SetChainOptions } from "@/aiParams";
+import { ChainType } from "@/chainFactory";
 import { BaseChatMemory } from "langchain/memory";
-import { useState } from 'react';
+import { useState } from "react";
 
 /**
  * React hook to manage state related to model, chain and memory in Chat component.
-*/
+ */
 export function useAIState(
-  chainManager: ChainManager,
+  chainManager: ChainManager
 ): [
   string,
   (model: string) => void,
@@ -36,11 +36,5 @@ export function useAIState(
     setCurrentChain(newChain);
   };
 
-  return [
-    currentModel,
-    setModel,
-    currentChain,
-    setChain,
-    clearChatMemory,
-  ];
+  return [currentModel, setModel, currentChain, setChain, clearChatMemory];
 }

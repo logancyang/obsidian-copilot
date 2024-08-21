@@ -37,7 +37,7 @@ export default class ChatModelManager {
 
   private constructor(
     private langChainParams: LangChainParams,
-    encryptionService: EncryptionService,
+    encryptionService: EncryptionService
   ) {
     this.encryptionService = encryptionService;
     this.buildModelMap();
@@ -45,20 +45,16 @@ export default class ChatModelManager {
 
   static getInstance(
     langChainParams: LangChainParams,
-    encryptionService: EncryptionService,
+    encryptionService: EncryptionService
   ): ChatModelManager {
     if (!ChatModelManager.instance) {
-      ChatModelManager.instance = new ChatModelManager(
-        langChainParams,
-        encryptionService,
-      );
+      ChatModelManager.instance = new ChatModelManager(langChainParams, encryptionService);
     }
     return ChatModelManager.instance;
   }
 
   private getModelConfig(chatModelProvider: string): ModelConfig {
-    const decrypt = (key: string) =>
-      this.encryptionService.getDecryptedKey(key);
+    const decrypt = (key: string) => this.encryptionService.getDecryptedKey(key);
     const params = this.langChainParams;
     const baseConfig: ModelConfig = {
       modelName: params.model,
@@ -70,10 +66,7 @@ export default class ChatModelManager {
 
     const providerConfig = {
       [ModelProviders.OPENAI]: {
-        modelName:
-          params.openAIProxyModelName ||
-          params.openAICustomModel ||
-          params.model,
+        modelName: params.openAIProxyModelName || params.openAICustomModel || params.model,
         openAIApiKey: decrypt(params.openAIApiKey),
         openAIOrgId: decrypt(params.openAIOrgId),
         maxTokens: params.maxTokens,
@@ -136,9 +129,7 @@ export default class ChatModelManager {
     ChatModelManager.modelMap = {};
     const modelMap = ChatModelManager.modelMap;
 
-    const OpenAIChatModel = this.langChainParams.openAIProxyBaseUrl
-      ? ProxyChatOpenAI
-      : ChatOpenAI;
+    const OpenAIChatModel = this.langChainParams.openAIProxyBaseUrl ? ProxyChatOpenAI : ChatOpenAI;
 
     const modelConfigurations = [
       {
