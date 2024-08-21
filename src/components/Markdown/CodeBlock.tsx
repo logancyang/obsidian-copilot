@@ -67,27 +67,7 @@ export const CodeBlock: FC<CodeProps> = memo(({ language = "text", value }) => {
       }, 2000);
     });
   };
-  const downloadAsFile = () => {
-    const fileExtension = programmingLanguages[language] || ".file";
-    const suggestedFileName = `file-${generateRandomString(3, true)}${fileExtension}`;
-    const fileName = window.prompt(t("Enter file name") || "", suggestedFileName);
 
-    if (!fileName) {
-      // user pressed cancel on prompt
-      return;
-    }
-
-    const blob = new Blob([value], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.download = fileName;
-    link.href = url;
-    link.style.display = "none";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
   return (
     <div className="codeblock relative font-sans text-[16px]">
       <div className="flex items-center justify-between py-1.5 px-4">
