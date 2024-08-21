@@ -62,7 +62,7 @@ If your plugin does not need CSS, delete this file.
   flex-direction: column;
   width: 100%;
   height: 100%;
-  overflow: hidden;  /* Fix overflow and can't scroll up */
+  overflow: hidden; /* Fix overflow and can't scroll up */
 }
 
 .bottom-container {
@@ -211,12 +211,14 @@ If your plugin does not need CSS, delete this file.
   word-break: break-word;
 }
 
-.message-content pre, .message-content p {
+.message-content pre,
+.message-content p {
   margin: 0;
   padding: 0;
 }
 
-.message-content ol, .message-content ul {
+.message-content ol,
+.message-content ul {
   list-style: none;
   padding-left: 20px;
   margin: 0;
@@ -238,13 +240,13 @@ If your plugin does not need CSS, delete this file.
 }
 
 .message-content li:has(> p) {
-    display: flex;
-    flex-direction: column;
+  display: flex;
+  flex-direction: column;
 }
 
 .message-content li:has(> p)::before {
-    align-self: flex-start;
-    margin-top: 0; /* Adjust this value to align the pseudo-element vertically */
+  align-self: flex-start;
+  margin-top: 0; /* Adjust this value to align the pseudo-element vertically */
 }
 
 .copy-message-button {

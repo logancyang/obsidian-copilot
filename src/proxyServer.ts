@@ -1,10 +1,11 @@
+import { ChatModelDisplayNames } from "@/constants";
+import { CopilotSettings } from "@/settings/SettingsPage";
 import cors from "@koa/cors";
 import Koa from "koa";
 import proxy from "koa-proxies";
-import { CopilotSettings } from "@/settings/SettingsPage";
-import { ChatModelDisplayNames } from "@/constants";
 
 // There should only be 1 running proxy server at a time so keep it in upper scope
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let server: any;
 
 export class ProxyServer {
@@ -22,10 +23,7 @@ export class ProxyServer {
   getProxyURL(currentModel: string): string {
     if (currentModel === ChatModelDisplayNames.CLAUDE) {
       return "https://api.anthropic.com/";
-    } else if (
-      this.settings.useOpenAILocalProxy &&
-      this.settings.openAIProxyBaseUrl
-    ) {
+    } else if (this.settings.useOpenAILocalProxy && this.settings.openAIProxyBaseUrl) {
       return this.settings.openAIProxyBaseUrl;
     }
 
@@ -51,12 +49,12 @@ export class ProxyServer {
         changeOrigin: true,
         logs: false,
         rewrite: rewritePaths ? (path) => path : undefined,
-      }),
+      })
     );
 
     // Create the server and attach error handling for "EADDRINUSE"
     if (server?.listening) {
-      return
+      return;
     }
     server = app.listen(this.port);
     server.on("error", (err: NodeJS.ErrnoException) => {
@@ -71,7 +69,7 @@ export class ProxyServer {
       this.runningUrl = proxyBaseUrl;
       if (this.debug) {
         console.log(
-          `Proxy server running on http://localhost:${this.port}. Proxy to ${proxyBaseUrl}`,
+          `Proxy server running on http://localhost:${this.port}. Proxy to ${proxyBaseUrl}`
         );
       }
     });
@@ -81,9 +79,7 @@ export class ProxyServer {
     let waitForClose: Promise<boolean> | boolean = false;
     if (server) {
       if (this.debug) {
-        console.log(
-          `Attempting to stop proxy server proxying to ${this.runningUrl}...`,
-        );
+        console.log(`Attempting to stop proxy server proxying to ${this.runningUrl}...`);
       }
       waitForClose = new Promise((resolve) => {
         server.on("close", () => {
