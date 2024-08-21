@@ -44,8 +44,12 @@ In the case of Copilot for Obsidian, you will need to:
 1. Fork the repo.
 2. Create a vault just for development.
 3. Clone the forked repo into your vault's `plugins` folder.
-4. Run `npm run dev` in your repo to see the effect of your changes.
-5. When you are ready to make a pull request, ensure to make your changes in **a branch on your fork**, and then submit a pull request to the **main repo**.
+4. Run `npm install` to install all dependencies.
+5. Install the recommended VS Code extensions (Prettier and ESLint).
+6. Ensure your editor respects the `.editorconfig` and Prettier settings.
+7. Run `npm run dev` in your repo to see the effect of your changes.
+8. Before committing, run `npm run format` to ensure all files are properly formatted.
+9. When you are ready to make a pull request, ensure to make your changes in **a branch on your fork**, and then submit a pull request to the **main repo**.
 
 Try to be descriptive in your branch names and pull requests. Happy coding!
 
@@ -55,4 +59,3 @@ Try to be descriptive in your branch names and pull requests. Happy coding!
 - **Email**: logan@brevilabs.com
 
 Thank you for contributing to Copilot for Obsidian!
-

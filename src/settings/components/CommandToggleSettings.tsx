@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ToggleComponent } from './SettingBlocks';
+import React, { useState } from "react";
+import { ToggleComponent } from "./SettingBlocks";
 
 interface CommandToggleSettingsProps {
   enabledCommands: Record<string, { enabled: boolean; name: string }>;
@@ -15,14 +15,14 @@ const CommandToggleSettings: React.FC<CommandToggleSettingsProps> = ({
   const toggleCommand = (commandId: string, enabled: boolean) => {
     setEnabledCommands({
       ...enabledCommands,
-      [commandId]: { ...enabledCommands[commandId], enabled }
+      [commandId]: { ...enabledCommands[commandId], enabled },
     });
   };
 
   return (
     <div>
-      <h2 onClick={() => setIsExpanded(!isExpanded)} style={{ cursor: 'pointer' }}>
-        Command Settings {isExpanded ? '▼' : '▶'}
+      <h2 onClick={() => setIsExpanded(!isExpanded)} style={{ cursor: "pointer" }}>
+        Command Settings {isExpanded ? "▼" : "▶"}
       </h2>
       {isExpanded && (
         <div>

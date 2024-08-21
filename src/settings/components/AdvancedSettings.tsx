@@ -1,9 +1,5 @@
-import React from 'react';
-import {
-  TextAreaComponent,
-  TextComponent,
-  ToggleComponent,
-} from './SettingBlocks';
+import React from "react";
+import { TextAreaComponent, TextComponent, ToggleComponent } from "./SettingBlocks";
 
 interface AdvancedSettingsProps {
   openAIProxyBaseUrl: string;
@@ -40,7 +36,8 @@ const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
       <br />
       <h1>Advanced Settings</h1>
       <div className="warning-message">
-        OpenAI Proxy settings override the default OpenAI parameters, meaning now your OpenAI models are routed to this provider instead! Clear these fields to use OpenAI again.
+        OpenAI Proxy settings override the default OpenAI parameters, meaning now your OpenAI models
+        are routed to this provider instead! Clear these fields to use OpenAI again.
         <br />
         This is in effect only when you pick any OpenAI model in the model dropdown.
         <br />
