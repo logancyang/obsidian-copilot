@@ -1,4 +1,4 @@
-import { NoteTitleModal } from "@/components/ NoteTitleModal";
+import { NoteTitleModal } from "@/components/NoteTitleModal";
 import React, { useEffect, useRef, useState } from "react";
 
 interface ChatInputProps {
