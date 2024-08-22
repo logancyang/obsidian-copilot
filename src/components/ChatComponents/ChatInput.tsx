@@ -1,4 +1,5 @@
 import { NoteTitleModal } from "@/components/NoteTitleModal";
+import { IconSend } from "@tabler/icons-react";
 import React, { useEffect, useRef, useState } from "react";
 
 interface ChatInputProps {
@@ -82,7 +83,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
         onKeyDown={handleKeyDown}
         rows={rows}
       />
-      <button onClick={handleSendMessage}>Send</button>
+      <button onClick={handleSendMessage} aria-label="Send message">
+        <IconSend size={18} />
+      </button>
     </div>
   );
 };

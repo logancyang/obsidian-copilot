@@ -141,17 +141,21 @@ If your plugin does not need CSS, delete this file.
   flex-grow: 1;
   width: 100%;
   order: 2;
+  position: relative;
 }
 
 .chat-input-container textarea {
   width: 100%;
-  margin-right: 8px;
+  margin-right: 0;
   margin-bottom: 8px;
   resize: none;
   overflow: auto;
   min-height: 60px;
   max-height: 200px;
   box-sizing: border-box;
+  border: 1px solid gray;
+  border-radius: 10px;
+  padding: 15px 60px 15px 15px;
 }
 
 .chat-input-container textarea::placeholder {
@@ -160,8 +164,12 @@ If your plugin does not need CSS, delete this file.
 }
 
 .chat-input-container button {
+  position: absolute;
+  right: 22px;
+  bottom: 31px;
   padding: 8px;
-  margin: 8px;
+  margin: 0;
+  z-index: 1;
 }
 
 .chat-messages {
