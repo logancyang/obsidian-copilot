@@ -11,7 +11,6 @@ import {
   RefreshIcon,
   SaveAsNoteIcon,
   SendActiveNoteToPromptIcon,
-  StopIcon,
   UseActiveNoteAsContextIcon,
 } from "@/components/Icons";
 import { stringToChainType } from "@/utils";
@@ -21,7 +20,6 @@ interface ChatIconsProps {
   setCurrentModel: (model: string) => void;
   currentChain: ChainType;
   setCurrentChain: (chain: ChainType, options?: SetChainOptions) => void;
-  onStopGenerating: () => void;
   onNewChat: () => void;
   onSaveAsNote: () => void;
   onSendActiveNoteToPrompt: () => void;
@@ -39,7 +37,6 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   setCurrentModel,
   currentChain,
   setCurrentChain,
-  onStopGenerating,
   onNewChat,
   onSaveAsNote,
   onSendActiveNoteToPrompt,
@@ -191,10 +188,6 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           <span className="tooltip-text">Model Selection</span>
         </div>
       </div>
-      <button className="chat-icon-button" onClick={onStopGenerating}>
-        <StopIcon className="icon-scaler" />
-        <span className="tooltip-text">Stop Generating</span>
-      </button>
       <button className="chat-icon-button" onClick={onNewChat}>
         <RefreshIcon className="icon-scaler" />
         <span className="tooltip-text">

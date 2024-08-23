@@ -1,5 +1,5 @@
 import { NoteTitleModal } from "@/components/NoteTitleModal";
-import { IconSend } from "@tabler/icons-react";
+import { IconPlayerStopFilled, IconSend } from "@tabler/icons-react";
 import React, { useEffect, useRef, useState } from "react";
 
 interface ChatInputProps {
@@ -8,6 +8,8 @@ interface ChatInputProps {
   handleKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   handleSendMessage: () => void;
   getChatVisibility: () => Promise<boolean>;
+  isGenerating: boolean;
+  onStopGenerating: () => void;
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
@@ -16,6 +18,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
   handleKeyDown,
   handleSendMessage,
   getChatVisibility,
+  isGenerating,
+  onStopGenerating,
 }) => {
   const [rows, setRows] = useState(1);
   const [shouldFocus, setShouldFocus] = useState(false);
@@ -83,8 +87,11 @@ const ChatInput: React.FC<ChatInputProps> = ({
         onKeyDown={handleKeyDown}
         rows={rows}
       />
-      <button onClick={handleSendMessage} aria-label="Send message">
-        <IconSend size={18} />
+      <button
+        onClick={isGenerating ? onStopGenerating : handleSendMessage}
+        aria-label={isGenerating ? "Stop generating" : "Send message"}
+      >
+        {isGenerating ? <IconPlayerStopFilled size={18} /> : <IconSend size={18} />}
       </button>
     </div>
   );
