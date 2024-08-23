@@ -301,8 +301,11 @@ const Chat: React.FC<ChatProps> = ({
 
   const handleStopGenerating = () => {
     if (abortController) {
-      console.log("User stopping generation...");
+      if (plugin.settings.debug) {
+        console.log("User stopping generation...");
+      }
       abortController.abort();
+      setLoading(false);
     }
   };
 
@@ -457,7 +460,6 @@ const Chat: React.FC<ChatProps> = ({
           setCurrentModel={setModel}
           currentChain={currentChain}
           setCurrentChain={setChain}
-          onStopGenerating={handleStopGenerating}
           onNewChat={() => {
             clearMessages();
             clearChatMemory();
@@ -479,6 +481,8 @@ const Chat: React.FC<ChatProps> = ({
           handleSendMessage={handleSendMessage}
           handleKeyDown={handleKeyDown}
           getChatVisibility={getChatVisibility}
+          isGenerating={loading}
+          onStopGenerating={handleStopGenerating}
         />
       </div>
     </div>
