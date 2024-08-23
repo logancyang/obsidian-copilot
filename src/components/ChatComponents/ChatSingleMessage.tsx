@@ -25,6 +25,22 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({ message }) => {
     });
   };
 
+  // const markdown = `
+  // The Maxwell equations are:
+
+  // 1. Gauss's Law:
+  //    \\(\\nabla \\cdot \\mathbf{E} = \\frac{\\rho}{\\epsilon_0}\\)
+
+  // 2. Gauss's Law for Magnetism:
+  //    \\(\\nabla \\cdot \\mathbf{B} = 0\\)
+
+  // 3. Faraday's Law of Induction:
+  //    \\(\\nabla \\times \\mathbf{E} = -\\frac{\\partial \\mathbf{B}}{\\partial t}\\)
+
+  // 4. Ampère-Maxwell Law:
+  //    \\(\\nabla \\times \\mathbf{B} = \\mu_0 \\mathbf{J} + \\mu_0 \\epsilon_0 \\frac{\\partial \\mathbf{E}}{\\partial t}\\)
+  // `;
+
   return (
     <div className="message-container">
       <div className={`message ${message.sender === USER_SENDER ? "user-message" : "bot-message"}`}>
@@ -35,7 +51,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({ message }) => {
           {message.sender === USER_SENDER ? (
             <span>{message.message}</span>
           ) : (
-            <MemoizedReactMarkdown transformLinkUri={null}>{message.message}</MemoizedReactMarkdown>
+            <MemoizedReactMarkdown>{message.message}</MemoizedReactMarkdown>
           )}
         </div>
       </div>
