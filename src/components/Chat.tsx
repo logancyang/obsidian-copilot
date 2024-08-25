@@ -453,6 +453,7 @@ const Chat: React.FC<ChatProps> = ({
         chatHistory={chatHistory}
         currentAiMessage={currentAiMessage}
         loading={loading}
+        app={app}
       />
       <div className="bottom-container">
         <ChatIcons

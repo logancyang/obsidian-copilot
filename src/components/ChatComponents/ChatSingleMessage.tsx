@@ -1,16 +1,18 @@
 import { BotIcon, CheckIcon, CopyClipboardIcon, UserIcon } from "@/components/Icons";
-import MemoizedReactMarkdown from "@/components/Markdown/MemoizedReactMarkdown";
 import { USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/sharedState";
-import React, { useState } from "react";
+import { App, Component, MarkdownRenderer } from "obsidian";
+import React, { useEffect, useRef, useState } from "react";
 
 interface ChatSingleMessageProps {
   message: ChatMessage;
+  app: App;
 }
 
-const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({ message }) => {
+const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({ message, app }) => {
   const [isCopied, setIsCopied] = useState<boolean>(false);
-
+  const contentRef = useRef<HTMLDivElement>(null);
+  const componentRef = useRef<Component | null>(null);
   const copyToClipboard = () => {
     if (!navigator.clipboard || !navigator.clipboard.writeText) {
       return;
@@ -25,21 +27,43 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({ message }) => {
     });
   };
 
-  // const markdown = `
-  // The Maxwell equations are:
+  const preprocessLatex = (content: string): string => {
+    return content
+      .replace(/\\\[/g, "$$")
+      .replace(/\\\]/g, "$$")
+      .replace(/\\\(/g, "$")
+      .replace(/\\\)/g, "$");
+  };
 
-  // 1. Gauss's Law:
-  //    \\(\\nabla \\cdot \\mathbf{E} = \\frac{\\rho}{\\epsilon_0}\\)
+  useEffect(() => {
+    if (contentRef.current && message.sender !== USER_SENDER) {
+      // Clear previous content
+      contentRef.current.innerHTML = "";
 
-  // 2. Gauss's Law for Magnetism:
-  //    \\(\\nabla \\cdot \\mathbf{B} = 0\\)
+      // Create a new Component instance if it doesn't exist
+      if (!componentRef.current) {
+        componentRef.current = new Component();
+      }
 
-  // 3. Faraday's Law of Induction:
-  //    \\(\\nabla \\times \\mathbf{E} = -\\frac{\\partial \\mathbf{B}}{\\partial t}\\)
+      const processedMessage = preprocessLatex(message.message);
 
-  // 4. Ampère-Maxwell Law:
-  //    \\(\\nabla \\times \\mathbf{B} = \\mu_0 \\mathbf{J} + \\mu_0 \\epsilon_0 \\frac{\\partial \\mathbf{E}}{\\partial t}\\)
-  // `;
+      // Use Obsidian's MarkdownRenderer to render the message
+      MarkdownRenderer.renderMarkdown(
+        processedMessage,
+        contentRef.current,
+        "", // Empty string for sourcePath as we don't have a specific source file
+        componentRef.current
+      );
+    }
+
+    // Cleanup function
+    return () => {
+      if (componentRef.current) {
+        componentRef.current.unload();
+        componentRef.current = null;
+      }
+    };
+  }, [message, app, componentRef]);
 
   return (
     <div className="message-container">
@@ -51,7 +75,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({ message }) => {
           {message.sender === USER_SENDER ? (
             <span>{message.message}</span>
           ) : (
-            <MemoizedReactMarkdown>{message.message}</MemoizedReactMarkdown>
+            <div ref={contentRef}></div>
           )}
         </div>
       </div>
