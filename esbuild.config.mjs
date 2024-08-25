@@ -1,4 +1,5 @@
 import esbuild from "esbuild";
+import { polyfillNode } from "esbuild-plugin-polyfill-node"; // Corrected import
 import svgPlugin from "esbuild-plugin-svg";
 import process from "process";
 import wasmPlugin from "./wasmPlugin.mjs";
@@ -38,9 +39,21 @@ const context = await esbuild.context({
   sourcemap: prod ? false : "inline",
   treeShaking: true,
   outfile: "main.js",
-  plugins: [svgPlugin(), wasmPlugin],
+  plugins: [
+    svgPlugin(),
+    wasmPlugin,
+    polyfillNode({ // Use polyfillNode instead of nodePolyfills
+      polyfills: {
+        events: true,
+        stream: true,
+        util: true,
+        // Add any other Node.js built-ins that PouchDB might be using
+      }
+    })
+  ],
   define: {
     'global': 'window',
+    'process.env.NODE_ENV': JSON.stringify(prod ? 'production' : 'development'),
   },
 });
 
