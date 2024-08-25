@@ -1,16 +1,21 @@
 import ChatSingleMessage from "@/components/ChatComponents/ChatSingleMessage";
-import { BotIcon } from "@/components/Icons";
-import ReactMarkdown from "@/components/Markdown/MemoizedReactMarkdown";
 import { ChatMessage } from "@/sharedState";
+import { App } from "obsidian";
 import React, { useEffect, useState } from "react";
 
 interface ChatMessagesProps {
   chatHistory: ChatMessage[];
   currentAiMessage: string;
   loading?: boolean;
+  app: App;
 }
 
-const ChatMessages: React.FC<ChatMessagesProps> = ({ chatHistory, currentAiMessage, loading }) => {
+const ChatMessages: React.FC<ChatMessagesProps> = ({
+  chatHistory,
+  currentAiMessage,
+  loading,
+  app,
+}) => {
   const [loadingDots, setLoadingDots] = useState("");
 
   const scrollToBottom = () => {
@@ -22,7 +27,7 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({ chatHistory, currentAiMessa
 
   useEffect(() => {
     scrollToBottom();
-  }, [chatHistory]);
+  }, [chatHistory, currentAiMessage]);
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
@@ -39,28 +44,20 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({ chatHistory, currentAiMessa
   return (
     <div className="chat-messages">
       {chatHistory.map(
-        (message, index) => message.isVisible && <ChatSingleMessage key={index} message={message} />
+        (message, index) =>
+          message.isVisible && <ChatSingleMessage key={index} message={message} app={app} />
       )}
-      {currentAiMessage ? (
-        <div className="message bot-message" key={`ai_message_${currentAiMessage}`}>
-          <div className="message-icon">
-            <BotIcon />
-          </div>
-          <div className="message-content">
-            <ReactMarkdown>{currentAiMessage}</ReactMarkdown>
-          </div>
-        </div>
-      ) : (
-        loading && (
-          <div className="message bot-message" key={`ai_message_${currentAiMessage}`}>
-            <div className="message-icon">
-              <BotIcon />
-            </div>
-            <div className="message-content">
-              <ReactMarkdown>{loadingDots}</ReactMarkdown>
-            </div>
-          </div>
-        )
+      {(currentAiMessage || loading) && (
+        <ChatSingleMessage
+          key={`ai_message_${currentAiMessage}`}
+          message={{
+            sender: "AI",
+            message: currentAiMessage || loadingDots,
+            isVisible: true,
+          }}
+          app={app}
+          isStreaming={true}
+        />
       )}
     </div>
   );

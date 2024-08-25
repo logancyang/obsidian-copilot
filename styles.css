@@ -212,32 +212,78 @@ If your plugin does not need CSS, delete this file.
 }
 
 .message-content {
-  white-space: pre-wrap;
-  line-height: 1.5;
   grid-area: content;
   max-width: 95%;
   word-break: break-word;
+  line-height: 2 !important;
 }
 
-.message-content pre,
 .message-content p {
-  margin: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.message-content table {
+  margin-top: 15px;
+  margin-bottom: 15px;
+}
+
+/* Style for inline code */
+.message-content code {
+  background-color: var(--code-background);
+  padding: 2px 4px;
+  border-radius: 3px;
+  color: var(--code-normal);
+}
+
+/* Style for code blocks */
+.message-content pre {
+  background-color: var(--background-primary-alt);
+  border-radius: 4px;
+  padding: 10px;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.message-content pre code {
+  background-color: transparent;
   padding: 0;
+  color: var(--code-normal);
+  line-height: 1.5 !important;
+  display: block;
 }
 
-.message-content ol,
-.message-content ul {
-  list-style: none;
-  padding-left: 20px;
-  margin: 0;
-}
-
-.message-content li {
-  margin: 0;
-  width: 100%;
-  padding-left: 10px;
-  display: inline;
+/* Style for the copy button in code blocks */
+.message-content pre {
   position: relative;
+}
+
+.message-content pre .copy-code-button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 4px 8px;
+  color: var(--text-muted);
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 0 4px 0 4px;
+  font-size: 0.8em;
+  transition: all 0.1s ease;
+  opacity: 0;
+}
+
+.message-content pre:hover .copy-code-button {
+  opacity: 1;
+}
+
+.message-content pre .copy-code-button:hover {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.message-content ul,
+.message-content ol {
+  padding-left: 20px;
+  margin: 10px;
 }
 
 .message-content li::before {
@@ -254,7 +300,6 @@ If your plugin does not need CSS, delete this file.
 
 .message-content li:has(> p)::before {
   align-self: flex-start;
-  margin-top: 0; /* Adjust this value to align the pseudo-element vertically */
 }
 
 .copy-message-button {
@@ -272,6 +317,7 @@ If your plugin does not need CSS, delete this file.
 }
 
 .user-message {
+  white-space: pre-wrap;
   width: 95%;
   color: var(--inline-title-color);
 }
