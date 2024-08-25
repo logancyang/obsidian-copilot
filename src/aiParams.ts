@@ -60,6 +60,7 @@ export interface LangChainParams {
   lmStudioBaseUrl: string;
   openAIProxyBaseUrl?: string;
   useOpenAILocalProxy?: boolean;
+  useOpenAIEmbeddingLocalProxy?: boolean;
   openAIProxyModelName?: string;
   openAIEmbeddingProxyBaseUrl?: string;
   openAIEmbeddingProxyModelName?: string;

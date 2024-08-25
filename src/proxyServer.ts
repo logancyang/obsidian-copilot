@@ -4,20 +4,36 @@ import cors from "@koa/cors";
 import Koa from "koa";
 import proxy from "koa-proxies";
 
-// There should only be 1 running proxy server at a time so keep it in upper scope
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let server: any;
-
 export class ProxyServer {
   private settings: CopilotSettings;
   private debug: boolean;
-  private port: number;
-  private runningUrl: string;
+  private chatPort: number;
+  private embeddingPort: number;
+  private chatProviderUrl = "";
+  private embeddingProviderUrl = "";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private chatServer: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private embeddingServer: any;
 
-  constructor(settings: CopilotSettings, port: number) {
+  private static instance: ProxyServer;
+
+  private constructor(settings: CopilotSettings, chatPort: number, embeddingPort: number) {
     this.settings = settings;
-    this.port = port;
+    this.chatPort = chatPort;
+    this.embeddingPort = embeddingPort;
     this.debug = settings.debug;
+  }
+
+  static getInstance(
+    settings: CopilotSettings,
+    chatPort: number,
+    embeddingPort: number
+  ): ProxyServer {
+    if (!ProxyServer.instance) {
+      ProxyServer.instance = new ProxyServer(settings, chatPort, embeddingPort);
+    }
+    return ProxyServer.instance;
   }
 
   getProxyURL(currentModel: string): string {
@@ -30,11 +46,23 @@ export class ProxyServer {
     return "";
   }
 
-  // Starts a proxy server on localhost that forwards requests to the provided base URL
-  // If rewritePaths is true, the proxy will rewrite all paths of the requests to match the base URL
-  async startProxyServer(proxyBaseUrl: string, rewritePaths = true) {
-    await this.stopProxyServer();
+  async startChatProxyServer(proxyBaseUrl: string, rewritePaths = true) {
+    await this.stopProxyServer(this.chatServer, this.chatPort, this.chatProviderUrl);
+    this.chatServer = await this.startProxyServer(proxyBaseUrl, this.chatPort, rewritePaths);
+    this.chatProviderUrl = proxyBaseUrl;
+  }
 
+  async startEmbeddingProxyServer(proxyBaseUrl: string, rewritePaths = true) {
+    await this.stopProxyServer(this.embeddingServer, this.embeddingPort, this.embeddingProviderUrl);
+    this.embeddingServer = await this.startProxyServer(
+      proxyBaseUrl,
+      this.embeddingPort,
+      rewritePaths
+    );
+    this.embeddingProviderUrl = proxyBaseUrl;
+  }
+
+  private async startProxyServer(proxyBaseUrl: string, port: number, rewritePaths = true) {
     if (this.debug) {
       console.log(`Attempting to start proxy server to ${proxyBaseUrl}...`);
     }
@@ -42,7 +70,6 @@ export class ProxyServer {
     const app = new Koa();
     app.use(cors());
 
-    // Proxy all requests to the new base URL
     app.use(
       proxy("/", {
         target: proxyBaseUrl,
@@ -52,46 +79,51 @@ export class ProxyServer {
       })
     );
 
-    // Create the server and attach error handling for "EADDRINUSE"
-    if (server?.listening) {
-      return;
-    }
-    server = app.listen(this.port);
-    server.on("error", (err: NodeJS.ErrnoException) => {
-      if (err.code === "EADDRINUSE") {
-        console.error(`Proxy server port ${this.port} is already in use.`);
-      } else {
-        console.error(`Failed to start proxy server: ${err.message}`);
-      }
-    });
+    return new Promise((resolve, reject) => {
+      const server = app.listen(port);
+      server.on("error", (err: NodeJS.ErrnoException) => {
+        if (err.code === "EADDRINUSE") {
+          console.error(`Proxy server port ${port} is already in use.`);
+        } else {
+          console.error(`Failed to start proxy server: ${err.message}`);
+        }
+        reject(err);
+      });
 
-    server.on("listening", () => {
-      this.runningUrl = proxyBaseUrl;
-      if (this.debug) {
-        console.log(
-          `Proxy server running on http://localhost:${this.port}. Proxy to ${proxyBaseUrl}`
-        );
-      }
+      server.on("listening", () => {
+        if (this.debug) {
+          console.log(`Proxy server running on http://localhost:${port}. Proxy to ${proxyBaseUrl}`);
+        }
+        resolve(server);
+      });
     });
   }
 
-  async stopProxyServer() {
-    let waitForClose: Promise<boolean> | boolean = false;
+  async stopProxyServer(server: any, port: number, runningUrl: string) {
     if (server) {
       if (this.debug) {
-        console.log(`Attempting to stop proxy server proxying to ${this.runningUrl}...`);
+        console.log(`Attempting to stop proxy server proxying to ${runningUrl}...`);
       }
-      waitForClose = new Promise((resolve) => {
-        server.on("close", () => {
-          this.runningUrl = "";
+      return new Promise<void>((resolve) => {
+        server.close(() => {
           if (this.debug) {
-            console.log("Proxy server stopped.");
+            console.log(`Proxy server on port ${port} stopped.`);
           }
-          resolve(true);
+          resolve();
         });
-        server.close();
       });
     }
-    return waitForClose;
+  }
+
+  async stopChatProxyServer() {
+    await this.stopProxyServer(this.chatServer, this.chatPort, this.chatProviderUrl);
+    this.chatServer = null;
+    this.chatProviderUrl = "";
+  }
+
+  async stopEmbeddingProxyServer() {
+    await this.stopProxyServer(this.embeddingServer, this.embeddingPort, this.embeddingProviderUrl);
+    this.embeddingServer = null;
+    this.embeddingProviderUrl = "";
   }
 }

@@ -152,7 +152,8 @@ export default class ChainManager {
     if (chainType === ChainType.LONG_NOTE_QA_CHAIN || chainType === ChainType.VAULT_QA_CHAIN) {
       this.embeddingsManager = EmbeddingsManager.getInstance(
         this.langChainParams,
-        this.encryptionService
+        this.encryptionService,
+        this.settings
       );
     }
 

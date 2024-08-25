@@ -1,8 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { LangChainParams } from "@/aiParams";
-import { EMBEDDING_MODEL_TO_PROVIDERS, ModelProviders, NOMIC_EMBED_TEXT } from "@/constants";
+import {
+  EMBEDDING_MODEL_TO_PROVIDERS,
+  EMBEDDING_PROXY_SERVER_PORT,
+  ModelProviders,
+  NOMIC_EMBED_TEXT,
+  PROXY_SERVER_PORT,
+} from "@/constants";
 import EncryptionService from "@/encryptionService";
 import { ProxyOpenAIEmbeddings } from "@/langchainWrappers";
+import { ProxyServer } from "@/proxyServer";
+import { CopilotSettings } from "@/settings/SettingsPage";
 import { CohereEmbeddings } from "@langchain/cohere";
 import { Embeddings } from "langchain/embeddings/base";
 import { OllamaEmbeddings } from "langchain/embeddings/ollama";
@@ -10,17 +18,31 @@ import { OpenAIEmbeddings } from "langchain/embeddings/openai";
 
 export default class EmbeddingManager {
   private static instance: EmbeddingManager;
+  private proxyServer: ProxyServer;
+
   private constructor(
     private langChainParams: LangChainParams,
-    private encryptionService: EncryptionService
-  ) {}
+    private encryptionService: EncryptionService,
+    private copilotSettings: CopilotSettings
+  ) {
+    this.proxyServer = ProxyServer.getInstance(
+      this.copilotSettings,
+      PROXY_SERVER_PORT,
+      EMBEDDING_PROXY_SERVER_PORT
+    );
+  }
 
   static getInstance(
     langChainParams: LangChainParams,
-    encryptionService: EncryptionService
+    encryptionService: EncryptionService,
+    copilotSettings: CopilotSettings
   ): EmbeddingManager {
     if (!EmbeddingManager.instance) {
-      EmbeddingManager.instance = new EmbeddingManager(langChainParams, encryptionService);
+      EmbeddingManager.instance = new EmbeddingManager(
+        langChainParams,
+        encryptionService,
+        copilotSettings
+      );
     }
     return EmbeddingManager.instance;
   }
@@ -46,9 +68,20 @@ export default class EmbeddingManager {
       embeddingModel,
       openAIEmbeddingProxyBaseUrl,
       openAIEmbeddingProxyModelName,
+      useOpenAIEmbeddingLocalProxy,
     } = this.langChainParams;
 
-    if (openAIEmbeddingProxyBaseUrl) {
+    if (openAIEmbeddingProxyBaseUrl && useOpenAIEmbeddingLocalProxy) {
+      this.proxyServer.startEmbeddingProxyServer(openAIEmbeddingProxyBaseUrl);
+      return new ProxyOpenAIEmbeddings({
+        modelName: openAIEmbeddingProxyModelName || embeddingModel,
+        openAIApiKey: openAIApiKey ? decrypt(openAIApiKey) : "default-key",
+        maxRetries: 3,
+        maxConcurrency: 3,
+        timeout: 10000,
+        openAIEmbeddingProxyBaseUrl: `http://localhost:${EMBEDDING_PROXY_SERVER_PORT}`,
+      });
+    } else if (openAIEmbeddingProxyBaseUrl) {
       return new ProxyOpenAIEmbeddings({
         modelName: openAIEmbeddingProxyModelName || embeddingModel,
         openAIApiKey: openAIApiKey ? decrypt(openAIApiKey) : "default-key",

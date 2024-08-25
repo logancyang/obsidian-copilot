@@ -70,6 +70,9 @@ const SettingsMain: React.FC<{ plugin: CopilotPlugin; reloadPlugin: () => Promis
         setOpenAIEmbeddingProxyBaseUrl={(value) =>
           updateSettings({ openAIEmbeddingProxyBaseUrl: value })
         }
+        setUseOpenAIEmbeddingLocalProxy={(value) =>
+          updateSettings({ useOpenAIEmbeddingLocalProxy: value })
+        }
         setOpenAIEmbeddingProxyModelName={(value) =>
           updateSettings({ openAIEmbeddingProxyModelName: value })
         }

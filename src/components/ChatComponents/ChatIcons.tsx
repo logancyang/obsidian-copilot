@@ -57,21 +57,13 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
     // Start proxy server based on the selected model & settings
     const proxyServerURL = proxyServer.getProxyURL(selectedModel);
     if (proxyServerURL) {
-      await proxyServer.startProxyServer(
-        proxyServerURL,
-        selectedModel !== ChatModelDisplayNames.CLAUDE
-      );
-    } else {
-      await proxyServer.stopProxyServer();
+      await proxyServer.startChatProxyServer(proxyServerURL);
     }
   };
 
   useEffect(() => {
     const startProxyServerForClaude = async (proxyServerURL: string) => {
-      await proxyServer.startProxyServer(
-        proxyServerURL,
-        currentModel !== ChatModelDisplayNames.CLAUDE
-      );
+      await proxyServer.startChatProxyServer(proxyServerURL);
     };
 
     // Call the function on component mount
@@ -82,7 +74,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
 
     // Cleanup function to stop the proxy server when the component unmounts
     return () => {
-      proxyServer.stopProxyServer().catch(console.error);
+      proxyServer.stopChatProxyServer().catch(console.error);
     };
   }, []);
 

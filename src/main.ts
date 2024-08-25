@@ -13,6 +13,7 @@ import {
   CHAT_VIEWTYPE,
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
+  EMBEDDING_PROXY_SERVER_PORT,
   PROXY_SERVER_PORT,
   VAULT_VECTOR_STORE_STRATEGY,
 } from "@/constants";
@@ -50,7 +51,11 @@ export default class CopilotPlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
-    this.proxyServer = new ProxyServer(this.settings, PROXY_SERVER_PORT);
+    this.proxyServer = ProxyServer.getInstance(
+      this.settings,
+      PROXY_SERVER_PORT,
+      EMBEDDING_PROXY_SERVER_PORT
+    );
     this.addSettingTab(new CopilotSettingTab(this.app, this));
     // Always have one instance of sharedState and chainManager in the plugin
     this.sharedState = new SharedState();
@@ -71,7 +76,11 @@ export default class CopilotPlugin extends Plugin {
       await this.saveSettings();
     }
 
-    this.embeddingsManager = EmbeddingsManager.getInstance(langChainParams, this.encryptionService);
+    this.embeddingsManager = EmbeddingsManager.getInstance(
+      langChainParams,
+      this.encryptionService,
+      this.settings
+    );
     this.dbPrompts = new PouchDB<CustomPrompt>("copilot_custom_prompts");
 
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));

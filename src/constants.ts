@@ -141,6 +141,7 @@ export const VAULT_VECTOR_STORE_STRATEGIES = [
 ];
 
 export const PROXY_SERVER_PORT = 53001;
+export const EMBEDDING_PROXY_SERVER_PORT = 53002;
 
 export const COMMAND_IDS = {
   FIX_GRAMMAR: "fix-grammar-prompt",
@@ -190,6 +191,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   useOpenAILocalProxy: false,
   openAIProxyModelName: "",
   openAIEmbeddingProxyBaseUrl: "",
+  useOpenAIEmbeddingLocalProxy: false,
   openAIEmbeddingProxyModelName: "",
   ollamaModel: "llama2",
   ollamaBaseUrl: "",

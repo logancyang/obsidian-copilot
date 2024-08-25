@@ -10,6 +10,8 @@ interface AdvancedSettingsProps {
   setOpenAIProxyModelName: (value: string) => void;
   openAIEmbeddingProxyBaseUrl: string;
   setOpenAIEmbeddingProxyBaseUrl: (value: string) => void;
+  useOpenAIEmbeddingLocalProxy: boolean;
+  setUseOpenAIEmbeddingLocalProxy: (value: boolean) => void;
   openAIEmbeddingProxyModelName: string;
   setOpenAIEmbeddingProxyModelName: (value: string) => void;
   userSystemPrompt: string;
@@ -25,6 +27,8 @@ const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
   setOpenAIProxyModelName,
   openAIEmbeddingProxyBaseUrl,
   setOpenAIEmbeddingProxyBaseUrl,
+  useOpenAIEmbeddingLocalProxy,
+  setUseOpenAIEmbeddingLocalProxy,
   openAIEmbeddingProxyModelName,
   setOpenAIEmbeddingProxyModelName,
   userSystemPrompt,
@@ -69,6 +73,12 @@ const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
         value={openAIEmbeddingProxyBaseUrl}
         onChange={setOpenAIEmbeddingProxyBaseUrl}
         placeholder="https://openai.example.com/v1"
+      />
+      <ToggleComponent
+        name="Use local proxy server for OpenAI Embedding"
+        description="Enable if your embedding proxy base URL results in CORS errors."
+        value={useOpenAIEmbeddingLocalProxy}
+        onChange={setUseOpenAIEmbeddingLocalProxy}
       />
       <TextComponent
         name="OpenAI Embedding Proxy Model Name"
