@@ -286,22 +286,6 @@ If your plugin does not need CSS, delete this file.
   margin: 10px;
 }
 
-.message-content li::before {
-  content: counter(list-item, decimal) ".";
-  counter-increment: list-item;
-  position: absolute;
-  left: -20px;
-}
-
-.message-content li:has(> p) {
-  display: flex;
-  flex-direction: column;
-}
-
-.message-content li:has(> p)::before {
-  align-self: flex-start;
-}
-
 .copy-message-button {
   width: 24px;
   height: 24px;
