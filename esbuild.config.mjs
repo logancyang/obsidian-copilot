@@ -40,23 +40,7 @@ const context = await esbuild.context({
   sourcemap: prod ? false : "inline",
   treeShaking: true,
   outfile: "main.js",
-  plugins: [
-    svgPlugin(),
-    wasmPlugin,
-    {
-      name: "css-loader",
-      setup(build) {
-        build.onLoad({ filter: /\.css$/ }, async (args) => {
-          return { contents: `import "${args.path}";`, loader: "js" };
-        });
-      },
-    },
-  ],
-  loader: {
-    ".ttf": "file",
-    ".woff": "file",
-    ".woff2": "file",
-  },
+  plugins: [svgPlugin(), wasmPlugin],
 });
 
 if (prod) {

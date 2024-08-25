@@ -7,9 +7,14 @@ import React, { useEffect, useRef, useState } from "react";
 interface ChatSingleMessageProps {
   message: ChatMessage;
   app: App;
+  isStreaming?: boolean;
 }
 
-const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({ message, app }) => {
+const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
+  message,
+  app,
+  isStreaming = false,
+}) => {
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
@@ -63,7 +68,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({ message, app }) =
         componentRef.current = null;
       }
     };
-  }, [message, app, componentRef]);
+  }, [message, app, componentRef, isStreaming]);
 
   return (
     <div className="message-container">
