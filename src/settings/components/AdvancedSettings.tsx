@@ -1,3 +1,4 @@
+import { DEFAULT_SYSTEM_PROMPT } from "@/constants";
 import React from "react";
 import { TextAreaComponent, TextComponent, ToggleComponent } from "./SettingBlocks";
 
@@ -82,7 +83,7 @@ const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
         description="Warning: It will override the default system prompt for all messages!"
         value={userSystemPrompt}
         onChange={setUserSystemPrompt}
-        placeholder="Enter your custom system prompt here"
+        placeholder={userSystemPrompt || "Default: " + DEFAULT_SYSTEM_PROMPT}
       />
     </div>
   );
