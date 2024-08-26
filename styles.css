@@ -215,7 +215,7 @@ If your plugin does not need CSS, delete this file.
   grid-area: content;
   max-width: 95%;
   word-break: break-word;
-  line-height: 2 !important;
+  line-height: 1.6 !important;
 }
 
 .message-content p {
