@@ -45,6 +45,7 @@ export interface CopilotSettings {
   groqApiKey: string;
   enabledCommands: Record<string, { enabled: boolean; name: string }>;
   activeModels: Array<CustomModel>;
+  activeEmbeddingModels: Array<CustomModel>;
 }
 
 export class CopilotSettingTab extends PluginSettingTab {

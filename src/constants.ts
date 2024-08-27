@@ -15,6 +15,7 @@ export enum ChatModels {
   GEMINI_FLASH = "gemini-1.5-flash",
   AZURE_OPENAI = "azure-openai",
   CLAUDE_3_5_SONNET = "claude-3-5-sonnet-20240620",
+  CLAUDE_3_HAIKU = "claude-3-haiku-20240307",
 }
 
 // Model Providers
@@ -30,7 +31,7 @@ export enum ChatModelProviders {
   OPENAI_FORMAT = "3rd party (openai-format)",
 }
 
-export const builtInModels: CustomModel[] = [
+export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.GPT_4o,
     provider: ChatModelProviders.OPENAI,
@@ -46,6 +47,18 @@ export const builtInModels: CustomModel[] = [
   {
     name: ChatModels.GPT_4_TURBO,
     provider: ChatModelProviders.OPENAI,
+    enabled: true,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.CLAUDE_3_5_SONNET,
+    provider: ChatModelProviders.ANTHROPIC,
+    enabled: true,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.CLAUDE_3_5_SONNET,
+    provider: ChatModelProviders.ANTHROPIC,
     enabled: true,
     isBuiltIn: true,
   },
@@ -67,13 +80,6 @@ export const builtInModels: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
   },
-  {
-    name: ChatModels.CLAUDE_3_5_SONNET,
-    provider: ChatModelProviders.ANTHROPIC,
-    enabled: true,
-    isBuiltIn: true,
-    enableCors: true,
-  },
 ];
 
 export enum EmbeddingModelProviders {
@@ -81,46 +87,65 @@ export enum EmbeddingModelProviders {
   COHEREAI = "cohereai",
   AZURE_OPENAI = "azure_openai",
   OLLAMA = "ollama",
+  OPENAI_FORMAT = "3rd party (openai-format)",
   // HUGGINGFACE = "huggingface",
   // VOYAGEAI = "voyageai",
 }
-
-export const CHAT_MODEL_TO_PROVIDERS: Record<string, string> = {
-  [ChatModels.GPT_4o]: ChatModelProviders.OPENAI,
-  [ChatModels.GPT_4o_mini]: ChatModelProviders.OPENAI,
-  [ChatModels.GPT_4_TURBO]: ChatModelProviders.OPENAI,
-  [ChatModels.GEMINI_PRO]: ChatModelProviders.GOOGLE,
-  [ChatModels.GEMINI_FLASH]: ChatModelProviders.GOOGLE,
-  [ChatModels.AZURE_OPENAI]: ChatModelProviders.AZURE_OPENAI,
-  [ChatModels.CLAUDE_3_5_SONNET]: ChatModelProviders.ANTHROPIC,
-};
-
-export const EMBEDDING_PROVIDERS = [
-  EmbeddingModelProviders.OPENAI,
-  EmbeddingModelProviders.AZURE_OPENAI,
-  EmbeddingModelProviders.COHEREAI,
-  EmbeddingModelProviders.OLLAMA,
-  // EmbeddingModelProviders.HUGGINGFACE,
-  // EmbeddingModelProviders.VOYAGEAI,
-];
 
 export enum EmbeddingModels {
   OPENAI_EMBEDDING_ADA_V2 = "text-embedding-ada-002",
   OPENAI_EMBEDDING_SMALL = "text-embedding-3-small",
   OPENAI_EMBEDDING_LARGE = "text-embedding-3-large",
   AZURE_OPENAI = "azure-openai",
-  COHEREAI = "cohereai",
-  OLLAMA_NOMIC = "ollama-nomic-embed-text",
+  COHEREAI_EMBED_MULTILINGUAL_LIGHT_V3_0 = "embed-multilingual-light-v3.0",
+  OLLAMA_NOMIC_EMBED_TEXT = "nomic-embed-text",
+  OLLAMA_MXBAI_EMBED_LARGE = "mxbai-embed-large",
 }
 
-export const EMBEDDING_MODEL_TO_PROVIDERS: Record<string, string> = {
-  [EmbeddingModels.OPENAI_EMBEDDING_ADA_V2]: EmbeddingModelProviders.OPENAI,
-  [EmbeddingModels.OPENAI_EMBEDDING_SMALL]: EmbeddingModelProviders.OPENAI,
-  [EmbeddingModels.OPENAI_EMBEDDING_LARGE]: EmbeddingModelProviders.OPENAI,
-  [EmbeddingModels.AZURE_OPENAI]: EmbeddingModelProviders.AZURE_OPENAI,
-  [EmbeddingModels.COHEREAI]: EmbeddingModelProviders.COHEREAI,
-  [EmbeddingModels.OLLAMA_NOMIC]: EmbeddingModelProviders.OLLAMA,
-};
+export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
+  {
+    name: EmbeddingModels.OPENAI_EMBEDDING_SMALL,
+    provider: EmbeddingModelProviders.OPENAI,
+    enabled: true,
+    isBuiltIn: true,
+    isEmbeddingModel: true,
+  },
+  {
+    name: EmbeddingModels.OPENAI_EMBEDDING_LARGE,
+    provider: EmbeddingModelProviders.OPENAI,
+    enabled: true,
+    isBuiltIn: true,
+    isEmbeddingModel: true,
+  },
+  {
+    name: EmbeddingModels.COHEREAI_EMBED_MULTILINGUAL_LIGHT_V3_0,
+    provider: EmbeddingModelProviders.COHEREAI,
+    enabled: true,
+    isBuiltIn: true,
+    isEmbeddingModel: true,
+  },
+  {
+    name: EmbeddingModels.AZURE_OPENAI,
+    provider: EmbeddingModelProviders.AZURE_OPENAI,
+    enabled: true,
+    isBuiltIn: true,
+    isEmbeddingModel: true,
+  },
+  {
+    name: EmbeddingModels.OLLAMA_NOMIC_EMBED_TEXT,
+    provider: EmbeddingModelProviders.OLLAMA,
+    enabled: true,
+    isBuiltIn: true,
+    isEmbeddingModel: true,
+  },
+  {
+    name: EmbeddingModels.OLLAMA_MXBAI_EMBED_LARGE,
+    provider: EmbeddingModelProviders.OLLAMA,
+    enabled: true,
+    isBuiltIn: true,
+    isEmbeddingModel: true,
+  },
+];
 
 // Embedding Models
 export const NOMIC_EMBED_TEXT = "nomic-embed-text";
@@ -198,6 +223,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   maxSourceChunks: 3,
   groqApiKey: "",
   activeModels: [],
+  activeEmbeddingModels: [],
   enabledCommands: {
     [COMMAND_IDS.FIX_GRAMMAR]: {
       enabled: true,

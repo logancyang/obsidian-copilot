@@ -134,8 +134,9 @@ export default class ChainManager {
     // MUST set embeddingsManager when switching to QA mode
     if (chainType === ChainType.LONG_NOTE_QA_CHAIN || chainType === ChainType.VAULT_QA_CHAIN) {
       this.embeddingsManager = EmbeddingsManager.getInstance(
-        this.langChainParams,
-        this.encryptionService
+        () => this.langChainParams,
+        this.encryptionService,
+        this.settings.activeEmbeddingModels
       );
     }
 

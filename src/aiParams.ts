@@ -71,6 +71,7 @@ export interface CustomModel {
   baseUrl?: string;
   apiKey?: string;
   enabled: boolean;
+  isEmbeddingModel?: boolean;
   isBuiltIn?: boolean;
   enableCors?: boolean;
 }

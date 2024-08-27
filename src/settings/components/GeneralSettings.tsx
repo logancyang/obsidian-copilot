@@ -45,6 +45,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         }}
         defaultModel={settings.defaultModel}
         onSetDefaultModel={handleSetDefaultModel}
+        isEmbeddingModel={false}
       />
       <TextComponent
         name="Default Conversation Folder Name"

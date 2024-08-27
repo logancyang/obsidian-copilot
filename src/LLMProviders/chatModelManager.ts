@@ -1,5 +1,5 @@
 import { CustomModel, LangChainParams, ModelConfig } from "@/aiParams";
-import { ChatModelProviders, builtInModels } from "@/constants";
+import { BUILTIN_CHAT_MODELS, ChatModelProviders } from "@/constants";
 import EncryptionService from "@/encryptionService";
 import { ChatAnthropicWrapped, ProxyChatOpenAI } from "@/langchainWrappers";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
@@ -123,7 +123,7 @@ export default class ChatModelManager {
     ChatModelManager.modelMap = {};
     const modelMap = ChatModelManager.modelMap;
 
-    const allModels = activeModels ?? builtInModels;
+    const allModels = activeModels ?? BUILTIN_CHAT_MODELS;
 
     allModels.forEach((model) => {
       if (model.enabled) {

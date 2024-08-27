@@ -10,11 +10,12 @@ import CopilotView from "@/components/CopilotView";
 import { ListPromptModal } from "@/components/ListPromptModal";
 import { QAExclusionModal } from "@/components/QAExclusionModal";
 import {
+  BUILTIN_CHAT_MODELS,
+  BUILTIN_EMBEDDING_MODELS,
   CHAT_VIEWTYPE,
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
   VAULT_VECTOR_STORE_STRATEGY,
-  builtInModels,
 } from "@/constants";
 import { CustomPrompt } from "@/customPromptProcessor";
 import EncryptionService from "@/encryptionService";
@@ -56,7 +57,8 @@ export default class CopilotPlugin extends Plugin {
     this.dbVectorStores = new PouchDB<VectorStoreDocument>(
       `copilot_vector_stores_${this.getVaultIdentifier()}`
     );
-    this.settings.activeModels = this.mergeActiveModels(this.settings.activeModels);
+
+    this.mergeAllActiveModelsWithExisting();
     this.chainManager = new ChainManager(
       this.app,
       langChainParams,
@@ -69,7 +71,11 @@ export default class CopilotPlugin extends Plugin {
       await this.saveSettings();
     }
 
-    this.embeddingsManager = EmbeddingsManager.getInstance(langChainParams, this.encryptionService);
+    this.embeddingsManager = EmbeddingsManager.getInstance(
+      () => langChainParams,
+      this.encryptionService,
+      this.settings.activeEmbeddingModels
+    );
     this.dbPrompts = new PouchDB<CustomPrompt>("copilot_custom_prompts");
 
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
@@ -592,10 +598,13 @@ export default class CopilotPlugin extends Plugin {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 
     // Ensure activeModels always includes builtInModels
-    this.settings.activeModels = this.mergeActiveModels(this.settings.activeModels);
+    this.mergeAllActiveModelsWithExisting();
   }
 
-  mergeActiveModels(existingActiveModels: CustomModel[]): CustomModel[] {
+  mergeActiveModels(
+    existingActiveModels: CustomModel[],
+    builtInModels: CustomModel[]
+  ): CustomModel[] {
     const modelMap = new Map<string, CustomModel>();
 
     // Add built-in models to the map
@@ -620,6 +629,17 @@ export default class CopilotPlugin extends Plugin {
     return Array.from(modelMap.values());
   }
 
+  mergeAllActiveModelsWithExisting(): void {
+    this.settings.activeModels = this.mergeActiveModels(
+      this.settings.activeModels,
+      BUILTIN_CHAT_MODELS
+    );
+    this.settings.activeEmbeddingModels = this.mergeActiveModels(
+      this.settings.activeEmbeddingModels,
+      BUILTIN_EMBEDDING_MODELS
+    );
+  }
+
   async saveSettings(): Promise<void> {
     if (this.settings.enableEncryption) {
       // Encrypt all API keys before saving
@@ -627,7 +647,7 @@ export default class CopilotPlugin extends Plugin {
     }
 
     // Ensure activeModels is merged before saving
-    this.settings.activeModels = this.mergeActiveModels(this.settings.activeModels);
+    this.mergeAllActiveModelsWithExisting();
 
     await this.saveData(this.settings);
   }

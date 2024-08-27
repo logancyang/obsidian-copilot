@@ -179,6 +179,7 @@ interface ModelSettingsComponentProps {
   onDeleteModel: (modelName: string) => void;
   defaultModel: string;
   onSetDefaultModel: (modelName: string) => void;
+  isEmbeddingModel: boolean;
 }
 
 const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
@@ -188,6 +189,7 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
   onDeleteModel,
   defaultModel,
   onSetDefaultModel,
+  isEmbeddingModel,
 }) => {
   const emptyModel: CustomModel = {
     name: "",
@@ -197,6 +199,7 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
     enabled: true,
     isBuiltIn: false,
     enableCors: false,
+    isEmbeddingModel: isEmbeddingModel,
   };
   const [newModel, setNewModel] = useState(emptyModel);
   const [isAddModelOpen, setIsAddModelOpen] = useState(false);
@@ -209,6 +212,10 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
     } else {
       new Notice("Please fill in necessary fields!");
     }
+  };
+
+  const handleSetDefaultModel = (modelName: string) => {
+    onSetDefaultModel(modelName);
   };
 
   return (
@@ -230,9 +237,9 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
               <td>
                 <input
                   type="radio"
-                  name="defaultModel"
+                  name={`selected-${isEmbeddingModel ? "embedding" : "chat"}-model`}
                   checked={model.name === defaultModel}
-                  onChange={() => onSetDefaultModel(model.name)}
+                  onChange={() => handleSetDefaultModel(model.name)}
                 />
               </td>
               <td>{model.name}</td>
