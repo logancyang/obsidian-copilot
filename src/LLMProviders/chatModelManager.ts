@@ -13,7 +13,6 @@ import {
 } from "@/constants";
 import EncryptionService from "@/encryptionService";
 import { ChatAnthropicWrapped, ProxyChatOpenAI } from "@/langchainWrappers";
-import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatGroq } from "@langchain/groq";

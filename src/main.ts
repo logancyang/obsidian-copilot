@@ -28,7 +28,7 @@ import {
 import VectorDBManager, { VectorStoreDocument } from "@/vectorDBManager";
 import { MD5 } from "crypto-js";
 import { Editor, MarkdownView, Menu, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
-import PouchDB from "pouchdb";
+import PouchDB from "pouchdb-browser";
 
 export default class CopilotPlugin extends Plugin {
   settings: CopilotSettings;
