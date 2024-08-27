@@ -29,6 +29,7 @@ export interface CopilotSettings {
   maxTokens: number;
   contextTurns: number;
   userSystemPrompt: string;
+  sendNotesPrompt: string;
   openAIProxyBaseUrl: string;
   useOpenAILocalProxy: boolean;
   openAIProxyModelName: string;

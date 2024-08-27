@@ -1,4 +1,4 @@
-import { DEFAULT_SYSTEM_PROMPT } from "@/constants";
+import { DEFAULT_SYSTEM_PROMPT, DEFAULT_SEND_NOTES_PROMPT } from "@/constants";
 import React from "react";
 import { TextAreaComponent, TextComponent, ToggleComponent } from "./SettingBlocks";
 
@@ -15,6 +15,8 @@ interface AdvancedSettingsProps {
   setOpenAIEmbeddingProxyModelName: (value: string) => void;
   userSystemPrompt: string;
   setUserSystemPrompt: (value: string) => void;
+  sendNotesPrompt: string;
+  setSendNotesPrompt: (value: string) => void;
 }
 
 const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
@@ -30,6 +32,8 @@ const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
   setOpenAIEmbeddingProxyModelName,
   userSystemPrompt,
   setUserSystemPrompt,
+  sendNotesPrompt,
+  setSendNotesPrompt,
 }) => {
   return (
     <div>
@@ -84,6 +88,13 @@ const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
         value={userSystemPrompt}
         onChange={setUserSystemPrompt}
         placeholder={userSystemPrompt || "Default: " + DEFAULT_SYSTEM_PROMPT}
+      />
+      <TextAreaComponent
+        name="Send Notes Prompt"
+        description='Warning: It will override the default prompt for send notes button! "{{notes}}" will be replaced by the content of the notes.'
+        value={sendNotesPrompt}
+        onChange={setSendNotesPrompt}
+        placeholder={sendNotesPrompt || "Default: " + DEFAULT_SEND_NOTES_PROMPT}
       />
     </div>
   );

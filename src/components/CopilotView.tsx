@@ -19,6 +19,7 @@ export default class CopilotView extends ItemView {
   private debug = false;
   emitter: EventEmitter;
   userSystemPrompt = "";
+  sendNotesPrompt = "";
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -33,6 +34,7 @@ export default class CopilotView extends ItemView {
     this.emitter = new EventEmitter();
     this.getChatVisibility = this.getChatVisibility.bind(this);
     this.userSystemPrompt = plugin.settings.userSystemPrompt;
+    this.sendNotesPrompt = plugin.settings.sendNotesPrompt;
     this.plugin = plugin;
     this.defaultSaveFolder = plugin.settings.defaultSaveFolder;
   }

@@ -11,6 +11,7 @@ import { getAIResponse } from "@/langchainStream";
 import CopilotPlugin from "@/main";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import SharedState, { ChatMessage, useSharedState } from "@/sharedState";
+import { DEFAULT_SEND_NOTES_PROMPT } from "@/constants";
 import {
   createChangeToneSelectionPrompt,
   createTranslateSelectionPrompt,
@@ -210,7 +211,7 @@ const Chat: React.FC<ChatProps> = ({
 
     // Send the content of the note to AI
     const promptMessageHidden: ChatMessage = {
-      message: sendNotesContentPrompt(notes),
+      message: sendNotesContentPrompt(notes, settings.sendNotesPrompt || DEFAULT_SEND_NOTES_PROMPT),
       sender: USER_SENDER,
       isVisible: false,
     };

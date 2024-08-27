@@ -74,6 +74,7 @@ const SettingsMain: React.FC<{ plugin: CopilotPlugin; reloadPlugin: () => Promis
           updateSettings({ openAIEmbeddingProxyModelName: value })
         }
         setUserSystemPrompt={(value) => updateSettings({ userSystemPrompt: value })}
+        setSendNotesPrompt={(value) => updateSettings({ sendNotesPrompt: value })}
       />
       <LocalCopilotSettings
         {...settings}

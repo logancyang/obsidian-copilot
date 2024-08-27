@@ -5,6 +5,15 @@ export const USER_SENDER = "user";
 export const AI_SENDER = "ai";
 export const DEFAULT_SYSTEM_PROMPT =
   "You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.";
+export const DEFAULT_SEND_NOTES_PROMPT =
+  "Please read the notes below and be ready to answer questions about them. " +
+  "If there's no information about a certain topic, just say the note " +
+  "does not mention it. " +
+  'The content of the note is between "/***/":\n\n/***/\n\n{{notes}}\n\n/***/\n\n' +
+  "Please reply with the following word for word:" +
+  "\"OK I've read these notes. " +
+  "Feel free to ask related questions, such as 'give me a summary of these notes in bullet points', " +
+  "'what key questions does these notes answer', etc. \"\n";
 
 export enum ChatModels {
   GPT_4 = "gpt-4",
@@ -186,6 +195,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   maxTokens: 1000,
   contextTurns: 15,
   userSystemPrompt: "",
+  sendNotesPrompt: "",
   openAIProxyBaseUrl: "",
   useOpenAILocalProxy: false,
   openAIProxyModelName: "",
