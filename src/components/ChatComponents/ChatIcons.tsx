@@ -1,5 +1,6 @@
 import { SetChainOptions } from "@/aiParams";
-import { AI_SENDER, ChatModelDisplayNames, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
+import { AI_SENDER, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
+import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChatMessage } from "@/sharedState";
 import { getFileContent, getFileName } from "@/utils";
 import { Notice, Vault } from "obsidian";
@@ -25,6 +26,7 @@ interface ChatIconsProps {
   onForceRebuildActiveNoteContext: () => void;
   onRefreshVaultContext: () => void;
   addMessage: (message: ChatMessage) => void;
+  settings: CopilotSettings;
   vault: Vault;
   vault_qa_strategy: string;
   debug?: boolean;
@@ -41,6 +43,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   onForceRebuildActiveNoteContext,
   onRefreshVaultContext,
   addMessage,
+  settings,
   vault,
   vault_qa_strategy,
   debug,
@@ -116,39 +119,17 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         <div className="select-wrapper">
           <select
             id="aiModelSelect"
-            className="chat-icon-selection"
+            className="chat-icon-selection model-select"
             value={currentModel}
             onChange={handleModelChange}
           >
-            <option value={ChatModelDisplayNames.GPT_4}>{ChatModelDisplayNames.GPT_4}</option>
-            <option value={ChatModelDisplayNames.GPT_4o}>{ChatModelDisplayNames.GPT_4o}</option>
-            <option value={ChatModelDisplayNames.GPT_4o_mini}>
-              {ChatModelDisplayNames.GPT_4o_mini}
-            </option>
-            <option value={ChatModelDisplayNames.GPT_4_TURBO}>
-              {ChatModelDisplayNames.GPT_4_TURBO}
-            </option>
-            <option value={ChatModelDisplayNames.GPT_4_32K}>
-              {ChatModelDisplayNames.GPT_4_32K}
-            </option>
-            <option value={ChatModelDisplayNames.AZURE_OPENAI}>
-              {ChatModelDisplayNames.AZURE_OPENAI}
-            </option>
-            <option value={ChatModelDisplayNames.CLAUDE}>{ChatModelDisplayNames.CLAUDE}</option>
-            <option value={ChatModelDisplayNames.GEMINI_PRO}>
-              {ChatModelDisplayNames.GEMINI_PRO}
-            </option>
-            <option value={ChatModelDisplayNames.GEMINI_FLASH}>
-              {ChatModelDisplayNames.GEMINI_FLASH}
-            </option>
-            <option value={ChatModelDisplayNames.OPENROUTERAI}>
-              {ChatModelDisplayNames.OPENROUTERAI}
-            </option>
-            <option value={ChatModelDisplayNames.GROQ}>{ChatModelDisplayNames.GROQ}</option>
-            <option value={ChatModelDisplayNames.LM_STUDIO}>
-              {ChatModelDisplayNames.LM_STUDIO}
-            </option>
-            <option value={ChatModelDisplayNames.OLLAMA}>{ChatModelDisplayNames.OLLAMA}</option>
+            {settings.activeModels
+              .filter((model) => model.enabled)
+              .map((model) => (
+                <option key={model.name} value={model.name}>
+                  {model.name}
+                </option>
+              ))}
           </select>
           <span className="tooltip-text">Model Selection</span>
         </div>

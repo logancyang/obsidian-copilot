@@ -4,7 +4,6 @@ import { useSettingsContext } from "../contexts/SettingsContext";
 import AdvancedSettings from "./AdvancedSettings";
 import ApiSettings from "./ApiSettings";
 import GeneralSettings from "./GeneralSettings";
-import LocalCopilotSettings from "./LocalCopilotSettings";
 import QASettings from "./QASettings";
 
 const SettingsMain: React.FC<{ plugin: CopilotPlugin; reloadPlugin: () => Promise<void> }> = ({
@@ -28,18 +27,18 @@ const SettingsMain: React.FC<{ plugin: CopilotPlugin; reloadPlugin: () => Promis
         Please Save and Reload the plugin when you change any setting below!
       </div>
 
-      <GeneralSettings />
+      <GeneralSettings
+        getLangChainParams={plugin.getLangChainParams.bind(plugin)}
+        encryptionService={plugin.getEncryptionService()}
+      />
       <ApiSettings
         {...settings}
         setOpenAIApiKey={(value) => updateSettings({ openAIApiKey: value })}
         setOpenAIOrgId={(value) => updateSettings({ openAIOrgId: value })}
         setOpenAICustomModel={(value) => updateSettings({ openAICustomModel: value })}
         setGoogleApiKey={(value) => updateSettings({ googleApiKey: value })}
-        setGoogleCustomModel={(value) => updateSettings({ googleCustomModel: value })}
         setAnthropicApiKey={(value) => updateSettings({ anthropicApiKey: value })}
-        setAnthropicModel={(value) => updateSettings({ anthropicModel: value })}
         setOpenRouterAiApiKey={(value) => updateSettings({ openRouterAiApiKey: value })}
-        setOpenRouterModel={(value) => updateSettings({ openRouterModel: value })}
         setAzureOpenAIApiKey={(value) => updateSettings({ azureOpenAIApiKey: value })}
         setAzureOpenAIApiInstanceName={(value) =>
           updateSettings({ azureOpenAIApiInstanceName: value })
@@ -52,7 +51,6 @@ const SettingsMain: React.FC<{ plugin: CopilotPlugin; reloadPlugin: () => Promis
           updateSettings({ azureOpenAIApiEmbeddingDeploymentName: value })
         }
         setGroqApiKey={(value) => updateSettings({ groqApiKey: value })}
-        setGroqModel={(value) => updateSettings({ groqModel: value })}
       />
       <QASettings
         {...settings}
@@ -74,12 +72,6 @@ const SettingsMain: React.FC<{ plugin: CopilotPlugin; reloadPlugin: () => Promis
           updateSettings({ openAIEmbeddingProxyModelName: value })
         }
         setUserSystemPrompt={(value) => updateSettings({ userSystemPrompt: value })}
-      />
-      <LocalCopilotSettings
-        {...settings}
-        setlmStudioBaseUrl={(value) => updateSettings({ lmStudioBaseUrl: value })}
-        setOllamaModel={(value) => updateSettings({ ollamaModel: value })}
-        setOllamaBaseUrl={(value) => updateSettings({ ollamaBaseUrl: value })}
       />
     </>
   );

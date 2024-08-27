@@ -473,6 +473,7 @@ const Chat: React.FC<ChatProps> = ({
           onForceRebuildActiveNoteContext={forceRebuildActiveNoteContext}
           onRefreshVaultContext={refreshVaultContext}
           addMessage={addMessage}
+          settings={settings}
           vault={app.vault}
           vault_qa_strategy={plugin.settings.indexVaultToVectorStore}
           debug={debug}

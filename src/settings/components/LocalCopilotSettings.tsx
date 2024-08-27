@@ -4,8 +4,6 @@ import { TextComponent } from "./SettingBlocks";
 interface LocalCopilotSettingsProps {
   lmStudioBaseUrl: string;
   setlmStudioBaseUrl: (value: string) => void;
-  ollamaModel: string;
-  setOllamaModel: (value: string) => void;
   ollamaBaseUrl: string;
   setOllamaBaseUrl: (value: string) => void;
 }
@@ -13,8 +11,6 @@ interface LocalCopilotSettingsProps {
 const LocalCopilotSettings: React.FC<LocalCopilotSettingsProps> = ({
   lmStudioBaseUrl,
   setlmStudioBaseUrl,
-  ollamaModel,
-  setOllamaModel,
   ollamaBaseUrl,
   setOllamaBaseUrl,
 }) => {
@@ -54,13 +50,6 @@ const LocalCopilotSettings: React.FC<LocalCopilotSettingsProps> = ({
       <p>
         <strong>OLLAMA_ORIGINS=app://obsidian.md* ollama serve</strong>
       </p>
-      <TextComponent
-        name="Ollama model"
-        description="Default is llama2 (7b)."
-        value={ollamaModel}
-        onChange={setOllamaModel}
-        placeholder="llama2"
-      />
       <TextComponent
         name="Ollama Base URL"
         description="Default is http://localhost:11434. If you'd like to use a remote server, provide the URL here."

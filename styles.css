@@ -344,3 +344,90 @@ If your plugin does not need CSS, delete this file.
 .copilot-command-save-btn {
   margin-top: 15px;
 }
+
+.model-settings-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.model-settings-table th,
+.model-settings-table td {
+  text-align: center;
+  vertical-align: middle;
+  padding: 0.5em;
+  border: none !important;
+  height: 2.5em;
+}
+
+.model-settings-table th {
+  font-weight: bold;
+}
+
+.model-settings-table th:nth-child(1) {
+  width: 10%;
+}
+
+.model-settings-table th:nth-child(2) {
+  width: 50%;
+}
+
+.model-settings-table th:nth-child(3) {
+  width: 16%;
+}
+
+.model-settings-table th:nth-child(4),
+.model-settings-table th:nth-child(5),
+.model-settings-table th:nth-child(6) {
+  width: 8%;
+}
+
+.model-settings-table .switch {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  margin-top: -1.2em;
+}
+
+.add-custom-model {
+  margin-top: 20px;
+}
+
+.switch.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.switch.disabled input:checked + .slider {
+  background-color: #ccc;
+}
+
+.switch.disabled input:focus + .slider {
+  box-shadow: 0 0 1px #ccc;
+}
+
+.switch.disabled input:checked + .slider:before {
+  -webkit-transform: translateX(26px);
+  -ms-transform: translateX(26px);
+  transform: translateX(26px);
+}
+
+.model-select {
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.select-wrapper::after {
+  content: "\25BC";
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.add-model-button {
+  margin-top: 15px;
+}

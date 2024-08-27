@@ -1,19 +1,12 @@
-import { LangChainParams, SetChainOptions } from "@/aiParams";
+import { CustomModel, LangChainParams, SetChainOptions } from "@/aiParams";
 import ChainFactory, { ChainType, Document } from "@/chainFactory";
-import { AI_SENDER, ChatModelDisplayNames } from "@/constants";
+import { AI_SENDER } from "@/constants";
 import EncryptionService from "@/encryptionService";
-import { ProxyChatOpenAI } from "@/langchainWrappers";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChatMessage } from "@/sharedState";
-import {
-  extractChatHistory,
-  extractUniqueTitlesFromDocs,
-  getModelName,
-  isSupportedChain,
-} from "@/utils";
+import { extractChatHistory, extractUniqueTitlesFromDocs, isSupportedChain } from "@/utils";
 import VectorDBManager, { MemoryVector, NoteFile, VectorStoreDocument } from "@/vectorDBManager";
-import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { BaseChatMemory } from "langchain/memory";
 import {
@@ -33,9 +26,6 @@ export default class ChainManager {
   private static chain: RunnableSequence;
   private static retrievalChain: RunnableSequence;
   private static retrievedDocuments: Document[] = [];
-
-  private static isOllamaModelActive = false;
-  private static isOpenRouterModelActive = false;
 
   private app: App;
   private settings: CopilotSettings;
@@ -68,10 +58,14 @@ export default class ChainManager {
     this.settings = settings;
     this.memoryManager = MemoryManager.getInstance(this.langChainParams);
     this.encryptionService = encryptionService;
-    this.chatModelManager = ChatModelManager.getInstance(this.langChainParams, encryptionService);
+    this.chatModelManager = ChatModelManager.getInstance(
+      () => this.langChainParams,
+      encryptionService,
+      this.settings.activeModels
+    );
     this.promptManager = PromptManager.getInstance(this.langChainParams);
     this.getDbVectorStores = getDbVectorStores;
-    this.createChainWithNewModel(this.langChainParams.modelDisplayName);
+    this.createChainWithNewModel(this.langChainParams.model);
   }
 
   private setNoteFile(noteFile: NoteFile): void {
@@ -82,40 +76,29 @@ export default class ChainManager {
     if (chainType === undefined || chainType === null) throw new Error("No chain type set");
   }
 
+  private findCustomModel(modelName: string): CustomModel | undefined {
+    return this.settings.activeModels.find((model) => model.name === modelName);
+  }
+
   static storeRetrieverDocuments(documents: Document[]) {
     ChainManager.retrievedDocuments = documents;
   }
 
   /**
    * Update the active model and create a new chain
-   * with the specified model display name.
+   * with the specified model name.
    *
-   * @param {string} newModelDisplayName - the display name of the new model in the dropdown
+   * @param {string} newModel - the name of the new model in the dropdown
    * @return {void}
    */
-  createChainWithNewModel(newModelDisplayName: string): void {
-    ChainManager.isOllamaModelActive = newModelDisplayName === ChatModelDisplayNames.OLLAMA;
-    ChainManager.isOpenRouterModelActive =
-      newModelDisplayName === ChatModelDisplayNames.OPENROUTERAI;
-    // model and model display name must be update at the same time!
-    let newModel = getModelName(newModelDisplayName);
-
-    switch (newModelDisplayName) {
-      case ChatModelDisplayNames.OLLAMA:
-        newModel = this.langChainParams.ollamaModel;
-        break;
-      case ChatModelDisplayNames.LM_STUDIO:
-        newModel = "check_model_in_lm_studio_ui";
-        break;
-      case ChatModelDisplayNames.OPENROUTERAI:
-        newModel = this.langChainParams.openRouterModel;
-        break;
-    }
-
+  createChainWithNewModel(newModel: string): void {
     try {
+      const customModel = this.findCustomModel(newModel);
+      if (!customModel) {
+        throw new Error(`No model configuration found for: ${newModel}`);
+      }
       this.langChainParams.model = newModel;
-      this.langChainParams.modelDisplayName = newModelDisplayName;
-      this.chatModelManager.setChatModel(newModelDisplayName);
+      this.chatModelManager.setChatModel(customModel);
       // Must update the chatModel for chain because ChainFactory always
       // retrieves the old chain without the chatModel change if it exists!
       // Create a new chain with the new chatModel
@@ -123,7 +106,7 @@ export default class ChainManager {
         ...this.langChainParams.options,
         forceNewCreation: true,
       });
-      console.log(`Setting model to ${newModelDisplayName}: ${newModel}`);
+      console.log(`Setting model to ${newModel}`);
     } catch (error) {
       console.error("createChainWithNewModel failed: ", error);
       console.log("model:", this.langChainParams.model);
@@ -165,13 +148,6 @@ export default class ChainManager {
       case ChainType.LLM_CHAIN: {
         // For initial load of the plugin
         if (options.forceNewCreation) {
-          // setChain is async, this is to ensure Ollama has the right model passed in from the setting
-          if (ChainManager.isOllamaModelActive) {
-            (chatModel as ChatOllama).model = this.langChainParams.ollamaModel;
-          } else if (ChainManager.isOpenRouterModelActive) {
-            (chatModel as ProxyChatOpenAI).modelName = this.langChainParams.openRouterModel;
-          }
-
           ChainManager.chain = ChainFactory.createNewLLMChain({
             llm: chatModel,
             memory: memory,

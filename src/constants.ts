@@ -1,3 +1,4 @@
+import { CustomModel } from "@/aiParams";
 import { CopilotSettings } from "@/settings/SettingsPage";
 
 export const CHAT_VIEWTYPE = "copilot-chat-view";
@@ -7,101 +8,100 @@ export const DEFAULT_SYSTEM_PROMPT =
   "You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.";
 
 export enum ChatModels {
-  GPT_4 = "gpt-4",
   GPT_4o = "gpt-4o",
   GPT_4o_mini = "gpt-4o-mini",
-  GPT_4_TURBO = "gpt-4-turbo-preview",
-  GPT_4_32K = "gpt-4-32k",
+  GPT_4_TURBO = "gpt-4-turbo",
   GEMINI_PRO = "gemini-1.5-pro",
   GEMINI_FLASH = "gemini-1.5-flash",
-  GROQ = "llama3-70b-8192",
-  OLLAMA = "ollama",
+  AZURE_OPENAI = "azure-openai",
+  CLAUDE_3_5_SONNET = "claude-3-5-sonnet-20240620",
 }
-
-export enum ChatModelDisplayNames {
-  GPT_4 = "GPT-4",
-  GPT_4o = "GPT-4o",
-  GPT_4o_mini = "GPT-4o mini",
-  GPT_4_TURBO = "GPT-4 TURBO",
-  GPT_4_32K = "GPT-4 32K",
-  AZURE_OPENAI = "AZURE OPENAI",
-  CLAUDE = "CLAUDE",
-  GEMINI_PRO = "GEMINI 1.5 PRO",
-  GEMINI_FLASH = "GEMINI 1.5 FLASH",
-  OPENROUTERAI = "OPENROUTER.AI",
-  GROQ = "GROQ",
-  OLLAMA = "OLLAMA (LOCAL)",
-  LM_STUDIO = "LM STUDIO (LOCAL)",
-}
-
-export const OPENAI_MODELS = new Set([
-  ChatModelDisplayNames.GPT_4,
-  ChatModelDisplayNames.GPT_4o,
-  ChatModelDisplayNames.GPT_4o_mini,
-  ChatModelDisplayNames.GPT_4_TURBO,
-  ChatModelDisplayNames.GPT_4_32K,
-  ChatModelDisplayNames.LM_STUDIO,
-]);
-
-export const AZURE_MODELS = new Set([ChatModelDisplayNames.AZURE_OPENAI]);
-
-export const GOOGLE_MODELS = new Set([
-  ChatModelDisplayNames.GEMINI_PRO,
-  ChatModelDisplayNames.GEMINI_FLASH,
-]);
-
-export const ANTHROPIC_MODELS = new Set([ChatModelDisplayNames.CLAUDE]);
-
-export const OPENROUTERAI_MODELS = new Set([ChatModelDisplayNames.OPENROUTERAI]);
-
-export const OLLAMA_MODELS = new Set([ChatModelDisplayNames.OLLAMA]);
-
-export const LM_STUDIO_MODELS = new Set([ChatModelDisplayNames.LM_STUDIO]);
-
-export const DISPLAY_NAME_TO_MODEL: Record<string, string> = {
-  [ChatModelDisplayNames.GPT_4]: ChatModels.GPT_4,
-  [ChatModelDisplayNames.GPT_4o]: ChatModels.GPT_4o,
-  [ChatModelDisplayNames.GPT_4o_mini]: ChatModels.GPT_4o_mini,
-  [ChatModelDisplayNames.GPT_4_TURBO]: ChatModels.GPT_4_TURBO,
-  [ChatModelDisplayNames.GPT_4_32K]: ChatModels.GPT_4_32K,
-  [ChatModelDisplayNames.AZURE_OPENAI]: "azure_openai",
-  [ChatModelDisplayNames.GEMINI_PRO]: ChatModels.GEMINI_PRO,
-  [ChatModelDisplayNames.GEMINI_FLASH]: ChatModels.GEMINI_FLASH,
-};
-
-export const GROQ_MODELS = new Set([ChatModelDisplayNames.GROQ]);
 
 // Model Providers
-export enum ModelProviders {
+export enum ChatModelProviders {
   OPENAI = "openai",
-  HUGGINGFACE = "huggingface",
-  COHEREAI = "cohereai",
-  AZURE_OPENAI = "azure_openai",
+  AZURE_OPENAI = "azure openai",
   ANTHROPIC = "anthropic",
   GOOGLE = "google",
   OPENROUTERAI = "openrouterai",
-  LM_STUDIO = "lm_studio",
-  OLLAMA = "ollama",
   GROQ = "groq",
+  OLLAMA = "ollama",
+  LM_STUDIO = "lm-studio",
+  OPENAI_FORMAT = "3rd party (openai-format)",
 }
 
-export const VENDOR_MODELS: Record<string, Set<string>> = {
-  [ModelProviders.OPENAI]: OPENAI_MODELS,
-  [ModelProviders.AZURE_OPENAI]: AZURE_MODELS,
-  [ModelProviders.GOOGLE]: GOOGLE_MODELS,
-  [ModelProviders.ANTHROPIC]: ANTHROPIC_MODELS,
-  [ModelProviders.OPENROUTERAI]: OPENROUTERAI_MODELS,
-  [ModelProviders.OLLAMA]: OLLAMA_MODELS,
-  [ModelProviders.LM_STUDIO]: LM_STUDIO_MODELS,
-  [ModelProviders.GROQ]: GROQ_MODELS,
+export const builtInModels: CustomModel[] = [
+  {
+    name: ChatModels.GPT_4o,
+    provider: ChatModelProviders.OPENAI,
+    enabled: true,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.GPT_4o_mini,
+    provider: ChatModelProviders.OPENAI,
+    enabled: true,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.GPT_4_TURBO,
+    provider: ChatModelProviders.OPENAI,
+    enabled: true,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.GEMINI_PRO,
+    provider: ChatModelProviders.GOOGLE,
+    enabled: true,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.GEMINI_FLASH,
+    provider: ChatModelProviders.GOOGLE,
+    enabled: true,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.AZURE_OPENAI,
+    provider: ChatModelProviders.AZURE_OPENAI,
+    enabled: true,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.CLAUDE_3_5_SONNET,
+    provider: ChatModelProviders.ANTHROPIC,
+    enabled: true,
+    isBuiltIn: true,
+    enableCors: true,
+  },
+];
+
+export enum EmbeddingModelProviders {
+  OPENAI = "openai",
+  COHEREAI = "cohereai",
+  AZURE_OPENAI = "azure_openai",
+  OLLAMA = "ollama",
+  // HUGGINGFACE = "huggingface",
+  // VOYAGEAI = "voyageai",
+}
+
+export const CHAT_MODEL_TO_PROVIDERS: Record<string, string> = {
+  [ChatModels.GPT_4o]: ChatModelProviders.OPENAI,
+  [ChatModels.GPT_4o_mini]: ChatModelProviders.OPENAI,
+  [ChatModels.GPT_4_TURBO]: ChatModelProviders.OPENAI,
+  [ChatModels.GEMINI_PRO]: ChatModelProviders.GOOGLE,
+  [ChatModels.GEMINI_FLASH]: ChatModelProviders.GOOGLE,
+  [ChatModels.AZURE_OPENAI]: ChatModelProviders.AZURE_OPENAI,
+  [ChatModels.CLAUDE_3_5_SONNET]: ChatModelProviders.ANTHROPIC,
 };
 
 export const EMBEDDING_PROVIDERS = [
-  ModelProviders.OPENAI,
-  ModelProviders.AZURE_OPENAI,
-  ModelProviders.COHEREAI,
-  ModelProviders.HUGGINGFACE,
-  ModelProviders.OLLAMA,
+  EmbeddingModelProviders.OPENAI,
+  EmbeddingModelProviders.AZURE_OPENAI,
+  EmbeddingModelProviders.COHEREAI,
+  EmbeddingModelProviders.OLLAMA,
+  // EmbeddingModelProviders.HUGGINGFACE,
+  // EmbeddingModelProviders.VOYAGEAI,
 ];
 
 export enum EmbeddingModels {
@@ -114,12 +114,12 @@ export enum EmbeddingModels {
 }
 
 export const EMBEDDING_MODEL_TO_PROVIDERS: Record<string, string> = {
-  [EmbeddingModels.OPENAI_EMBEDDING_ADA_V2]: ModelProviders.OPENAI,
-  [EmbeddingModels.OPENAI_EMBEDDING_SMALL]: ModelProviders.OPENAI,
-  [EmbeddingModels.OPENAI_EMBEDDING_LARGE]: ModelProviders.OPENAI,
-  [EmbeddingModels.AZURE_OPENAI]: ModelProviders.AZURE_OPENAI,
-  [EmbeddingModels.COHEREAI]: ModelProviders.COHEREAI,
-  [EmbeddingModels.OLLAMA_NOMIC]: ModelProviders.OLLAMA,
+  [EmbeddingModels.OPENAI_EMBEDDING_ADA_V2]: EmbeddingModelProviders.OPENAI,
+  [EmbeddingModels.OPENAI_EMBEDDING_SMALL]: EmbeddingModelProviders.OPENAI,
+  [EmbeddingModels.OPENAI_EMBEDDING_LARGE]: EmbeddingModelProviders.OPENAI,
+  [EmbeddingModels.AZURE_OPENAI]: EmbeddingModelProviders.AZURE_OPENAI,
+  [EmbeddingModels.COHEREAI]: EmbeddingModelProviders.COHEREAI,
+  [EmbeddingModels.OLLAMA_NOMIC]: EmbeddingModelProviders.OLLAMA,
 };
 
 // Embedding Models
@@ -167,18 +167,14 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   huggingfaceApiKey: "",
   cohereApiKey: "",
   anthropicApiKey: "",
-  anthropicModel: "claude-3-5-sonnet-20240620",
   azureOpenAIApiKey: "",
   azureOpenAIApiInstanceName: "",
   azureOpenAIApiDeploymentName: "",
   azureOpenAIApiVersion: "",
   azureOpenAIApiEmbeddingDeploymentName: "",
   googleApiKey: "",
-  googleCustomModel: "",
   openRouterAiApiKey: "",
-  openRouterModel: "cognitivecomputations/dolphin-mixtral-8x7b",
   defaultModel: ChatModels.GPT_4o,
-  defaultModelDisplayName: ChatModelDisplayNames.GPT_4o,
   embeddingModel: EmbeddingModels.OPENAI_EMBEDDING_SMALL,
   temperature: 0.1,
   maxTokens: 1000,
@@ -189,7 +185,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   openAIProxyModelName: "",
   openAIEmbeddingProxyBaseUrl: "",
   openAIEmbeddingProxyModelName: "",
-  ollamaModel: "llama2",
   ollamaBaseUrl: "",
   lmStudioBaseUrl: "http://localhost:1234/v1",
   stream: true,
@@ -201,8 +196,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   debug: false,
   enableEncryption: false,
   maxSourceChunks: 3,
-  groqModel: "llama3-70b-8192",
   groqApiKey: "",
+  activeModels: [],
   enabledCommands: {
     [COMMAND_IDS.FIX_GRAMMAR]: {
       enabled: true,

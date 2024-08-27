@@ -1,6 +1,6 @@
 import ChainManager from "@/LLMProviders/chainManager";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
-import { LangChainParams, SetChainOptions } from "@/aiParams";
+import { CustomModel, LangChainParams, SetChainOptions } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { registerBuiltInCommands } from "@/commands";
 import { AddPromptModal } from "@/components/AddPromptModal";
@@ -14,6 +14,7 @@ import {
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
   VAULT_VECTOR_STORE_STRATEGY,
+  builtInModels,
 } from "@/constants";
 import { CustomPrompt } from "@/customPromptProcessor";
 import EncryptionService from "@/encryptionService";
@@ -55,6 +56,7 @@ export default class CopilotPlugin extends Plugin {
     this.dbVectorStores = new PouchDB<VectorStoreDocument>(
       `copilot_vector_stores_${this.getVaultIdentifier()}`
     );
+    this.settings.activeModels = this.mergeActiveModels(this.settings.activeModels);
     this.chainManager = new ChainManager(
       this.app,
       langChainParams,
@@ -588,6 +590,34 @@ export default class CopilotPlugin extends Plugin {
 
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+
+    // Ensure activeModels always includes builtInModels
+    this.settings.activeModels = this.mergeActiveModels(this.settings.activeModels);
+  }
+
+  mergeActiveModels(existingActiveModels: CustomModel[]): CustomModel[] {
+    const modelMap = new Map<string, CustomModel>();
+
+    // Add built-in models to the map
+    builtInModels.forEach((model) => {
+      modelMap.set(model.name, { ...model, isBuiltIn: true });
+    });
+
+    // Add or update existing models in the map
+    existingActiveModels.forEach((model) => {
+      const existingModel = modelMap.get(model.name);
+      if (existingModel) {
+        // If it's a built-in model, preserve the built-in status
+        modelMap.set(model.name, {
+          ...model,
+          isBuiltIn: existingModel.isBuiltIn || model.isBuiltIn,
+        });
+      } else {
+        modelMap.set(model.name, { ...model, isBuiltIn: false });
+      }
+    });
+
+    return Array.from(modelMap.values());
   }
 
   async saveSettings(): Promise<void> {
@@ -595,6 +625,10 @@ export default class CopilotPlugin extends Plugin {
       // Encrypt all API keys before saving
       this.encryptionService.encryptAllKeys();
     }
+
+    // Ensure activeModels is merged before saving
+    this.settings.activeModels = this.mergeActiveModels(this.settings.activeModels);
+
     await this.saveData(this.settings);
   }
 
@@ -637,25 +671,20 @@ export default class CopilotPlugin extends Plugin {
       huggingfaceApiKey,
       cohereApiKey,
       anthropicApiKey,
-      anthropicModel,
       azureOpenAIApiKey,
       azureOpenAIApiInstanceName,
       azureOpenAIApiDeploymentName,
       azureOpenAIApiVersion,
       azureOpenAIApiEmbeddingDeploymentName,
       googleApiKey,
-      googleCustomModel,
       openRouterAiApiKey,
-      openRouterModel,
       embeddingModel,
       temperature,
       maxTokens,
       contextTurns,
-      ollamaModel,
       ollamaBaseUrl,
       lmStudioBaseUrl,
       groqApiKey,
-      groqModel,
     } = sanitizeSettings(this.settings);
     return {
       openAIApiKey,
@@ -664,23 +693,17 @@ export default class CopilotPlugin extends Plugin {
       huggingfaceApiKey,
       cohereApiKey,
       anthropicApiKey,
-      anthropicModel: anthropicModel || DEFAULT_SETTINGS.anthropicModel,
       groqApiKey,
-      groqModel,
       azureOpenAIApiKey,
       azureOpenAIApiInstanceName,
       azureOpenAIApiDeploymentName,
       azureOpenAIApiVersion,
       azureOpenAIApiEmbeddingDeploymentName,
       googleApiKey,
-      googleCustomModel,
       openRouterAiApiKey,
-      openRouterModel: openRouterModel || DEFAULT_SETTINGS.openRouterModel,
-      ollamaModel: ollamaModel || DEFAULT_SETTINGS.ollamaModel,
       ollamaBaseUrl: ollamaBaseUrl || DEFAULT_SETTINGS.ollamaBaseUrl,
       lmStudioBaseUrl: lmStudioBaseUrl || DEFAULT_SETTINGS.lmStudioBaseUrl,
       model: this.settings.defaultModel,
-      modelDisplayName: this.settings.defaultModelDisplayName,
       embeddingModel: embeddingModel || DEFAULT_SETTINGS.embeddingModel,
       temperature: Number(temperature),
       maxTokens: Number(maxTokens),
@@ -694,5 +717,13 @@ export default class CopilotPlugin extends Plugin {
       openAIEmbeddingProxyBaseUrl: this.settings.openAIEmbeddingProxyBaseUrl,
       openAIEmbeddingProxyModelName: this.settings.openAIEmbeddingProxyModelName,
     };
+  }
+
+  getLangChainParams(): LangChainParams {
+    return this.getChainManagerParams();
+  }
+
+  getEncryptionService(): EncryptionService {
+    return this.encryptionService;
   }
 }

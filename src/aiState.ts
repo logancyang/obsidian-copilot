@@ -17,7 +17,7 @@ export function useAIState(
   () => void,
 ] {
   const { langChainParams } = chainManager;
-  const [currentModel, setCurrentModel] = useState<string>(langChainParams.modelDisplayName);
+  const [currentModel, setCurrentModel] = useState<string>(langChainParams.model);
   const [currentChain, setCurrentChain] = useState<ChainType>(langChainParams.chainType);
   const [, setChatMemory] = useState<BaseChatMemory | null>(chainManager.memoryManager.getMemory());
 
@@ -26,9 +26,9 @@ export function useAIState(
     setChatMemory(chainManager.memoryManager.getMemory());
   };
 
-  const setModel = (newModelDisplayName: string) => {
-    chainManager.createChainWithNewModel(newModelDisplayName);
-    setCurrentModel(newModelDisplayName);
+  const setModel = (newModel: string) => {
+    chainManager.createChainWithNewModel(newModel);
+    setCurrentModel(newModel);
   };
 
   const setChain = (newChain: ChainType, options?: SetChainOptions) => {

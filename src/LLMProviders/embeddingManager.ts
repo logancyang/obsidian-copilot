@@ -1,6 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { LangChainParams } from "@/aiParams";
-import { EMBEDDING_MODEL_TO_PROVIDERS, ModelProviders, NOMIC_EMBED_TEXT } from "@/constants";
+import {
+  EMBEDDING_MODEL_TO_PROVIDERS,
+  EmbeddingModelProviders,
+  NOMIC_EMBED_TEXT,
+} from "@/constants";
 import EncryptionService from "@/encryptionService";
 import { ProxyOpenAIEmbeddings } from "@/langchainWrappers";
 import { CohereEmbeddings } from "@langchain/cohere";
@@ -86,19 +90,19 @@ export default class EmbeddingManager {
     const embeddingProvder = EMBEDDING_MODEL_TO_PROVIDERS[this.langChainParams.embeddingModel];
 
     switch (embeddingProvder) {
-      case ModelProviders.OPENAI:
+      case EmbeddingModelProviders.OPENAI:
         if (OpenAIEmbeddingsAPI) {
           return OpenAIEmbeddingsAPI;
         }
         console.error("OpenAI API key is not provided for the embedding model.");
         break;
-      case ModelProviders.COHEREAI:
+      case EmbeddingModelProviders.COHEREAI:
         return new CohereEmbeddings({
           apiKey: decrypt(this.langChainParams.cohereApiKey),
           maxRetries: 3,
           maxConcurrency: 3,
         });
-      case ModelProviders.AZURE_OPENAI:
+      case EmbeddingModelProviders.AZURE_OPENAI:
         if (azureOpenAIApiKey) {
           return new OpenAIEmbeddings({
             azureOpenAIApiKey: decrypt(azureOpenAIApiKey),
@@ -111,7 +115,7 @@ export default class EmbeddingManager {
         }
         console.error("Azure OpenAI API key is not provided for the embedding model.");
         break;
-      case ModelProviders.OLLAMA:
+      case EmbeddingModelProviders.OLLAMA:
         return new OllamaEmbeddings({
           ...(this.langChainParams.ollamaBaseUrl
             ? { baseUrl: this.langChainParams.ollamaBaseUrl }
