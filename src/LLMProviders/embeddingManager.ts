@@ -46,6 +46,7 @@ export default class EmbeddingManager {
       embeddingModel,
       openAIEmbeddingProxyBaseUrl,
       openAIEmbeddingProxyModelName,
+      useOpenAILocalProxy,
     } = this.langChainParams;
 
     if (openAIEmbeddingProxyBaseUrl) {
@@ -56,6 +57,7 @@ export default class EmbeddingManager {
         maxConcurrency: 3,
         timeout: 10000,
         openAIEmbeddingProxyBaseUrl,
+        useOpenAILocalProxy,
       });
     } else if (openAIApiKey) {
       // No proxy URL; now check if the API key exists

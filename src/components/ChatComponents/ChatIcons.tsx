@@ -47,6 +47,10 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
 }) => {
   const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
 
+  const handleModelChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setCurrentModel(event.target.value);
+  };
+
   const handleChainChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedChain(stringToChainType(event.target.value));
   };
@@ -114,7 +118,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             id="aiModelSelect"
             className="chat-icon-selection"
             value={currentModel}
-            onChange={handleChainChange}
+            onChange={handleModelChange}
           >
             <option value={ChatModelDisplayNames.GPT_4}>{ChatModelDisplayNames.GPT_4}</option>
             <option value={ChatModelDisplayNames.GPT_4o}>{ChatModelDisplayNames.GPT_4o}</option>
@@ -191,7 +195,10 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         </button>
       )}
       {selectedChain === "long_note_qa" && (
-        <button className="chat-icon-button clickable-icon" onClick={onForceRebuildActiveNoteContext}>
+        <button
+          className="chat-icon-button clickable-icon"
+          onClick={onForceRebuildActiveNoteContext}
+        >
           <UseActiveNoteAsContextIcon className="icon-scaler" />
           <span className="tooltip-text">
             Refresh Index

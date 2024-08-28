@@ -72,7 +72,7 @@ export default class ChatModelManager {
         openAIProxyBaseUrl: params.openAIProxyBaseUrl,
       },
       [ModelProviders.ANTHROPIC]: {
-        anthropicApiUrl: 'https://api.anthropic.com',
+        anthropicApiUrl: "https://api.anthropic.com",
         anthropicApiKey: decrypt(params.anthropicApiKey),
         modelName: params.anthropicModel,
       },
@@ -95,6 +95,7 @@ export default class ChatModelManager {
       [ModelProviders.LM_STUDIO]: {
         openAIApiKey: "placeholder",
         openAIProxyBaseUrl: `${params.lmStudioBaseUrl}`,
+        useOpenAILocalProxy: params.useOpenAILocalProxy,
       },
       [ModelProviders.OLLAMA]: {
         ...(params.ollamaBaseUrl ? { baseUrl: params.ollamaBaseUrl } : {}),
