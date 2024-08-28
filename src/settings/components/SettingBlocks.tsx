@@ -25,6 +25,7 @@ type TextAreaComponentProps = {
   placeholder: string;
   value: string;
   onChange: (value: string) => void;
+  rows?: number;
 };
 
 type SliderComponentProps = {
@@ -100,6 +101,7 @@ const TextAreaComponent: React.FC<TextAreaComponentProps> = ({
   placeholder,
   value,
   onChange,
+  rows = 3,
 }) => {
   return (
     <div className="copilot-setting-item">
@@ -110,6 +112,7 @@ const TextAreaComponent: React.FC<TextAreaComponentProps> = ({
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        rows={rows}
       />
     </div>
   );
@@ -288,7 +291,7 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
           <div className="add-custom-model-form">
             <TextComponent
               name="Model Name"
-              description="The name of the model, i.e. 'gpt-4o-mini'"
+              description={`The name of the model, i.e. ${isEmbeddingModel ? "text-embedding-3-small" : "gpt-4o-mini"}`}
               value={newModel.name}
               placeholder="Enter model name"
               onChange={(value) => {
