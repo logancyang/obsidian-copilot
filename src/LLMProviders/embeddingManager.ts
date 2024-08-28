@@ -138,7 +138,7 @@ export default class EmbeddingManager {
 
     const providerConfigs = {
       [EmbeddingModelProviders.OPENAI]: {
-        modelName: params.openAIEmbeddingProxyModelName || modelName,
+        modelName: modelName,
         openAIApiKey: decrypt(params.openAIApiKey),
         timeout: 10000,
       },
@@ -154,6 +154,10 @@ export default class EmbeddingManager {
       [EmbeddingModelProviders.OLLAMA]: {
         baseUrl: params.ollamaBaseUrl || "http://localhost:11434",
         model: modelName,
+      },
+      [EmbeddingModelProviders.OPENAI_FORMAT]: {
+        openAIEmbeddingProxyBaseUrl: params.openAIEmbeddingProxyBaseUrl,
+        modelName: modelName,
       },
     };
 
