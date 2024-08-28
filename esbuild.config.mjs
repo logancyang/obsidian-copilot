@@ -30,7 +30,7 @@ const context = await esbuild.context({
     "@codemirror/view",
     "@lezer/common",
     "@lezer/highlight",
-    "@lezer/lr"
+    "@lezer/lr",
   ],
   format: "cjs",
   target: "es2018",
@@ -40,7 +40,10 @@ const context = await esbuild.context({
   outfile: "main.js",
   plugins: [svgPlugin(), wasmPlugin],
   define: {
-    'global': 'window',
+    global: "window",
+  },
+  alias: {
+    events: "./null-events.js",
   },
 });
 
