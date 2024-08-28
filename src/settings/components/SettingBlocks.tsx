@@ -179,9 +179,9 @@ interface ModelSettingsComponentProps {
   activeModels: Array<CustomModel>;
   onUpdateModels: (models: Array<CustomModel>) => void;
   providers: string[];
-  onDeleteModel: (modelName: string) => void;
-  defaultModel: string;
-  onSetDefaultModel: (modelName: string) => void;
+  onDeleteModel: (modelKey: string) => void;
+  defaultModelKey: string;
+  onSetDefaultModelKey: (modelKey: string) => void;
   isEmbeddingModel: boolean;
 }
 
@@ -190,8 +190,8 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
   onUpdateModels,
   providers,
   onDeleteModel,
-  defaultModel,
-  onSetDefaultModel,
+  defaultModelKey,
+  onSetDefaultModelKey,
   isEmbeddingModel,
 }) => {
   const emptyModel: CustomModel = {
@@ -207,6 +207,8 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
   const [newModel, setNewModel] = useState(emptyModel);
   const [isAddModelOpen, setIsAddModelOpen] = useState(false);
 
+  const getModelKey = (model: CustomModel) => `${model.name}|${model.provider}`;
+
   const handleAddModel = () => {
     if (newModel.name && newModel.provider) {
       const updatedModels = [...activeModels, { ...newModel, enabled: true }];
@@ -217,8 +219,8 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
     }
   };
 
-  const handleSetDefaultModel = (modelName: string) => {
-    onSetDefaultModel(modelName);
+  const handleSetDefaultModel = (model: CustomModel) => {
+    onSetDefaultModelKey(getModelKey(model));
   };
 
   return (
@@ -236,13 +238,13 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
         </thead>
         <tbody>
           {activeModels.map((model, index) => (
-            <tr key={model.name}>
+            <tr key={getModelKey(model)}>
               <td>
                 <input
                   type="radio"
                   name={`selected-${isEmbeddingModel ? "embedding" : "chat"}-model`}
-                  checked={model.name === defaultModel}
-                  onChange={() => handleSetDefaultModel(model.name)}
+                  checked={getModelKey(model) === defaultModelKey}
+                  onChange={() => handleSetDefaultModel(model)}
                 />
               </td>
               <td>{model.name}</td>
@@ -276,7 +278,7 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
               </td>
               <td>
                 {!model.isBuiltIn && (
-                  <button onClick={() => onDeleteModel(model.name)}>Delete</button>
+                  <button onClick={() => onDeleteModel(getModelKey(model))}>Delete</button>
                 )}
               </td>
             </tr>

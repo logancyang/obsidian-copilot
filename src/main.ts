@@ -607,22 +607,26 @@ export default class CopilotPlugin extends Plugin {
   ): CustomModel[] {
     const modelMap = new Map<string, CustomModel>();
 
+    // Create a unique key for each model, it's model (name + provider)
+    const getModelKey = (model: CustomModel) => `${model.name}|${model.provider}`;
+
     // Add built-in models to the map
     builtInModels.forEach((model) => {
-      modelMap.set(model.name, { ...model, isBuiltIn: true });
+      modelMap.set(getModelKey(model), { ...model, isBuiltIn: true });
     });
 
     // Add or update existing models in the map
     existingActiveModels.forEach((model) => {
-      const existingModel = modelMap.get(model.name);
+      const key = getModelKey(model);
+      const existingModel = modelMap.get(key);
       if (existingModel) {
         // If it's a built-in model, preserve the built-in status
-        modelMap.set(model.name, {
+        modelMap.set(key, {
           ...model,
           isBuiltIn: existingModel.isBuiltIn || model.isBuiltIn,
         });
       } else {
-        modelMap.set(model.name, { ...model, isBuiltIn: false });
+        modelMap.set(key, { ...model, isBuiltIn: false });
       }
     });
 
@@ -698,7 +702,7 @@ export default class CopilotPlugin extends Plugin {
       azureOpenAIApiEmbeddingDeploymentName,
       googleApiKey,
       openRouterAiApiKey,
-      embeddingModel,
+      embeddingModelKey,
       temperature,
       maxTokens,
       contextTurns,
@@ -723,8 +727,8 @@ export default class CopilotPlugin extends Plugin {
       openRouterAiApiKey,
       ollamaBaseUrl: ollamaBaseUrl || DEFAULT_SETTINGS.ollamaBaseUrl,
       lmStudioBaseUrl: lmStudioBaseUrl || DEFAULT_SETTINGS.lmStudioBaseUrl,
-      model: this.settings.defaultModel,
-      embeddingModel: embeddingModel || DEFAULT_SETTINGS.embeddingModel,
+      modelKey: this.settings.defaultModelKey,
+      embeddingModelKey: embeddingModelKey || DEFAULT_SETTINGS.embeddingModelKey,
       temperature: Number(temperature),
       maxTokens: Number(maxTokens),
       systemMessage: this.settings.userSystemPrompt || DEFAULT_SYSTEM_PROMPT,
@@ -732,10 +736,7 @@ export default class CopilotPlugin extends Plugin {
       chainType: ChainType.LLM_CHAIN, // Set LLM_CHAIN as default ChainType
       options: { forceNewCreation: true } as SetChainOptions,
       openAIProxyBaseUrl: this.settings.openAIProxyBaseUrl,
-      enableCors: this.settings.enableCors,
-      openAIProxyModelName: this.settings.openAIProxyModelName,
       openAIEmbeddingProxyBaseUrl: this.settings.openAIEmbeddingProxyBaseUrl,
-      openAIEmbeddingProxyModelName: this.settings.openAIEmbeddingProxyModelName,
     };
   }
 

@@ -8,6 +8,10 @@ import { BaseChain, RetrievalQAChain } from "langchain/chains";
 import moment from "moment";
 import { TFile, Vault, parseYaml } from "obsidian";
 
+export const getModelNameFromKey = (modelKey: string): string => {
+  return modelKey.split("|")[0];
+};
+
 export const isFolderMatch = (fileFullpath: string, inputPath: string): boolean => {
   const fileSegments = fileFullpath.split("/").map((segment) => segment.toLowerCase());
   return fileSegments.includes(inputPath.toLowerCase());

@@ -65,7 +65,7 @@ export default class ChainManager {
     );
     this.promptManager = PromptManager.getInstance(this.langChainParams);
     this.getDbVectorStores = getDbVectorStores;
-    this.createChainWithNewModel(this.langChainParams.model);
+    this.createChainWithNewModel(this.langChainParams.modelKey);
   }
 
   private setNoteFile(noteFile: NoteFile): void {
@@ -76,8 +76,11 @@ export default class ChainManager {
     if (chainType === undefined || chainType === null) throw new Error("No chain type set");
   }
 
-  private findCustomModel(modelName: string): CustomModel | undefined {
-    return this.settings.activeModels.find((model) => model.name === modelName);
+  private findCustomModel(modelKey: string): CustomModel | undefined {
+    const [name, provider] = modelKey.split("|");
+    return this.settings.activeModels.find(
+      (model) => model.name === name && model.provider === provider
+    );
   }
 
   static storeRetrieverDocuments(documents: Document[]) {
@@ -91,13 +94,13 @@ export default class ChainManager {
    * @param {string} newModel - the name of the new model in the dropdown
    * @return {void}
    */
-  createChainWithNewModel(newModel: string): void {
+  createChainWithNewModel(newModelKey: string): void {
     try {
-      const customModel = this.findCustomModel(newModel);
+      const customModel = this.findCustomModel(newModelKey);
       if (!customModel) {
-        throw new Error(`No model configuration found for: ${newModel}`);
+        throw new Error(`No model configuration found for: ${newModelKey}`);
       }
-      this.langChainParams.model = newModel;
+      this.langChainParams.modelKey = newModelKey;
       this.chatModelManager.setChatModel(customModel);
       // Must update the chatModel for chain because ChainFactory always
       // retrieves the old chain without the chatModel change if it exists!
@@ -106,10 +109,10 @@ export default class ChainManager {
         ...this.langChainParams.options,
         forceNewCreation: true,
       });
-      console.log(`Setting model to ${newModel}`);
+      console.log(`Setting model to ${newModelKey}`);
     } catch (error) {
       console.error("createChainWithNewModel failed: ", error);
-      console.log("model:", this.langChainParams.model);
+      console.log("modelKey:", this.langChainParams.modelKey);
     }
   }
 
@@ -387,7 +390,7 @@ export default class ChainManager {
                 `chat context turns: ${chatContextTurns}\n`
             );
             console.log("chain RunnableSequence:", ChainManager.chain);
-            console.log("embedding model:", this.langChainParams.embeddingModel);
+            console.log("embedding model:", this.langChainParams.embeddingModelKey);
           }
           fullAIResponse = await this.runRetrievalChain(
             userMessage,

@@ -50,7 +50,7 @@ export default class ChatModelManager {
     const decrypt = (key: string) => this.encryptionService.getDecryptedKey(key);
     const params = this.getLangChainParams();
     const baseConfig: ModelConfig = {
-      modelName: params.model,
+      modelName: customModel.name,
       temperature: params.temperature,
       streaming: true,
       maxRetries: 3,
@@ -59,7 +59,7 @@ export default class ChatModelManager {
 
     const providerConfig = {
       [ChatModelProviders.OPENAI]: {
-        modelName: params.openAIProxyModelName || params.openAICustomModel || params.model,
+        modelName: customModel.name,
         openAIApiKey: decrypt(params.openAIApiKey),
         openAIOrgId: decrypt(params.openAIOrgId),
         maxTokens: params.maxTokens,
@@ -119,6 +119,7 @@ export default class ChatModelManager {
     return { ...baseConfig, ...selectedProviderConfig };
   }
 
+  // Build a map of modelKey to model config
   public buildModelMap(activeModels: CustomModel[]) {
     ChatModelManager.modelMap = {};
     const modelMap = ChatModelManager.modelMap;
@@ -176,7 +177,8 @@ export default class ChatModelManager {
           }
         }
 
-        modelMap[model.name] = {
+        const modelKey = `${model.name}|${model.provider}`;
+        modelMap[modelKey] = {
           hasApiKey: Boolean(model.apiKey || apiKey),
           AIConstructor: constructor,
           vendor: model.provider,
@@ -190,14 +192,15 @@ export default class ChatModelManager {
   }
 
   setChatModel(model: CustomModel): void {
-    if (!ChatModelManager.modelMap.hasOwnProperty(model.name)) {
-      throw new Error(`No model found for: ${model.name}`);
+    const modelKey = `${model.name}|${model.provider}`;
+    if (!ChatModelManager.modelMap.hasOwnProperty(modelKey)) {
+      throw new Error(`No model found for: ${modelKey}`);
     }
 
     // Create and return the appropriate model
-    const selectedModel = ChatModelManager.modelMap[model.name];
+    const selectedModel = ChatModelManager.modelMap[modelKey];
     if (!selectedModel.hasApiKey) {
-      const errorMessage = `API key is not provided for the model: ${model.name}. Model switch failed.`;
+      const errorMessage = `API key is not provided for the model: ${modelKey}. Model switch failed.`;
       new Notice(errorMessage);
       // Stop execution and deliberate fail the model switch
       throw new Error(errorMessage);
@@ -205,9 +208,8 @@ export default class ChatModelManager {
 
     const modelConfig = this.getModelConfig(model);
 
-    // Update the langChainParams.model with the prioritized model name
     // MUST update it since chatModelManager is a singleton.
-    this.getLangChainParams().model = modelConfig.modelName;
+    this.getLangChainParams().modelKey = `${model.name}|${model.provider}`;
     new Notice(`Setting model: ${modelConfig.modelName}`);
     try {
       const newModelInstance = new selectedModel.AIConstructor({
@@ -217,7 +219,7 @@ export default class ChatModelManager {
       ChatModelManager.chatModel = newModelInstance;
     } catch (error) {
       console.error(error);
-      new Notice(`Error creating model: ${model.name}`);
+      new Notice(`Error creating model: ${modelKey}`);
     }
   }
 

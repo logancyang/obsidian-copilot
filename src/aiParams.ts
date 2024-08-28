@@ -26,6 +26,7 @@ export interface ModelConfig {
 }
 
 export interface LangChainParams {
+  modelKey: string; // name | provider, e.g. "gpt-4o|openai"
   openAIApiKey: string;
   openAIOrgId: string;
   openAICustomModel: string;
@@ -39,8 +40,7 @@ export interface LangChainParams {
   azureOpenAIApiEmbeddingDeploymentName: string;
   googleApiKey: string;
   openRouterAiApiKey: string;
-  model: string;
-  embeddingModel: string;
+  embeddingModelKey: string; // name | provider, e.g. "text-embedding-3-large|openai"
   temperature: number;
   maxTokens: number;
   systemMessage: string;

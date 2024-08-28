@@ -69,7 +69,7 @@ const Chat: React.FC<ChatProps> = ({
   debug,
 }) => {
   const [chatHistory, addMessage, clearMessages] = useSharedState(sharedState);
-  const [currentModel, setModel, currentChain, setChain, clearChatMemory] =
+  const [currentModelKey, setModelKey, currentChain, setChain, clearChatMemory] =
     useAIState(chainManager);
   const [currentAiMessage, setCurrentAiMessage] = useState("");
   const [inputMessage, setInputMessage] = useState("");
@@ -459,8 +459,8 @@ const Chat: React.FC<ChatProps> = ({
       />
       <div className="bottom-container">
         <ChatIcons
-          currentModel={currentModel}
-          setCurrentModel={setModel}
+          currentModelKey={currentModelKey}
+          setCurrentModelKey={setModelKey}
           currentChain={currentChain}
           setCurrentChain={setChain}
           onNewChat={() => {

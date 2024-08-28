@@ -1,4 +1,4 @@
-import { SetChainOptions } from "@/aiParams";
+import { CustomModel, SetChainOptions } from "@/aiParams";
 import { AI_SENDER, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChatMessage } from "@/sharedState";
@@ -16,8 +16,8 @@ import {
 import { stringToChainType } from "@/utils";
 
 interface ChatIconsProps {
-  currentModel: string;
-  setCurrentModel: (model: string) => void;
+  currentModelKey: string;
+  setCurrentModelKey: (modelKey: string) => void;
   currentChain: ChainType;
   setCurrentChain: (chain: ChainType, options?: SetChainOptions) => void;
   onNewChat: () => void;
@@ -33,8 +33,8 @@ interface ChatIconsProps {
 }
 
 const ChatIcons: React.FC<ChatIconsProps> = ({
-  currentModel,
-  setCurrentModel,
+  currentModelKey,
+  setCurrentModelKey,
   currentChain,
   setCurrentChain,
   onNewChat,
@@ -50,8 +50,11 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
 }) => {
   const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
 
+  const getModelKey = (model: CustomModel) => `${model.name}|${model.provider}`;
+
   const handleModelChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
-    setCurrentModel(event.target.value);
+    const selectedModelKey = event.target.value;
+    setCurrentModelKey(selectedModelKey);
   };
 
   const handleChainChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -120,13 +123,13 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           <select
             id="aiModelSelect"
             className="chat-icon-selection model-select"
-            value={currentModel}
+            value={currentModelKey}
             onChange={handleModelChange}
           >
             {settings.activeModels
               .filter((model) => model.enabled)
               .map((model) => (
-                <option key={model.name} value={model.name}>
+                <option key={getModelKey(model)} value={getModelKey(model)}>
                   {model.name}
                 </option>
               ))}

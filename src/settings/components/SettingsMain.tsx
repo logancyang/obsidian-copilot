@@ -54,7 +54,6 @@ const SettingsMain: React.FC<{ plugin: CopilotPlugin; reloadPlugin: () => Promis
       />
       <QASettings
         {...settings}
-        setEmbeddingModel={(value) => updateSettings({ embeddingModel: value })}
         setCohereApiKey={(value) => updateSettings({ cohereApiKey: value })}
         setHuggingfaceApiKey={(value) => updateSettings({ huggingfaceApiKey: value })}
         setIndexVaultToVectorStore={(value) => updateSettings({ indexVaultToVectorStore: value })}

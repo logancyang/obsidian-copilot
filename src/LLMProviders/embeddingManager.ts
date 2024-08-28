@@ -7,9 +7,9 @@ import { CohereEmbeddings } from "@langchain/cohere";
 import { Embeddings } from "langchain/embeddings/base";
 import { OllamaEmbeddings } from "langchain/embeddings/ollama";
 import { OpenAIEmbeddings } from "langchain/embeddings/openai";
-
 export default class EmbeddingManager {
   private encryptionService: EncryptionService;
+  private activeEmbeddingModels: CustomModel[];
   private static instance: EmbeddingManager;
   private static embeddingModel: Embeddings;
   private static modelMap: Record<
@@ -27,6 +27,7 @@ export default class EmbeddingManager {
     activeEmbeddingModels: CustomModel[]
   ) {
     this.encryptionService = encryptionService;
+    this.activeEmbeddingModels = activeEmbeddingModels;
     this.buildModelMap(activeEmbeddingModels);
   }
 
@@ -45,6 +46,7 @@ export default class EmbeddingManager {
     return EmbeddingManager.instance;
   }
 
+  // Build a map of modelKey to model config
   private buildModelMap(activeEmbeddingModels: CustomModel[]) {
     EmbeddingManager.modelMap = {};
     const modelMap = EmbeddingManager.modelMap;
@@ -80,8 +82,8 @@ export default class EmbeddingManager {
             console.warn(`Unknown provider: ${model.provider} for embedding model: ${model.name}`);
             return;
         }
-
-        modelMap[model.name] = {
+        const modelKey = `${model.name}|${model.provider}`;
+        modelMap[modelKey] = {
           hasApiKey: Boolean(apiKey),
           EmbeddingConstructor: constructor,
           vendor: model.provider,
@@ -103,33 +105,43 @@ export default class EmbeddingManager {
     }
   }
 
+  // Get the custom model that matches the name and provider from the model key
+  private getCustomModel(modelKey: string): CustomModel {
+    return this.activeEmbeddingModels.filter((model) => {
+      const key = `${model.name}|${model.provider}`;
+      return modelKey === key;
+    })[0];
+  }
+
   getEmbeddingsAPI(): Embeddings | undefined {
-    const { embeddingModel } = this.getLangChainParams();
+    const { embeddingModelKey } = this.getLangChainParams();
 
-    if (!EmbeddingManager.modelMap.hasOwnProperty(embeddingModel)) {
-      console.error(`No embedding model found for: ${embeddingModel}`);
+    if (!EmbeddingManager.modelMap.hasOwnProperty(embeddingModelKey)) {
+      console.error(`No embedding model found for: ${embeddingModelKey}`);
       return;
     }
 
-    const selectedModel = EmbeddingManager.modelMap[embeddingModel];
+    const selectedModel = EmbeddingManager.modelMap[embeddingModelKey];
     if (!selectedModel.hasApiKey) {
-      console.error(`API key is not provided for the embedding model: ${embeddingModel}`);
+      console.error(`API key is not provided for the embedding model: ${embeddingModelKey}`);
       return;
     }
 
-    const config = this.getEmbeddingConfig(embeddingModel);
+    const customModel = this.getCustomModel(embeddingModelKey);
+    const config = this.getEmbeddingConfig(customModel);
 
     try {
       EmbeddingManager.embeddingModel = new selectedModel.EmbeddingConstructor(config);
       return EmbeddingManager.embeddingModel;
     } catch (error) {
-      console.error(`Error creating embedding model: ${embeddingModel}`, error);
+      console.error(`Error creating embedding model: ${embeddingModelKey}`, error);
     }
   }
 
-  private getEmbeddingConfig(modelName: string): any {
+  private getEmbeddingConfig(customModel: CustomModel): any {
     const decrypt = (key: string) => this.encryptionService.getDecryptedKey(key);
     const params = this.getLangChainParams();
+    const modelName = customModel.name;
 
     const baseConfig = {
       maxRetries: 3,
@@ -138,7 +150,7 @@ export default class EmbeddingManager {
 
     const providerConfigs = {
       [EmbeddingModelProviders.OPENAI]: {
-        modelName: modelName,
+        modelName,
         openAIApiKey: decrypt(params.openAIApiKey),
         timeout: 10000,
       },
@@ -156,12 +168,17 @@ export default class EmbeddingManager {
         model: modelName,
       },
       [EmbeddingModelProviders.OPENAI_FORMAT]: {
-        openAIEmbeddingProxyBaseUrl: params.openAIEmbeddingProxyBaseUrl,
-        modelName: modelName,
+        modelName,
+        openAIApiKey: decrypt(customModel.apiKey || ""),
+        openAIEmbeddingProxyBaseUrl: customModel.baseUrl,
       },
     };
 
-    const selectedModel = EmbeddingManager.modelMap[modelName];
+    const modelKey = `${modelName}|${customModel.provider}`;
+    const selectedModel = EmbeddingManager.modelMap[modelKey];
+    if (!selectedModel) {
+      console.error(`No embedding model found for key: ${modelKey}`);
+    }
     const providerConfig =
       providerConfigs[selectedModel.vendor as keyof typeof providerConfigs] || {};
 

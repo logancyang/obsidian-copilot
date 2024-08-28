@@ -26,8 +26,9 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
     updateSettings({ activeModels: updatedActiveModels });
   };
 
-  const handleSetDefaultModel = (modelName: string) => {
-    updateSettings({ defaultModel: modelName });
+  // modelKey is name | provider, e.g. "gpt-4o|openai"
+  const onSetDefaultModelKey = (modelKey: string) => {
+    updateSettings({ defaultModelKey: modelKey });
   };
 
   return (
@@ -43,8 +44,8 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
           );
           updateSettings({ activeModels: updatedActiveModels });
         }}
-        defaultModel={settings.defaultModel}
-        onSetDefaultModel={handleSetDefaultModel}
+        defaultModelKey={settings.defaultModelKey}
+        onSetDefaultModelKey={onSetDefaultModelKey}
         isEmbeddingModel={false}
       />
       <TextComponent

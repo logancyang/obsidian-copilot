@@ -7,8 +7,6 @@ import Collapsible from "./Collapsible";
 import { DropdownComponent, ModelSettingsComponent, SliderComponent } from "./SettingBlocks";
 
 interface QASettingsProps {
-  embeddingModel: string;
-  setEmbeddingModel: (value: string) => void;
   cohereApiKey: string;
   setCohereApiKey: (value: string) => void;
   huggingfaceApiKey: string;
@@ -20,8 +18,6 @@ interface QASettingsProps {
 }
 
 const QASettings: React.FC<QASettingsProps> = ({
-  embeddingModel,
-  setEmbeddingModel,
   cohereApiKey,
   setCohereApiKey,
   indexVaultToVectorStore,
@@ -40,8 +36,8 @@ const QASettings: React.FC<QASettingsProps> = ({
     updateSettings({ activeEmbeddingModels: updatedActiveEmbeddingModels });
   };
 
-  const handleSetEmbeddingModel = (modelName: string) => {
-    updateSettings({ embeddingModel: modelName });
+  const handleSetEmbeddingModelKey = (modelKey: string) => {
+    updateSettings({ embeddingModelKey: modelKey });
   };
 
   return (
@@ -75,23 +71,16 @@ const QASettings: React.FC<QASettingsProps> = ({
         activeModels={settings.activeEmbeddingModels}
         onUpdateModels={handleUpdateEmbeddingModels}
         providers={Object.values(EmbeddingModelProviders)}
-        onDeleteModel={(modelName) => {
+        onDeleteModel={(modelKey) => {
           const updatedActiveEmbeddingModels = settings.activeEmbeddingModels.filter(
-            (model) => model.name !== modelName
+            (model) => `${model.name}|${model.provider}` !== modelKey
           );
           updateSettings({ activeEmbeddingModels: updatedActiveEmbeddingModels });
         }}
-        defaultModel={settings.embeddingModel}
-        onSetDefaultModel={handleSetEmbeddingModel}
+        defaultModelKey={settings.embeddingModelKey}
+        onSetDefaultModelKey={handleSetEmbeddingModelKey}
         isEmbeddingModel={true}
       />
-      {/* <DropdownComponent
-        name="Embedding Models"
-        description="The embedding API/model to use"
-        value={embeddingModel}
-        onChange={setEmbeddingModel}
-        options={Object.values(EmbeddingModels)}
-      /> */}
       <h1>Auto-Index Strategy</h1>
       <div className="warning-message">
         If you are using a paid embedding provider, beware of costs for large vaults!
