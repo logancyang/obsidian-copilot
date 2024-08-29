@@ -140,8 +140,6 @@ export const VAULT_VECTOR_STORE_STRATEGIES = [
   VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH,
 ];
 
-export const PROXY_SERVER_PORT = 53001;
-
 export const COMMAND_IDS = {
   FIX_GRAMMAR: "fix-grammar-prompt",
   SUMMARIZE: "summarize-prompt",
@@ -187,7 +185,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   contextTurns: 15,
   userSystemPrompt: "",
   openAIProxyBaseUrl: "",
-  useOpenAILocalProxy: false,
+  enableCors: false,
   openAIProxyModelName: "",
   openAIEmbeddingProxyBaseUrl: "",
   openAIEmbeddingProxyModelName: "",

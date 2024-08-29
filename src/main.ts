@@ -689,7 +689,7 @@ export default class CopilotPlugin extends Plugin {
       chainType: ChainType.LLM_CHAIN, // Set LLM_CHAIN as default ChainType
       options: { forceNewCreation: true } as SetChainOptions,
       openAIProxyBaseUrl: this.settings.openAIProxyBaseUrl,
-      useOpenAILocalProxy: this.settings.useOpenAILocalProxy,
+      enableCors: this.settings.enableCors,
       openAIProxyModelName: this.settings.openAIProxyModelName,
       openAIEmbeddingProxyBaseUrl: this.settings.openAIEmbeddingProxyBaseUrl,
       openAIEmbeddingProxyModelName: this.settings.openAIEmbeddingProxyModelName,

@@ -9,7 +9,6 @@ import {
   OLLAMA_MODELS,
   OPENAI_MODELS,
   OPENROUTERAI_MODELS,
-  PROXY_SERVER_PORT,
 } from "@/constants";
 import EncryptionService from "@/encryptionService";
 import { ChatAnthropicWrapped, ProxyChatOpenAI } from "@/langchainWrappers";
@@ -95,7 +94,7 @@ export default class ChatModelManager {
       [ModelProviders.LM_STUDIO]: {
         openAIApiKey: "placeholder",
         openAIProxyBaseUrl: `${params.lmStudioBaseUrl}`,
-        useOpenAILocalProxy: params.useOpenAILocalProxy,
+        enableCors: params.enableCors,
       },
       [ModelProviders.OLLAMA]: {
         ...(params.ollamaBaseUrl ? { baseUrl: params.ollamaBaseUrl } : {}),
@@ -109,18 +108,6 @@ export default class ChatModelManager {
 
     const selectedProviderConfig =
       providerConfig[chatModelProvider as keyof typeof providerConfig] || {};
-
-    // When useOpenAILocalProxy is enabled, use local proxy server
-    // Local proxy server will proxy requests to openAIProxyBaseUrl
-    if (
-      chatModelProvider === ModelProviders.OPENAI &&
-      params.useOpenAILocalProxy &&
-      params.openAIProxyBaseUrl
-    ) {
-      (
-        selectedProviderConfig as (typeof providerConfig)[ModelProviders.OPENAI]
-      ).openAIProxyBaseUrl = `http://localhost:${PROXY_SERVER_PORT}`;
-    }
 
     return { ...baseConfig, ...selectedProviderConfig };
   }

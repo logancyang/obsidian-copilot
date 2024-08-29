@@ -65,7 +65,7 @@ const SettingsMain: React.FC<{ plugin: CopilotPlugin; reloadPlugin: () => Promis
       <AdvancedSettings
         {...settings}
         setOpenAIProxyBaseUrl={(value) => updateSettings({ openAIProxyBaseUrl: value })}
-        setUseOpenAILocalProxy={(value) => updateSettings({ useOpenAILocalProxy: value })}
+        setEnableCors={(value) => updateSettings({ enableCors: value })}
         setOpenAIProxyModelName={(value) => updateSettings({ openAIProxyModelName: value })}
         setOpenAIEmbeddingProxyBaseUrl={(value) =>
           updateSettings({ openAIEmbeddingProxyBaseUrl: value })

@@ -30,7 +30,7 @@ export interface CopilotSettings {
   contextTurns: number;
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;
-  useOpenAILocalProxy: boolean;
+  enableCors: boolean;
   openAIProxyModelName: string;
   openAIEmbeddingProxyBaseUrl: string;
   openAIEmbeddingProxyModelName: string;
