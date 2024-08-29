@@ -73,6 +73,7 @@
     "cohere-ai": "^7.6.2",
     "crypto-js": "^4.1.1",
     "esbuild-plugin-svg": "^0.1.0",
+    "esbuild-plugins-node-modules-polyfill": "^1.6.5",
     "eventsource-parser": "^1.0.0",
     "koa": "^2.14.2",
     "koa-proxies": "^0.12.3",
