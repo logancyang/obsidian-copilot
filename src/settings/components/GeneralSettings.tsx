@@ -23,6 +23,13 @@ const GeneralSettings: React.FC = () => {
         value={settings.defaultSaveFolder}
         onChange={(value) => updateSettings({ defaultSaveFolder: value })}
       />
+      <TextComponent
+        name="Exclude Folders from Indexing"
+        description="Comma separated list like folder1, folder1/folder2, etc, to be excluded from indexing process. NOTE: files which were previously indexed will remain in the index."
+        placeholder="folder1, folder1/folder2"
+        value={settings.excludedFolders.join(", ")}
+        onChange={(value) => updateSettings({ excludedFolders: value.split(", ") })}
+      />
       <h6>
         Please be mindful of the number of tokens and context conversation turns you set here, as
         they will affect the cost of your API requests.
