@@ -27,7 +27,7 @@ export class ProxyOpenAIEmbeddings extends OpenAIEmbeddings {
     this["client"] = new OpenAI({
       ...this["clientConfig"],
       baseURL: fields.openAIEmbeddingProxyBaseUrl,
-      fetch: fields.enableCors ? safeFetch : undefined,
+      fetch: safeFetch,
     });
   }
 }
@@ -41,6 +41,9 @@ export class ChatAnthropicWrapped extends ChatAnthropic {
   }
 }
 
+/** Proxy function to use in place of fetch() to bypass CORS restrictions.
+ * It currently doesn't support streaming until this is implemented
+ * https://forum.obsidian.md/t/support-streaming-the-request-and-requesturl-response-body/87381 */
 async function safeFetch(url: string, options: RequestInit): Promise<Response> {
   // Necessary to remove 'content-length' in order to make headers compatible with requestUrl()
   delete (options.headers as Record<string, string>)["content-length"];
