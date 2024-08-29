@@ -65,9 +65,7 @@ async function safeFetch(url: string, options: RequestInit): Promise<Response> {
     redirected: false,
     body: createReadableStreamFromString(response.text),
     bodyUsed: true,
-    json: () => {
-      throw new Error("not implemented");
-    },
+    json: () => response.json,
     text: async () => response.text,
     clone: () => {
       throw new Error("not implemented");
