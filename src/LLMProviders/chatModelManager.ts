@@ -71,7 +71,6 @@ export default class ChatModelManager {
         openAIProxyBaseUrl: params.openAIProxyBaseUrl,
       },
       [ModelProviders.ANTHROPIC]: {
-        anthropicApiUrl: "https://api.anthropic.com",
         anthropicApiKey: decrypt(params.anthropicApiKey),
         modelName: params.anthropicModel,
       },
