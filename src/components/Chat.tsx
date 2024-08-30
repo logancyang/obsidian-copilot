@@ -37,13 +37,9 @@ import {
   simplifyPrompt,
   summarizePrompt,
   tocPrompt,
-} from '@/utils';
-import { Notice, TFile } from 'obsidian';
-import React, {
-  useContext,
-  useEffect,
-  useState,
-} from 'react';
+} from "@/utils";
+import { Notice, TFile } from "obsidian";
+import React, { useContext, useEffect, useState } from "react";
 
 interface CreateEffectOptions {
   custom_temperature?: number;
@@ -345,9 +341,10 @@ const Chat: React.FC<ChatProps> = ({
         ignoreSystemMessage = true, // Ignore system message by default for commands
       } = options;
       const handleSelection = async (event: CustomEvent) => {
-        console.log('handleSelection2', event);
-        const messageWithPrompt = await promptFn(event.detail.selectedText, event.detail.eventSubtype);
-        console.log('messageWithPrompt', messageWithPrompt);
+        const messageWithPrompt = await promptFn(
+          event.detail.selectedText,
+          event.detail.eventSubtype
+        );
         // Create a user message with the selected text
         const promptMessage: ChatMessage = {
           message: messageWithPrompt,
