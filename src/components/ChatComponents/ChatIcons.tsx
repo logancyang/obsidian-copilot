@@ -1,6 +1,5 @@
 import { SetChainOptions } from "@/aiParams";
 import { AI_SENDER, ChatModelDisplayNames, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
-import { ProxyServer } from "@/proxyServer";
 import { ChatMessage } from "@/sharedState";
 import { getFileContent, getFileName } from "@/utils";
 import { Notice, Vault } from "obsidian";
@@ -28,7 +27,6 @@ interface ChatIconsProps {
   addMessage: (message: ChatMessage) => void;
   vault: Vault;
   vault_qa_strategy: string;
-  proxyServer: ProxyServer;
   debug?: boolean;
 }
 
@@ -45,46 +43,13 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   addMessage,
   vault,
   vault_qa_strategy,
-  proxyServer,
   debug,
 }) => {
   const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
 
   const handleModelChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedModel = event.target.value;
     setCurrentModel(event.target.value);
-
-    // Start proxy server based on the selected model & settings
-    const proxyServerURL = proxyServer.getProxyURL(selectedModel);
-    if (proxyServerURL) {
-      await proxyServer.startProxyServer(
-        proxyServerURL,
-        selectedModel !== ChatModelDisplayNames.CLAUDE
-      );
-    } else {
-      await proxyServer.stopProxyServer();
-    }
   };
-
-  useEffect(() => {
-    const startProxyServerForClaude = async (proxyServerURL: string) => {
-      await proxyServer.startProxyServer(
-        proxyServerURL,
-        currentModel !== ChatModelDisplayNames.CLAUDE
-      );
-    };
-
-    // Call the function on component mount
-    const proxyServerURL = proxyServer.getProxyURL(currentModel);
-    if (proxyServerURL) {
-      startProxyServerForClaude(proxyServerURL);
-    }
-
-    // Cleanup function to stop the proxy server when the component unmounts
-    return () => {
-      proxyServer.stopProxyServer().catch(console.error);
-    };
-  }, []);
 
   const handleChainChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedChain(stringToChainType(event.target.value));
@@ -188,7 +153,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           <span className="tooltip-text">Model Selection</span>
         </div>
       </div>
-      <button className="chat-icon-button" onClick={onNewChat}>
+      <button className="chat-icon-button clickable-icon" onClick={onNewChat}>
         <RefreshIcon className="icon-scaler" />
         <span className="tooltip-text">
           New Chat
@@ -196,7 +161,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           (unsaved history will be lost)
         </span>
       </button>
-      <button className="chat-icon-button" onClick={onSaveAsNote}>
+      <button className="chat-icon-button clickable-icon" onClick={onSaveAsNote}>
         <SaveAsNoteIcon className="icon-scaler" />
         <span className="tooltip-text">Save as Note</span>
       </button>
@@ -216,7 +181,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         </div>
       </div>
       {selectedChain === "llm_chain" && (
-        <button className="chat-icon-button" onClick={onSendActiveNoteToPrompt}>
+        <button className="chat-icon-button clickable-icon" onClick={onSendActiveNoteToPrompt}>
           <SendActiveNoteToPromptIcon className="icon-scaler" />
           <span className="tooltip-text">
             Send Note(s) to Prompt
@@ -230,7 +195,10 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         </button>
       )}
       {selectedChain === "long_note_qa" && (
-        <button className="chat-icon-button" onClick={onForceRebuildActiveNoteContext}>
+        <button
+          className="chat-icon-button clickable-icon"
+          onClick={onForceRebuildActiveNoteContext}
+        >
           <UseActiveNoteAsContextIcon className="icon-scaler" />
           <span className="tooltip-text">
             Refresh Index
@@ -240,7 +208,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         </button>
       )}
       {selectedChain === "vault_qa" && (
-        <button className="chat-icon-button" onClick={onRefreshVaultContext}>
+        <button className="chat-icon-button clickable-icon" onClick={onRefreshVaultContext}>
           <UseActiveNoteAsContextIcon className="icon-scaler" />
           <span className="tooltip-text">
             Refresh Index

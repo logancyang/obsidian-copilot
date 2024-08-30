@@ -38,7 +38,6 @@ import {
   summarizePrompt,
   tocPrompt,
 } from "@/utils";
-import { EventEmitter } from "events";
 import { Notice, TFile } from "obsidian";
 import React, { useContext, useEffect, useState } from "react";
 
@@ -52,7 +51,7 @@ interface ChatProps {
   sharedState: SharedState;
   settings: CopilotSettings;
   chainManager: ChainManager;
-  emitter: EventEmitter;
+  emitter: EventTarget;
   getChatVisibility: () => Promise<boolean>;
   defaultSaveFolder: string;
   plugin: CopilotPlugin;
@@ -310,9 +309,9 @@ const Chat: React.FC<ChatProps> = ({
   };
 
   useEffect(() => {
-    async function handleSelection(selectedText: string) {
-      const wordCount = selectedText.split(" ").length;
-      const tokenCount = await chainManager.chatModelManager.countTokens(selectedText);
+    async function handleSelection(event: CustomEvent) {
+      const wordCount = event.detail.selectedText.split(" ").length;
+      const tokenCount = await chainManager.chatModelManager.countTokens(event.detail.selectedText);
       const tokenCountMessage: ChatMessage = {
         sender: AI_SENDER,
         message: `The selected text contains ${wordCount} words and ${tokenCount} tokens.`,
@@ -321,11 +320,11 @@ const Chat: React.FC<ChatProps> = ({
       addMessage(tokenCountMessage);
     }
 
-    emitter.on("countTokensSelection", handleSelection);
+    emitter.addEventListener("countTokensSelection", handleSelection);
 
     // Cleanup function to remove the event listener when the component unmounts
     return () => {
-      emitter.removeListener("countTokensSelection", handleSelection);
+      emitter.removeEventListener("countTokensSelection", handleSelection);
     };
   }, []);
 
@@ -341,8 +340,11 @@ const Chat: React.FC<ChatProps> = ({
         isVisible = false,
         ignoreSystemMessage = true, // Ignore system message by default for commands
       } = options;
-      const handleSelection = async (selectedText: string, eventSubtype?: string) => {
-        const messageWithPrompt = await promptFn(selectedText, eventSubtype);
+      const handleSelection = async (event: CustomEvent) => {
+        const messageWithPrompt = await promptFn(
+          event.detail.selectedText,
+          event.detail.eventSubtype
+        );
         // Create a user message with the selected text
         const promptMessage: ChatMessage = {
           message: messageWithPrompt,
@@ -375,11 +377,11 @@ const Chat: React.FC<ChatProps> = ({
         setLoading(false);
       };
 
-      emitter.on(eventType, handleSelection);
+      emitter.addEventListener(eventType, handleSelection);
 
       // Cleanup function to remove the event listener when the component unmounts
       return () => {
-        emitter.removeListener(eventType, handleSelection);
+        emitter.removeEventListener(eventType, handleSelection);
       };
     };
   };
@@ -473,7 +475,6 @@ const Chat: React.FC<ChatProps> = ({
           addMessage={addMessage}
           vault={app.vault}
           vault_qa_strategy={plugin.settings.indexVaultToVectorStore}
-          proxyServer={plugin.proxyServer}
           debug={debug}
         />
         <ChatInput

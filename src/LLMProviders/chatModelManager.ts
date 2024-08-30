@@ -9,11 +9,9 @@ import {
   OLLAMA_MODELS,
   OPENAI_MODELS,
   OPENROUTERAI_MODELS,
-  PROXY_SERVER_PORT,
 } from "@/constants";
 import EncryptionService from "@/encryptionService";
-import { ProxyChatOpenAI } from "@/langchainWrappers";
-import { ChatAnthropic } from "@langchain/anthropic";
+import { ChatAnthropicWrapped, ProxyChatOpenAI } from "@/langchainWrappers";
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatGroq } from "@langchain/groq";
@@ -73,7 +71,6 @@ export default class ChatModelManager {
         openAIProxyBaseUrl: params.openAIProxyBaseUrl,
       },
       [ModelProviders.ANTHROPIC]: {
-        anthropicApiUrl: `http://localhost:${PROXY_SERVER_PORT}`,
         anthropicApiKey: decrypt(params.anthropicApiKey),
         modelName: params.anthropicModel,
       },
@@ -96,6 +93,7 @@ export default class ChatModelManager {
       [ModelProviders.LM_STUDIO]: {
         openAIApiKey: "placeholder",
         openAIProxyBaseUrl: `${params.lmStudioBaseUrl}`,
+        enableCors: params.enableCors,
       },
       [ModelProviders.OLLAMA]: {
         ...(params.ollamaBaseUrl ? { baseUrl: params.ollamaBaseUrl } : {}),
@@ -109,18 +107,6 @@ export default class ChatModelManager {
 
     const selectedProviderConfig =
       providerConfig[chatModelProvider as keyof typeof providerConfig] || {};
-
-    // When useOpenAILocalProxy is enabled, use local proxy server
-    // Local proxy server will proxy requests to openAIProxyBaseUrl
-    if (
-      chatModelProvider === ModelProviders.OPENAI &&
-      params.useOpenAILocalProxy &&
-      params.openAIProxyBaseUrl
-    ) {
-      (
-        selectedProviderConfig as (typeof providerConfig)[ModelProviders.OPENAI]
-      ).openAIProxyBaseUrl = `http://localhost:${PROXY_SERVER_PORT}`;
-    }
 
     return { ...baseConfig, ...selectedProviderConfig };
   }
@@ -154,7 +140,7 @@ export default class ChatModelManager {
       {
         models: ANTHROPIC_MODELS,
         apiKey: this.langChainParams.anthropicApiKey,
-        constructor: ChatAnthropic,
+        constructor: ChatAnthropicWrapped,
         vendor: ModelProviders.ANTHROPIC,
       },
       {

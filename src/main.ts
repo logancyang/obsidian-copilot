@@ -13,12 +13,10 @@ import {
   CHAT_VIEWTYPE,
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
-  PROXY_SERVER_PORT,
   VAULT_VECTOR_STORE_STRATEGY,
 } from "@/constants";
 import { CustomPrompt } from "@/customPromptProcessor";
 import EncryptionService from "@/encryptionService";
-import { ProxyServer } from "@/proxyServer";
 import { CopilotSettingTab, CopilotSettings } from "@/settings/SettingsPage";
 import SharedState from "@/sharedState";
 import {
@@ -30,7 +28,7 @@ import {
 import VectorDBManager, { VectorStoreDocument } from "@/vectorDBManager";
 import { MD5 } from "crypto-js";
 import { Editor, MarkdownView, Menu, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
-import PouchDB from "pouchdb";
+import PouchDB from "pouchdb-browser";
 
 export default class CopilotPlugin extends Plugin {
   settings: CopilotSettings;
@@ -44,13 +42,11 @@ export default class CopilotPlugin extends Plugin {
   dbVectorStores: PouchDB.Database<VectorStoreDocument>;
   embeddingsManager: EmbeddingsManager;
   encryptionService: EncryptionService;
-  proxyServer: ProxyServer;
 
   isChatVisible = () => this.chatIsVisible;
 
   async onload(): Promise<void> {
     await this.loadSettings();
-    this.proxyServer = new ProxyServer(this.settings, PROXY_SERVER_PORT);
     this.addSettingTab(new CopilotSettingTab(this.app, this));
     // Always have one instance of sharedState and chainManager in the plugin
     this.sharedState = new SharedState();
@@ -524,7 +520,8 @@ export default class CopilotPlugin extends Plugin {
         .getLeavesOfType(CHAT_VIEWTYPE)
         .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
       if (activeCopilotView && (!checkSelectedText || selectedText)) {
-        activeCopilotView.emitter.emit(eventType, selectedText, eventSubtype);
+        const event = new CustomEvent(eventType, { detail: { selectedText, eventSubtype } });
+        activeCopilotView.emitter.dispatchEvent(event);
       }
     }, 0);
   }
@@ -692,7 +689,7 @@ export default class CopilotPlugin extends Plugin {
       chainType: ChainType.LLM_CHAIN, // Set LLM_CHAIN as default ChainType
       options: { forceNewCreation: true } as SetChainOptions,
       openAIProxyBaseUrl: this.settings.openAIProxyBaseUrl,
-      useOpenAILocalProxy: this.settings.useOpenAILocalProxy,
+      enableCors: this.settings.enableCors,
       openAIProxyModelName: this.settings.openAIProxyModelName,
       openAIEmbeddingProxyBaseUrl: this.settings.openAIEmbeddingProxyBaseUrl,
       openAIEmbeddingProxyModelName: this.settings.openAIEmbeddingProxyModelName,

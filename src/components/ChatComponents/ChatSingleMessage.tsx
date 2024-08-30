@@ -71,7 +71,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   }, [message, app, componentRef, isStreaming]);
 
   return (
-    <div className="message-container">
+    <div className="chat-message-container">
       <div className={`message ${message.sender === USER_SENDER ? "user-message" : "bot-message"}`}>
         <div className="message-icon">
           {message.sender === USER_SENDER ? <UserIcon /> : <BotIcon />}
@@ -84,7 +84,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           )}
         </div>
       </div>
-      <button onClick={copyToClipboard} className="copy-message-button">
+      <button onClick={copyToClipboard} className="copy-message-button clickable-icon">
         {isCopied ? <CheckIcon /> : <CopyClipboardIcon />}
       </button>
     </div>
