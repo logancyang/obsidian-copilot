@@ -188,7 +188,6 @@ export const COMMAND_IDS = {
 export const DEFAULT_SETTINGS: CopilotSettings = {
   openAIApiKey: "",
   openAIOrgId: "",
-  openAICustomModel: "",
   huggingfaceApiKey: "",
   cohereApiKey: "",
   anthropicApiKey: "",
@@ -200,7 +199,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   googleApiKey: "",
   openRouterAiApiKey: "",
   defaultModelKey: ChatModels.GPT_4o + "|" + ChatModelProviders.OPENAI,
-  embeddingModelKey: EmbeddingModels.OPENAI_EMBEDDING_SMALL,
+  embeddingModelKey: EmbeddingModels.OPENAI_EMBEDDING_SMALL + "|" + ChatModelProviders.OPENAI,
   temperature: 0.1,
   maxTokens: 1000,
   contextTurns: 15,

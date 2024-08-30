@@ -55,6 +55,7 @@ export default class ChatModelManager {
       streaming: true,
       maxRetries: 3,
       maxConcurrency: 3,
+      enableCors: customModel.enableCors,
     };
 
     const providerConfig = {
@@ -63,17 +64,10 @@ export default class ChatModelManager {
         openAIApiKey: decrypt(params.openAIApiKey),
         openAIOrgId: decrypt(params.openAIOrgId),
         maxTokens: params.maxTokens,
-        openAIProxyBaseUrl: params.openAIProxyBaseUrl,
       },
       [ChatModelProviders.ANTHROPIC]: {
         anthropicApiKey: decrypt(params.anthropicApiKey),
         modelName: customModel.name,
-        clientOptions: {
-          defaultHeaders: {
-            // Required for Anthropic models to work without CORS error
-            "anthropic-dangerous-direct-browser-access": "true",
-          },
-        },
       },
       [ChatModelProviders.AZURE_OPENAI]: {
         maxTokens: params.maxTokens,

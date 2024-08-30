@@ -113,21 +113,19 @@ If your plugin does not need CSS, delete this file.
 }
 
 .select-wrapper:hover .tooltip-text,
-.chat-icon-button:hover .tooltip-text {
-  visibility: visible;
-  opacity: 1;
+.chat-icon-button.clickable-icon:hover .tooltip-text {
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 
-.chat-icon-button {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 32px;
-  height: 32px;
-  background-color: transparent;
-  border: none;
-  cursor: pointer;
-  position: relative;
+.chat-icon-button.clickable-icon {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 22px !important;
+  height: 22px !important;
+  cursor: pointer !important;
+  position: relative !important;
 }
 
 .chat-icon-selection {

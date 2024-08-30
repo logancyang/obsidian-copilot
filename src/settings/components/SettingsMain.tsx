@@ -35,7 +35,6 @@ const SettingsMain: React.FC<{ plugin: CopilotPlugin; reloadPlugin: () => Promis
         {...settings}
         setOpenAIApiKey={(value) => updateSettings({ openAIApiKey: value })}
         setOpenAIOrgId={(value) => updateSettings({ openAIOrgId: value })}
-        setOpenAICustomModel={(value) => updateSettings({ openAICustomModel: value })}
         setGoogleApiKey={(value) => updateSettings({ googleApiKey: value })}
         setAnthropicApiKey={(value) => updateSettings({ anthropicApiKey: value })}
         setOpenRouterAiApiKey={(value) => updateSettings({ openRouterAiApiKey: value })}

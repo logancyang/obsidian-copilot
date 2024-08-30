@@ -7,8 +7,6 @@ interface ApiSettingsProps {
   setOpenAIApiKey: (value: string) => void;
   openAIOrgId: string;
   setOpenAIOrgId: (value: string) => void;
-  openAICustomModel: string;
-  setOpenAICustomModel: (value: string) => void;
   googleApiKey: string;
   setGoogleApiKey: (value: string) => void;
   anthropicApiKey: string;
@@ -34,8 +32,6 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
   setOpenAIApiKey,
   openAIOrgId,
   setOpenAIOrgId,
-  openAICustomModel,
-  setOpenAICustomModel,
   googleApiKey,
   setGoogleApiKey,
   anthropicApiKey,
@@ -85,14 +81,6 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
               https://platform.openai.com/api-keys
             </a>
           </p>
-          <ApiSetting
-            title="OpenAI Custom Model Name (optional)"
-            description="Warning: overrides any OpenAI model in the dropdown if set."
-            value={openAICustomModel}
-            setValue={setOpenAICustomModel}
-            placeholder="Enter custom model name"
-            type="text"
-          />
           <ApiSetting
             title="OpenAI Organization ID (optional)"
             value={openAIOrgId}

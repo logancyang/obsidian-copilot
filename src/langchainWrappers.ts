@@ -36,6 +36,7 @@ export class ChatAnthropicWrapped extends ChatAnthropic {
   constructor(fields?: Partial<AnthropicInput>) {
     super({
       ...fields,
+      // Required to bypass CORS restrictions
       clientOptions: { defaultHeaders: { "anthropic-dangerous-direct-browser-access": "true" } },
     });
   }

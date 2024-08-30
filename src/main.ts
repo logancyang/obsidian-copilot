@@ -691,7 +691,6 @@ export default class CopilotPlugin extends Plugin {
     const {
       openAIApiKey,
       openAIOrgId,
-      openAICustomModel,
       huggingfaceApiKey,
       cohereApiKey,
       anthropicApiKey,
@@ -713,7 +712,6 @@ export default class CopilotPlugin extends Plugin {
     return {
       openAIApiKey,
       openAIOrgId,
-      openAICustomModel,
       huggingfaceApiKey,
       cohereApiKey,
       anthropicApiKey,

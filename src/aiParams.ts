@@ -23,13 +23,13 @@ export interface ModelConfig {
   baseUrl?: string;
   lmStudioBaseUrl?: string;
   groqApiKey?: string;
+  enableCors?: boolean;
 }
 
 export interface LangChainParams {
   modelKey: string; // name | provider, e.g. "gpt-4o|openai"
   openAIApiKey: string;
   openAIOrgId: string;
-  openAICustomModel: string;
   huggingfaceApiKey: string;
   cohereApiKey: string;
   anthropicApiKey: string;
