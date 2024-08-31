@@ -1,3 +1,4 @@
+import { CustomModel } from "@/aiParams";
 import CopilotPlugin from "@/main";
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import React from "react";
@@ -8,33 +9,24 @@ import { SettingsProvider } from "./contexts/SettingsContext";
 export interface CopilotSettings {
   openAIApiKey: string;
   openAIOrgId: string;
-  openAICustomModel: string;
   huggingfaceApiKey: string;
   cohereApiKey: string;
   anthropicApiKey: string;
-  anthropicModel: string;
   azureOpenAIApiKey: string;
   azureOpenAIApiInstanceName: string;
   azureOpenAIApiDeploymentName: string;
   azureOpenAIApiVersion: string;
   azureOpenAIApiEmbeddingDeploymentName: string;
   googleApiKey: string;
-  googleCustomModel: string;
   openRouterAiApiKey: string;
-  openRouterModel: string;
-  defaultModel: string;
-  defaultModelDisplayName: string;
-  embeddingModel: string;
+  defaultModelKey: string;
+  embeddingModelKey: string;
   temperature: number;
   maxTokens: number;
   contextTurns: number;
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;
-  enableCors: boolean;
-  openAIProxyModelName: string;
   openAIEmbeddingProxyBaseUrl: string;
-  openAIEmbeddingProxyModelName: string;
-  ollamaModel: string;
   ollamaBaseUrl: string;
   lmStudioBaseUrl: string;
   stream: boolean;
@@ -46,9 +38,10 @@ export interface CopilotSettings {
   enableEncryption: boolean;
   maxSourceChunks: number;
   qaExclusionPaths: string;
-  groqModel: string;
   groqApiKey: string;
   enabledCommands: Record<string, { enabled: boolean; name: string }>;
+  activeModels: Array<CustomModel>;
+  activeEmbeddingModels: Array<CustomModel>;
 }
 
 export class CopilotSettingTab extends PluginSettingTab {

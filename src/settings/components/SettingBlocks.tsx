@@ -1,4 +1,6 @@
-import React from "react";
+import { CustomModel } from "@/aiParams";
+import { Notice } from "obsidian";
+import React, { useState } from "react";
 
 type DropdownComponentProps = {
   name: string;
@@ -23,6 +25,7 @@ type TextAreaComponentProps = {
   placeholder: string;
   value: string;
   onChange: (value: string) => void;
+  rows?: number;
 };
 
 type SliderComponentProps = {
@@ -40,6 +43,7 @@ type ToggleComponentProps = {
   description?: string;
   value: boolean;
   onChange: (value: boolean) => void;
+  disabled?: boolean;
 };
 
 const DropdownComponent: React.FC<DropdownComponentProps> = ({
@@ -97,6 +101,7 @@ const TextAreaComponent: React.FC<TextAreaComponentProps> = ({
   placeholder,
   value,
   onChange,
+  rows = 3,
 }) => {
   return (
     <div className="copilot-setting-item">
@@ -107,6 +112,7 @@ const TextAreaComponent: React.FC<TextAreaComponentProps> = ({
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        rows={rows}
       />
     </div>
   );
@@ -150,17 +156,187 @@ const ToggleComponent: React.FC<ToggleComponentProps> = ({
   description,
   value,
   onChange,
+  disabled = false,
 }) => {
   return (
     <div className="copilot-setting-item">
       <div className="copilot-setting-item-name">{name}</div>
       <div className="copilot-setting-item-description">{description}</div>
-      <label className="switch">
-        <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
+      <label className={`switch ${disabled ? "disabled" : ""}`}>
+        <input
+          type="checkbox"
+          checked={value}
+          onChange={(e) => onChange(e.target.checked)}
+          disabled={disabled}
+        />
         <span className="slider round"></span>
       </label>
     </div>
   );
 };
 
-export { DropdownComponent, SliderComponent, TextAreaComponent, TextComponent, ToggleComponent };
+interface ModelSettingsComponentProps {
+  activeModels: Array<CustomModel>;
+  onUpdateModels: (models: Array<CustomModel>) => void;
+  providers: string[];
+  onDeleteModel: (modelKey: string) => void;
+  defaultModelKey: string;
+  onSetDefaultModelKey: (modelKey: string) => void;
+  isEmbeddingModel: boolean;
+}
+
+const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
+  activeModels,
+  onUpdateModels,
+  providers,
+  onDeleteModel,
+  defaultModelKey,
+  onSetDefaultModelKey,
+  isEmbeddingModel,
+}) => {
+  const emptyModel: CustomModel = {
+    name: "",
+    provider: providers.length > 0 ? providers[0] : "",
+    baseUrl: "",
+    apiKey: "",
+    enabled: true,
+    isBuiltIn: false,
+    enableCors: false,
+    isEmbeddingModel: isEmbeddingModel,
+  };
+  const [newModel, setNewModel] = useState(emptyModel);
+  const [isAddModelOpen, setIsAddModelOpen] = useState(false);
+
+  const getModelKey = (model: CustomModel) => `${model.name}|${model.provider}`;
+
+  const handleAddModel = () => {
+    if (newModel.name && newModel.provider) {
+      const updatedModels = [...activeModels, { ...newModel, enabled: true }];
+      onUpdateModels(updatedModels);
+      setNewModel(emptyModel);
+    } else {
+      new Notice("Please fill in necessary fields!");
+    }
+  };
+
+  const handleSetDefaultModel = (model: CustomModel) => {
+    onSetDefaultModelKey(getModelKey(model));
+  };
+
+  return (
+    <div>
+      <table className="model-settings-table">
+        <thead>
+          <tr>
+            <th>Default</th>
+            <th>Model</th>
+            <th>Provider</th>
+            <th>Enabled</th>
+            <th>CORS</th>
+            <th>Delete</th>
+          </tr>
+        </thead>
+        <tbody>
+          {activeModels.map((model, index) => (
+            <tr key={getModelKey(model)}>
+              <td>
+                <input
+                  type="radio"
+                  name={`selected-${isEmbeddingModel ? "embedding" : "chat"}-model`}
+                  checked={getModelKey(model) === defaultModelKey}
+                  onChange={() => handleSetDefaultModel(model)}
+                />
+              </td>
+              <td>{model.name}</td>
+              <td>{model.provider}</td>
+              <td>
+                <ToggleComponent
+                  name={""}
+                  value={model.enabled}
+                  onChange={(value) => {
+                    if (!model.isBuiltIn) {
+                      const updatedModels = [...activeModels];
+                      updatedModels[index].enabled = value;
+                      onUpdateModels(updatedModels);
+                    }
+                  }}
+                  disabled={model.isBuiltIn}
+                />
+              </td>
+              <td>
+                {!model.isBuiltIn && (
+                  <ToggleComponent
+                    name={""}
+                    value={model.enableCors || false}
+                    onChange={(value) => {
+                      const updatedModels = [...activeModels];
+                      updatedModels[index].enableCors = value;
+                      onUpdateModels(updatedModels);
+                    }}
+                  />
+                )}
+              </td>
+              <td>
+                {!model.isBuiltIn && (
+                  <button onClick={() => onDeleteModel(getModelKey(model))}>Delete</button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="add-custom-model">
+        <h2 onClick={() => setIsAddModelOpen(!isAddModelOpen)} style={{ cursor: "pointer" }}>
+          Add Custom Model {isAddModelOpen ? "▼" : "▶"}
+        </h2>
+        {isAddModelOpen && (
+          <div className="add-custom-model-form">
+            <TextComponent
+              name="Model Name"
+              description={`The name of the model, i.e. ${isEmbeddingModel ? "text-embedding-3-small" : "gpt-4o-mini"}`}
+              value={newModel.name}
+              placeholder="Enter model name"
+              onChange={(value) => {
+                setNewModel({ ...newModel, name: value });
+              }}
+            />
+            <DropdownComponent
+              name="Provider"
+              options={providers}
+              value={newModel.provider}
+              onChange={(value) => {
+                setNewModel({ ...newModel, provider: value });
+              }}
+            />
+            <TextComponent
+              name="Base URL (optional)"
+              description="For 3rd party OpenAI Format endpoints only. Leave blank for other providers."
+              value={newModel.baseUrl || ""}
+              placeholder="https://api.example.com/v1"
+              onChange={(value) => setNewModel({ ...newModel, baseUrl: value })}
+            />
+            <TextComponent
+              name="API Key (optional)"
+              description="API key for the 3rd party provider"
+              value={newModel.apiKey || ""}
+              placeholder="Enter API key"
+              onChange={(value) => setNewModel({ ...newModel, apiKey: value })}
+            />
+            <button onClick={handleAddModel} className="add-model-button">
+              Add Model
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export {
+  DropdownComponent,
+  ModelSettingsComponent,
+  SliderComponent,
+  TextAreaComponent,
+  TextComponent,
+  ToggleComponent,
+};

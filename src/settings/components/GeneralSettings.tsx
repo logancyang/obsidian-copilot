@@ -1,20 +1,52 @@
-import { ChatModelDisplayNames } from "@/constants";
+import { CustomModel, LangChainParams } from "@/aiParams";
+import { ChatModelProviders } from "@/constants";
+import EncryptionService from "@/encryptionService";
 import React from "react";
 import { useSettingsContext } from "../contexts/SettingsContext";
 import CommandToggleSettings from "./CommandToggleSettings";
-import { DropdownComponent, SliderComponent, TextComponent } from "./SettingBlocks";
+import { ModelSettingsComponent, SliderComponent, TextComponent } from "./SettingBlocks";
 
-const GeneralSettings: React.FC = () => {
+interface GeneralSettingsProps {
+  getLangChainParams: () => LangChainParams;
+  encryptionService: EncryptionService;
+}
+
+const GeneralSettings: React.FC<GeneralSettingsProps> = ({
+  getLangChainParams,
+  encryptionService,
+}) => {
   const { settings, updateSettings } = useSettingsContext();
+
+  const handleUpdateModels = (models: Array<CustomModel>) => {
+    const updatedActiveModels = models.map((model) => ({
+      ...model,
+      baseUrl: model.baseUrl || "",
+      apiKey: model.apiKey || "",
+    }));
+    updateSettings({ activeModels: updatedActiveModels });
+  };
+
+  // modelKey is name | provider, e.g. "gpt-4o|openai"
+  const onSetDefaultModelKey = (modelKey: string) => {
+    updateSettings({ defaultModelKey: modelKey });
+  };
 
   return (
     <div>
       <h2>General Settings</h2>
-      <DropdownComponent
-        name="Default Model"
-        options={Object.values(ChatModelDisplayNames)}
-        value={settings.defaultModelDisplayName}
-        onChange={(value) => updateSettings({ defaultModelDisplayName: value })}
+      <ModelSettingsComponent
+        activeModels={settings.activeModels}
+        onUpdateModels={handleUpdateModels}
+        providers={Object.values(ChatModelProviders)}
+        onDeleteModel={(modelName) => {
+          const updatedActiveModels = settings.activeModels.filter(
+            (model) => model.name !== modelName
+          );
+          updateSettings({ activeModels: updatedActiveModels });
+        }}
+        defaultModelKey={settings.defaultModelKey}
+        onSetDefaultModelKey={onSetDefaultModelKey}
+        isEmbeddingModel={false}
       />
       <TextComponent
         name="Default Conversation Folder Name"

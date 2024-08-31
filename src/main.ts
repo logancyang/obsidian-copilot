@@ -1,6 +1,6 @@
 import ChainManager from "@/LLMProviders/chainManager";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
-import { LangChainParams, SetChainOptions } from "@/aiParams";
+import { CustomModel, LangChainParams, SetChainOptions } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { registerBuiltInCommands } from "@/commands";
 import { AddPromptModal } from "@/components/AddPromptModal";
@@ -10,6 +10,8 @@ import CopilotView from "@/components/CopilotView";
 import { ListPromptModal } from "@/components/ListPromptModal";
 import { QAExclusionModal } from "@/components/QAExclusionModal";
 import {
+  BUILTIN_CHAT_MODELS,
+  BUILTIN_EMBEDDING_MODELS,
   CHAT_VIEWTYPE,
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
@@ -55,6 +57,8 @@ export default class CopilotPlugin extends Plugin {
     this.dbVectorStores = new PouchDB<VectorStoreDocument>(
       `copilot_vector_stores_${this.getVaultIdentifier()}`
     );
+
+    this.mergeAllActiveModelsWithExisting();
     this.chainManager = new ChainManager(
       this.app,
       langChainParams,
@@ -67,7 +71,11 @@ export default class CopilotPlugin extends Plugin {
       await this.saveSettings();
     }
 
-    this.embeddingsManager = EmbeddingsManager.getInstance(langChainParams, this.encryptionService);
+    this.embeddingsManager = EmbeddingsManager.getInstance(
+      () => langChainParams,
+      this.encryptionService,
+      this.settings.activeEmbeddingModels
+    );
     this.dbPrompts = new PouchDB<CustomPrompt>("copilot_custom_prompts");
 
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
@@ -588,6 +596,52 @@ export default class CopilotPlugin extends Plugin {
 
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+
+    // Ensure activeModels always includes builtInModels
+    this.mergeAllActiveModelsWithExisting();
+  }
+
+  mergeActiveModels(
+    existingActiveModels: CustomModel[],
+    builtInModels: CustomModel[]
+  ): CustomModel[] {
+    const modelMap = new Map<string, CustomModel>();
+
+    // Create a unique key for each model, it's model (name + provider)
+    const getModelKey = (model: CustomModel) => `${model.name}|${model.provider}`;
+
+    // Add built-in models to the map
+    builtInModels.forEach((model) => {
+      modelMap.set(getModelKey(model), { ...model, isBuiltIn: true });
+    });
+
+    // Add or update existing models in the map
+    existingActiveModels.forEach((model) => {
+      const key = getModelKey(model);
+      const existingModel = modelMap.get(key);
+      if (existingModel) {
+        // If it's a built-in model, preserve the built-in status
+        modelMap.set(key, {
+          ...model,
+          isBuiltIn: existingModel.isBuiltIn || model.isBuiltIn,
+        });
+      } else {
+        modelMap.set(key, { ...model, isBuiltIn: false });
+      }
+    });
+
+    return Array.from(modelMap.values());
+  }
+
+  mergeAllActiveModelsWithExisting(): void {
+    this.settings.activeModels = this.mergeActiveModels(
+      this.settings.activeModels,
+      BUILTIN_CHAT_MODELS
+    );
+    this.settings.activeEmbeddingModels = this.mergeActiveModels(
+      this.settings.activeEmbeddingModels,
+      BUILTIN_EMBEDDING_MODELS
+    );
   }
 
   async saveSettings(): Promise<void> {
@@ -595,6 +649,10 @@ export default class CopilotPlugin extends Plugin {
       // Encrypt all API keys before saving
       this.encryptionService.encryptAllKeys();
     }
+
+    // Ensure activeModels is merged before saving
+    this.mergeAllActiveModelsWithExisting();
+
     await this.saveData(this.settings);
   }
 
@@ -633,55 +691,42 @@ export default class CopilotPlugin extends Plugin {
     const {
       openAIApiKey,
       openAIOrgId,
-      openAICustomModel,
       huggingfaceApiKey,
       cohereApiKey,
       anthropicApiKey,
-      anthropicModel,
       azureOpenAIApiKey,
       azureOpenAIApiInstanceName,
       azureOpenAIApiDeploymentName,
       azureOpenAIApiVersion,
       azureOpenAIApiEmbeddingDeploymentName,
       googleApiKey,
-      googleCustomModel,
       openRouterAiApiKey,
-      openRouterModel,
-      embeddingModel,
+      embeddingModelKey,
       temperature,
       maxTokens,
       contextTurns,
-      ollamaModel,
       ollamaBaseUrl,
       lmStudioBaseUrl,
       groqApiKey,
-      groqModel,
     } = sanitizeSettings(this.settings);
     return {
       openAIApiKey,
       openAIOrgId,
-      openAICustomModel,
       huggingfaceApiKey,
       cohereApiKey,
       anthropicApiKey,
-      anthropicModel: anthropicModel || DEFAULT_SETTINGS.anthropicModel,
       groqApiKey,
-      groqModel,
       azureOpenAIApiKey,
       azureOpenAIApiInstanceName,
       azureOpenAIApiDeploymentName,
       azureOpenAIApiVersion,
       azureOpenAIApiEmbeddingDeploymentName,
       googleApiKey,
-      googleCustomModel,
       openRouterAiApiKey,
-      openRouterModel: openRouterModel || DEFAULT_SETTINGS.openRouterModel,
-      ollamaModel: ollamaModel || DEFAULT_SETTINGS.ollamaModel,
       ollamaBaseUrl: ollamaBaseUrl || DEFAULT_SETTINGS.ollamaBaseUrl,
       lmStudioBaseUrl: lmStudioBaseUrl || DEFAULT_SETTINGS.lmStudioBaseUrl,
-      model: this.settings.defaultModel,
-      modelDisplayName: this.settings.defaultModelDisplayName,
-      embeddingModel: embeddingModel || DEFAULT_SETTINGS.embeddingModel,
+      modelKey: this.settings.defaultModelKey,
+      embeddingModelKey: embeddingModelKey || DEFAULT_SETTINGS.embeddingModelKey,
       temperature: Number(temperature),
       maxTokens: Number(maxTokens),
       systemMessage: this.settings.userSystemPrompt || DEFAULT_SYSTEM_PROMPT,
@@ -689,10 +734,15 @@ export default class CopilotPlugin extends Plugin {
       chainType: ChainType.LLM_CHAIN, // Set LLM_CHAIN as default ChainType
       options: { forceNewCreation: true } as SetChainOptions,
       openAIProxyBaseUrl: this.settings.openAIProxyBaseUrl,
-      enableCors: this.settings.enableCors,
-      openAIProxyModelName: this.settings.openAIProxyModelName,
       openAIEmbeddingProxyBaseUrl: this.settings.openAIEmbeddingProxyBaseUrl,
-      openAIEmbeddingProxyModelName: this.settings.openAIEmbeddingProxyModelName,
     };
+  }
+
+  getLangChainParams(): LangChainParams {
+    return this.getChainManagerParams();
+  }
+
+  getEncryptionService(): EncryptionService {
+    return this.encryptionService;
   }
 }

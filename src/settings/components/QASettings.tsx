@@ -1,12 +1,12 @@
-import { EmbeddingModels, VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
+import { CustomModel } from "@/aiParams";
+import { EmbeddingModelProviders, VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
+import { useSettingsContext } from "@/settings/contexts/SettingsContext";
 import React from "react";
 import ApiSetting from "./ApiSetting";
 import Collapsible from "./Collapsible";
-import { DropdownComponent, SliderComponent } from "./SettingBlocks";
+import { DropdownComponent, ModelSettingsComponent, SliderComponent } from "./SettingBlocks";
 
 interface QASettingsProps {
-  embeddingModel: string;
-  setEmbeddingModel: (value: string) => void;
   cohereApiKey: string;
   setCohereApiKey: (value: string) => void;
   huggingfaceApiKey: string;
@@ -18,17 +18,28 @@ interface QASettingsProps {
 }
 
 const QASettings: React.FC<QASettingsProps> = ({
-  embeddingModel,
-  setEmbeddingModel,
   cohereApiKey,
   setCohereApiKey,
-  huggingfaceApiKey,
-  setHuggingfaceApiKey,
   indexVaultToVectorStore,
   setIndexVaultToVectorStore,
   maxSourceChunks,
   setMaxSourceChunks,
 }) => {
+  const { settings, updateSettings } = useSettingsContext();
+
+  const handleUpdateEmbeddingModels = (models: Array<CustomModel>) => {
+    const updatedActiveEmbeddingModels = models.map((model) => ({
+      ...model,
+      baseUrl: model.baseUrl || "",
+      apiKey: model.apiKey || "",
+    }));
+    updateSettings({ activeEmbeddingModels: updatedActiveEmbeddingModels });
+  };
+
+  const handleSetEmbeddingModelKey = (modelKey: string) => {
+    updateSettings({ embeddingModelKey: modelKey });
+  };
+
   return (
     <div>
       <br />
@@ -55,12 +66,20 @@ const QASettings: React.FC<QASettingsProps> = ({
         </a>{" "}
         setup guide to setup Ollama's local embedding model (requires Ollama v0.1.26 or above).
       </p>
-      <DropdownComponent
-        name="Embedding Models"
-        description="The embedding API/model to use"
-        value={embeddingModel}
-        onChange={setEmbeddingModel}
-        options={Object.values(EmbeddingModels)}
+      <h2>Embedding Models</h2>
+      <ModelSettingsComponent
+        activeModels={settings.activeEmbeddingModels}
+        onUpdateModels={handleUpdateEmbeddingModels}
+        providers={Object.values(EmbeddingModelProviders)}
+        onDeleteModel={(modelKey) => {
+          const updatedActiveEmbeddingModels = settings.activeEmbeddingModels.filter(
+            (model) => `${model.name}|${model.provider}` !== modelKey
+          );
+          updateSettings({ activeEmbeddingModels: updatedActiveEmbeddingModels });
+        }}
+        defaultModelKey={settings.embeddingModelKey}
+        onSetDefaultModelKey={handleSetEmbeddingModelKey}
+        isEmbeddingModel={true}
       />
       <h1>Auto-Index Strategy</h1>
       <div className="warning-message">
