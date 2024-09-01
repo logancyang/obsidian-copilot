@@ -2,7 +2,7 @@
 
 ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/logancyang/obsidian-copilot?style=for-the-badge&sort=semver) ![Obsidian Downloads](https://img.shields.io/badge/dynamic/json?logo=obsidian&color=%23483699&label=downloads&query=%24%5B%22copilot%22%5D.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json&style=for-the-badge)
 
-Copilot for Obsidian is a **free** and **open-source** ChatGPT interface right inside Obsidian. It has a minimalistic design and is straightforward to use.
+Copilot for Obsidian is a **free** and **open-source** LLM interface right inside Obsidian. It has a minimalistic design and is straightforward to use.
 
 - 💬 ChatGPT UI in Obsidian.
 - 🛠️ Prompt AI with your writing using Copilot commands to get quick results.
@@ -20,6 +20,15 @@ If you enjoy Copilot for Obsidian, please consider [sponsoring this project](htt
 SPECIAL THANKS TO OUR SPONSORS:
 @Arlorean, @dashinja, @emaynard, @scmarinelli, @borthwick
 
+[Changelog](https://github.com/logancyang/obsidian-copilot/releases)
+
+#### v2.6.0: MOBILE SUPPORT is here! 🎉🎉🎉
+
+- Huge thanks to our awesome [@gianluca-venturini](https://github.com/gianluca-venturini) for his incredible work on mobile support! Now you can use Copilot on your phone and tablet! 🎉🎉🎉
+- Complete rehaul of how models work in Copilot settings. Now you can add any model to your model picker provided its name, model provider, API key and base url! No more waiting for me to add new models!
+- Say goodbye to CORS errors for both chat models and embedding! The new model table in settings now lets you turn on "CORS" for individual chat models if you see CORS issue with them. And embedding models are immune to CORS errors by default!
+  - Caveat: this is powered by Obsidian API's `requestUrl` which does not support "streaming" of LLM responses. So streaming is disabled whenever you have CORS on in Copilot settings. Please upvote [this feature request](https://forum.obsidian.md/t/support-streaming-the-request-and-requesturl-response-body/87381) to let Obsidian know your need for streaming!
+
 #### 🎉 HIGHLY ANTICIPATED v2.5.0: Vault QA (BETA) mode (with local embedding support)! Claude 3! 🎉🎉🎉
 
 <a href="https://youtu.be/NSoKRYNlOls" target="_blank"><img src="./images/thumbnail-vault-qa.png" width="700" /></a>
@@ -30,11 +39,11 @@ The brand new **Vault QA (BETA)** mode allows you to chat with your whole vault,
 
 What's more, with Ollama **local embeddings** and **local chat models**, this mode works **completely offline**! This is a huge step toward truly private and local AI assistance inside Obsidian!
 
-Since Claude 3 models are announced today (3/4/2024), I managed to add them in this release too. Go to Anthropic's site to get your API key, you can now find it in the settings.
-
 (Huge shoutout to @AntoineDao for working with me on Vault QA mode!)
 
-#### FREE Models
+#### Model Providers
+
+**OpenAI**, **Anthropic**, **Azure OpenAI**, **Google Gemini**, **OpenRouter**, **GROQ**, **3rd Party Models with OpenAI-Compatible API**, **LM Studio** and **Ollama** are supported model providers.
 
 **OpenRouter.ai** hosts some of the best open-source models at the moment, such as MistralAI's new models, check out their websites for all the good stuff they have!
 
