@@ -92,12 +92,12 @@ export default class ChatModelManager {
       [ChatModelProviders.OLLAMA]: {
         modelName: customModel.name,
         openAIApiKey: customModel.apiKey || "default-key",
-        openAIProxyBaseUrl: params.ollamaBaseUrl || "http://localhost:11434/v1",
+        openAIProxyBaseUrl: customModel.baseUrl || "http://localhost:11434/v1",
       },
       [ChatModelProviders.LM_STUDIO]: {
         modelName: customModel.name,
         openAIApiKey: customModel.apiKey || "default-key",
-        openAIProxyBaseUrl: params.lmStudioBaseUrl || "http://localhost:1234/v1",
+        openAIProxyBaseUrl: customModel.baseUrl || "http://localhost:1234/v1",
       },
       [ChatModelProviders.OPENAI_FORMAT]: {
         modelName: customModel.name,
@@ -125,50 +125,46 @@ export default class ChatModelManager {
         let constructor;
         let apiKey;
 
-        if (model.baseUrl) {
-          constructor = ProxyChatOpenAI;
-        } else {
-          switch (model.provider) {
-            case ChatModelProviders.OPENAI:
-              constructor = ChatOpenAI;
-              apiKey = model.apiKey || this.getLangChainParams().openAIApiKey;
-              break;
-            case ChatModelProviders.GOOGLE:
-              constructor = ChatGoogleGenerativeAI;
-              apiKey = model.apiKey || this.getLangChainParams().googleApiKey;
-              break;
-            case ChatModelProviders.AZURE_OPENAI:
-              constructor = ChatOpenAI;
-              apiKey = model.apiKey || this.getLangChainParams().azureOpenAIApiKey;
-              break;
-            case ChatModelProviders.ANTHROPIC:
-              constructor = ChatAnthropicWrapped;
-              apiKey = model.apiKey || this.getLangChainParams().anthropicApiKey;
-              break;
-            case ChatModelProviders.OPENROUTERAI:
-              constructor = ProxyChatOpenAI;
-              apiKey = model.apiKey || this.getLangChainParams().openRouterAiApiKey;
-              break;
-            case ChatModelProviders.OLLAMA:
-              constructor = ProxyChatOpenAI;
-              apiKey = model.apiKey || "default-key";
-              break;
-            case ChatModelProviders.LM_STUDIO:
-              constructor = ProxyChatOpenAI;
-              apiKey = model.apiKey || "default-key";
-              break;
-            case ChatModelProviders.GROQ:
-              constructor = ChatGroq;
-              apiKey = model.apiKey || this.getLangChainParams().groqApiKey;
-              break;
-            case ChatModelProviders.OPENAI_FORMAT:
-              constructor = ProxyChatOpenAI;
-              apiKey = model.apiKey || "default-key";
-              break;
-            default:
-              console.warn(`Unknown provider: ${model.provider} for model: ${model.name}`);
-              return;
-          }
+        switch (model.provider) {
+          case ChatModelProviders.OPENAI:
+            constructor = ChatOpenAI;
+            apiKey = model.apiKey || this.getLangChainParams().openAIApiKey;
+            break;
+          case ChatModelProviders.GOOGLE:
+            constructor = ChatGoogleGenerativeAI;
+            apiKey = model.apiKey || this.getLangChainParams().googleApiKey;
+            break;
+          case ChatModelProviders.AZURE_OPENAI:
+            constructor = ChatOpenAI;
+            apiKey = model.apiKey || this.getLangChainParams().azureOpenAIApiKey;
+            break;
+          case ChatModelProviders.ANTHROPIC:
+            constructor = ChatAnthropicWrapped;
+            apiKey = model.apiKey || this.getLangChainParams().anthropicApiKey;
+            break;
+          case ChatModelProviders.OPENROUTERAI:
+            constructor = ProxyChatOpenAI;
+            apiKey = model.apiKey || this.getLangChainParams().openRouterAiApiKey;
+            break;
+          case ChatModelProviders.OLLAMA:
+            constructor = ProxyChatOpenAI;
+            apiKey = model.apiKey || "default-key";
+            break;
+          case ChatModelProviders.LM_STUDIO:
+            constructor = ProxyChatOpenAI;
+            apiKey = model.apiKey || "default-key";
+            break;
+          case ChatModelProviders.GROQ:
+            constructor = ChatGroq;
+            apiKey = model.apiKey || this.getLangChainParams().groqApiKey;
+            break;
+          case ChatModelProviders.OPENAI_FORMAT:
+            constructor = ProxyChatOpenAI;
+            apiKey = model.apiKey || "default-key";
+            break;
+          default:
+            console.warn(`Unknown provider: ${model.provider} for model: ${model.name}`);
+            return;
         }
 
         const modelKey = `${model.name}|${model.provider}`;
