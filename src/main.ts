@@ -705,8 +705,6 @@ export default class CopilotPlugin extends Plugin {
       temperature,
       maxTokens,
       contextTurns,
-      ollamaBaseUrl,
-      lmStudioBaseUrl,
       groqApiKey,
     } = sanitizeSettings(this.settings);
     return {
@@ -723,8 +721,6 @@ export default class CopilotPlugin extends Plugin {
       azureOpenAIApiEmbeddingDeploymentName,
       googleApiKey,
       openRouterAiApiKey,
-      ollamaBaseUrl: ollamaBaseUrl || DEFAULT_SETTINGS.ollamaBaseUrl,
-      lmStudioBaseUrl: lmStudioBaseUrl || DEFAULT_SETTINGS.lmStudioBaseUrl,
       modelKey: this.settings.defaultModelKey,
       embeddingModelKey: embeddingModelKey || DEFAULT_SETTINGS.embeddingModelKey,
       temperature: Number(temperature),

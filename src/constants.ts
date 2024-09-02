@@ -206,8 +206,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   userSystemPrompt: "",
   openAIProxyBaseUrl: "",
   openAIEmbeddingProxyBaseUrl: "",
-  ollamaBaseUrl: "",
-  lmStudioBaseUrl: "http://localhost:1234/v1",
   stream: true,
   defaultSaveFolder: "copilot-conversations",
   indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH,

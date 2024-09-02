@@ -27,8 +27,6 @@ export interface CopilotSettings {
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;
   openAIEmbeddingProxyBaseUrl: string;
-  ollamaBaseUrl: string;
-  lmStudioBaseUrl: string;
   stream: boolean;
   defaultSaveFolder: string;
   indexVaultToVectorStore: string;
