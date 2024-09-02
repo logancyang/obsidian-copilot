@@ -164,7 +164,7 @@ export default class EmbeddingManager {
         azureOpenAIApiVersion: params.azureOpenAIApiVersion,
       },
       [EmbeddingModelProviders.OLLAMA]: {
-        baseUrl: params.ollamaBaseUrl || "http://localhost:11434",
+        baseUrl: customModel.baseUrl || "http://localhost:11434",
         model: modelName,
       },
       [EmbeddingModelProviders.OPENAI_FORMAT]: {
