@@ -136,8 +136,8 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 <details>
   <summary>"You do not have access to this model"</summary>
 
-- You need to have access to some of the models like GPT-4 or Azure ones to use them. If you don't, sign up on their waitlist!
-- A common misunderstanding I see is that some think they have access to GPT-4 API when they get ChatGPT Plus subscription. It was not always true. _You need to have access to GPT-4 API to use the GPT-4 model in this plugin_. Please check if you can successfully use your model in the OpenAI playground first https://platform.openai.com/playground?mode=chat. If not, you can apply for GPT-4 API access here https://openai.com/waitlist/gpt-4-api. Once you have access to the API, you can use GPT-4 with this plugin without the ChatGPT Plus subscription!
+- You need to **have access to the model APIs** to use them. Usually they require an API key and a payment method.
+- A common misunderstanding I see is that some think they have access to GPT-4 API when they get ChatGPT Plus subscription. It's not always true (depending on when you signed up). _You need to have access to GPT-4 API to use the model in this plugin_. Please check if you have payment available on your OpenAI account. Then check OpenAI playground if you can use that particular model https://platform.openai.com/playground?mode=chat. Again, API access and ChatGPT Plus are two different things! You can use the API without the ChatGPT Plus subscription.
 - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/3#issuecomment-1544583676
 </details>
 <details>
@@ -149,11 +149,6 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/51
 </details>
 <details>
-  <summary>Unresponsive QA when using Huggingface as the Embedding Provider</summary>
-
-- Huggingface Inference API is free to use. It can give errors such as 503 or 504 frequently at times because their server has issues. If it's an issue for you, please consider using OpenAI or CohereAI as the embedding provider. Just keep in mind that OpenAI costs more, especially with very long notes as context.
-</details>
-<details>
   <summary>"insufficient_quota"</summary>
 
 - It might be because you haven't set up payment for your OpenAI account, or you exceeded your max monthly limit. OpenAI has a cap on how much you can use their API, usually $120 for individual users.
@@ -162,7 +157,8 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 <details>
   <summary>"context_length_exceeded"</summary>
 
-- GPT-3.5 has a 4096 context token limit, GPT-4 has 8K (there is a 32K one available to the public soon per OpenAI). **So if you set a big token limit in your Copilot setting, you could get this error.** Note that the prompts behind the scenes for Copilot commands can also take up tokens, so please limit your message length and max tokens to avoid this error. (For QA with Unlimited Context, use the "QA" mode in the dropdown! Requires Copilot v2.1.0.)
+- Please refer to the model provider's documentation for the context window size. **Note: if you set a big max token limit in your Copilot setting, you could get this error**. Max token refers to completion tokens, not input tokens. So a bigger max output token limit means a smaller input token limit!
+- The prompts behind the scenes for Copilot commands can also take up tokens, so please limit your message length and max tokens to avoid this error. (For QA with Unlimited Context, use the "QA" mode in the dropdown! Requires Copilot v2.1.0.)
 - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/1#issuecomment-1542934569
 </details>
 <details>
