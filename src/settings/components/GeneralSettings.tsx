@@ -31,6 +31,14 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
     updateSettings({ defaultModelKey: modelKey });
   };
 
+  const onDeleteModel = (modelKey: string) => {
+    const [modelName, provider] = modelKey.split("|");
+    const updatedActiveModels = settings.activeModels.filter(
+      (model) => !(model.name === modelName && model.provider === provider)
+    );
+    updateSettings({ activeModels: updatedActiveModels });
+  };
+
   return (
     <div>
       <h2>General Settings</h2>
@@ -38,12 +46,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         activeModels={settings.activeModels}
         onUpdateModels={handleUpdateModels}
         providers={Object.values(ChatModelProviders)}
-        onDeleteModel={(modelName) => {
-          const updatedActiveModels = settings.activeModels.filter(
-            (model) => model.name !== modelName
-          );
-          updateSettings({ activeModels: updatedActiveModels });
-        }}
+        onDeleteModel={onDeleteModel}
         defaultModelKey={settings.defaultModelKey}
         onSetDefaultModelKey={onSetDefaultModelKey}
         isEmbeddingModel={false}
