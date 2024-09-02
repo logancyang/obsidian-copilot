@@ -320,6 +320,7 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
               description="API key for the 3rd party provider"
               value={newModel.apiKey || ""}
               placeholder="Enter API key"
+              type="password"
               onChange={(value) => setNewModel({ ...newModel, apiKey: value })}
             />
             <button onClick={handleAddModel} className="add-model-button">
