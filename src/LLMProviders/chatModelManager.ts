@@ -101,7 +101,7 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.OPENAI_FORMAT]: {
         modelName: customModel.name,
-        openAIApiKey: decrypt(customModel.apiKey || ""),
+        openAIApiKey: decrypt(customModel.apiKey || "default-key"),
         maxTokens: params.maxTokens,
         openAIProxyBaseUrl: customModel.baseUrl || "",
       },
