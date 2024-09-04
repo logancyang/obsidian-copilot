@@ -7,8 +7,8 @@ interface ChatInputProps {
   setInputMessage: (message: string) => void;
   handleKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   handleSendMessage: () => void;
-  getChatVisibility: () => Promise<boolean>;
   isGenerating: boolean;
+  chatIsVisible: boolean;
   onStopGenerating: () => void;
 }
 
@@ -17,9 +17,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
   setInputMessage,
   handleKeyDown,
   handleSendMessage,
-  getChatVisibility,
   isGenerating,
   onStopGenerating,
+  chatIsVisible,
 }) => {
   const [rows, setRows] = useState(1);
   const [shouldFocus, setShouldFocus] = useState(false);
@@ -62,12 +62,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   // Effect hook to get the chat visibility
   useEffect(() => {
-    const fetchChatVisibility = async () => {
-      const visibility = await getChatVisibility();
-      setShouldFocus(visibility);
-    };
-    fetchChatVisibility();
-  }, [getChatVisibility]);
+    setShouldFocus(chatIsVisible);
+  }, [chatIsVisible]);
 
   // This effect will run every time the shouldFocus state is updated
   useEffect(() => {

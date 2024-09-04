@@ -4,7 +4,7 @@ import { ChainType } from "@/chainFactory";
 import ChatIcons from "@/components/ChatComponents/ChatIcons";
 import ChatInput from "@/components/ChatComponents/ChatInput";
 import ChatMessages from "@/components/ChatComponents/ChatMessages";
-import { AI_SENDER, USER_SENDER } from "@/constants";
+import { AI_SENDER, EVENT_NAMES, USER_SENDER } from "@/constants";
 import { AppContext } from "@/context";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { getAIResponse } from "@/langchainStream";
@@ -39,7 +39,7 @@ import {
   tocPrompt,
 } from "@/utils";
 import { Notice, TFile } from "obsidian";
-import React, { useContext, useEffect, useState } from "react";
+import React, { useCallback, useContext, useEffect, useState } from "react";
 
 interface CreateEffectOptions {
   custom_temperature?: number;
@@ -52,7 +52,6 @@ interface ChatProps {
   settings: CopilotSettings;
   chainManager: ChainManager;
   emitter: EventTarget;
-  getChatVisibility: () => Promise<boolean>;
   defaultSaveFolder: string;
   plugin: CopilotPlugin;
   debug: boolean;
@@ -63,7 +62,6 @@ const Chat: React.FC<ChatProps> = ({
   settings,
   chainManager,
   emitter,
-  getChatVisibility,
   defaultSaveFolder,
   plugin,
   debug,
@@ -75,6 +73,20 @@ const Chat: React.FC<ChatProps> = ({
   const [inputMessage, setInputMessage] = useState("");
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [loading, setLoading] = useState(false);
+  const [chatIsVisible, setChatIsVisible] = useState(false);
+
+  const visibleCallback = useCallback(() => {
+    emitter.addEventListener(
+      EVENT_NAMES.CHAT_IS_VISIBLE,
+      (evt: CustomEvent<{ chatIsVisible: boolean }>) => {
+        setChatIsVisible(evt.detail.chatIsVisible);
+      }
+    );
+  }, []);
+
+  useEffect(() => {
+    visibleCallback();
+  }, []);
 
   const app = plugin.app || useContext(AppContext);
 
@@ -483,9 +495,9 @@ const Chat: React.FC<ChatProps> = ({
           setInputMessage={setInputMessage}
           handleSendMessage={handleSendMessage}
           handleKeyDown={handleKeyDown}
-          getChatVisibility={getChatVisibility}
           isGenerating={loading}
           onStopGenerating={handleStopGenerating}
+          chatIsVisible={chatIsVisible}
         />
       </div>
     </div>

@@ -17,7 +17,7 @@ export default class CopilotView extends ItemView {
   private defaultSaveFolder: string;
   private debug = false;
   emitter: EventTarget;
-  userSystemPrompt = '';
+  userSystemPrompt = "";
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -71,7 +71,6 @@ export default class CopilotView extends ItemView {
             settings={this.settings}
             chainManager={this.chainManager}
             emitter={this.emitter}
-            getChatVisibility={this.getChatVisibility}
             defaultSaveFolder={this.defaultSaveFolder}
             plugin={this.plugin}
             debug={this.debug}
