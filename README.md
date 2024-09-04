@@ -24,6 +24,8 @@ SPECIAL THANKS TO OUR SPONSORS:
 
 #### v2.6.0: MOBILE SUPPORT is here! 🎉🎉🎉
 
+<a href="https://youtu.be/l-x_QwSNghE" target="_blank"><img src="./images/thumbnail-260.png" width="700" /></a>
+
 - Huge thanks to our awesome [@gianluca-venturini](https://github.com/gianluca-venturini) for his incredible work on mobile support! Now you can use Copilot on your phone and tablet! 🎉🎉🎉
 - Complete rehaul of how models work in Copilot settings. Now you can add any model to your model picker provided its name, model provider, API key and base url! No more waiting for me to add new models!
 - Say goodbye to CORS errors for both chat models and embedding! The new model table in settings now lets you turn on "CORS" for individual chat models if you see CORS issue with them. And embedding models are immune to CORS errors by default!

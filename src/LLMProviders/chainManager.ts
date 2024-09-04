@@ -1,6 +1,6 @@
 import { CustomModel, LangChainParams, SetChainOptions } from "@/aiParams";
 import ChainFactory, { ChainType, Document } from "@/chainFactory";
-import { AI_SENDER } from "@/constants";
+import { AI_SENDER, BUILTIN_CHAT_MODELS } from "@/constants";
 import EncryptionService from "@/encryptionService";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { CopilotSettings } from "@/settings/SettingsPage";
@@ -96,9 +96,12 @@ export default class ChainManager {
    */
   createChainWithNewModel(newModelKey: string): void {
     try {
-      const customModel = this.findCustomModel(newModelKey);
+      let customModel = this.findCustomModel(newModelKey);
       if (!customModel) {
-        throw new Error(`No model configuration found for: ${newModelKey}`);
+        // Reset default model if no model is found
+        console.error("Resetting default model. No model configuration found for: ", newModelKey);
+        customModel = BUILTIN_CHAT_MODELS[0];
+        newModelKey = customModel.name + "|" + customModel.provider;
       }
       this.langChainParams.modelKey = newModelKey;
       this.chatModelManager.setChatModel(customModel);
