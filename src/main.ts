@@ -402,6 +402,15 @@ export default class CopilotPlugin extends Plugin {
     this.registerEvent(this.app.workspace.on("editor-menu", this.handleContextMenu));
   }
 
+  async autosaveCurrentChat() {
+    if (this.settings.autosaveChat) {
+      const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view as CopilotView;
+      if (chatView && chatView.sharedState.chatHistory.length > 0) {
+        await chatView.saveChat();
+      }
+    }
+  }
+
   private getVaultIdentifier(): string {
     const vaultName = this.app.vault.getName();
     return MD5(vaultName).toString();

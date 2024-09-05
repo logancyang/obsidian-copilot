@@ -1,4 +1,6 @@
 import { CustomModel } from "@/aiParams";
+import CopilotView from "@/components/CopilotView";
+import { CHAT_VIEWTYPE } from "@/constants";
 import CopilotPlugin from "@/main";
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import React from "react";
@@ -29,6 +31,7 @@ export interface CopilotSettings {
   openAIEmbeddingProxyBaseUrl: string;
   stream: boolean;
   defaultSaveFolder: string;
+  autosaveChat: boolean;
   indexVaultToVectorStore: string;
   chatNoteContextPath: string;
   chatNoteContextTags: string[];
@@ -54,6 +57,12 @@ export class CopilotSettingTab extends PluginSettingTab {
     try {
       // Save the settings before reloading
       await this.plugin.saveSettings();
+
+      // Autosave the current chat before reloading
+      const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view as CopilotView;
+      if (chatView && this.plugin.settings.autosaveChat) {
+        await this.plugin.autosaveCurrentChat();
+      }
 
       // Reload the plugin
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -54,6 +54,7 @@ interface ChatProps {
   emitter: EventTarget;
   getChatVisibility: () => Promise<boolean>;
   defaultSaveFolder: string;
+  onSaveChat: (saveAsNote: () => Promise<void>) => void;
   plugin: CopilotPlugin;
   debug: boolean;
 }
@@ -65,6 +66,7 @@ const Chat: React.FC<ChatProps> = ({
   emitter,
   getChatVisibility,
   defaultSaveFolder,
+  onSaveChat,
   plugin,
   debug,
 }) => {
@@ -580,6 +582,13 @@ ${chatContent}`;
     new Notice("Message inserted into the active note.");
   };
 
+  // Expose handleSaveAsNote to parent
+  useEffect(() => {
+    if (onSaveChat) {
+      onSaveChat(handleSaveAsNote);
+    }
+  }, [onSaveChat]);
+
   return (
     <div className="chat-container">
       <ChatMessages
@@ -597,7 +606,10 @@ ${chatContent}`;
           setCurrentModelKey={setModelKey}
           currentChain={currentChain}
           setCurrentChain={setChain}
-          onNewChat={() => {
+          onNewChat={async () => {
+            if (settings.autosaveChat && chatHistory.length > 0) {
+              await handleSaveAsNote();
+            }
             clearMessages();
             clearChatMemory();
             clearCurrentAiMessage();

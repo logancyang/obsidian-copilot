@@ -10,14 +10,15 @@ import * as React from "react";
 import { Root, createRoot } from "react-dom/client";
 
 export default class CopilotView extends ItemView {
-  private sharedState: SharedState;
   private chainManager: ChainManager;
   private root: Root | null = null;
   private settings: CopilotSettings;
   private defaultSaveFolder: string;
+  private handleSaveAsNote: (() => Promise<void>) | null = null;
   private debug = false;
+  sharedState: SharedState;
   emitter: EventTarget;
-  userSystemPrompt = '';
+  userSystemPrompt = "";
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -75,10 +76,19 @@ export default class CopilotView extends ItemView {
             defaultSaveFolder={this.defaultSaveFolder}
             plugin={this.plugin}
             debug={this.debug}
+            onSaveChat={(saveFunction) => {
+              this.handleSaveAsNote = saveFunction;
+            }}
           />
         </React.StrictMode>
       </AppContext.Provider>
     );
+  }
+
+  async saveChat(): Promise<void> {
+    if (this.handleSaveAsNote) {
+      await this.handleSaveAsNote();
+    }
   }
 
   async onClose(): Promise<void> {
