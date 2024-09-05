@@ -192,6 +192,7 @@ ${chatContent}`;
       const newNote: TFile = await app.vault.create(noteFileName, noteContentWithTimestamp);
       const leaf = app.workspace.getLeaf();
       leaf.openFile(newNote);
+      new Notice(`Chat saved as note in folder: ${defaultSaveFolder}.`);
     } catch (error) {
       console.error("Error saving chat as note:", error);
     }
