@@ -38,7 +38,7 @@ import {
   summarizePrompt,
   tocPrompt,
 } from "@/utils";
-import { Notice, TFile } from "obsidian";
+import { MarkdownView, Notice, TFile } from "obsidian";
 import React, { useContext, useEffect, useState } from "react";
 
 interface CreateEffectOptions {
@@ -308,6 +308,83 @@ const Chat: React.FC<ChatProps> = ({
     }
   };
 
+  const handleRegenerate = async (messageIndex: number) => {
+    const lastUserMessageIndex = messageIndex - 1;
+
+    if (lastUserMessageIndex < 0 || chatHistory[lastUserMessageIndex].sender !== USER_SENDER) {
+      new Notice("Cannot regenerate the first message or a user message.");
+      return;
+    }
+
+    // Get the last user message
+    const lastUserMessage = chatHistory[lastUserMessageIndex];
+
+    // Remove all messages after the AI message to regenerate
+    const newChatHistory = chatHistory.slice(0, messageIndex);
+    clearMessages();
+    newChatHistory.forEach(addMessage);
+
+    // Update the chain's memory with the new chat history
+    chainManager.memoryManager.clearChatMemory();
+    for (let i = 0; i < newChatHistory.length; i += 2) {
+      const userMsg = newChatHistory[i];
+      const aiMsg = newChatHistory[i + 1];
+      if (userMsg && aiMsg) {
+        await chainManager.memoryManager
+          .getMemory()
+          .saveContext({ input: userMsg.message }, { output: aiMsg.message });
+      }
+    }
+
+    setLoading(true);
+    try {
+      const regeneratedResponse = await chainManager.runChain(
+        lastUserMessage.message,
+        new AbortController(),
+        setCurrentAiMessage,
+        addMessage,
+        { debug }
+      );
+      if (regeneratedResponse && debug) {
+        console.log("Message regenerated successfully");
+      }
+    } catch (error) {
+      console.error("Error regenerating message:", error);
+      new Notice("Failed to regenerate message. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEdit = async (messageIndex: number, newMessage: string) => {
+    const oldMessage = chatHistory[messageIndex].message;
+
+    // Check if the message has actually changed
+    if (oldMessage === newMessage) {
+      return; // Exit the function if the message hasn't changed
+    }
+
+    const newChatHistory = [...chatHistory];
+    newChatHistory[messageIndex].message = newMessage;
+    clearMessages();
+    newChatHistory.forEach(addMessage);
+
+    // Update the chain's memory with the new chat history
+    chainManager.memoryManager.clearChatMemory();
+    for (let i = 0; i < newChatHistory.length; i += 2) {
+      const userMsg = newChatHistory[i];
+      const aiMsg = newChatHistory[i + 1];
+      if (userMsg && aiMsg) {
+        await chainManager.memoryManager
+          .getMemory()
+          .saveContext({ input: userMsg.message }, { output: aiMsg.message });
+      }
+    }
+
+    // Trigger regeneration of the AI message
+    handleRegenerate(messageIndex + 1);
+  };
+
   useEffect(() => {
     async function handleSelection(event: CustomEvent) {
       const wordCount = event.detail.selectedText.split(" ").length;
@@ -449,6 +526,29 @@ const Chat: React.FC<ChatProps> = ({
     []
   );
 
+  const handleInsertAtCursor = async (message: string) => {
+    let leaf = app.workspace.getMostRecentLeaf();
+    if (!leaf) {
+      new Notice("No active leaf found.");
+      return;
+    }
+
+    if (!(leaf.view instanceof MarkdownView)) {
+      leaf = app.workspace.getLeaf(false);
+      await leaf.setViewState({ type: "markdown", state: leaf.view.getState() });
+    }
+
+    if (!(leaf.view instanceof MarkdownView)) {
+      new Notice("Failed to open a markdown view.");
+      return;
+    }
+
+    const editor = leaf.view.editor;
+    const cursor = editor.getCursor();
+    editor.replaceRange(message, cursor);
+    new Notice("Message inserted into the active note.");
+  };
+
   return (
     <div className="chat-container">
       <ChatMessages
@@ -456,6 +556,9 @@ const Chat: React.FC<ChatProps> = ({
         currentAiMessage={currentAiMessage}
         loading={loading}
         app={app}
+        onInsertAtCursor={handleInsertAtCursor}
+        onRegenerate={handleRegenerate}
+        onEdit={handleEdit}
       />
       <div className="bottom-container">
         <ChatIcons
