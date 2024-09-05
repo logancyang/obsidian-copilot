@@ -308,6 +308,54 @@ const Chat: React.FC<ChatProps> = ({
     }
   };
 
+  const handleRegenerate = async (messageIndex: number) => {
+    const lastUserMessageIndex = messageIndex - 1;
+
+    if (lastUserMessageIndex < 0 || chatHistory[lastUserMessageIndex].sender !== USER_SENDER) {
+      new Notice("Cannot regenerate the first message or a user message.");
+      return;
+    }
+
+    // Get the last user message
+    const lastUserMessage = chatHistory[lastUserMessageIndex];
+
+    // Remove all messages after the AI message to regenerate
+    const newChatHistory = chatHistory.slice(0, messageIndex);
+    clearMessages();
+    newChatHistory.forEach(addMessage);
+
+    // Update the chain's memory with the new chat history
+    chainManager.memoryManager.clearChatMemory();
+    for (let i = 0; i < newChatHistory.length; i += 2) {
+      const userMsg = newChatHistory[i];
+      const aiMsg = newChatHistory[i + 1];
+      if (userMsg && aiMsg) {
+        await chainManager.memoryManager
+          .getMemory()
+          .saveContext({ input: userMsg.message }, { output: aiMsg.message });
+      }
+    }
+
+    setLoading(true);
+    try {
+      const regeneratedResponse = await chainManager.runChain(
+        lastUserMessage.message,
+        new AbortController(),
+        setCurrentAiMessage,
+        addMessage,
+        { debug }
+      );
+      if (regeneratedResponse && debug) {
+        console.log("Message regenerated successfully");
+      }
+    } catch (error) {
+      console.error("Error regenerating message:", error);
+      new Notice("Failed to regenerate message. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     async function handleSelection(event: CustomEvent) {
       const wordCount = event.detail.selectedText.split(" ").length;
@@ -480,6 +528,7 @@ const Chat: React.FC<ChatProps> = ({
         loading={loading}
         app={app}
         onInsertAtCursor={handleInsertAtCursor}
+        onRegenerate={handleRegenerate}
       />
       <div className="bottom-container">
         <ChatIcons

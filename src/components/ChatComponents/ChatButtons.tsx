@@ -1,4 +1,4 @@
-import { CheckIcon, CopyClipboardIcon, InsertIcon } from "@/components/Icons";
+import { CheckIcon, CopyClipboardIcon, InsertIcon, RegenerateIcon } from "@/components/Icons";
 import { USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/sharedState";
 import React from "react";
@@ -36,9 +36,9 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
           >
             <InsertIcon />
           </button>
-          {/* <button onClick={onRegenerate} className="clickable-icon" title="Regenerate">
+          <button onClick={onRegenerate} className="clickable-icon" title="Regenerate">
             <RegenerateIcon />
-          </button> */}
+          </button>
         </>
       )}
     </div>
