@@ -38,7 +38,7 @@ import {
   summarizePrompt,
   tocPrompt,
 } from "@/utils";
-import { Notice, TFile } from "obsidian";
+import { MarkdownView, Notice, TFile } from "obsidian";
 import React, { useContext, useEffect, useState } from "react";
 
 interface CreateEffectOptions {
@@ -449,6 +449,29 @@ const Chat: React.FC<ChatProps> = ({
     []
   );
 
+  const handleInsertAtCursor = async (message: string) => {
+    let leaf = app.workspace.getMostRecentLeaf();
+    if (!leaf) {
+      new Notice("No active leaf found.");
+      return;
+    }
+
+    if (!(leaf.view instanceof MarkdownView)) {
+      leaf = app.workspace.getLeaf(false);
+      await leaf.setViewState({ type: "markdown", state: leaf.view.getState() });
+    }
+
+    if (!(leaf.view instanceof MarkdownView)) {
+      new Notice("Failed to open a markdown view.");
+      return;
+    }
+
+    const editor = leaf.view.editor;
+    const cursor = editor.getCursor();
+    editor.replaceRange(message, cursor);
+    new Notice("Message inserted into the active note.");
+  };
+
   return (
     <div className="chat-container">
       <ChatMessages
@@ -456,6 +479,7 @@ const Chat: React.FC<ChatProps> = ({
         currentAiMessage={currentAiMessage}
         loading={loading}
         app={app}
+        onInsertAtCursor={handleInsertAtCursor}
       />
       <div className="bottom-container">
         <ChatIcons

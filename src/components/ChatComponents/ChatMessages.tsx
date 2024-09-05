@@ -8,6 +8,7 @@ interface ChatMessagesProps {
   currentAiMessage: string;
   loading?: boolean;
   app: App;
+  onInsertAtCursor: (message: string) => void;
 }
 
 const ChatMessages: React.FC<ChatMessagesProps> = ({
@@ -15,6 +16,7 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
   currentAiMessage,
   loading,
   app,
+  onInsertAtCursor,
 }) => {
   const [loadingDots, setLoadingDots] = useState("");
 
@@ -46,7 +48,15 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
       {chatHistory.map(
         (message, index) =>
           message.isVisible && (
-            <ChatSingleMessage key={index} message={message} app={app} isStreaming={false} />
+            <ChatSingleMessage
+              key={index}
+              message={message}
+              app={app}
+              isStreaming={false}
+              onInsertAtCursor={() => {
+                onInsertAtCursor(message.message);
+              }}
+            />
           )
       )}
       {(currentAiMessage || loading) && (
