@@ -54,6 +54,7 @@ interface ChatProps {
   emitter: EventTarget;
   getChatVisibility: () => Promise<boolean>;
   defaultSaveFolder: string;
+  onSaveChat: (saveAsNote: () => Promise<void>) => void;
   plugin: CopilotPlugin;
   debug: boolean;
 }
@@ -65,6 +66,7 @@ const Chat: React.FC<ChatProps> = ({
   emitter,
   getChatVisibility,
   defaultSaveFolder,
+  onSaveChat,
   plugin,
   debug,
 }) => {
@@ -155,10 +157,42 @@ const Chat: React.FC<ChatProps> = ({
       }
 
       const now = new Date();
-      const noteFileName = `${defaultSaveFolder}/Chat-${formatDateTime(now)}.md`;
-      const newNote: TFile = await app.vault.create(noteFileName, chatContent);
+      const { fileName: timestampFileName, epoch } = formatDateTime(now);
+
+      // Get the first user message
+      const firstUserMessage = chatHistory.find(
+        (message) => message.sender === USER_SENDER && message.isVisible
+      );
+
+      // Get the first 10 words from the first user message and sanitize them
+      const firstTenWords = firstUserMessage
+        ? firstUserMessage.message
+            .split(/\s+/)
+            .slice(0, 10)
+            .join(" ")
+            .replace(/[\\/:*?"<>|]/g, "") // Remove invalid filename characters
+            .trim()
+        : "Untitled Chat";
+
+      // Create the file name (limit to 100 characters to avoid excessively long names)
+      const sanitizedFileName = `${firstTenWords.slice(0, 100)}@${timestampFileName}`.replace(
+        /\s+/g,
+        "_"
+      );
+      const noteFileName = `${defaultSaveFolder}/${sanitizedFileName}.md`;
+
+      // Add the timestamp and model properties to the note content
+      const noteContentWithTimestamp = `---
+epoch: ${epoch}
+modelKey: ${currentModelKey}
+---
+
+${chatContent}`;
+
+      const newNote: TFile = await app.vault.create(noteFileName, noteContentWithTimestamp);
       const leaf = app.workspace.getLeaf();
       leaf.openFile(newNote);
+      new Notice(`Chat saved as note in folder: ${defaultSaveFolder}.`);
     } catch (error) {
       console.error("Error saving chat as note:", error);
     }
@@ -549,6 +583,13 @@ const Chat: React.FC<ChatProps> = ({
     new Notice("Message inserted into the active note.");
   };
 
+  // Expose handleSaveAsNote to parent
+  useEffect(() => {
+    if (onSaveChat) {
+      onSaveChat(handleSaveAsNote);
+    }
+  }, [onSaveChat]);
+
   return (
     <div className="chat-container">
       <ChatMessages
@@ -566,7 +607,10 @@ const Chat: React.FC<ChatProps> = ({
           setCurrentModelKey={setModelKey}
           currentChain={currentChain}
           setCurrentChain={setChain}
-          onNewChat={() => {
+          onNewChat={async () => {
+            if (settings.autosaveChat && chatHistory.length > 0) {
+              await handleSaveAsNote();
+            }
             clearMessages();
             clearChatMemory();
             clearCurrentAiMessage();

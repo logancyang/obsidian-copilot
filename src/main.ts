@@ -8,19 +8,22 @@ import { AdhocPromptModal } from "@/components/AdhocPromptModal";
 import { ChatNoteContextModal } from "@/components/ChatNoteContextModal";
 import CopilotView from "@/components/CopilotView";
 import { ListPromptModal } from "@/components/ListPromptModal";
+import { LoadChatHistoryModal } from "@/components/LoadChatHistoryModal";
 import { QAExclusionModal } from "@/components/QAExclusionModal";
 import {
+  AI_SENDER,
   BUILTIN_CHAT_MODELS,
   BUILTIN_EMBEDDING_MODELS,
   CHAT_VIEWTYPE,
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
+  USER_SENDER,
   VAULT_VECTOR_STORE_STRATEGY,
 } from "@/constants";
 import { CustomPrompt } from "@/customPromptProcessor";
 import EncryptionService from "@/encryptionService";
 import { CopilotSettingTab, CopilotSettings } from "@/settings/SettingsPage";
-import SharedState from "@/sharedState";
+import SharedState, { ChatMessage } from "@/sharedState";
 import {
   areEmbeddingModelsSame,
   getAllNotesContent,
@@ -29,7 +32,16 @@ import {
 } from "@/utils";
 import VectorDBManager, { VectorStoreDocument } from "@/vectorDBManager";
 import { MD5 } from "crypto-js";
-import { Editor, MarkdownView, Menu, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import {
+  Editor,
+  MarkdownView,
+  Menu,
+  Notice,
+  Plugin,
+  TFile,
+  TFolder,
+  WorkspaceLeaf,
+} from "obsidian";
 import PouchDB from "pouchdb-browser";
 
 export default class CopilotPlugin extends Plugin {
@@ -361,6 +373,14 @@ export default class CopilotPlugin extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: "load-copilot-chat-conversation",
+      name: "Load Copilot Chat conversation",
+      callback: () => {
+        this.loadCopilotChatHistory();
+      },
+    });
+
     this.registerEvent(
       this.app.vault.on("delete", (file) => {
         const docHash = VectorDBManager.getDocumentHash(file.path);
@@ -380,6 +400,15 @@ export default class CopilotPlugin extends Plugin {
     }
 
     this.registerEvent(this.app.workspace.on("editor-menu", this.handleContextMenu));
+  }
+
+  async autosaveCurrentChat() {
+    if (this.settings.autosaveChat) {
+      const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view as CopilotView;
+      if (chatView && chatView.sharedState.chatHistory.length > 0) {
+        await chatView.saveChat();
+      }
+    }
   }
 
   private getVaultIdentifier(): string {
@@ -562,7 +591,7 @@ export default class CopilotPlugin extends Plugin {
     leaves.length > 0 ? this.deactivateView() : this.activateView();
   }
 
-  async activateView() {
+  async activateView(): Promise<void> {
     this.app.workspace.detachLeavesOfType(CHAT_VIEWTYPE);
     this.activateViewPromise = this.app.workspace.getRightLeaf(false).setViewState({
       type: CHAT_VIEWTYPE,
@@ -740,5 +769,64 @@ export default class CopilotPlugin extends Plugin {
 
   getEncryptionService(): EncryptionService {
     return this.encryptionService;
+  }
+
+  async loadCopilotChatHistory() {
+    const chatFiles = await this.getChatHistoryFiles();
+    if (chatFiles.length === 0) {
+      new Notice("No chat history found.");
+      return;
+    }
+    new LoadChatHistoryModal(this.app, chatFiles, this.loadChatHistory.bind(this)).open();
+  }
+
+  async getChatHistoryFiles(): Promise<TFile[]> {
+    const folder = this.app.vault.getAbstractFileByPath(this.settings.defaultSaveFolder);
+    if (!(folder instanceof TFolder)) {
+      return [];
+    }
+    const files = await this.app.vault.getMarkdownFiles();
+    return files.filter((file) => file.path.startsWith(folder.path));
+  }
+
+  async loadChatHistory(file: TFile) {
+    const content = await this.app.vault.read(file);
+    const messages = this.parseChatContent(content);
+    this.sharedState.clearChatHistory();
+    messages.forEach((message) => this.sharedState.addMessage(message));
+    this.activateView();
+  }
+
+  parseChatContent(content: string): ChatMessage[] {
+    const lines = content.split("\n");
+    const messages: ChatMessage[] = [];
+    let currentSender = "";
+    let currentMessage = "";
+
+    for (const line of lines) {
+      if (line.startsWith("**user**:") || line.startsWith("**ai**:")) {
+        if (currentSender && currentMessage) {
+          messages.push({
+            sender: currentSender === USER_SENDER ? USER_SENDER : AI_SENDER,
+            message: currentMessage.trim(),
+            isVisible: true,
+          });
+        }
+        currentSender = line.startsWith("**user**:") ? USER_SENDER : AI_SENDER;
+        currentMessage = line.substring(line.indexOf(":") + 1).trim();
+      } else {
+        currentMessage += "\n" + line;
+      }
+    }
+
+    if (currentSender && currentMessage) {
+      messages.push({
+        sender: currentSender === USER_SENDER ? USER_SENDER : AI_SENDER,
+        message: currentMessage.trim(),
+        isVisible: true,
+      });
+    }
+
+    return messages;
   }
 }
