@@ -207,7 +207,11 @@ export const formatDateTime = (now: Date, timezone: "local" | "utc" = "local") =
     formattedDateTime.utc();
   }
 
-  return formattedDateTime.format("YYYY_MM_DD-HH_mm_ss");
+  return {
+    fileName: formattedDateTime.format("YYYY_MM_DD_HH_mm_ss"),
+    display: formattedDateTime.format("YYYY/MM/DD HH:mm:ss"),
+    epoch: formattedDateTime.valueOf(),
+  };
 };
 
 export async function getFileContent(file: TFile, vault: Vault): Promise<string | null> {
