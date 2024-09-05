@@ -356,6 +356,35 @@ const Chat: React.FC<ChatProps> = ({
     }
   };
 
+  const handleEdit = async (messageIndex: number, newMessage: string) => {
+    const oldMessage = chatHistory[messageIndex].message;
+
+    // Check if the message has actually changed
+    if (oldMessage === newMessage) {
+      return; // Exit the function if the message hasn't changed
+    }
+
+    const newChatHistory = [...chatHistory];
+    newChatHistory[messageIndex].message = newMessage;
+    clearMessages();
+    newChatHistory.forEach(addMessage);
+
+    // Update the chain's memory with the new chat history
+    chainManager.memoryManager.clearChatMemory();
+    for (let i = 0; i < newChatHistory.length; i += 2) {
+      const userMsg = newChatHistory[i];
+      const aiMsg = newChatHistory[i + 1];
+      if (userMsg && aiMsg) {
+        await chainManager.memoryManager
+          .getMemory()
+          .saveContext({ input: userMsg.message }, { output: aiMsg.message });
+      }
+    }
+
+    // Trigger regeneration of the AI message
+    handleRegenerate(messageIndex + 1);
+  };
+
   useEffect(() => {
     async function handleSelection(event: CustomEvent) {
       const wordCount = event.detail.selectedText.split(" ").length;
@@ -529,6 +558,7 @@ const Chat: React.FC<ChatProps> = ({
         app={app}
         onInsertAtCursor={handleInsertAtCursor}
         onRegenerate={handleRegenerate}
+        onEdit={handleEdit}
       />
       <div className="bottom-container">
         <ChatIcons

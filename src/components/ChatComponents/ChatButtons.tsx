@@ -1,4 +1,10 @@
-import { CheckIcon, CopyClipboardIcon, InsertIcon, RegenerateIcon } from "@/components/Icons";
+import {
+  CheckIcon,
+  CopyClipboardIcon,
+  EditIcon,
+  InsertIcon,
+  RegenerateIcon,
+} from "@/components/Icons";
 import { USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/sharedState";
 import React from "react";
@@ -9,6 +15,7 @@ interface ChatButtonsProps {
   isCopied: boolean;
   onInsertAtCursor?: () => void;
   onRegenerate?: () => void;
+  onEdit?: () => void;
 }
 
 export const ChatButtons: React.FC<ChatButtonsProps> = ({
@@ -17,6 +24,7 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
   isCopied,
   onInsertAtCursor,
   onRegenerate,
+  onEdit,
 }) => {
   return (
     <div className="chat-message-buttons">
@@ -24,8 +32,8 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
         {isCopied ? <CheckIcon /> : <CopyClipboardIcon />}
       </button>
       {message.sender === USER_SENDER ? (
-        <button className="clickable-icon" title="Edit">
-          {/* <EditIcon /> */}
+        <button onClick={onEdit} className="clickable-icon" title="Edit">
+          <EditIcon />
         </button>
       ) : (
         <>

@@ -11,6 +11,7 @@ interface ChatSingleMessageProps {
   isStreaming: boolean;
   onInsertAtCursor?: () => void;
   onRegenerate?: () => void;
+  onEdit?: (newMessage: string) => void;
 }
 
 const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
@@ -19,10 +20,14 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   isStreaming,
   onInsertAtCursor,
   onRegenerate,
+  onEdit,
 }) => {
   const [isCopied, setIsCopied] = useState<boolean>(false);
+  const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [editedMessage, setEditedMessage] = useState<string>(message.message);
   const contentRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const copyToClipboard = () => {
     if (!navigator.clipboard || !navigator.clipboard.writeText) {
@@ -76,6 +81,41 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     };
   }, [message, app, componentRef, isStreaming]);
 
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      adjustTextareaHeight(textareaRef.current);
+    }
+  }, [isEditing]);
+
+  const adjustTextareaHeight = (element: HTMLTextAreaElement) => {
+    element.style.height = "auto";
+    element.style.height = `${element.scrollHeight}px`;
+  };
+
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setEditedMessage(e.target.value);
+    adjustTextareaHeight(e.target);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.nativeEvent.isComposing) return;
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault(); // Prevents adding a newline to the textarea
+      handleSaveEdit();
+    }
+  };
+
+  const handleEdit = () => {
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = () => {
+    setIsEditing(false);
+    if (onEdit) {
+      onEdit(editedMessage);
+    }
+  };
+
   return (
     <div className="chat-message-container">
       <div className={`message ${message.sender === USER_SENDER ? "user-message" : "bot-message"}`}>
@@ -83,7 +123,17 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           {message.sender === USER_SENDER ? <UserIcon /> : <BotIcon />}
         </div>
         <div className="message-content">
-          {message.sender === USER_SENDER ? (
+          {message.sender === USER_SENDER && isEditing ? (
+            <textarea
+              ref={textareaRef}
+              value={editedMessage}
+              onChange={handleTextareaChange}
+              onKeyDown={handleKeyDown}
+              onBlur={handleSaveEdit}
+              autoFocus
+              className="edit-textarea"
+            />
+          ) : message.sender === USER_SENDER ? (
             <span>{message.message}</span>
           ) : (
             <div ref={contentRef}></div>
@@ -98,6 +148,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             isCopied={isCopied}
             onInsertAtCursor={onInsertAtCursor}
             onRegenerate={onRegenerate}
+            onEdit={handleEdit}
           />
         </div>
       )}

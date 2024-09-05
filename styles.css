@@ -192,26 +192,26 @@ If your plugin does not need CSS, delete this file.
   display: flex;
   flex-direction: column;
   width: 100%;
-  margin-bottom: 8px; /* Reduced from 16px to 8px for less space between messages */
+  margin-bottom: 8px;
 }
 
 .message {
   display: flex;
-  padding: 0; /* Removed padding */
+  padding: 0;
   border-radius: 4px;
   position: relative;
-  margin-bottom: 0; /* Removed margin */
+  margin-bottom: 0;
 }
 
 .message-icon {
   width: 24px;
   margin-right: 8px;
   color: var(--inline-title-color);
-  grid-area: icon;
+  flex-shrink: 0;
 }
 
 .message-content {
-  grid-area: content;
+  flex-grow: 1;
   max-width: 95%;
   word-break: break-word;
   line-height: 1.6 !important;
@@ -451,4 +451,21 @@ If your plugin does not need CSS, delete this file.
 
 .add-model-button {
   margin-top: 15px;
+}
+
+.edit-textarea {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  resize: vertical;
+  overflow-y: hidden;
+}
+
+.edit-textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
 }

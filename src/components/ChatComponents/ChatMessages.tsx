@@ -10,6 +10,7 @@ interface ChatMessagesProps {
   app: App;
   onInsertAtCursor: (message: string) => void;
   onRegenerate: (messageIndex: number) => void;
+  onEdit: (messageIndex: number, newMessage: string) => void;
 }
 
 const ChatMessages: React.FC<ChatMessagesProps> = ({
@@ -19,6 +20,7 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
   app,
   onInsertAtCursor,
   onRegenerate,
+  onEdit,
 }) => {
   const [loadingDots, setLoadingDots] = useState("");
 
@@ -59,6 +61,7 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
                 onInsertAtCursor(message.message);
               }}
               onRegenerate={() => onRegenerate(index)}
+              onEdit={(newMessage) => onEdit(index, newMessage)}
             />
           )
       )}
