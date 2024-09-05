@@ -40,10 +40,10 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
   const preprocessLatex = (content: string): string => {
     return content
-      .replace(/\\\[/g, "$$")
-      .replace(/\\\]/g, "$$")
-      .replace(/\\\(/g, "$")
-      .replace(/\\\)/g, "$");
+      .replace(/\\\[\s*/g, "$$")
+      .replace(/\s*\\\]/g, "$$")
+      .replace(/\\\(\s*/g, "$")
+      .replace(/\s*\\\)/g, "$");
   };
 
   useEffect(() => {
