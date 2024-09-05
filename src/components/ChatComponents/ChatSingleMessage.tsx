@@ -1,4 +1,5 @@
-import { BotIcon, CheckIcon, CopyClipboardIcon, UserIcon } from "@/components/Icons";
+import { ChatButtons } from "@/components/ChatComponents/ChatButtons";
+import { BotIcon, UserIcon } from "@/components/Icons";
 import { USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/sharedState";
 import { App, Component, MarkdownRenderer } from "obsidian";
@@ -7,17 +8,22 @@ import React, { useEffect, useRef, useState } from "react";
 interface ChatSingleMessageProps {
   message: ChatMessage;
   app: App;
-  isStreaming?: boolean;
+  isStreaming: boolean;
+  onInsertAtCursor?: () => void;
+  onRegenerate?: () => void;
 }
 
 const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   message,
   app,
-  isStreaming = false,
+  isStreaming,
+  onInsertAtCursor,
+  onRegenerate,
 }) => {
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
+
   const copyToClipboard = () => {
     if (!navigator.clipboard || !navigator.clipboard.writeText) {
       return;
@@ -84,9 +90,17 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           )}
         </div>
       </div>
-      <button onClick={copyToClipboard} className="copy-message-button clickable-icon">
-        {isCopied ? <CheckIcon /> : <CopyClipboardIcon />}
-      </button>
+      {!isStreaming && (
+        <div className="message-buttons-wrapper">
+          <ChatButtons
+            message={message}
+            onCopy={copyToClipboard}
+            isCopied={isCopied}
+            onInsertAtCursor={onInsertAtCursor}
+            onRegenerate={onRegenerate}
+          />
+        </div>
+      )}
     </div>
   );
 };

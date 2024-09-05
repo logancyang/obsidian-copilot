@@ -190,16 +190,17 @@ If your plugin does not need CSS, delete this file.
 
 .chat-message-container {
   display: flex;
+  flex-direction: column;
   width: 100%;
-  margin: 0;
+  margin-bottom: 8px; /* Reduced from 16px to 8px for less space between messages */
 }
 
 .message {
   display: flex;
-  padding: 8px;
-  margin-bottom: 4px;
+  padding: 0; /* Removed padding */
   border-radius: 4px;
   position: relative;
+  margin-bottom: 0; /* Removed margin */
 }
 
 .message-icon {
@@ -284,18 +285,40 @@ If your plugin does not need CSS, delete this file.
   margin: 10px;
 }
 
-.copy-message-button {
+.message-buttons-wrapper {
+  align-self: flex-end;
+  margin-top: 0;
+}
+
+.chat-message-buttons {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  height: 24px;
+}
+
+.chat-message-buttons button {
   width: 24px;
   height: 24px;
-  padding: 4px;
+  padding: 0;
   font-size: 12px;
   display: flex;
   justify-content: center;
   align-items: center;
-  align-self: flex-end;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+  background-color: transparent;
+  border: none;
   cursor: pointer;
+  color: var(--text-muted);
+  transition: color 0.2s ease;
+}
+
+.chat-message-buttons button:hover {
+  color: var(--text-normal);
+}
+
+.chat-message-buttons button svg {
+  width: 16px;
+  height: 16px;
 }
 
 .user-message {
