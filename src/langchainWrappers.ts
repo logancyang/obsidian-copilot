@@ -14,6 +14,7 @@ export class ProxyChatOpenAI extends ChatOpenAI {
     this["client"] = new OpenAI({
       ...this["clientConfig"],
       baseURL: fields.openAIProxyBaseUrl,
+      dangerouslyAllowBrowser: true,
       fetch: fields.enableCors ? safeFetch : undefined,
     });
   }
@@ -27,6 +28,7 @@ export class ProxyOpenAIEmbeddings extends OpenAIEmbeddings {
     this["client"] = new OpenAI({
       ...this["clientConfig"],
       baseURL: fields.openAIEmbeddingProxyBaseUrl,
+      dangerouslyAllowBrowser: true,
       fetch: safeFetch,
     });
   }
