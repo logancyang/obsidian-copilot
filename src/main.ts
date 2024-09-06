@@ -399,6 +399,15 @@ export default class CopilotPlugin extends Plugin {
       }
     }
 
+    // Temporary: Migrate Custom Prompts from PouchDB to Markdown files.
+    this.addCommand({
+      id: "dump-custom-prompts-to-markdown",
+      name: "Dump custom prompts to markdown files",
+      callback: async () => {
+        await this.dumpCustomPrompts();
+      },
+    });
+
     this.registerEvent(this.app.workspace.on("editor-menu", this.handleContextMenu));
   }
 
@@ -408,6 +417,33 @@ export default class CopilotPlugin extends Plugin {
       if (chatView && chatView.sharedState.chatHistory.length > 0) {
         await chatView.saveChat();
       }
+    }
+  }
+
+  async dumpCustomPrompts(): Promise<void> {
+    const folder = this.settings.customPromptsFolder || "custom_prompts";
+
+    try {
+      // Ensure the folder exists
+      if (!(await this.app.vault.adapter.exists(folder))) {
+        await this.app.vault.createFolder(folder);
+      }
+
+      // Fetch all prompts
+      const response = await this.dbPrompts.allDocs({ include_docs: true });
+
+      for (const row of response.rows) {
+        const doc = row.doc as CustomPrompt;
+        if (doc && doc._id && doc.prompt) {
+          const fileName = `${folder}/${doc._id}.md`;
+          await this.app.vault.create(fileName, doc.prompt);
+        }
+      }
+
+      new Notice(`Custom prompts dumped to ${folder} folder`);
+    } catch (error) {
+      console.error("Error dumping custom prompts:", error);
+      new Notice("Error dumping custom prompts. Check console for details.");
     }
   }
 
