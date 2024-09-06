@@ -69,6 +69,13 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         value={settings.autosaveChat}
         onChange={(value) => updateSettings({ autosaveChat: value })}
       />
+      <TextComponent
+        name="Custom Prompts Folder Name"
+        description="The default folder name where custom prompts will be saved. Default is 'copilot-custom-prompts'"
+        placeholder="copilot-custom-prompts"
+        value={settings.customPromptsFolder}
+        onChange={(value) => updateSettings({ customPromptsFolder: value })}
+      />
       <h6>
         Please be mindful of the number of tokens and context conversation turns you set here, as
         they will affect the cost of your API requests.

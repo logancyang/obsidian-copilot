@@ -1,4 +1,5 @@
 import { CustomPrompt, CustomPromptProcessor } from "@/customPromptProcessor";
+import { CopilotSettings } from "@/settings/SettingsPage";
 
 // Mocking Obsidian Vault
 const mockVault = {
@@ -15,13 +16,13 @@ describe("CustomPromptProcessor", () => {
     jest.clearAllMocks();
 
     // Create an instance of CustomPromptProcessor with mocked dependencies
-    processor = CustomPromptProcessor.getInstance(mockVault);
+    processor = CustomPromptProcessor.getInstance(mockVault, {} as CopilotSettings);
   });
 
   it("should add 1 context and selectedText", async () => {
     const doc: CustomPrompt = {
-      _id: "test-prompt",
-      prompt: "This is a {variable} and {}.",
+      title: "test-prompt",
+      content: "This is a {variable} and {}.",
     };
     const selectedText = "here is some selected text 12345";
 
@@ -30,7 +31,7 @@ describe("CustomPromptProcessor", () => {
       .spyOn(processor, "extractVariablesFromPrompt")
       .mockResolvedValue(["here is the note content for note0"]);
 
-    const result = await processor.processCustomPrompt(doc.prompt, selectedText);
+    const result = await processor.processCustomPrompt(doc.content, selectedText);
 
     expect(result).toContain("This is a {variable} and {selectedText}.");
     expect(result).toContain("here is some selected text 12345");
@@ -39,8 +40,8 @@ describe("CustomPromptProcessor", () => {
 
   it("should add 2 context and no selectedText", async () => {
     const doc: CustomPrompt = {
-      _id: "test-prompt",
-      prompt: "This is a {variable} and {var2}.",
+      title: "test-prompt",
+      content: "This is a {variable} and {var2}.",
     };
     const selectedText = "here is some selected text 12345";
 
@@ -49,7 +50,7 @@ describe("CustomPromptProcessor", () => {
       .spyOn(processor, "extractVariablesFromPrompt")
       .mockResolvedValue(["here is the note content for note0", "note content for note1"]);
 
-    const result = await processor.processCustomPrompt(doc.prompt, selectedText);
+    const result = await processor.processCustomPrompt(doc.content, selectedText);
 
     expect(result).toContain("This is a {variable} and {var2}.");
     expect(result).toContain("here is the note content for note0");
@@ -58,8 +59,8 @@ describe("CustomPromptProcessor", () => {
 
   it("should add 1 selectedText and no context", async () => {
     const doc: CustomPrompt = {
-      _id: "test-prompt",
-      prompt: "Rewrite the following text {}",
+      title: "test-prompt",
+      content: "Rewrite the following text {}",
     };
     const selectedText = "here is some selected text 12345";
 
@@ -68,7 +69,7 @@ describe("CustomPromptProcessor", () => {
       .spyOn(processor, "extractVariablesFromPrompt")
       .mockResolvedValue(["here is the note content for note0", "note content for note1"]);
 
-    const result = await processor.processCustomPrompt(doc.prompt, selectedText);
+    const result = await processor.processCustomPrompt(doc.content, selectedText);
 
     expect(result).toContain("Rewrite the following text {selectedText}");
     expect(result).toContain("here is some selected text 12345");
@@ -79,8 +80,8 @@ describe("CustomPromptProcessor", () => {
   // This is not an expected use case but it's possible
   it("should add 2 selectedText and no context", async () => {
     const doc: CustomPrompt = {
-      _id: "test-prompt",
-      prompt: "Rewrite the following text {} and {}",
+      title: "test-prompt",
+      content: "Rewrite the following text {} and {}",
     };
     const selectedText = "here is some selected text 12345";
 
@@ -89,7 +90,7 @@ describe("CustomPromptProcessor", () => {
       .spyOn(processor, "extractVariablesFromPrompt")
       .mockResolvedValue(["here is the note content for note0", "note content for note1"]);
 
-    const result = await processor.processCustomPrompt(doc.prompt, selectedText);
+    const result = await processor.processCustomPrompt(doc.content, selectedText);
 
     expect(result).toContain("Rewrite the following text {selectedText} and {selectedText}");
     expect(result).toContain("here is some selected text 12345");
@@ -99,15 +100,15 @@ describe("CustomPromptProcessor", () => {
 
   it("should handle prompts without variables", async () => {
     const doc: CustomPrompt = {
-      _id: "test-prompt",
-      prompt: "This is a test prompt with no variables.",
+      title: "test-prompt",
+      content: "This is a test prompt with no variables.",
     };
     const selectedText = "selected text";
 
     // Mock the extractVariablesFromPrompt method to return an empty array
     jest.spyOn(processor, "extractVariablesFromPrompt").mockResolvedValue([]);
 
-    const result = await processor.processCustomPrompt(doc.prompt, selectedText);
+    const result = await processor.processCustomPrompt(doc.content, selectedText);
 
     expect(result).toBe("This is a test prompt with no variables.\n\n");
   });

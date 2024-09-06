@@ -32,6 +32,7 @@ export interface CopilotSettings {
   stream: boolean;
   defaultSaveFolder: string;
   autosaveChat: boolean;
+  customPromptsFolder: string;
   indexVaultToVectorStore: string;
   chatNoteContextPath: string;
   chatNoteContextTags: string[];

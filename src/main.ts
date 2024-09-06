@@ -20,7 +20,7 @@ import {
   USER_SENDER,
   VAULT_VECTOR_STORE_STRATEGY,
 } from "@/constants";
-import { CustomPrompt } from "@/customPromptProcessor";
+import { CustomPrompt, CustomPromptDB, CustomPromptProcessor } from "@/customPromptProcessor";
 import EncryptionService from "@/encryptionService";
 import { CopilotSettingTab, CopilotSettings } from "@/settings/SettingsPage";
 import SharedState, { ChatMessage } from "@/sharedState";
@@ -114,14 +114,15 @@ export default class CopilotPlugin extends Plugin {
 
     registerBuiltInCommands(this);
 
+    const promptProcessor = CustomPromptProcessor.getInstance(this.app.vault, this.settings);
+
     this.addCommand({
       id: "add-custom-prompt",
       name: "Add custom prompt",
       callback: () => {
         new AddPromptModal(this.app, async (title: string, prompt: string) => {
           try {
-            // Save the prompt to the database
-            await this.dbPrompts.put({ _id: title, prompt: prompt });
+            await promptProcessor.savePrompt(title, prompt);
             new Notice("Custom prompt saved successfully.");
           } catch (e) {
             new Notice("Error saving custom prompt. Please check if the title already exists.");
@@ -134,30 +135,26 @@ export default class CopilotPlugin extends Plugin {
     this.addCommand({
       id: "apply-custom-prompt",
       name: "Apply custom prompt",
-      callback: () => {
-        this.fetchPromptTitles().then((promptTitles: string[]) => {
-          new ListPromptModal(this.app, promptTitles, async (promptTitle: string) => {
-            if (!promptTitle) {
-              new Notice("Please select a prompt title.");
+      callback: async () => {
+        const prompts = await promptProcessor.getAllPrompts();
+        const promptTitles = prompts.map((p) => p.title);
+        new ListPromptModal(this.app, promptTitles, async (promptTitle: string) => {
+          if (!promptTitle) {
+            new Notice("Please select a prompt title.");
+            return;
+          }
+          try {
+            const prompt = await promptProcessor.getPrompt(promptTitle);
+            if (!prompt) {
+              new Notice(`No prompt found with the title "${promptTitle}".`);
               return;
             }
-            try {
-              const doc = (await this.dbPrompts.get(promptTitle)) as CustomPrompt;
-              if (!doc.prompt) {
-                new Notice(`No prompt found with the title "${promptTitle}".`);
-                return;
-              }
-              this.processCustomPrompt("applyCustomPrompt", doc.prompt);
-            } catch (err) {
-              if (err.name === "not_found") {
-                new Notice(`No prompt found with the title "${promptTitle}".`);
-              } else {
-                console.error(err);
-                new Notice("An error occurred.");
-              }
-            }
-          }).open();
-        });
+            this.processCustomPrompt("applyCustomPrompt", prompt.content);
+          } catch (err) {
+            console.error(err);
+            new Notice("An error occurred.");
+          }
+        }).open();
       },
     });
 
@@ -186,7 +183,8 @@ export default class CopilotPlugin extends Plugin {
           return true;
         }
 
-        this.fetchPromptTitles().then((promptTitles: string[]) => {
+        promptProcessor.getAllPrompts().then((prompts) => {
+          const promptTitles = prompts.map((p) => p.title);
           new ListPromptModal(this.app, promptTitles, async (promptTitle: string) => {
             if (!promptTitle) {
               new Notice("Please select a prompt title.");
@@ -194,20 +192,11 @@ export default class CopilotPlugin extends Plugin {
             }
 
             try {
-              const doc = await this.dbPrompts.get(promptTitle);
-              if (doc._rev) {
-                await this.dbPrompts.remove(doc as PouchDB.Core.RemoveDocument);
-                new Notice(`Prompt "${promptTitle}" has been deleted.`);
-              } else {
-                new Notice(`Failed to delete prompt "${promptTitle}": No revision found.`);
-              }
+              await promptProcessor.deletePrompt(promptTitle);
+              new Notice(`Prompt "${promptTitle}" has been deleted.`);
             } catch (err) {
-              if (err.name === "not_found") {
-                new Notice(`No prompt found with the title "${promptTitle}".`);
-              } else {
-                console.error(err);
-                new Notice("An error occurred while deleting the prompt.");
-              }
+              console.error(err);
+              new Notice("An error occurred while deleting the prompt.");
             }
           }).open();
         });
@@ -224,7 +213,8 @@ export default class CopilotPlugin extends Plugin {
           return true;
         }
 
-        this.fetchPromptTitles().then((promptTitles: string[]) => {
+        promptProcessor.getAllPrompts().then((prompts) => {
+          const promptTitles = prompts.map((p) => p.title);
           new ListPromptModal(this.app, promptTitles, async (promptTitle: string) => {
             if (!promptTitle) {
               new Notice("Please select a prompt title.");
@@ -232,31 +222,24 @@ export default class CopilotPlugin extends Plugin {
             }
 
             try {
-              const doc = (await this.dbPrompts.get(promptTitle)) as CustomPrompt;
-              if (doc.prompt) {
+              const prompt = await promptProcessor.getPrompt(promptTitle);
+              if (prompt) {
                 new AddPromptModal(
                   this.app,
-                  (title: string, newPrompt: string) => {
-                    this.dbPrompts.put({
-                      ...doc,
-                      prompt: newPrompt,
-                    });
+                  async (title: string, newPrompt: string) => {
+                    await promptProcessor.updatePrompt(title, newPrompt);
                     new Notice(`Prompt "${title}" has been updated.`);
                   },
-                  doc._id,
-                  doc.prompt,
+                  prompt.title,
+                  prompt.content,
                   true
                 ).open();
               } else {
                 new Notice(`No prompt found with the title "${promptTitle}".`);
               }
             } catch (err) {
-              if (err.name === "not_found") {
-                new Notice(`No prompt found with the title "${promptTitle}".`);
-              } else {
-                console.error(err);
-                new Notice("An error occurred.");
-              }
+              console.error(err);
+              new Notice("An error occurred.");
             }
           }).open();
         });
@@ -399,6 +382,15 @@ export default class CopilotPlugin extends Plugin {
       }
     }
 
+    // Temporary: Migrate Custom Prompts from PouchDB to Markdown files.
+    this.addCommand({
+      id: "dump-custom-prompts-to-markdown",
+      name: "Dump custom prompts to markdown files",
+      callback: async () => {
+        await this.dumpCustomPrompts();
+      },
+    });
+
     this.registerEvent(this.app.workspace.on("editor-menu", this.handleContextMenu));
   }
 
@@ -408,6 +400,33 @@ export default class CopilotPlugin extends Plugin {
       if (chatView && chatView.sharedState.chatHistory.length > 0) {
         await chatView.saveChat();
       }
+    }
+  }
+
+  async dumpCustomPrompts(): Promise<void> {
+    const folder = this.settings.customPromptsFolder || DEFAULT_SETTINGS.customPromptsFolder;
+
+    try {
+      // Ensure the folder exists
+      if (!(await this.app.vault.adapter.exists(folder))) {
+        await this.app.vault.createFolder(folder);
+      }
+
+      // Fetch all prompts
+      const response = await this.dbPrompts.allDocs({ include_docs: true });
+
+      for (const row of response.rows) {
+        const doc = row.doc as CustomPromptDB;
+        if (doc && doc._id && doc.prompt) {
+          const fileName = `${folder}/${doc._id}.md`;
+          await this.app.vault.create(fileName, doc.prompt);
+        }
+      }
+
+      new Notice(`Custom prompts dumped to ${folder} folder`);
+    } catch (error) {
+      console.error("Error dumping custom prompts:", error);
+      new Notice("Error dumping custom prompts. Check console for details.");
     }
   }
 
@@ -683,11 +702,6 @@ export default class CopilotPlugin extends Plugin {
     this.mergeAllActiveModelsWithExisting();
 
     await this.saveData(this.settings);
-  }
-
-  async fetchPromptTitles(): Promise<string[]> {
-    const response = await this.dbPrompts.allDocs({ include_docs: true });
-    return response.rows.map((row) => (row.doc as CustomPrompt)?._id).filter(Boolean) as string[];
   }
 
   async countTotalTokens(): Promise<number> {
