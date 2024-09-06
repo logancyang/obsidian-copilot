@@ -531,7 +531,7 @@ ${chatContent}`;
     []
   );
 
-  const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
+  const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault, settings);
   useEffect(
     createEffect(
       "applyCustomPrompt",

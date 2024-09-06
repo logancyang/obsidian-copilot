@@ -1,3 +1,4 @@
+import { CopilotSettings } from "@/settings/SettingsPage";
 import {
   getFileContent,
   getFileName,
@@ -5,26 +6,83 @@ import {
   getNotesFromTags,
   processVariableNameForNotePath,
 } from "@/utils";
-import { Notice, Vault } from "obsidian";
+import { Notice, TFile, Vault } from "obsidian";
 
-export interface CustomPrompt {
+// TODO: To be deprecated once PouchDB is removed
+export interface CustomPromptDB {
   _id: string;
   _rev?: string;
   prompt: string;
 }
 
+export interface CustomPrompt {
+  title: string;
+  content: string;
+}
+
 export class CustomPromptProcessor {
   private vault: Vault;
+  private settings: CopilotSettings;
   private static instance: CustomPromptProcessor | null = null;
-  private constructor(vault: Vault) {
+
+  private constructor(vault: Vault, settings: CopilotSettings) {
     this.vault = vault;
+    this.settings = settings;
   }
 
-  public static getInstance(vault: Vault): CustomPromptProcessor {
+  public static getInstance(vault: Vault, settings: CopilotSettings): CustomPromptProcessor {
     if (!CustomPromptProcessor.instance) {
-      CustomPromptProcessor.instance = new CustomPromptProcessor(vault);
+      CustomPromptProcessor.instance = new CustomPromptProcessor(vault, settings);
     }
     return CustomPromptProcessor.instance;
+  }
+
+  async getAllPrompts(): Promise<CustomPrompt[]> {
+    const folder = this.settings.customPromptsFolder;
+    const files = this.vault
+      .getFiles()
+      .filter((file) => file.path.startsWith(folder) && file.extension === "md");
+
+    const prompts: CustomPrompt[] = [];
+    for (const file of files) {
+      const content = await this.vault.read(file);
+      prompts.push({
+        title: file.basename,
+        content: content,
+      });
+    }
+    return prompts;
+  }
+
+  async getPrompt(title: string): Promise<CustomPrompt | null> {
+    const filePath = `${this.settings.customPromptsFolder}/${title}.md`;
+    const file = this.vault.getAbstractFileByPath(filePath);
+    if (file instanceof TFile) {
+      const content = await this.vault.read(file);
+      return { title, content };
+    }
+    return null;
+  }
+
+  async savePrompt(title: string, content: string): Promise<void> {
+    const filePath = `${this.settings.customPromptsFolder}/${title}.md`;
+    await this.vault.create(filePath, content);
+  }
+
+  async updatePrompt(title: string, content: string): Promise<void> {
+    const filePath = `${this.settings.customPromptsFolder}/${title}.md`;
+    const file = this.vault.getAbstractFileByPath(filePath);
+    if (file instanceof TFile) {
+      await this.vault.modify(file, content);
+    }
+  }
+
+  async deletePrompt(title: string): Promise<void> {
+    const filePath = `${this.settings.customPromptsFolder}/${title}.md`;
+    const file = this.vault.getAbstractFileByPath(filePath);
+    if (file instanceof TFile) {
+      await this.vault.delete(file);
+    }
   }
 
   /**
