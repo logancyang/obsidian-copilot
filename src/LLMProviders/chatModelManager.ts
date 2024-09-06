@@ -4,6 +4,7 @@ import EncryptionService from "@/encryptionService";
 import { ChatAnthropicWrapped, ProxyChatOpenAI } from "@/langchainWrappers";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatGroq } from "@langchain/groq";
+import { ChatOllama } from "@langchain/ollama";
 import { BaseChatModel } from "langchain/chat_models/base";
 import { ChatOpenAI } from "langchain/chat_models/openai";
 import { Notice } from "obsidian";
@@ -17,7 +18,8 @@ export default class ChatModelManager {
     string,
     {
       hasApiKey: boolean;
-      AIConstructor: new (config: ModelConfig) => BaseChatModel;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      AIConstructor: new (config: any) => BaseChatModel;
       vendor: string;
     }
   >;
@@ -91,8 +93,9 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.OLLAMA]: {
         modelName: customModel.name,
-        openAIApiKey: customModel.apiKey || "default-key",
-        openAIProxyBaseUrl: customModel.baseUrl || "http://localhost:11434/v1",
+        apiKey: customModel.apiKey || "default-key",
+        // MUST NOT use /v1 in the baseUrl for ollama
+        baseUrl: customModel.baseUrl || "http://localhost:11434",
       },
       [ChatModelProviders.LM_STUDIO]: {
         modelName: customModel.name,
@@ -147,7 +150,7 @@ export default class ChatModelManager {
             apiKey = model.apiKey || this.getLangChainParams().openRouterAiApiKey;
             break;
           case ChatModelProviders.OLLAMA:
-            constructor = ProxyChatOpenAI;
+            constructor = ChatOllama;
             apiKey = model.apiKey || "default-key";
             break;
           case ChatModelProviders.LM_STUDIO:
@@ -170,7 +173,8 @@ export default class ChatModelManager {
         const modelKey = `${model.name}|${model.provider}`;
         modelMap[modelKey] = {
           hasApiKey: Boolean(model.apiKey || apiKey),
-          AIConstructor: constructor,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          AIConstructor: constructor as any,
           vendor: model.provider,
         };
       }
