@@ -55,7 +55,7 @@ Try to be descriptive in your branch names and pull requests. Happy coding!
 
 ## Getting Help
 
-- **Discord**: [Join](https://discord.gg/CYDvNtGHkQ) the server for Copilot dev discussions.
+- **Discord**: [Join](https://discord.gg/bFtfKDQqZt) the server for Copilot dev discussions.
 - **Email**: logan@brevilabs.com
 
 Thank you for contributing to Copilot for Obsidian!
