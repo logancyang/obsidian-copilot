@@ -6,7 +6,7 @@ import {
   getNotesFromTags,
   processVariableNameForNotePath,
 } from "@/utils";
-import { Notice, TFile, Vault } from "obsidian";
+import { normalizePath, Notice, TFile, Vault } from "obsidian";
 
 // TODO: To be deprecated once PouchDB is removed
 export interface CustomPromptDB {
@@ -65,7 +65,16 @@ export class CustomPromptProcessor {
   }
 
   async savePrompt(title: string, content: string): Promise<void> {
-    const filePath = `${this.settings.customPromptsFolder}/${title}.md`;
+    const folderPath = normalizePath(this.settings.customPromptsFolder);
+    const filePath = `${folderPath}/${title}.md`;
+
+    // Check if the folder exists and create it if it doesn't
+    const folderExists = await this.vault.adapter.exists(folderPath);
+    if (!folderExists) {
+      await this.vault.createFolder(folderPath);
+    }
+
+    // Create the file
     await this.vault.create(filePath, content);
   }
 
