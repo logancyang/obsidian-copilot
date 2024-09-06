@@ -98,8 +98,6 @@ export enum EmbeddingModels {
   OPENAI_EMBEDDING_LARGE = "text-embedding-3-large",
   AZURE_OPENAI = "azure-openai",
   COHEREAI_EMBED_MULTILINGUAL_LIGHT_V3_0 = "embed-multilingual-light-v3.0",
-  OLLAMA_NOMIC_EMBED_TEXT = "nomic-embed-text",
-  OLLAMA_MXBAI_EMBED_LARGE = "mxbai-embed-large",
 }
 
 export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
@@ -127,20 +125,6 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
   {
     name: EmbeddingModels.AZURE_OPENAI,
     provider: EmbeddingModelProviders.AZURE_OPENAI,
-    enabled: true,
-    isBuiltIn: true,
-    isEmbeddingModel: true,
-  },
-  {
-    name: EmbeddingModels.OLLAMA_NOMIC_EMBED_TEXT,
-    provider: EmbeddingModelProviders.OLLAMA,
-    enabled: true,
-    isBuiltIn: true,
-    isEmbeddingModel: true,
-  },
-  {
-    name: EmbeddingModels.OLLAMA_MXBAI_EMBED_LARGE,
-    provider: EmbeddingModelProviders.OLLAMA,
     enabled: true,
     isBuiltIn: true,
     isEmbeddingModel: true,

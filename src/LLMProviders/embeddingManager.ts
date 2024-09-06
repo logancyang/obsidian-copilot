@@ -155,6 +155,7 @@ export default class EmbeddingManager {
         timeout: 10000,
       },
       [EmbeddingModelProviders.COHEREAI]: {
+        model: modelName,
         apiKey: decrypt(params.cohereApiKey),
       },
       [EmbeddingModelProviders.AZURE_OPENAI]: {
