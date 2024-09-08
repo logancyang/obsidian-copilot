@@ -2,13 +2,9 @@ import { CustomModel } from "@/aiParams";
 import { EmbeddingModelProviders, VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
 import { useSettingsContext } from "@/settings/contexts/SettingsContext";
 import React from "react";
-import ApiSetting from "./ApiSetting";
-import Collapsible from "./Collapsible";
 import { DropdownComponent, ModelSettingsComponent, SliderComponent } from "./SettingBlocks";
 
 interface QASettingsProps {
-  cohereApiKey: string;
-  setCohereApiKey: (value: string) => void;
   huggingfaceApiKey: string;
   setHuggingfaceApiKey: (value: string) => void;
   indexVaultToVectorStore: string;
@@ -18,8 +14,6 @@ interface QASettingsProps {
 }
 
 const QASettings: React.FC<QASettingsProps> = ({
-  cohereApiKey,
-  setCohereApiKey,
   indexVaultToVectorStore,
   setIndexVaultToVectorStore,
   maxSourceChunks,
@@ -135,21 +129,6 @@ const QASettings: React.FC<QASettingsProps> = ({
           setMaxSourceChunks(value);
         }}
       />
-      <br />
-      <Collapsible title="Cohere API Settings">
-        <ApiSetting
-          title="Cohere API Key"
-          value={cohereApiKey}
-          setValue={setCohereApiKey}
-          placeholder="Enter Cohere API Key"
-        />
-        <p>
-          Get your free Cohere API key{" "}
-          <a href="https://dashboard.cohere.ai/api-keys" target="_blank" rel="noreferrer">
-            here
-          </a>
-        </p>
-      </Collapsible>
     </div>
   );
 };
