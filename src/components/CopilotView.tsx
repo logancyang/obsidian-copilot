@@ -96,4 +96,9 @@ export default class CopilotView extends ItemView {
       this.root.unmount();
     }
   }
+
+  updateView(): void {
+    // Force a re-render of the React component
+    this.onOpen();
+  }
 }

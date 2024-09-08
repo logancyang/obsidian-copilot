@@ -808,7 +808,17 @@ export default class CopilotPlugin extends Plugin {
     const messages = this.parseChatContent(content);
     this.sharedState.clearChatHistory();
     messages.forEach((message) => this.sharedState.addMessage(message));
-    this.activateView();
+
+    // Check if the Copilot view is already active
+    const existingView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0];
+    if (!existingView) {
+      // Only activate the view if it's not already open
+      this.activateView();
+    } else {
+      // If the view is already open, just update its content
+      const copilotView = existingView.view as CopilotView;
+      copilotView.updateView();
+    }
   }
 
   parseChatContent(content: string): ChatMessage[] {
