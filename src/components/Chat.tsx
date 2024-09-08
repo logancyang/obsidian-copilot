@@ -136,7 +136,7 @@ const Chat: React.FC<ChatProps> = ({
     }
   };
 
-  const handleSaveAsNote = async () => {
+  const handleSaveAsNote = async (openNote = false) => {
     if (!app) {
       console.error("App instance is not available.");
       return;
@@ -190,8 +190,10 @@ modelKey: ${currentModelKey}
 ${chatContent}`;
 
       const newNote: TFile = await app.vault.create(noteFileName, noteContentWithTimestamp);
-      const leaf = app.workspace.getLeaf();
-      leaf.openFile(newNote);
+      if (openNote) {
+        const leaf = app.workspace.getLeaf();
+        leaf.openFile(newNote);
+      }
       new Notice(`Chat saved as note in folder: ${defaultSaveFolder}.`);
     } catch (error) {
       console.error("Error saving chat as note:", error);
@@ -607,15 +609,15 @@ ${chatContent}`;
           setCurrentModelKey={setModelKey}
           currentChain={currentChain}
           setCurrentChain={setChain}
-          onNewChat={async () => {
+          onNewChat={async (openNote: boolean) => {
             if (settings.autosaveChat && chatHistory.length > 0) {
-              await handleSaveAsNote();
+              await handleSaveAsNote(openNote);
             }
             clearMessages();
             clearChatMemory();
             clearCurrentAiMessage();
           }}
-          onSaveAsNote={handleSaveAsNote}
+          onSaveAsNote={() => handleSaveAsNote(true)}
           onSendActiveNoteToPrompt={handleSendActiveNoteToPrompt}
           onForceRebuildActiveNoteContext={forceRebuildActiveNoteContext}
           onRefreshVaultContext={refreshVaultContext}
