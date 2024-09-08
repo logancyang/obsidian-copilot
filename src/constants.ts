@@ -16,6 +16,8 @@ export enum ChatModels {
   AZURE_OPENAI = "azure-openai",
   CLAUDE_3_5_SONNET = "claude-3-5-sonnet-20240620",
   CLAUDE_3_HAIKU = "claude-3-haiku-20240307",
+  COMMAND_R = "command-r",
+  COMMAND_R_PLUS = "command-r-plus",
 }
 
 // Model Providers
@@ -23,6 +25,7 @@ export enum ChatModelProviders {
   OPENAI = "openai",
   AZURE_OPENAI = "azure openai",
   ANTHROPIC = "anthropic",
+  COHEREAI = "cohereai",
   GOOGLE = "google",
   OPENROUTERAI = "openrouterai",
   GROQ = "groq",
@@ -59,6 +62,18 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.CLAUDE_3_5_SONNET,
     provider: ChatModelProviders.ANTHROPIC,
+    enabled: true,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.COMMAND_R,
+    provider: ChatModelProviders.COHEREAI,
+    enabled: true,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.COMMAND_R_PLUS,
+    provider: ChatModelProviders.COHEREAI,
     enabled: true,
     isBuiltIn: true,
   },

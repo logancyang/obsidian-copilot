@@ -12,6 +12,7 @@ export interface ModelConfig {
   openAIApiKey?: string;
   openAIOrgId?: string;
   anthropicApiKey?: string;
+  cohereApiKey?: string;
   azureOpenAIApiKey?: string;
   azureOpenAIApiInstanceName?: string;
   azureOpenAIApiDeploymentName?: string;
