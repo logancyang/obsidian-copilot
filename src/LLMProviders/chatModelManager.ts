@@ -2,6 +2,7 @@ import { CustomModel, LangChainParams, ModelConfig } from "@/aiParams";
 import { BUILTIN_CHAT_MODELS, ChatModelProviders } from "@/constants";
 import EncryptionService from "@/encryptionService";
 import { ChatAnthropicWrapped, ProxyChatOpenAI } from "@/langchainWrappers";
+import { ChatCohere } from "@langchain/cohere";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatGroq } from "@langchain/groq";
 import { ChatOllama } from "@langchain/ollama";
@@ -78,6 +79,10 @@ export default class ChatModelManager {
         azureOpenAIApiDeploymentName: params.azureOpenAIApiDeploymentName,
         azureOpenAIApiVersion: params.azureOpenAIApiVersion,
       },
+      [ChatModelProviders.COHEREAI]: {
+        apiKey: decrypt(customModel.apiKey || params.cohereApiKey),
+        model: customModel.name,
+      },
       [ChatModelProviders.GOOGLE]: {
         apiKey: decrypt(customModel.apiKey || params.googleApiKey),
         modelName: customModel.name,
@@ -145,6 +150,10 @@ export default class ChatModelManager {
           case ChatModelProviders.ANTHROPIC:
             constructor = ChatAnthropicWrapped;
             apiKey = model.apiKey || this.getLangChainParams().anthropicApiKey;
+            break;
+          case ChatModelProviders.COHEREAI:
+            constructor = ChatCohere;
+            apiKey = model.apiKey || this.getLangChainParams().cohereApiKey;
             break;
           case ChatModelProviders.OPENROUTERAI:
             constructor = ProxyChatOpenAI;
