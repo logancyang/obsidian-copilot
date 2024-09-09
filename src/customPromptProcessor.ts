@@ -23,16 +23,14 @@ export interface CustomPrompt {
 }
 
 export class CustomPromptProcessor {
-  private vault: Vault;
-  private settings: CopilotSettings;
-  private static instance: CustomPromptProcessor | null = null;
+  private static instance: CustomPromptProcessor;
 
-  private constructor(vault: Vault, settings: CopilotSettings) {
-    this.vault = vault;
-    this.settings = settings;
-  }
+  private constructor(
+    private vault: Vault,
+    private settings: CopilotSettings
+  ) {}
 
-  public static getInstance(vault: Vault, settings: CopilotSettings): CustomPromptProcessor {
+  static getInstance(vault: Vault, settings: CopilotSettings): CustomPromptProcessor {
     if (!CustomPromptProcessor.instance) {
       CustomPromptProcessor.instance = new CustomPromptProcessor(vault, settings);
     }
@@ -102,7 +100,10 @@ export class CustomPromptProcessor {
    * @param {CustomPrompt} doc - the custom prompt to process
    * @return {Promise<string[]>} the processed custom prompt
    */
-  async extractVariablesFromPrompt(customPrompt: string): Promise<string[]> {
+  public async extractVariablesFromPrompt(
+    customPrompt: string,
+    activeNote?: TFile
+  ): Promise<string[]> {
     const variablesWithContent: string[] = [];
     const variableRegex = /\{([^}]+)\}/g;
     let match;
@@ -111,7 +112,16 @@ export class CustomPromptProcessor {
       const variableName = match[1].trim();
       const notes = [];
 
-      if (variableName.startsWith("#")) {
+      if (variableName.toLowerCase() === "activenote") {
+        if (activeNote) {
+          const content = await getFileContent(activeNote, this.vault);
+          if (content) {
+            notes.push({ name: getFileName(activeNote), content });
+          }
+        } else {
+          new Notice("No active note found.");
+        }
+      } else if (variableName.startsWith("#")) {
         // Handle tag-based variable for multiple tags
         const tagNames = variableName
           .slice(1)
@@ -145,8 +155,12 @@ export class CustomPromptProcessor {
     return variablesWithContent;
   }
 
-  async processCustomPrompt(customPrompt: string, selectedText: string): Promise<string> {
-    const variablesWithContent = await this.extractVariablesFromPrompt(customPrompt);
+  async processCustomPrompt(
+    customPrompt: string,
+    selectedText: string,
+    activeNote?: TFile
+  ): Promise<string> {
+    const variablesWithContent = await this.extractVariablesFromPrompt(customPrompt, activeNote);
     let processedPrompt = customPrompt;
     const matches = [...processedPrompt.matchAll(/\{([^}]+)\}/g)];
 

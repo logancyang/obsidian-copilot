@@ -82,7 +82,11 @@ const Chat: React.FC<ChatProps> = ({
     if (!inputMessage) return;
 
     const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault, settings);
-    const processedUserMessage = await customPromptProcessor.processCustomPrompt(inputMessage, "");
+    const processedUserMessage = await customPromptProcessor.processCustomPrompt(
+      inputMessage,
+      "",
+      app.workspace.getActiveFile() as TFile | undefined
+    );
 
     const userMessage: ChatMessage = {
       message: inputMessage,
@@ -528,7 +532,11 @@ ${chatContent}`;
         if (!customPrompt) {
           return selectedText;
         }
-        return await customPromptProcessor.processCustomPrompt(customPrompt, selectedText);
+        return await customPromptProcessor.processCustomPrompt(
+          customPrompt,
+          selectedText,
+          app.workspace.getActiveFile() as TFile | undefined
+        );
       },
       { isVisible: debug, ignoreSystemMessage: true, custom_temperature: 0.1 }
     ),
@@ -542,7 +550,11 @@ ${chatContent}`;
         if (!customPrompt) {
           return selectedText;
         }
-        return await customPromptProcessor.processCustomPrompt(customPrompt, selectedText);
+        return await customPromptProcessor.processCustomPrompt(
+          customPrompt,
+          selectedText,
+          app.workspace.getActiveFile() as TFile | undefined
+        );
       },
       { isVisible: debug, ignoreSystemMessage: true, custom_temperature: 0.1 }
     ),

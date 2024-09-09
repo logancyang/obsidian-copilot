@@ -1,24 +1,46 @@
 import { CustomPrompt, CustomPromptProcessor } from "@/customPromptProcessor";
 import { CopilotSettings } from "@/settings/SettingsPage";
-import { extractNoteTitles, getFileContent, getNoteFileFromTitle } from "@/utils";
-import { TFile } from "obsidian";
+import { extractNoteTitles, getFileContent, getNoteFileFromTitle, getNotesFromPath } from "@/utils";
+import { Notice, TFile, Vault } from "obsidian";
+
+// Mock Obsidian
+jest.mock("obsidian", () => ({
+  Notice: jest.fn(),
+  TFile: jest.fn(),
+  Vault: jest.fn(),
+}));
 
 // Mock the utility functions
 jest.mock("@/utils", () => ({
   extractNoteTitles: jest.fn().mockReturnValue([]),
   getNoteFileFromTitle: jest.fn(),
   getFileContent: jest.fn(),
+  getFileName: jest.fn(),
+  getNotesFromPath: jest.fn(),
+  getNotesFromTags: jest.fn(),
+  processVariableNameForNotePath: jest.fn(),
 }));
 
 describe("CustomPromptProcessor", () => {
   let processor: CustomPromptProcessor;
+  let mockVault: Vault;
+  let mockSettings: CopilotSettings;
+  let mockActiveNote: TFile;
 
   beforeEach(() => {
     // Reset mocks before each test
     jest.clearAllMocks();
 
+    // Create mock objects
+    mockVault = {} as Vault;
+    mockSettings = {} as CopilotSettings;
+    mockActiveNote = {
+      path: "path/to/active/note.md",
+      basename: "Active Note",
+    } as TFile;
+
     // Create an instance of CustomPromptProcessor with mocked dependencies
-    processor = CustomPromptProcessor.getInstance({} as any, {} as CopilotSettings);
+    processor = CustomPromptProcessor.getInstance(mockVault, mockSettings);
   });
 
   it("should add 1 context and selectedText", async () => {
@@ -28,12 +50,11 @@ describe("CustomPromptProcessor", () => {
     };
     const selectedText = "here is some selected text 12345";
 
-    // Mock the extractVariablesFromPrompt method to return predefined content
-    jest
-      .spyOn(processor, "extractVariablesFromPrompt")
-      .mockResolvedValue(["here is the note content for note0"]);
+    // Mock getFileContent to return content for {variable}
+    (getFileContent as jest.Mock).mockResolvedValueOnce("here is the note content for note0");
+    (getNotesFromPath as jest.Mock).mockResolvedValueOnce([mockActiveNote]);
 
-    const result = await processor.processCustomPrompt(doc.content, selectedText);
+    const result = await processor.processCustomPrompt(doc.content, selectedText, mockActiveNote);
 
     expect(result).toContain("This is a {variable} and {selectedText}.");
     expect(result).toContain("here is some selected text 12345");
@@ -43,18 +64,21 @@ describe("CustomPromptProcessor", () => {
   it("should add 2 context and no selectedText", async () => {
     const doc: CustomPrompt = {
       title: "test-prompt",
-      content: "This is a {variable} and {var2}.",
+      content: "This is a {variable1} and {variable2}.",
     };
-    const selectedText = "here is some selected text 12345";
+    const selectedText = "";
 
-    // Mock the extractVariablesFromPrompt method to return predefined content
-    jest
-      .spyOn(processor, "extractVariablesFromPrompt")
-      .mockResolvedValue(["here is the note content for note0", "note content for note1"]);
+    // Mock getFileContent to return content for {variable1} and {variable2}
+    (getFileContent as jest.Mock)
+      .mockResolvedValueOnce("here is the note content for note0")
+      .mockResolvedValueOnce("note content for note1");
 
-    const result = await processor.processCustomPrompt(doc.content, selectedText);
+    // Mock getNotesFromPath to return an array with a single mock file
+    (getNotesFromPath as jest.Mock).mockResolvedValue([mockActiveNote]);
 
-    expect(result).toContain("This is a {variable} and {var2}.");
+    const result = await processor.processCustomPrompt(doc.content, selectedText, mockActiveNote);
+
+    expect(result).toContain("This is a {variable1} and {variable2}.");
     expect(result).toContain("here is the note content for note0");
     expect(result).toContain("note content for note1");
   });
@@ -66,38 +90,42 @@ describe("CustomPromptProcessor", () => {
     };
     const selectedText = "here is some selected text 12345";
 
-    // Mock the extractVariablesFromPrompt method to return predefined content
-    jest
-      .spyOn(processor, "extractVariablesFromPrompt")
-      .mockResolvedValue(["here is the note content for note0", "note content for note1"]);
-
-    const result = await processor.processCustomPrompt(doc.content, selectedText);
+    const result = await processor.processCustomPrompt(doc.content, selectedText, mockActiveNote);
 
     expect(result).toContain("Rewrite the following text {selectedText}");
     expect(result).toContain("here is some selected text 12345");
-    expect(result).not.toContain("here is the note content for note0");
-    expect(result).not.toContain("note content for note1");
   });
 
-  // This is not an expected use case but it's possible
-  it("should add 2 selectedText and no context", async () => {
+  it("should process {activeNote} correctly", async () => {
     const doc: CustomPrompt = {
       title: "test-prompt",
-      content: "Rewrite the following text {} and {}",
+      content: "This is the active note: {activenote}",
     };
-    const selectedText = "here is some selected text 12345";
+    const selectedText = "";
 
-    // Mock the extractVariablesFromPrompt method to return predefined content
-    jest
-      .spyOn(processor, "extractVariablesFromPrompt")
-      .mockResolvedValue(["here is the note content for note0", "note content for note1"]);
+    // Mock the getFileContent function to return a predefined content for the active note
+    (getFileContent as jest.Mock).mockResolvedValue("Content of the active note");
 
-    const result = await processor.processCustomPrompt(doc.content, selectedText);
+    const result = await processor.processCustomPrompt(doc.content, selectedText, mockActiveNote);
 
-    expect(result).toContain("Rewrite the following text {selectedText} and {selectedText}");
-    expect(result).toContain("here is some selected text 12345");
-    expect(result).not.toContain("here is the note content for note0");
-    expect(result).not.toContain("note content for note1");
+    expect(result).toContain("This is the active note: {activenote}");
+    expect(result).toContain("Content of the active note");
+    expect(getFileContent).toHaveBeenCalledWith(mockActiveNote, mockVault);
+  });
+
+  it("should handle {activeNote} when no active note is provided", async () => {
+    const doc: CustomPrompt = {
+      title: "test-prompt",
+      content: "This is the active note: {activeNote}",
+    };
+    const selectedText = "";
+
+    const result = await processor.processCustomPrompt(doc.content, selectedText, undefined);
+
+    expect(result).toContain("This is the active note: {activeNote}");
+    expect(result).not.toContain("Content of the active note");
+    expect(getFileContent).not.toHaveBeenCalled();
+    expect(Notice).toHaveBeenCalledWith("No active note found.");
   });
 
   it("should handle prompts without variables", async () => {
@@ -107,10 +135,7 @@ describe("CustomPromptProcessor", () => {
     };
     const selectedText = "selected text";
 
-    // Mock the extractVariablesFromPrompt method to return an empty array
-    jest.spyOn(processor, "extractVariablesFromPrompt").mockResolvedValue([]);
-
-    const result = await processor.processCustomPrompt(doc.content, selectedText);
+    const result = await processor.processCustomPrompt(doc.content, selectedText, mockActiveNote);
 
     expect(result).toBe("This is a test prompt with no variables.\n\n");
   });
@@ -124,7 +149,7 @@ describe("CustomPromptProcessor", () => {
       .spyOn(processor, "extractVariablesFromPrompt")
       .mockResolvedValue(['[{"name":"note","content":"Note content for #tag"}]']);
 
-    const result = await processor.processCustomPrompt(customPrompt, selectedText);
+    const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
 
     expect(result).toContain("Notes related to {#tag} are:");
     expect(result).toContain('[{"name":"note","content":"Note content for #tag"}]');
@@ -141,7 +166,7 @@ describe("CustomPromptProcessor", () => {
         '[{"name":"note1","content":"Note content for #tag1"},{"name":"note2","content":"Note content for #tag2"}]',
       ]);
 
-    const result = await processor.processCustomPrompt(customPrompt, selectedText);
+    const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
 
     expect(result).toContain("Notes related to {#tag1,#tag2,#tag3} are:");
     expect(result).toContain(
@@ -154,12 +179,11 @@ describe("CustomPromptProcessor", () => {
     const selectedText = "";
 
     // Mock the necessary functions
-    jest.spyOn(processor, "extractVariablesFromPrompt").mockResolvedValue([]);
     (extractNoteTitles as jest.Mock).mockReturnValue(["Test Note"]);
     (getNoteFileFromTitle as jest.Mock).mockResolvedValue({} as TFile);
     (getFileContent as jest.Mock).mockResolvedValue("Test note content");
 
-    const result = await processor.processCustomPrompt(customPrompt, selectedText);
+    const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
 
     expect(result).toContain("Content of [[Test Note]] is important.");
     expect(result).toContain("[[Test Note]]:\n\nTest note content");
@@ -175,7 +199,7 @@ describe("CustomPromptProcessor", () => {
       .mockResolvedValue([JSON.stringify([{ name: "Test Note", content: "Test note content" }])]);
     (extractNoteTitles as jest.Mock).mockReturnValue(["Test Note"]);
 
-    const result = await processor.processCustomPrompt(customPrompt, selectedText);
+    const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
 
     expect(result).toContain("Content of {[[Test Note]]} is important.");
     expect(result).toContain(
@@ -202,7 +226,7 @@ describe("CustomPromptProcessor", () => {
     (getNoteFileFromTitle as jest.Mock).mockResolvedValue({} as TFile);
     (getFileContent as jest.Mock).mockResolvedValue("Note2 content");
 
-    const result = await processor.processCustomPrompt(customPrompt, selectedText);
+    const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
 
     expect(result).toContain("{[[Note1]]} content and [[Note2]] are both important.");
     expect(result).toContain('[[Note1]]:\n\n[{"name":"Note1","content":"Note1 content"}]');
@@ -222,7 +246,6 @@ describe("CustomPromptProcessor", () => {
     const selectedText = "";
 
     // Mock the necessary functions
-    jest.spyOn(processor, "extractVariablesFromPrompt").mockResolvedValue([]);
     (extractNoteTitles as jest.Mock).mockReturnValue(["Note1", "Note2", "Note3"]);
     (getNoteFileFromTitle as jest.Mock).mockResolvedValue({} as TFile);
     (getFileContent as jest.Mock)
@@ -230,7 +253,7 @@ describe("CustomPromptProcessor", () => {
       .mockResolvedValueOnce("Note2 content")
       .mockResolvedValueOnce("Note3 content");
 
-    const result = await processor.processCustomPrompt(customPrompt, selectedText);
+    const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
 
     expect(result).toContain("[[Note1]] is related to [[Note2]] and [[Note3]].");
     expect(result).toContain("[[Note1]]:\n\nNote1 content");
@@ -243,13 +266,34 @@ describe("CustomPromptProcessor", () => {
     const selectedText = "";
 
     // Mock the necessary functions
-    jest.spyOn(processor, "extractVariablesFromPrompt").mockResolvedValue([]);
     (extractNoteTitles as jest.Mock).mockReturnValue(["Non-existent Note"]);
     (getNoteFileFromTitle as jest.Mock).mockResolvedValue(null);
 
-    const result = await processor.processCustomPrompt(customPrompt, selectedText);
+    const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
 
     expect(result).toContain("[[Non-existent Note]] should not cause errors.");
     expect(result).not.toContain("[[Non-existent Note]]:");
+  });
+
+  it("should process {activenote} only once when it appears multiple times", async () => {
+    const doc: CustomPrompt = {
+      title: "test-prompt",
+      content: "This is the active note: {activeNote}. And again: {activeNote}",
+    };
+    const selectedText = "";
+
+    // Mock the extractVariablesFromPrompt method to simulate processing of {activeNote}
+    jest
+      .spyOn(processor, "extractVariablesFromPrompt")
+      .mockResolvedValue([
+        JSON.stringify([{ name: "Active Note", content: "Content of the active note" }]),
+      ]);
+
+    const result = await processor.processCustomPrompt(doc.content, selectedText, mockActiveNote);
+
+    expect(result).toContain("This is the active note: {activeNote}. And again: {activeNote}");
+    expect(result).toContain("Content of the active note");
+    expect((result.match(/activeNote:/g) || []).length).toBe(1);
+    expect(processor.extractVariablesFromPrompt).toHaveBeenCalledTimes(1);
   });
 });
