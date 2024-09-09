@@ -1,7 +1,9 @@
 import { CopilotSettings } from "@/settings/SettingsPage";
 import {
+  extractNoteTitles,
   getFileContent,
   getFileName,
+  getNoteFileFromTitle,
   getNotesFromPath,
   getNotesFromTags,
   processVariableNameForNotePath,
@@ -21,16 +23,14 @@ export interface CustomPrompt {
 }
 
 export class CustomPromptProcessor {
-  private vault: Vault;
-  private settings: CopilotSettings;
-  private static instance: CustomPromptProcessor | null = null;
+  private static instance: CustomPromptProcessor;
 
-  private constructor(vault: Vault, settings: CopilotSettings) {
-    this.vault = vault;
-    this.settings = settings;
-  }
+  private constructor(
+    private vault: Vault,
+    private settings: CopilotSettings
+  ) {}
 
-  public static getInstance(vault: Vault, settings: CopilotSettings): CustomPromptProcessor {
+  static getInstance(vault: Vault, settings: CopilotSettings): CustomPromptProcessor {
     if (!CustomPromptProcessor.instance) {
       CustomPromptProcessor.instance = new CustomPromptProcessor(vault, settings);
     }
@@ -100,7 +100,10 @@ export class CustomPromptProcessor {
    * @param {CustomPrompt} doc - the custom prompt to process
    * @return {Promise<string[]>} the processed custom prompt
    */
-  async extractVariablesFromPrompt(customPrompt: string): Promise<string[]> {
+  public async extractVariablesFromPrompt(
+    customPrompt: string,
+    activeNote?: TFile
+  ): Promise<string[]> {
     const variablesWithContent: string[] = [];
     const variableRegex = /\{([^}]+)\}/g;
     let match;
@@ -109,7 +112,16 @@ export class CustomPromptProcessor {
       const variableName = match[1].trim();
       const notes = [];
 
-      if (variableName.startsWith("#")) {
+      if (variableName.toLowerCase() === "activenote") {
+        if (activeNote) {
+          const content = await getFileContent(activeNote, this.vault);
+          if (content) {
+            notes.push({ name: getFileName(activeNote), content });
+          }
+        } else {
+          new Notice("No active note found.");
+        }
+      } else if (variableName.startsWith("#")) {
         // Handle tag-based variable for multiple tags
         const tagNames = variableName
           .slice(1)
@@ -143,22 +155,51 @@ export class CustomPromptProcessor {
     return variablesWithContent;
   }
 
-  async processCustomPrompt(customPrompt: string, selectedText: string): Promise<string> {
-    const variablesWithContent = await this.extractVariablesFromPrompt(customPrompt);
+  async processCustomPrompt(
+    customPrompt: string,
+    selectedText: string,
+    activeNote?: TFile
+  ): Promise<string> {
+    const variablesWithContent = await this.extractVariablesFromPrompt(customPrompt, activeNote);
     let processedPrompt = customPrompt;
     const matches = [...processedPrompt.matchAll(/\{([^}]+)\}/g)];
 
     let additionalInfo = "";
+    let activeNoteContent: string | null = null;
+
     if (processedPrompt.includes("{}")) {
-      // Replace {} with {selectedText}
       processedPrompt = processedPrompt.replace(/\{\}/g, "{selectedText}");
-      additionalInfo += `selectedText:\n\n ${selectedText}`;
+      if (selectedText) {
+        additionalInfo += `selectedText:\n\n ${selectedText}`;
+      } else if (activeNote) {
+        activeNoteContent = await getFileContent(activeNote, this.vault);
+        additionalInfo += `selectedText (entire active note):\n\n ${activeNoteContent}`;
+      } else {
+        additionalInfo += `selectedText:\n\n (No selected text or active note available)`;
+      }
     }
 
     for (let i = 0; i < variablesWithContent.length; i++) {
       if (matches[i]) {
         const varname = matches[i][1];
+        if (varname.toLowerCase() === "activenote" && activeNoteContent) {
+          // Skip adding activeNote content if it's already added as selectedText
+          continue;
+        }
         additionalInfo += `\n\n${varname}:\n\n${variablesWithContent[i]}`;
+      }
+    }
+
+    // Process [[note title]] syntax only for those not already processed
+    const noteTitles = extractNoteTitles(processedPrompt);
+    for (const noteTitle of noteTitles) {
+      // Check if this note title wasn't already processed in extractVariablesFromPrompt
+      if (!matches.some((match) => match[1].includes(`[[${noteTitle}]]`))) {
+        const noteFile = await getNoteFileFromTitle(this.vault, noteTitle);
+        if (noteFile) {
+          const noteContent = await getFileContent(noteFile, this.vault);
+          additionalInfo += `\n\n[[${noteTitle}]]:\n\n${noteContent}`;
+        }
       }
     }
 

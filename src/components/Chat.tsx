@@ -16,12 +16,10 @@ import {
   createTranslateSelectionPrompt,
   eli5SelectionPrompt,
   emojifyPrompt,
-  extractNoteTitles,
   fixGrammarSpellingSelectionPrompt,
   formatDateTime,
   getFileContent,
   getFileName,
-  getNoteFileFromTitle,
   getNotesFromPath,
   getNotesFromTags,
   getSendChatContextNotesPrompt,
@@ -83,19 +81,12 @@ const Chat: React.FC<ChatProps> = ({
   const handleSendMessage = async () => {
     if (!inputMessage) return;
 
-    let processedUserMessage = inputMessage;
-    // If in Chat mode and user input has [[note title]]'s, append the note content
-    // below the original user message
-    if (currentChain === ChainType.LLM_CHAIN) {
-      const noteTitles = extractNoteTitles(inputMessage);
-      for (const noteTitle of noteTitles) {
-        const noteFile = await getNoteFileFromTitle(app.vault, noteTitle);
-        if (noteFile) {
-          const noteContent = await getFileContent(noteFile, app.vault);
-          processedUserMessage = `${processedUserMessage}\n\n[[${noteTitle}]]: \n${noteContent}`;
-        }
-      }
-    }
+    const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault, settings);
+    const processedUserMessage = await customPromptProcessor.processCustomPrompt(
+      inputMessage,
+      "",
+      app.workspace.getActiveFile() as TFile | undefined
+    );
 
     const userMessage: ChatMessage = {
       message: inputMessage,
@@ -541,7 +532,11 @@ ${chatContent}`;
         if (!customPrompt) {
           return selectedText;
         }
-        return await customPromptProcessor.processCustomPrompt(customPrompt, selectedText);
+        return await customPromptProcessor.processCustomPrompt(
+          customPrompt,
+          selectedText,
+          app.workspace.getActiveFile() as TFile | undefined
+        );
       },
       { isVisible: debug, ignoreSystemMessage: true, custom_temperature: 0.1 }
     ),
@@ -555,7 +550,11 @@ ${chatContent}`;
         if (!customPrompt) {
           return selectedText;
         }
-        return await customPromptProcessor.processCustomPrompt(customPrompt, selectedText);
+        return await customPromptProcessor.processCustomPrompt(
+          customPrompt,
+          selectedText,
+          app.workspace.getActiveFile() as TFile | undefined
+        );
       },
       { isVisible: debug, ignoreSystemMessage: true, custom_temperature: 0.1 }
     ),
@@ -635,6 +634,8 @@ ${chatContent}`;
           getChatVisibility={getChatVisibility}
           isGenerating={loading}
           onStopGenerating={handleStopGenerating}
+          app={app}
+          settings={settings}
         />
       </div>
     </div>
