@@ -165,14 +165,27 @@ export class CustomPromptProcessor {
     const matches = [...processedPrompt.matchAll(/\{([^}]+)\}/g)];
 
     let additionalInfo = "";
+    let activeNoteContent: string | null = null;
+
     if (processedPrompt.includes("{}")) {
       processedPrompt = processedPrompt.replace(/\{\}/g, "{selectedText}");
-      additionalInfo += `selectedText:\n\n ${selectedText}`;
+      if (selectedText) {
+        additionalInfo += `selectedText:\n\n ${selectedText}`;
+      } else if (activeNote) {
+        activeNoteContent = await getFileContent(activeNote, this.vault);
+        additionalInfo += `selectedText (entire active note):\n\n ${activeNoteContent}`;
+      } else {
+        additionalInfo += `selectedText:\n\n (No selected text or active note available)`;
+      }
     }
 
     for (let i = 0; i < variablesWithContent.length; i++) {
       if (matches[i]) {
         const varname = matches[i][1];
+        if (varname.toLowerCase() === "activenote" && activeNoteContent) {
+          // Skip adding activeNote content if it's already added as selectedText
+          continue;
+        }
         additionalInfo += `\n\n${varname}:\n\n${variablesWithContent[i]}`;
       }
     }

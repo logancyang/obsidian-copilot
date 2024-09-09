@@ -296,4 +296,71 @@ describe("CustomPromptProcessor", () => {
     expect((result.match(/activeNote:/g) || []).length).toBe(1);
     expect(processor.extractVariablesFromPrompt).toHaveBeenCalledTimes(1);
   });
+
+  it("should use active note content when {} is present and no selected text", async () => {
+    const doc: CustomPrompt = {
+      title: "test-prompt",
+      content: "Summarize this: {}",
+    };
+    const selectedText = "";
+
+    (getFileContent as jest.Mock).mockResolvedValue("Content of the active note");
+
+    const result = await processor.processCustomPrompt(doc.content, selectedText, mockActiveNote);
+
+    expect(result).toContain("Summarize this: {selectedText}");
+    expect(result).toContain("selectedText (entire active note):\n\n Content of the active note");
+    expect(getFileContent).toHaveBeenCalledWith(mockActiveNote, mockVault);
+  });
+
+  it("should not duplicate active note content when both {} and {activeNote} are present", async () => {
+    const doc: CustomPrompt = {
+      title: "test-prompt",
+      content: "Summarize this: {}. Additional info: {activeNote}",
+    };
+    const selectedText = "";
+
+    (getFileContent as jest.Mock).mockResolvedValue("Content of the active note");
+    jest
+      .spyOn(processor, "extractVariablesFromPrompt")
+      .mockResolvedValue([
+        JSON.stringify([{ name: "Active Note", content: "Content of the active note" }]),
+      ]);
+
+    const result = await processor.processCustomPrompt(doc.content, selectedText, mockActiveNote);
+
+    expect(result).toContain("Summarize this: {selectedText}. Additional info: {activeNote}");
+    expect(result).toContain("selectedText (entire active note):\n\n Content of the active note");
+    expect(result).not.toContain("activeNote:");
+    expect((result.match(/Content of the active note/g) || []).length).toBe(1);
+  });
+
+  it("should handle {} when no active note or selected text is available", async () => {
+    const doc: CustomPrompt = {
+      title: "test-prompt",
+      content: "Process this: {}",
+    };
+    const selectedText = "";
+
+    const result = await processor.processCustomPrompt(doc.content, selectedText, undefined);
+
+    expect(result).toContain("Process this: {selectedText}");
+    expect(result).toContain("selectedText:\n\n (No selected text or active note available)");
+  });
+
+  it("should prioritize selected text over active note when both are available", async () => {
+    const doc: CustomPrompt = {
+      title: "test-prompt",
+      content: "Analyze this: {}",
+    };
+    const selectedText = "This is the selected text";
+
+    (getFileContent as jest.Mock).mockResolvedValue("Content of the active note");
+
+    const result = await processor.processCustomPrompt(doc.content, selectedText, mockActiveNote);
+
+    expect(result).toContain("Analyze this: {selectedText}");
+    expect(result).toContain("selectedText:\n\n This is the selected text");
+    expect(result).not.toContain("Content of the active note");
+  });
 });
