@@ -60,7 +60,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     isBuiltIn: true,
   },
   {
-    name: ChatModels.CLAUDE_3_5_SONNET,
+    name: ChatModels.CLAUDE_3_HAIKU,
     provider: ChatModelProviders.ANTHROPIC,
     enabled: true,
     isBuiltIn: true,
