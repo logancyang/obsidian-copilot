@@ -41,7 +41,23 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
     const updatedActiveModels = settings.activeModels.filter(
       (model) => !(model.name === modelName && model.provider === provider)
     );
-    updateSettings({ activeModels: updatedActiveModels });
+
+    // Check if the deleted model was the default model
+    let newDefaultModelKey = settings.defaultModelKey;
+    if (modelKey === settings.defaultModelKey) {
+      const newDefaultModel = updatedActiveModels.find((model) => model.enabled);
+      if (newDefaultModel) {
+        newDefaultModelKey = `${newDefaultModel.name}|${newDefaultModel.provider}`;
+      } else {
+        newDefaultModelKey = "";
+      }
+    }
+
+    // Update both activeModels and defaultModelKey in a single operation
+    updateSettings({
+      activeModels: updatedActiveModels,
+      defaultModelKey: newDefaultModelKey,
+    });
   };
 
   return (
