@@ -1,7 +1,9 @@
 import { CopilotSettings } from "@/settings/SettingsPage";
 import {
+  extractNoteTitles,
   getFileContent,
   getFileName,
+  getNoteFileFromTitle,
   getNotesFromPath,
   getNotesFromTags,
   processVariableNameForNotePath,
@@ -150,7 +152,6 @@ export class CustomPromptProcessor {
 
     let additionalInfo = "";
     if (processedPrompt.includes("{}")) {
-      // Replace {} with {selectedText}
       processedPrompt = processedPrompt.replace(/\{\}/g, "{selectedText}");
       additionalInfo += `selectedText:\n\n ${selectedText}`;
     }
@@ -159,6 +160,19 @@ export class CustomPromptProcessor {
       if (matches[i]) {
         const varname = matches[i][1];
         additionalInfo += `\n\n${varname}:\n\n${variablesWithContent[i]}`;
+      }
+    }
+
+    // Process [[note title]] syntax only for those not already processed
+    const noteTitles = extractNoteTitles(processedPrompt);
+    for (const noteTitle of noteTitles) {
+      // Check if this note title wasn't already processed in extractVariablesFromPrompt
+      if (!matches.some((match) => match[1].includes(`[[${noteTitle}]]`))) {
+        const noteFile = await getNoteFileFromTitle(this.vault, noteTitle);
+        if (noteFile) {
+          const noteContent = await getFileContent(noteFile, this.vault);
+          additionalInfo += `\n\n[[${noteTitle}]]:\n\n${noteContent}`;
+        }
       }
     }
 

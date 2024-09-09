@@ -16,12 +16,10 @@ import {
   createTranslateSelectionPrompt,
   eli5SelectionPrompt,
   emojifyPrompt,
-  extractNoteTitles,
   fixGrammarSpellingSelectionPrompt,
   formatDateTime,
   getFileContent,
   getFileName,
-  getNoteFileFromTitle,
   getNotesFromPath,
   getNotesFromTags,
   getSendChatContextNotesPrompt,
@@ -83,19 +81,8 @@ const Chat: React.FC<ChatProps> = ({
   const handleSendMessage = async () => {
     if (!inputMessage) return;
 
-    let processedUserMessage = inputMessage;
-    // If in Chat mode and user input has [[note title]]'s, append the note content
-    // below the original user message
-    if (currentChain === ChainType.LLM_CHAIN) {
-      const noteTitles = extractNoteTitles(inputMessage);
-      for (const noteTitle of noteTitles) {
-        const noteFile = await getNoteFileFromTitle(app.vault, noteTitle);
-        if (noteFile) {
-          const noteContent = await getFileContent(noteFile, app.vault);
-          processedUserMessage = `${processedUserMessage}\n\n[[${noteTitle}]]: \n${noteContent}`;
-        }
-      }
-    }
+    const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault, settings);
+    const processedUserMessage = await customPromptProcessor.processCustomPrompt(inputMessage, "");
 
     const userMessage: ChatMessage = {
       message: inputMessage,

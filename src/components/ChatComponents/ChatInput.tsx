@@ -75,9 +75,12 @@ const ChatInput: React.FC<ChatInputProps> = ({
     const lineHeight = 20;
     const maxHeight = 200;
     const minRows = 1;
+    const charactersPerRow = 40;
 
+    const newlineRows = text.split("\n").length;
+    const characterRows = Math.ceil(text.length / charactersPerRow);
     const rowsNeeded = Math.min(
-      Math.max(text.split("\n").length, minRows),
+      Math.max(newlineRows, characterRows, minRows),
       Math.floor(maxHeight / lineHeight)
     );
     setRows(rowsNeeded);
