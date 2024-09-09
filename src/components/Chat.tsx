@@ -635,6 +635,8 @@ ${chatContent}`;
           getChatVisibility={getChatVisibility}
           isGenerating={loading}
           onStopGenerating={handleStopGenerating}
+          app={app}
+          settings={settings}
         />
       </div>
     </div>
