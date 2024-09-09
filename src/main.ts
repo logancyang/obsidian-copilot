@@ -561,12 +561,14 @@ export default class CopilotPlugin extends Plugin {
   }
 
   initActiveLeafChangeHandler() {
-    this.app.workspace.on("active-leaf-change", (leaf) => {
-      if (!leaf) {
-        return;
-      }
-      this.processChatIsVisible(leaf.getViewState().type === CHAT_VIEWTYPE);
-    });
+    this.registerEvent(
+      this.app.workspace.on("active-leaf-change", (leaf) => {
+        if (!leaf) {
+          return;
+        }
+        this.processChatIsVisible(leaf.getViewState().type === CHAT_VIEWTYPE);
+      })
+    );
   }
 
   private getCurrentEditorOrDummy(): Editor {

@@ -39,7 +39,7 @@ import {
   tocPrompt,
 } from "@/utils";
 import { Notice, TFile } from "obsidian";
-import React, { useCallback, useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 
 interface CreateEffectOptions {
   custom_temperature?: number;
@@ -75,17 +75,16 @@ const Chat: React.FC<ChatProps> = ({
   const [loading, setLoading] = useState(false);
   const [chatIsVisible, setChatIsVisible] = useState(false);
 
-  const visibleCallback = useCallback(() => {
-    emitter.addEventListener(
-      EVENT_NAMES.CHAT_IS_VISIBLE,
-      (evt: CustomEvent<{ chatIsVisible: boolean }>) => {
-        setChatIsVisible(evt.detail.chatIsVisible);
-      }
-    );
-  }, []);
-
   useEffect(() => {
-    visibleCallback();
+    const handleChatVisibility = (evt: CustomEvent<{ chatIsVisible: boolean }>) => {
+      setChatIsVisible(evt.detail.chatIsVisible);
+    };
+    emitter.addEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
+
+    // Cleanup function
+    return () => {
+      emitter.removeEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
+    };
   }, []);
 
   const app = plugin.app || useContext(AppContext);
