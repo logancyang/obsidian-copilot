@@ -74,6 +74,9 @@ export default class CopilotView extends ItemView {
             emitter={this.emitter}
             getChatVisibility={this.getChatVisibility}
             defaultSaveFolder={this.defaultSaveFolder}
+            updateUserMessageHistory={(newMessage) => {
+              this.plugin.updateUserMessageHistory(newMessage);
+            }}
             plugin={this.plugin}
             debug={this.debug}
             onSaveChat={(saveFunction) => {

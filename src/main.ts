@@ -56,6 +56,7 @@ export default class CopilotPlugin extends Plugin {
   dbVectorStores: PouchDB.Database<VectorStoreDocument>;
   embeddingsManager: EmbeddingsManager;
   encryptionService: EncryptionService;
+  userMessageHistory: string[] = [];
 
   isChatVisible = () => this.chatIsVisible;
 
@@ -392,6 +393,10 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.registerEvent(this.app.workspace.on("editor-menu", this.handleContextMenu));
+  }
+
+  updateUserMessageHistory(newMessage: string) {
+    this.userMessageHistory = [...this.userMessageHistory, newMessage];
   }
 
   async autosaveCurrentChat() {
