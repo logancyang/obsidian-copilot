@@ -53,6 +53,7 @@ interface ChatProps {
   getChatVisibility: () => Promise<boolean>;
   defaultSaveFolder: string;
   onSaveChat: (saveAsNote: () => Promise<void>) => void;
+  updateUserMessageHistory: (newMessage: string) => void;
   plugin: CopilotPlugin;
   debug: boolean;
 }
@@ -65,6 +66,7 @@ const Chat: React.FC<ChatProps> = ({
   getChatVisibility,
   defaultSaveFolder,
   onSaveChat,
+  updateUserMessageHistory,
   plugin,
   debug,
 }) => {
@@ -75,6 +77,7 @@ const Chat: React.FC<ChatProps> = ({
   const [inputMessage, setInputMessage] = useState("");
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [loading, setLoading] = useState(false);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
   const app = plugin.app || useContext(AppContext);
 
@@ -103,6 +106,11 @@ const Chat: React.FC<ChatProps> = ({
     // Add user message to chat history
     addMessage(userMessage);
     addMessage(promptMessageHidden);
+
+    // Add to user message history
+    updateUserMessageHistory(inputMessage);
+    setHistoryIndex(-1);
+
     // Clear input
     setInputMessage("");
 
@@ -119,12 +127,16 @@ const Chat: React.FC<ChatProps> = ({
     setLoading(false);
   };
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.nativeEvent.isComposing) return;
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault(); // Prevents adding a newline to the textarea
-      handleSendMessage();
+  const navigateHistory = (direction: "up" | "down"): string => {
+    const history = plugin.userMessageHistory;
+    if (direction === "up" && historyIndex < history.length - 1) {
+      setHistoryIndex(historyIndex + 1);
+      return history[history.length - 1 - historyIndex - 1];
+    } else if (direction === "down" && historyIndex > -1) {
+      setHistoryIndex(historyIndex - 1);
+      return historyIndex === 0 ? "" : history[history.length - 1 - historyIndex + 1];
     }
+    return inputMessage;
   };
 
   const handleSaveAsNote = async (openNote = false) => {
@@ -630,12 +642,12 @@ ${chatContent}`;
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}
           handleSendMessage={handleSendMessage}
-          handleKeyDown={handleKeyDown}
           getChatVisibility={getChatVisibility}
           isGenerating={loading}
           onStopGenerating={handleStopGenerating}
           app={app}
           settings={settings}
+          navigateHistory={navigateHistory}
         />
       </div>
     </div>

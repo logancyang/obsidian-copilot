@@ -9,28 +9,30 @@ import React, { useEffect, useRef, useState } from "react";
 interface ChatInputProps {
   inputMessage: string;
   setInputMessage: (message: string) => void;
-  handleKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   handleSendMessage: () => void;
   getChatVisibility: () => Promise<boolean>;
   isGenerating: boolean;
   onStopGenerating: () => void;
   app: App;
   settings: CopilotSettings;
+  navigateHistory: (direction: "up" | "down") => string;
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
   inputMessage,
   setInputMessage,
-  handleKeyDown,
   handleSendMessage,
   getChatVisibility,
   isGenerating,
   onStopGenerating,
   app,
   settings,
+  navigateHistory,
 }) => {
   const [rows, setRows] = useState(1);
   const [shouldFocus, setShouldFocus] = useState(false);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [tempInput, setTempInput] = useState("");
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleInputChange = async (event: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -101,6 +103,68 @@ const ChatInput: React.FC<ChatInputProps> = ({
       textAreaRef.current.focus();
     }
   }, [shouldFocus]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing) return;
+
+    const textarea = textAreaRef.current;
+    if (!textarea) return;
+
+    const { selectionStart, value } = textarea;
+    const lines = value.split("\n");
+    const currentLineIndex = value.substring(0, selectionStart).split("\n").length - 1;
+
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+      setHistoryIndex(-1);
+      setTempInput("");
+    } else if (e.key === "ArrowUp") {
+      if (currentLineIndex > 0) {
+        // Normal cursor movement within multi-line input
+        return;
+      }
+      e.preventDefault();
+      if (historyIndex === -1 && value.trim() !== "") {
+        setTempInput(value);
+      }
+      const newMessage = navigateHistory("up");
+      if (newMessage !== inputMessage) {
+        setHistoryIndex(historyIndex + 1);
+        setInputMessage(newMessage);
+        updateRows(newMessage);
+        // Set cursor to beginning of input after update
+        setTimeout(() => {
+          if (textarea) {
+            textarea.selectionStart = textarea.selectionEnd = 0;
+          }
+        }, 0);
+      }
+    } else if (e.key === "ArrowDown") {
+      if (currentLineIndex < lines.length - 1) {
+        // Normal cursor movement within multi-line input
+        return;
+      }
+      e.preventDefault();
+      if (historyIndex > -1) {
+        const newMessage = navigateHistory("down");
+        setHistoryIndex(historyIndex - 1);
+        if (historyIndex === 0) {
+          setInputMessage(tempInput);
+          updateRows(tempInput);
+        } else {
+          setInputMessage(newMessage);
+          updateRows(newMessage);
+        }
+        // Set cursor to beginning of input after update
+        setTimeout(() => {
+          if (textarea) {
+            textarea.selectionStart = textarea.selectionEnd = 0;
+          }
+        }, 0);
+      }
+    }
+  };
 
   return (
     <div className="chat-input-container">
