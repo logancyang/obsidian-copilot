@@ -224,16 +224,35 @@ export default class CopilotPlugin extends Plugin {
               if (doc.prompt) {
                 new AddPromptModal(
                   this.app,
-                  (title: string, newPrompt: string) => {
-                    this.dbPrompts.put({
-                      ...doc,
+                  async (title: string, newPrompt: string) => {
+                    try {
+                      const originDoc = (await this.dbPrompts.get(title)) as CustomPrompt;
+
+                      if (title !== promptTitle && !!originDoc) {
+                        new Notice(
+                          "Error saving custom prompt. Please check if the title already exists."
+                        );
+                        return;
+                      }
+                    } catch (err) {
+                      if (err.name === "not_found") {
+                        /* empty */
+                      } else {
+                        console.error(err);
+                        new Notice("An error occurred.");
+                      }
+                    }
+                    // First delete, then insert at the end.
+                    await this.dbPrompts.remove(doc as PouchDB.Core.RemoveDocument);
+                    await this.dbPrompts.put({
+                      _id: title,
                       prompt: newPrompt,
                     });
                     new Notice(`Prompt "${title}" has been updated.`);
                   },
                   doc._id,
                   doc.prompt,
-                  true
+                  false
                 ).open();
               } else {
                 new Notice(`No prompt found with the title "${promptTitle}".`);
