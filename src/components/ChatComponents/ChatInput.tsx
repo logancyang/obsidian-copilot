@@ -34,6 +34,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [tempInput, setTempInput] = useState("");
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  const [charactersPerRow, setCharactersPerRow] = useState(40);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const handleInputChange = async (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     const inputValue = event.target.value;
@@ -77,10 +79,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
     const lineHeight = 20;
     const maxHeight = 200;
     const minRows = 1;
-    const charactersPerRow = 40;
+    const characterRows = Math.ceil(text.length / charactersPerRow);
 
     const newlineRows = text.split("\n").length;
-    const characterRows = Math.ceil(text.length / charactersPerRow);
     const rowsNeeded = Math.min(
       Math.max(newlineRows, characterRows, minRows),
       Math.floor(maxHeight / lineHeight)
@@ -88,7 +89,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
     setRows(rowsNeeded);
   };
 
-  // Effect hook to get the chat visibility
   useEffect(() => {
     const fetchChatVisibility = async () => {
       const visibility = await getChatVisibility();
@@ -97,7 +97,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
     fetchChatVisibility();
   }, [getChatVisibility]);
 
-  // This effect will run every time the shouldFocus state is updated
   useEffect(() => {
     if (textAreaRef.current && shouldFocus) {
       textAreaRef.current.focus();
@@ -120,8 +119,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
       setHistoryIndex(-1);
       setTempInput("");
     } else if (e.key === "ArrowUp") {
-      if (currentLineIndex > 0) {
-        // Normal cursor movement within multi-line input
+      if (currentLineIndex > 0 || selectionStart > 0) {
+        // Allow normal cursor movement within multi-line input
         return;
       }
       e.preventDefault();
@@ -141,8 +140,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
         }, 0);
       }
     } else if (e.key === "ArrowDown") {
-      if (currentLineIndex < lines.length - 1) {
-        // Normal cursor movement within multi-line input
+      if (currentLineIndex < lines.length - 1 || selectionStart < value.length) {
+        // Allow normal cursor movement within multi-line input
         return;
       }
       e.preventDefault();
@@ -166,8 +165,27 @@ const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
+  useEffect(() => {
+    const calculateCharactersPerRow = () => {
+      if (containerRef.current) {
+        const containerWidth = containerRef.current.clientWidth;
+        const fontSize = parseFloat(getComputedStyle(containerRef.current).fontSize);
+        const averageCharWidth = fontSize * 0.6; // Approximate average character width
+        const newCharactersPerRow = Math.floor(containerWidth / averageCharWidth);
+        setCharactersPerRow(newCharactersPerRow);
+      }
+    };
+
+    calculateCharactersPerRow();
+    window.addEventListener("resize", calculateCharactersPerRow);
+
+    return () => {
+      window.removeEventListener("resize", calculateCharactersPerRow);
+    };
+  }, []);
+
   return (
-    <div className="chat-input-container">
+    <div className="chat-input-container" ref={containerRef}>
       <textarea
         ref={textAreaRef}
         className="chat-input-textarea"
