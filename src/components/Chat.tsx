@@ -4,7 +4,7 @@ import { ChainType } from "@/chainFactory";
 import ChatIcons from "@/components/ChatComponents/ChatIcons";
 import ChatInput from "@/components/ChatComponents/ChatInput";
 import ChatMessages from "@/components/ChatComponents/ChatMessages";
-import { AI_SENDER, USER_SENDER } from "@/constants";
+import { AI_SENDER, EVENT_NAMES, USER_SENDER } from "@/constants";
 import { AppContext } from "@/context";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { getAIResponse } from "@/langchainStream";
@@ -50,7 +50,6 @@ interface ChatProps {
   settings: CopilotSettings;
   chainManager: ChainManager;
   emitter: EventTarget;
-  getChatVisibility: () => Promise<boolean>;
   defaultSaveFolder: string;
   onSaveChat: (saveAsNote: () => Promise<void>) => void;
   updateUserMessageHistory: (newMessage: string) => void;
@@ -63,7 +62,6 @@ const Chat: React.FC<ChatProps> = ({
   settings,
   chainManager,
   emitter,
-  getChatVisibility,
   defaultSaveFolder,
   onSaveChat,
   updateUserMessageHistory,
@@ -78,6 +76,19 @@ const Chat: React.FC<ChatProps> = ({
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [loading, setLoading] = useState(false);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [chatIsVisible, setChatIsVisible] = useState(false);
+
+  useEffect(() => {
+    const handleChatVisibility = (evt: CustomEvent<{ chatIsVisible: boolean }>) => {
+      setChatIsVisible(evt.detail.chatIsVisible);
+    };
+    emitter.addEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
+
+    // Cleanup function
+    return () => {
+      emitter.removeEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
+    };
+  }, []);
 
   const app = plugin.app || useContext(AppContext);
 
@@ -642,12 +653,12 @@ ${chatContent}`;
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}
           handleSendMessage={handleSendMessage}
-          getChatVisibility={getChatVisibility}
           isGenerating={loading}
           onStopGenerating={handleStopGenerating}
           app={app}
           settings={settings}
           navigateHistory={navigateHistory}
+          chatIsVisible={chatIsVisible}
         />
       </div>
     </div>

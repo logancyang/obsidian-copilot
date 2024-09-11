@@ -18,6 +18,7 @@ import {
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
   USER_SENDER,
+  EVENT_NAMES,
   VAULT_VECTOR_STORE_STRATEGY,
 } from "@/constants";
 import { CustomPrompt, CustomPromptDB, CustomPromptProcessor } from "@/customPromptProcessor";
@@ -92,6 +93,8 @@ export default class CopilotPlugin extends Plugin {
     this.dbPrompts = new PouchDB<CustomPrompt>("copilot_custom_prompts");
 
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
+
+    this.initActiveLeafChangeHandler();
 
     this.addCommand({
       id: "chat-toggle-window",
@@ -591,6 +594,36 @@ export default class CopilotPlugin extends Plugin {
     this.processText(editor, eventType, eventSubtype);
   }
 
+  processChatIsVisible(chatIsVisible: boolean) {
+    if (this.chatIsVisible === chatIsVisible) {
+      return;
+    }
+
+    this.chatIsVisible = chatIsVisible;
+
+    const activeCopilotView = this.app.workspace
+      .getLeavesOfType(CHAT_VIEWTYPE)
+      .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
+
+    if (activeCopilotView) {
+      const event = new CustomEvent(EVENT_NAMES.CHAT_IS_VISIBLE, {
+        detail: { chatIsVisible: this.chatIsVisible },
+      });
+      activeCopilotView.emitter.dispatchEvent(event);
+    }
+  }
+
+  initActiveLeafChangeHandler() {
+    this.registerEvent(
+      this.app.workspace.on("active-leaf-change", (leaf) => {
+        if (!leaf) {
+          return;
+        }
+        this.processChatIsVisible(leaf.getViewState().type === CHAT_VIEWTYPE);
+      })
+    );
+  }
+
   private getCurrentEditorOrDummy(): Editor {
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
     return {
@@ -623,12 +656,12 @@ export default class CopilotPlugin extends Plugin {
     });
     await this.activateViewPromise;
     this.app.workspace.revealLeaf(this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]);
-    this.chatIsVisible = true;
+    this.processChatIsVisible(true);
   }
 
   async deactivateView() {
     this.app.workspace.detachLeavesOfType(CHAT_VIEWTYPE);
-    this.chatIsVisible = false;
+    this.processChatIsVisible(false);
   }
 
   async toggleViewNoteArea() {
@@ -644,7 +677,7 @@ export default class CopilotPlugin extends Plugin {
     });
     await this.activateViewPromise;
     this.app.workspace.revealLeaf(this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]);
-    this.chatIsVisible = true;
+    this.processChatIsVisible(true);
   }
 
   async loadSettings() {

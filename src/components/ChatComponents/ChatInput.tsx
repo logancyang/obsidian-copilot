@@ -10,8 +10,8 @@ interface ChatInputProps {
   inputMessage: string;
   setInputMessage: (message: string) => void;
   handleSendMessage: () => void;
-  getChatVisibility: () => Promise<boolean>;
   isGenerating: boolean;
+  chatIsVisible: boolean;
   onStopGenerating: () => void;
   app: App;
   settings: CopilotSettings;
@@ -22,12 +22,12 @@ const ChatInput: React.FC<ChatInputProps> = ({
   inputMessage,
   setInputMessage,
   handleSendMessage,
-  getChatVisibility,
   isGenerating,
   onStopGenerating,
   app,
   settings,
   navigateHistory,
+  chatIsVisible,
 }) => {
   const [rows, setRows] = useState(1);
   const [shouldFocus, setShouldFocus] = useState(false);
@@ -90,12 +90,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   useEffect(() => {
-    const fetchChatVisibility = async () => {
-      const visibility = await getChatVisibility();
-      setShouldFocus(visibility);
-    };
-    fetchChatVisibility();
-  }, [getChatVisibility]);
+    setShouldFocus(chatIsVisible);
+  }, [chatIsVisible]);
 
   useEffect(() => {
     if (textAreaRef.current && shouldFocus) {

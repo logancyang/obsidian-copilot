@@ -31,7 +31,6 @@ export default class CopilotView extends ItemView {
     this.chainManager = plugin.chainManager;
     this.debug = plugin.settings.debug;
     this.emitter = new EventTarget();
-    this.getChatVisibility = this.getChatVisibility.bind(this);
     this.userSystemPrompt = plugin.settings.userSystemPrompt;
     this.plugin = plugin;
     this.defaultSaveFolder = plugin.settings.defaultSaveFolder;
@@ -55,13 +54,6 @@ export default class CopilotView extends ItemView {
     return "Copilot";
   }
 
-  async getChatVisibility() {
-    if (this.plugin.activateViewPromise) {
-      await this.plugin.activateViewPromise;
-    }
-    return this.plugin.isChatVisible();
-  }
-
   async onOpen(): Promise<void> {
     const root = createRoot(this.containerEl.children[1]);
     root.render(
@@ -72,7 +64,6 @@ export default class CopilotView extends ItemView {
             settings={this.settings}
             chainManager={this.chainManager}
             emitter={this.emitter}
-            getChatVisibility={this.getChatVisibility}
             defaultSaveFolder={this.defaultSaveFolder}
             updateUserMessageHistory={(newMessage) => {
               this.plugin.updateUserMessageHistory(newMessage);
