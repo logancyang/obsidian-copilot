@@ -50,10 +50,10 @@ const SettingsMain: React.FC<{ plugin: CopilotPlugin; reloadPlugin: () => Promis
           updateSettings({ azureOpenAIApiEmbeddingDeploymentName: value })
         }
         setGroqApiKey={(value) => updateSettings({ groqApiKey: value })}
+        setCohereApiKey={(value) => updateSettings({ cohereApiKey: value })}
       />
       <QASettings
         {...settings}
-        setCohereApiKey={(value) => updateSettings({ cohereApiKey: value })}
         setHuggingfaceApiKey={(value) => updateSettings({ huggingfaceApiKey: value })}
         setIndexVaultToVectorStore={(value) => updateSettings({ indexVaultToVectorStore: value })}
         setMaxSourceChunks={(value) => updateSettings({ maxSourceChunks: value })}

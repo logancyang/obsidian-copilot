@@ -4,7 +4,7 @@ import { ChainType } from "@/chainFactory";
 import ChatIcons from "@/components/ChatComponents/ChatIcons";
 import ChatInput from "@/components/ChatComponents/ChatInput";
 import ChatMessages from "@/components/ChatComponents/ChatMessages";
-import { AI_SENDER, USER_SENDER } from "@/constants";
+import { AI_SENDER, EVENT_NAMES, USER_SENDER } from "@/constants";
 import { AppContext } from "@/context";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { getAIResponse } from "@/langchainStream";
@@ -16,12 +16,10 @@ import {
   createTranslateSelectionPrompt,
   eli5SelectionPrompt,
   emojifyPrompt,
-  extractNoteTitles,
   fixGrammarSpellingSelectionPrompt,
   formatDateTime,
   getFileContent,
   getFileName,
-  getNoteFileFromTitle,
   getNotesFromPath,
   getNotesFromTags,
   getSendChatContextNotesPrompt,
@@ -38,7 +36,7 @@ import {
   summarizePrompt,
   tocPrompt,
 } from "@/utils";
-import { Notice, TFile } from "obsidian";
+import { MarkdownView, Notice, TFile } from "obsidian";
 import React, { useContext, useEffect, useState } from "react";
 
 interface CreateEffectOptions {
@@ -52,8 +50,9 @@ interface ChatProps {
   settings: CopilotSettings;
   chainManager: ChainManager;
   emitter: EventTarget;
-  getChatVisibility: () => Promise<boolean>;
   defaultSaveFolder: string;
+  onSaveChat: (saveAsNote: () => Promise<void>) => void;
+  updateUserMessageHistory: (newMessage: string) => void;
   plugin: CopilotPlugin;
   debug: boolean;
 }
@@ -63,8 +62,9 @@ const Chat: React.FC<ChatProps> = ({
   settings,
   chainManager,
   emitter,
-  getChatVisibility,
   defaultSaveFolder,
+  onSaveChat,
+  updateUserMessageHistory,
   plugin,
   debug,
 }) => {
@@ -75,25 +75,32 @@ const Chat: React.FC<ChatProps> = ({
   const [inputMessage, setInputMessage] = useState("");
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [loading, setLoading] = useState(false);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [chatIsVisible, setChatIsVisible] = useState(false);
+
+  useEffect(() => {
+    const handleChatVisibility = (evt: CustomEvent<{ chatIsVisible: boolean }>) => {
+      setChatIsVisible(evt.detail.chatIsVisible);
+    };
+    emitter.addEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
+
+    // Cleanup function
+    return () => {
+      emitter.removeEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
+    };
+  }, []);
 
   const app = plugin.app || useContext(AppContext);
 
   const handleSendMessage = async () => {
     if (!inputMessage) return;
 
-    let processedUserMessage = inputMessage;
-    // If in Chat mode and user input has [[note title]]'s, append the note content
-    // below the original user message
-    if (currentChain === ChainType.LLM_CHAIN) {
-      const noteTitles = extractNoteTitles(inputMessage);
-      for (const noteTitle of noteTitles) {
-        const noteFile = await getNoteFileFromTitle(app.vault, noteTitle);
-        if (noteFile) {
-          const noteContent = await getFileContent(noteFile, app.vault);
-          processedUserMessage = `${processedUserMessage}\n\n[[${noteTitle}]]: \n${noteContent}`;
-        }
-      }
-    }
+    const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault, settings);
+    const processedUserMessage = await customPromptProcessor.processCustomPrompt(
+      inputMessage,
+      "",
+      app.workspace.getActiveFile() as TFile | undefined
+    );
 
     const userMessage: ChatMessage = {
       message: inputMessage,
@@ -110,6 +117,11 @@ const Chat: React.FC<ChatProps> = ({
     // Add user message to chat history
     addMessage(userMessage);
     addMessage(promptMessageHidden);
+
+    // Add to user message history
+    updateUserMessageHistory(inputMessage);
+    setHistoryIndex(-1);
+
     // Clear input
     setInputMessage("");
 
@@ -126,15 +138,19 @@ const Chat: React.FC<ChatProps> = ({
     setLoading(false);
   };
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.nativeEvent.isComposing) return;
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault(); // Prevents adding a newline to the textarea
-      handleSendMessage();
+  const navigateHistory = (direction: "up" | "down"): string => {
+    const history = plugin.userMessageHistory;
+    if (direction === "up" && historyIndex < history.length - 1) {
+      setHistoryIndex(historyIndex + 1);
+      return history[history.length - 1 - historyIndex - 1];
+    } else if (direction === "down" && historyIndex > -1) {
+      setHistoryIndex(historyIndex - 1);
+      return historyIndex === 0 ? "" : history[history.length - 1 - historyIndex + 1];
     }
+    return inputMessage;
   };
 
-  const handleSaveAsNote = async () => {
+  const handleSaveAsNote = async (openNote = false) => {
     if (!app) {
       console.error("App instance is not available.");
       return;
@@ -155,10 +171,44 @@ const Chat: React.FC<ChatProps> = ({
       }
 
       const now = new Date();
-      const noteFileName = `${defaultSaveFolder}/Chat-${formatDateTime(now)}.md`;
-      const newNote: TFile = await app.vault.create(noteFileName, chatContent);
-      const leaf = app.workspace.getLeaf();
-      leaf.openFile(newNote);
+      const { fileName: timestampFileName, epoch } = formatDateTime(now);
+
+      // Get the first user message
+      const firstUserMessage = chatHistory.find(
+        (message) => message.sender === USER_SENDER && message.isVisible
+      );
+
+      // Get the first 10 words from the first user message and sanitize them
+      const firstTenWords = firstUserMessage
+        ? firstUserMessage.message
+            .split(/\s+/)
+            .slice(0, 10)
+            .join(" ")
+            .replace(/[\\/:*?"<>|]/g, "") // Remove invalid filename characters
+            .trim()
+        : "Untitled Chat";
+
+      // Create the file name (limit to 100 characters to avoid excessively long names)
+      const sanitizedFileName = `${firstTenWords.slice(0, 100)}@${timestampFileName}`.replace(
+        /\s+/g,
+        "_"
+      );
+      const noteFileName = `${defaultSaveFolder}/${sanitizedFileName}.md`;
+
+      // Add the timestamp and model properties to the note content
+      const noteContentWithTimestamp = `---
+epoch: ${epoch}
+modelKey: ${currentModelKey}
+---
+
+${chatContent}`;
+
+      const newNote: TFile = await app.vault.create(noteFileName, noteContentWithTimestamp);
+      if (openNote) {
+        const leaf = app.workspace.getLeaf();
+        leaf.openFile(newNote);
+      }
+      new Notice(`Chat saved as note in folder: ${defaultSaveFolder}.`);
     } catch (error) {
       console.error("Error saving chat as note:", error);
     }
@@ -308,6 +358,83 @@ const Chat: React.FC<ChatProps> = ({
     }
   };
 
+  const handleRegenerate = async (messageIndex: number) => {
+    const lastUserMessageIndex = messageIndex - 1;
+
+    if (lastUserMessageIndex < 0 || chatHistory[lastUserMessageIndex].sender !== USER_SENDER) {
+      new Notice("Cannot regenerate the first message or a user message.");
+      return;
+    }
+
+    // Get the last user message
+    const lastUserMessage = chatHistory[lastUserMessageIndex];
+
+    // Remove all messages after the AI message to regenerate
+    const newChatHistory = chatHistory.slice(0, messageIndex);
+    clearMessages();
+    newChatHistory.forEach(addMessage);
+
+    // Update the chain's memory with the new chat history
+    chainManager.memoryManager.clearChatMemory();
+    for (let i = 0; i < newChatHistory.length; i += 2) {
+      const userMsg = newChatHistory[i];
+      const aiMsg = newChatHistory[i + 1];
+      if (userMsg && aiMsg) {
+        await chainManager.memoryManager
+          .getMemory()
+          .saveContext({ input: userMsg.message }, { output: aiMsg.message });
+      }
+    }
+
+    setLoading(true);
+    try {
+      const regeneratedResponse = await chainManager.runChain(
+        lastUserMessage.message,
+        new AbortController(),
+        setCurrentAiMessage,
+        addMessage,
+        { debug }
+      );
+      if (regeneratedResponse && debug) {
+        console.log("Message regenerated successfully");
+      }
+    } catch (error) {
+      console.error("Error regenerating message:", error);
+      new Notice("Failed to regenerate message. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEdit = async (messageIndex: number, newMessage: string) => {
+    const oldMessage = chatHistory[messageIndex].message;
+
+    // Check if the message has actually changed
+    if (oldMessage === newMessage) {
+      return; // Exit the function if the message hasn't changed
+    }
+
+    const newChatHistory = [...chatHistory];
+    newChatHistory[messageIndex].message = newMessage;
+    clearMessages();
+    newChatHistory.forEach(addMessage);
+
+    // Update the chain's memory with the new chat history
+    chainManager.memoryManager.clearChatMemory();
+    for (let i = 0; i < newChatHistory.length; i += 2) {
+      const userMsg = newChatHistory[i];
+      const aiMsg = newChatHistory[i + 1];
+      if (userMsg && aiMsg) {
+        await chainManager.memoryManager
+          .getMemory()
+          .saveContext({ input: userMsg.message }, { output: aiMsg.message });
+      }
+    }
+
+    // Trigger regeneration of the AI message
+    handleRegenerate(messageIndex + 1);
+  };
+
   useEffect(() => {
     async function handleSelection(event: CustomEvent) {
       const wordCount = event.detail.selectedText.split(" ").length;
@@ -420,7 +547,7 @@ const Chat: React.FC<ChatProps> = ({
     []
   );
 
-  const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
+  const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault, settings);
   useEffect(
     createEffect(
       "applyCustomPrompt",
@@ -428,7 +555,11 @@ const Chat: React.FC<ChatProps> = ({
         if (!customPrompt) {
           return selectedText;
         }
-        return await customPromptProcessor.processCustomPrompt(customPrompt, selectedText);
+        return await customPromptProcessor.processCustomPrompt(
+          customPrompt,
+          selectedText,
+          app.workspace.getActiveFile() as TFile | undefined
+        );
       },
       { isVisible: debug, ignoreSystemMessage: true, custom_temperature: 0.1 }
     ),
@@ -442,12 +573,46 @@ const Chat: React.FC<ChatProps> = ({
         if (!customPrompt) {
           return selectedText;
         }
-        return await customPromptProcessor.processCustomPrompt(customPrompt, selectedText);
+        return await customPromptProcessor.processCustomPrompt(
+          customPrompt,
+          selectedText,
+          app.workspace.getActiveFile() as TFile | undefined
+        );
       },
       { isVisible: debug, ignoreSystemMessage: true, custom_temperature: 0.1 }
     ),
     []
   );
+
+  const handleInsertAtCursor = async (message: string) => {
+    let leaf = app.workspace.getMostRecentLeaf();
+    if (!leaf) {
+      new Notice("No active leaf found.");
+      return;
+    }
+
+    if (!(leaf.view instanceof MarkdownView)) {
+      leaf = app.workspace.getLeaf(false);
+      await leaf.setViewState({ type: "markdown", state: leaf.view.getState() });
+    }
+
+    if (!(leaf.view instanceof MarkdownView)) {
+      new Notice("Failed to open a markdown view.");
+      return;
+    }
+
+    const editor = leaf.view.editor;
+    const cursor = editor.getCursor();
+    editor.replaceRange(message, cursor);
+    new Notice("Message inserted into the active note.");
+  };
+
+  // Expose handleSaveAsNote to parent
+  useEffect(() => {
+    if (onSaveChat) {
+      onSaveChat(handleSaveAsNote);
+    }
+  }, [onSaveChat]);
 
   return (
     <div className="chat-container">
@@ -456,6 +621,9 @@ const Chat: React.FC<ChatProps> = ({
         currentAiMessage={currentAiMessage}
         loading={loading}
         app={app}
+        onInsertAtCursor={handleInsertAtCursor}
+        onRegenerate={handleRegenerate}
+        onEdit={handleEdit}
       />
       <div className="bottom-container">
         <ChatIcons
@@ -463,12 +631,15 @@ const Chat: React.FC<ChatProps> = ({
           setCurrentModelKey={setModelKey}
           currentChain={currentChain}
           setCurrentChain={setChain}
-          onNewChat={() => {
+          onNewChat={async (openNote: boolean) => {
+            if (settings.autosaveChat && chatHistory.length > 0) {
+              await handleSaveAsNote(openNote);
+            }
             clearMessages();
             clearChatMemory();
             clearCurrentAiMessage();
           }}
-          onSaveAsNote={handleSaveAsNote}
+          onSaveAsNote={() => handleSaveAsNote(true)}
           onSendActiveNoteToPrompt={handleSendActiveNoteToPrompt}
           onForceRebuildActiveNoteContext={forceRebuildActiveNoteContext}
           onRefreshVaultContext={refreshVaultContext}
@@ -482,10 +653,12 @@ const Chat: React.FC<ChatProps> = ({
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}
           handleSendMessage={handleSendMessage}
-          handleKeyDown={handleKeyDown}
-          getChatVisibility={getChatVisibility}
           isGenerating={loading}
           onStopGenerating={handleStopGenerating}
+          app={app}
+          settings={settings}
+          navigateHistory={navigateHistory}
+          chatIsVisible={chatIsVisible}
         />
       </div>
     </div>

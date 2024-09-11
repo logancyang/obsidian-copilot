@@ -25,6 +25,8 @@ interface ApiSettingsProps {
   setAzureOpenAIApiEmbeddingDeploymentName: (value: string) => void;
   groqApiKey: string;
   setGroqApiKey: (value: string) => void;
+  cohereApiKey: string;
+  setCohereApiKey: (value: string) => void;
 }
 
 const ApiSettings: React.FC<ApiSettingsProps> = ({
@@ -50,6 +52,8 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
   setAzureOpenAIApiEmbeddingDeploymentName,
   groqApiKey,
   setGroqApiKey,
+  cohereApiKey,
+  setCohereApiKey,
 }) => {
   return (
     <div>
@@ -233,6 +237,21 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
             Your API key is stored locally and is only used to make requests to Groq's services.
           </p>
         </div>
+      </Collapsible>
+
+      <Collapsible title="Cohere API Settings">
+        <ApiSetting
+          title="Cohere API Key"
+          value={cohereApiKey}
+          setValue={setCohereApiKey}
+          placeholder="Enter Cohere API Key"
+        />
+        <p>
+          Get your free Cohere API key{" "}
+          <a href="https://dashboard.cohere.ai/api-keys" target="_blank" rel="noreferrer">
+            here
+          </a>
+        </p>
       </Collapsible>
     </div>
   );

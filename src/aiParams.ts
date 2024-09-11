@@ -12,6 +12,7 @@ export interface ModelConfig {
   openAIApiKey?: string;
   openAIOrgId?: string;
   anthropicApiKey?: string;
+  cohereApiKey?: string;
   azureOpenAIApiKey?: string;
   azureOpenAIApiInstanceName?: string;
   azureOpenAIApiDeploymentName?: string;
@@ -19,9 +20,6 @@ export interface ModelConfig {
   // Google and TogetherAI API key share this property
   apiKey?: string;
   openAIProxyBaseUrl?: string;
-  // OllamaBaseUrl
-  baseUrl?: string;
-  lmStudioBaseUrl?: string;
   groqApiKey?: string;
   enableCors?: boolean;
 }
@@ -47,8 +45,6 @@ export interface LangChainParams {
   chatContextTurns: number;
   chainType: ChainType; // Default ChainType is set in main.ts getChainManagerParams
   options: SetChainOptions;
-  ollamaBaseUrl: string;
-  lmStudioBaseUrl: string;
   openAIProxyBaseUrl?: string;
   enableCors?: boolean;
   openAIProxyModelName?: string;

@@ -20,7 +20,7 @@ interface ChatIconsProps {
   setCurrentModelKey: (modelKey: string) => void;
   currentChain: ChainType;
   setCurrentChain: (chain: ChainType, options?: SetChainOptions) => void;
-  onNewChat: () => void;
+  onNewChat: (openNote: boolean) => void;
   onSaveAsNote: () => void;
   onSendActiveNoteToPrompt: () => void;
   onForceRebuildActiveNoteContext: () => void;
@@ -137,7 +137,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           <span className="tooltip-text">Model Selection</span>
         </div>
       </div>
-      <button className="chat-icon-button clickable-icon" onClick={onNewChat}>
+      <button className="chat-icon-button clickable-icon" onClick={() => onNewChat(false)}>
         <RefreshIcon className="icon-scaler" />
         <span className="tooltip-text">
           New Chat

@@ -17,12 +17,20 @@ If you enjoy Copilot for Obsidian, please consider [sponsoring this project](htt
 
 <a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
 
-SPECIAL THANKS TO OUR SPONSORS:
-@Arlorean, @dashinja, @emaynard, @scmarinelli, @borthwick
+SPECIAL THANKS TO OUR TOP SPONSORS:
+@pedramamini, @Arlorean, @dashinja, @gpythomas, @emaynard, @scmarinelli, @borthwick
 
 [Changelog](https://github.com/logancyang/obsidian-copilot/releases)
 
+#### Announcement 🚨
+
+We are migrating off of PouchDB for better Obsidian Sync and mobile support (starting from v2.6.3). Your existing custom prompts MUST be dumped to markdown using the command _"Copilot: Dump custom prompts to markdown files"_. After running it you should be able to use your Add/Edit/Apply/Delete custom prompts as usual.
+
+Please make sure you run it, or you will lose all your old prompts when PouchDB is removed!
+
 #### v2.6.0: MOBILE SUPPORT is here! 🎉🎉🎉
+
+<a href="https://youtu.be/l-x_QwSNghE" target="_blank"><img src="./images/thumbnail-260.png" width="700" /></a>
 
 - Huge thanks to our awesome [@gianluca-venturini](https://github.com/gianluca-venturini) for his incredible work on mobile support! Now you can use Copilot on your phone and tablet! 🎉🎉🎉
 - Complete rehaul of how models work in Copilot settings. Now you can add any model to your model picker provided its name, model provider, API key and base url! No more waiting for me to add new models!
@@ -136,8 +144,8 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 <details>
   <summary>"You do not have access to this model"</summary>
 
-- You need to have access to some of the models like GPT-4 or Azure ones to use them. If you don't, sign up on their waitlist!
-- A common misunderstanding I see is that some think they have access to GPT-4 API when they get ChatGPT Plus subscription. It was not always true. _You need to have access to GPT-4 API to use the GPT-4 model in this plugin_. Please check if you can successfully use your model in the OpenAI playground first https://platform.openai.com/playground?mode=chat. If not, you can apply for GPT-4 API access here https://openai.com/waitlist/gpt-4-api. Once you have access to the API, you can use GPT-4 with this plugin without the ChatGPT Plus subscription!
+- You need to **have access to the model APIs** to use them. Usually they require an API key and a payment method.
+- A common misunderstanding I see is that some think they have access to GPT-4 API when they get ChatGPT Plus subscription. It's not always true (depending on when you signed up). _You need to have access to GPT-4 API to use the model in this plugin_. Please check if you have payment available on your OpenAI account. Then check OpenAI playground if you can use that particular model https://platform.openai.com/playground?mode=chat. Again, API access and ChatGPT Plus are two different things! You can use the API without the ChatGPT Plus subscription.
 - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/3#issuecomment-1544583676
 </details>
 <details>
@@ -149,11 +157,6 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/51
 </details>
 <details>
-  <summary>Unresponsive QA when using Huggingface as the Embedding Provider</summary>
-
-- Huggingface Inference API is free to use. It can give errors such as 503 or 504 frequently at times because their server has issues. If it's an issue for you, please consider using OpenAI or CohereAI as the embedding provider. Just keep in mind that OpenAI costs more, especially with very long notes as context.
-</details>
-<details>
   <summary>"insufficient_quota"</summary>
 
 - It might be because you haven't set up payment for your OpenAI account, or you exceeded your max monthly limit. OpenAI has a cap on how much you can use their API, usually $120 for individual users.
@@ -162,7 +165,8 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 <details>
   <summary>"context_length_exceeded"</summary>
 
-- GPT-3.5 has a 4096 context token limit, GPT-4 has 8K (there is a 32K one available to the public soon per OpenAI). **So if you set a big token limit in your Copilot setting, you could get this error.** Note that the prompts behind the scenes for Copilot commands can also take up tokens, so please limit your message length and max tokens to avoid this error. (For QA with Unlimited Context, use the "QA" mode in the dropdown! Requires Copilot v2.1.0.)
+- Please refer to the model provider's documentation for the context window size. **Note: if you set a big max token limit in your Copilot setting, you could get this error**. Max token refers to completion tokens, not input tokens. So a bigger max output token limit means a smaller input token limit!
+- The prompts behind the scenes for Copilot commands can also take up tokens, so please limit your message length and max tokens to avoid this error. (For QA with Unlimited Context, use the "QA" mode in the dropdown! Requires Copilot v2.1.0.)
 - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/1#issuecomment-1542934569
 </details>
 <details>
