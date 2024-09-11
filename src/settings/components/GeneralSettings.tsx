@@ -4,7 +4,12 @@ import EncryptionService from "@/encryptionService";
 import React from "react";
 import { useSettingsContext } from "../contexts/SettingsContext";
 import CommandToggleSettings from "./CommandToggleSettings";
-import { ModelSettingsComponent, SliderComponent, TextComponent } from "./SettingBlocks";
+import {
+  ModelSettingsComponent,
+  SliderComponent,
+  TextComponent,
+  ToggleComponent,
+} from "./SettingBlocks";
 
 interface GeneralSettingsProps {
   getLangChainParams: () => LangChainParams;
@@ -36,7 +41,23 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
     const updatedActiveModels = settings.activeModels.filter(
       (model) => !(model.name === modelName && model.provider === provider)
     );
-    updateSettings({ activeModels: updatedActiveModels });
+
+    // Check if the deleted model was the default model
+    let newDefaultModelKey = settings.defaultModelKey;
+    if (modelKey === settings.defaultModelKey) {
+      const newDefaultModel = updatedActiveModels.find((model) => model.enabled);
+      if (newDefaultModel) {
+        newDefaultModelKey = `${newDefaultModel.name}|${newDefaultModel.provider}`;
+      } else {
+        newDefaultModelKey = "";
+      }
+    }
+
+    // Update both activeModels and defaultModelKey in a single operation
+    updateSettings({
+      activeModels: updatedActiveModels,
+      defaultModelKey: newDefaultModelKey,
+    });
   };
 
   return (
@@ -57,6 +78,19 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         placeholder="copilot-conversations"
         value={settings.defaultSaveFolder}
         onChange={(value) => updateSettings({ defaultSaveFolder: value })}
+      />
+      <ToggleComponent
+        name="Autosave Chat"
+        description="Automatically save the chat when starting a new one or when the plugin reloads"
+        value={settings.autosaveChat}
+        onChange={(value) => updateSettings({ autosaveChat: value })}
+      />
+      <TextComponent
+        name="Custom Prompts Folder Name"
+        description="The default folder name where custom prompts will be saved. Default is 'copilot-custom-prompts'"
+        placeholder="copilot-custom-prompts"
+        value={settings.customPromptsFolder}
+        onChange={(value) => updateSettings({ customPromptsFolder: value })}
       />
       <h6>
         Please be mindful of the number of tokens and context conversation turns you set here, as

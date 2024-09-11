@@ -16,6 +16,8 @@ export enum ChatModels {
   AZURE_OPENAI = "azure-openai",
   CLAUDE_3_5_SONNET = "claude-3-5-sonnet-20240620",
   CLAUDE_3_HAIKU = "claude-3-haiku-20240307",
+  COMMAND_R = "command-r",
+  COMMAND_R_PLUS = "command-r-plus",
 }
 
 // Model Providers
@@ -23,6 +25,7 @@ export enum ChatModelProviders {
   OPENAI = "openai",
   AZURE_OPENAI = "azure openai",
   ANTHROPIC = "anthropic",
+  COHEREAI = "cohereai",
   GOOGLE = "google",
   OPENROUTERAI = "openrouterai",
   GROQ = "groq",
@@ -57,8 +60,20 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     isBuiltIn: true,
   },
   {
-    name: ChatModels.CLAUDE_3_5_SONNET,
+    name: ChatModels.CLAUDE_3_HAIKU,
     provider: ChatModelProviders.ANTHROPIC,
+    enabled: true,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.COMMAND_R,
+    provider: ChatModelProviders.COHEREAI,
+    enabled: true,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.COMMAND_R_PLUS,
+    provider: ChatModelProviders.COHEREAI,
     enabled: true,
     isBuiltIn: true,
   },
@@ -98,8 +113,6 @@ export enum EmbeddingModels {
   OPENAI_EMBEDDING_LARGE = "text-embedding-3-large",
   AZURE_OPENAI = "azure-openai",
   COHEREAI_EMBED_MULTILINGUAL_LIGHT_V3_0 = "embed-multilingual-light-v3.0",
-  OLLAMA_NOMIC_EMBED_TEXT = "nomic-embed-text",
-  OLLAMA_MXBAI_EMBED_LARGE = "mxbai-embed-large",
 }
 
 export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
@@ -127,20 +140,6 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
   {
     name: EmbeddingModels.AZURE_OPENAI,
     provider: EmbeddingModelProviders.AZURE_OPENAI,
-    enabled: true,
-    isBuiltIn: true,
-    isEmbeddingModel: true,
-  },
-  {
-    name: EmbeddingModels.OLLAMA_NOMIC_EMBED_TEXT,
-    provider: EmbeddingModelProviders.OLLAMA,
-    enabled: true,
-    isBuiltIn: true,
-    isEmbeddingModel: true,
-  },
-  {
-    name: EmbeddingModels.OLLAMA_MXBAI_EMBED_LARGE,
-    provider: EmbeddingModelProviders.OLLAMA,
     enabled: true,
     isBuiltIn: true,
     isEmbeddingModel: true,
@@ -206,10 +205,10 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   userSystemPrompt: "",
   openAIProxyBaseUrl: "",
   openAIEmbeddingProxyBaseUrl: "",
-  ollamaBaseUrl: "",
-  lmStudioBaseUrl: "http://localhost:1234/v1",
   stream: true,
   defaultSaveFolder: "copilot-conversations",
+  autosaveChat: true,
+  customPromptsFolder: "copilot-custom-prompts",
   indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH,
   qaExclusionPaths: "",
   chatNoteContextPath: "",
