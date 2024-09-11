@@ -9,6 +9,7 @@ import {
   processVariableNameForNotePath,
 } from "@/utils";
 import { normalizePath, Notice, TFile, Vault } from "obsidian";
+import { CustomError } from "@/error";
 
 // TODO: To be deprecated once PouchDB is removed
 export interface CustomPromptDB {
@@ -78,10 +79,23 @@ export class CustomPromptProcessor {
     await this.vault.create(filePath, content);
   }
 
-  async updatePrompt(title: string, content: string): Promise<void> {
-    const filePath = `${this.settings.customPromptsFolder}/${title}.md`;
+  async updatePrompt(originTitle: string, newTitle: string, content: string): Promise<void> {
+    const filePath = `${this.settings.customPromptsFolder}/${originTitle}.md`;
     const file = this.vault.getAbstractFileByPath(filePath);
+
     if (file instanceof TFile) {
+      if (originTitle !== newTitle) {
+        const newFilePath = `${this.settings.customPromptsFolder}/${newTitle}.md`;
+        const newFileExists = this.vault.getAbstractFileByPath(newFilePath);
+
+        if (newFileExists) {
+          throw new CustomError(
+            "Error saving custom prompt. Please check if the title already exists."
+          );
+        }
+
+        await this.vault.rename(file, newFilePath);
+      }
       await this.vault.modify(file, content);
     }
   }
