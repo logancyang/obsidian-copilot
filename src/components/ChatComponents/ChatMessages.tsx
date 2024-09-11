@@ -32,8 +32,10 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [chatHistory, currentAiMessage]);
+    if (!loading) {
+      scrollToBottom();
+    }
+  }, [loading]);
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
