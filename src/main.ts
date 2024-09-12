@@ -23,7 +23,7 @@ import {
 } from "@/constants";
 import { CustomPrompt, CustomPromptDB, CustomPromptProcessor } from "@/customPromptProcessor";
 import EncryptionService from "@/encryptionService";
-import { CopilotSettingTab, CopilotSettings } from "@/settings/SettingsPage";
+import { CopilotSettings, CopilotSettingTab } from "@/settings/SettingsPage";
 import SharedState, { ChatMessage } from "@/sharedState";
 import {
   areEmbeddingModelsSame,
@@ -44,6 +44,7 @@ import {
   WorkspaceLeaf,
 } from "obsidian";
 import PouchDB from "pouchdb-browser";
+import { CustomError } from "@/error";
 
 export default class CopilotPlugin extends Plugin {
   settings: CopilotSettings;
@@ -231,12 +232,21 @@ export default class CopilotPlugin extends Plugin {
                 new AddPromptModal(
                   this.app,
                   async (title: string, newPrompt: string) => {
-                    await promptProcessor.updatePrompt(title, newPrompt);
-                    new Notice(`Prompt "${title}" has been updated.`);
+                    try {
+                      await promptProcessor.updatePrompt(promptTitle, title, newPrompt);
+                      new Notice(`Prompt "${title}" has been updated.`);
+                    } catch (err) {
+                      console.error(err);
+                      if (err instanceof CustomError) {
+                        new Notice(err.msg);
+                      } else {
+                        new Notice("An error occurred.");
+                      }
+                    }
                   },
                   prompt.title,
                   prompt.content,
-                  true
+                  false
                 ).open();
               } else {
                 new Notice(`No prompt found with the title "${promptTitle}".`);
