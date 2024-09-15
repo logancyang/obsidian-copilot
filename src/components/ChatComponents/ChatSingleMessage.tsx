@@ -1,4 +1,5 @@
-import { BotIcon, CheckIcon, CopyClipboardIcon, UserIcon } from "@/components/Icons";
+import { ChatButtons } from "@/components/ChatComponents/ChatButtons";
+import { BotIcon, UserIcon } from "@/components/Icons";
 import { USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/sharedState";
 import { App, Component, MarkdownRenderer } from "obsidian";
@@ -7,17 +8,27 @@ import React, { useEffect, useRef, useState } from "react";
 interface ChatSingleMessageProps {
   message: ChatMessage;
   app: App;
-  isStreaming?: boolean;
+  isStreaming: boolean;
+  onInsertAtCursor?: () => void;
+  onRegenerate?: () => void;
+  onEdit?: (newMessage: string) => void;
 }
 
 const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   message,
   app,
-  isStreaming = false,
+  isStreaming,
+  onInsertAtCursor,
+  onRegenerate,
+  onEdit,
 }) => {
   const [isCopied, setIsCopied] = useState<boolean>(false);
+  const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [editedMessage, setEditedMessage] = useState<string>(message.message);
   const contentRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   const copyToClipboard = () => {
     if (!navigator.clipboard || !navigator.clipboard.writeText) {
       return;
@@ -34,10 +45,10 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
   const preprocessLatex = (content: string): string => {
     return content
-      .replace(/\\\[/g, "$$")
-      .replace(/\\\]/g, "$$")
-      .replace(/\\\(/g, "$")
-      .replace(/\\\)/g, "$");
+      .replace(/\\\[\s*/g, "$$")
+      .replace(/\s*\\\]/g, "$$")
+      .replace(/\\\(\s*/g, "$")
+      .replace(/\s*\\\)/g, "$");
   };
 
   useEffect(() => {
@@ -70,23 +81,77 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     };
   }, [message, app, componentRef, isStreaming]);
 
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      adjustTextareaHeight(textareaRef.current);
+    }
+  }, [isEditing]);
+
+  const adjustTextareaHeight = (element: HTMLTextAreaElement) => {
+    element.style.height = "auto";
+    element.style.height = `${element.scrollHeight}px`;
+  };
+
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setEditedMessage(e.target.value);
+    adjustTextareaHeight(e.target);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.nativeEvent.isComposing) return;
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault(); // Prevents adding a newline to the textarea
+      handleSaveEdit();
+    }
+  };
+
+  const handleEdit = () => {
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = () => {
+    setIsEditing(false);
+    if (onEdit) {
+      onEdit(editedMessage);
+    }
+  };
+
   return (
-    <div className="message-container">
+    <div className="chat-message-container">
       <div className={`message ${message.sender === USER_SENDER ? "user-message" : "bot-message"}`}>
         <div className="message-icon">
           {message.sender === USER_SENDER ? <UserIcon /> : <BotIcon />}
         </div>
         <div className="message-content">
-          {message.sender === USER_SENDER ? (
+          {message.sender === USER_SENDER && isEditing ? (
+            <textarea
+              ref={textareaRef}
+              value={editedMessage}
+              onChange={handleTextareaChange}
+              onKeyDown={handleKeyDown}
+              onBlur={handleSaveEdit}
+              autoFocus
+              className="edit-textarea"
+            />
+          ) : message.sender === USER_SENDER ? (
             <span>{message.message}</span>
           ) : (
             <div ref={contentRef}></div>
           )}
         </div>
       </div>
-      <button onClick={copyToClipboard} className="copy-message-button">
-        {isCopied ? <CheckIcon /> : <CopyClipboardIcon />}
-      </button>
+      {!isStreaming && (
+        <div className="message-buttons-wrapper">
+          <ChatButtons
+            message={message}
+            onCopy={copyToClipboard}
+            isCopied={isCopied}
+            onInsertAtCursor={onInsertAtCursor}
+            onRegenerate={onRegenerate}
+            onEdit={handleEdit}
+          />
+        </div>
+      )}
     </div>
   );
 };

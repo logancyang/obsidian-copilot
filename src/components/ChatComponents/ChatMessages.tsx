@@ -8,6 +8,9 @@ interface ChatMessagesProps {
   currentAiMessage: string;
   loading?: boolean;
   app: App;
+  onInsertAtCursor: (message: string) => void;
+  onRegenerate: (messageIndex: number) => void;
+  onEdit: (messageIndex: number, newMessage: string) => void;
 }
 
 const ChatMessages: React.FC<ChatMessagesProps> = ({
@@ -15,6 +18,9 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
   currentAiMessage,
   loading,
   app,
+  onInsertAtCursor,
+  onRegenerate,
+  onEdit,
 }) => {
   const [loadingDots, setLoadingDots] = useState("");
 
@@ -26,8 +32,10 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [chatHistory, currentAiMessage]);
+    if (!loading) {
+      scrollToBottom();
+    }
+  }, [loading]);
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
@@ -45,7 +53,19 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
     <div className="chat-messages">
       {chatHistory.map(
         (message, index) =>
-          message.isVisible && <ChatSingleMessage key={index} message={message} app={app} />
+          message.isVisible && (
+            <ChatSingleMessage
+              key={index}
+              message={message}
+              app={app}
+              isStreaming={false}
+              onInsertAtCursor={() => {
+                onInsertAtCursor(message.message);
+              }}
+              onRegenerate={() => onRegenerate(index)}
+              onEdit={(newMessage) => onEdit(index, newMessage)}
+            />
+          )
       )}
       {(currentAiMessage || loading) && (
         <ChatSingleMessage

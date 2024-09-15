@@ -1,6 +1,6 @@
-import { SetChainOptions } from "@/aiParams";
-import { AI_SENDER, ChatModelDisplayNames, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
-import { ProxyServer } from "@/proxyServer";
+import { CustomModel, SetChainOptions } from "@/aiParams";
+import { AI_SENDER, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
+import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChatMessage } from "@/sharedState";
 import { getFileContent, getFileName } from "@/utils";
 import { Notice, Vault } from "obsidian";
@@ -16,25 +16,25 @@ import {
 import { stringToChainType } from "@/utils";
 
 interface ChatIconsProps {
-  currentModel: string;
-  setCurrentModel: (model: string) => void;
+  currentModelKey: string;
+  setCurrentModelKey: (modelKey: string) => void;
   currentChain: ChainType;
   setCurrentChain: (chain: ChainType, options?: SetChainOptions) => void;
-  onNewChat: () => void;
+  onNewChat: (openNote: boolean) => void;
   onSaveAsNote: () => void;
   onSendActiveNoteToPrompt: () => void;
   onForceRebuildActiveNoteContext: () => void;
   onRefreshVaultContext: () => void;
   addMessage: (message: ChatMessage) => void;
+  settings: CopilotSettings;
   vault: Vault;
   vault_qa_strategy: string;
-  proxyServer: ProxyServer;
   debug?: boolean;
 }
 
 const ChatIcons: React.FC<ChatIconsProps> = ({
-  currentModel,
-  setCurrentModel,
+  currentModelKey,
+  setCurrentModelKey,
   currentChain,
   setCurrentChain,
   onNewChat,
@@ -43,48 +43,19 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   onForceRebuildActiveNoteContext,
   onRefreshVaultContext,
   addMessage,
+  settings,
   vault,
   vault_qa_strategy,
-  proxyServer,
   debug,
 }) => {
   const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
 
+  const getModelKey = (model: CustomModel) => `${model.name}|${model.provider}`;
+
   const handleModelChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedModel = event.target.value;
-    setCurrentModel(event.target.value);
-
-    // Start proxy server based on the selected model & settings
-    const proxyServerURL = proxyServer.getProxyURL(selectedModel);
-    if (proxyServerURL) {
-      await proxyServer.startProxyServer(
-        proxyServerURL,
-        selectedModel !== ChatModelDisplayNames.CLAUDE
-      );
-    } else {
-      await proxyServer.stopProxyServer();
-    }
+    const selectedModelKey = event.target.value;
+    setCurrentModelKey(selectedModelKey);
   };
-
-  useEffect(() => {
-    const startProxyServerForClaude = async (proxyServerURL: string) => {
-      await proxyServer.startProxyServer(
-        proxyServerURL,
-        currentModel !== ChatModelDisplayNames.CLAUDE
-      );
-    };
-
-    // Call the function on component mount
-    const proxyServerURL = proxyServer.getProxyURL(currentModel);
-    if (proxyServerURL) {
-      startProxyServerForClaude(proxyServerURL);
-    }
-
-    // Cleanup function to stop the proxy server when the component unmounts
-    return () => {
-      proxyServer.stopProxyServer().catch(console.error);
-    };
-  }, []);
 
   const handleChainChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedChain(stringToChainType(event.target.value));
@@ -151,44 +122,22 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         <div className="select-wrapper">
           <select
             id="aiModelSelect"
-            className="chat-icon-selection"
-            value={currentModel}
+            className="chat-icon-selection model-select"
+            value={currentModelKey}
             onChange={handleModelChange}
           >
-            <option value={ChatModelDisplayNames.GPT_4}>{ChatModelDisplayNames.GPT_4}</option>
-            <option value={ChatModelDisplayNames.GPT_4o}>{ChatModelDisplayNames.GPT_4o}</option>
-            <option value={ChatModelDisplayNames.GPT_4o_mini}>
-              {ChatModelDisplayNames.GPT_4o_mini}
-            </option>
-            <option value={ChatModelDisplayNames.GPT_4_TURBO}>
-              {ChatModelDisplayNames.GPT_4_TURBO}
-            </option>
-            <option value={ChatModelDisplayNames.GPT_4_32K}>
-              {ChatModelDisplayNames.GPT_4_32K}
-            </option>
-            <option value={ChatModelDisplayNames.AZURE_OPENAI}>
-              {ChatModelDisplayNames.AZURE_OPENAI}
-            </option>
-            <option value={ChatModelDisplayNames.CLAUDE}>{ChatModelDisplayNames.CLAUDE}</option>
-            <option value={ChatModelDisplayNames.GEMINI_PRO}>
-              {ChatModelDisplayNames.GEMINI_PRO}
-            </option>
-            <option value={ChatModelDisplayNames.GEMINI_FLASH}>
-              {ChatModelDisplayNames.GEMINI_FLASH}
-            </option>
-            <option value={ChatModelDisplayNames.OPENROUTERAI}>
-              {ChatModelDisplayNames.OPENROUTERAI}
-            </option>
-            <option value={ChatModelDisplayNames.GROQ}>{ChatModelDisplayNames.GROQ}</option>
-            <option value={ChatModelDisplayNames.LM_STUDIO}>
-              {ChatModelDisplayNames.LM_STUDIO}
-            </option>
-            <option value={ChatModelDisplayNames.OLLAMA}>{ChatModelDisplayNames.OLLAMA}</option>
+            {settings.activeModels
+              .filter((model) => model.enabled)
+              .map((model) => (
+                <option key={getModelKey(model)} value={getModelKey(model)}>
+                  {model.name}
+                </option>
+              ))}
           </select>
           <span className="tooltip-text">Model Selection</span>
         </div>
       </div>
-      <button className="chat-icon-button" onClick={onNewChat}>
+      <button className="chat-icon-button clickable-icon" onClick={() => onNewChat(false)}>
         <RefreshIcon className="icon-scaler" />
         <span className="tooltip-text">
           New Chat
@@ -196,7 +145,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           (unsaved history will be lost)
         </span>
       </button>
-      <button className="chat-icon-button" onClick={onSaveAsNote}>
+      <button className="chat-icon-button clickable-icon" onClick={onSaveAsNote}>
         <SaveAsNoteIcon className="icon-scaler" />
         <span className="tooltip-text">Save as Note</span>
       </button>
@@ -216,7 +165,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         </div>
       </div>
       {selectedChain === "llm_chain" && (
-        <button className="chat-icon-button" onClick={onSendActiveNoteToPrompt}>
+        <button className="chat-icon-button clickable-icon" onClick={onSendActiveNoteToPrompt}>
           <SendActiveNoteToPromptIcon className="icon-scaler" />
           <span className="tooltip-text">
             Send Note(s) to Prompt
@@ -230,7 +179,10 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         </button>
       )}
       {selectedChain === "long_note_qa" && (
-        <button className="chat-icon-button" onClick={onForceRebuildActiveNoteContext}>
+        <button
+          className="chat-icon-button clickable-icon"
+          onClick={onForceRebuildActiveNoteContext}
+        >
           <UseActiveNoteAsContextIcon className="icon-scaler" />
           <span className="tooltip-text">
             Refresh Index
@@ -240,7 +192,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         </button>
       )}
       {selectedChain === "vault_qa" && (
-        <button className="chat-icon-button" onClick={onRefreshVaultContext}>
+        <button className="chat-icon-button clickable-icon" onClick={onRefreshVaultContext}>
           <UseActiveNoteAsContextIcon className="icon-scaler" />
           <span className="tooltip-text">
             Refresh Index

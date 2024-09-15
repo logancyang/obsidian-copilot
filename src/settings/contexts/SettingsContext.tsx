@@ -26,6 +26,9 @@ export const SettingsProvider: React.FC<{
       setSettings(updatedSettings);
       plugin.settings = updatedSettings;
       await plugin.saveSettings();
+      if (newSettings.activeModels) {
+        plugin.chainManager.chatModelManager.buildModelMap(updatedSettings.activeModels);
+      }
     },
     [plugin, settings]
   );

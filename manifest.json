@@ -1,7 +1,7 @@
 {
   "id": "copilot",
   "name": "Copilot",
-  "version": "2.5.5",
+  "version": "2.6.6",
   "minAppVersion": "0.15.0",
   "description": "A ChatGPT Copilot in Obsidian.",
   "author": "Logan Yang",
@@ -9,6 +9,5 @@
   "fundingUrl": {
     "Buy Me a Coffee": "https://www.buymeacoffee.com/logancyang",
     "GitHub Sponsor": "https://github.com/sponsors/logancyang"
-  },
-  "isDesktopOnly": true
+  }
 }

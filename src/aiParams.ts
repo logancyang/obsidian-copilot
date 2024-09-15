@@ -12,7 +12,7 @@ export interface ModelConfig {
   openAIApiKey?: string;
   openAIOrgId?: string;
   anthropicApiKey?: string;
-  anthropicModel?: string;
+  cohereApiKey?: string;
   azureOpenAIApiKey?: string;
   azureOpenAIApiInstanceName?: string;
   azureOpenAIApiDeploymentName?: string;
@@ -20,51 +20,37 @@ export interface ModelConfig {
   // Google and TogetherAI API key share this property
   apiKey?: string;
   openAIProxyBaseUrl?: string;
-  ollamaModel?: string;
-  // OllamaBaseUrl
-  baseUrl?: string;
-  openRouterModel?: string;
-  lmStudioBaseUrl?: string;
   groqApiKey?: string;
-  groqModel?: string;
+  enableCors?: boolean;
 }
 
 export interface LangChainParams {
+  modelKey: string; // name | provider, e.g. "gpt-4o|openai"
   openAIApiKey: string;
   openAIOrgId: string;
-  openAICustomModel: string;
   huggingfaceApiKey: string;
   cohereApiKey: string;
   anthropicApiKey: string;
-  anthropicModel: string;
   azureOpenAIApiKey: string;
   azureOpenAIApiInstanceName: string;
   azureOpenAIApiDeploymentName: string;
   azureOpenAIApiVersion: string;
   azureOpenAIApiEmbeddingDeploymentName: string;
   googleApiKey: string;
-  googleCustomModel: string;
   openRouterAiApiKey: string;
-  model: string;
-  modelDisplayName: string;
-  embeddingModel: string;
+  embeddingModelKey: string; // name | provider, e.g. "text-embedding-3-large|openai"
   temperature: number;
   maxTokens: number;
   systemMessage: string;
   chatContextTurns: number;
   chainType: ChainType; // Default ChainType is set in main.ts getChainManagerParams
   options: SetChainOptions;
-  ollamaModel: string;
-  ollamaBaseUrl: string;
-  openRouterModel: string;
-  lmStudioBaseUrl: string;
   openAIProxyBaseUrl?: string;
-  useOpenAILocalProxy?: boolean;
+  enableCors?: boolean;
   openAIProxyModelName?: string;
   openAIEmbeddingProxyBaseUrl?: string;
   openAIEmbeddingProxyModelName?: string;
   groqApiKey: string;
-  groqModel: string;
 }
 
 export interface SetChainOptions {
@@ -73,4 +59,15 @@ export interface SetChainOptions {
   forceNewCreation?: boolean;
   abortController?: AbortController;
   debug?: boolean;
+}
+
+export interface CustomModel {
+  name: string;
+  provider: string;
+  baseUrl?: string;
+  apiKey?: string;
+  enabled: boolean;
+  isEmbeddingModel?: boolean;
+  isBuiltIn?: boolean;
+  enableCors?: boolean;
 }

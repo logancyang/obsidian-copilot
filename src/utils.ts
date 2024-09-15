@@ -1,10 +1,5 @@
 import { ChainType, Document } from "@/chainFactory";
-import {
-  DEFAULT_SETTINGS,
-  DISPLAY_NAME_TO_MODEL,
-  NOMIC_EMBED_TEXT,
-  USER_SENDER,
-} from "@/constants";
+import { DEFAULT_SETTINGS, NOMIC_EMBED_TEXT, USER_SENDER } from "@/constants";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChatMessage } from "@/sharedState";
 import { MemoryVariables } from "@langchain/core/memory";
@@ -12,6 +7,10 @@ import { RunnableSequence } from "@langchain/core/runnables";
 import { BaseChain, RetrievalQAChain } from "langchain/chains";
 import moment from "moment";
 import { TFile, Vault, parseYaml } from "obsidian";
+
+export const getModelNameFromKey = (modelKey: string): string => {
+  return modelKey.split("|")[0];
+};
 
 export const isFolderMatch = (fileFullpath: string, inputPath: string): boolean => {
   const fileSegments = fileFullpath.split("/").map((segment) => segment.toLowerCase());
@@ -181,10 +180,6 @@ export const isSupportedChain = (chain: RunnableSequence): chain is RunnableSequ
   return isLLMChain(chain) || isRetrievalQAChain(chain);
 };
 
-export const getModelName = (modelDisplayName: string): string => {
-  return DISPLAY_NAME_TO_MODEL[modelDisplayName];
-};
-
 // Returns the last N messages from the chat history,
 // last one being the newest ai message
 export const getChatContext = (chatHistory: ChatMessage[], contextSize: number) => {
@@ -212,7 +207,11 @@ export const formatDateTime = (now: Date, timezone: "local" | "utc" = "local") =
     formattedDateTime.utc();
   }
 
-  return formattedDateTime.format("YYYY_MM_DD-HH_mm_ss");
+  return {
+    fileName: formattedDateTime.format("YYYY_MM_DD_HH_mm_ss"),
+    display: formattedDateTime.format("YYYY/MM/DD HH:mm:ss"),
+    epoch: formattedDateTime.valueOf(),
+  };
 };
 
 export async function getFileContent(file: TFile, vault: Vault): Promise<string | null> {

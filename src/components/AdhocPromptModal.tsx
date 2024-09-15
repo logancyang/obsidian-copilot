@@ -19,6 +19,8 @@ export class AdhocPromptModal extends Modal {
       frag.createEl("br");
       frag.createEl("strong", { text: "- {[[Note Title]]} represents a note. " });
       frag.createEl("br");
+      frag.createEl("strong", { text: "- {activeNote} represents the active note. " });
+      frag.createEl("br");
       frag.createEl("strong", { text: "- {FolderPath} represents a folder of notes. " });
       frag.createEl("br");
       frag.createEl("strong", {

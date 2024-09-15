@@ -33,6 +33,7 @@ export default class EncryptionService {
   }
 
   public encryptAllKeys(): void {
+    // Encrypt top-level API keys
     const keysToEncrypt = Object.keys(this.settings).filter((key) =>
       key.toLowerCase().includes("apikey".toLowerCase())
     );
@@ -41,6 +42,14 @@ export default class EncryptionService {
       const apiKey = this.settings[key as keyof CopilotSettings] as string;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (this.settings[key as keyof CopilotSettings] as any) = this.getEncryptedKey(apiKey);
+    }
+
+    // Encrypt API keys in activeModels
+    if (Array.isArray(this.settings.activeModels)) {
+      this.settings.activeModels = this.settings.activeModels.map((model) => ({
+        ...model,
+        apiKey: this.getEncryptedKey(model.apiKey || ""),
+      }));
     }
   }
 
