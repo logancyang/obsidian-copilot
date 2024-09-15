@@ -27,8 +27,8 @@ const GeneralSettings: React.FC = () => {
         name="Exclude Folders from Indexing"
         description="Comma separated list like folder1, folder1/folder2, etc, to be excluded from indexing process. NOTE: files which were previously indexed will remain in the index."
         placeholder="folder1, folder1/folder2"
-        value={settings.qaExclusionPaths.join(", ")}
-        onChange={(value) => updateSettings({ qaExclusionPaths: value.split(", ") })}
+        value={settings.qaExclusionPaths}
+        onChange={(value) => updateSettings({ qaExclusionPaths: value })}
       />
       <h6>
         Please be mindful of the number of tokens and context conversation turns you set here, as
