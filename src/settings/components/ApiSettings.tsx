@@ -1,4 +1,3 @@
-import { DEFAULT_SETTINGS } from "@/constants";
 import React from "react";
 import ApiSetting from "./ApiSetting";
 import Collapsible from "./Collapsible";
@@ -8,20 +7,12 @@ interface ApiSettingsProps {
   setOpenAIApiKey: (value: string) => void;
   openAIOrgId: string;
   setOpenAIOrgId: (value: string) => void;
-  openAICustomModel: string;
-  setOpenAICustomModel: (value: string) => void;
   googleApiKey: string;
   setGoogleApiKey: (value: string) => void;
-  googleCustomModel: string;
-  setGoogleCustomModel: (value: string) => void;
   anthropicApiKey: string;
   setAnthropicApiKey: (value: string) => void;
-  anthropicModel: string;
-  setAnthropicModel: (value: string) => void;
   openRouterAiApiKey: string;
   setOpenRouterAiApiKey: (value: string) => void;
-  openRouterModel: string;
-  setOpenRouterModel: (value: string) => void;
   azureOpenAIApiKey: string;
   setAzureOpenAIApiKey: (value: string) => void;
   azureOpenAIApiInstanceName: string;
@@ -34,8 +25,8 @@ interface ApiSettingsProps {
   setAzureOpenAIApiEmbeddingDeploymentName: (value: string) => void;
   groqApiKey: string;
   setGroqApiKey: (value: string) => void;
-  groqModel: string;
-  setGroqModel: (value: string) => void;
+  cohereApiKey: string;
+  setCohereApiKey: (value: string) => void;
 }
 
 const ApiSettings: React.FC<ApiSettingsProps> = ({
@@ -43,20 +34,12 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
   setOpenAIApiKey,
   openAIOrgId,
   setOpenAIOrgId,
-  openAICustomModel,
-  setOpenAICustomModel,
   googleApiKey,
   setGoogleApiKey,
-  googleCustomModel,
-  setGoogleCustomModel,
   anthropicApiKey,
   setAnthropicApiKey,
-  anthropicModel,
-  setAnthropicModel,
   openRouterAiApiKey,
   setOpenRouterAiApiKey,
-  openRouterModel,
-  setOpenRouterModel,
   azureOpenAIApiKey,
   setAzureOpenAIApiKey,
   azureOpenAIApiInstanceName,
@@ -69,8 +52,8 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
   setAzureOpenAIApiEmbeddingDeploymentName,
   groqApiKey,
   setGroqApiKey,
-  groqModel,
-  setGroqModel,
+  cohereApiKey,
+  setCohereApiKey,
 }) => {
   return (
     <div>
@@ -102,14 +85,6 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
               https://platform.openai.com/api-keys
             </a>
           </p>
-          <ApiSetting
-            title="OpenAI Custom Model Name (optional)"
-            description="Warning: overrides any OpenAI model in the dropdown if set."
-            value={openAICustomModel}
-            setValue={setOpenAICustomModel}
-            placeholder="Enter custom model name"
-            type="text"
-          />
           <ApiSetting
             title="OpenAI Organization ID (optional)"
             value={openAIOrgId}
@@ -151,14 +126,6 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
             <br />
             Your API key is stored locally and is only used to make requests to Google's services.
           </p>
-          <ApiSetting
-            title="Google Custom Model Name (optional)"
-            description="Warning: overrides any Google model in the dropdown if set."
-            value={googleCustomModel}
-            setValue={setGoogleCustomModel}
-            placeholder="Enter custom model name"
-            type="text"
-          />
         </div>
       </Collapsible>
 
@@ -169,14 +136,6 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
             value={anthropicApiKey}
             setValue={setAnthropicApiKey}
             placeholder="Enter Anthropic API Key"
-          />
-          <ApiSetting
-            title="Anthropic Model"
-            value={anthropicModel}
-            // @ts-ignore
-            setValue={setAnthropicModel}
-            placeholder={DEFAULT_SETTINGS.anthropicModel}
-            type="text"
           />
           <p>
             If you have Anthropic API access, you can get the API key{" "}
@@ -202,14 +161,6 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
             value={openRouterAiApiKey}
             setValue={setOpenRouterAiApiKey}
             placeholder="Enter OpenRouter AI API Key"
-          />
-          <ApiSetting
-            title="OpenRouter Model"
-            value={openRouterModel}
-            // @ts-ignore
-            setValue={setOpenRouterModel}
-            placeholder={DEFAULT_SETTINGS.openRouterModel}
-            type="text"
           />
           <p>
             You can get your OpenRouterAI key{" "}
@@ -276,13 +227,6 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
             setValue={setGroqApiKey}
             placeholder="Enter Groq API Key"
           />
-          <ApiSetting
-            title="Groq Model"
-            value={groqModel}
-            setValue={setGroqModel}
-            placeholder="Enter Groq Model"
-            type="text"
-          />
           <p>
             If you have Groq API access, you can get the API key{" "}
             <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer">
@@ -293,6 +237,21 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
             Your API key is stored locally and is only used to make requests to Groq's services.
           </p>
         </div>
+      </Collapsible>
+
+      <Collapsible title="Cohere API Settings">
+        <ApiSetting
+          title="Cohere API Key"
+          value={cohereApiKey}
+          setValue={setCohereApiKey}
+          placeholder="Enter Cohere API Key"
+        />
+        <p>
+          Get your free Cohere API key{" "}
+          <a href="https://dashboard.cohere.ai/api-keys" target="_blank" rel="noreferrer">
+            here
+          </a>
+        </p>
       </Collapsible>
     </div>
   );

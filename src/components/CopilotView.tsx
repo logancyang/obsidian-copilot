@@ -5,19 +5,19 @@ import { AppContext } from "@/context";
 import CopilotPlugin from "@/main";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import SharedState from "@/sharedState";
-import { EventEmitter } from "events";
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
 import { Root, createRoot } from "react-dom/client";
 
 export default class CopilotView extends ItemView {
-  private sharedState: SharedState;
   private chainManager: ChainManager;
   private root: Root | null = null;
   private settings: CopilotSettings;
   private defaultSaveFolder: string;
+  private handleSaveAsNote: (() => Promise<void>) | null = null;
   private debug = false;
-  emitter: EventEmitter;
+  sharedState: SharedState;
+  emitter: EventTarget;
   userSystemPrompt = "";
 
   constructor(
@@ -30,8 +30,7 @@ export default class CopilotView extends ItemView {
     this.app = plugin.app;
     this.chainManager = plugin.chainManager;
     this.debug = plugin.settings.debug;
-    this.emitter = new EventEmitter();
-    this.getChatVisibility = this.getChatVisibility.bind(this);
+    this.emitter = new EventTarget();
     this.userSystemPrompt = plugin.settings.userSystemPrompt;
     this.plugin = plugin;
     this.defaultSaveFolder = plugin.settings.defaultSaveFolder;
@@ -55,13 +54,6 @@ export default class CopilotView extends ItemView {
     return "Copilot";
   }
 
-  async getChatVisibility() {
-    if (this.plugin.activateViewPromise) {
-      await this.plugin.activateViewPromise;
-    }
-    return this.plugin.isChatVisible();
-  }
-
   async onOpen(): Promise<void> {
     const root = createRoot(this.containerEl.children[1]);
     root.render(
@@ -72,19 +64,35 @@ export default class CopilotView extends ItemView {
             settings={this.settings}
             chainManager={this.chainManager}
             emitter={this.emitter}
-            getChatVisibility={this.getChatVisibility}
             defaultSaveFolder={this.defaultSaveFolder}
+            updateUserMessageHistory={(newMessage) => {
+              this.plugin.updateUserMessageHistory(newMessage);
+            }}
             plugin={this.plugin}
             debug={this.debug}
+            onSaveChat={(saveFunction) => {
+              this.handleSaveAsNote = saveFunction;
+            }}
           />
         </React.StrictMode>
       </AppContext.Provider>
     );
   }
 
+  async saveChat(): Promise<void> {
+    if (this.handleSaveAsNote) {
+      await this.handleSaveAsNote();
+    }
+  }
+
   async onClose(): Promise<void> {
     if (this.root) {
       this.root.unmount();
     }
+  }
+
+  updateView(): void {
+    // Force a re-render of the React component
+    this.onOpen();
   }
 }

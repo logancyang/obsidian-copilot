@@ -2,7 +2,7 @@
 
 ## LM Studio
 
-[LM Studio](https://lmstudio.ai/) has the best UI for running local models, it has support for Apple Silicon, Windows, and Linux (in beta). After you download the correct version of LM Studio to your machine, the first thing is to download a model. Find something small to start with, such as Mistral 7B, and work your way up if you have a beefy machine.
+[LM Studio](https://lmstudio.ai/) has the best UI for running local models, it has support for Apple Silicon, Windows, and Linux. After you download the correct version of LM Studio to your machine, the first thing is to download a model. Find something small to start with, such as Mistral 7B, and work your way up if you have a beefy machine.
 
 A rule of thumb to determine how large a model you can run:
 
@@ -17,13 +17,13 @@ Here's an example for Apple Metal macs. I can run 7B models blazingly fast on my
 
 <img src="./images/lm-studio.png" alt="LM Studio">
 
-Pick LM STUDIO (LOCAL) in the model dropdown, and start chatting!
+In Copilot settings, select Add Custom Model, paste the model name from LM Studio, select `lm-studio` as provider, click add, and you'll find it in your model picker!
 
 <img src="./images/lm-studio-model-pick.png" alt="LM Studio Model">
 
 ## Ollama
 
-[Ollama](https://ollama.ai/) currently supports Mac and Linux, they mentioned that Windows is coming soon.
+[Ollama](https://ollama.ai/) currently supports Mac, Linux and Windows.
 
 Go to their website, download, install Ollama and its command line tool on your machine.
 
@@ -51,11 +51,9 @@ Again, `OLLAMA_ORIGINS=app://obsidian.md*` is required!
 
 <img src="./images/ollama-serve.png" alt="Ollama">
 
-Inside Copilot settings, enter `mistral` under Ollama model
+Inside Copilot settings, click Add Custom Model, enter the model name you pulled from Ollama, e.g. `mistral`, select `ollama` as provider, click add, and you'll find it in your model picker!
 
 <img src="./images/ollama-setting.png" alt="Ollama">
-
-Pick OLLAMA (LOCAL) in the model dropdown and start chatting!
 
 #### Ollama for Windows (Preview)
 
@@ -85,8 +83,10 @@ Ollama has added support for local embeddings for RAG since v0.1.26! It's super 
 ollama pull nomic-embed-text
 ```
 
-and start your local Ollama server as before. Now you can set your embedding model in Copilot settings as `ollama-nomic-embed-text`, and it will use your local embeddings!
+and start your local Ollama server as before. Now you can add your Ollama embedding model in Copilot QA settings as `nomic-embed-text` with provider `ollama`, and it will use your local embeddings!
 
 With this one Ollama server running, you can set your Chat model as Ollama too, meaning it handles both chat streaming and embedding! You can then have a **completely offline QA** experience!
+
+Check Ollama for more embedding models, e.g. `mxbai-embed-large` is a better model than `nomic-embed-text` for vector search.
 
 #### Now, go crazy with local models in Chat mode and QA modes!

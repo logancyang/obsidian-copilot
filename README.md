@@ -2,7 +2,7 @@
 
 ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/logancyang/obsidian-copilot?style=for-the-badge&sort=semver) ![Obsidian Downloads](https://img.shields.io/badge/dynamic/json?logo=obsidian&color=%23483699&label=downloads&query=%24%5B%22copilot%22%5D.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json&style=for-the-badge)
 
-Copilot for Obsidian is a **free** and **open-source** ChatGPT interface right inside Obsidian. It has a minimalistic design and is straightforward to use.
+Copilot for Obsidian is a **free** and **open-source** LLM interface right inside Obsidian. It has a minimalistic design and is straightforward to use.
 
 - 💬 ChatGPT UI in Obsidian.
 - 🛠️ Prompt AI with your writing using Copilot commands to get quick results.
@@ -17,8 +17,25 @@ If you enjoy Copilot for Obsidian, please consider [sponsoring this project](htt
 
 <a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
 
-SPECIAL THANKS TO OUR SPONSORS:
-@Arlorean, @dashinja, @emaynard, @scmarinelli, @borthwick
+SPECIAL THANKS TO OUR TOP SPONSORS:
+@pedramamini, @Arlorean, @dashinja, @gpythomas, @emaynard, @scmarinelli, @borthwick
+
+[Changelog](https://github.com/logancyang/obsidian-copilot/releases)
+
+#### Announcement 🚨
+
+We are migrating off of PouchDB for better Obsidian Sync and mobile support (starting from v2.6.3). Your existing custom prompts MUST be dumped to markdown using the command _"Copilot: Dump custom prompts to markdown files"_. After running it you should be able to use your Add/Edit/Apply/Delete custom prompts as usual.
+
+Please make sure you run it, or you will lose all your old prompts when PouchDB is removed!
+
+#### v2.6.0: MOBILE SUPPORT is here! 🎉🎉🎉
+
+<a href="https://youtu.be/l-x_QwSNghE" target="_blank"><img src="./images/thumbnail-260.png" width="700" /></a>
+
+- Huge thanks to our awesome [@gianluca-venturini](https://github.com/gianluca-venturini) for his incredible work on mobile support! Now you can use Copilot on your phone and tablet! 🎉🎉🎉
+- Complete rehaul of how models work in Copilot settings. Now you can add any model to your model picker provided its name, model provider, API key and base url! No more waiting for me to add new models!
+- Say goodbye to CORS errors for both chat models and embedding! The new model table in settings now lets you turn on "CORS" for individual chat models if you see CORS issue with them. And embedding models are immune to CORS errors by default!
+  - Caveat: this is powered by Obsidian API's `requestUrl` which does not support "streaming" of LLM responses. So streaming is disabled whenever you have CORS on in Copilot settings. Please upvote [this feature request](https://forum.obsidian.md/t/support-streaming-the-request-and-requesturl-response-body/87381) to let Obsidian know your need for streaming!
 
 #### 🎉 HIGHLY ANTICIPATED v2.5.0: Vault QA (BETA) mode (with local embedding support)! Claude 3! 🎉🎉🎉
 
@@ -30,11 +47,11 @@ The brand new **Vault QA (BETA)** mode allows you to chat with your whole vault,
 
 What's more, with Ollama **local embeddings** and **local chat models**, this mode works **completely offline**! This is a huge step toward truly private and local AI assistance inside Obsidian!
 
-Since Claude 3 models are announced today (3/4/2024), I managed to add them in this release too. Go to Anthropic's site to get your API key, you can now find it in the settings.
-
 (Huge shoutout to @AntoineDao for working with me on Vault QA mode!)
 
-#### FREE Models
+#### Model Providers
+
+**OpenAI**, **Anthropic**, **Azure OpenAI**, **Google Gemini**, **OpenRouter**, **GROQ**, **3rd Party Models with OpenAI-Compatible API**, **LM Studio** and **Ollama** are supported model providers.
 
 **OpenRouter.ai** hosts some of the best open-source models at the moment, such as MistralAI's new models, check out their websites for all the good stuff they have!
 
@@ -127,8 +144,8 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 <details>
   <summary>"You do not have access to this model"</summary>
 
-- You need to have access to some of the models like GPT-4 or Azure ones to use them. If you don't, sign up on their waitlist!
-- A common misunderstanding I see is that some think they have access to GPT-4 API when they get ChatGPT Plus subscription. It was not always true. _You need to have access to GPT-4 API to use the GPT-4 model in this plugin_. Please check if you can successfully use your model in the OpenAI playground first https://platform.openai.com/playground?mode=chat. If not, you can apply for GPT-4 API access here https://openai.com/waitlist/gpt-4-api. Once you have access to the API, you can use GPT-4 with this plugin without the ChatGPT Plus subscription!
+- You need to **have access to the model APIs** to use them. Usually they require an API key and a payment method.
+- A common misunderstanding I see is that some think they have access to GPT-4 API when they get ChatGPT Plus subscription. It's not always true (depending on when you signed up). _You need to have access to GPT-4 API to use the model in this plugin_. Please check if you have payment available on your OpenAI account. Then check OpenAI playground if you can use that particular model https://platform.openai.com/playground?mode=chat. Again, API access and ChatGPT Plus are two different things! You can use the API without the ChatGPT Plus subscription.
 - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/3#issuecomment-1544583676
 </details>
 <details>
@@ -140,11 +157,6 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/51
 </details>
 <details>
-  <summary>Unresponsive QA when using Huggingface as the Embedding Provider</summary>
-
-- Huggingface Inference API is free to use. It can give errors such as 503 or 504 frequently at times because their server has issues. If it's an issue for you, please consider using OpenAI or CohereAI as the embedding provider. Just keep in mind that OpenAI costs more, especially with very long notes as context.
-</details>
-<details>
   <summary>"insufficient_quota"</summary>
 
 - It might be because you haven't set up payment for your OpenAI account, or you exceeded your max monthly limit. OpenAI has a cap on how much you can use their API, usually $120 for individual users.
@@ -153,7 +165,8 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 <details>
   <summary>"context_length_exceeded"</summary>
 
-- GPT-3.5 has a 4096 context token limit, GPT-4 has 8K (there is a 32K one available to the public soon per OpenAI). **So if you set a big token limit in your Copilot setting, you could get this error.** Note that the prompts behind the scenes for Copilot commands can also take up tokens, so please limit your message length and max tokens to avoid this error. (For QA with Unlimited Context, use the "QA" mode in the dropdown! Requires Copilot v2.1.0.)
+- Please refer to the model provider's documentation for the context window size. **Note: if you set a big max token limit in your Copilot setting, you could get this error**. Max token refers to completion tokens, not input tokens. So a bigger max output token limit means a smaller input token limit!
+- The prompts behind the scenes for Copilot commands can also take up tokens, so please limit your message length and max tokens to avoid this error. (For QA with Unlimited Context, use the "QA" mode in the dropdown! Requires Copilot v2.1.0.)
 - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/1#issuecomment-1542934569
 </details>
 <details>

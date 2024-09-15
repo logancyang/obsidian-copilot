@@ -1,3 +1,6 @@
+import { CustomModel } from "@/aiParams";
+import CopilotView from "@/components/CopilotView";
+import { CHAT_VIEWTYPE } from "@/constants";
 import CopilotPlugin from "@/main";
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import React from "react";
@@ -8,37 +11,28 @@ import { SettingsProvider } from "./contexts/SettingsContext";
 export interface CopilotSettings {
   openAIApiKey: string;
   openAIOrgId: string;
-  openAICustomModel: string;
   huggingfaceApiKey: string;
   cohereApiKey: string;
   anthropicApiKey: string;
-  anthropicModel: string;
   azureOpenAIApiKey: string;
   azureOpenAIApiInstanceName: string;
   azureOpenAIApiDeploymentName: string;
   azureOpenAIApiVersion: string;
   azureOpenAIApiEmbeddingDeploymentName: string;
   googleApiKey: string;
-  googleCustomModel: string;
   openRouterAiApiKey: string;
-  openRouterModel: string;
-  defaultModel: string;
-  defaultModelDisplayName: string;
-  embeddingModel: string;
+  defaultModelKey: string;
+  embeddingModelKey: string;
   temperature: number;
   maxTokens: number;
   contextTurns: number;
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;
-  useOpenAILocalProxy: boolean;
-  openAIProxyModelName: string;
   openAIEmbeddingProxyBaseUrl: string;
-  openAIEmbeddingProxyModelName: string;
-  ollamaModel: string;
-  ollamaBaseUrl: string;
-  lmStudioBaseUrl: string;
   stream: boolean;
   defaultSaveFolder: string;
+  autosaveChat: boolean;
+  customPromptsFolder: string;
   indexVaultToVectorStore: string;
   chatNoteContextPath: string;
   chatNoteContextTags: string[];
@@ -46,9 +40,10 @@ export interface CopilotSettings {
   enableEncryption: boolean;
   maxSourceChunks: number;
   qaExclusionPaths: string;
-  groqModel: string;
   groqApiKey: string;
   enabledCommands: Record<string, { enabled: boolean; name: string }>;
+  activeModels: Array<CustomModel>;
+  activeEmbeddingModels: Array<CustomModel>;
 }
 
 export class CopilotSettingTab extends PluginSettingTab {
@@ -63,6 +58,12 @@ export class CopilotSettingTab extends PluginSettingTab {
     try {
       // Save the settings before reloading
       await this.plugin.saveSettings();
+
+      // Autosave the current chat before reloading
+      const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view as CopilotView;
+      if (chatView && this.plugin.settings.autosaveChat) {
+        await this.plugin.autosaveCurrentChat();
+      }
 
       // Reload the plugin
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
