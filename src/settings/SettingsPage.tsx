@@ -39,7 +39,6 @@ export interface CopilotSettings {
   lmStudioBaseUrl: string;
   stream: boolean;
   defaultSaveFolder: string;
-  excludedFolders: string[];
   indexVaultToVectorStore: string;
   chatNoteContextPath: string;
   chatNoteContextTags: string[];

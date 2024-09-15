@@ -465,8 +465,6 @@ export default class CopilotPlugin extends Plugin {
       0
     );
 
-    let skippedCount = 0;
-
     const errors: string[] = [];
     const loadPromises = files.map(async (file, index) => {
       try {
@@ -478,22 +476,15 @@ export default class CopilotPlugin extends Plugin {
           metadata: fileMetadatas[index]?.frontmatter ?? {},
         };
 
-        let result;
-        console.log(`indexing file: ${noteFile.path} ${noteFile.basename}`);
-        // MILES TODO: bail on certain files here
-        if (!this.settings.excludedFolders.find((folder) => noteFile.path.indexOf(folder) === 0)) {
-          result = await VectorDBManager.indexFile(
-            this.dbVectorStores,
-            embeddingInstance,
-            noteFile
-          );
-        } else {
-          skippedCount++;
-        }
+        const result = await VectorDBManager.indexFile(
+          this.dbVectorStores,
+          embeddingInstance,
+          noteFile
+        );
 
         indexedCount++;
         indexNotice.setMessage(
-          `Copilot is indexing your vault...\n${indexedCount}/${totalFiles} files processed${skippedCount ? `, \n ${skippedCount} were skipped` : ""}`
+          `Copilot is indexing your vault...\n${indexedCount}/${totalFiles} files processed.`
         );
         return result;
       } catch (err) {
