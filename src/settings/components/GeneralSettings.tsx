@@ -79,13 +79,6 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         value={settings.defaultSaveFolder}
         onChange={(value) => updateSettings({ defaultSaveFolder: value })}
       />
-      <TextComponent
-        name="Exclude Folders from Indexing"
-        description="Comma separated list like folder1, folder1/folder2, etc, to be excluded from indexing process. NOTE: files which were previously indexed will remain in the index."
-        placeholder="folder1, folder1/folder2"
-        value={settings.qaExclusionPaths}
-        onChange={(value) => updateSettings({ qaExclusionPaths: value })}
-      />
       <ToggleComponent
         name="Autosave Chat"
         description="Automatically save the chat when starting a new one or when the plugin reloads"

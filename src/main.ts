@@ -545,7 +545,6 @@ export default class CopilotPlugin extends Plugin {
           content: fileContents[index],
           metadata: fileMetadatas[index]?.frontmatter ?? {},
         };
-
         const result = await VectorDBManager.indexFile(
           this.dbVectorStores,
           embeddingInstance,
