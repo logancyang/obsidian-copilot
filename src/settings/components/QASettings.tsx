@@ -2,7 +2,12 @@ import { CustomModel } from "@/aiParams";
 import { EmbeddingModelProviders, VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
 import { useSettingsContext } from "@/settings/contexts/SettingsContext";
 import React from "react";
-import { DropdownComponent, ModelSettingsComponent, SliderComponent } from "./SettingBlocks";
+import {
+  DropdownComponent,
+  ModelSettingsComponent,
+  SliderComponent,
+  TextComponent,
+} from "./SettingBlocks";
 
 interface QASettingsProps {
   huggingfaceApiKey: string;
@@ -44,7 +49,7 @@ const QASettings: React.FC<QASettingsProps> = ({
         repo.
       </div>
       <p>
-        QA mode relies a <em>local</em> vector index.
+        QA mode relies on a <em>local</em> vector index.
       </p>
       <h2>Long Note QA vs. Vault QA (BETA)</h2>
       <p>
@@ -128,6 +133,13 @@ const QASettings: React.FC<QASettingsProps> = ({
         onChange={async (value) => {
           setMaxSourceChunks(value);
         }}
+      />
+      <TextComponent
+        name="Exclude Folders from Indexing"
+        description="Comma separated list like folder1, folder1/folder2, etc, to be excluded from indexing process. NOTE: files which were previously indexed will remain in the index."
+        placeholder="folder1, folder1/folder2"
+        value={settings.qaExclusionPaths}
+        onChange={(value) => updateSettings({ qaExclusionPaths: value })}
       />
     </div>
   );
