@@ -162,6 +162,7 @@ export default class EmbeddingManager {
       [EmbeddingModelProviders.COHEREAI]: {
         model: modelName,
         apiKey: decrypt(params.cohereApiKey),
+        inputType: params.cohereEmbeddingInputType,
       },
       [EmbeddingModelProviders.GOOGLE]: {
         modelName: modelName,

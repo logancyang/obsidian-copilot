@@ -57,6 +57,7 @@ const SettingsMain: React.FC<{ plugin: CopilotPlugin; reloadPlugin: () => Promis
         setHuggingfaceApiKey={(value) => updateSettings({ huggingfaceApiKey: value })}
         setIndexVaultToVectorStore={(value) => updateSettings({ indexVaultToVectorStore: value })}
         setMaxSourceChunks={(value) => updateSettings({ maxSourceChunks: value })}
+        setCohereEmbeddingInputType={(value) => updateSettings({ cohereEmbeddingInputType: value })}
       />
       <AdvancedSettings
         {...settings}

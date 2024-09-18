@@ -155,6 +155,13 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
   },
 ];
 
+export const COHEREAI_EMBEDDING_INPUT_TYPES = [
+  "search_document",
+  "search_query",
+  "classification",
+  "clustering",
+];
+
 // Embedding Models
 export const NOMIC_EMBED_TEXT = "nomic-embed-text";
 // export const DISTILBERT_NLI = 'sentence-transformers/distilbert-base-nli-mean-tokens';
@@ -198,6 +205,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   openAIOrgId: "",
   huggingfaceApiKey: "",
   cohereApiKey: "",
+  cohereEmbeddingInputType: COHEREAI_EMBEDDING_INPUT_TYPES[0],
   anthropicApiKey: "",
   azureOpenAIApiKey: "",
   azureOpenAIApiInstanceName: "",
