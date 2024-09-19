@@ -3,7 +3,7 @@ import { Platform } from "obsidian";
 
 // Dynamically import electron to access safeStorage
 // @ts-ignore
-let safeStorage: Electron.SafeStorage;
+let safeStorage: Electron.SafeStorage | null = null;
 
 if (Platform.isDesktop) {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -20,20 +20,17 @@ export default class EncryptionService {
   }
 
   private isPlainText(key: string): boolean {
-    // If a key does not start with the prefix, it's considered plain text
     return (
       !key.startsWith(EncryptionService.ENCRYPTION_PREFIX) &&
       !key.startsWith(EncryptionService.DECRYPTION_PREFIX)
     );
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private isDecrypted(keyBuffer: any): boolean {
+  private isDecrypted(keyBuffer: string): boolean {
     return keyBuffer.startsWith(EncryptionService.DECRYPTION_PREFIX);
   }
 
   public encryptAllKeys(): void {
-    // Encrypt top-level API keys
     const keysToEncrypt = Object.keys(this.settings).filter((key) =>
       key.toLowerCase().includes("apikey".toLowerCase())
     );
@@ -44,7 +41,6 @@ export default class EncryptionService {
       (this.settings[key as keyof CopilotSettings] as any) = this.getEncryptedKey(apiKey);
     }
 
-    // Encrypt API keys in activeModels
     if (Array.isArray(this.settings.activeModels)) {
       this.settings.activeModels = this.settings.activeModels.map((model) => ({
         ...model,
@@ -54,46 +50,71 @@ export default class EncryptionService {
   }
 
   public getEncryptedKey(apiKey: string): string {
-    if (!apiKey) {
-      return apiKey;
-    }
-    // Return as is if encryption is not enabled, or already encrypted
     if (
-      !safeStorage.isEncryptionAvailable() ||
+      !apiKey ||
       !this.settings.enableEncryption ||
       apiKey.startsWith(EncryptionService.ENCRYPTION_PREFIX)
     ) {
       return apiKey;
     }
-    // Make sure what's encrypted is the plain text api key
+
     if (this.isDecrypted(apiKey)) {
-      // Remove the prefix if the key is decrypted
       apiKey = apiKey.replace(EncryptionService.DECRYPTION_PREFIX, "");
     }
-    const encryptedBuffer = safeStorage.encryptString(apiKey) as Buffer;
-    // Convert the encrypted buffer to a Base64 string and prepend the prefix
-    return EncryptionService.ENCRYPTION_PREFIX + encryptedBuffer.toString("base64");
+
+    if (safeStorage && safeStorage.isEncryptionAvailable()) {
+      // Convert the encrypted buffer to a Base64 string and prepend the prefix
+      const encryptedBuffer = safeStorage.encryptString(apiKey) as Buffer;
+      // Convert the encrypted buffer to a Base64 string and prepend the prefix
+      return EncryptionService.ENCRYPTION_PREFIX + encryptedBuffer.toString("base64");
+    } else {
+      // Simple fallback for mobile (just for demonstration)
+      const encoder = new TextEncoder();
+      const data = encoder.encode(apiKey);
+      return EncryptionService.ENCRYPTION_PREFIX + this.arrayBufferToBase64(data);
+    }
   }
 
-  // Get the actual key for use in the LLM chain
   public getDecryptedKey(apiKey: string): string {
-    if (!apiKey) {
+    if (!apiKey || this.isPlainText(apiKey)) {
       return apiKey;
-    }
-    if (this.isPlainText(apiKey)) {
-      return apiKey; // Return as is if the key is in plain text
     }
     if (this.isDecrypted(apiKey)) {
       return apiKey.replace(EncryptionService.DECRYPTION_PREFIX, "");
     }
 
-    // Remove the prefix and convert from Base64 to a buffer before decryption
     const base64Data = apiKey.replace(EncryptionService.ENCRYPTION_PREFIX, "");
     try {
-      const buffer = Buffer.from(base64Data, "base64");
-      return safeStorage.decryptString(buffer) as string;
+      if (safeStorage && safeStorage.isEncryptionAvailable()) {
+        const buffer = Buffer.from(base64Data, "base64");
+        return safeStorage.decryptString(buffer) as string;
+      } else {
+        // Simple fallback for mobile (just for demonstration)
+        const data = this.base64ToArrayBuffer(base64Data);
+        const decoder = new TextDecoder();
+        return decoder.decode(data);
+      }
     } catch (err) {
+      console.error("Decryption failed:", err);
       return "Copilot failed to decrypt API keys!";
     }
+  }
+
+  private arrayBufferToBase64(buffer: ArrayBuffer): string {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+  }
+
+  private base64ToArrayBuffer(base64: string): ArrayBuffer {
+    const binaryString = window.atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
   }
 }
