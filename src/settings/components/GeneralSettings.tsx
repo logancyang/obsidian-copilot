@@ -83,8 +83,8 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         name="Default Conversation Tag"
         description="The default tag to be used when saving a conversation. Default is 'ai-conversations'"
         placeholder="ai-conversation"
-        value={settings.defaultTag}
-        onChange={(value) => updateSettings({ defaultTag: value })}
+        value={settings.defaultConversationTag}
+        onChange={(value) => updateSettings({ defaultConversationTag: value })}
       />
       <ToggleComponent
         name="Autosave Chat"

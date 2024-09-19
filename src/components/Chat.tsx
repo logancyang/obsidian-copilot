@@ -200,7 +200,7 @@ const Chat: React.FC<ChatProps> = ({
 epoch: ${epoch}
 modelKey: ${currentModelKey}
 tags:
-  - ${settings.defaultTag}
+  - ${settings.defaultConversationTag}
 ---
 
 ${chatContent}`;
