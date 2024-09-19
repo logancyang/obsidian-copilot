@@ -79,6 +79,13 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         value={settings.defaultSaveFolder}
         onChange={(value) => updateSettings({ defaultSaveFolder: value })}
       />
+      <TextComponent
+        name="Default Conversation Tag"
+        description="The default tag to be used when saving a conversation. Default is 'ai-conversations'"
+        placeholder="ai-conversation"
+        value={settings.defaultConversationTag}
+        onChange={(value) => updateSettings({ defaultConversationTag: value })}
+      />
       <ToggleComponent
         name="Autosave Chat"
         description="Automatically save the chat when starting a new one or when the plugin reloads"

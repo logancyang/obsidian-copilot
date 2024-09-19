@@ -207,6 +207,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   openAIEmbeddingProxyBaseUrl: "",
   stream: true,
   defaultSaveFolder: "copilot-conversations",
+  defaultConversationTag: "ai-conversations",
   autosaveChat: true,
   customPromptsFolder: "copilot-custom-prompts",
   indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH,

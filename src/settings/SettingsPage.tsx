@@ -31,6 +31,7 @@ export interface CopilotSettings {
   openAIEmbeddingProxyBaseUrl: string;
   stream: boolean;
   defaultSaveFolder: string;
+  defaultConversationTag: string;
   autosaveChat: boolean;
   customPromptsFolder: string;
   indexVaultToVectorStore: string;
