@@ -199,6 +199,8 @@ const Chat: React.FC<ChatProps> = ({
       const noteContentWithTimestamp = `---
 epoch: ${epoch}
 modelKey: ${currentModelKey}
+tags:
+  - ${settings.defaultTag}
 ---
 
 ${chatContent}`;

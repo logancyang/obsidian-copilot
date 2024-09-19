@@ -22,6 +22,7 @@ export interface CopilotSettings {
   googleApiKey: string;
   openRouterAiApiKey: string;
   defaultModelKey: string;
+  defaultTag: string;
   embeddingModelKey: string;
   temperature: number;
   maxTokens: number;
