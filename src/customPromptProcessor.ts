@@ -10,6 +10,7 @@ import {
 } from "@/utils";
 import { normalizePath, Notice, TFile, Vault } from "obsidian";
 import { CustomError } from "@/error";
+import { PromptUsageStrategy } from "@/PromptUsageStrategy";
 
 // TODO: To be deprecated once PouchDB is removed
 export interface CustomPromptDB {
@@ -28,14 +29,26 @@ export class CustomPromptProcessor {
 
   private constructor(
     private vault: Vault,
-    private settings: CopilotSettings
+    private settings: CopilotSettings,
+    private usageStrategy?: PromptUsageStrategy
   ) {}
 
-  static getInstance(vault: Vault, settings: CopilotSettings): CustomPromptProcessor {
+  static getInstance(
+    vault: Vault,
+    settings: CopilotSettings,
+    usageStrategy?: PromptUsageStrategy
+  ): CustomPromptProcessor {
     if (!CustomPromptProcessor.instance) {
-      CustomPromptProcessor.instance = new CustomPromptProcessor(vault, settings);
+      if (!usageStrategy) {
+        console.warn("PromptUsageStrategy not initialize");
+      }
+      CustomPromptProcessor.instance = new CustomPromptProcessor(vault, settings, usageStrategy);
     }
     return CustomPromptProcessor.instance;
+  }
+
+  async recordPromptUsage(title: string) {
+    return this.usageStrategy?.recordUsage(title).save();
   }
 
   async getAllPrompts(): Promise<CustomPrompt[]> {
@@ -52,7 +65,13 @@ export class CustomPromptProcessor {
         content: content,
       });
     }
-    return prompts;
+
+    // Clean up promptUsageTimestamps
+    this.usageStrategy?.removeUnusedPrompts(prompts.map((prompt) => prompt.title)).save();
+
+    console.log(this.settings.promptUsageTimestamps);
+
+    return prompts.sort((a, b) => this.usageStrategy?.compare(b.title, a.title) || 0);
   }
 
   async getPrompt(title: string): Promise<CustomPrompt | null> {
@@ -94,7 +113,10 @@ export class CustomPromptProcessor {
           );
         }
 
-        await this.vault.rename(file, newFilePath);
+        await Promise.all([
+          this.usageStrategy?.updateUsage(originTitle, newTitle).save(),
+          this.vault.rename(file, newFilePath),
+        ]);
       }
       await this.vault.modify(file, content);
     }
@@ -104,7 +126,10 @@ export class CustomPromptProcessor {
     const filePath = `${this.settings.customPromptsFolder}/${title}.md`;
     const file = this.vault.getAbstractFileByPath(filePath);
     if (file instanceof TFile) {
-      await this.vault.delete(file);
+      await Promise.all([
+        this.usageStrategy?.removeUnusedPrompts([title]).save(),
+        this.vault.delete(file),
+      ]);
     }
   }
 

@@ -45,6 +45,7 @@ import {
 } from "obsidian";
 import PouchDB from "pouchdb-browser";
 import { CustomError } from "@/error";
+import { TimestampUsageStrategy } from "@/PromptUsageStrategy";
 
 export default class CopilotPlugin extends Plugin {
   settings: CopilotSettings;
@@ -119,7 +120,11 @@ export default class CopilotPlugin extends Plugin {
 
     registerBuiltInCommands(this);
 
-    const promptProcessor = CustomPromptProcessor.getInstance(this.app.vault, this.settings);
+    const promptProcessor = CustomPromptProcessor.getInstance(
+      this.app.vault,
+      this.settings,
+      new TimestampUsageStrategy(this.settings, () => this.saveSettings())
+    );
 
     this.addCommand({
       id: "add-custom-prompt",

@@ -281,6 +281,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
       name: "Change tone of selection",
     },
   },
+  promptUsageTimestamps: {},
 };
 
 export const EVENT_NAMES = {

@@ -44,6 +44,7 @@ export interface CopilotSettings {
   enabledCommands: Record<string, { enabled: boolean; name: string }>;
   activeModels: Array<CustomModel>;
   activeEmbeddingModels: Array<CustomModel>;
+  promptUsageTimestamps: Record<string, number>;
 }
 
 export class CopilotSettingTab extends PluginSettingTab {
