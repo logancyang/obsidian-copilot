@@ -17,12 +17,14 @@ import {
   CHAT_VIEWTYPE,
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
-  USER_SENDER,
   EVENT_NAMES,
+  USER_SENDER,
   VAULT_VECTOR_STORE_STRATEGY,
 } from "@/constants";
 import { CustomPrompt, CustomPromptDB, CustomPromptProcessor } from "@/customPromptProcessor";
 import EncryptionService from "@/encryptionService";
+import { CustomError } from "@/error";
+import { TimestampUsageStrategy } from "@/promptUsageStrategy";
 import { CopilotSettings, CopilotSettingTab } from "@/settings/SettingsPage";
 import SharedState, { ChatMessage } from "@/sharedState";
 import {
@@ -44,8 +46,6 @@ import {
   WorkspaceLeaf,
 } from "obsidian";
 import PouchDB from "pouchdb-browser";
-import { CustomError } from "@/error";
-import { TimestampUsageStrategy } from "@/PromptUsageStrategy";
 
 export default class CopilotPlugin extends Plugin {
   settings: CopilotSettings;

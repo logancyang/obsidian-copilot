@@ -1,3 +1,5 @@
+import { CustomError } from "@/error";
+import { PromptUsageStrategy } from "@/promptUsageStrategy";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import {
   extractNoteTitles,
@@ -9,8 +11,6 @@ import {
   processVariableNameForNotePath,
 } from "@/utils";
 import { normalizePath, Notice, TFile, Vault } from "obsidian";
-import { CustomError } from "@/error";
-import { PromptUsageStrategy } from "@/PromptUsageStrategy";
 
 // TODO: To be deprecated once PouchDB is removed
 export interface CustomPromptDB {
@@ -68,8 +68,6 @@ export class CustomPromptProcessor {
 
     // Clean up promptUsageTimestamps
     this.usageStrategy?.removeUnusedPrompts(prompts.map((prompt) => prompt.title)).save();
-
-    console.log(this.settings.promptUsageTimestamps);
 
     return prompts.sort((a, b) => this.usageStrategy?.compare(b.title, a.title) || 0);
   }
