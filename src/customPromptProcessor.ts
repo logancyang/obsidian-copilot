@@ -1,4 +1,5 @@
 import { CustomError } from "@/error";
+import { PromptUsageStrategy } from "@/promptUsageStrategy";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import {
   extractNoteTitles,
@@ -10,7 +11,6 @@ import {
   processVariableNameForNotePath,
 } from "@/utils";
 import { normalizePath, Notice, TFile, Vault } from "obsidian";
-import { PromptUsageStrategy } from "./promptUsageStrategy";
 
 // TODO: To be deprecated once PouchDB is removed
 export interface CustomPromptDB {
