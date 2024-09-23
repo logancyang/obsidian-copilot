@@ -45,6 +45,7 @@ import {
 } from "obsidian";
 import PouchDB from "pouchdb-browser";
 import { CustomError } from "@/error";
+import { TimestampUsageStrategy } from "@/PromptUsageStrategy";
 
 export default class CopilotPlugin extends Plugin {
   settings: CopilotSettings;
@@ -119,7 +120,11 @@ export default class CopilotPlugin extends Plugin {
 
     registerBuiltInCommands(this);
 
-    const promptProcessor = CustomPromptProcessor.getInstance(this.app.vault, this.settings);
+    const promptProcessor = CustomPromptProcessor.getInstance(
+      this.app.vault,
+      this.settings,
+      new TimestampUsageStrategy(this.settings, () => this.saveSettings())
+    );
 
     this.addCommand({
       id: "add-custom-prompt",
@@ -401,7 +406,7 @@ export default class CopilotPlugin extends Plugin {
       id: "dump-custom-prompts-to-markdown",
       name: "Dump custom prompts to markdown files",
       callback: async () => {
-        await this.dumpCustomPrompts();
+        await this.dumpCustomPrompts(promptProcessor);
       },
     });
 
@@ -421,23 +426,17 @@ export default class CopilotPlugin extends Plugin {
     }
   }
 
-  async dumpCustomPrompts(): Promise<void> {
+  async dumpCustomPrompts(promptProcessor: CustomPromptProcessor): Promise<void> {
     const folder = this.settings.customPromptsFolder || DEFAULT_SETTINGS.customPromptsFolder;
 
     try {
-      // Ensure the folder exists
-      if (!(await this.app.vault.adapter.exists(folder))) {
-        await this.app.vault.createFolder(folder);
-      }
-
       // Fetch all prompts
       const response = await this.dbPrompts.allDocs({ include_docs: true });
 
       for (const row of response.rows) {
         const doc = row.doc as CustomPromptDB;
         if (doc && doc._id && doc.prompt) {
-          const fileName = `${folder}/${doc._id}.md`;
-          await this.app.vault.create(fileName, doc.prompt);
+          await promptProcessor.savePrompt(doc._id, doc.prompt);
         }
       }
 

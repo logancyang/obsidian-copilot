@@ -69,6 +69,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
     new ListPromptModal(app, promptTitles, async (promptTitle: string) => {
       const selectedPrompt = prompts.find((prompt) => prompt.title === promptTitle);
       if (selectedPrompt) {
+        await customPromptProcessor.recordPromptUsage(selectedPrompt.title);
         setInputMessage(selectedPrompt.content);
         updateRows(selectedPrompt.content);
       }
