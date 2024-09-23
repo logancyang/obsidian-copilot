@@ -32,6 +32,7 @@ import {
   getAllNotesContent,
   isPathInList,
   sanitizeSettings,
+  stringToFormattedDateTime,
 } from "@/utils";
 import VectorDBManager, { VectorStoreDocument } from "@/vectorDBManager";
 import { MD5 } from "crypto-js";
@@ -873,6 +874,7 @@ export default class CopilotPlugin extends Plugin {
     const messages: ChatMessage[] = [];
     let currentSender = "";
     let currentMessage = "";
+    let currentTimestamp = "";
 
     for (const line of lines) {
       if (line.startsWith("**user**:") || line.startsWith("**ai**:")) {
@@ -881,10 +883,14 @@ export default class CopilotPlugin extends Plugin {
             sender: currentSender === USER_SENDER ? USER_SENDER : AI_SENDER,
             message: currentMessage.trim(),
             isVisible: true,
+            timestamp: currentTimestamp ? stringToFormattedDateTime(currentTimestamp) : null,
           });
         }
         currentSender = line.startsWith("**user**:") ? USER_SENDER : AI_SENDER;
         currentMessage = line.substring(line.indexOf(":") + 1).trim();
+        currentTimestamp = "";
+      } else if (line.startsWith("[Timestamp:")) {
+        currentTimestamp = line.substring(11, line.length - 1).trim();
       } else {
         currentMessage += "\n" + line;
       }
@@ -895,6 +901,7 @@ export default class CopilotPlugin extends Plugin {
         sender: currentSender === USER_SENDER ? USER_SENDER : AI_SENDER,
         message: currentMessage.trim(),
         isVisible: true,
+        timestamp: currentTimestamp ? stringToFormattedDateTime(currentTimestamp) : null,
       });
     }
 

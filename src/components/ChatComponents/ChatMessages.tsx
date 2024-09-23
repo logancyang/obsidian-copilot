@@ -74,6 +74,7 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
             sender: "AI",
             message: currentAiMessage || loadingDots,
             isVisible: true,
+            timestamp: null,
           }}
           app={app}
           isStreaming={true}

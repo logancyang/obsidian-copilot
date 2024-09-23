@@ -122,36 +122,40 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         <div className="message-icon">
           {message.sender === USER_SENDER ? <UserIcon /> : <BotIcon />}
         </div>
-        <div className="message-content">
-          {message.sender === USER_SENDER && isEditing ? (
-            <textarea
-              ref={textareaRef}
-              value={editedMessage}
-              onChange={handleTextareaChange}
-              onKeyDown={handleKeyDown}
-              onBlur={handleSaveEdit}
-              autoFocus
-              className="edit-textarea"
-            />
-          ) : message.sender === USER_SENDER ? (
-            <span>{message.message}</span>
-          ) : (
-            <div ref={contentRef}></div>
+        <div className="message-content-wrapper">
+          <div className="message-content">
+            {message.sender === USER_SENDER && isEditing ? (
+              <textarea
+                ref={textareaRef}
+                value={editedMessage}
+                onChange={handleTextareaChange}
+                onKeyDown={handleKeyDown}
+                onBlur={handleSaveEdit}
+                autoFocus
+                className="edit-textarea"
+              />
+            ) : message.sender === USER_SENDER ? (
+              <span>{message.message}</span>
+            ) : (
+              <div ref={contentRef}></div>
+            )}
+          </div>
+
+          {!isStreaming && (
+            <div className="message-buttons-wrapper">
+              <div className="message-timestamp">{message.timestamp?.display}</div>
+              <ChatButtons
+                message={message}
+                onCopy={copyToClipboard}
+                isCopied={isCopied}
+                onInsertAtCursor={onInsertAtCursor}
+                onRegenerate={onRegenerate}
+                onEdit={handleEdit}
+              />
+            </div>
           )}
         </div>
       </div>
-      {!isStreaming && (
-        <div className="message-buttons-wrapper">
-          <ChatButtons
-            message={message}
-            onCopy={copyToClipboard}
-            isCopied={isCopied}
-            onInsertAtCursor={onInsertAtCursor}
-            onRegenerate={onRegenerate}
-            onEdit={handleEdit}
-          />
-        </div>
-      )}
     </div>
   );
 };

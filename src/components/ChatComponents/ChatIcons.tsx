@@ -2,7 +2,7 @@ import { CustomModel, SetChainOptions } from "@/aiParams";
 import { AI_SENDER, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChatMessage } from "@/sharedState";
-import { getFileContent, getFileName } from "@/utils";
+import { formatDateTime, getFileContent, getFileName } from "@/utils";
 import { Notice, Vault } from "obsidian";
 import React, { useEffect, useState } from "react";
 
@@ -92,6 +92,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           sender: AI_SENDER,
           message: `OK Feel free to ask me questions about [[${noteName}]]. \n\nPlease note that this is a retrieval-based QA for notes longer than the model context window. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with *Send Note to Prompt* button used with a *long context model* is a more suitable choice.`,
           isVisible: true,
+          timestamp: formatDateTime(new Date()),
         };
         addMessage(activeNoteOnMessage);
         if (noteContent) {
@@ -106,6 +107,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           sender: AI_SENDER,
           message: `OK Feel free to ask me questions about your vault: **${app.vault.getName()}**. \n\nIf you have *NEVER* as your auto-index strategy, you must click the *Refresh Index* button below, or run Copilot command: *Index vault for QA* first before you proceed!\n\nPlease note that this is a retrieval-based QA. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with *Send Note to Prompt* button used with a *long context model* is a more suitable choice.`,
           isVisible: true,
+          timestamp: formatDateTime(new Date()),
         };
         addMessage(activeNoteOnMessage);
       }
