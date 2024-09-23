@@ -24,7 +24,6 @@ import {
 import { CustomPrompt, CustomPromptDB, CustomPromptProcessor } from "@/customPromptProcessor";
 import EncryptionService from "@/encryptionService";
 import { CustomError } from "@/error";
-import { TimestampUsageStrategy } from "@/promptUsageStrategy";
 import { CopilotSettings, CopilotSettingTab } from "@/settings/SettingsPage";
 import SharedState, { ChatMessage } from "@/sharedState";
 import {
@@ -46,6 +45,7 @@ import {
   WorkspaceLeaf,
 } from "obsidian";
 import PouchDB from "pouchdb-browser";
+import { TimestampUsageStrategy } from "./promptUsageStrategy";
 
 export default class CopilotPlugin extends Plugin {
   settings: CopilotSettings;
