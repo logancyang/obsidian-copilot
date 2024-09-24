@@ -11,6 +11,7 @@ interface ChatMessagesProps {
   onInsertAtCursor: (message: string) => void;
   onRegenerate: (messageIndex: number) => void;
   onEdit: (messageIndex: number, newMessage: string) => void;
+  onDelete: (messageIndex: number) => void;
 }
 
 const ChatMessages: React.FC<ChatMessagesProps> = ({
@@ -21,6 +22,7 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
   onInsertAtCursor,
   onRegenerate,
   onEdit,
+  onDelete,
 }) => {
   const [loadingDots, setLoadingDots] = useState("");
 
@@ -64,6 +66,7 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
               }}
               onRegenerate={() => onRegenerate(index)}
               onEdit={(newMessage) => onEdit(index, newMessage)}
+              onDelete={() => onDelete(index)}
             />
           )
       )}
@@ -78,6 +81,7 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
           }}
           app={app}
           isStreaming={true}
+          onDelete={() => {}}
         />
       )}
     </div>
