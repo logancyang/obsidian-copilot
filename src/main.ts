@@ -857,6 +857,9 @@ export default class CopilotPlugin extends Plugin {
     this.sharedState.clearChatHistory();
     messages.forEach((message) => this.sharedState.addMessage(message));
 
+    // Update the chain's memory with the loaded messages
+    await this.chainManager.updateMemoryWithLoadedMessages(messages);
+
     // Check if the Copilot view is already active
     const existingView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0];
     if (!existingView) {
