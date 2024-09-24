@@ -1,6 +1,7 @@
 import { AI_SENDER } from "@/constants";
 import ChainManager from "@/LLMProviders/chainManager";
 import { ChatMessage } from "@/sharedState";
+import { formatDateTime } from "./utils";
 
 export type Role = "assistant" | "user" | "system";
 
@@ -45,6 +46,7 @@ export const getAIResponse = async (
       sender: AI_SENDER,
       message: `Error: ${errorMessage}`,
       isVisible: true,
+      timestamp: formatDateTime(new Date()),
     });
   }
 };

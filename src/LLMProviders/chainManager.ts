@@ -5,7 +5,12 @@ import EncryptionService from "@/encryptionService";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChatMessage } from "@/sharedState";
-import { extractChatHistory, extractUniqueTitlesFromDocs, isSupportedChain } from "@/utils";
+import {
+  extractChatHistory,
+  extractUniqueTitlesFromDocs,
+  formatDateTime,
+  isSupportedChain,
+} from "@/utils";
 import VectorDBManager, { MemoryVector, NoteFile, VectorStoreDocument } from "@/vectorDBManager";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { BaseChatMemory } from "langchain/memory";
@@ -426,6 +431,7 @@ export default class ChainManager {
           message: fullAIResponse,
           sender: AI_SENDER,
           isVisible: true,
+          timestamp: formatDateTime(new Date()),
         });
       }
       updateCurrentAiMessage("");

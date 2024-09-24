@@ -102,16 +102,20 @@ const Chat: React.FC<ChatProps> = ({
       app.workspace.getActiveFile() as TFile | undefined
     );
 
+    const timestamp = formatDateTime(new Date());
+
     const userMessage: ChatMessage = {
       message: inputMessage,
       sender: USER_SENDER,
       isVisible: true,
+      timestamp: timestamp,
     };
 
     const promptMessageHidden: ChatMessage = {
       message: processedUserMessage,
       sender: USER_SENDER,
       isVisible: false,
+      timestamp: timestamp,
     };
 
     // Add user message to chat history
@@ -156,11 +160,23 @@ const Chat: React.FC<ChatProps> = ({
       return;
     }
 
-    // Save the chat history as a new note in the vault
-    // Only visible messages are included
-    const chatContent = chatHistory
-      .filter((message) => message.isVisible)
-      .map((message) => `**${message.sender}**: ${message.message}`)
+    // Filter visible messages
+    const visibleMessages = chatHistory.filter((message) => message.isVisible);
+
+    if (visibleMessages.length === 0) {
+      new Notice("No messages to save.");
+      return;
+    }
+
+    // Get the epoch of the first message
+    const firstMessageEpoch = visibleMessages[0].timestamp?.epoch || Date.now();
+
+    // Format the chat content
+    const chatContent = visibleMessages
+      .map(
+        (message) =>
+          `**${message.sender}**: ${message.message}\n[Timestamp: ${message.timestamp?.display}]`
+      )
       .join("\n\n");
 
     try {
@@ -170,13 +186,10 @@ const Chat: React.FC<ChatProps> = ({
         await app.vault.createFolder(defaultSaveFolder);
       }
 
-      const now = new Date();
-      const { fileName: timestampFileName, epoch } = formatDateTime(now);
+      const { fileName: timestampFileName } = formatDateTime(new Date(firstMessageEpoch));
 
       // Get the first user message
-      const firstUserMessage = chatHistory.find(
-        (message) => message.sender === USER_SENDER && message.isVisible
-      );
+      const firstUserMessage = visibleMessages.find((message) => message.sender === USER_SENDER);
 
       // Get the first 10 words from the first user message and sanitize them
       const firstTenWords = firstUserMessage
@@ -197,7 +210,7 @@ const Chat: React.FC<ChatProps> = ({
 
       // Add the timestamp and model properties to the note content
       const noteContentWithTimestamp = `---
-epoch: ${epoch}
+epoch: ${firstMessageEpoch}
 modelKey: ${currentModelKey}
 tags:
   - ${settings.defaultConversationTag}
@@ -205,7 +218,7 @@ tags:
 
 ${chatContent}`;
 
-      const newNote: TFile = await app.vault.create(noteFileName, noteContentWithTimestamp);
+      const newNote = await app.vault.create(noteFileName, noteContentWithTimestamp);
       if (openNote) {
         const leaf = app.workspace.getLeaf();
         leaf.openFile(newNote);
@@ -213,6 +226,7 @@ ${chatContent}`;
       new Notice(`Chat saved as note in folder: ${defaultSaveFolder}.`);
     } catch (error) {
       console.error("Error saving chat as note:", error);
+      new Notice("Failed to save chat as note. Check console for details.");
     }
   };
 
@@ -264,6 +278,7 @@ ${chatContent}`;
       message: sendNotesContentPrompt(notes),
       sender: USER_SENDER,
       isVisible: false,
+      timestamp: formatDateTime(new Date()),
     };
 
     // Visible user message that is not sent to AI
@@ -277,6 +292,7 @@ ${chatContent}`;
       message: sendNoteContentUserMessage,
       sender: USER_SENDER,
       isVisible: true,
+      timestamp: formatDateTime(new Date()),
     };
 
     addMessage(promptMessageVisible);
@@ -327,6 +343,7 @@ ${chatContent}`;
       sender: AI_SENDER,
       message: `Indexing [[${noteName}]]...\n\n Please switch to "QA" in Mode Selection to ask questions about it.`,
       isVisible: true,
+      timestamp: formatDateTime(new Date()),
     };
 
     if (currentChain === ChainType.LONG_NOTE_QA_CHAIN) {
@@ -445,6 +462,7 @@ ${chatContent}`;
         sender: AI_SENDER,
         message: `The selected text contains ${wordCount} words and ${tokenCount} tokens.`,
         isVisible: true,
+        timestamp: formatDateTime(new Date()),
       };
       addMessage(tokenCountMessage);
     }
@@ -479,6 +497,7 @@ ${chatContent}`;
           message: messageWithPrompt,
           sender: USER_SENDER,
           isVisible: isVisible,
+          timestamp: formatDateTime(new Date()),
         };
 
         if (isVisible) {

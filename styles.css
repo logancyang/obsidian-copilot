@@ -210,6 +210,12 @@ If your plugin does not need CSS, delete this file.
   flex-shrink: 0;
 }
 
+.message-content-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
 .message-content {
   flex-grow: 1;
   max-width: 95%;
@@ -286,8 +292,17 @@ If your plugin does not need CSS, delete this file.
 }
 
 .message-buttons-wrapper {
-  align-self: flex-end;
-  margin-top: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.message-timestamp {
+  font-size: 0.7em;
+  color: var(--text-faint, #bbb);
+  opacity: 0.7;
+  font-style: italic;
 }
 
 .chat-message-buttons {
@@ -295,6 +310,7 @@ If your plugin does not need CSS, delete this file.
   gap: 4px;
   align-items: center;
   height: 24px;
+  margin-left: auto;
 }
 
 .chat-message-buttons button {
