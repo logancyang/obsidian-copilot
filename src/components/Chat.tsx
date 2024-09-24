@@ -218,12 +218,25 @@ tags:
 
 ${chatContent}`;
 
-      const newNote = await app.vault.create(noteFileName, noteContentWithTimestamp);
-      if (openNote) {
-        const leaf = app.workspace.getLeaf();
-        leaf.openFile(newNote);
+      // Check if the file already exists
+      const existingFile = app.vault.getAbstractFileByPath(noteFileName);
+      if (existingFile instanceof TFile) {
+        // If the file exists, update its content
+        await app.vault.modify(existingFile, noteContentWithTimestamp);
+        new Notice(`Chat updated in existing note: ${noteFileName}`);
+      } else {
+        // If the file doesn't exist, create a new one
+        await app.vault.create(noteFileName, noteContentWithTimestamp);
+        new Notice(`Chat saved as new note: ${noteFileName}`);
       }
-      new Notice(`Chat saved as note in folder: ${defaultSaveFolder}.`);
+
+      if (openNote) {
+        const file = app.vault.getAbstractFileByPath(noteFileName);
+        if (file instanceof TFile) {
+          const leaf = app.workspace.getLeaf();
+          leaf.openFile(file);
+        }
+      }
     } catch (error) {
       console.error("Error saving chat as note:", error);
       new Notice("Failed to save chat as note. Check console for details.");

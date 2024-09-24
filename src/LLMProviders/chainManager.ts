@@ -1,6 +1,6 @@
 import { CustomModel, LangChainParams, SetChainOptions } from "@/aiParams";
 import ChainFactory, { ChainType, Document } from "@/chainFactory";
-import { AI_SENDER, BUILTIN_CHAT_MODELS } from "@/constants";
+import { AI_SENDER, BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
 import EncryptionService from "@/encryptionService";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { CopilotSettings } from "@/settings/SettingsPage";
@@ -499,5 +499,18 @@ export default class ChainManager {
       return;
     }
     return await VectorDBManager.indexFile(this.getDbVectorStores(), embeddingsAPI, noteFile);
+  }
+
+  async updateMemoryWithLoadedMessages(messages: ChatMessage[]) {
+    await this.memoryManager.clearChatMemory();
+    for (let i = 0; i < messages.length; i += 2) {
+      const userMsg = messages[i];
+      const aiMsg = messages[i + 1];
+      if (userMsg && aiMsg && userMsg.sender === USER_SENDER) {
+        await this.memoryManager
+          .getMemory()
+          .saveContext({ input: userMsg.message }, { output: aiMsg.message });
+      }
+    }
   }
 }
