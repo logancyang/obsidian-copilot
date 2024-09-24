@@ -2,6 +2,7 @@ import ChainManager from "@/LLMProviders/chainManager";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { CustomModel, LangChainParams, SetChainOptions } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
+import { parseChatContent, updateChatMemory } from "@/chatUtils";
 import { registerBuiltInCommands } from "@/commands";
 import { AddPromptModal } from "@/components/AddPromptModal";
 import { AdhocPromptModal } from "@/components/AdhocPromptModal";
@@ -11,14 +12,12 @@ import { ListPromptModal } from "@/components/ListPromptModal";
 import { LoadChatHistoryModal } from "@/components/LoadChatHistoryModal";
 import { QAExclusionModal } from "@/components/QAExclusionModal";
 import {
-  AI_SENDER,
   BUILTIN_CHAT_MODELS,
   BUILTIN_EMBEDDING_MODELS,
   CHAT_VIEWTYPE,
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
   EVENT_NAMES,
-  USER_SENDER,
   VAULT_VECTOR_STORE_STRATEGY,
 } from "@/constants";
 import { CustomPrompt, CustomPromptDB, CustomPromptProcessor } from "@/customPromptProcessor";
@@ -26,13 +25,12 @@ import EncryptionService from "@/encryptionService";
 import { CustomError } from "@/error";
 import { TimestampUsageStrategy } from "@/promptUsageStrategy";
 import { CopilotSettings, CopilotSettingTab } from "@/settings/SettingsPage";
-import SharedState, { ChatMessage } from "@/sharedState";
+import SharedState from "@/sharedState";
 import {
   areEmbeddingModelsSame,
   getAllNotesContent,
   isPathInList,
   sanitizeSettings,
-  stringToFormattedDateTime,
 } from "@/utils";
 import VectorDBManager, { VectorStoreDocument } from "@/vectorDBManager";
 import { MD5 } from "crypto-js";
@@ -853,12 +851,12 @@ export default class CopilotPlugin extends Plugin {
 
   async loadChatHistory(file: TFile) {
     const content = await this.app.vault.read(file);
-    const messages = this.parseChatContent(content);
+    const messages = parseChatContent(content);
     this.sharedState.clearChatHistory();
     messages.forEach((message) => this.sharedState.addMessage(message));
 
     // Update the chain's memory with the loaded messages
-    await this.chainManager.updateMemoryWithLoadedMessages(messages);
+    await updateChatMemory(messages, this.chainManager.memoryManager);
 
     // Check if the Copilot view is already active
     const existingView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0];
@@ -870,44 +868,5 @@ export default class CopilotPlugin extends Plugin {
       const copilotView = existingView.view as CopilotView;
       copilotView.updateView();
     }
-  }
-
-  parseChatContent(content: string): ChatMessage[] {
-    const lines = content.split("\n");
-    const messages: ChatMessage[] = [];
-    let currentSender = "";
-    let currentMessage = "";
-    let currentTimestamp = "";
-
-    for (const line of lines) {
-      if (line.startsWith("**user**:") || line.startsWith("**ai**:")) {
-        if (currentSender && currentMessage) {
-          messages.push({
-            sender: currentSender === USER_SENDER ? USER_SENDER : AI_SENDER,
-            message: currentMessage.trim(),
-            isVisible: true,
-            timestamp: currentTimestamp ? stringToFormattedDateTime(currentTimestamp) : null,
-          });
-        }
-        currentSender = line.startsWith("**user**:") ? USER_SENDER : AI_SENDER;
-        currentMessage = line.substring(line.indexOf(":") + 1).trim();
-        currentTimestamp = "";
-      } else if (line.startsWith("[Timestamp:")) {
-        currentTimestamp = line.substring(11, line.length - 1).trim();
-      } else {
-        currentMessage += "\n" + line;
-      }
-    }
-
-    if (currentSender && currentMessage) {
-      messages.push({
-        sender: currentSender === USER_SENDER ? USER_SENDER : AI_SENDER,
-        message: currentMessage.trim(),
-        isVisible: true,
-        timestamp: currentTimestamp ? stringToFormattedDateTime(currentTimestamp) : null,
-      });
-    }
-
-    return messages;
   }
 }

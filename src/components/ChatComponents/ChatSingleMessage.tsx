@@ -12,6 +12,7 @@ interface ChatSingleMessageProps {
   onInsertAtCursor?: () => void;
   onRegenerate?: () => void;
   onEdit?: (newMessage: string) => void;
+  onDelete: () => void;
 }
 
 const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
@@ -21,6 +22,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   onInsertAtCursor,
   onRegenerate,
   onEdit,
+  onDelete,
 }) => {
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
@@ -151,6 +153,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                 onInsertAtCursor={onInsertAtCursor}
                 onRegenerate={onRegenerate}
                 onEdit={handleEdit}
+                onDelete={onDelete}
               />
             </div>
           )}

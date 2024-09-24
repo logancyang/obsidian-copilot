@@ -1,6 +1,7 @@
 import ChainManager from "@/LLMProviders/chainManager";
 import { useAIState } from "@/aiState";
 import { ChainType } from "@/chainFactory";
+import { updateChatMemory } from "@/chatUtils";
 import ChatIcons from "@/components/ChatComponents/ChatIcons";
 import ChatInput from "@/components/ChatComponents/ChatInput";
 import ChatMessages from "@/components/ChatComponents/ChatMessages";
@@ -452,19 +453,15 @@ ${chatContent}`;
     newChatHistory.forEach(addMessage);
 
     // Update the chain's memory with the new chat history
-    chainManager.memoryManager.clearChatMemory();
-    for (let i = 0; i < newChatHistory.length; i += 2) {
-      const userMsg = newChatHistory[i];
-      const aiMsg = newChatHistory[i + 1];
-      if (userMsg && aiMsg) {
-        await chainManager.memoryManager
-          .getMemory()
-          .saveContext({ input: userMsg.message }, { output: aiMsg.message });
-      }
-    }
+    await updateChatMemory(newChatHistory, chainManager.memoryManager);
 
-    // Trigger regeneration of the AI message
-    handleRegenerate(messageIndex + 1);
+    // Trigger regeneration of the AI message if the edited message was from the user
+    if (
+      newChatHistory[messageIndex].sender === USER_SENDER &&
+      messageIndex < newChatHistory.length - 1
+    ) {
+      handleRegenerate(messageIndex + 1);
+    }
   };
 
   useEffect(() => {
@@ -648,6 +645,16 @@ ${chatContent}`;
     }
   }, [onSaveChat]);
 
+  const handleDelete = async (messageIndex: number) => {
+    const newChatHistory = [...chatHistory];
+    newChatHistory.splice(messageIndex, 1);
+    clearMessages();
+    newChatHistory.forEach(addMessage);
+
+    // Update the chain's memory with the new chat history
+    await updateChatMemory(newChatHistory, chainManager.memoryManager);
+  };
+
   return (
     <div className="chat-container">
       <ChatMessages
@@ -658,6 +665,7 @@ ${chatContent}`;
         onInsertAtCursor={handleInsertAtCursor}
         onRegenerate={handleRegenerate}
         onEdit={handleEdit}
+        onDelete={handleDelete}
       />
       <div className="bottom-container">
         <ChatIcons

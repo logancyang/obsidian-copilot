@@ -1,6 +1,7 @@
 import {
   CheckIcon,
   CopyClipboardIcon,
+  DeleteIcon,
   EditIcon,
   InsertIcon,
   RegenerateIcon,
@@ -16,6 +17,7 @@ interface ChatButtonsProps {
   onInsertAtCursor?: () => void;
   onRegenerate?: () => void;
   onEdit?: () => void;
+  onDelete: () => void;
 }
 
 export const ChatButtons: React.FC<ChatButtonsProps> = ({
@@ -25,6 +27,7 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
   onInsertAtCursor,
   onRegenerate,
   onEdit,
+  onDelete,
 }) => {
   return (
     <div className="chat-message-buttons">
@@ -32,9 +35,14 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
         {isCopied ? <CheckIcon /> : <CopyClipboardIcon />}
       </button>
       {message.sender === USER_SENDER ? (
-        <button onClick={onEdit} className="clickable-icon" title="Edit">
-          <EditIcon />
-        </button>
+        <>
+          <button onClick={onEdit} className="clickable-icon" title="Edit">
+            <EditIcon />
+          </button>
+          <button onClick={onDelete} className="clickable-icon" title="Delete">
+            <DeleteIcon />
+          </button>
+        </>
       ) : (
         <>
           <button
@@ -46,6 +54,9 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
           </button>
           <button onClick={onRegenerate} className="clickable-icon" title="Regenerate">
             <RegenerateIcon />
+          </button>
+          <button onClick={onDelete} className="clickable-icon" title="Delete">
+            <DeleteIcon />
           </button>
         </>
       )}
