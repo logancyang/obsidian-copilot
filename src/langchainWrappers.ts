@@ -50,6 +50,15 @@ export class ChatAnthropicWrapped extends ChatAnthropic {
 async function safeFetch(url: string, options: RequestInit): Promise<Response> {
   // Necessary to remove 'content-length' in order to make headers compatible with requestUrl()
   delete (options.headers as Record<string, string>)["content-length"];
+
+  if (typeof options.body === "string") {
+    const newBody = JSON.parse(options.body ?? {});
+    // frequency_penalty: default 0, but perplexity.ai requires 1 by default.
+    // so, delete this argument for now
+    delete newBody["frequency_penalty"];
+    options.body = JSON.stringify(newBody);
+  }
+
   const response = await requestUrl({
     url,
     contentType: "application/json",
