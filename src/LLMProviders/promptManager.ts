@@ -22,11 +22,19 @@ export default class PromptManager {
   }
 
   private initChatPrompt(): void {
+    // Escape curly braces in the system message
+    const escapedSystemMessage = this.escapeTemplateString(this.langChainParams.systemMessage);
+
     this.chatPrompt = ChatPromptTemplate.fromMessages([
-      SystemMessagePromptTemplate.fromTemplate(this.langChainParams.systemMessage),
+      SystemMessagePromptTemplate.fromTemplate(escapedSystemMessage),
       new MessagesPlaceholder("history"),
       HumanMessagePromptTemplate.fromTemplate("{input}"),
     ]);
+  }
+
+  // Add this new method to escape curly braces
+  private escapeTemplateString(str: string): string {
+    return str.replace(/\{/g, "{{").replace(/\}/g, "}}");
   }
 
   getChatPrompt(): ChatPromptTemplate {
