@@ -183,7 +183,10 @@ export class CustomPromptProcessor {
       }
 
       if (notes.length > 0) {
-        variablesWithContent.push(JSON.stringify(notes));
+        const markdownContent = notes
+          .map((note) => `## ${note.name}\n\n${note.content}`)
+          .join("\n\n");
+        variablesWithContent.push(markdownContent);
       } else {
         new Notice(`Warning: No valid notes found for the provided path '${variableName}'.`);
       }
