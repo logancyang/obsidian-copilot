@@ -40,12 +40,14 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.OPENAI,
     enabled: true,
     isBuiltIn: true,
+    core: true,
   },
   {
     name: ChatModels.GPT_4o_mini,
     provider: ChatModelProviders.OPENAI,
     enabled: true,
     isBuiltIn: true,
+    core: true,
   },
   {
     name: ChatModels.GPT_4_TURBO,
@@ -122,6 +124,7 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     isEmbeddingModel: true,
+    core: true,
   },
   {
     name: EmbeddingModels.OPENAI_EMBEDDING_LARGE,
@@ -218,8 +221,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableEncryption: false,
   maxSourceChunks: 3,
   groqApiKey: "",
-  activeModels: [],
-  activeEmbeddingModels: [],
+  activeModels: BUILTIN_CHAT_MODELS,
+  activeEmbeddingModels: BUILTIN_EMBEDDING_MODELS,
   enabledCommands: {
     [COMMAND_IDS.FIX_GRAMMAR]: {
       enabled: true,

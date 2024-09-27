@@ -277,7 +277,7 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
                 )}
               </td>
               <td>
-                {!model.isBuiltIn && (
+                {!model.core && (
                   <button onClick={() => onDeleteModel(getModelKey(model))}>Delete</button>
                 )}
               </td>

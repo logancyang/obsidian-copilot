@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS } from "@/constants";
+import { BUILTIN_CHAT_MODELS, BUILTIN_EMBEDDING_MODELS, DEFAULT_SETTINGS } from "@/constants";
 import CopilotPlugin from "@/main";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import React, { createContext, useCallback, useContext, useState } from "react";
@@ -39,11 +39,16 @@ export const SettingsProvider: React.FC<{
   }, [plugin, reloadPlugin]);
 
   const resetSettings = useCallback(async () => {
-    plugin.settings = DEFAULT_SETTINGS;
-    setSettings(DEFAULT_SETTINGS);
+    const defaultSettingsWithBuiltIns = {
+      ...DEFAULT_SETTINGS,
+      activeModels: BUILTIN_CHAT_MODELS.map((model) => ({ ...model, enabled: true })),
+      activeEmbeddingModels: BUILTIN_EMBEDDING_MODELS.map((model) => ({ ...model, enabled: true })),
+    };
+    plugin.settings = defaultSettingsWithBuiltIns;
+    setSettings(defaultSettingsWithBuiltIns);
     await plugin.saveSettings();
     await reloadPlugin();
-  }, [plugin]);
+  }, [plugin, reloadPlugin]);
 
   return (
     <SettingsContext.Provider
