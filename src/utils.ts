@@ -295,28 +295,17 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 }
 
 // Basic prompts
-// Note that GPT4 is much better at following instructions than GPT3.5!
-export function sendNoteContentPrompt(noteName: string, noteContent: string | null): string {
-  return (
-    `Please read the note below and be ready to answer questions about it. ` +
-    `If there's no information about a certain topic, just say the note ` +
-    `does not mention it. ` +
-    `The content of the note is between "/***/":\n\n/***/\n\n${noteContent}\n\n/***/\n\n` +
-    `Please reply with the following word for word:` +
-    `"OK I've read this note titled [[ ${noteName} ]]. ` +
-    `Feel free to ask related questions, such as 'give me a summary of this note in bullet points', 'what key questions does it answer', etc. "\n`
-  );
-}
-
 export function sendNotesContentPrompt(notes: { name: string; content: string }[]): string {
+  const formattedNotes = notes.map((note) => `## ${note.name}\n\n${note.content}`).join("\n\n");
+
   return (
     `Please read the notes below and be ready to answer questions about them. ` +
     `If there's no information about a certain topic, just say the note ` +
     `does not mention it. ` +
-    `The content of the note is between "/***/":\n\n/***/\n\n${JSON.stringify(notes)}\n\n/***/\n\n` +
+    `The content of the notes is between "/***/":\n\n/***/\n\n${formattedNotes}\n\n/***/\n\n` +
     `Please reply with the following word for word:` +
     `"OK I've read these notes. ` +
-    `Feel free to ask related questions, such as 'give me a summary of these notes in bullet points', 'what key questions does these notes answer', etc. "\n`
+    `Feel free to ask related questions, such as 'give me a summary of these notes in bullet points', 'what key questions do these notes answer', etc. "\n`
   );
 }
 
