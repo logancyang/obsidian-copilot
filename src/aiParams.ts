@@ -70,4 +70,5 @@ export interface CustomModel {
   isEmbeddingModel?: boolean;
   isBuiltIn?: boolean;
   enableCors?: boolean;
+  core?: boolean;
 }

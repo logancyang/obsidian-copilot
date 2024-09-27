@@ -73,7 +73,8 @@ export default class CopilotPlugin extends Plugin {
       `copilot_vector_stores_${this.getVaultIdentifier()}`
     );
 
-    this.mergeAllActiveModelsWithExisting();
+    // Ensure activeModels always includes core models
+    this.mergeAllActiveModelsWithCoreModels();
     this.chainManager = new ChainManager(
       this.app,
       langChainParams,
@@ -691,8 +692,8 @@ export default class CopilotPlugin extends Plugin {
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 
-    // Ensure activeModels always includes builtInModels
-    this.mergeAllActiveModelsWithExisting();
+    // Ensure activeModels always includes core models
+    this.mergeAllActiveModelsWithCoreModels();
   }
 
   mergeActiveModels(
@@ -704,10 +705,12 @@ export default class CopilotPlugin extends Plugin {
     // Create a unique key for each model, it's model (name + provider)
     const getModelKey = (model: CustomModel) => `${model.name}|${model.provider}`;
 
-    // Add built-in models to the map
-    builtInModels.forEach((model) => {
-      modelMap.set(getModelKey(model), { ...model, isBuiltIn: true });
-    });
+    // Add core models to the map
+    builtInModels
+      .filter((model) => model.core)
+      .forEach((model) => {
+        modelMap.set(getModelKey(model), { ...model, core: true });
+      });
 
     // Add or update existing models in the map
     existingActiveModels.forEach((model) => {
@@ -720,14 +723,14 @@ export default class CopilotPlugin extends Plugin {
           isBuiltIn: existingModel.isBuiltIn || model.isBuiltIn,
         });
       } else {
-        modelMap.set(key, { ...model, isBuiltIn: false });
+        modelMap.set(key, model);
       }
     });
 
     return Array.from(modelMap.values());
   }
 
-  mergeAllActiveModelsWithExisting(): void {
+  mergeAllActiveModelsWithCoreModels(): void {
     this.settings.activeModels = this.mergeActiveModels(
       this.settings.activeModels,
       BUILTIN_CHAT_MODELS
@@ -743,10 +746,8 @@ export default class CopilotPlugin extends Plugin {
       // Encrypt all API keys before saving
       this.encryptionService.encryptAllKeys();
     }
-
-    // Ensure activeModels is merged before saving
-    this.mergeAllActiveModelsWithExisting();
-
+    // Ensure activeModels always includes core models
+    this.mergeAllActiveModelsWithCoreModels();
     await this.saveData(this.settings);
   }
 
