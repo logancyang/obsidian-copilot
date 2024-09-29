@@ -214,11 +214,12 @@ If your plugin does not need CSS, delete this file.
   display: flex;
   flex-direction: column;
   flex-grow: 1;
+  max-width: 100%;
 }
 
 .message-content {
-  flex-grow: 1;
-  max-width: 95%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
   word-break: break-word;
   line-height: 1.6 !important;
 }
