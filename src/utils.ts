@@ -444,7 +444,7 @@ export function createTranslateSelectionPrompt(language?: string) {
 export function createChangeToneSelectionPrompt(tone?: string) {
   return (selectedText: string): string => {
     return (
-      `Please change the tone of the following text to ${tone}. Output in the same language as the source, do not output English if it is not English:\n\n` +
+      `Please change the tone of the following text to ${tone}. Identify the language first, then Output in the same language as the source, do not output English if it is not English:\n\n` +
       `${selectedText}`
     );
   };
