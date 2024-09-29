@@ -5,9 +5,9 @@ import EncryptionService from "@/encryptionService";
 import { ProxyOpenAIEmbeddings } from "@/langchainWrappers";
 import { CohereEmbeddings } from "@langchain/cohere";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
-import { Embeddings } from "langchain/embeddings/base";
-import { OllamaEmbeddings } from "langchain/embeddings/ollama";
-import { OpenAIEmbeddings } from "langchain/embeddings/openai";
+import { Embeddings } from "@langchain/core/embeddings";
+import { OllamaEmbeddings } from "@langchain/community/embeddings/ollama";
+import { OpenAIEmbeddings } from "@langchain/openai";
 export default class EmbeddingManager {
   private encryptionService: EncryptionService;
   private activeEmbeddingModels: CustomModel[];
@@ -162,7 +162,6 @@ export default class EmbeddingManager {
       [EmbeddingModelProviders.COHEREAI]: {
         model: modelName,
         apiKey: decrypt(params.cohereApiKey),
-        inputType: params.cohereEmbeddingInputType,
       },
       [EmbeddingModelProviders.GOOGLE]: {
         modelName: modelName,

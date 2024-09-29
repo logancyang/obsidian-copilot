@@ -1,9 +1,5 @@
 import { CustomModel } from "@/aiParams";
-import {
-  EmbeddingModelProviders,
-  COHEREAI_EMBEDDING_INPUT_TYPES,
-  VAULT_VECTOR_STORE_STRATEGIES,
-} from "@/constants";
+import { EmbeddingModelProviders, VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
 import { useSettingsContext } from "@/settings/contexts/SettingsContext";
 import React from "react";
 import {
@@ -20,8 +16,6 @@ interface QASettingsProps {
   setIndexVaultToVectorStore: (value: string) => void;
   maxSourceChunks: number;
   setMaxSourceChunks: (value: number) => void;
-  cohereEmbeddingInputType: string;
-  setCohereEmbeddingInputType: (value: string) => void;
 }
 
 const QASettings: React.FC<QASettingsProps> = ({
@@ -29,8 +23,6 @@ const QASettings: React.FC<QASettingsProps> = ({
   setIndexVaultToVectorStore,
   maxSourceChunks,
   setMaxSourceChunks,
-  cohereEmbeddingInputType,
-  setCohereEmbeddingInputType,
 }) => {
   const { settings, updateSettings } = useSettingsContext();
 
@@ -87,13 +79,6 @@ const QASettings: React.FC<QASettingsProps> = ({
         defaultModelKey={settings.embeddingModelKey}
         onSetDefaultModelKey={handleSetEmbeddingModelKey}
         isEmbeddingModel={true}
-      />
-      <DropdownComponent
-        name="Input Type for Cohere's embeddings"
-        description="Cohere embeddings are optimized for different types of inputs. When using embeddings for semantic search, use 'search_query', whereas the text passages that are being searched over should be embedded with 'search_document'. Similarly, the input type can be set to 'classification' and 'clustering' to optimize the embeddings for those use cases."
-        value={cohereEmbeddingInputType}
-        onChange={setCohereEmbeddingInputType}
-        options={COHEREAI_EMBEDDING_INPUT_TYPES}
       />
       <h1>Auto-Index Strategy</h1>
       <div className="warning-message">

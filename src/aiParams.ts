@@ -1,5 +1,5 @@
 import { ChainType } from "@/chainFactory";
-import { ChatPromptTemplate } from "langchain/prompts";
+import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { NoteFile } from "./vectorDBManager";
 
 export interface ModelConfig {
@@ -30,7 +30,6 @@ export interface LangChainParams {
   openAIOrgId: string;
   huggingfaceApiKey: string;
   cohereApiKey: string;
-  cohereEmbeddingInputType: string;
   anthropicApiKey: string;
   azureOpenAIApiKey: string;
   azureOpenAIApiInstanceName: string;

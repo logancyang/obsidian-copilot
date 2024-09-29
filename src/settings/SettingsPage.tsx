@@ -13,7 +13,6 @@ export interface CopilotSettings {
   openAIOrgId: string;
   huggingfaceApiKey: string;
   cohereApiKey: string;
-  cohereEmbeddingInputType: string;
   anthropicApiKey: string;
   azureOpenAIApiKey: string;
   azureOpenAIApiInstanceName: string;
