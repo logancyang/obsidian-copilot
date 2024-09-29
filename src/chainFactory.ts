@@ -1,9 +1,9 @@
 import { StringOutputParser } from "@langchain/core/output_parsers";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { RunnablePassthrough, RunnableSequence } from "@langchain/core/runnables";
-import { BaseLanguageModel } from "langchain/base_language";
+import { BaseLanguageModel } from "@langchain/core/language_models/base";
 import { BaseChatMemory } from "langchain/memory";
-import { ChatPromptTemplate, PromptTemplate } from "langchain/prompts";
+import { ChatPromptTemplate, PromptTemplate } from "@langchain/core/prompts";
 import { formatDocumentsAsString } from "langchain/util/document";
 
 export interface LLMChainInput {

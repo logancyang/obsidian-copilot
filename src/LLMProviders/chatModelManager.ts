@@ -6,8 +6,8 @@ import { ChatCohere } from "@langchain/cohere";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatGroq } from "@langchain/groq";
 import { ChatOllama } from "@langchain/ollama";
-import { BaseChatModel } from "langchain/chat_models/base";
-import { ChatOpenAI } from "langchain/chat_models/openai";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { ChatOpenAI } from "@langchain/openai";
 import { Notice } from "obsidian";
 
 export default class ChatModelManager {
