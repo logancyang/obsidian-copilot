@@ -1,10 +1,10 @@
 import { extractNoteTitles, getNoteFileFromTitle } from "@/utils";
 import VectorDBManager from "@/vectorDBManager";
+import { Document } from "@langchain/core/documents";
+import { BaseLanguageModel } from "@langchain/core/language_models/base";
+import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { VectorStore } from "@langchain/core/vectorstores";
-import { BaseLanguageModel } from "langchain/base_language";
-import { Document } from "langchain/document";
-import { ChatPromptTemplate } from "langchain/prompts";
 import {
   ScoreThresholdRetriever,
   ScoreThresholdRetrieverInput,
