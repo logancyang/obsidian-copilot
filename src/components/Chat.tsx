@@ -361,7 +361,7 @@ ${chatContent}`;
     };
 
     if (currentChain === ChainType.LONG_NOTE_QA_CHAIN) {
-      setChain(ChainType.LONG_NOTE_QA_CHAIN, { noteFile });
+      setChain(ChainType.LONG_NOTE_QA_CHAIN, { noteFile, debug });
     }
 
     addMessage(activeNoteOnMessage);
