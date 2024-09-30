@@ -12,13 +12,13 @@ import {
   isSupportedChain,
 } from "@/utils";
 import VectorDBManager, { MemoryVector, NoteFile, VectorStoreDocument } from "@/vectorDBManager";
-import { RunnableSequence } from "@langchain/core/runnables";
-import { BaseChatMemory } from "langchain/memory";
 import {
   ChatPromptTemplate,
   HumanMessagePromptTemplate,
   MessagesPlaceholder,
 } from "@langchain/core/prompts";
+import { RunnableSequence } from "@langchain/core/runnables";
+import { BaseChatMemory } from "langchain/memory";
 import { MultiQueryRetriever } from "langchain/retrievers/multi_query";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { App, Notice } from "obsidian";
@@ -479,12 +479,12 @@ export default class ChainManager {
       const markdownLinks = docTitles
         .map(
           (title) =>
-            `[${title}](obsidian://open?vault=${encodeURIComponent(this.app.vault.getName())}&file=${encodeURIComponent(
+            `- [${title}](obsidian://open?vault=${encodeURIComponent(this.app.vault.getName())}&file=${encodeURIComponent(
               title
             )})`
         )
         .join("\n");
-      fullAIResponse += "\n\n**Sources**:\n" + markdownLinks;
+      fullAIResponse += "\n\n#### Sources:\n" + markdownLinks;
     }
 
     return fullAIResponse;
