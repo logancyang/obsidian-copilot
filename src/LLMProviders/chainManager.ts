@@ -18,7 +18,7 @@ import {
   ChatPromptTemplate,
   HumanMessagePromptTemplate,
   MessagesPlaceholder,
-} from "langchain/prompts";
+} from "@langchain/core/prompts";
 import { MultiQueryRetriever } from "langchain/retrievers/multi_query";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { App, Notice } from "obsidian";

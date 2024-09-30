@@ -1,6 +1,6 @@
 import { MD5 } from "crypto-js";
 import { Document } from "langchain/document";
-import { Embeddings } from "langchain/embeddings/base";
+import { Embeddings } from "@langchain/core/embeddings";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import EmbeddingManager from "./LLMProviders/embeddingManager";

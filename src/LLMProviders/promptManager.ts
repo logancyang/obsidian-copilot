@@ -4,7 +4,7 @@ import {
   HumanMessagePromptTemplate,
   MessagesPlaceholder,
   SystemMessagePromptTemplate,
-} from "langchain/prompts";
+} from "@langchain/core/prompts";
 
 export default class PromptManager {
   private static instance: PromptManager;

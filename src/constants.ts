@@ -102,6 +102,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
 export enum EmbeddingModelProviders {
   OPENAI = "openai",
   COHEREAI = "cohereai",
+  GOOGLE = "google",
   AZURE_OPENAI = "azure_openai",
   OLLAMA = "ollama",
   OPENAI_FORMAT = "3rd party (openai-format)",
@@ -115,6 +116,7 @@ export enum EmbeddingModels {
   OPENAI_EMBEDDING_LARGE = "text-embedding-3-large",
   AZURE_OPENAI = "azure-openai",
   COHEREAI_EMBED_MULTILINGUAL_LIGHT_V3_0 = "embed-multilingual-light-v3.0",
+  GOOGLE_ENG = "text-embedding-004",
 }
 
 export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
@@ -136,6 +138,13 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
   {
     name: EmbeddingModels.COHEREAI_EMBED_MULTILINGUAL_LIGHT_V3_0,
     provider: EmbeddingModelProviders.COHEREAI,
+    enabled: true,
+    isBuiltIn: true,
+    isEmbeddingModel: true,
+  },
+  {
+    name: EmbeddingModels.GOOGLE_ENG,
+    provider: EmbeddingModelProviders.GOOGLE,
     enabled: true,
     isBuiltIn: true,
     isEmbeddingModel: true,
