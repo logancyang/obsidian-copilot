@@ -272,6 +272,7 @@ export default class ChainManager {
             maxK: this.settings.maxSourceChunks, // The maximum number of docs (chunks) to retrieve
             kIncrement: 2,
           },
+          chatModel,
           options.debug
         );
 

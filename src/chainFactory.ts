@@ -134,7 +134,8 @@ class ChainFactory {
     // and lose the follow up question altogether.
     const condenseQuestionTemplate = `Given the following conversation and a follow up question,
     summarize the conversation as context and keep the follow up question unchanged, in its original language.
-    Then combine the summary and the follow up question to construct a standalone question.
+    If the follow up question is unrelated to its preceding messages, return the question directly.
+    If it is related, then combine the summary and the follow up question to construct a standalone question.
     Make sure to keep any [[]] wrapped note titles in the question unchanged.
 
     Chat History:

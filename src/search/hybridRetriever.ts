@@ -2,7 +2,9 @@ import { extractNoteTitles, getNoteFileFromTitle } from "@/utils";
 import VectorDBManager from "@/vectorDBManager";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { VectorStore } from "@langchain/core/vectorstores";
+import { BaseLanguageModel } from "langchain/base_language";
 import { Document } from "langchain/document";
+import { ChatPromptTemplate } from "langchain/prompts";
 import {
   ScoreThresholdRetriever,
   ScoreThresholdRetrieverInput,
@@ -12,13 +14,21 @@ import { Vault } from "obsidian";
 export class HybridRetriever<V extends VectorStore> extends BaseRetriever {
   public lc_namespace = ["hybrid_retriever"];
 
+  private llm: BaseLanguageModel;
+  private queryRewritePrompt: ChatPromptTemplate;
+
   constructor(
     private db: PouchDB.Database,
     private vault: Vault,
     private options: ScoreThresholdRetrieverInput<V>,
+    llm: BaseLanguageModel,
     private debug?: boolean
   ) {
     super();
+    this.llm = llm;
+    this.queryRewritePrompt = ChatPromptTemplate.fromTemplate(
+      "Please write a passage to answer the question.\nQuestion: {question}\nPassage:"
+    );
   }
 
   async getRelevantDocuments(query: string): Promise<Document[]> {
@@ -26,20 +36,11 @@ export class HybridRetriever<V extends VectorStore> extends BaseRetriever {
     const noteTitles = extractNoteTitles(query);
     // Retrieve chunks for explicitly mentioned note titles
     const explicitChunks = await this.getExplicitChunks(noteTitles);
-    if (this.debug) {
-      console.log(
-        "*** HYBRID RETRIEVER DEBUG INFO: ***",
-        "\nHybrid Retriever Query: ",
-        query,
-        "\nNote Titles extracted: ",
-        noteTitles,
-        "\nExplicit Chunks:",
-        explicitChunks
-      );
-    }
 
+    // Generate a hypothetical answer passage
+    const rewrittenQuery = await this.rewriteQuery(query);
     // Perform vector similarity search using ScoreThresholdRetriever
-    const vectorChunks = await this.getVectorChunks(query);
+    const vectorChunks = await this.getVectorChunks(rewrittenQuery);
 
     // Combine explicit and vector chunks, removing duplicates while maintaining order
     const uniqueChunks = new Set<string>(explicitChunks.map((chunk) => chunk.pageContent));
@@ -53,8 +54,44 @@ export class HybridRetriever<V extends VectorStore> extends BaseRetriever {
       }
     }
 
+    if (this.debug) {
+      console.log(
+        "*** HyDE HYBRID RETRIEVER DEBUG INFO: ***",
+        "\nOriginal Query: ",
+        query,
+        "\n\nRewritten Query: ",
+        rewrittenQuery,
+        "\n\nNote Titles extracted: ",
+        noteTitles,
+        "\n\nExplicit Chunks:",
+        explicitChunks,
+        "\n\nVector Chunks:",
+        vectorChunks,
+        "\n\nCombined Chunks:",
+        combinedChunks
+      );
+    }
+
     // Make sure the combined chunks are at most maxK
     return combinedChunks.slice(0, this.options.maxK);
+  }
+
+  private async rewriteQuery(query: string): Promise<string> {
+    try {
+      const promptResult = await this.queryRewritePrompt.format({ question: query });
+      const rewrittenQueryObject = await this.llm.invoke(promptResult);
+
+      // Directly return the content assuming it's structured as expected
+      if (rewrittenQueryObject && "content" in rewrittenQueryObject) {
+        return rewrittenQueryObject.content;
+      }
+      console.warn("Unexpected rewrittenQuery format. Falling back to original query.");
+      return query;
+    } catch (error) {
+      console.error("Error in rewriteQuery:", error);
+      // If there's an error, return the original query
+      return query;
+    }
   }
 
   private async getExplicitChunks(noteTitles: string[]): Promise<Document[]> {
