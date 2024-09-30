@@ -3,10 +3,10 @@ import { BUILTIN_CHAT_MODELS, ChatModelProviders } from "@/constants";
 import EncryptionService from "@/encryptionService";
 import { ChatAnthropicWrapped, ProxyChatOpenAI } from "@/langchainWrappers";
 import { ChatCohere } from "@langchain/cohere";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatGroq } from "@langchain/groq";
 import { ChatOllama } from "@langchain/ollama";
-import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatOpenAI } from "@langchain/openai";
 import { Notice } from "obsidian";
 
