@@ -1,6 +1,6 @@
 import { CustomModel, LangChainParams, SetChainOptions } from "@/aiParams";
 import ChainFactory, { ChainType, Document } from "@/chainFactory";
-import { AI_SENDER, BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
+import { ABORT_REASON, AI_SENDER, BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
 import EncryptionService from "@/encryptionService";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { CopilotSettings } from "@/settings/SettingsPage";
@@ -424,7 +424,8 @@ export default class ChainManager {
         console.error(errorData);
       }
     } finally {
-      if (fullAIResponse) {
+      // note: pls Check Abort Reason
+      if (fullAIResponse && abortController.signal.reason !== ABORT_REASON.NEW_CHAT) {
         // This line is a must for memory to work with RunnableSequence!
         await memory.saveContext({ input: userMessage }, { output: fullAIResponse });
         addMessage({

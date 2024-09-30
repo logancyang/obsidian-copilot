@@ -5,7 +5,7 @@ import { updateChatMemory } from "@/chatUtils";
 import ChatIcons from "@/components/ChatComponents/ChatIcons";
 import ChatInput from "@/components/ChatComponents/ChatInput";
 import ChatMessages from "@/components/ChatComponents/ChatMessages";
-import { AI_SENDER, EVENT_NAMES, USER_SENDER } from "@/constants";
+import { ABORT_REASON, AI_SENDER, EVENT_NAMES, USER_SENDER } from "@/constants";
 import { AppContext } from "@/context";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { getAIResponse } from "@/langchainStream";
@@ -381,12 +381,12 @@ ${chatContent}`;
     setCurrentAiMessage("");
   };
 
-  const handleStopGenerating = () => {
+  const handleStopGenerating = (reason?: ABORT_REASON) => {
     if (abortController) {
       if (plugin.settings.debug) {
-        console.log("User stopping generation...");
+        console.log(`stopping generation..., reason: ${reason}`);
       }
-      abortController.abort();
+      abortController.abort(reason);
       setLoading(false);
     }
   };
@@ -674,12 +674,14 @@ ${chatContent}`;
           currentChain={currentChain}
           setCurrentChain={setChain}
           onNewChat={async (openNote: boolean) => {
+            handleStopGenerating(ABORT_REASON.NEW_CHAT);
             if (settings.autosaveChat && chatHistory.length > 0) {
               await handleSaveAsNote(openNote);
             }
             clearMessages();
             clearChatMemory();
             clearCurrentAiMessage();
+            console.log(Date.now());
           }}
           onSaveAsNote={() => handleSaveAsNote(true)}
           onSendActiveNoteToPrompt={handleSendActiveNoteToPrompt}
@@ -696,7 +698,7 @@ ${chatContent}`;
           setInputMessage={setInputMessage}
           handleSendMessage={handleSendMessage}
           isGenerating={loading}
-          onStopGenerating={handleStopGenerating}
+          onStopGenerating={() => handleStopGenerating(ABORT_REASON.USER_STOPPED)}
           app={app}
           settings={settings}
           navigateHistory={navigateHistory}

@@ -291,3 +291,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
 export const EVENT_NAMES = {
   CHAT_IS_VISIBLE: "chat-is-visible",
 };
+
+export enum ABORT_REASON {
+  USER_STOPPED = "user-stopped",
+  NEW_CHAT = "new-chat",
+}
