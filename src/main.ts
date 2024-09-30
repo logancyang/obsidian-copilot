@@ -271,19 +271,7 @@ export default class CopilotPlugin extends Plugin {
       id: "clear-local-vector-store",
       name: "Clear local vector store",
       callback: async () => {
-        try {
-          // Clear the vectorstore db
-          await this.dbVectorStores.destroy();
-          // Reinitialize the database
-          this.dbVectorStores = new PouchDB<VectorStoreDocument>(
-            `copilot_vector_stores_${this.getVaultIdentifier()}`
-          );
-          new Notice("Local vector store cleared successfully.");
-          console.log("Local vector store cleared successfully, new instance created.");
-        } catch (err) {
-          console.error("Error clearing the local vector store:", err);
-          new Notice("An error occurred while clearing the local vector store.");
-        }
+        await this.clearVectorStore();
       },
     });
 
@@ -339,10 +327,11 @@ export default class CopilotPlugin extends Plugin {
       name: "Force re-index vault for QA",
       callback: async () => {
         try {
+          await this.clearVectorStore();
           const indexedFileCount = await this.indexVaultToVectorStore(true);
 
-          new Notice(`${indexedFileCount} vault files indexed to vector store.`);
-          console.log(`${indexedFileCount} vault files indexed to vector store.`);
+          new Notice(`${indexedFileCount} vault files re-indexed to vector store.`);
+          console.log(`${indexedFileCount} vault files re-indexed to vector store.`);
         } catch (err) {
           console.error("Error re-indexing vault to vector store:", err);
           new Notice("An error occurred while re-indexing vault to vector store.");
@@ -481,8 +470,12 @@ export default class CopilotPlugin extends Plugin {
     // TODO: Remove this when Ollama model is dynamically set
     const currEmbeddingModel = EmbeddingsManager.getModelName(embeddingInstance);
 
-    if (this.settings.debug)
+    if (this.settings.debug) {
+      console.log(
+        `\nVault QA exclusion paths: ${this.settings.qaExclusionPaths ? this.settings.qaExclusionPaths : "None"}`
+      );
       console.log("Prev vs Current embedding models:", prevEmbeddingModel, currEmbeddingModel);
+    }
 
     if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
       // Model has changed, clear DB and reindex from scratch
@@ -868,6 +861,23 @@ export default class CopilotPlugin extends Plugin {
       // If the view is already open, just update its content
       const copilotView = existingView.view as CopilotView;
       copilotView.updateView();
+    }
+  }
+
+  async clearVectorStore(): Promise<void> {
+    try {
+      // Clear the vectorstore db
+      await this.dbVectorStores.destroy();
+      // Reinitialize the database
+      this.dbVectorStores = new PouchDB<VectorStoreDocument>(
+        `copilot_vector_stores_${this.getVaultIdentifier()}`
+      );
+      new Notice("Local vector store cleared successfully.");
+      console.log("Local vector store cleared successfully, new instance created.");
+    } catch (err) {
+      console.error("Error clearing the local vector store:", err);
+      new Notice("An error occurred while clearing the local vector store.");
+      throw err;
     }
   }
 }
