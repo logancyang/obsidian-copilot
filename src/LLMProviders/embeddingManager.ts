@@ -4,9 +4,9 @@ import { EmbeddingModelProviders } from "@/constants";
 import EncryptionService from "@/encryptionService";
 import { ProxyOpenAIEmbeddings } from "@/langchainWrappers";
 import { CohereEmbeddings } from "@langchain/cohere";
-import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { Embeddings } from "@langchain/core/embeddings";
-import { OllamaEmbeddings } from "@langchain/community/embeddings/ollama";
+import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
+import { OllamaEmbeddings } from "@langchain/ollama";
 import { OpenAIEmbeddings } from "@langchain/openai";
 export default class EmbeddingManager {
   private encryptionService: EncryptionService;
