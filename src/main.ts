@@ -460,110 +460,125 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
-    const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
-    if (!embeddingInstance) {
-      throw new Error("Embedding instance not found.");
-    }
-
-    // Check if embedding model has changed
-    const prevEmbeddingModel = await VectorDBManager.checkEmbeddingModel(this.dbVectorStores);
-    // TODO: Remove this when Ollama model is dynamically set
-    const currEmbeddingModel = EmbeddingsManager.getModelName(embeddingInstance);
-
-    if (this.settings.debug) {
-      console.log(
-        `\nVault QA exclusion paths: ${this.settings.qaExclusionPaths ? this.settings.qaExclusionPaths : "None"}`
-      );
-      console.log("Prev vs Current embedding models:", prevEmbeddingModel, currEmbeddingModel);
-    }
-
-    if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
-      // Model has changed, clear DB and reindex from scratch
-      overwrite = true;
-      // Clear the current vector store with mixed embeddings
-      try {
-        // Clear the vectorstore db
-        await this.dbVectorStores.destroy();
-        // Reinitialize the database
-        this.dbVectorStores = new PouchDB<VectorStoreDocument>(
-          `copilot_vector_stores_${this.getVaultIdentifier()}`
-        );
-        new Notice("Detected change in embedding model. Rebuild vector store from scratch.");
-        console.log("Detected change in embedding model. Rebuild vector store from scratch.");
-      } catch (err) {
-        console.error("Error clearing vector store for reindexing:", err);
-        new Notice("Error clearing vector store for reindexing.");
+    try {
+      const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
+      if (!embeddingInstance) {
+        throw new CustomError("Embedding instance not found.");
       }
-    }
 
-    const latestMtime = await VectorDBManager.getLatestFileMtime(this.dbVectorStores);
+      // Check if embedding model has changed
+      const prevEmbeddingModel = await VectorDBManager.checkEmbeddingModel(this.dbVectorStores);
+      // TODO: Remove this when Ollama model is dynamically set
+      const currEmbeddingModel = EmbeddingsManager.getModelName(embeddingInstance);
 
-    const files = this.app.vault
-      .getMarkdownFiles()
-      .filter((file) => {
-        if (!latestMtime || overwrite) return true;
-        return file.stat.mtime > latestMtime;
-      })
-      // file not in qaExclusionPaths
-      .filter((file) => {
-        if (!this.settings.qaExclusionPaths) return true;
-        return !isPathInList(file.path, this.settings.qaExclusionPaths);
+      if (this.settings.debug) {
+        console.log(
+          `\nVault QA exclusion paths: ${this.settings.qaExclusionPaths ? this.settings.qaExclusionPaths : "None"}`
+        );
+        console.log("Prev vs Current embedding models:", prevEmbeddingModel, currEmbeddingModel);
+      }
+
+      if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
+        // Model has changed, clear DB and reindex from scratch
+        overwrite = true;
+        // Clear the current vector store with mixed embeddings
+        try {
+          // Clear the vectorstore db
+          await this.dbVectorStores.destroy();
+          // Reinitialize the database
+          this.dbVectorStores = new PouchDB<VectorStoreDocument>(
+            `copilot_vector_stores_${this.getVaultIdentifier()}`
+          );
+          new Notice("Detected change in embedding model. Rebuild vector store from scratch.");
+          console.log("Detected change in embedding model. Rebuild vector store from scratch.");
+        } catch (err) {
+          console.error("Error clearing vector store for reindexing:", err);
+          new Notice("Error clearing vector store for reindexing.");
+        }
+      }
+
+      const latestMtime = await VectorDBManager.getLatestFileMtime(this.dbVectorStores);
+
+      const files = this.app.vault
+        .getMarkdownFiles()
+        .filter((file) => {
+          if (!latestMtime || overwrite) return true;
+          return file.stat.mtime > latestMtime;
+        })
+        // file not in qaExclusionPaths
+        .filter((file) => {
+          if (!this.settings.qaExclusionPaths) return true;
+          return !isPathInList(file.path, this.settings.qaExclusionPaths);
+        });
+
+      const fileContents: string[] = await Promise.all(
+        files.map((file) => this.app.vault.cachedRead(file))
+      );
+      const fileMetadatas = files.map((file) => this.app.metadataCache.getFileCache(file));
+
+      const totalFiles = files.length;
+      if (totalFiles === 0) {
+        new Notice("Copilot vault index is up-to-date.");
+        return 0;
+      }
+
+      let indexedCount = 0;
+      const indexNotice = new Notice(
+        `Copilot is indexing your vault...\n0/${totalFiles} files processed.`,
+        0
+      );
+
+      const errors: string[] = [];
+      const loadPromises = files.map(async (file, index) => {
+        try {
+          const noteFile = {
+            basename: file.basename,
+            path: file.path,
+            mtime: file.stat.mtime,
+            content: fileContents[index],
+            metadata: fileMetadatas[index]?.frontmatter ?? {},
+          };
+          const result = await VectorDBManager.indexFile(
+            this.dbVectorStores,
+            embeddingInstance,
+            noteFile
+          );
+
+          indexedCount++;
+          indexNotice.setMessage(
+            `Copilot is indexing your vault...\n${indexedCount}/${totalFiles} files processed.`
+          );
+          return result;
+        } catch (err) {
+          console.error("Error indexing file:", err);
+          errors.push(`Error indexing file: ${file.basename}`);
+        }
       });
 
-    const fileContents: string[] = await Promise.all(
-      files.map((file) => this.app.vault.cachedRead(file))
-    );
-    const fileMetadatas = files.map((file) => this.app.metadataCache.getFileCache(file));
+      await Promise.all(loadPromises);
+      setTimeout(() => {
+        indexNotice.hide();
+      }, 2000);
 
-    const totalFiles = files.length;
-    if (totalFiles === 0) {
-      new Notice("Copilot vault index is up-to-date.");
+      if (errors.length > 0) {
+        new Notice(`Indexing completed with errors. Check the console for details.`);
+        console.log("Indexing Errors:", errors.join("\n"));
+      }
+      return files.length;
+    } catch (error) {
+      if (error instanceof CustomError) {
+        console.error("Error indexing vault to vector store:", error.msg);
+        new Notice(
+          `Error indexing vault: ${error.msg}. Please check your embedding model settings.`
+        );
+      } else {
+        console.error("Unexpected error indexing vault to vector store:", error);
+        new Notice(
+          "An unexpected error occurred while indexing the vault. Please check the console for details."
+        );
+      }
       return 0;
     }
-
-    let indexedCount = 0;
-    const indexNotice = new Notice(
-      `Copilot is indexing your vault...\n0/${totalFiles} files processed.`,
-      0
-    );
-
-    const errors: string[] = [];
-    const loadPromises = files.map(async (file, index) => {
-      try {
-        const noteFile = {
-          basename: file.basename,
-          path: file.path,
-          mtime: file.stat.mtime,
-          content: fileContents[index],
-          metadata: fileMetadatas[index]?.frontmatter ?? {},
-        };
-        const result = await VectorDBManager.indexFile(
-          this.dbVectorStores,
-          embeddingInstance,
-          noteFile
-        );
-
-        indexedCount++;
-        indexNotice.setMessage(
-          `Copilot is indexing your vault...\n${indexedCount}/${totalFiles} files processed.`
-        );
-        return result;
-      } catch (err) {
-        console.error("Error indexing file:", err);
-        errors.push(`Error indexing file: ${file.basename}`);
-      }
-    });
-
-    await Promise.all(loadPromises);
-    setTimeout(() => {
-      indexNotice.hide();
-    }, 2000);
-
-    if (errors.length > 0) {
-      new Notice(`Indexing completed with errors. Check the console for details.`);
-      console.log("Indexing Errors:", errors.join("\n"));
-    }
-    return files.length;
   }
 
   async processText(
