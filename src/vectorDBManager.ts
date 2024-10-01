@@ -1,9 +1,10 @@
+import EmbeddingManager from "@/LLMProviders/embeddingManager";
+import { RateLimiter } from "@/rateLimiter";
+import { Embeddings } from "@langchain/core/embeddings";
 import { MD5 } from "crypto-js";
 import { Document } from "langchain/document";
-import { Embeddings } from "@langchain/core/embeddings";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
-import EmbeddingManager from "./LLMProviders/embeddingManager";
 
 // TODOs
 // 1. Use embeddingModel rather than embeddingProvider
@@ -34,7 +35,29 @@ export interface NoteFile {
   metadata: Record<string, any>;
 }
 
+interface VectorDBConfig {
+  getEmbeddingRequestsPerSecond: () => number;
+  debug: boolean;
+}
+
 class VectorDBManager {
+  private static rateLimiter: RateLimiter;
+  private static config: VectorDBConfig;
+
+  public static initialize(config: VectorDBConfig) {
+    this.config = config;
+  }
+
+  private static getRateLimiter(): RateLimiter {
+    if (!this.config) {
+      throw new Error("VectorDBManager not initialized. Call initialize() first.");
+    }
+    const requestsPerSecond = this.config.getEmbeddingRequestsPerSecond();
+    if (!this.rateLimiter || this.rateLimiter.getRequestsPerSecond() !== requestsPerSecond) {
+      this.rateLimiter = new RateLimiter(requestsPerSecond);
+    }
+    return this.rateLimiter;
+  }
   public static getDocumentHash(sourceDocument: string): string {
     return MD5(sourceDocument).toString();
   }
@@ -136,6 +159,7 @@ class VectorDBManager {
     noteFile: NoteFile
   ): Promise<VectorStoreDocument | undefined> {
     if (!db) throw new Error("DB not initialized");
+    if (!this.config) throw new Error("VectorDBManager not initialized");
 
     const embeddingModel = EmbeddingManager.getModelName(embeddingsAPI);
     if (!embeddingModel) console.error("EmbeddingManager could not determine model name!");
@@ -150,9 +174,13 @@ class VectorDBManager {
       chunkHeader: "[[" + noteFile.basename + "]]" + "\n\n---\n\n",
       appendChunkOverlapHeader: true,
     });
+
+    // Apply rate limiting before making the API call
+    await this.getRateLimiter().wait();
     const docVectors = await embeddingsAPI.embedDocuments(
       splitDocument.map((doc) => doc.pageContent)
     );
+
     const memoryVectors = docVectors.map((docVector, i) => ({
       content: splitDocument[i].pageContent,
       metadata: {

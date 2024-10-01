@@ -46,6 +46,7 @@ export interface CopilotSettings {
   activeModels: Array<CustomModel>;
   activeEmbeddingModels: Array<CustomModel>;
   promptUsageTimestamps: Record<string, number>;
+  embeddingRequestsPerSecond: number;
 }
 
 export class CopilotSettingTab extends PluginSettingTab {
