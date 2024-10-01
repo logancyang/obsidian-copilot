@@ -208,6 +208,7 @@ export default class ChainManager {
               retriever: vectorStore.asRetriever(undefined, (doc) => {
                 return doc.metadata.path === options.noteFile?.path;
               }),
+              systemMessage: this.langChainParams.systemMessage,
             },
             ChainManager.storeRetrieverDocuments.bind(ChainManager),
             options.debug
@@ -238,6 +239,7 @@ export default class ChainManager {
             {
               llm: chatModel,
               retriever: retriever,
+              systemMessage: this.langChainParams.systemMessage,
             },
             ChainManager.storeRetrieverDocuments.bind(ChainManager),
             options.debug
@@ -281,6 +283,7 @@ export default class ChainManager {
           {
             llm: chatModel,
             retriever: retriever,
+            systemMessage: this.langChainParams.systemMessage,
           },
           ChainManager.storeRetrieverDocuments.bind(ChainManager),
           options.debug
@@ -477,15 +480,17 @@ export default class ChainManager {
     // expand and reveal the chunk
     if (this.langChainParams.chainType === ChainType.VAULT_QA_CHAIN) {
       const docTitles = extractUniqueTitlesFromDocs(ChainManager.retrievedDocuments);
-      const markdownLinks = docTitles
-        .map(
-          (title) =>
-            `- [${title}](obsidian://open?vault=${encodeURIComponent(this.app.vault.getName())}&file=${encodeURIComponent(
-              title
-            )})`
-        )
-        .join("\n");
-      fullAIResponse += "\n\n#### Sources:\n" + markdownLinks;
+      if (docTitles.length > 0) {
+        const markdownLinks = docTitles
+          .map(
+            (title) =>
+              `- [${title}](obsidian://open?vault=${encodeURIComponent(this.app.vault.getName())}&file=${encodeURIComponent(
+                title
+              )})`
+          )
+          .join("\n");
+        fullAIResponse += "\n\n#### Sources:\n" + markdownLinks;
+      }
     }
 
     return fullAIResponse;

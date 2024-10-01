@@ -1,9 +1,9 @@
+import { BaseLanguageModel } from "@langchain/core/language_models/base";
 import { StringOutputParser } from "@langchain/core/output_parsers";
+import { ChatPromptTemplate, PromptTemplate } from "@langchain/core/prompts";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { RunnablePassthrough, RunnableSequence } from "@langchain/core/runnables";
-import { BaseLanguageModel } from "@langchain/core/language_models/base";
 import { BaseChatMemory } from "langchain/memory";
-import { ChatPromptTemplate, PromptTemplate } from "@langchain/core/prompts";
 import { formatDocumentsAsString } from "langchain/util/document";
 
 export interface LLMChainInput {
@@ -24,6 +24,7 @@ export interface RetrievalChainParams {
 export interface ConversationalRetrievalChainParams {
   llm: BaseLanguageModel;
   retriever: BaseRetriever;
+  systemMessage: string;
   options?: {
     returnSourceDocuments?: boolean;
     questionGeneratorTemplate?: string;
@@ -128,13 +129,13 @@ class ChainFactory {
     onDocumentsRetrieved: (documents: Document[]) => void,
     debug?: boolean
   ): RunnableSequence {
-    const { llm, retriever } = args;
+    const { llm, retriever, systemMessage } = args;
 
     // NOTE: This is a tricky part of the Conversational RAG. Weaker models may fail this instruction
     // and lose the follow up question altogether.
     const condenseQuestionTemplate = `Given the following conversation and a follow up question,
     summarize the conversation as context and keep the follow up question unchanged, in its original language.
-    If the follow up question is unrelated to its preceding messages, return the question directly.
+    If the follow up question is unrelated to its preceding messages, return this follow up question directly.
     If it is related, then combine the summary and the follow up question to construct a standalone question.
     Make sure to keep any [[]] wrapped note titles in the question unchanged.
 
@@ -144,11 +145,13 @@ class ChainFactory {
     Standalone question:`;
     const CONDENSE_QUESTION_PROMPT = PromptTemplate.fromTemplate(condenseQuestionTemplate);
 
-    const answerTemplate = `Answer the question with as detailed as possible based only on the following context:
-    {context}
+    const answerTemplate = `{system_message}
 
-    Question: {question}
-    `;
+Answer the question with as detailed as possible based only on the following context:
+{context}
+
+Question: {question}
+`;
     const ANSWER_PROMPT = PromptTemplate.fromTemplate(answerTemplate);
 
     const formatChatHistory = (chatHistory: [string, string][]) => {
@@ -173,6 +176,10 @@ class ChainFactory {
       CONDENSE_QUESTION_PROMPT,
       llm,
       new StringOutputParser(),
+      (output) => {
+        if (debug) console.log("Standalone Question: ", output);
+        return output;
+      },
     ]);
 
     const formatDocumentsAsStringAndStore = async (documents: Document[]) => {
@@ -185,6 +192,7 @@ class ChainFactory {
       {
         context: retriever.pipe(formatDocumentsAsStringAndStore),
         question: new RunnablePassthrough(),
+        system_message: () => systemMessage,
       },
       ANSWER_PROMPT,
       llm,
