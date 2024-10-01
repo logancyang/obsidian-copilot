@@ -56,9 +56,6 @@ class VectorDBManager {
     if (!this.rateLimiter || this.rateLimiter.getRequestsPerSecond() !== requestsPerSecond) {
       this.rateLimiter = new RateLimiter(requestsPerSecond);
     }
-    if (this.config.debug) {
-      console.log("Embedding rate limiter: " + requestsPerSecond + " requests per second");
-    }
     return this.rateLimiter;
   }
   public static getDocumentHash(sourceDocument: string): string {
