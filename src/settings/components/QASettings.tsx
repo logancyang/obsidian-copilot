@@ -134,6 +134,15 @@ const QASettings: React.FC<QASettingsProps> = ({
           setMaxSourceChunks(value);
         }}
       />
+      <SliderComponent
+        name="Requests per second"
+        description="Default is 10. Decrease if you are rate limited by your embedding provider."
+        min={1}
+        max={30}
+        step={1}
+        value={settings.embeddingRequestsPerSecond}
+        onChange={(value) => updateSettings({ embeddingRequestsPerSecond: value })}
+      />
       <TextComponent
         name="Exclude Folders from Indexing"
         description="Comma separated list like folder1, folder1/folder2, etc, to be excluded from indexing process. NOTE: files which were previously indexed will remain in the index."

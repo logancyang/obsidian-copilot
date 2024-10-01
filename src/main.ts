@@ -94,6 +94,12 @@ export default class CopilotPlugin extends Plugin {
     );
     this.dbPrompts = new PouchDB<CustomPrompt>("copilot_custom_prompts");
 
+    // Initialize the rate limiter
+    VectorDBManager.initialize({
+      getEmbeddingRequestsPerSecond: () => this.settings.embeddingRequestsPerSecond,
+      debug: this.settings.debug,
+    });
+
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
 
     this.initActiveLeafChangeHandler();

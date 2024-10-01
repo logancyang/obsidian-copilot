@@ -232,6 +232,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   groqApiKey: "",
   activeModels: BUILTIN_CHAT_MODELS,
   activeEmbeddingModels: BUILTIN_EMBEDDING_MODELS,
+  embeddingRequestsPerSecond: 10,
   enabledCommands: {
     [COMMAND_IDS.FIX_GRAMMAR]: {
       enabled: true,
