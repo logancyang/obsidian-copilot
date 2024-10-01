@@ -2,12 +2,14 @@
 import { CustomModel, LangChainParams } from "@/aiParams";
 import { EmbeddingModelProviders } from "@/constants";
 import EncryptionService from "@/encryptionService";
+import { CustomError } from "@/error";
 import { ProxyOpenAIEmbeddings } from "@/langchainWrappers";
 import { CohereEmbeddings } from "@langchain/cohere";
 import { Embeddings } from "@langchain/core/embeddings";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { OllamaEmbeddings } from "@langchain/ollama";
 import { OpenAIEmbeddings } from "@langchain/openai";
+
 export default class EmbeddingManager {
   private encryptionService: EncryptionService;
   private activeEmbeddingModels: CustomModel[];
@@ -122,14 +124,14 @@ export default class EmbeddingManager {
     const { embeddingModelKey } = this.getLangChainParams();
 
     if (!EmbeddingManager.modelMap.hasOwnProperty(embeddingModelKey)) {
-      console.error(`No embedding model found for: ${embeddingModelKey}`);
-      return;
+      throw new CustomError(`No embedding model found for: ${embeddingModelKey}`);
     }
 
     const selectedModel = EmbeddingManager.modelMap[embeddingModelKey];
     if (!selectedModel.hasApiKey) {
-      console.error(`API key is not provided for the embedding model: ${embeddingModelKey}`);
-      return;
+      throw new CustomError(
+        `API key is not provided for the embedding model: ${embeddingModelKey}`
+      );
     }
 
     const customModel = this.getCustomModel(embeddingModelKey);
@@ -139,7 +141,9 @@ export default class EmbeddingManager {
       EmbeddingManager.embeddingModel = new selectedModel.EmbeddingConstructor(config);
       return EmbeddingManager.embeddingModel;
     } catch (error) {
-      console.error(`Error creating embedding model: ${embeddingModelKey}`, error);
+      throw new CustomError(
+        `Error creating embedding model: ${embeddingModelKey}. ${error.message}`
+      );
     }
   }
 

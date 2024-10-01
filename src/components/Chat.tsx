@@ -373,8 +373,13 @@ ${chatContent}`;
       return;
     }
 
-    await plugin.indexVaultToVectorStore();
-    new Notice("Vault index refreshed.");
+    try {
+      await plugin.indexVaultToVectorStore();
+      new Notice("Vault index refreshed.");
+    } catch (error) {
+      console.error("Error refreshing vault index:", error);
+      new Notice("Failed to refresh vault index. Check console for details.");
+    }
   };
 
   const clearCurrentAiMessage = () => {
@@ -681,7 +686,6 @@ ${chatContent}`;
             clearMessages();
             clearChatMemory();
             clearCurrentAiMessage();
-            console.log(Date.now());
           }}
           onSaveAsNote={() => handleSaveAsNote(true)}
           onSendActiveNoteToPrompt={handleSendActiveNoteToPrompt}

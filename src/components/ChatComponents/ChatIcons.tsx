@@ -1,5 +1,6 @@
 import { CustomModel, SetChainOptions } from "@/aiParams";
 import { AI_SENDER, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
+import { CustomError } from "@/error";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChatMessage } from "@/sharedState";
 import { formatDateTime, getFileContent, getFileName } from "@/utils";
@@ -112,7 +113,19 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         addMessage(activeNoteOnMessage);
       }
 
-      setCurrentChain(selectedChain, { debug });
+      try {
+        await setCurrentChain(selectedChain, { debug });
+      } catch (error) {
+        if (error instanceof CustomError) {
+          console.error("Error setting QA chain:", error.msg);
+          new Notice(`Error: ${error.msg}. Please check your embedding model settings.`);
+        } else {
+          console.error("Unexpected error setting QA chain:", error);
+          new Notice(
+            "An unexpected error occurred while setting up the QA chain. Please check the console for details."
+          );
+        }
+      }
     };
 
     handleChainSelection();
