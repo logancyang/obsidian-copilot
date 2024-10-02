@@ -60,6 +60,13 @@ export default class CopilotPlugin extends Plugin {
   encryptionService: EncryptionService;
   userMessageHistory: string[] = [];
 
+  isIndexingPaused = false;
+  isIndexingCancelled = false;
+  currentIndexingNotice: Notice | null = null;
+  indexNoticeMessage: HTMLSpanElement | null = null;
+  indexedCount = 0;
+  totalFilesToIndex = 0;
+
   isChatVisible = () => this.chatIsVisible;
 
   async onload(): Promise<void> {
@@ -447,22 +454,23 @@ export default class CopilotPlugin extends Plugin {
     return MD5(vaultName).toString();
   }
 
-  async saveFileToVectorStore(file: TFile): Promise<void> {
-    const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
-    if (!embeddingInstance) {
-      new Notice("Embedding instance not found.");
-      return;
+  pauseIndexing() {
+    this.isIndexingPaused = true;
+    this.updateIndexingNoticeMessage();
+  }
+
+  // Method to resume indexing
+  resumeIndexing() {
+    this.isIndexingPaused = false;
+    this.updateIndexingNoticeMessage();
+  }
+
+  // Method to update the notice message
+  updateIndexingNoticeMessage() {
+    if (this.indexNoticeMessage) {
+      const status = this.isIndexingPaused ? " (Paused)" : "";
+      this.indexNoticeMessage.textContent = `Copilot is indexing your vault...\n${this.indexedCount}/${this.totalFilesToIndex} files processed.${status}\nExclusion paths: ${this.settings.qaExclusionPaths ? this.settings.qaExclusionPaths : "None"}`;
     }
-    const fileContent = await this.app.vault.cachedRead(file);
-    const fileMetadata = this.app.metadataCache.getFileCache(file);
-    const noteFile = {
-      basename: file.basename,
-      path: file.path,
-      mtime: file.stat.mtime,
-      content: fileContent,
-      metadata: fileMetadata?.frontmatter ?? {},
-    };
-    VectorDBManager.indexFile(this.dbVectorStores, embeddingInstance, noteFile);
   }
 
   async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
@@ -504,6 +512,9 @@ export default class CopilotPlugin extends Plugin {
       }
 
       const latestMtime = await VectorDBManager.getLatestFileMtime(this.dbVectorStores);
+      // Initialize indexing state
+      this.isIndexingPaused = false;
+      this.isIndexingCancelled = false;
 
       const files = this.app.vault
         .getMarkdownFiles()
@@ -528,14 +539,59 @@ export default class CopilotPlugin extends Plugin {
         return 0;
       }
 
-      let indexedCount = 0;
-      const indexNotice = new Notice(
-        `Copilot is indexing your vault...\n0/${totalFiles} files processed.`,
-        0
-      );
+      this.indexedCount = 0;
+      this.totalFilesToIndex = totalFiles;
+
+      // Create the notice content using a DocumentFragment
+      const frag = document.createDocumentFragment();
+
+      // Create a container for the message and button
+      const container = frag.createEl("div", { cls: "copilot-notice-container" });
+
+      // Create the message element and assign it to `this.indexNoticeMessage`
+      this.indexNoticeMessage = container.createEl("div", { cls: "copilot-notice-message" });
+      this.indexNoticeMessage.textContent = `Copilot is indexing your vault...\n${this.indexedCount}/${totalFiles} files processed.\nExclusion paths: ${this.settings.qaExclusionPaths ? this.settings.qaExclusionPaths : "None"}`;
+
+      // Create the pause button
+      const pauseButton = frag.createEl("button");
+      pauseButton.textContent = "Pause";
+
+      // Add the event listener for pausing/resuming
+      pauseButton.addEventListener("click", (event) => {
+        event.stopPropagation(); // Prevent the event from bubbling up to the Notice
+        event.preventDefault(); // Prevent default behavior
+
+        if (this.isIndexingPaused) {
+          this.resumeIndexing();
+          pauseButton.textContent = "Pause";
+        } else {
+          this.pauseIndexing();
+          pauseButton.textContent = "Resume";
+        }
+      });
+
+      // Append the message and button to the fragment
+      frag.appendChild(this.indexNoticeMessage);
+      frag.appendChild(pauseButton);
+
+      // **Pass the DocumentFragment to the Notice constructor**
+      const indexNotice = new Notice(frag, 0);
+      this.currentIndexingNotice = indexNotice;
 
       const errors: string[] = [];
-      const loadPromises = files.map(async (file, index) => {
+      for (let index = 0; index < files.length; index++) {
+        if (this.isIndexingCancelled) {
+          // Handle cancellation if required
+          break;
+        }
+
+        // Wait if indexing is paused
+        while (this.isIndexingPaused) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+
+        const file = files[index];
+
         try {
           const noteFile = {
             basename: file.basename,
@@ -544,27 +600,24 @@ export default class CopilotPlugin extends Plugin {
             content: fileContents[index],
             metadata: fileMetadatas[index]?.frontmatter ?? {},
           };
-          const result = await VectorDBManager.indexFile(
-            this.dbVectorStores,
-            embeddingInstance,
-            noteFile
-          );
+          await VectorDBManager.indexFile(this.dbVectorStores, embeddingInstance, noteFile);
 
-          indexedCount++;
-          indexNotice.setMessage(
-            `Copilot is indexing your vault...\n${indexedCount}/${totalFiles} files processed.`
-          );
-          return result;
+          this.indexedCount++;
+          this.updateIndexingNoticeMessage();
         } catch (err) {
           console.error("Error indexing file:", err);
           errors.push(`Error indexing file: ${file.basename}`);
         }
-      });
+      }
 
-      await Promise.all(loadPromises);
+      // Hide the notice after completion
       setTimeout(() => {
         indexNotice.hide();
-      }, 2000);
+        this.currentIndexingNotice = null;
+        this.indexNoticeMessage = null;
+        this.isIndexingPaused = false;
+        this.isIndexingCancelled = false;
+      }, 5000);
 
       if (errors.length > 0) {
         new Notice(`Indexing completed with errors. Check the console for details.`);
