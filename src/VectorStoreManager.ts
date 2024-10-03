@@ -250,7 +250,7 @@ class VectorStoreManager {
             }
 
             // Display the error message as a notice
-            new Notice(errorMessage, 5000);
+            new Notice(errorMessage, 8000);
             rateLimitNoticeShown = true;
             // Break the loop to stop further indexing attempts
             break;
