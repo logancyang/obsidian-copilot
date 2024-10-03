@@ -223,7 +223,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   autosaveChat: true,
   customPromptsFolder: "copilot-custom-prompts",
   indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH,
-  qaExclusionPaths: "",
+  qaExclusions: "",
   chatNoteContextPath: "",
   chatNoteContextTags: [],
   debug: false,

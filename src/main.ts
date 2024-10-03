@@ -10,7 +10,6 @@ import { ChatNoteContextModal } from "@/components/ChatNoteContextModal";
 import CopilotView from "@/components/CopilotView";
 import { ListPromptModal } from "@/components/ListPromptModal";
 import { LoadChatHistoryModal } from "@/components/LoadChatHistoryModal";
-import { QAExclusionModal } from "@/components/QAExclusionModal";
 import {
   BUILTIN_CHAT_MODELS,
   BUILTIN_EMBEDDING_MODELS,
@@ -317,18 +316,6 @@ export default class CopilotPlugin extends Plugin {
           // Store the path in the plugin's settings, default to empty string
           this.settings.chatNoteContextPath = path;
           this.settings.chatNoteContextTags = tags;
-          await this.saveSettings();
-        }).open();
-      },
-    });
-
-    this.addCommand({
-      id: "set-vault-qa-exclusion",
-      name: "Set exclusion for Vault QA mode",
-      callback: async () => {
-        new QAExclusionModal(this.app, this.settings, async (paths: string) => {
-          // Store the path in the plugin's settings, default to empty string
-          this.settings.qaExclusionPaths = paths;
           await this.saveSettings();
         }).open();
       },
