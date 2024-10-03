@@ -6,7 +6,7 @@ import EncryptionService from "@/encryptionService";
 import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { CopilotSettings } from "@/settings/SettingsPage";
-import { areEmbeddingModelsSame, isPathInList } from "@/utils";
+import { areEmbeddingModelsSame, getNotesFromTags, isPathInList } from "@/utils";
 import VectorDBManager, { VectorStoreDocument } from "@/vectorDBManager";
 import { MD5 } from "crypto-js";
 import { App, Notice } from "obsidian";
@@ -92,8 +92,8 @@ class VectorStoreManager {
   private updateIndexingNoticeMessage() {
     if (this.indexNoticeMessage) {
       const status = this.isIndexingPaused ? " (Paused)" : "";
-      this.indexNoticeMessage.textContent = `Copilot is indexing your vault...\n${this.indexedCount}/${this.totalFilesToIndex} files processed.${status}\nExclusion paths: ${
-        this.settings.qaExclusionPaths ? this.settings.qaExclusionPaths : "None"
+      this.indexNoticeMessage.textContent = `Copilot is indexing your vault...\n${this.indexedCount}/${this.totalFilesToIndex} files processed.${status}\nExclusions: ${
+        this.settings.qaExclusions ? this.settings.qaExclusions : "None"
       }`;
     }
   }
@@ -125,6 +125,32 @@ class VectorStoreManager {
     return new Notice(frag, 0);
   }
 
+  private async getExcludedFiles(): Promise<Set<string>> {
+    const excludedFiles = new Set<string>();
+
+    if (this.settings.qaExclusions) {
+      const exclusions = this.settings.qaExclusions.split(",").map((item) => item.trim());
+
+      for (const exclusion of exclusions) {
+        if (exclusion.startsWith("#")) {
+          // Tag-based exclusion
+          const tagName = exclusion.slice(1);
+          const taggedFiles = await getNotesFromTags(this.app.vault, [tagName]);
+          taggedFiles.forEach((file) => excludedFiles.add(file.path));
+        } else {
+          // Path-based exclusion
+          this.app.vault.getFiles().forEach((file) => {
+            if (isPathInList(file.path, exclusion)) {
+              excludedFiles.add(file.path);
+            }
+          });
+        }
+      }
+    }
+
+    return excludedFiles;
+  }
+
   public async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
     let rateLimitNoticeShown = false;
 
@@ -141,7 +167,7 @@ class VectorStoreManager {
 
       if (this.settings.debug) {
         console.log(
-          `\nVault QA exclusion paths: ${this.settings.qaExclusionPaths ? this.settings.qaExclusionPaths : "None"}`
+          `\nVault QA exclusions: ${this.settings.qaExclusions ? this.settings.qaExclusions : "None"}`
         );
         console.log("Prev vs Current embedding models:", prevEmbeddingModel, currEmbeddingModel);
       }
@@ -170,17 +196,15 @@ class VectorStoreManager {
       this.isIndexingPaused = false;
       this.isIndexingCancelled = false;
 
+      const excludedFiles = await this.getExcludedFiles();
+
       const files = this.app.vault
         .getMarkdownFiles()
         .filter((file) => {
           if (!latestMtime || overwrite) return true;
           return file.stat.mtime > latestMtime;
         })
-        // file not in qaExclusionPaths
-        .filter((file) => {
-          if (!this.settings.qaExclusionPaths) return true;
-          return !isPathInList(file.path, this.settings.qaExclusionPaths);
-        });
+        .filter((file) => !excludedFiles.has(file.path));
 
       const fileContents: string[] = await Promise.all(
         files.map((file) => this.app.vault.cachedRead(file))
