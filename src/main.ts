@@ -1,5 +1,5 @@
 import ChainManager from "@/LLMProviders/chainManager";
-import EmbeddingsManager from "@/LLMProviders/embeddingManager";
+import VectorStoreManager from "@/VectorStoreManager";
 import { CustomModel, LangChainParams, SetChainOptions } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { parseChatContent, updateChatMemory } from "@/chatUtils";
@@ -20,20 +20,14 @@ import {
   EVENT_NAMES,
   VAULT_VECTOR_STORE_STRATEGY,
 } from "@/constants";
-import { CustomPrompt, CustomPromptDB, CustomPromptProcessor } from "@/customPromptProcessor";
+import { CustomPromptProcessor } from "@/customPromptProcessor";
 import EncryptionService from "@/encryptionService";
 import { CustomError } from "@/error";
 import { TimestampUsageStrategy } from "@/promptUsageStrategy";
 import { CopilotSettings, CopilotSettingTab } from "@/settings/SettingsPage";
 import SharedState from "@/sharedState";
-import {
-  areEmbeddingModelsSame,
-  getAllNotesContent,
-  isPathInList,
-  sanitizeSettings,
-} from "@/utils";
-import VectorDBManager, { VectorStoreDocument } from "@/vectorDBManager";
-import { MD5 } from "crypto-js";
+import { getAllNotesContent, sanitizeSettings } from "@/utils";
+import VectorDBManager from "@/vectorDBManager";
 import {
   Editor,
   MarkdownView,
@@ -44,7 +38,6 @@ import {
   TFolder,
   WorkspaceLeaf,
 } from "obsidian";
-import PouchDB from "pouchdb-browser";
 
 export default class CopilotPlugin extends Plugin {
   settings: CopilotSettings;
@@ -54,11 +47,9 @@ export default class CopilotPlugin extends Plugin {
   chainManager: ChainManager;
   activateViewPromise: Promise<void> | null = null;
   chatIsVisible = false;
-  dbPrompts: PouchDB.Database;
-  dbVectorStores: PouchDB.Database<VectorStoreDocument>;
-  embeddingsManager: EmbeddingsManager;
   encryptionService: EncryptionService;
   userMessageHistory: string[] = [];
+  vectorStoreManager: VectorStoreManager;
 
   isChatVisible = () => this.chatIsVisible;
 
@@ -67,38 +58,34 @@ export default class CopilotPlugin extends Plugin {
     this.addSettingTab(new CopilotSettingTab(this.app, this));
     // Always have one instance of sharedState and chainManager in the plugin
     this.sharedState = new SharedState();
-    const langChainParams = this.getChainManagerParams();
-    this.encryptionService = new EncryptionService(this.settings);
-    this.dbVectorStores = new PouchDB<VectorStoreDocument>(
-      `copilot_vector_stores_${this.getVaultIdentifier()}`
-    );
 
-    // Ensure activeModels always includes core models
-    this.mergeAllActiveModelsWithCoreModels();
-    this.chainManager = new ChainManager(
+    this.encryptionService = new EncryptionService(this.settings);
+    this.vectorStoreManager = new VectorStoreManager(
       this.app,
-      langChainParams,
-      this.encryptionService,
       this.settings,
-      () => this.dbVectorStores
+      this.encryptionService,
+      () => this.getLangChainParams()
     );
 
     if (this.settings.enableEncryption) {
       await this.saveSettings();
     }
 
-    this.embeddingsManager = EmbeddingsManager.getInstance(
-      () => langChainParams,
-      this.encryptionService,
-      this.settings.activeEmbeddingModels
-    );
-    this.dbPrompts = new PouchDB<CustomPrompt>("copilot_custom_prompts");
-
     // Initialize the rate limiter
     VectorDBManager.initialize({
       getEmbeddingRequestsPerSecond: () => this.settings.embeddingRequestsPerSecond,
       debug: this.settings.debug,
     });
+
+    // Ensure activeModels always includes core models
+    this.mergeAllActiveModelsWithCoreModels();
+    this.chainManager = new ChainManager(
+      this.app,
+      () => this.getLangChainParams(),
+      this.encryptionService,
+      this.settings,
+      this.vectorStoreManager
+    );
 
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
 
@@ -277,7 +264,7 @@ export default class CopilotPlugin extends Plugin {
       id: "clear-local-vector-store",
       name: "Clear local vector store",
       callback: async () => {
-        await this.clearVectorStore();
+        await this.vectorStoreManager.clearVectorStore();
       },
     });
 
@@ -285,30 +272,7 @@ export default class CopilotPlugin extends Plugin {
       id: "garbage-collect-vector-store",
       name: "Garbage collect vector store (remove files that no longer exist in vault)",
       callback: async () => {
-        try {
-          const files = this.app.vault.getMarkdownFiles();
-          const filePaths = files.map((file) => file.path);
-          const indexedFiles = await VectorDBManager.getNoteFiles(this.dbVectorStores);
-          const indexedFilePaths = indexedFiles.map((file) => file.path);
-          const filesToDelete = indexedFilePaths.filter(
-            (filePath) => !filePaths.includes(filePath)
-          );
-
-          const deletePromises = filesToDelete.map(async (filePath) => {
-            VectorDBManager.removeMemoryVectors(
-              this.dbVectorStores,
-              VectorDBManager.getDocumentHash(filePath)
-            );
-          });
-
-          await Promise.all(deletePromises);
-
-          new Notice("Local vector store garbage collected successfully.");
-          console.log("Local vector store garbage collected successfully, new instance created.");
-        } catch (err) {
-          console.error("Error clearing the local vector store:", err);
-          new Notice("An error occurred while clearing the local vector store.");
-        }
+        await this.vectorStoreManager.garbageCollectVectorStore();
       },
     });
 
@@ -317,7 +281,7 @@ export default class CopilotPlugin extends Plugin {
       name: "Index (refresh) vault for QA",
       callback: async () => {
         try {
-          const indexedFileCount = await this.indexVaultToVectorStore();
+          const indexedFileCount = await this.vectorStoreManager.indexVaultToVectorStore();
 
           new Notice(`${indexedFileCount} vault files indexed to vector store.`);
           console.log(`${indexedFileCount} vault files indexed to vector store.`);
@@ -333,8 +297,8 @@ export default class CopilotPlugin extends Plugin {
       name: "Force re-index vault for QA",
       callback: async () => {
         try {
-          await this.clearVectorStore();
-          const indexedFileCount = await this.indexVaultToVectorStore(true);
+          await this.vectorStoreManager.clearVectorStore();
+          const indexedFileCount = await this.vectorStoreManager.indexVaultToVectorStore(true);
 
           new Notice(`${indexedFileCount} vault files re-indexed to vector store.`);
           console.log(`${indexedFileCount} vault files re-indexed to vector store.`);
@@ -381,7 +345,7 @@ export default class CopilotPlugin extends Plugin {
     this.registerEvent(
       this.app.vault.on("delete", (file) => {
         const docHash = VectorDBManager.getDocumentHash(file.path);
-        VectorDBManager.removeMemoryVectors(this.dbVectorStores, docHash);
+        VectorDBManager.removeMemoryVectors(this.vectorStoreManager.getDbVectorStores(), docHash);
       })
     );
 
@@ -389,21 +353,12 @@ export default class CopilotPlugin extends Plugin {
     // This can take a while, so we don't want to block the startup process
     if (this.settings.indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP) {
       try {
-        await this.indexVaultToVectorStore();
+        await this.vectorStoreManager.indexVaultToVectorStore();
       } catch (err) {
         console.error("Error saving vault to vector store:", err);
         new Notice("An error occurred while saving vault to vector store.");
       }
     }
-
-    // Temporary: Migrate Custom Prompts from PouchDB to Markdown files.
-    this.addCommand({
-      id: "dump-custom-prompts-to-markdown",
-      name: "Dump custom prompts to markdown files",
-      callback: async () => {
-        await this.dumpCustomPrompts(promptProcessor);
-      },
-    });
 
     this.registerEvent(this.app.workspace.on("editor-menu", this.handleContextMenu));
   }
@@ -418,172 +373,6 @@ export default class CopilotPlugin extends Plugin {
       if (chatView && chatView.sharedState.chatHistory.length > 0) {
         await chatView.saveChat();
       }
-    }
-  }
-
-  async dumpCustomPrompts(promptProcessor: CustomPromptProcessor): Promise<void> {
-    const folder = this.settings.customPromptsFolder || DEFAULT_SETTINGS.customPromptsFolder;
-
-    try {
-      // Fetch all prompts
-      const response = await this.dbPrompts.allDocs({ include_docs: true });
-
-      for (const row of response.rows) {
-        const doc = row.doc as CustomPromptDB;
-        if (doc && doc._id && doc.prompt) {
-          await promptProcessor.savePrompt(doc._id, doc.prompt);
-        }
-      }
-
-      new Notice(`Custom prompts dumped to ${folder} folder`);
-    } catch (error) {
-      console.error("Error dumping custom prompts:", error);
-      new Notice("Error dumping custom prompts. Check console for details.");
-    }
-  }
-
-  private getVaultIdentifier(): string {
-    const vaultName = this.app.vault.getName();
-    return MD5(vaultName).toString();
-  }
-
-  async saveFileToVectorStore(file: TFile): Promise<void> {
-    const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
-    if (!embeddingInstance) {
-      new Notice("Embedding instance not found.");
-      return;
-    }
-    const fileContent = await this.app.vault.cachedRead(file);
-    const fileMetadata = this.app.metadataCache.getFileCache(file);
-    const noteFile = {
-      basename: file.basename,
-      path: file.path,
-      mtime: file.stat.mtime,
-      content: fileContent,
-      metadata: fileMetadata?.frontmatter ?? {},
-    };
-    VectorDBManager.indexFile(this.dbVectorStores, embeddingInstance, noteFile);
-  }
-
-  async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
-    try {
-      const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
-      if (!embeddingInstance) {
-        throw new CustomError("Embedding instance not found.");
-      }
-
-      // Check if embedding model has changed
-      const prevEmbeddingModel = await VectorDBManager.checkEmbeddingModel(this.dbVectorStores);
-      // TODO: Remove this when Ollama model is dynamically set
-      const currEmbeddingModel = EmbeddingsManager.getModelName(embeddingInstance);
-
-      if (this.settings.debug) {
-        console.log(
-          `\nVault QA exclusion paths: ${this.settings.qaExclusionPaths ? this.settings.qaExclusionPaths : "None"}`
-        );
-        console.log("Prev vs Current embedding models:", prevEmbeddingModel, currEmbeddingModel);
-      }
-
-      if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
-        // Model has changed, clear DB and reindex from scratch
-        overwrite = true;
-        // Clear the current vector store with mixed embeddings
-        try {
-          // Clear the vectorstore db
-          await this.dbVectorStores.destroy();
-          // Reinitialize the database
-          this.dbVectorStores = new PouchDB<VectorStoreDocument>(
-            `copilot_vector_stores_${this.getVaultIdentifier()}`
-          );
-          new Notice("Detected change in embedding model. Rebuild vector store from scratch.");
-          console.log("Detected change in embedding model. Rebuild vector store from scratch.");
-        } catch (err) {
-          console.error("Error clearing vector store for reindexing:", err);
-          new Notice("Error clearing vector store for reindexing.");
-        }
-      }
-
-      const latestMtime = await VectorDBManager.getLatestFileMtime(this.dbVectorStores);
-
-      const files = this.app.vault
-        .getMarkdownFiles()
-        .filter((file) => {
-          if (!latestMtime || overwrite) return true;
-          return file.stat.mtime > latestMtime;
-        })
-        // file not in qaExclusionPaths
-        .filter((file) => {
-          if (!this.settings.qaExclusionPaths) return true;
-          return !isPathInList(file.path, this.settings.qaExclusionPaths);
-        });
-
-      const fileContents: string[] = await Promise.all(
-        files.map((file) => this.app.vault.cachedRead(file))
-      );
-      const fileMetadatas = files.map((file) => this.app.metadataCache.getFileCache(file));
-
-      const totalFiles = files.length;
-      if (totalFiles === 0) {
-        new Notice("Copilot vault index is up-to-date.");
-        return 0;
-      }
-
-      let indexedCount = 0;
-      const indexNotice = new Notice(
-        `Copilot is indexing your vault...\n0/${totalFiles} files processed.`,
-        0
-      );
-
-      const errors: string[] = [];
-      const loadPromises = files.map(async (file, index) => {
-        try {
-          const noteFile = {
-            basename: file.basename,
-            path: file.path,
-            mtime: file.stat.mtime,
-            content: fileContents[index],
-            metadata: fileMetadatas[index]?.frontmatter ?? {},
-          };
-          const result = await VectorDBManager.indexFile(
-            this.dbVectorStores,
-            embeddingInstance,
-            noteFile
-          );
-
-          indexedCount++;
-          indexNotice.setMessage(
-            `Copilot is indexing your vault...\n${indexedCount}/${totalFiles} files processed.`
-          );
-          return result;
-        } catch (err) {
-          console.error("Error indexing file:", err);
-          errors.push(`Error indexing file: ${file.basename}`);
-        }
-      });
-
-      await Promise.all(loadPromises);
-      setTimeout(() => {
-        indexNotice.hide();
-      }, 2000);
-
-      if (errors.length > 0) {
-        new Notice(`Indexing completed with errors. Check the console for details.`);
-        console.log("Indexing Errors:", errors.join("\n"));
-      }
-      return files.length;
-    } catch (error) {
-      if (error instanceof CustomError) {
-        console.error("Error indexing vault to vector store:", error.msg);
-        new Notice(
-          `Error indexing vault: ${error.msg}. Please check your embedding model settings.`
-        );
-      } else {
-        console.error("Unexpected error indexing vault to vector store:", error);
-        new Notice(
-          "An unexpected error occurred while indexing the vault. Please check the console for details."
-        );
-      }
-      return 0;
     }
   }
 
@@ -791,7 +580,11 @@ export default class CopilotPlugin extends Plugin {
     });
   };
 
-  getChainManagerParams(): LangChainParams {
+  getLangChainParams(): LangChainParams {
+    if (!this.settings) {
+      throw new Error("Settings are not loaded");
+    }
+
     const {
       openAIApiKey,
       openAIOrgId,
@@ -838,10 +631,6 @@ export default class CopilotPlugin extends Plugin {
     };
   }
 
-  getLangChainParams(): LangChainParams {
-    return this.getChainManagerParams();
-  }
-
   getEncryptionService(): EncryptionService {
     return this.encryptionService;
   }
@@ -882,23 +671,6 @@ export default class CopilotPlugin extends Plugin {
       // If the view is already open, just update its content
       const copilotView = existingView.view as CopilotView;
       copilotView.updateView();
-    }
-  }
-
-  async clearVectorStore(): Promise<void> {
-    try {
-      // Clear the vectorstore db
-      await this.dbVectorStores.destroy();
-      // Reinitialize the database
-      this.dbVectorStores = new PouchDB<VectorStoreDocument>(
-        `copilot_vector_stores_${this.getVaultIdentifier()}`
-      );
-      new Notice("Local vector store cleared successfully.");
-      console.log("Local vector store cleared successfully, new instance created.");
-    } catch (err) {
-      console.error("Error clearing the local vector store:", err);
-      new Notice("An error occurred while clearing the local vector store.");
-      throw err;
     }
   }
 }

@@ -374,7 +374,7 @@ ${chatContent}`;
     }
 
     try {
-      await plugin.indexVaultToVectorStore();
+      await plugin.vectorStoreManager.indexVaultToVectorStore();
       new Notice("Vault index refreshed.");
     } catch (error) {
       console.error("Error refreshing vault index:", error);
@@ -498,7 +498,6 @@ ${chatContent}`;
   ) => {
     return () => {
       const {
-        custom_temperature,
         isVisible = false,
         ignoreSystemMessage = true, // Ignore system message by default for commands
       } = options;
@@ -518,12 +517,6 @@ ${chatContent}`;
         if (isVisible) {
           addMessage(promptMessage);
         }
-
-        // Have a hardcoded custom temperature for some commands that need more strictness
-        chainManager.langChainParams = {
-          ...chainManager.langChainParams,
-          ...(custom_temperature && { temperature: custom_temperature }),
-        };
 
         setLoading(true);
         await getAIResponse(

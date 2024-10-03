@@ -12,6 +12,7 @@ import {
   isSupportedChain,
 } from "@/utils";
 import VectorDBManager, { MemoryVector, NoteFile, VectorStoreDocument } from "@/vectorDBManager";
+import VectorStoreManager from "@/VectorStoreManager";
 import {
   ChatPromptTemplate,
   HumanMessagePromptTemplate,
@@ -35,46 +36,54 @@ export default class ChainManager {
   private app: App;
   private settings: CopilotSettings;
   private vectorStore: MemoryVectorStore;
+  private vectorStoreManager: VectorStoreManager;
   private promptManager: PromptManager;
-  private embeddingsManager: EmbeddingsManager;
   private encryptionService: EncryptionService;
-  public chatModelManager: ChatModelManager;
-  public langChainParams: LangChainParams;
-  public memoryManager: MemoryManager;
-  private getDbVectorStores: () => PouchDB.Database<VectorStoreDocument>;
 
-  /**
-   * Constructor for initializing langChainParams and instantiating singletons.
-   *
-   * @param {LangChainParams} langChainParams - the parameters for language chaining
-   * @return {void}
-   */
+  private langChainParams: LangChainParams;
+
+  public chatModelManager: ChatModelManager;
+  public memoryManager: MemoryManager;
+  public embeddingsManager: EmbeddingsManager;
+
   constructor(
     app: App,
-    langChainParams: LangChainParams,
+    getLangChainParams: () => LangChainParams,
     encryptionService: EncryptionService,
     settings: CopilotSettings,
     // Ensure ChainManager always has the up-to-date dbVectorStores
-    getDbVectorStores: () => PouchDB.Database<VectorStoreDocument>
+    vectorStoreManager: VectorStoreManager
   ) {
     // Instantiate singletons
     this.app = app;
-    this.langChainParams = langChainParams;
+    this.langChainParams = getLangChainParams();
     this.settings = settings;
-    this.memoryManager = MemoryManager.getInstance(this.langChainParams);
+    this.vectorStoreManager = vectorStoreManager;
+    this.memoryManager = MemoryManager.getInstance(this.getLangChainParams());
     this.encryptionService = encryptionService;
     this.chatModelManager = ChatModelManager.getInstance(
-      () => this.langChainParams,
+      () => this.getLangChainParams(),
       encryptionService,
       this.settings.activeModels
     );
-    this.promptManager = PromptManager.getInstance(this.langChainParams);
-    this.getDbVectorStores = getDbVectorStores;
-    this.createChainWithNewModel(this.langChainParams.modelKey);
+    this.embeddingsManager = this.vectorStoreManager.getEmbeddingsManager();
+    this.promptManager = PromptManager.getInstance(this.getLangChainParams());
+    this.createChainWithNewModel(this.getLangChainParams().modelKey);
+  }
+
+  public getLangChainParams(): LangChainParams {
+    return this.langChainParams;
+  }
+
+  public setLangChainParam<K extends keyof LangChainParams>(
+    key: K,
+    value: LangChainParams[K]
+  ): void {
+    this.langChainParams[key] = value;
   }
 
   private setNoteFile(noteFile: NoteFile): void {
-    this.langChainParams.options.noteFile = noteFile;
+    this.setLangChainParam("options", { ...this.getLangChainParams().options, noteFile });
   }
 
   private validateChainType(chainType: ChainType): void {
@@ -108,19 +117,19 @@ export default class ChainManager {
         customModel = BUILTIN_CHAT_MODELS[0];
         newModelKey = customModel.name + "|" + customModel.provider;
       }
-      this.langChainParams.modelKey = newModelKey;
+      this.setLangChainParam("modelKey", newModelKey);
       this.chatModelManager.setChatModel(customModel);
       // Must update the chatModel for chain because ChainFactory always
       // retrieves the old chain without the chatModel change if it exists!
       // Create a new chain with the new chatModel
-      this.createChain(this.langChainParams.chainType, {
-        ...this.langChainParams.options,
+      this.createChain(this.getLangChainParams().chainType, {
+        ...this.getLangChainParams().options,
         forceNewCreation: true,
       });
       console.log(`Setting model to ${newModelKey}`);
     } catch (error) {
       console.error("createChainWithNewModel failed: ", error);
-      console.log("modelKey:", this.langChainParams.modelKey);
+      console.log("modelKey:", this.getLangChainParams().modelKey);
     }
   }
 
@@ -145,7 +154,7 @@ export default class ChainManager {
     // MUST set embeddingsManager when switching to QA mode
     if (chainType === ChainType.LONG_NOTE_QA_CHAIN || chainType === ChainType.VAULT_QA_CHAIN) {
       this.embeddingsManager = EmbeddingsManager.getInstance(
-        () => this.langChainParams,
+        () => this.getLangChainParams(),
         this.encryptionService,
         this.settings.activeEmbeddingModels
       );
@@ -176,7 +185,7 @@ export default class ChainManager {
           }) as RunnableSequence;
         }
 
-        this.langChainParams.chainType = ChainType.LLM_CHAIN;
+        this.setLangChainParam("chainType", ChainType.LLM_CHAIN);
         break;
       }
       case ChainType.LONG_NOTE_QA_CHAIN: {
@@ -188,7 +197,10 @@ export default class ChainManager {
         this.setNoteFile(options.noteFile);
         const docHash = VectorDBManager.getDocumentHash(options.noteFile.path);
         const parsedMemoryVectors: MemoryVector[] | undefined =
-          await VectorDBManager.getMemoryVectors(this.getDbVectorStores(), docHash);
+          await VectorDBManager.getMemoryVectors(
+            this.vectorStoreManager.getDbVectorStores(),
+            docHash
+          );
         const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
         if (!embeddingsAPI) {
           console.error("Error getting embeddings API. Please check your settings.");
@@ -208,7 +220,7 @@ export default class ChainManager {
               retriever: vectorStore.asRetriever(undefined, (doc) => {
                 return doc.metadata.path === options.noteFile?.path;
               }),
-              systemMessage: this.langChainParams.systemMessage,
+              systemMessage: this.getLangChainParams().systemMessage,
             },
             ChainManager.storeRetrieverDocuments.bind(ChainManager),
             options.debug
@@ -218,7 +230,7 @@ export default class ChainManager {
           // Index doesn't exist
           const vectorStoreDoc = await this.indexFile(options.noteFile);
           this.vectorStore = await VectorDBManager.getMemoryVectorStore(
-            this.getDbVectorStores(),
+            this.vectorStoreManager.getDbVectorStores(),
             embeddingsAPI,
             vectorStoreDoc?._id
           );
@@ -239,7 +251,7 @@ export default class ChainManager {
             {
               llm: chatModel,
               retriever: retriever,
-              systemMessage: this.langChainParams.systemMessage,
+              systemMessage: this.getLangChainParams().systemMessage,
             },
             ChainManager.storeRetrieverDocuments.bind(ChainManager),
             options.debug
@@ -250,7 +262,7 @@ export default class ChainManager {
           );
         }
 
-        this.langChainParams.chainType = ChainType.LONG_NOTE_QA_CHAIN;
+        this.setLangChainParam("chainType", ChainType.LONG_NOTE_QA_CHAIN);
         console.log("Set chain:", ChainType.LONG_NOTE_QA_CHAIN);
         break;
       }
@@ -262,11 +274,11 @@ export default class ChainManager {
           return;
         }
         const vectorStore = await VectorDBManager.getMemoryVectorStore(
-          this.getDbVectorStores(),
+          this.vectorStoreManager.getDbVectorStores(),
           embeddingsAPI
         );
         const retriever = new HybridRetriever(
-          this.getDbVectorStores(),
+          this.vectorStoreManager.getDbVectorStores(),
           this.app.vault,
           {
             vectorStore: vectorStore,
@@ -283,14 +295,14 @@ export default class ChainManager {
           {
             llm: chatModel,
             retriever: retriever,
-            systemMessage: this.langChainParams.systemMessage,
+            systemMessage: this.getLangChainParams().systemMessage,
           },
           ChainManager.storeRetrieverDocuments.bind(ChainManager),
           options.debug
         );
         console.log("New Vault QA chain with hybrid retriever created for entire vault");
 
-        this.langChainParams.chainType = ChainType.VAULT_QA_CHAIN;
+        this.setLangChainParam("chainType", ChainType.VAULT_QA_CHAIN);
         console.log("Set chain:", ChainType.VAULT_QA_CHAIN);
         break;
       }
@@ -326,13 +338,13 @@ export default class ChainManager {
     if (!ChainManager.chain || !isSupportedChain(ChainManager.chain)) {
       console.error(
         "Chain is not initialized properly, re-initializing chain: ",
-        this.langChainParams.chainType
+        this.getLangChainParams().chainType
       );
-      this.setChain(this.langChainParams.chainType, this.langChainParams.options);
+      this.setChain(this.getLangChainParams().chainType, this.getLangChainParams().options);
     }
 
     const { temperature, maxTokens, systemMessage, chatContextTurns, chainType } =
-      this.langChainParams;
+      this.getLangChainParams();
 
     const memory = this.memoryManager.getMemory();
     const chatPrompt = this.promptManager.getChatPrompt();
@@ -347,11 +359,11 @@ export default class ChainManager {
         : chatPrompt;
 
       this.setChain(chainType, {
-        ...this.langChainParams.options,
+        ...this.getLangChainParams().options,
         prompt: effectivePrompt,
       });
     } else {
-      this.setChain(chainType, this.langChainParams.options);
+      this.setChain(chainType, this.getLangChainParams().options);
     }
 
     let fullAIResponse = "";
@@ -402,7 +414,7 @@ export default class ChainManager {
                 `chat context turns: ${chatContextTurns}\n`
             );
             console.log("chain RunnableSequence:", ChainManager.chain);
-            console.log("embedding model:", this.langChainParams.embeddingModelKey);
+            console.log("embedding model:", this.getLangChainParams().embeddingModelKey);
           }
           fullAIResponse = await this.runRetrievalChain(
             userMessage,
@@ -413,7 +425,7 @@ export default class ChainManager {
           );
           break;
         default:
-          console.error("Chain type not supported:", this.langChainParams.chainType);
+          console.error("Chain type not supported:", this.getLangChainParams().chainType);
       }
     } catch (error) {
       const errorData = error?.response?.data?.error || error;
@@ -478,7 +490,7 @@ export default class ChainManager {
     // That means multiple chunks can be from the same note. A more advanced logic is needed
     // to show specific chunks in the future. E.g. collapsed note title when clicked,
     // expand and reveal the chunk
-    if (this.langChainParams.chainType === ChainType.VAULT_QA_CHAIN) {
+    if (this.getLangChainParams().chainType === ChainType.VAULT_QA_CHAIN) {
       const docTitles = extractUniqueTitlesFromDocs(ChainManager.retrievedDocuments);
       if (docTitles.length > 0) {
         const markdownLinks = docTitles
@@ -505,7 +517,11 @@ export default class ChainManager {
       console.error(errorMsg);
       return;
     }
-    return await VectorDBManager.indexFile(this.getDbVectorStores(), embeddingsAPI, noteFile);
+    return await VectorDBManager.indexFile(
+      this.vectorStoreManager.getDbVectorStores(),
+      embeddingsAPI,
+      noteFile
+    );
   }
 
   async updateMemoryWithLoadedMessages(messages: ChatMessage[]) {

@@ -486,3 +486,22 @@ If your plugin does not need CSS, delete this file.
   outline: none;
   box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
 }
+
+.copilot-notice-container {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+.copilot-notice-message {
+  margin-bottom: 16px;
+}
+
+.copilot-notice-container button {
+  align-self: flex-end;
+  margin-top: 16px;
+  margin-left: auto;
+}
