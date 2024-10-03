@@ -29,18 +29,16 @@ const ChatInput: React.FC<ChatInputProps> = ({
   navigateHistory,
   chatIsVisible,
 }) => {
-  const [rows, setRows] = useState(1);
   const [shouldFocus, setShouldFocus] = useState(false);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [tempInput, setTempInput] = useState("");
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
-  const [charactersPerRow, setCharactersPerRow] = useState(40);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const handleInputChange = async (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     const inputValue = event.target.value;
     setInputMessage(inputValue);
-    updateRows(inputValue);
+    adjustTextareaHeight();
 
     if (inputValue.slice(-2) === "[[") {
       showNoteTitleModal();
@@ -48,6 +46,17 @@ const ChatInput: React.FC<ChatInputProps> = ({
       showCustomPromptModal();
     }
   };
+
+  const adjustTextareaHeight = () => {
+    if (textAreaRef.current) {
+      textAreaRef.current.style.height = "auto"; // Reset height
+      textAreaRef.current.style.height = `${textAreaRef.current.scrollHeight}px`; // Adjust height
+    }
+  };
+
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [inputMessage]);
 
   const showNoteTitleModal = () => {
     const fetchNoteTitles = async () => {
@@ -71,23 +80,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
       if (selectedPrompt) {
         await customPromptProcessor.recordPromptUsage(selectedPrompt.title);
         setInputMessage(selectedPrompt.content);
-        updateRows(selectedPrompt.content);
       }
     }).open();
-  };
-
-  const updateRows = (text: string) => {
-    const lineHeight = 20;
-    const maxHeight = 200;
-    const minRows = 1;
-    const characterRows = Math.ceil(text.length / charactersPerRow);
-
-    const newlineRows = text.split("\n").length;
-    const rowsNeeded = Math.min(
-      Math.max(newlineRows, characterRows, minRows),
-      Math.floor(maxHeight / lineHeight)
-    );
-    setRows(rowsNeeded);
   };
 
   useEffect(() => {
@@ -128,7 +122,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
       if (newMessage !== inputMessage) {
         setHistoryIndex(historyIndex + 1);
         setInputMessage(newMessage);
-        updateRows(newMessage);
         // Set cursor to beginning of input after update
         setTimeout(() => {
           if (textarea) {
@@ -147,10 +140,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
         setHistoryIndex(historyIndex - 1);
         if (historyIndex === 0) {
           setInputMessage(tempInput);
-          updateRows(tempInput);
         } else {
           setInputMessage(newMessage);
-          updateRows(newMessage);
         }
         // Set cursor to beginning of input after update
         setTimeout(() => {
@@ -162,25 +153,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
-  useEffect(() => {
-    const calculateCharactersPerRow = () => {
-      if (containerRef.current) {
-        const containerWidth = containerRef.current.clientWidth;
-        const fontSize = parseFloat(getComputedStyle(containerRef.current).fontSize);
-        const averageCharWidth = fontSize * 0.6; // Approximate average character width
-        const newCharactersPerRow = Math.floor(containerWidth / averageCharWidth);
-        setCharactersPerRow(newCharactersPerRow);
-      }
-    };
-
-    calculateCharactersPerRow();
-    window.addEventListener("resize", calculateCharactersPerRow);
-
-    return () => {
-      window.removeEventListener("resize", calculateCharactersPerRow);
-    };
-  }, []);
-
   return (
     <div className="chat-input-container" ref={containerRef}>
       <textarea
@@ -190,7 +162,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
         value={inputMessage}
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
-        rows={rows}
       />
       <button
         onClick={isGenerating ? onStopGenerating : handleSendMessage}
