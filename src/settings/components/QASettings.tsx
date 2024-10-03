@@ -6,7 +6,7 @@ import {
   DropdownComponent,
   ModelSettingsComponent,
   SliderComponent,
-  TextComponent,
+  TextAreaComponent,
 } from "./SettingBlocks";
 
 interface QASettingsProps {
@@ -143,7 +143,7 @@ const QASettings: React.FC<QASettingsProps> = ({
         value={settings.embeddingRequestsPerSecond}
         onChange={(value) => updateSettings({ embeddingRequestsPerSecond: value })}
       />
-      <TextComponent
+      <TextAreaComponent
         name="Indexing Exclusions"
         description="Comma separated list of paths, tags or note titles, e.g. folder1, folder1/folder2, #tag1, #tag2, [[note1]], [[note2]], etc, to be excluded from the indexing process. NOTE: Tags must be in the note properties, not the note content. Files which were previously indexed will remain in the index unless you force re-index."
         placeholder="folder1, folder1/folder2, #tag1, #tag2, [[note1]], [[note2]]"
