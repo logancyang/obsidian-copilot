@@ -16,7 +16,7 @@ export function useAIState(
   (chain: ChainType, options?: SetChainOptions) => void,
   () => void,
 ] {
-  const { langChainParams } = chainManager;
+  const langChainParams = chainManager.getLangChainParams();
   const [currentModelKey, setCurrentModelKey] = useState<string>(langChainParams.modelKey);
   const [currentChain, setCurrentChain] = useState<ChainType>(langChainParams.chainType);
   const [, setChatMemory] = useState<BaseChatMemory | null>(chainManager.memoryManager.getMemory());

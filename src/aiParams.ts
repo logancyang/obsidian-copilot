@@ -43,7 +43,7 @@ export interface LangChainParams {
   maxTokens: number;
   systemMessage: string;
   chatContextTurns: number;
-  chainType: ChainType; // Default ChainType is set in main.ts getChainManagerParams
+  chainType: ChainType; // Default ChainType is set in main.ts getLangChainParams
   options: SetChainOptions;
   openAIProxyBaseUrl?: string;
   enableCors?: boolean;
