@@ -11,7 +11,7 @@ import {
   formatDateTime,
   isSupportedChain,
 } from "@/utils";
-import VectorDBManager, { MemoryVector, NoteFile, VectorStoreDocument } from "@/vectorDBManager";
+import VectorDBManager from "@/vectorDBManager";
 import VectorStoreManager from "@/VectorStoreManager";
 import {
   ChatPromptTemplate,
@@ -82,7 +82,7 @@ export default class ChainManager {
     this.langChainParams[key] = value;
   }
 
-  private setNoteFile(noteFile: NoteFile): void {
+  private setNoteFile(noteFile: any): void {
     this.setLangChainParam("options", { ...this.getLangChainParams().options, noteFile });
   }
 
@@ -195,55 +195,59 @@ export default class ChainManager {
         }
 
         this.setNoteFile(options.noteFile);
-        const docHash = VectorDBManager.getDocumentHash(options.noteFile.path);
-        const parsedMemoryVectors: MemoryVector[] | undefined =
-          await VectorDBManager.getMemoryVectors(
-            this.vectorStoreManager.getDbVectorStores(),
-            docHash
-          );
+        const docHits = await VectorDBManager.getDocsByPath(
+          this.vectorStoreManager.getDb(),
+          options.noteFile.path
+        );
+
         const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
         if (!embeddingsAPI) {
           console.error("Error getting embeddings API. Please check your settings.");
           return;
         }
-        if (parsedMemoryVectors) {
+        if (docHits) {
           // Index already exists
-          const vectorStore = await VectorDBManager.rebuildMemoryVectorStore(
-            parsedMemoryVectors,
-            embeddingsAPI
+          const hybridRetriever = new HybridRetriever(
+            this.vectorStoreManager.getDb(),
+            this.app.vault,
+            chatModel,
+            embeddingsAPI,
+            {
+              minSimilarityScore: 0.3,
+              maxK: this.settings.maxSourceChunks,
+            },
+            options.debug
           );
 
           // Create new conversational retrieval chain
           ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain(
             {
               llm: chatModel,
-              retriever: vectorStore.asRetriever(undefined, (doc) => {
-                return doc.metadata.path === options.noteFile?.path;
-              }),
+              retriever: hybridRetriever,
               systemMessage: this.getLangChainParams().systemMessage,
             },
             ChainManager.storeRetrieverDocuments.bind(ChainManager),
             options.debug
           );
-          console.log("Existing vector store for document hash: ", docHash);
+          console.log("Existing vector store for note path: ", options.noteFile.path);
         } else {
           // Index doesn't exist
-          const vectorStoreDoc = await this.indexFile(options.noteFile);
-          this.vectorStore = await VectorDBManager.getMemoryVectorStore(
-            this.vectorStoreManager.getDbVectorStores(),
-            embeddingsAPI,
-            vectorStoreDoc?._id
-          );
-          if (!this.vectorStore) {
-            console.error("Error creating vector store.");
-            return;
-          }
+          await this.indexFile(options.noteFile);
 
+          const hybridRetriever = new HybridRetriever(
+            this.vectorStoreManager.getDb(),
+            this.app.vault,
+            chatModel,
+            embeddingsAPI,
+            {
+              minSimilarityScore: 0.3,
+              maxK: this.settings.maxSourceChunks,
+            },
+            options.debug
+          );
           const retriever = MultiQueryRetriever.fromLLM({
             llm: chatModel,
-            retriever: this.vectorStore.asRetriever(undefined, (doc) => {
-              return doc.metadata.path === options.noteFile?.path;
-            }),
+            retriever: hybridRetriever,
             verbose: false,
           });
 
@@ -257,8 +261,8 @@ export default class ChainManager {
             options.debug
           );
           console.log(
-            "New Long Note QA chain with multi-query retriever created for " + "document hash: ",
-            docHash
+            "New Long Note QA chain with multi-query retriever created for note: ",
+            options.noteFile.path
           );
         }
 
@@ -273,20 +277,16 @@ export default class ChainManager {
           console.error("Error getting embeddings API. Please check your settings.");
           return;
         }
-        const vectorStore = await VectorDBManager.getMemoryVectorStore(
-          this.vectorStoreManager.getDbVectorStores(),
-          embeddingsAPI
-        );
+
         const retriever = new HybridRetriever(
-          this.vectorStoreManager.getDbVectorStores(),
+          this.vectorStoreManager.getDb(),
           this.app.vault,
-          {
-            vectorStore: vectorStore,
-            minSimilarityScore: 0.3, // TODO: Make this a setting
-            maxK: this.settings.maxSourceChunks, // The maximum number of docs (chunks) to retrieve
-            kIncrement: 2,
-          },
           chatModel,
+          embeddingsAPI,
+          {
+            minSimilarityScore: 0.3,
+            maxK: this.settings.maxSourceChunks,
+          },
           options.debug
         );
 
@@ -508,7 +508,7 @@ export default class ChainManager {
     return fullAIResponse;
   }
 
-  async indexFile(noteFile: NoteFile): Promise<VectorStoreDocument | undefined> {
+  async indexFile(noteFile: any): Promise<any | undefined> {
     const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
     if (!embeddingsAPI) {
       const errorMsg =
@@ -518,7 +518,7 @@ export default class ChainManager {
       return;
     }
     return await VectorDBManager.indexFile(
-      this.vectorStoreManager.getDbVectorStores(),
+      this.vectorStoreManager.getDb(),
       embeddingsAPI,
       noteFile
     );
