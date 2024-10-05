@@ -157,8 +157,6 @@ export const stringToChainType = (chain: string): ChainType => {
   switch (chain) {
     case "llm_chain":
       return ChainType.LLM_CHAIN;
-    case "long_note_qa":
-      return ChainType.LONG_NOTE_QA_CHAIN;
     case "vault_qa":
       return ChainType.VAULT_QA_CHAIN;
     default:

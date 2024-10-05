@@ -1,22 +1,22 @@
-// src/VectorStoreManager.ts
-
 import { LangChainParams } from "@/aiParams";
-import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import EncryptionService from "@/encryptionService";
 import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import { areEmbeddingModelsSame, getNotesFromTags, isPathInList } from "@/utils";
-import VectorDBManager, { VectorStoreDocument } from "@/vectorDBManager";
+import VectorDBManager from "@/vectorDBManager";
+import { Embeddings } from "@langchain/core/embeddings";
+import { create, load, Orama, remove, removeMultiple, save, search } from "@orama/orama";
 import { MD5 } from "crypto-js";
 import { App, Notice } from "obsidian";
-import PouchDB from "pouchdb-browser";
+import { VAULT_VECTOR_STORE_STRATEGY } from "./constants";
 
 class VectorStoreManager {
   private app: App;
   private settings: CopilotSettings;
   private encryptionService: EncryptionService;
-  private dbVectorStores: PouchDB.Database<VectorStoreDocument>;
+  private oramaDb: Orama<any>;
+  private dbPath: string;
   private embeddingsManager: EmbeddingsManager;
   private getLangChainParams: () => LangChainParams;
 
@@ -26,7 +26,7 @@ class VectorStoreManager {
   private indexNoticeMessage: HTMLSpanElement | null = null;
   private indexedCount = 0;
   private totalFilesToIndex = 0;
-
+  private initializationPromise: Promise<void>;
   constructor(
     app: App,
     settings: CopilotSettings,
@@ -38,32 +38,142 @@ class VectorStoreManager {
     this.encryptionService = encryptionService;
     this.getLangChainParams = getLangChainParams;
 
-    this.initializeDB();
+    this.dbPath = this.getDbPath();
     this.embeddingsManager = EmbeddingsManager.getInstance(
       this.getLangChainParams,
       this.encryptionService,
       this.settings.activeEmbeddingModels
     );
 
+    // Initialize the database asynchronously
+    this.initializationPromise = this.initializeDB()
+      .then((db) => {
+        this.oramaDb = db;
+        console.log("Database initialized successfully:", this.oramaDb);
+
+        // Perform any operations that depend on the initialized database here
+        this.performPostInitializationTasks();
+      })
+      .catch((error) => {
+        console.error("Failed to initialize database:", error);
+      });
+
     // Initialize the rate limiter
     VectorDBManager.initialize({
       getEmbeddingRequestsPerSecond: () => this.settings.embeddingRequestsPerSecond,
       debug: this.settings.debug,
     });
+  }
 
+  private async performPostInitializationTasks() {
     // Optionally index the vault on startup
     if (this.settings.indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP) {
-      this.indexVaultToVectorStore().catch((err) => {
+      try {
+        await this.indexVaultToVectorStore();
+      } catch (err) {
         console.error("Error indexing vault to vector store on startup:", err);
         new Notice("An error occurred while indexing vault to vector store.");
-      });
+      }
     }
   }
 
-  private initializeDB() {
-    this.dbVectorStores = new PouchDB<VectorStoreDocument>(
-      `copilot_vector_stores_${this.getVaultIdentifier()}`
+  private getDbPath(): string {
+    return `${this.app.vault.configDir}/copilot-index-${this.getVaultIdentifier()}.json`;
+  }
+
+  private createDynamicSchema(vectorLength: number) {
+    return {
+      id: "string",
+      title: "string", // basename of the TFile
+      path: "string", // path of the TFile
+      content: "string",
+      embedding: `vector[${vectorLength}]`,
+      embeddingModel: "string",
+      created_at: "number",
+      ctime: "number",
+      mtime: "number",
+      tags: "string[]",
+      extension: "string",
+    };
+  }
+
+  private async initializeDB(): Promise<Orama<any>> {
+    this.dbPath = this.getDbPath();
+    // Ensure the config directory exists
+    const configDir = this.app.vault.configDir;
+    if (!(await this.app.vault.adapter.exists(configDir))) {
+      console.log(`Config directory does not exist. Creating: ${configDir}`);
+      await this.app.vault.adapter.mkdir(configDir);
+    }
+
+    try {
+      if (await this.app.vault.adapter.exists(this.dbPath)) {
+        // Load existing database
+        const savedDb = await this.app.vault.adapter.read(this.dbPath);
+        const parsedDb = JSON.parse(savedDb);
+
+        // Create a new database with the same schema as the saved one
+        const schema = parsedDb.schema;
+        const newDb = await create({ schema });
+
+        // Load the data into the new database
+        await load(newDb, parsedDb);
+
+        console.log(`Loaded existing Orama database for ${this.dbPath} from disk.`);
+        return newDb;
+      } else {
+        // Create new database
+        return await this.createNewDb();
+      }
+    } catch (error) {
+      console.error(`Error initializing Orama database:`, error);
+      return await this.createNewDb();
+    }
+  }
+
+  private async createNewDb(): Promise<Orama<any>> {
+    const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
+    if (!embeddingInstance) {
+      throw new CustomError("Embedding instance not found.");
+    }
+
+    const vectorLength = await this.getVectorLength(embeddingInstance);
+    const schema = this.createDynamicSchema(vectorLength);
+
+    const db = await create({
+      schema,
+      components: {
+        tokenizer: {
+          stemmer: undefined,
+          stopWords: undefined,
+        },
+      },
+    });
+    console.log(
+      `Created new Orama database for ${this.dbPath}. ` +
+        `Embedding model: ${EmbeddingsManager.getModelName(embeddingInstance)} with vector length ${vectorLength}.`
     );
+    return db;
+  }
+
+  private async getVectorLength(embeddingInstance: Embeddings): Promise<number> {
+    const sampleText = "Sample text for embedding";
+    const sampleEmbedding = await embeddingInstance.embedQuery(sampleText);
+    return sampleEmbedding.length;
+  }
+
+  private async saveDB() {
+    try {
+      const rawData = await save(this.oramaDb);
+      const dataToSave = {
+        schema: this.oramaDb.schema,
+        ...rawData,
+      };
+      await this.app.vault.adapter.write(this.dbPath, JSON.stringify(dataToSave));
+      console.log(`Saved Orama database to ${this.dbPath}.`);
+    } catch (error) {
+      console.error(`Error saving Orama database to ${this.dbPath}:`, error);
+    }
   }
 
   private getVaultIdentifier(): string {
@@ -71,8 +181,8 @@ class VectorStoreManager {
     return MD5(vaultName).toString();
   }
 
-  public getDbVectorStores(): PouchDB.Database<VectorStoreDocument> {
-    return this.dbVectorStores;
+  public getDb(): Orama<any> {
+    return this.oramaDb;
   }
 
   public getEmbeddingsManager(): EmbeddingsManager {
@@ -160,38 +270,40 @@ class VectorStoreManager {
         throw new CustomError("Embedding instance not found.");
       }
 
-      // Check if embedding model has changed
-      const prevEmbeddingModel = await VectorDBManager.checkEmbeddingModel(this.dbVectorStores);
-      // TODO: Remove this when Ollama model is dynamically set
-      const currEmbeddingModel = EmbeddingsManager.getModelName(embeddingInstance);
+      const singleDoc = await search(this.getDb(), {
+        term: "",
+        limit: 1,
+      });
 
-      if (this.settings.debug) {
-        console.log(
-          `\nVault QA exclusions: ${this.settings.qaExclusions ? this.settings.qaExclusions : "None"}`
-        );
-        console.log("Prev vs Current embedding models:", prevEmbeddingModel, currEmbeddingModel);
-      }
+      let prevEmbeddingModel: string | undefined;
 
-      if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
-        // Model has changed, clear DB and reindex from scratch
-        overwrite = true;
-        // Clear the current vector store with mixed embeddings
-        try {
-          // Clear the vectorstore db
-          await this.dbVectorStores.destroy();
-          // Reinitialize the database
-          this.dbVectorStores = new PouchDB<VectorStoreDocument>(
-            `copilot_vector_stores_${this.getVaultIdentifier()}`
-          );
-          new Notice("Detected change in embedding model. Rebuild vector store from scratch.");
-          console.log("Detected change in embedding model. Rebuild vector store from scratch.");
-        } catch (err) {
-          console.error("Error clearing vector store for reindexing:", err);
-          new Notice("Error clearing vector store for reindexing.");
+      if (singleDoc.hits.length > 0) {
+        const oramaDocSample = singleDoc.hits[0];
+        if (
+          typeof oramaDocSample === "object" &&
+          oramaDocSample !== null &&
+          "document" in oramaDocSample
+        ) {
+          const document = oramaDocSample.document as { embeddingModel?: string };
+          prevEmbeddingModel = document.embeddingModel;
         }
       }
 
-      const latestMtime = await VectorDBManager.getLatestFileMtime(this.dbVectorStores);
+      if (prevEmbeddingModel) {
+        const currEmbeddingModel = EmbeddingsManager.getModelName(embeddingInstance);
+
+        if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
+          // Model has changed, reinitialize DB
+          await this.initializeDB();
+          overwrite = true;
+          new Notice("Detected change in embedding model. Rebuilding vector store from scratch.");
+          console.log("Detected change in embedding model. Rebuilding vector store from scratch.");
+        }
+      } else {
+        console.log("No previous embedding model found in the database.");
+      }
+
+      const latestMtime = await VectorDBManager.getLatestFileMtime(this.oramaDb);
       // Initialize indexing state
       this.isIndexingPaused = false;
       this.isIndexingCancelled = false;
@@ -237,14 +349,18 @@ class VectorStoreManager {
         const file = files[index];
 
         try {
-          const noteFile = {
-            basename: file.basename,
+          const fileToSave = {
+            title: file.basename,
             path: file.path,
-            mtime: file.stat.mtime,
             content: fileContents[index],
+            embeddingModel: EmbeddingsManager.getModelName(embeddingInstance),
+            ctime: file.stat.ctime,
+            mtime: file.stat.mtime,
+            tags: fileMetadatas[index]?.tags ?? [], // Assuming tags are in the metadata
+            extension: file.extension,
             metadata: fileMetadatas[index]?.frontmatter ?? {},
           };
-          await VectorDBManager.indexFile(this.dbVectorStores, embeddingInstance, noteFile);
+          await VectorDBManager.indexFile(this.oramaDb, embeddingInstance, fileToSave);
 
           this.indexedCount++;
           this.updateIndexingNoticeMessage();
@@ -289,6 +405,7 @@ class VectorStoreManager {
         this.indexNoticeMessage = null;
         this.isIndexingPaused = false;
         this.isIndexingCancelled = false;
+        this.saveDB();
       }, 3000);
 
       if (errors.length > 0) {
@@ -314,8 +431,11 @@ class VectorStoreManager {
 
   public async clearVectorStore(): Promise<void> {
     try {
-      await this.dbVectorStores.destroy();
-      this.initializeDB();
+      // Create a new, empty database instance
+      this.oramaDb = await this.createNewDb();
+
+      // Save the new, empty database
+      await this.saveDB();
       new Notice("Local vector store cleared successfully.");
       console.log("Local vector store cleared successfully, new instance created.");
     } catch (err) {
@@ -328,19 +448,32 @@ class VectorStoreManager {
   public async garbageCollectVectorStore(): Promise<void> {
     try {
       const files = this.app.vault.getMarkdownFiles();
-      const filePaths = files.map((file) => file.path);
-      const indexedFiles = await VectorDBManager.getNoteFiles(this.dbVectorStores);
-      const indexedFilePaths = indexedFiles.map((file) => file.path);
-      const filesToDelete = indexedFilePaths.filter((filePath) => !filePaths.includes(filePath));
+      const filePaths = new Set(files.map((file) => file.path));
 
-      const deletePromises = filesToDelete.map(async (filePath) => {
-        VectorDBManager.removeMemoryVectors(
-          this.dbVectorStores,
-          VectorDBManager.getDocumentHash(filePath)
-        );
+      // Search for all documents in the database
+      const result = await search(this.oramaDb, {
+        term: "",
+        properties: ["path"],
+        limit: Infinity,
       });
 
-      await Promise.all(deletePromises);
+      const docsToRemove = result.hits
+        .filter((hit) => !filePaths.has(hit.document.path))
+        .map((hit) => hit.id);
+
+      if (docsToRemove.length === 0) {
+        console.log("No documents to remove during garbage collection.");
+        return;
+      }
+
+      if (docsToRemove.length === 1) {
+        await remove(this.oramaDb, docsToRemove[0]);
+      } else {
+        const removedCount = await removeMultiple(this.oramaDb, docsToRemove, 500);
+        console.log(`Removed ${removedCount} documents during garbage collection.`);
+      }
+
+      await this.saveDB();
 
       new Notice("Local vector store garbage collected successfully.");
       console.log("Local vector store garbage collected successfully.");
@@ -350,15 +483,40 @@ class VectorStoreManager {
     }
   }
 
-  public registerEventHandlers() {
+  public async removeDocs(filePath: string) {
     // Handle file deletion
-    this.app.vault.on("delete", (file) => {
-      const docHash = VectorDBManager.getDocumentHash(file.path);
-      VectorDBManager.removeMemoryVectors(this.dbVectorStores, docHash);
-    });
+    try {
+      const searchResult = await search(this.oramaDb, {
+        term: filePath,
+        properties: ["path"],
+        tolerance: 1,
+      });
+      if (searchResult.hits.length > 0) {
+        await removeMultiple(
+          this.oramaDb,
+          searchResult.hits.map((hit) => hit.id),
+          500
+        );
+      }
+    } catch (err) {
+      console.error("Error deleting document from local Copilotindex:", err);
+    }
   }
 
-  // Add other methods as needed...
+  public async waitForInitialization() {
+    await this.initializationPromise;
+  }
+
+  // Test query to retrieve record by id from the database
+  public async getDocById(id: string): Promise<any | undefined> {
+    const result = await search(this.oramaDb, {
+      term: id,
+      properties: ["id"],
+      limit: 1,
+      includeVectors: true,
+    });
+    return result.hits[0]?.document;
+  }
 }
 
 export default VectorStoreManager;

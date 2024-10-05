@@ -330,9 +330,8 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.registerEvent(
-      this.app.vault.on("delete", (file) => {
-        const docHash = VectorDBManager.getDocumentHash(file.path);
-        VectorDBManager.removeMemoryVectors(this.vectorStoreManager.getDbVectorStores(), docHash);
+      this.app.vault.on("delete", async (file) => {
+        await this.vectorStoreManager.removeDocs(file.path);
       })
     );
 

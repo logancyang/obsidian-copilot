@@ -3,7 +3,7 @@ import { AI_SENDER, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { CustomError } from "@/error";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChatMessage } from "@/sharedState";
-import { formatDateTime, getFileContent, getFileName } from "@/utils";
+import { formatDateTime } from "@/utils";
 import { Notice, Vault } from "obsidian";
 import React, { useEffect, useState } from "react";
 
@@ -69,38 +69,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         return;
       }
 
-      if (selectedChain === ChainType.LONG_NOTE_QA_CHAIN) {
-        const file = app.workspace.getActiveFile();
-        if (!file) {
-          new Notice("No active note found.");
-          console.error("No active note found.");
-          return;
-        }
-
-        const noteContent = await getFileContent(file, vault);
-        const fileMetadata = app.metadataCache.getFileCache(file);
-        const noteFile = {
-          path: file.path,
-          basename: file.basename,
-          mtime: file.stat.mtime,
-          content: noteContent ?? "",
-          metadata: fileMetadata?.frontmatter ?? {},
-        };
-
-        const noteName = getFileName(file);
-
-        const activeNoteOnMessage: ChatMessage = {
-          sender: AI_SENDER,
-          message: `OK Feel free to ask me questions about [[${noteName}]]. \n\nPlease note that this is a retrieval-based QA for notes longer than the model context window. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with *Send Note to Prompt* button used with a *long context model* is a more suitable choice.`,
-          isVisible: true,
-          timestamp: formatDateTime(new Date()),
-        };
-        addMessage(activeNoteOnMessage);
-        if (noteContent) {
-          setCurrentChain(selectedChain, { noteFile, debug });
-        }
-        return;
-      } else if (selectedChain === ChainType.VAULT_QA_CHAIN) {
+      if (selectedChain === ChainType.VAULT_QA_CHAIN) {
         if (vault_qa_strategy === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH) {
           await onRefreshVaultContext();
         }
@@ -173,7 +142,6 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             onChange={handleChainChange}
           >
             <option value="llm_chain">Chat</option>
-            <option value="long_note_qa">Long Note QA</option>
             <option value="vault_qa">Vault QA (BETA)</option>
           </select>
           <span className="tooltip-text">Mode Selection</span>
@@ -190,19 +158,6 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             in Chat mode.
             <br />
             Default is active note)
-          </span>
-        </button>
-      )}
-      {selectedChain === "long_note_qa" && (
-        <button
-          className="chat-icon-button clickable-icon"
-          onClick={onForceRebuildActiveNoteContext}
-        >
-          <UseActiveNoteAsContextIcon className="icon-scaler" />
-          <span className="tooltip-text">
-            Refresh Index
-            <br />
-            for Active Note
           </span>
         </button>
       )}

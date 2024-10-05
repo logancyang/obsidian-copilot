@@ -44,18 +44,8 @@ const QASettings: React.FC<QASettingsProps> = ({
       <br />
       <br />
       <h1>QA Settings</h1>
-      <div className="warning-message">
-        Vault QA is in BETA and may not be stable. If you have issues please report in the github
-        repo.
-      </div>
       <p>
         QA mode relies on a <em>local</em> vector index.
-      </p>
-      <h2>Long Note QA vs. Vault QA (BETA)</h2>
-      <p>
-        Long Note QA mode uses the Active Note as context. Vault QA (BETA) uses your entire vault as
-        context. Please ask questions as specific as possible, avoid vague questions to get better
-        results.
       </p>
       <h2>Local Embedding Model</h2>
       <p>
@@ -85,9 +75,6 @@ const QASettings: React.FC<QASettingsProps> = ({
         If you are using a paid embedding provider, beware of costs for large vaults!
       </div>
       <p>
-        When you switch to <strong>Long Note QA</strong> mode, your active note is indexed
-        automatically upon mode switch.
-        <br />
         When you switch to <strong>Vault QA</strong> mode, your vault is indexed{" "}
         <em>based on the auto-index strategy you select below</em>.
         <br />

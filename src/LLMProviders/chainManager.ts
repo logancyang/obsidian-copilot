@@ -11,7 +11,7 @@ import {
   formatDateTime,
   isSupportedChain,
 } from "@/utils";
-import VectorDBManager, { MemoryVector, NoteFile, VectorStoreDocument } from "@/vectorDBManager";
+import VectorDBManager from "@/vectorDBManager";
 import VectorStoreManager from "@/VectorStoreManager";
 import {
   ChatPromptTemplate,
@@ -20,7 +20,6 @@ import {
 } from "@langchain/core/prompts";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { BaseChatMemory } from "langchain/memory";
-import { MultiQueryRetriever } from "langchain/retrievers/multi_query";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { App, Notice } from "obsidian";
 import ChatModelManager from "./chatModelManager";
@@ -82,7 +81,7 @@ export default class ChainManager {
     this.langChainParams[key] = value;
   }
 
-  private setNoteFile(noteFile: NoteFile): void {
+  private setNoteFile(noteFile: any): void {
     this.setLangChainParam("options", { ...this.getLangChainParams().options, noteFile });
   }
 
@@ -152,7 +151,7 @@ export default class ChainManager {
     }
     this.validateChainType(chainType);
     // MUST set embeddingsManager when switching to QA mode
-    if (chainType === ChainType.LONG_NOTE_QA_CHAIN || chainType === ChainType.VAULT_QA_CHAIN) {
+    if (chainType === ChainType.VAULT_QA_CHAIN) {
       this.embeddingsManager = EmbeddingsManager.getInstance(
         () => this.getLangChainParams(),
         this.encryptionService,
@@ -188,84 +187,6 @@ export default class ChainManager {
         this.setLangChainParam("chainType", ChainType.LLM_CHAIN);
         break;
       }
-      case ChainType.LONG_NOTE_QA_CHAIN: {
-        if (!options.noteFile) {
-          new Notice("No note content provided");
-          throw new Error("No note content provided");
-        }
-
-        this.setNoteFile(options.noteFile);
-        const docHash = VectorDBManager.getDocumentHash(options.noteFile.path);
-        const parsedMemoryVectors: MemoryVector[] | undefined =
-          await VectorDBManager.getMemoryVectors(
-            this.vectorStoreManager.getDbVectorStores(),
-            docHash
-          );
-        const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
-        if (!embeddingsAPI) {
-          console.error("Error getting embeddings API. Please check your settings.");
-          return;
-        }
-        if (parsedMemoryVectors) {
-          // Index already exists
-          const vectorStore = await VectorDBManager.rebuildMemoryVectorStore(
-            parsedMemoryVectors,
-            embeddingsAPI
-          );
-
-          // Create new conversational retrieval chain
-          ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain(
-            {
-              llm: chatModel,
-              retriever: vectorStore.asRetriever(undefined, (doc) => {
-                return doc.metadata.path === options.noteFile?.path;
-              }),
-              systemMessage: this.getLangChainParams().systemMessage,
-            },
-            ChainManager.storeRetrieverDocuments.bind(ChainManager),
-            options.debug
-          );
-          console.log("Existing vector store for document hash: ", docHash);
-        } else {
-          // Index doesn't exist
-          const vectorStoreDoc = await this.indexFile(options.noteFile);
-          this.vectorStore = await VectorDBManager.getMemoryVectorStore(
-            this.vectorStoreManager.getDbVectorStores(),
-            embeddingsAPI,
-            vectorStoreDoc?._id
-          );
-          if (!this.vectorStore) {
-            console.error("Error creating vector store.");
-            return;
-          }
-
-          const retriever = MultiQueryRetriever.fromLLM({
-            llm: chatModel,
-            retriever: this.vectorStore.asRetriever(undefined, (doc) => {
-              return doc.metadata.path === options.noteFile?.path;
-            }),
-            verbose: false,
-          });
-
-          ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain(
-            {
-              llm: chatModel,
-              retriever: retriever,
-              systemMessage: this.getLangChainParams().systemMessage,
-            },
-            ChainManager.storeRetrieverDocuments.bind(ChainManager),
-            options.debug
-          );
-          console.log(
-            "New Long Note QA chain with multi-query retriever created for " + "document hash: ",
-            docHash
-          );
-        }
-
-        this.setLangChainParam("chainType", ChainType.LONG_NOTE_QA_CHAIN);
-        console.log("Set chain:", ChainType.LONG_NOTE_QA_CHAIN);
-        break;
-      }
 
       case ChainType.VAULT_QA_CHAIN: {
         const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
@@ -273,20 +194,16 @@ export default class ChainManager {
           console.error("Error getting embeddings API. Please check your settings.");
           return;
         }
-        const vectorStore = await VectorDBManager.getMemoryVectorStore(
-          this.vectorStoreManager.getDbVectorStores(),
-          embeddingsAPI
-        );
+
         const retriever = new HybridRetriever(
-          this.vectorStoreManager.getDbVectorStores(),
+          this.vectorStoreManager.getDb(),
           this.app.vault,
-          {
-            vectorStore: vectorStore,
-            minSimilarityScore: 0.3, // TODO: Make this a setting
-            maxK: this.settings.maxSourceChunks, // The maximum number of docs (chunks) to retrieve
-            kIncrement: 2,
-          },
           chatModel,
+          embeddingsAPI,
+          {
+            minSimilarityScore: 0.3,
+            maxK: this.settings.maxSourceChunks,
+          },
           options.debug
         );
 
@@ -400,7 +317,6 @@ export default class ChainManager {
             updateCurrentAiMessage(fullAIResponse);
           }
           break;
-        case ChainType.LONG_NOTE_QA_CHAIN:
         case ChainType.VAULT_QA_CHAIN:
           if (debug) {
             console.log(
@@ -508,7 +424,7 @@ export default class ChainManager {
     return fullAIResponse;
   }
 
-  async indexFile(noteFile: NoteFile): Promise<VectorStoreDocument | undefined> {
+  async indexFile(noteFile: any): Promise<any | undefined> {
     const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
     if (!embeddingsAPI) {
       const errorMsg =
@@ -518,7 +434,7 @@ export default class ChainManager {
       return;
     }
     return await VectorDBManager.indexFile(
-      this.vectorStoreManager.getDbVectorStores(),
+      this.vectorStoreManager.getDb(),
       embeddingsAPI,
       noteFile
     );

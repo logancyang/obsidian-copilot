@@ -51,7 +51,6 @@ type ConversationalRetrievalQAChainInput = {
 // Add new chain types here
 export enum ChainType {
   LLM_CHAIN = "llm_chain",
-  LONG_NOTE_QA_CHAIN = "long_note_qa",
   VAULT_QA_CHAIN = "vault_qa",
 }
 
