@@ -75,7 +75,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         }
         const activeNoteOnMessage: ChatMessage = {
           sender: AI_SENDER,
-          message: `OK Feel free to ask me questions about your vault: **${app.vault.getName()}**. \n\nIf you have *NEVER* as your auto-index strategy, you must click the *Refresh Index* button below, or run Copilot command: *Index vault for QA* first before you proceed!\n\nPlease note that this is a retrieval-based QA. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with *Send Note to Prompt* button used with a *long context model* is a more suitable choice.`,
+          message: `OK Feel free to ask me questions about your vault: **${app.vault.getName()}**. \n\nIf you have *NEVER* as your auto-index strategy, you must click the *Refresh Index* button below, or run Copilot command: *Index vault for QA* first before you proceed!\n\nPlease note that this is a retrieval-based QA. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with direct \`[[note title]]\` mention is a more suitable choice.`,
           isVisible: true,
           timestamp: formatDateTime(new Date()),
         };
@@ -142,7 +142,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             onChange={handleChainChange}
           >
             <option value="llm_chain">Chat</option>
-            <option value="vault_qa">Vault QA (BETA)</option>
+            <option value="vault_qa">Vault QA (Basic)</option>
           </select>
           <span className="tooltip-text">Mode Selection</span>
         </div>
