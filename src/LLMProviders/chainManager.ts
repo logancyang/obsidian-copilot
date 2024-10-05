@@ -20,7 +20,6 @@ import {
 } from "@langchain/core/prompts";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { BaseChatMemory } from "langchain/memory";
-import { MultiQueryRetriever } from "langchain/retrievers/multi_query";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { App, Notice } from "obsidian";
 import ChatModelManager from "./chatModelManager";
@@ -152,7 +151,7 @@ export default class ChainManager {
     }
     this.validateChainType(chainType);
     // MUST set embeddingsManager when switching to QA mode
-    if (chainType === ChainType.LONG_NOTE_QA_CHAIN || chainType === ChainType.VAULT_QA_CHAIN) {
+    if (chainType === ChainType.VAULT_QA_CHAIN) {
       this.embeddingsManager = EmbeddingsManager.getInstance(
         () => this.getLangChainParams(),
         this.encryptionService,
@@ -186,88 +185,6 @@ export default class ChainManager {
         }
 
         this.setLangChainParam("chainType", ChainType.LLM_CHAIN);
-        break;
-      }
-      case ChainType.LONG_NOTE_QA_CHAIN: {
-        if (!options.noteFile) {
-          new Notice("No note content provided");
-          throw new Error("No note content provided");
-        }
-
-        this.setNoteFile(options.noteFile);
-        const docHits = await VectorDBManager.getDocsByPath(
-          this.vectorStoreManager.getDb(),
-          options.noteFile.path
-        );
-
-        const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
-        if (!embeddingsAPI) {
-          console.error("Error getting embeddings API. Please check your settings.");
-          return;
-        }
-        if (docHits) {
-          // Index already exists
-          const hybridRetriever = new HybridRetriever(
-            this.vectorStoreManager.getDb(),
-            this.app.vault,
-            chatModel,
-            embeddingsAPI,
-            {
-              minSimilarityScore: 0.5,
-              maxK: this.settings.maxSourceChunks,
-            },
-            options.debug
-          );
-
-          // Create new conversational retrieval chain
-          ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain(
-            {
-              llm: chatModel,
-              retriever: hybridRetriever,
-              systemMessage: this.getLangChainParams().systemMessage,
-            },
-            ChainManager.storeRetrieverDocuments.bind(ChainManager),
-            options.debug
-          );
-          console.log("Existing vector store for note path: ", options.noteFile.path);
-        } else {
-          // Index doesn't exist
-          await this.indexFile(options.noteFile);
-
-          const hybridRetriever = new HybridRetriever(
-            this.vectorStoreManager.getDb(),
-            this.app.vault,
-            chatModel,
-            embeddingsAPI,
-            {
-              minSimilarityScore: 0.3,
-              maxK: this.settings.maxSourceChunks,
-            },
-            options.debug
-          );
-          const retriever = MultiQueryRetriever.fromLLM({
-            llm: chatModel,
-            retriever: hybridRetriever,
-            verbose: false,
-          });
-
-          ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain(
-            {
-              llm: chatModel,
-              retriever: retriever,
-              systemMessage: this.getLangChainParams().systemMessage,
-            },
-            ChainManager.storeRetrieverDocuments.bind(ChainManager),
-            options.debug
-          );
-          console.log(
-            "New Long Note QA chain with multi-query retriever created for note: ",
-            options.noteFile.path
-          );
-        }
-
-        this.setLangChainParam("chainType", ChainType.LONG_NOTE_QA_CHAIN);
-        console.log("Set chain:", ChainType.LONG_NOTE_QA_CHAIN);
         break;
       }
 
@@ -400,7 +317,6 @@ export default class ChainManager {
             updateCurrentAiMessage(fullAIResponse);
           }
           break;
-        case ChainType.LONG_NOTE_QA_CHAIN:
         case ChainType.VAULT_QA_CHAIN:
           if (debug) {
             console.log(

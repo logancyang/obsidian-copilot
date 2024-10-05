@@ -61,7 +61,6 @@ What's more, with Ollama **local embeddings** and **local chat models**, this mo
 - No usage cap for GPT-4 like ChatGPT Plus.
 - One-click copying any message as markdown.
 - One-click saving the entire conversation as a note.
-- Use a super long note as context, and start a discussion around it by switching to "Long Note QA" in the Mode Selection menu.
 - **Chat with your whole vault** by selecting "Vault QA" mode. Ask questions and get **cited responses**!
 - All QA modes are powered by retrieval augmentation with a **local vector store**. No sending your data to a cloud-based vector search service!
 - Easy commands to **simplify, emojify, summarize, translate, change tone, fix grammar, rewrite into a tweet/thread, count tokens** and more.
@@ -128,7 +127,6 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 
 - The chat history is not saved by default. Please use "**Save as Note**" to save it. The note will have a title `Chat-Year_Month_Day-Hour_Minute_Second`, you can change its name as needed.
 - "**New Chat**" clears all previous chat history. Again, please use "**Save as Note**" if you would like to save the chat.
-- "**Use Long Note as Context**" creates a local vector index for the active long note so that you can chat with note longer than the model's context window! To start the QA, please switch from "Chat" to "QA" in the Mode Selection dropdown.
 - You can set a very long context in the setting "**Conversation turns in context**" if needed.
 
 #### 📣 Again, please always be mindful of the API cost if you use GPT-4 with a long context!

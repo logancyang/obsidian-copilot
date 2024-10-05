@@ -1,6 +1,5 @@
 import ChainManager from "@/LLMProviders/chainManager";
 import { useAIState } from "@/aiState";
-import { ChainType } from "@/chainFactory";
 import { updateChatMemory } from "@/chatUtils";
 import ChatIcons from "@/components/ChatComponents/ChatIcons";
 import ChatInput from "@/components/ChatComponents/ChatInput";
@@ -359,10 +358,6 @@ ${chatContent}`;
       isVisible: true,
       timestamp: formatDateTime(new Date()),
     };
-
-    if (currentChain === ChainType.LONG_NOTE_QA_CHAIN) {
-      setChain(ChainType.LONG_NOTE_QA_CHAIN, { noteFile, debug });
-    }
 
     addMessage(activeNoteOnMessage);
   };
