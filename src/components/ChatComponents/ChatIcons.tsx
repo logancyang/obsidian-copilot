@@ -8,12 +8,7 @@ import { Notice, Vault } from "obsidian";
 import React, { useEffect, useState } from "react";
 
 import { ChainType } from "@/chainFactory";
-import {
-  RefreshIcon,
-  SaveAsNoteIcon,
-  SendActiveNoteToPromptIcon,
-  UseActiveNoteAsContextIcon,
-} from "@/components/Icons";
+import { RefreshIcon, SaveAsNoteIcon, UseActiveNoteAsContextIcon } from "@/components/Icons";
 import { stringToChainType } from "@/utils";
 
 interface ChatIconsProps {
@@ -23,8 +18,6 @@ interface ChatIconsProps {
   setCurrentChain: (chain: ChainType, options?: SetChainOptions) => void;
   onNewChat: (openNote: boolean) => void;
   onSaveAsNote: () => void;
-  onSendActiveNoteToPrompt: () => void;
-  onForceRebuildActiveNoteContext: () => void;
   onRefreshVaultContext: () => void;
   addMessage: (message: ChatMessage) => void;
   settings: CopilotSettings;
@@ -40,8 +33,6 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   setCurrentChain,
   onNewChat,
   onSaveAsNote,
-  onSendActiveNoteToPrompt,
-  onForceRebuildActiveNoteContext,
   onRefreshVaultContext,
   addMessage,
   settings,
@@ -147,20 +138,6 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           <span className="tooltip-text">Mode Selection</span>
         </div>
       </div>
-      {selectedChain === "llm_chain" && (
-        <button className="chat-icon-button clickable-icon" onClick={onSendActiveNoteToPrompt}>
-          <SendActiveNoteToPromptIcon className="icon-scaler" />
-          <span className="tooltip-text">
-            Send Note(s) to Prompt
-            <br />
-            (Set with Copilot command: <br />
-            set note context <br />
-            in Chat mode.
-            <br />
-            Default is active note)
-          </span>
-        </button>
-      )}
       {selectedChain === "vault_qa" && (
         <button className="chat-icon-button clickable-icon" onClick={onRefreshVaultContext}>
           <UseActiveNoteAsContextIcon className="icon-scaler" />

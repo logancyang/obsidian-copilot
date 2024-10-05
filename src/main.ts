@@ -6,7 +6,6 @@ import { parseChatContent, updateChatMemory } from "@/chatUtils";
 import { registerBuiltInCommands } from "@/commands";
 import { AddPromptModal } from "@/components/AddPromptModal";
 import { AdhocPromptModal } from "@/components/AdhocPromptModal";
-import { ChatNoteContextModal } from "@/components/ChatNoteContextModal";
 import CopilotView from "@/components/CopilotView";
 import { ListPromptModal } from "@/components/ListPromptModal";
 import { LoadChatHistoryModal } from "@/components/LoadChatHistoryModal";
@@ -305,19 +304,6 @@ export default class CopilotPlugin extends Plugin {
           console.error("Error re-indexing vault to vector store:", err);
           new Notice("An error occurred while re-indexing vault to vector store.");
         }
-      },
-    });
-
-    this.addCommand({
-      id: "set-chat-note-context",
-      name: "Set note context for Chat mode",
-      callback: async () => {
-        new ChatNoteContextModal(this.app, this.settings, async (path: string, tags: string[]) => {
-          // Store the path in the plugin's settings, default to empty string
-          this.settings.chatNoteContextPath = path;
-          this.settings.chatNoteContextTags = tags;
-          await this.saveSettings();
-        }).open();
       },
     });
 
