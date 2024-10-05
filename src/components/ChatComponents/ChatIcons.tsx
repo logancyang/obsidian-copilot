@@ -80,11 +80,16 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         const noteContent = await getFileContent(file, vault);
         const fileMetadata = app.metadataCache.getFileCache(file);
         const noteFile = {
+          id: file.path,
+          title: file.basename,
           path: file.path,
-          basename: file.basename,
+          ctime: file.stat.ctime,
           mtime: file.stat.mtime,
           content: noteContent ?? "",
           metadata: fileMetadata?.frontmatter ?? {},
+          tags: fileMetadata?.tags?.map((tag) => tag.tag) ?? [],
+          extension: file.extension,
+          nchars: noteContent?.length ?? 0,
         };
 
         const noteName = getFileName(file);

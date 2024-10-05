@@ -22,12 +22,6 @@ SPECIAL THANKS TO OUR TOP SPONSORS:
 
 [Changelog](https://github.com/logancyang/obsidian-copilot/releases)
 
-#### Announcement 🚨
-
-We are migrating off of PouchDB for better Obsidian Sync and mobile support (starting from v2.6.3). Your existing custom prompts MUST be dumped to markdown using the command _"Copilot: Dump custom prompts to markdown files"_. After running it you should be able to use your Add/Edit/Apply/Delete custom prompts as usual.
-
-Please make sure you run it, or you will lose all your old prompts when PouchDB is removed!
-
 #### v2.6.0: MOBILE SUPPORT is here! 🎉🎉🎉
 
 <a href="https://youtu.be/l-x_QwSNghE" target="_blank"><img src="./images/thumbnail-260.png" width="700" /></a>

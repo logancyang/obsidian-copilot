@@ -12,13 +12,6 @@ import {
 } from "@/utils";
 import { normalizePath, Notice, TFile, Vault } from "obsidian";
 
-// TODO: To be deprecated once PouchDB is removed
-export interface CustomPromptDB {
-  _id: string;
-  _rev?: string;
-  prompt: string;
-}
-
 export interface CustomPrompt {
   title: string;
   content: string;
