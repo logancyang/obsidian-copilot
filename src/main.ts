@@ -331,7 +331,7 @@ export default class CopilotPlugin extends Plugin {
 
     this.registerEvent(
       this.app.vault.on("delete", async (file) => {
-        await this.vectorStoreManager.removeDoc(file.path);
+        await this.vectorStoreManager.removeDocs(file.path);
       })
     );
 

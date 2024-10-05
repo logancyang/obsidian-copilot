@@ -213,7 +213,7 @@ export default class ChainManager {
             chatModel,
             embeddingsAPI,
             {
-              minSimilarityScore: 0.3,
+              minSimilarityScore: 0.5,
               maxK: this.settings.maxSourceChunks,
             },
             options.debug

@@ -29,7 +29,7 @@ export class HybridRetriever extends BaseRetriever {
     this.llm = llm;
     this.embeddingsInstance = embeddingsInstance;
     this.queryRewritePrompt = ChatPromptTemplate.fromTemplate(
-      "Please write a passage to answer the question.\nQuestion: {question}\nPassage:"
+      "Please write a passage to answer the question. If you don't know the answer, just make up a passage. \nQuestion: {question}\nPassage:"
     );
   }
 
@@ -99,13 +99,26 @@ export class HybridRetriever extends BaseRetriever {
     const explicitChunks: Document[] = [];
     for (const noteTitle of noteTitles) {
       const noteFile = await getNoteFileFromTitle(this.vault, noteTitle);
-      const docHits = await VectorDBManager.getDocsByPath(this.db, noteFile?.path ?? "");
-      if (docHits) {
-        const matchingChunks = docHits.map(
-          (docHit: any) =>
+      const hits = await VectorDBManager.getDocsByPath(this.db, noteFile?.path ?? "");
+      if (hits) {
+        const matchingChunks = hits.map(
+          (hit: any) =>
             new Document({
-              pageContent: docHit.content,
-              metadata: docHit.metadata,
+              pageContent: hit.document.content,
+              metadata: {
+                ...hit.document.metadata,
+                score: hit.score,
+                path: hit.document.path,
+                mtime: hit.document.mtime,
+                ctime: hit.document.ctime,
+                title: hit.document.title,
+                id: hit.document.id,
+                embeddingModel: hit.document.embeddingModel,
+                tags: hit.document.tags,
+                extension: hit.document.extension,
+                created_at: hit.document.created_at,
+                nchars: hit.document.nchars,
+              },
             })
         );
         explicitChunks.push(...matchingChunks);
@@ -137,10 +150,19 @@ export class HybridRetriever extends BaseRetriever {
           metadata: {
             ...hit.document.metadata,
             score: hit.score,
+            path: hit.document.path,
+            mtime: hit.document.mtime,
+            ctime: hit.document.ctime,
+            title: hit.document.title,
+            id: hit.document.id,
+            embeddingModel: hit.document.embeddingModel,
+            tags: hit.document.tags,
+            extension: hit.document.extension,
+            created_at: hit.document.created_at,
+            nchars: hit.document.nchars,
           },
         })
     );
-
     return vectorChunks;
   }
 
