@@ -1,4 +1,5 @@
 import { CustomModel, SetChainOptions } from "@/aiParams";
+import { SimilarNotesModal } from "@/components/SimilarNotesModal";
 import { AI_SENDER, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { CustomError } from "@/error";
 import { CopilotSettings } from "@/settings/SettingsPage";
@@ -8,7 +9,12 @@ import { Notice, Vault } from "obsidian";
 import React, { useEffect, useState } from "react";
 
 import { ChainType } from "@/chainFactory";
-import { RefreshIcon, SaveAsNoteIcon, UseActiveNoteAsContextIcon } from "@/components/Icons";
+import {
+  ConnectionIcon,
+  RefreshIcon,
+  SaveAsNoteIcon,
+  UseActiveNoteAsContextIcon,
+} from "@/components/Icons";
 import { stringToChainType } from "@/utils";
 
 interface ChatIconsProps {
@@ -19,6 +25,7 @@ interface ChatIconsProps {
   onNewChat: (openNote: boolean) => void;
   onSaveAsNote: () => void;
   onRefreshVaultContext: () => void;
+  onFindSimilarNotes: (content: string, activeFilePath: string) => Promise<any>;
   addMessage: (message: ChatMessage) => void;
   settings: CopilotSettings;
   vault: Vault;
@@ -34,6 +41,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   onNewChat,
   onSaveAsNote,
   onRefreshVaultContext,
+  onFindSimilarNotes,
   addMessage,
   settings,
   vault,
@@ -91,6 +99,18 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
     handleChainSelection();
   }, [selectedChain]);
 
+  const handleFindSimilarNotes = async () => {
+    const activeFile = app.workspace.getActiveFile();
+    if (!activeFile) {
+      new Notice("No active file");
+      return;
+    }
+
+    const activeNoteContent = await app.vault.cachedRead(activeFile);
+    const similarChunks = await onFindSimilarNotes(activeNoteContent, activeFile.path);
+    new SimilarNotesModal(app, similarChunks).open();
+  };
+
   return (
     <div className="chat-icons-container">
       <div className="chat-icon-selection-tooltip">
@@ -139,14 +159,20 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         </div>
       </div>
       {selectedChain === "vault_qa" && (
-        <button className="chat-icon-button clickable-icon" onClick={onRefreshVaultContext}>
-          <UseActiveNoteAsContextIcon className="icon-scaler" />
-          <span className="tooltip-text">
-            Refresh Index
-            <br />
-            for Vault
-          </span>
-        </button>
+        <>
+          <button className="chat-icon-button clickable-icon" onClick={onRefreshVaultContext}>
+            <UseActiveNoteAsContextIcon className="icon-scaler" />
+            <span className="tooltip-text">
+              Refresh Index
+              <br />
+              for Vault
+            </span>
+          </button>
+          <button className="chat-icon-button clickable-icon" onClick={handleFindSimilarNotes}>
+            <ConnectionIcon className="icon-scaler" />
+            <span className="tooltip-text">Find Similar Notes for Active Note</span>
+          </button>
+        </>
       )}
     </div>
   );

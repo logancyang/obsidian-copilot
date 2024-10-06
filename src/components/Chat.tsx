@@ -551,6 +551,9 @@ ${chatContent}`;
           }}
           onSaveAsNote={() => handleSaveAsNote(true)}
           onRefreshVaultContext={refreshVaultContext}
+          onFindSimilarNotes={(content, activeFilePath) =>
+            plugin.findSimilarNotes(content, activeFilePath)
+          }
           addMessage={addMessage}
           settings={settings}
           vault={app.vault}
