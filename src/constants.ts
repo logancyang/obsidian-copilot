@@ -1,5 +1,6 @@
 import { CustomModel } from "@/aiParams";
 import { CopilotSettings } from "@/settings/SettingsPage";
+import { ChainType } from "./chainFactory";
 
 export const CHAT_VIEWTYPE = "copilot-chat-view";
 export const USER_SENDER = "user";
@@ -209,6 +210,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   azureOpenAIApiEmbeddingDeploymentName: "",
   googleApiKey: "",
   openRouterAiApiKey: "",
+  defaultChainType: ChainType.LLM_CHAIN,
   defaultModelKey: ChatModels.GPT_4o + "|" + ChatModelProviders.OPENAI,
   embeddingModelKey: EmbeddingModels.OPENAI_EMBEDDING_SMALL + "|" + ChatModelProviders.OPENAI,
   temperature: 0.1,

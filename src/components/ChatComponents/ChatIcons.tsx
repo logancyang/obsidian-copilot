@@ -99,6 +99,10 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
     handleChainSelection();
   }, [selectedChain]);
 
+  useEffect(() => {
+    setSelectedChain(settings.defaultChainType);
+  }, [settings.defaultChainType]);
+
   const handleFindSimilarNotes = async () => {
     const activeFile = app.workspace.getActiveFile();
     if (!activeFile) {

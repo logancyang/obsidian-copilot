@@ -49,13 +49,13 @@ class VectorStoreManager {
     this.initializationPromise = this.initializeDB()
       .then((db) => {
         this.oramaDb = db;
-        console.log("Database initialized successfully:", this.oramaDb);
+        console.log("Copilot database initialized successfully.");
 
         // Perform any operations that depend on the initialized database here
         this.performPostInitializationTasks();
       })
       .catch((error) => {
-        console.error("Failed to initialize database:", error);
+        console.error("Failed to initialize Copilot database:", error);
       });
 
     // Initialize the rate limiter
@@ -262,6 +262,7 @@ class VectorStoreManager {
   }
 
   public async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
+    await this.waitForInitialization();
     let rateLimitNoticeShown = false;
 
     try {

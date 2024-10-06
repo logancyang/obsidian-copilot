@@ -1,4 +1,5 @@
 import { CustomModel } from "@/aiParams";
+import { ChainType } from "@/chainFactory";
 import CopilotView from "@/components/CopilotView";
 import { CHAT_VIEWTYPE } from "@/constants";
 import CopilotPlugin from "@/main";
@@ -21,6 +22,7 @@ export interface CopilotSettings {
   azureOpenAIApiEmbeddingDeploymentName: string;
   googleApiKey: string;
   openRouterAiApiKey: string;
+  defaultChainType: ChainType;
   defaultModelKey: string;
   embeddingModelKey: string;
   temperature: number;

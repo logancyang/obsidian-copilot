@@ -1,4 +1,5 @@
 import { CustomModel, LangChainParams } from "@/aiParams";
+import { ChainType } from "@/chainFactory";
 import { ChatModelProviders } from "@/constants";
 import EncryptionService from "@/encryptionService";
 import React from "react";
@@ -72,6 +73,21 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         onSetDefaultModelKey={onSetDefaultModelKey}
         isEmbeddingModel={false}
       />
+      <div className="chat-icon-selection-tooltip">
+        <div className="select-wrapper">
+          <h2>Default Mode</h2>
+          <select
+            id="defaultChainSelect"
+            className="chat-icon-selection"
+            value={settings.defaultChainType}
+            onChange={(e) => updateSettings({ defaultChainType: e.target.value as ChainType })}
+          >
+            <option value={ChainType.LLM_CHAIN}>Chat</option>
+            <option value={ChainType.VAULT_QA_CHAIN}>Vault QA (Basic)</option>
+          </select>
+          <span className="tooltip-text">Default Mode Selection</span>
+        </div>
+      </div>
       <TextComponent
         name="Default Conversation Folder Name"
         description="The default folder name where chat conversations will be saved. Default is 'copilot-conversations'"
