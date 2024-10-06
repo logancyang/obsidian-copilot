@@ -217,10 +217,12 @@ export default class ChainManager {
           ChainManager.storeRetrieverDocuments.bind(ChainManager),
           options.debug
         );
-        console.log("New Vault QA chain with hybrid retriever created for entire vault");
 
         this.setLangChainParam("chainType", ChainType.VAULT_QA_CHAIN);
-        console.log("Set chain:", ChainType.VAULT_QA_CHAIN);
+        if (options.debug) {
+          console.log("New Vault QA chain with hybrid retriever created for entire vault");
+          console.log("Set chain:", ChainType.VAULT_QA_CHAIN);
+        }
         break;
       }
 

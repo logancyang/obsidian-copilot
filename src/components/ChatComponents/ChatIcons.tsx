@@ -1,4 +1,5 @@
 import { CustomModel, SetChainOptions } from "@/aiParams";
+import { CopilotPlusModal } from "@/components/CopilotPlusModal";
 import { SimilarNotesModal } from "@/components/SimilarNotesModal";
 import { AI_SENDER, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { CustomError } from "@/error";
@@ -58,7 +59,16 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   };
 
   const handleChainChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedChain(stringToChainType(event.target.value));
+    const newChain = stringToChainType(event.target.value);
+    setSelectedChain(newChain);
+
+    if (newChain === ChainType.COPILOT_PLUS) {
+      new CopilotPlusModal(app).open();
+      // Reset the selected chain to the previous value
+      setSelectedChain(currentChain);
+    } else {
+      setCurrentChain(newChain, { debug });
+    }
   };
 
   useEffect(() => {
@@ -158,6 +168,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
           >
             <option value="llm_chain">Chat</option>
             <option value="vault_qa">Vault QA (Basic)</option>
+            <option value="copilot_plus">Copilot Plus (Alpha)</option>
           </select>
           <span className="tooltip-text">Mode Selection</span>
         </div>
