@@ -159,6 +159,8 @@ export const stringToChainType = (chain: string): ChainType => {
       return ChainType.LLM_CHAIN;
     case "vault_qa":
       return ChainType.VAULT_QA_CHAIN;
+    case "copilot_plus":
+      return ChainType.COPILOT_PLUS;
     default:
       throw new Error(`Unknown chain type: ${chain}`);
   }
