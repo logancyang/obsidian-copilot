@@ -112,7 +112,7 @@ const QASettings: React.FC<QASettingsProps> = ({
       <br />
       <SliderComponent
         name="Max Sources"
-        description="Default is 3 (Recommended). Increase if you want more sources from your notes. A higher number can lead to irrelevant sources and lower quality responses, it also fills up the context window faster."
+        description="Copilot goes through your vault to find relevant blocks and passes the top N blocks to the LLM. Default for N is 3. Increase if you want more sources included in the answer generation step."
         min={1}
         max={10}
         step={1}

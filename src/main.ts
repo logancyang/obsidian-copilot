@@ -6,10 +6,10 @@ import { parseChatContent, updateChatMemory } from "@/chatUtils";
 import { registerBuiltInCommands } from "@/commands";
 import { AddPromptModal } from "@/components/AddPromptModal";
 import { AdhocPromptModal } from "@/components/AdhocPromptModal";
-import { ChatNoteContextModal } from "@/components/ChatNoteContextModal";
 import CopilotView from "@/components/CopilotView";
 import { ListPromptModal } from "@/components/ListPromptModal";
 import { LoadChatHistoryModal } from "@/components/LoadChatHistoryModal";
+import { SimilarNotesModal } from "@/components/SimilarNotesModal";
 import {
   BUILTIN_CHAT_MODELS,
   BUILTIN_EMBEDDING_MODELS,
@@ -23,10 +23,13 @@ import { CustomPromptProcessor } from "@/customPromptProcessor";
 import EncryptionService from "@/encryptionService";
 import { CustomError } from "@/error";
 import { TimestampUsageStrategy } from "@/promptUsageStrategy";
+import { HybridRetriever } from "@/search/hybridRetriever";
 import { CopilotSettings, CopilotSettingTab } from "@/settings/SettingsPage";
 import SharedState from "@/sharedState";
 import { getAllNotesContent, sanitizeSettings } from "@/utils";
 import VectorDBManager from "@/vectorDBManager";
+import { Embeddings } from "@langchain/core/embeddings";
+import { search } from "@orama/orama";
 import {
   Editor,
   MarkdownView,
@@ -309,23 +312,26 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "set-chat-note-context",
-      name: "Set note context for Chat mode",
-      callback: async () => {
-        new ChatNoteContextModal(this.app, this.settings, async (path: string, tags: string[]) => {
-          // Store the path in the plugin's settings, default to empty string
-          this.settings.chatNoteContextPath = path;
-          this.settings.chatNoteContextTags = tags;
-          await this.saveSettings();
-        }).open();
-      },
-    });
-
-    this.addCommand({
       id: "load-copilot-chat-conversation",
       name: "Load Copilot Chat conversation",
       callback: () => {
         this.loadCopilotChatHistory();
+      },
+    });
+
+    this.addCommand({
+      id: "find-similar-notes",
+      name: "Find similar notes to active note",
+      callback: async () => {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile) {
+          new Notice("No active file");
+          return;
+        }
+
+        const activeNoteContent = await this.app.vault.cachedRead(activeFile);
+        const similarChunks = await this.findSimilarNotes(activeNoteContent, activeFile.path);
+        new SimilarNotesModal(this.app, similarChunks).open();
       },
     });
 
@@ -658,5 +664,45 @@ export default class CopilotPlugin extends Plugin {
       const copilotView = existingView.view as CopilotView;
       copilotView.updateView();
     }
+  }
+
+  async findSimilarNotes(content: string, activeFilePath: string): Promise<any> {
+    // Wait for the VectorStoreManager to initialize
+    await this.vectorStoreManager.waitForInitialization();
+
+    const db = this.vectorStoreManager.getDb();
+
+    // Check if the index is empty
+    const singleDoc = await search(db, {
+      term: "",
+      limit: 1,
+    });
+
+    if (singleDoc.hits.length === 0) {
+      // Index is empty, trigger indexing
+      new Notice("Index does not exist, indexing vault for similarity search...");
+      await this.vectorStoreManager.indexVaultToVectorStore();
+    }
+
+    const hybridRetriever = new HybridRetriever(
+      db,
+      this.app.vault,
+      this.chainManager.chatModelManager.getChatModel(),
+      this.vectorStoreManager.getEmbeddingsManager().getEmbeddingsAPI() as Embeddings,
+      {
+        minSimilarityScore: 0.3,
+        maxK: 20,
+      },
+      this.settings.debug
+    );
+
+    const similarDocs = await hybridRetriever.getRelevantDocuments(content, { runName: "no_hyde" });
+    return similarDocs
+      .filter((doc) => doc.metadata.path !== activeFilePath)
+      .map((doc) => ({
+        chunk: doc,
+        score: doc.metadata.score || 0,
+      }))
+      .sort((a, b) => b.score - a.score);
   }
 }

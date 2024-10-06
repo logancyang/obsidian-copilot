@@ -1,4 +1,5 @@
 import { CustomModel, SetChainOptions } from "@/aiParams";
+import { SimilarNotesModal } from "@/components/SimilarNotesModal";
 import { AI_SENDER, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { CustomError } from "@/error";
 import { CopilotSettings } from "@/settings/SettingsPage";
@@ -9,9 +10,9 @@ import React, { useEffect, useState } from "react";
 
 import { ChainType } from "@/chainFactory";
 import {
+  ConnectionIcon,
   RefreshIcon,
   SaveAsNoteIcon,
-  SendActiveNoteToPromptIcon,
   UseActiveNoteAsContextIcon,
 } from "@/components/Icons";
 import { stringToChainType } from "@/utils";
@@ -23,9 +24,8 @@ interface ChatIconsProps {
   setCurrentChain: (chain: ChainType, options?: SetChainOptions) => void;
   onNewChat: (openNote: boolean) => void;
   onSaveAsNote: () => void;
-  onSendActiveNoteToPrompt: () => void;
-  onForceRebuildActiveNoteContext: () => void;
   onRefreshVaultContext: () => void;
+  onFindSimilarNotes: (content: string, activeFilePath: string) => Promise<any>;
   addMessage: (message: ChatMessage) => void;
   settings: CopilotSettings;
   vault: Vault;
@@ -40,9 +40,8 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   setCurrentChain,
   onNewChat,
   onSaveAsNote,
-  onSendActiveNoteToPrompt,
-  onForceRebuildActiveNoteContext,
   onRefreshVaultContext,
+  onFindSimilarNotes,
   addMessage,
   settings,
   vault,
@@ -75,7 +74,7 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         }
         const activeNoteOnMessage: ChatMessage = {
           sender: AI_SENDER,
-          message: `OK Feel free to ask me questions about your vault: **${app.vault.getName()}**. \n\nIf you have *NEVER* as your auto-index strategy, you must click the *Refresh Index* button below, or run Copilot command: *Index vault for QA* first before you proceed!\n\nPlease note that this is a retrieval-based QA. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with *Send Note to Prompt* button used with a *long context model* is a more suitable choice.`,
+          message: `OK Feel free to ask me questions about your vault: **${app.vault.getName()}**. \n\nIf you have *NEVER* as your auto-index strategy, you must click the *Refresh Index* button below, or run Copilot command: *Index vault for QA* first before you proceed!\n\nPlease note that this is a retrieval-based QA. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with direct \`[[note title]]\` mention is a more suitable choice.`,
           isVisible: true,
           timestamp: formatDateTime(new Date()),
         };
@@ -99,6 +98,18 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
 
     handleChainSelection();
   }, [selectedChain]);
+
+  const handleFindSimilarNotes = async () => {
+    const activeFile = app.workspace.getActiveFile();
+    if (!activeFile) {
+      new Notice("No active file");
+      return;
+    }
+
+    const activeNoteContent = await app.vault.cachedRead(activeFile);
+    const similarChunks = await onFindSimilarNotes(activeNoteContent, activeFile.path);
+    new SimilarNotesModal(app, similarChunks).open();
+  };
 
   return (
     <div className="chat-icons-container">
@@ -142,34 +153,26 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
             onChange={handleChainChange}
           >
             <option value="llm_chain">Chat</option>
-            <option value="vault_qa">Vault QA (BETA)</option>
+            <option value="vault_qa">Vault QA (Basic)</option>
           </select>
           <span className="tooltip-text">Mode Selection</span>
         </div>
       </div>
-      {selectedChain === "llm_chain" && (
-        <button className="chat-icon-button clickable-icon" onClick={onSendActiveNoteToPrompt}>
-          <SendActiveNoteToPromptIcon className="icon-scaler" />
-          <span className="tooltip-text">
-            Send Note(s) to Prompt
-            <br />
-            (Set with Copilot command: <br />
-            set note context <br />
-            in Chat mode.
-            <br />
-            Default is active note)
-          </span>
-        </button>
-      )}
       {selectedChain === "vault_qa" && (
-        <button className="chat-icon-button clickable-icon" onClick={onRefreshVaultContext}>
-          <UseActiveNoteAsContextIcon className="icon-scaler" />
-          <span className="tooltip-text">
-            Refresh Index
-            <br />
-            for Vault
-          </span>
-        </button>
+        <>
+          <button className="chat-icon-button clickable-icon" onClick={onRefreshVaultContext}>
+            <UseActiveNoteAsContextIcon className="icon-scaler" />
+            <span className="tooltip-text">
+              Refresh Index
+              <br />
+              for Vault
+            </span>
+          </button>
+          <button className="chat-icon-button clickable-icon" onClick={handleFindSimilarNotes}>
+            <ConnectionIcon className="icon-scaler" />
+            <span className="tooltip-text">Find Similar Notes for Active Note</span>
+          </button>
+        </>
       )}
     </div>
   );

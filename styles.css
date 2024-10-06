@@ -505,3 +505,48 @@ If your plugin does not need CSS, delete this file.
   margin-top: 16px;
   margin-left: auto;
 }
+
+.similar-notes-modal-container {
+  width: 80vw;
+  height: 80vh;
+}
+
+.similar-notes-modal {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.similar-notes-container {
+  max-height: calc(80vh - 100px);
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.similar-note-item {
+  margin-bottom: 10px;
+}
+
+.similar-note-title {
+  cursor: pointer;
+  color: var(--text-accent);
+}
+
+.similar-note-item details > summary {
+  list-style: none;
+}
+
+.similar-note-item details > summary::before {
+  content: "▶";
+  display: inline-block;
+  width: 20px;
+  transition: transform 0.3s;
+}
+
+.similar-note-item details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.similar-note-item details > p {
+  margin-left: 20px;
+  margin-top: 5px;
+}

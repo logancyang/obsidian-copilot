@@ -1,5 +1,6 @@
 import { extractNoteTitles, getNoteFileFromTitle } from "@/utils";
 import VectorDBManager from "@/vectorDBManager";
+import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
 import { Embeddings } from "@langchain/core/embeddings";
 import { BaseLanguageModel } from "@langchain/core/language_models/base";
@@ -33,13 +34,17 @@ export class HybridRetriever extends BaseRetriever {
     );
   }
 
-  async getRelevantDocuments(query: string): Promise<Document[]> {
+  async getRelevantDocuments(query: string, config?: BaseCallbackConfig): Promise<Document[]> {
     // Extract note titles wrapped in [[]] from the query
     const noteTitles = extractNoteTitles(query);
     // Retrieve chunks for explicitly mentioned note titles
     const explicitChunks = await this.getExplicitChunks(noteTitles);
-    // Generate a hypothetical answer passage
-    const rewrittenQuery = await this.rewriteQuery(query);
+    let rewrittenQuery = query;
+    if (config?.runName !== "no_hyde") {
+      // Use config to determine if HyDE should be used
+      // Generate a hypothetical answer passage
+      rewrittenQuery = await this.rewriteQuery(query);
+    }
     // Perform vector similarity search using ScoreThresholdRetriever
     const oramaChunks = await this.getOramaChunks(rewrittenQuery);
 
@@ -56,13 +61,15 @@ export class HybridRetriever extends BaseRetriever {
     }
 
     if (this.debug) {
+      console.log("*** HYBRID RETRIEVER DEBUG INFO: ***");
+
+      if (config?.runName !== "no_hyde") {
+        console.log("\nOriginal Query: ", query);
+        console.log("\nRewritten Query: ", rewrittenQuery);
+      }
+
       console.log(
-        "*** HyDE HYBRID RETRIEVER DEBUG INFO: ***",
-        "\nOriginal Query: ",
-        query,
-        "\n\nRewritten Query: ",
-        rewrittenQuery,
-        "\n\nNote Titles extracted: ",
+        "\nNote Titles extracted: ",
         noteTitles,
         "\n\nExplicit Chunks:",
         explicitChunks,

@@ -18,12 +18,6 @@ import {
   emojifyPrompt,
   fixGrammarSpellingSelectionPrompt,
   formatDateTime,
-  getFileContent,
-  getFileName,
-  getNotesFromPath,
-  getNotesFromTags,
-  getSendChatContextNotesPrompt,
-  getTagsFromNote,
   glossaryPrompt,
   removeUrlsFromSelectionPrompt,
   rewriteLongerSelectionPrompt,
@@ -31,7 +25,6 @@ import {
   rewriteShorterSelectionPrompt,
   rewriteTweetSelectionPrompt,
   rewriteTweetThreadSelectionPrompt,
-  sendNotesContentPrompt,
   simplifyPrompt,
   summarizePrompt,
   tocPrompt,
@@ -241,125 +234,6 @@ ${chatContent}`;
       console.error("Error saving chat as note:", error);
       new Notice("Failed to save chat as note. Check console for details.");
     }
-  };
-
-  const handleSendActiveNoteToPrompt = async () => {
-    if (!app) {
-      console.error("App instance is not available.");
-      return;
-    }
-
-    let noteFiles: TFile[] = [];
-    if (debug) {
-      console.log("Chat note context path:", settings.chatNoteContextPath);
-      console.log("Chat note context tags:", settings.chatNoteContextTags);
-    }
-    if (settings.chatNoteContextPath) {
-      // Recursively get all note TFiles in the path
-      noteFiles = await getNotesFromPath(app.vault, settings.chatNoteContextPath);
-    }
-    if (settings.chatNoteContextTags?.length > 0) {
-      // Get all notes with the specified tags
-      // If path is provided, get all notes with the specified tags in the path
-      // If path is not provided, get all notes with the specified tags
-      noteFiles = await getNotesFromTags(app.vault, settings.chatNoteContextTags, noteFiles);
-    }
-    const file = app.workspace.getActiveFile();
-    // If no note context provided, default to the active note
-    if (noteFiles.length === 0) {
-      if (!file) {
-        new Notice("No active note found.");
-        console.error("No active note found.");
-        return;
-      }
-      new Notice("No valid Chat context provided. Defaulting to the active note.");
-      noteFiles = [file];
-    }
-
-    const notes = [];
-    for (const file of noteFiles) {
-      // Get the content of the note
-      const content = await getFileContent(file, app.vault);
-      const tags = await getTagsFromNote(file, app.vault);
-      if (content) {
-        notes.push({ name: getFileName(file), content, tags });
-      }
-    }
-
-    // Send the content of the note to AI
-    const promptMessageHidden: ChatMessage = {
-      message: sendNotesContentPrompt(notes),
-      sender: USER_SENDER,
-      isVisible: false,
-      timestamp: formatDateTime(new Date()),
-    };
-
-    // Visible user message that is not sent to AI
-    // const sendNoteContentUserMessage = `Please read the following notes [[${activeNoteContent}]] and be ready to answer questions about it.`;
-    const sendNoteContentUserMessage = getSendChatContextNotesPrompt(
-      notes,
-      settings.chatNoteContextPath,
-      settings.chatNoteContextTags
-    );
-    const promptMessageVisible: ChatMessage = {
-      message: sendNoteContentUserMessage,
-      sender: USER_SENDER,
-      isVisible: true,
-      timestamp: formatDateTime(new Date()),
-    };
-
-    addMessage(promptMessageVisible);
-    addMessage(promptMessageHidden);
-
-    setLoading(true);
-    await getAIResponse(
-      promptMessageHidden,
-      chainManager,
-      addMessage,
-      setCurrentAiMessage,
-      setAbortController,
-      { debug }
-    );
-    setLoading(false);
-  };
-
-  const forceRebuildActiveNoteContext = async () => {
-    if (!app) {
-      console.error("App instance is not available.");
-      return;
-    }
-
-    const file = app.workspace.getActiveFile();
-    if (!file) {
-      new Notice("No active note found.");
-      console.error("No active note found.");
-      return;
-    }
-    const noteContent = await getFileContent(file, app.vault);
-    const noteName = getFileName(file);
-    if (!noteContent) {
-      new Notice("No note content found.");
-      console.error("No note content found.");
-      return;
-    }
-
-    const fileMetadata = app.metadataCache.getFileCache(file);
-    const noteFile = {
-      path: file.path,
-      basename: file.basename,
-      mtime: file.stat.mtime,
-      content: noteContent,
-      metadata: fileMetadata?.frontmatter ?? {},
-    };
-    await chainManager.indexFile(noteFile);
-    const activeNoteOnMessage: ChatMessage = {
-      sender: AI_SENDER,
-      message: `Indexing [[${noteName}]]...\n\n Please switch to "QA" in Mode Selection to ask questions about it.`,
-      isVisible: true,
-      timestamp: formatDateTime(new Date()),
-    };
-
-    addMessage(activeNoteOnMessage);
   };
 
   const refreshVaultContext = async () => {
@@ -676,9 +550,10 @@ ${chatContent}`;
             clearCurrentAiMessage();
           }}
           onSaveAsNote={() => handleSaveAsNote(true)}
-          onSendActiveNoteToPrompt={handleSendActiveNoteToPrompt}
-          onForceRebuildActiveNoteContext={forceRebuildActiveNoteContext}
           onRefreshVaultContext={refreshVaultContext}
+          onFindSimilarNotes={(content, activeFilePath) =>
+            plugin.findSimilarNotes(content, activeFilePath)
+          }
           addMessage={addMessage}
           settings={settings}
           vault={app.vault}
