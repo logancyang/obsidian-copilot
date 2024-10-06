@@ -1,9 +1,11 @@
+import { CHUNK_SIZE } from "@/constants";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
 import { RateLimiter } from "@/rateLimiter";
 import { Embeddings } from "@langchain/core/embeddings";
 import { insert, Orama, search, update } from "@orama/orama";
 import { MD5 } from "crypto-js";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
+import { Notice } from "obsidian";
 
 export interface OramaDocument {
   id: string;
@@ -61,7 +63,7 @@ class VectorDBManager {
 
     // Markdown splitter: https://js.langchain.com/docs/modules/data_connection/document_transformers/code_splitter#markdown
     const textSplitter = RecursiveCharacterTextSplitter.fromLanguage("markdown", {
-      chunkSize: 5000,
+      chunkSize: CHUNK_SIZE,
     });
     // Add note title as contextual chunk headers
     // https://js.langchain.com/docs/modules/data_connection/document_transformers/contextual_chunk_headers
@@ -91,10 +93,22 @@ class VectorDBManager {
             length: chunks[i].pageContent.length,
             error: error,
           });
+
+          // Check if the error is related to context length
+          if (error instanceof Error) {
+            new Notice(
+              `Embedding error: please check your embedding model context length, and consider switching to a model with a larger context length: ${error.message}`
+            );
+          }
+
+          // Rethrow the error to stop the indexing process
+          throw error;
         }
       }
     } catch (error) {
       console.error("indexFile - Unexpected error during embedding process:", error);
+      // Rethrow the error to be handled by the caller
+      throw error;
     }
 
     const chunkWithVectors =
@@ -139,15 +153,32 @@ class VectorDBManager {
     if (!db) throw new Error("DB not initialized");
     if (!this.config) throw new Error("VectorDBManager not initialized");
 
-    // If the document already exists, update it.
-    // Otherwise, insert it.
     try {
-      await insert(db, docToSave);
-    } catch (err) {
-      console.error(`Error inserting document ${docToSave.id} in VectorDB:`, err);
-      await update(db, docToSave, {
-        id: docToSave.id,
+      // Check if the document already exists
+      const existingDoc = await search(db, {
+        term: docToSave.id,
+        properties: ["id"],
+        limit: 1,
       });
+
+      if (existingDoc.hits.length > 0) {
+        // Document exists, update it
+        await update(db, docToSave, {
+          id: docToSave.id,
+        });
+        if (this.config.debug) {
+          console.log(`Updated document ${docToSave.id} in VectorDB`);
+        }
+      } else {
+        // Document doesn't exist, insert it
+        await insert(db, docToSave);
+        if (this.config.debug) {
+          console.log(`Inserted document ${docToSave.id} in VectorDB`);
+        }
+      }
+    } catch (err) {
+      console.error(`Error upserting document ${docToSave.id} in VectorDB:`, err);
+      throw err; // Rethrow the error to be handled by the caller
     }
   }
 

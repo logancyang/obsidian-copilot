@@ -162,6 +162,18 @@ class VectorStoreManager {
     return sampleEmbedding.length;
   }
 
+  private async ensureCorrectSchema(db: Orama<any>, embeddingInstance: Embeddings): Promise<void> {
+    const currentVectorLength = await this.getVectorLength(embeddingInstance);
+    const dbSchema = db.schema;
+
+    if (dbSchema.embedding !== `vector[${currentVectorLength}]`) {
+      console.log(
+        `Schema mismatch detected. Rebuilding database with new vector length: ${currentVectorLength}`
+      );
+      await this.clearVectorStore();
+    }
+  }
+
   private async saveDB() {
     try {
       const rawData = await save(this.oramaDb);
@@ -269,6 +281,7 @@ class VectorStoreManager {
       if (!embeddingInstance) {
         throw new CustomError("Embedding instance not found.");
       }
+      await this.ensureCorrectSchema(this.oramaDb, embeddingInstance);
 
       const singleDoc = await search(this.getDb(), {
         term: "",
