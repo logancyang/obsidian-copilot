@@ -135,8 +135,18 @@ export class HybridRetriever extends BaseRetriever {
   }
 
   private async getOramaChunks(query: string): Promise<Document[]> {
-    // Assuming you have a method to convert the query to a vector
-    const queryVector = await this.convertQueryToVector(query);
+    let queryVector: number[];
+    try {
+      queryVector = await this.convertQueryToVector(query);
+    } catch (error) {
+      console.error(
+        "Error in convertQueryToVector, please ensure your embedding model is working and has an adequate context length:",
+        error,
+        "\nQuery:",
+        query
+      );
+      throw error;
+    }
 
     const searchResults = await search(this.db, {
       mode: "vector",

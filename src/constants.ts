@@ -6,6 +6,7 @@ export const USER_SENDER = "user";
 export const AI_SENDER = "ai";
 export const DEFAULT_SYSTEM_PROMPT =
   "You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.";
+export const CHUNK_SIZE = 5000;
 
 export enum ChatModels {
   GPT_4o = "gpt-4o",

@@ -14,6 +14,7 @@ import {
   BUILTIN_CHAT_MODELS,
   BUILTIN_EMBEDDING_MODELS,
   CHAT_VIEWTYPE,
+  CHUNK_SIZE,
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
   EVENT_NAMES,
@@ -696,7 +697,10 @@ export default class CopilotPlugin extends Plugin {
       this.settings.debug
     );
 
-    const similarDocs = await hybridRetriever.getRelevantDocuments(content, { runName: "no_hyde" });
+    const truncatedContent = content.length > CHUNK_SIZE ? content.slice(0, CHUNK_SIZE) : content;
+    const similarDocs = await hybridRetriever.getRelevantDocuments(truncatedContent, {
+      runName: "no_hyde",
+    });
     return similarDocs
       .filter((doc) => doc.metadata.path !== activeFilePath)
       .map((doc) => ({
