@@ -3,6 +3,7 @@ import { ChainType } from "@/chainFactory";
 import { ListPromptModal } from "@/components/ListPromptModal";
 import { NoteTitleModal } from "@/components/NoteTitleModal";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
+import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChatMessage } from "@/sharedState";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -78,6 +79,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
       showNoteTitleModal(cursorPos);
     } else if (inputValue === "/") {
       showCustomPromptModal();
+    } else if (inputValue.slice(-1) === "@" && currentChain === ChainType.COPILOT_PLUS_CHAIN) {
+      showCopilotPlusOptionsModal();
     }
   };
 
@@ -124,6 +127,13 @@ const ChatInput: React.FC<ChatInputProps> = ({
         await customPromptProcessor.recordPromptUsage(selectedPrompt.title);
         setInputMessage(selectedPrompt.content);
       }
+    }).open();
+  };
+
+  const showCopilotPlusOptionsModal = () => {
+    const options = COPILOT_TOOL_NAMES;
+    new ListPromptModal(app, options, (selectedOption: string) => {
+      setInputMessage(inputMessage + selectedOption + " ");
     }).open();
   };
 

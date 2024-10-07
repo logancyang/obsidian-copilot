@@ -5,6 +5,7 @@ export interface ChatMessage {
   sender: string;
   timestamp: FormattedDateTime | null;
   isVisible: boolean;
+  sources?: { title: string; score: number }[];
 }
 
 class SharedState {

@@ -1,5 +1,4 @@
 import { SetChainOptions } from "@/aiParams";
-import { CopilotPlusModal } from "@/components/CopilotPlusModal";
 import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { CustomError } from "@/error";
 import { CopilotSettings } from "@/settings/SettingsPage";
@@ -48,13 +47,14 @@ const ChatControls: React.FC<ChatControlsProps> = ({
     const newChain = stringToChainType(value);
     setSelectedChain(newChain);
 
-    if (newChain === ChainType.COPILOT_PLUS_CHAIN) {
-      new CopilotPlusModal(app).open();
-      // Reset the selected chain to the previous value
-      setSelectedChain(currentChain);
-    } else {
-      setCurrentChain(newChain, { debug });
-    }
+    // TODO: Update Copilot Plus Modal to check the license key when ready to ship
+    // if (newChain === ChainType.COPILOT_PLUS_CHAIN) {
+    //   new CopilotPlusModal(app).open();
+    //   // Reset the selected chain to the previous value
+    //   setSelectedChain(currentChain);
+    // } else {
+    //   setCurrentChain(newChain, { debug });
+    // }
   };
 
   useEffect(() => {

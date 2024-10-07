@@ -10,6 +10,7 @@ interface ChatMessagesProps {
   chatHistory: ChatMessage[];
   currentAiMessage: string;
   loading?: boolean;
+  loadingMessage?: string;
   app: App;
   indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY;
   currentChain: ChainType;
@@ -26,6 +27,7 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
   loading,
   currentChain,
   indexVaultToVectorStore,
+  loadingMessage,
   app,
   onInsertAtCursor,
   onRegenerate,
@@ -72,6 +74,10 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
     );
   }
 
+  const getLoadingMessage = () => {
+    return loadingMessage ? `${loadingMessage} ${loadingDots}` : loadingDots;
+  };
+
   return (
     <div className="chat-messages">
       {chatHistory.map(
@@ -96,7 +102,7 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
           key={`ai_message_${currentAiMessage}`}
           message={{
             sender: "AI",
-            message: currentAiMessage || loadingDots,
+            message: currentAiMessage || getLoadingMessage(),
             isVisible: true,
             timestamp: null,
           }}

@@ -9,6 +9,7 @@ import { AdhocPromptModal } from "@/components/AdhocPromptModal";
 import CopilotView from "@/components/CopilotView";
 import { ListPromptModal } from "@/components/ListPromptModal";
 import { LoadChatHistoryModal } from "@/components/LoadChatHistoryModal";
+import { OramaSearchModal } from "@/components/OramaSearchModal";
 import { SimilarNotesModal } from "@/components/SimilarNotesModal";
 import {
   BUILTIN_CHAT_MODELS,
@@ -69,6 +70,9 @@ export default class CopilotPlugin extends Plugin {
       this.encryptionService,
       () => this.getLangChainParams()
     );
+
+    // Initialize event listeners for the VectorStoreManager, e.g. onModify triggers reindexing
+    await this.vectorStoreManager.initializeEventListeners();
 
     if (this.settings.enableEncryption) {
       await this.saveSettings();
@@ -336,11 +340,13 @@ export default class CopilotPlugin extends Plugin {
       },
     });
 
-    this.registerEvent(
-      this.app.vault.on("delete", async (file) => {
-        await this.vectorStoreManager.removeDocs(file.path);
-      })
-    );
+    this.addCommand({
+      id: "copilot-db-search",
+      name: "CopilotDB Search",
+      callback: () => {
+        new OramaSearchModal(this.app, this).open();
+      },
+    });
 
     // Index vault to vector store on startup and after loading all commands
     // This can take a while, so we don't want to block the startup process
@@ -686,6 +692,7 @@ export default class CopilotPlugin extends Plugin {
       {
         minSimilarityScore: 0.3,
         maxK: 20,
+        salientTerms: [],
       },
       this.settings.debug
     );
@@ -701,5 +708,30 @@ export default class CopilotPlugin extends Plugin {
         score: doc.metadata.score || 0,
       }))
       .sort((a, b) => b.score - a.score);
+  }
+
+  async customSearchDB(query: string, salientTerms: string[], textWeight: number): Promise<any[]> {
+    await this.vectorStoreManager.waitForInitialization();
+    const db = this.vectorStoreManager.getDb();
+
+    const hybridRetriever = new HybridRetriever(
+      db,
+      this.app.vault,
+      this.chainManager.chatModelManager.getChatModel(),
+      this.vectorStoreManager.getEmbeddingsManager().getEmbeddingsAPI() as Embeddings,
+      {
+        minSimilarityScore: 0.3,
+        maxK: 20,
+        salientTerms: salientTerms,
+        textWeight: textWeight,
+      },
+      this.settings.debug
+    );
+
+    const results = await hybridRetriever.getOramaChunks(query, salientTerms);
+    return results.map((doc) => ({
+      content: doc.pageContent,
+      metadata: doc.metadata,
+    }));
   }
 }

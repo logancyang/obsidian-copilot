@@ -1,4 +1,5 @@
 import { ChatButtons } from "@/components/ChatComponents/ChatButtons";
+import { SourcesModal } from "@/components/SourcesModal";
 import { USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/sharedState";
 import { Bot, User } from "lucide-react";
@@ -118,6 +119,12 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     }
   };
 
+  const handleShowSources = () => {
+    if (message.sources && message.sources.length > 0) {
+      new SourcesModal(app, message.sources).open();
+    }
+  };
+
   return (
     <div className="chat-message-container">
       <div className={`message ${message.sender === USER_SENDER ? "user-message" : "bot-message"}`}>
@@ -152,6 +159,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                 onRegenerate={onRegenerate}
                 onEdit={handleEdit}
                 onDelete={onDelete}
+                onShowSources={handleShowSources}
+                hasSources={message.sources && message.sources.length > 0 ? true : false}
               />
             </div>
           )}

@@ -68,7 +68,7 @@ class VectorDBManager {
     // Add note title as contextual chunk headers
     // https://js.langchain.com/docs/modules/data_connection/document_transformers/contextual_chunk_headers
     const chunks = await textSplitter.createDocuments([fileToSave.content], [], {
-      chunkHeader: "[[" + fileToSave.title + "]]" + "\n\n---\n\n",
+      chunkHeader: "\n\nNOTE TITLE: [[" + fileToSave.title + "]]" + "\n\nNOTE BLOCK CONTENT:\n\n",
       appendChunkOverlapHeader: true,
     });
 
@@ -179,8 +179,11 @@ class VectorDBManager {
       }
     } catch (err) {
       console.error(`Error upserting document ${docToSave.id} in VectorDB:`, err);
-      throw err;
+      // Instead of throwing, we'll return undefined to indicate failure
+      return undefined;
     }
+
+    return docToSave;
   }
 
   public static async getDocsByPath(db: Orama<any>, path: string): Promise<any | undefined> {

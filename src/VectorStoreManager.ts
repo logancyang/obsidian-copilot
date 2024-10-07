@@ -8,7 +8,7 @@ import VectorDBManager from "@/vectorDBManager";
 import { Embeddings } from "@langchain/core/embeddings";
 import { create, load, Orama, remove, removeMultiple, save, search } from "@orama/orama";
 import { MD5 } from "crypto-js";
-import { App, Notice, Platform } from "obsidian";
+import { App, Notice, Platform, TAbstractFile, TFile, Vault } from "obsidian";
 import { VAULT_VECTOR_STORE_STRATEGY } from "./constants";
 
 class VectorStoreManager {
@@ -28,6 +28,10 @@ class VectorStoreManager {
   private totalFilesToIndex = 0;
   private initializationPromise: Promise<void>;
   private isIndexLoaded = false;
+  private excludedFiles: Set<string> = new Set();
+
+  private debounceDelay = 5000; // 5 seconds
+  private debounceTimer: number | null = null;
 
   constructor(
     app: App,
@@ -69,6 +73,8 @@ class VectorStoreManager {
       getEmbeddingRequestsPerSecond: () => this.settings.embeddingRequestsPerSecond,
       debug: this.settings.debug,
     });
+
+    this.updateExcludedFiles();
   }
 
   private async performPostInitializationTasks() {
@@ -178,6 +184,14 @@ class VectorStoreManager {
     );
     this.isIndexLoaded = true;
     return db;
+  }
+
+  public getVault(): Vault {
+    return this.app.vault;
+  }
+
+  public getSettings(): CopilotSettings {
+    return this.settings;
   }
 
   private async getVectorLength(embeddingInstance: Embeddings): Promise<number> {
@@ -432,7 +446,7 @@ class VectorStoreManager {
             embeddingModel: EmbeddingsManager.getModelName(embeddingInstance),
             ctime: file.stat.ctime,
             mtime: file.stat.mtime,
-            tags: fileMetadatas[index]?.tags ?? [], // Assuming tags are in the metadata
+            tags: fileMetadatas[index]?.tags?.map((tag) => tag.tag) ?? [],
             extension: file.extension,
             metadata: fileMetadatas[index]?.frontmatter ?? {},
           };
@@ -580,7 +594,6 @@ class VectorStoreManager {
       const searchResult = await search(this.oramaDb, {
         term: filePath,
         properties: ["path"],
-        tolerance: 1,
       });
       if (searchResult.hits.length > 0) {
         await removeMultiple(
@@ -588,6 +601,9 @@ class VectorStoreManager {
           searchResult.hits.map((hit) => hit.id),
           500
         );
+        if (this.settings.debug) {
+          console.log(`Deleted document from local Copilot index: ${filePath}`);
+        }
       }
     } catch (err) {
       console.error("Error deleting document from local Copilotindex:", err);
@@ -610,6 +626,85 @@ class VectorStoreManager {
       includeVectors: true,
     });
     return result.hits[0]?.document;
+  }
+
+  public async initializeEventListeners() {
+    this.app.vault.on("modify", this.handleFileModify);
+    this.app.vault.on("delete", this.handleFileDelete);
+  }
+
+  private debouncedReindexFile = (file: TFile) => {
+    if (this.debounceTimer !== null) {
+      window.clearTimeout(this.debounceTimer);
+    }
+    this.debounceTimer = window.setTimeout(() => {
+      this.reindexFile(file);
+      this.debounceTimer = null;
+    }, this.debounceDelay);
+  };
+
+  private handleFileModify = async (file: TAbstractFile) => {
+    await this.updateExcludedFiles();
+    await this.removeDocs(file.path);
+    if (file instanceof TFile && file.extension === "md" && !this.excludedFiles.has(file.path)) {
+      this.debouncedReindexFile(file);
+    }
+  };
+
+  private handleFileDelete = async (file: TAbstractFile) => {
+    if (file instanceof TFile) {
+      await this.removeDocs(file.path);
+    }
+  };
+
+  private updateExcludedFiles = async () => {
+    this.excludedFiles = await this.getFilePathsForQA("exclusions");
+  };
+
+  private async reindexFile(file: TFile) {
+    try {
+      // Read the file content
+      const content = await this.app.vault.cachedRead(file);
+
+      // Get the embedding instance
+      const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
+      if (!embeddingInstance) {
+        throw new CustomError("Embedding instance not found.");
+      }
+
+      // Get file metadata
+      const fileCache = this.app.metadataCache.getFileCache(file);
+
+      // Prepare the file data
+      const fileToSave = {
+        title: file.basename,
+        path: file.path,
+        content: content,
+        embeddingModel: EmbeddingsManager.getModelName(embeddingInstance),
+        ctime: file.stat.ctime,
+        mtime: file.stat.mtime,
+        tags: fileCache?.tags?.map((tag) => tag.tag) ?? [],
+        extension: file.extension,
+        metadata: fileCache?.frontmatter ?? {},
+      };
+
+      const db = this.oramaDb;
+      if (!db) {
+        throw new CustomError("Copilot index is not loaded.");
+      }
+
+      // Reindex the file
+      await VectorDBManager.indexFile(db, embeddingInstance, fileToSave);
+
+      // Save the updated database
+      await this.saveDB();
+
+      if (this.settings.debug) {
+        console.log(`Reindexed file: ${file.path}`);
+      }
+    } catch (error) {
+      console.error(`Error reindexing file ${file.path}:`, error);
+    }
   }
 }
 

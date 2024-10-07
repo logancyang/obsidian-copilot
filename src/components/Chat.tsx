@@ -7,6 +7,7 @@ import {
   ABORT_REASON,
   AI_SENDER,
   EVENT_NAMES,
+  LOADING_MESSAGES,
   USER_SENDER,
   VAULT_VECTOR_STORE_STRATEGY,
 } from "@/constants";
@@ -73,6 +74,7 @@ const Chat: React.FC<ChatProps> = ({
   const [inputMessage, setInputMessage] = useState("");
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES.DEFAULT);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [chatIsVisible, setChatIsVisible] = useState(false);
 
@@ -129,15 +131,17 @@ const Chat: React.FC<ChatProps> = ({
 
     // Display running dots to indicate loading
     setLoading(true);
+    setLoadingMessage(LOADING_MESSAGES.DEFAULT);
     await getAIResponse(
       promptMessageHidden,
       chainManager,
       addMessage,
       setCurrentAiMessage,
       setAbortController,
-      { debug }
+      { debug, updateLoadingMessage: setLoadingMessage }
     );
     setLoading(false);
+    setLoadingMessage(LOADING_MESSAGES.DEFAULT);
   };
 
   const navigateHistory = (direction: "up" | "down"): string => {
@@ -535,6 +539,7 @@ ${chatContent}`;
         currentAiMessage={currentAiMessage}
         indexVaultToVectorStore={settings.indexVaultToVectorStore as VAULT_VECTOR_STORE_STRATEGY}
         loading={loading}
+        loadingMessage={loadingMessage}
         app={app}
         onInsertAtCursor={handleInsertAtCursor}
         onRegenerate={handleRegenerate}

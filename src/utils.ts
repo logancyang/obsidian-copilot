@@ -531,3 +531,9 @@ export async function getFilePathsFromPatterns(
 
   return Array.from(filePaths);
 }
+
+export function extractJsonFromCodeBlock(content: string): any {
+  const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  const jsonContent = codeBlockMatch ? codeBlockMatch[1].trim() : content.trim();
+  return JSON.parse(jsonContent);
+}
