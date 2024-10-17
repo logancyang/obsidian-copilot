@@ -259,6 +259,14 @@ class VectorStoreManager {
           const tagName = exclusion.slice(1);
           const taggedFiles = await getNotesFromTags(this.app.vault, [tagName]);
           taggedFiles.forEach((file) => excludedFiles.add(file.path));
+        } else if (exclusion.startsWith("*")) {
+          // File-extension-based exclusion
+          const extensionName = exclusion.slice(1);
+          this.app.vault.getFiles().forEach((file) => {
+            if (file.name.toLowerCase().contains(extensionName.toLowerCase())) {
+              excludedFiles.add(file.path);
+            }
+          });
         } else {
           // Path-based exclusion
           this.app.vault.getFiles().forEach((file) => {
