@@ -2,14 +2,16 @@
 
 ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/logancyang/obsidian-copilot?style=for-the-badge&sort=semver) ![Obsidian Downloads](https://img.shields.io/badge/dynamic/json?logo=obsidian&color=%23483699&label=downloads&query=%24%5B%22copilot%22%5D.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json&style=for-the-badge)
 
-Copilot for Obsidian is a **free** and **open-source** LLM interface right inside Obsidian. It has a minimalistic design and is straightforward to use.
+Copilot for Obsidian is an **open-source** LLM interface right inside Obsidian. It has a minimalistic design and is straightforward to use.
 
-- 💬 ChatGPT UI in Obsidian.
-- 🛠️ Prompt AI with your writing using Copilot commands to get quick results.
-- 🚀 Turbocharge your Second Brain with AI.
-- 🧠 Talk to your past notes for insights.
+- 💬 Chat UI in Obsidian with support for countless models, just BYO API key or use local models with LM Studio or Ollama.
+- 🛠️ Prompt AI with Copilot commands or your own custom prompts at the speed of thought.
+- 🧠 Talk to your entire vault for answers and insights.
+- 🚀 Turbocharge your Second Brain with powerful AI agents (Copilot Plus).
 
-My goal is to make this AI assistant **local-first** and **privacy-focused**. It has a **local** vector store and can work with **local** models for chat and QA **completely offline**! More features are under construction. Stay tuned!
+My goal is to make it the **ultimate AI assistant** that truly **understands** your personal knowledge base while being **privacy-focused**.
+
+It has a **local** index that powers the question-answering. Your notes are always stored on your own device and nowhere else! More features are under construction. Stay tuned!
 
 <img src="./images/ui.png" alt="UI">
 
@@ -22,68 +24,52 @@ SPECIAL THANKS TO OUR TOP SPONSORS:
 
 [Changelog](https://github.com/logancyang/obsidian-copilot/releases)
 
-#### v2.6.0: MOBILE SUPPORT is here! 🎉🎉🎉
-
-<a href="https://youtu.be/l-x_QwSNghE" target="_blank"><img src="./images/thumbnail-260.png" width="700" /></a>
-
-- Huge thanks to our awesome [@gianluca-venturini](https://github.com/gianluca-venturini) for his incredible work on mobile support! Now you can use Copilot on your phone and tablet! 🎉🎉🎉
-- Complete rehaul of how models work in Copilot settings. Now you can add any model to your model picker provided its name, model provider, API key and base url! No more waiting for me to add new models!
-- Say goodbye to CORS errors for both chat models and embedding! The new model table in settings now lets you turn on "CORS" for individual chat models if you see CORS issue with them. And embedding models are immune to CORS errors by default!
-  - Caveat: this is powered by Obsidian API's `requestUrl` which does not support "streaming" of LLM responses. So streaming is disabled whenever you have CORS on in Copilot settings. Please upvote [this feature request](https://forum.obsidian.md/t/support-streaming-the-request-and-requesturl-response-body/87381) to let Obsidian know your need for streaming!
-
-#### 🎉 HIGHLY ANTICIPATED v2.5.0: Vault QA (BETA) mode (with local embedding support)! Claude 3! 🎉🎉🎉
-
-<a href="https://youtu.be/NSoKRYNlOls" target="_blank"><img src="./images/thumbnail-vault-qa.png" width="700" /></a>
-
-The highly anticipated biggest update of all is here!
-
-The brand new **Vault QA (BETA)** mode allows you to chat with your whole vault, powered by a **local** vector store. Ask questions and get answers with **cited sources**!
-
-What's more, with Ollama **local embeddings** and **local chat models**, this mode works **completely offline**! This is a huge step toward truly private and local AI assistance inside Obsidian!
-
-(Huge shoutout to @AntoineDao for working with me on Vault QA mode!)
-
-#### Model Providers
-
-**OpenAI**, **Anthropic**, **Azure OpenAI**, **Google Gemini**, **OpenRouter**, **GROQ**, **3rd Party Models with OpenAI-Compatible API**, **LM Studio** and **Ollama** are supported model providers.
-
-**OpenRouter.ai** hosts some of the best open-source models at the moment, such as MistralAI's new models, check out their websites for all the good stuff they have!
-
-**LM Studio** and **Ollama** are the 2 best choices for running local models on your own machine. Please check out the super simple setup guide [here](local_copilot.md). Don't forget to flex your creativity in custom prompts using local models!
-
 ## 🛠️ Features
 
-- Chat with ChatGPT right inside Obsidian in the Copilot Chat window.
-- No repetitive login. Use your own API key (stored locally).
-- No monthly fee. Pay only for what you use.
-- Model selection of OpenAI, Azure, Google, Claude 3, OpenRouter and **local** models powered by LM Studio and Ollama.
-- No need to buy ChatGPT Plus to use GPT-4.
-- No usage cap for GPT-4 like ChatGPT Plus.
-- One-click copying any message as markdown.
-- One-click saving the entire conversation as a note.
-- **Chat with your whole vault** by selecting "Vault QA" mode. Ask questions and get **cited responses**!
-- All QA modes are powered by retrieval augmentation with a **local vector store**. No sending your data to a cloud-based vector search service!
-- Easy commands to **simplify, emojify, summarize, translate, change tone, fix grammar, rewrite into a tweet/thread, count tokens** and more.
-- Set your own parameters like LLM temperature, max tokens, conversation context based on your need (**pls be mindful of the API cost**).
-- **User custom prompt**! You can _add, apply, edit, delete_ your custom prompts, persisted in your local Obsidian environment! Be creative with your own prompt templates, sky is the limit!
-- **Local model** support for **offline chat** using LM Studio and Ollama.
+- Engage with numerous LLMs seamlessly within Obsidian via the Copilot Chat window.
+- Access GPT-4 or Claude 3 without purchasing ChatGPT Plus or Claude Pro—simply use your own API key (stored locally) and pay as you go for the best value.
+- Choose from a variety of models, including OpenAI, Azure, Google, Claude, OpenRouter, Groq, Cohere, or **any third-party models with OpenAI-compatible APIs** via Custom Model.
+- Customize parameters like LLM temperature, max tokens, and conversation context to suit your needs (**be mindful of API costs**).
+- Utilize local models powered by LM Studio and Ollama.
+- Easily copy, edit, or insert any message to your note with a single click.
+- Save or load entire conversations to or from a note.
+- To mention a note in Copilot Chat, simply type `[[` and provide the note title.
+- Use simple commands to **simplify, emojify, summarize, translate, change tone, fix grammar, rewrite into a tweet/thread, count tokens**, and more.
+- Take advantage of powerful **User Custom Prompts**! You can _add, apply, edit, and delete_ your custom prompts, all stored locally in your Obsidian vault as markdown. Trigger any custom prompt with a simple `/` in the chat input!
+- **Interact with your entire vault** using "Vault QA" mode. Ask questions and receive **cited responses**!
+- All QA modes leverage retrieval augmentation with a **local index**, ensuring your data isn't sent to a cloud-based vector search service.
+- **Copilot Plus (in limited Alpha)**: supercharge your second brain with a **powerful AI agent** right inside your Obsidian vault. More powerful than anything else out there. [Learn more here](https://obsidiancopilot.com).
 
-## 🎬 Demos
+Chat and Vault QA modes are completely free to use. Copilot Plus is currently in limited alpha and free to use for alpha testers. If you are interested in joining the alpha, please consider sponsoring the project! [learn more here](https://obsidiancopilot.com).
 
-#### 🤗 New to Copilot? Quick Guide for Beginners:
+## Model Providers
 
-<a href="https://www.youtube.com/watch?v=jRCDAg2sck8" target="_blank"><img src="./images/thumbnail.png" width="700" /></a>
+**OpenAI**, **Anthropic**, **Azure OpenAI**, **Google Gemini**, **Cohere**, **OpenRouter**, **GROQ**, and any **3rd Party Models with OpenAI-Compatible API** are supported. You can easily add them via Custom Model in Copilot settings.
 
-- Chat with ChatGPT, copy messages to note, save entire conversation as a note
-- QA around your past note
-- Fix grammar and spelling, Summarize, Simplify, Emojify, Remove URLs
-- Generate glossary, table of contents
-- Translate to a language of your choosing
-- You can find all Copilot commands in your command palette
+**LM Studio** and **Ollama** are supported for local models. Please check out the super simple setup guide [here](local_copilot.md). Don't forget to flex your creativity in custom prompts using local models!
 
-To use Copilot, you need API keys from one of the LLM providers such as OpenAI, Azure OpenAI, Gemini, OpenRouter (Free!). You can also use it offline with LM Studio or Ollama!
+## 🤗 New to Copilot? Quick Guide for Beginners
 
-Once you put your valid API key in the Copilot setting, don't forget to click Save and Reload. If you are a new user and have trouble setting it up, please open an issue and describe it in detail.
+The simplest way to get started is to get an OpenAI API key and set it in the Copilot settings. Then simply pick `gpt-4o` or `gpt-4o-mini` in the model dropdown to start chatting. [Learn more here](https://obsidiancopilot.com).
+
+Try going through all the Copilot commands in the command palette, and see what they do. Checkout my [youtube channel](https://youtube.com/@loganhallucinates?sub_confirmation=1) for previous demos.
+
+#### 🔧 Copilot Settings
+
+Explore the "General Settings" to select your default chat model and customize parameters such as temperature, max tokens, and conversation context to fit your needs.
+
+<img src="./images/settings.png" alt="Settings" width="700">
+
+Enter your API keys in "API settings" for existing providers.
+
+<img src="./images/api-settings.png" alt="API Settings" width="700">
+
+Add model using the "Custom Model" form.
+
+- When you add any model from the existing list of providers, there's no need to provide the URL.
+- When you add your own custom models, you can add them with the endpoint URL as long as they have OpenAI-compatible API.
+
+You can also use your own system prompt, choose between different embedding providers for Vault QA and more.
 
 #### 💬 User Custom Prompt: Create as Many Copilot Commands as You Like!
 
@@ -98,24 +84,14 @@ Check out this demo video below!
 
 This video shows how Advanced Custom Prompt works. This form of templating enables a lot more possibilities with long context window models. If you have your own creative cool use cases, don't hesitate to share them in the discussion or in the youtube comment section!
 
-#### 🔧 Copilot Settings
-
-The settings page lets you set your own temperature, max tokens, conversation context based on your need.
-
-New models will be added as I get access.
-
-You can also use your own system prompt, choose between different embedding providers such as OpenAI, CohereAI (their trial API is free and quite stable!) and Huggingface Inference API (free but sometimes times out).
-
-## ⚙️ Installation
-
-Copilot for Obsidian is now available in **Obsidian Community Plugin**!
+## ⚙️ Installation (recommended)
 
 - Open Community Plugins settings page, click on the Browse button.
 - Search for "Copilot" in the search bar and find the plugin with this exact name.
 - Click on the Install button.
 - Once the installation is complete, enable the Copilot plugin by toggling on its switch in the Community Plugins settings page.
 
-Now you can see the chat icon in your leftside ribbon, clicking on it will open the chat panel on the right! Don't forget to check out the Copilot commands available in the commands palette!
+Now you can see the chat icon in your leftside ribbon, clicking on it will open the chat panel on the right! Don't forget to provide your API keys in settings before using the plugin!
 
 #### ⛓️ Manual Installation
 
@@ -125,7 +101,7 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 
 ## 🔔 Note
 
-- The chat history is not saved by default. Please use "**Save as Note**" to save it. The note will have a title `Chat-Year_Month_Day-Hour_Minute_Second`, you can change its name as needed.
+- The chat history is not saved by default. Please check "**Autosave Chat**" in the setting if you would like to enable it. The note will have a title `<first-chat-message>@YYMMDD_HHMMSS`, you can change its name as needed.
 - "**New Chat**" clears all previous chat history. Again, please use "**Save as Note**" if you would like to save the chat.
 - You can set a very long context in the setting "**Conversation turns in context**" if needed.
 
@@ -143,15 +119,13 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 <details>
   <summary>It's not using my note as context</summary>
 
-- Please don't forget to switch to "**QA**" in the Mode Selection dropdown in order to start the QA. Copilot does not have your note as context in "Chat" mode.
-  <img src="./images/faq-mode-switch.png" alt="Settings" width="500">
-- In fact, you don't have to click the button on the right before starting the QA. Switching to QA mode in the dropdown directly is enough for Copilot to read the note as context. The button on the right is only for when you'd like to manually rebuild the index for the active note, like, when you'd like to switch context to another note, or you think the current index is corrupted because you switched the embedding provider, etc.
-- Reference issue: https://github.com/logancyang/obsidian-copilot/issues/51
+- Please don't forget to switch to "**Vault QA**" in the Mode Selection dropdown in order to start the QA. Copilot does not have your note as context in "Chat" mode without an explicit `[[notetitle]]` in the message.
+<img src="./images/faq-mode-switch.png" alt="Settings" width="500">
 </details>
 <details>
   <summary>"insufficient_quota"</summary>
 
-- It might be because you haven't set up payment for your OpenAI account, or you exceeded your max monthly limit. OpenAI has a cap on how much you can use their API, usually $120 for individual users.
+- Most likely because **you haven't set up payment in your OpenAI account**, or you exceeded your max monthly limit. OpenAI has a cap on how much you can use their API, usually $120 for individual users.
 - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/11
 </details>
 <details>
@@ -177,19 +151,18 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 - Reference issue: https://github.com/logancyang/obsidian-copilot/issues/98
 </details>
 
-When opening an issue, please include relevant console logs. You can go to Copilot's settings and turn on "Debug mode" at the bottom for more console messages!
+When opening an issue, please follow the issue template and include relevant console logs. You can go to Copilot's settings and turn on "Debug mode" at the bottom for more console messages. On Mac, you can open the console by pressing `Cmd+Opt+I`. On Windows, you can open the console by pressing `Ctrl+Shift+I`.
 
 ## 📝 Planned features (feedback welcome)
 
-- New modes
-  - **Chat mode** (originally Conversation mode): You can now provide multiple notes at once as context in conversations, for LLMs with an extended context window.
-  - **QA mode**: You can **index any folder** and perform question and answer sessions using a **local** search index and Retrieval-Augmented Generation (RAG) system.
-- Support **embedded PDFs** as context
-- Interact with a **powerful AI agent** that knows your vault who can search, filter and use your notes as context to work with. Explore, brainstorm and research like never before!
+- Support **embedded PDFs** as context. Index PDFs in the vault locally same as notes.
+- Image support in chat.
+- User profile with different system prompts and model parameters for different use cases e.g. work, personal, creative writing, etc.
+- Interact with a **powerful AI agent** that knows your vault that has access to various tools like web search, note search, youtube video to markdown, etc. Explore, brainstorm and research like never before!
 
 ## 🙏 Thank You
 
-Did you know that [even the timer on Alexa needs internet access](https://twitter.com/logancyang/status/1720929870635802738)? In this era of corporate-dominated internet, I still believe there's room for powerful tech that's focused on privacy. A great **local** AI agent in Obsidian is the ultimate form of this plugin. If you share my vision, please consider [sponsoring this project](https://github.com/sponsors/logancyang) or buying me coffees!
+If you share my vision, please consider [sponsoring this project](https://github.com/sponsors/logancyang) or buying me some coffees!
 
 <a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
 
