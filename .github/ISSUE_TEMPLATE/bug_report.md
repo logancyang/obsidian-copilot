@@ -6,7 +6,12 @@ labels: ""
 assignees: ""
 ---
 
+- [ ] Disable all other plugins besides Copilot **(required)**
 - [ ] Screenshot of note + Copilot chat pane + dev console added **(required)**
+
+Copilot version:
+
+(Bug report without the above will be closed)
 
 **Describe how to reproduce**
 A clear and concise description of what the bug is. Clear steps to reproduce the behavior

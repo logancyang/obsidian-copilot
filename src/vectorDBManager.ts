@@ -167,13 +167,13 @@ class VectorDBManager {
           id: docToSave.id,
         });
         if (this.config.debug) {
-          console.log(`Updated document ${docToSave.id} in VectorDB`);
+          console.log(`Updated document ${docToSave.id} in VectorDB with path: ${docToSave.path}`);
         }
       } else {
         // Document doesn't exist, insert it
         await insert(db, docToSave);
         if (this.config.debug) {
-          console.log(`Inserted document ${docToSave.id} in VectorDB`);
+          console.log(`Inserted document ${docToSave.id} in VectorDB with path: ${docToSave.path}`);
         }
       }
     } catch (err) {
