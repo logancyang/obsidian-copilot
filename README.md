@@ -24,6 +24,10 @@ SPECIAL THANKS TO OUR TOP SPONSORS:
 
 [Changelog](https://github.com/logancyang/obsidian-copilot/releases)
 
+## 🚨 IMPORTANT NOTICE
+
+In the new release v2.7.0, we will migrate off of PouchDB to Orama. This will require you to re-index your vault. With the new Orama db, you can find your index file at `.obsidian/copilot-index-<hash>.json`.
+
 ## 🛠️ Features
 
 - Engage with numerous LLMs seamlessly within Obsidian via the Copilot Chat window.
