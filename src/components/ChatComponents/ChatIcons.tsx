@@ -1,6 +1,5 @@
 import { CustomModel, SetChainOptions } from "@/aiParams";
 import { CopilotPlusModal } from "@/components/CopilotPlusModal";
-import { SimilarNotesModal } from "@/components/SimilarNotesModal";
 import { AI_SENDER, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { CustomError } from "@/error";
 import { CopilotSettings } from "@/settings/SettingsPage";
@@ -10,12 +9,7 @@ import { Notice, Vault } from "obsidian";
 import React, { useEffect, useState } from "react";
 
 import { ChainType } from "@/chainFactory";
-import {
-  ConnectionIcon,
-  RefreshIcon,
-  SaveAsNoteIcon,
-  UseActiveNoteAsContextIcon,
-} from "@/components/Icons";
+import { RefreshIcon, SaveAsNoteIcon, UseActiveNoteAsContextIcon } from "@/components/Icons";
 import { stringToChainType } from "@/utils";
 
 interface ChatIconsProps {
@@ -113,17 +107,17 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
     setSelectedChain(settings.defaultChainType);
   }, [settings.defaultChainType]);
 
-  const handleFindSimilarNotes = async () => {
-    const activeFile = app.workspace.getActiveFile();
-    if (!activeFile) {
-      new Notice("No active file");
-      return;
-    }
+  // const handleFindSimilarNotes = async () => {
+  //   const activeFile = app.workspace.getActiveFile();
+  //   if (!activeFile) {
+  //     new Notice("No active file");
+  //     return;
+  //   }
 
-    const activeNoteContent = await app.vault.cachedRead(activeFile);
-    const similarChunks = await onFindSimilarNotes(activeNoteContent, activeFile.path);
-    new SimilarNotesModal(app, similarChunks).open();
-  };
+  //   const activeNoteContent = await app.vault.cachedRead(activeFile);
+  //   const similarChunks = await onFindSimilarNotes(activeNoteContent, activeFile.path);
+  //   new SimilarNotesModal(app, similarChunks).open();
+  // };
 
   return (
     <div className="chat-icons-container">
@@ -183,10 +177,10 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
               for Vault
             </span>
           </button>
-          <button className="chat-icon-button clickable-icon" onClick={handleFindSimilarNotes}>
+          {/* <button className="chat-icon-button clickable-icon" onClick={handleFindSimilarNotes}>
             <ConnectionIcon className="icon-scaler" />
             <span className="tooltip-text">Find Similar Notes for Active Note</span>
-          </button>
+          </button> */}
         </>
       )}
     </div>

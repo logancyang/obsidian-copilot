@@ -28,6 +28,10 @@ SPECIAL THANKS TO OUR TOP SPONSORS:
 
 In the new release v2.7.0, we will migrate off of PouchDB to Orama. This will require you to re-index your vault. With the new Orama db, you can find your index file at `.obsidian/copilot-index-<hash>.json`.
 
+## 🤖 v2.7.0 Copilot Plus (alpha) demo video - AI Agent for Obsidian! 🚀
+
+<a href="https://youtu.be/WxcBEXkQoSE?si=Y5HnJgt-Ii_ZxLDl" target="_blank"><img src="./images/thumbnail-copilot-plus.png" width="700" /></a>
+
 ## 🛠️ Features
 
 - Engage with numerous LLMs seamlessly within Obsidian via the Copilot Chat window.
