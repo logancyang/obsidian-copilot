@@ -27,23 +27,24 @@ export class CopilotPlusModal extends Modal {
     const paragraph = container.createEl("p");
     paragraph.appendChild(
       document.createTextNode(
-        "Join our waitlist at the website below to be notified when Copilot Plus is available! We'll "
+        "Join our waitlist at the website below to be notified when Copilot Plus is available! "
       )
     );
+
+    paragraph.appendChild(document.createElement("br"));
+    paragraph.appendChild(document.createElement("br"));
+
+    paragraph.createEl("strong", {
+      text: "Alpha access spots are limited. ",
+    });
+    paragraph.appendChild(document.createTextNode("We'll "));
     paragraph.createEl("strong", {
       text: "prioritize supporters who have donated",
     });
     paragraph.appendChild(
       document.createTextNode(" to the project through either GitHub Sponsors or buymeacoffee. ")
     );
-
-    paragraph.appendChild(document.createElement("br"));
-    paragraph.appendChild(document.createElement("br"));
-
-    paragraph.createEl("strong", {
-      text: "Alpha access spots are limited, ",
-    });
-    paragraph.appendChild(document.createTextNode("so please consider "));
+    paragraph.appendChild(document.createTextNode(" so please consider "));
     const donateLink = paragraph.createEl("a", {
       href: "https://www.buymeacoffee.com/logancyang",
       text: "donating now",
