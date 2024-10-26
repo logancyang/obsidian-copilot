@@ -37,11 +37,13 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   const handleInputChange = async (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     const inputValue = event.target.value;
+    const cursorPos = event.target.selectionStart;
+
     setInputMessage(inputValue);
     adjustTextareaHeight();
 
-    if (inputValue.slice(-2) === "[[") {
-      showNoteTitleModal();
+    if (cursorPos >= 2 && inputValue.slice(cursorPos - 2, cursorPos) === "[[") {
+      showNoteTitleModal(cursorPos);
     } else if (inputValue === "/") {
       showCustomPromptModal();
     }
@@ -58,12 +60,21 @@ const ChatInput: React.FC<ChatInputProps> = ({
     adjustTextareaHeight();
   }, [inputMessage]);
 
-  const showNoteTitleModal = () => {
+  const showNoteTitleModal = (cursorPos: number) => {
     const fetchNoteTitles = async () => {
       const noteTitles = app.vault.getMarkdownFiles().map((file: TFile) => file.basename);
 
       new NoteTitleModal(app, noteTitles, (noteTitle: string) => {
-        setInputMessage(inputMessage.slice(0, -2) + ` [[${noteTitle}]]`);
+        const before = inputMessage.slice(0, cursorPos - 2);
+        const after = inputMessage.slice(cursorPos - 1);
+        setInputMessage(`${before}[[${noteTitle}]]${after}`);
+        // Add a delay to ensure the cursor is set after inputMessage is updated
+        setTimeout(() => {
+          if (textAreaRef.current) {
+            const newCursorPos = cursorPos + noteTitle.length + 2;
+            textAreaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+          }
+        }, 0);
       }).open();
     };
 
