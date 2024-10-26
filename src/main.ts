@@ -27,7 +27,7 @@ import { TimestampUsageStrategy } from "@/promptUsageStrategy";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { CopilotSettings, CopilotSettingTab } from "@/settings/SettingsPage";
 import SharedState from "@/sharedState";
-import { getAllNotesContent, sanitizeSettings } from "@/utils";
+import { sanitizeSettings } from "@/utils";
 import VectorDBManager from "@/vectorDBManager";
 import { Embeddings } from "@langchain/core/embeddings";
 import { search } from "@orama/orama";
@@ -549,7 +549,7 @@ export default class CopilotPlugin extends Plugin {
 
   async countTotalTokens(): Promise<number> {
     try {
-      const allContent = await getAllNotesContent(this.app.vault);
+      const allContent = await this.vectorStoreManager.getAllNonExcludedNotesContent();
       const totalTokens = await this.chainManager.chatModelManager.countTokens(allContent);
       return totalTokens;
     } catch (error) {

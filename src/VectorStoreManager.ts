@@ -281,6 +281,21 @@ class VectorStoreManager {
     return excludedFiles;
   }
 
+  public async getAllNonExcludedNotesContent(): Promise<string> {
+    let allContent = "";
+
+    const excludedFiles = await this.getExcludedFiles();
+    const nonExcludedFiles = this.app.vault
+      .getMarkdownFiles()
+      .filter((file) => !excludedFiles.has(file.path));
+
+    await Promise.all(nonExcludedFiles.map((file) => this.app.vault.cachedRead(file))).then(
+      (contents) => contents.map((c) => (allContent += c + " "))
+    );
+
+    return allContent;
+  }
+
   public async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
     await this.waitForInitialization();
     let rateLimitNoticeShown = false;
