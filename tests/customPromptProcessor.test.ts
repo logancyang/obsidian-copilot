@@ -12,13 +12,16 @@ jest.mock("obsidian", () => ({
 }));
 
 // Mock the utility functions
-jest.mock("@/utils", () => ({
-  extractNoteTitles: jest.fn().mockReturnValue([]),
+jest.mock("@/helpers/noteHelper", () => ({
   getNoteFileFromTitle: jest.fn(),
   getFileContent: jest.fn(),
   getFileName: jest.fn(),
   getNotesFromPath: jest.fn(),
   getNotesFromTags: jest.fn(),
+}));
+
+jest.mock("@/helpers/promptHelpers", () => ({
+  extractNoteTitles: jest.fn().mockReturnValue([]),
   processVariableNameForNotePath: jest.fn(),
 }));
 
