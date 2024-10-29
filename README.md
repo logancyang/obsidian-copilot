@@ -20,7 +20,7 @@ If you enjoy Copilot for Obsidian, please consider [sponsoring this project](htt
 <a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
 
 SPECIAL THANKS TO OUR TOP SPONSORS:
-@pedramamini, @Arlorean, @dashinja, @azagore, @MTGMAD, @gpythomas, @emaynard, @scmarinelli, @borthwick
+@pedramamini, @Arlorean, @dashinja, @azagore, @MTGMAD, @gpythomas, @emaynard, @scmarinelli, @borthwick, @adamhill, @gluecode, @rusi, @timgrote, @JiaruiYu-Consilium, @ddocta, @AMOz1, @agu3rra
 
 [Changelog](https://github.com/logancyang/obsidian-copilot/releases)
 
@@ -29,6 +29,10 @@ SPECIAL THANKS TO OUR TOP SPONSORS:
 In the new release v2.7.0, we will migrate off of PouchDB to Orama. This will require you to re-index your vault. With the new Orama db, you can find your index file at `.obsidian/copilot-index-<hash>.json`.
 
 ## 🤖 v2.7.0 Copilot Plus (alpha) demo video - AI Agent for Obsidian! 🚀
+
+Copilot Plus is a brand new mode that brings powerful agentic capabilities to Obsidian. Think of it as Cursor inside Obsidian but optimized for PKM use cases instead of coding. It is still in limited alpha and only available to alpha testers. If you are interested in joining the alpha, please consider sponsoring the project on Github (please have your email info in your github profile or I won't be able to reach you) or buy me coffees!
+
+Check out the demo video below for the first sneak peak of what Copilot Plus can do. It is under active development so expect more features to come very soon!
 
 <a href="https://youtu.be/WxcBEXkQoSE?si=Y5HnJgt-Ii_ZxLDl" target="_blank"><img src="./images/thumbnail-copilot-plus.png" width="700" /></a>
 
@@ -48,7 +52,7 @@ In the new release v2.7.0, we will migrate off of PouchDB to Orama. This will re
 - All QA modes leverage retrieval augmentation with a **local index**, ensuring your data isn't sent to a cloud-based vector search service.
 - **Copilot Plus (in limited Alpha)**: supercharge your second brain with a **powerful AI agent** right inside your Obsidian vault. More powerful than anything else out there. [Learn more here](https://obsidiancopilot.com).
 
-Chat and Vault QA modes are completely free to use. Copilot Plus is currently in limited alpha and free to use for alpha testers. If you are interested in joining the alpha, please consider sponsoring the project! [learn more here](https://obsidiancopilot.com).
+Chat and Vault QA modes are completely free to use. Copilot Plus is currently in limited alpha and free to use for alpha testers.
 
 ## Model Providers
 
@@ -58,9 +62,9 @@ Chat and Vault QA modes are completely free to use. Copilot Plus is currently in
 
 ## 🤗 New to Copilot? Quick Guide for Beginners
 
-The simplest way to get started is to get an OpenAI API key and set it in the Copilot settings. Then simply pick `gpt-4o` or `gpt-4o-mini` in the model dropdown to start chatting. [Learn more here](https://obsidiancopilot.com).
+The simplest way to get started is to get an OpenAI API key (with payment method set up with OpenAI) and set it in the Copilot settings. Then simply pick `gpt-4o` or `gpt-4o-mini` in the model dropdown to start chatting. Please check out the [documentation](https://obsidiancopilot.com/en/docs) for more details.
 
-Try going through all the Copilot commands in the command palette, and see what they do. Checkout my [youtube channel](https://youtube.com/@loganhallucinates?sub_confirmation=1) for previous demos.
+Try going through all the Copilot commands in the command palette, and see what they do. You can also checkout my [youtube channel](https://youtube.com/@loganhallucinates?sub_confirmation=1) for previous demos.
 
 #### 🔧 Copilot Settings
 
@@ -174,6 +178,6 @@ If you share my vision, please consider [sponsoring this project](https://github
 
 <a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
 
-Please also help spread the word by sharing about the Copilot for Obsidian Plugin on Twitter, Reddit, or any other social media platform you use.
+Please also help spread the word by sharing about the Copilot for Obsidian Plugin on Twitter/X, Reddit, or any other social media platform you use.
 
 You can find me on Twitter/X [@logancyang](https://twitter.com/logancyang).
