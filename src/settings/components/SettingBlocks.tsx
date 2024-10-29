@@ -1,4 +1,4 @@
-import { CustomModel } from "@/aiParams";
+import { CustomModel } from "@/models/aiParams";
 import { Notice } from "obsidian";
 import React, { useState } from "react";
 

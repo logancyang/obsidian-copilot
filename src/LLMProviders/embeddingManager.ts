@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { CustomModel, LangChainParams } from "@/aiParams";
+import { CustomModel, LangChainParams } from "@/models/aiParams";
 import { EmbeddingModelProviders } from "@/constants";
-import EncryptionService from "@/encryptionService";
+import EncryptionService from "@/services/encryptionService";
 import { CustomError } from "@/error";
-import { ProxyOpenAIEmbeddings } from "@/langchainWrappers";
+import { ProxyOpenAIEmbeddings } from "@/langchain/langchainWrappers";
 import { CohereEmbeddings } from "@langchain/cohere";
 import { Embeddings } from "@langchain/core/embeddings";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";

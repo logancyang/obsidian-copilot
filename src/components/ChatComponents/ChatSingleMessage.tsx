@@ -1,7 +1,7 @@
 import { ChatButtons } from "@/components/ChatComponents/ChatButtons";
 import { BotIcon, UserIcon } from "@/components/Icons";
 import { USER_SENDER } from "@/constants";
-import { ChatMessage } from "@/sharedState";
+import { ChatMessage } from "@/services/sharedState";
 import { App, Component, MarkdownRenderer } from "obsidian";
 import React, { useEffect, useRef, useState } from "react";
 

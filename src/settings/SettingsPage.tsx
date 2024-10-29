@@ -1,5 +1,5 @@
-import { CustomModel } from "@/aiParams";
-import { ChainType } from "@/chainFactory";
+import { CustomModel } from "@/models/aiParams";
+import { ChainType } from "@/langchain/chainFactory";
 import CopilotView from "@/components/CopilotView";
 import { CHAT_VIEWTYPE } from "@/constants";
 import CopilotPlugin from "@/main";

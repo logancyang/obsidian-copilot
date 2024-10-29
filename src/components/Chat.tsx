@@ -1,23 +1,24 @@
 import ChainManager from "@/LLMProviders/chainManager";
-import { useAIState } from "@/aiState";
-import { updateChatMemory } from "@/chatUtils";
+import { updateChatMemory } from "@/helpers/chatHelper";
 import ChatIcons from "@/components/ChatComponents/ChatIcons";
 import ChatInput from "@/components/ChatComponents/ChatInput";
 import ChatMessages from "@/components/ChatComponents/ChatMessages";
 import { ABORT_REASON, AI_SENDER, EVENT_NAMES, USER_SENDER } from "@/constants";
-import { AppContext } from "@/context";
-import { CustomPromptProcessor } from "@/customPromptProcessor";
-import { getAIResponse } from "@/langchainStream";
+import { AppContext } from "@/components/context";
+import { CustomPromptProcessor } from "@/services/customPromptProcessor";
+import { getAIResponse } from "@/langchain/langchainStream";
 import CopilotPlugin from "@/main";
 import { CopilotSettings } from "@/settings/SettingsPage";
-import SharedState, { ChatMessage, useSharedState } from "@/sharedState";
+import SharedState, { ChatMessage } from "@/services/sharedState";
+import { formatDateTime } from "@/utils";
+import { MarkdownView, Notice, TFile } from "obsidian";
+import React, { useContext, useEffect, useState } from "react";
 import {
   createChangeToneSelectionPrompt,
   createTranslateSelectionPrompt,
   eli5SelectionPrompt,
   emojifyPrompt,
   fixGrammarSpellingSelectionPrompt,
-  formatDateTime,
   glossaryPrompt,
   removeUrlsFromSelectionPrompt,
   rewriteLongerSelectionPrompt,
@@ -28,9 +29,8 @@ import {
   simplifyPrompt,
   summarizePrompt,
   tocPrompt,
-} from "@/utils";
-import { MarkdownView, Notice, TFile } from "obsidian";
-import React, { useContext, useEffect, useState } from "react";
+} from "@/helpers/promptHelpers";
+import { useAIState, useSharedState } from "@/helpers/hooks";
 
 interface CreateEffectOptions {
   custom_temperature?: number;

@@ -1,7 +1,8 @@
-import { CustomPrompt, CustomPromptProcessor } from "@/customPromptProcessor";
+import { CustomPrompt, CustomPromptProcessor } from "@/services/customPromptProcessor";
 import { CopilotSettings } from "@/settings/SettingsPage";
-import { extractNoteTitles, getFileContent, getNoteFileFromTitle, getNotesFromPath } from "@/utils";
 import { Notice, TFile, Vault } from "obsidian";
+import { getFileContent, getNoteFileFromTitle, getNotesFromPath } from "@/helpers/noteHelper";
+import { extractNoteTitles } from "@/helpers/promptHelpers";
 
 // Mock Obsidian
 jest.mock("obsidian", () => ({

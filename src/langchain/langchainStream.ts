@@ -1,7 +1,7 @@
 import { AI_SENDER } from "@/constants";
 import ChainManager from "@/LLMProviders/chainManager";
-import { ChatMessage } from "@/sharedState";
-import { formatDateTime } from "./utils";
+import { ChatMessage } from "@/services/sharedState";
+import { formatDateTime } from "../utils";
 
 export type Role = "assistant" | "user" | "system";
 

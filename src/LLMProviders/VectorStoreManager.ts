@@ -1,15 +1,16 @@
-import { LangChainParams } from "@/aiParams";
-import EncryptionService from "@/encryptionService";
+import { LangChainParams } from "@/models/aiParams";
+import EncryptionService from "@/services/encryptionService";
 import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { CopilotSettings } from "@/settings/SettingsPage";
-import { areEmbeddingModelsSame, getNotesFromTags, isPathInList } from "@/utils";
-import VectorDBManager from "@/vectorDBManager";
+import VectorDBManager from "@/LLMProviders/vectorDBManager";
 import { Embeddings } from "@langchain/core/embeddings";
 import { create, load, Orama, remove, removeMultiple, save, search } from "@orama/orama";
 import { MD5 } from "crypto-js";
 import { App, Notice } from "obsidian";
-import { VAULT_VECTOR_STORE_STRATEGY } from "./constants";
+import { VAULT_VECTOR_STORE_STRATEGY } from "../constants";
+import { getNotesFromTags, isPathInList } from "@/helpers/noteHelper";
+import { areEmbeddingModelsSame } from "@/helpers/langchainHelper";
 
 class VectorStoreManager {
   private app: App;

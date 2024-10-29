@@ -1,10 +1,10 @@
 import ChainManager from "@/LLMProviders/chainManager";
 import Chat from "@/components/Chat";
 import { CHAT_VIEWTYPE } from "@/constants";
-import { AppContext } from "@/context";
+import { AppContext } from "@/components/context";
 import CopilotPlugin from "@/main";
 import { CopilotSettings } from "@/settings/SettingsPage";
-import SharedState from "@/sharedState";
+import SharedState from "@/services/sharedState";
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
 import { Root, createRoot } from "react-dom/client";

@@ -1,6 +1,6 @@
 import { CHUNK_SIZE } from "@/constants";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
-import { RateLimiter } from "@/rateLimiter";
+import { RateLimiter } from "@/services/rateLimiterService";
 import { Embeddings } from "@langchain/core/embeddings";
 import { insert, Orama, search, update } from "@orama/orama";
 import { MD5 } from "crypto-js";

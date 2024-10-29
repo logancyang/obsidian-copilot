@@ -1,6 +1,6 @@
-import { CustomModel } from "@/aiParams";
+import { CustomModel } from "@/models/aiParams";
 import { CopilotSettings } from "@/settings/SettingsPage";
-import { ChainType } from "./chainFactory";
+import { ChainType } from "./langchain/chainFactory";
 
 export const CHAT_VIEWTYPE = "copilot-chat-view";
 export const USER_SENDER = "user";

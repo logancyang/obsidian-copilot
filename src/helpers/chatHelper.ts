@@ -1,7 +1,10 @@
+// helper contains business-related tools；
+// generally, util contains business-independent tools
+
 import { AI_SENDER, USER_SENDER } from "@/constants";
-import { ChatMessage } from "@/sharedState";
+import { ChatMessage } from "@/services/sharedState";
 import { stringToFormattedDateTime } from "@/utils";
-import MemoryManager from "./LLMProviders/memoryManager";
+import MemoryManager from "../LLMProviders/memoryManager";
 
 export function parseChatContent(content: string): ChatMessage[] {
   const lines = content.split("\n");

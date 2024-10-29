@@ -1,7 +1,7 @@
-import { CustomModel, LangChainParams } from "@/aiParams";
-import { ChainType } from "@/chainFactory";
+import { CustomModel, LangChainParams } from "@/models/aiParams";
+import { ChainType } from "@/langchain/chainFactory";
 import { ChatModelProviders } from "@/constants";
-import EncryptionService from "@/encryptionService";
+import EncryptionService from "@/services/encryptionService";
 import React from "react";
 import { useSettingsContext } from "../contexts/SettingsContext";
 import CommandToggleSettings from "./CommandToggleSettings";

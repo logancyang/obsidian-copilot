@@ -1,5 +1,4 @@
-import { extractNoteTitles, getNoteFileFromTitle } from "@/utils";
-import VectorDBManager from "@/vectorDBManager";
+import VectorDBManager from "@/LLMProviders/vectorDBManager";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
 import { Embeddings } from "@langchain/core/embeddings";
@@ -8,6 +7,8 @@ import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { Orama, search } from "@orama/orama";
 import { Vault } from "obsidian";
+import { getNoteFileFromTitle } from "@/helpers/noteHelper";
+import { extractNoteTitles } from "@/helpers/promptHelpers";
 
 export class HybridRetriever extends BaseRetriever {
   public lc_namespace = ["hybrid_retriever"];

@@ -1,4 +1,4 @@
-import { CustomModel } from "@/aiParams";
+import { CustomModel } from "@/models/aiParams";
 import { EmbeddingModelProviders, VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
 import { useSettingsContext } from "@/settings/contexts/SettingsContext";
 import React from "react";

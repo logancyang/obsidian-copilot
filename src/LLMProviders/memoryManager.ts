@@ -1,4 +1,4 @@
-import { LangChainParams } from "@/aiParams";
+import { LangChainParams } from "@/models/aiParams";
 import { BaseChatMemory, BufferWindowMemory } from "langchain/memory";
 
 export default class MemoryManager {

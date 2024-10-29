@@ -1,8 +1,8 @@
 import ChainManager from "@/LLMProviders/chainManager";
-import VectorStoreManager from "@/VectorStoreManager";
-import { CustomModel, LangChainParams, SetChainOptions } from "@/aiParams";
-import { ChainType } from "@/chainFactory";
-import { parseChatContent, updateChatMemory } from "@/chatUtils";
+import VectorStoreManager from "@/LLMProviders/VectorStoreManager";
+import { CustomModel, LangChainParams, SetChainOptions } from "@/models/aiParams";
+import { ChainType } from "@/langchain/chainFactory";
+import { parseChatContent, updateChatMemory } from "@/helpers/chatHelper";
 import { registerBuiltInCommands } from "@/commands";
 import { AddPromptModal } from "@/components/AddPromptModal";
 import { AdhocPromptModal } from "@/components/AdhocPromptModal";
@@ -20,15 +20,13 @@ import {
   EVENT_NAMES,
   VAULT_VECTOR_STORE_STRATEGY,
 } from "@/constants";
-import { CustomPromptProcessor } from "@/customPromptProcessor";
-import EncryptionService from "@/encryptionService";
+import { CustomPromptProcessor, TimestampUsageStrategy } from "@/services/customPromptProcessor";
+import EncryptionService from "@/services/encryptionService";
 import { CustomError } from "@/error";
-import { TimestampUsageStrategy } from "@/promptUsageStrategy";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { CopilotSettings, CopilotSettingTab } from "@/settings/SettingsPage";
-import SharedState from "@/sharedState";
-import { sanitizeSettings } from "@/utils";
-import VectorDBManager from "@/vectorDBManager";
+import SharedState from "@/services/sharedState";
+import VectorDBManager from "@/LLMProviders/vectorDBManager";
 import { Embeddings } from "@langchain/core/embeddings";
 import { search } from "@orama/orama";
 import {
@@ -41,6 +39,7 @@ import {
   TFolder,
   WorkspaceLeaf,
 } from "obsidian";
+import { sanitizeSettings } from "@/helpers/settingHelper";
 
 export default class CopilotPlugin extends Plugin {
   settings: CopilotSettings;

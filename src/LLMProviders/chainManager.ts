@@ -1,18 +1,13 @@
-import { CustomModel, LangChainParams, SetChainOptions } from "@/aiParams";
-import ChainFactory, { ChainType, Document } from "@/chainFactory";
+import { CustomModel, LangChainParams, SetChainOptions } from "@/models/aiParams";
+import ChainFactory, { ChainType, Document } from "@/langchain/chainFactory";
 import { ABORT_REASON, AI_SENDER, BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
-import EncryptionService from "@/encryptionService";
+import EncryptionService from "@/services/encryptionService";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { CopilotSettings } from "@/settings/SettingsPage";
-import { ChatMessage } from "@/sharedState";
-import {
-  extractChatHistory,
-  extractUniqueTitlesFromDocs,
-  formatDateTime,
-  isSupportedChain,
-} from "@/utils";
-import VectorDBManager from "@/vectorDBManager";
-import VectorStoreManager from "@/VectorStoreManager";
+import { ChatMessage } from "@/services/sharedState";
+import { formatDateTime } from "@/utils";
+import VectorDBManager from "@/LLMProviders/vectorDBManager";
+import VectorStoreManager from "@/LLMProviders/VectorStoreManager";
 import {
   ChatPromptTemplate,
   HumanMessagePromptTemplate,
@@ -26,6 +21,11 @@ import ChatModelManager from "./chatModelManager";
 import EmbeddingsManager from "./embeddingManager";
 import MemoryManager from "./memoryManager";
 import PromptManager from "./promptManager";
+import {
+  extractChatHistory,
+  extractUniqueTitlesFromDocs,
+  isSupportedChain,
+} from "@/helpers/langchainHelper";
 
 export default class ChainManager {
   private static chain: RunnableSequence;

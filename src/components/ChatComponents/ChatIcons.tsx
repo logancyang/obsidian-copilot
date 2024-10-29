@@ -1,16 +1,17 @@
-import { CustomModel, SetChainOptions } from "@/aiParams";
+import { CustomModel, SetChainOptions } from "@/models/aiParams";
 import { CopilotPlusModal } from "@/components/CopilotPlusModal";
 import { AI_SENDER, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { CustomError } from "@/error";
 import { CopilotSettings } from "@/settings/SettingsPage";
-import { ChatMessage } from "@/sharedState";
+import { ChatMessage } from "@/services/sharedState";
 import { formatDateTime } from "@/utils";
 import { Notice, Vault } from "obsidian";
 import React, { useEffect, useState } from "react";
 
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/langchain/chainFactory";
 import { RefreshIcon, SaveAsNoteIcon, UseActiveNoteAsContextIcon } from "@/components/Icons";
-import { stringToChainType } from "@/utils";
+
+import { stringToChainType } from "@/helpers/langchainHelper";
 
 interface ChatIconsProps {
   currentModelKey: string;

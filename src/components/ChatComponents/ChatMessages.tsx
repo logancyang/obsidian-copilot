@@ -1,5 +1,5 @@
 import ChatSingleMessage from "@/components/ChatComponents/ChatSingleMessage";
-import { ChatMessage } from "@/sharedState";
+import { ChatMessage } from "@/services/sharedState";
 import { App } from "obsidian";
 import React, { useEffect, useState } from "react";
 

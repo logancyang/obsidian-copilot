@@ -1,13 +1,12 @@
 import * as Obsidian from "obsidian";
 import { TFile } from "obsidian";
 import {
-  extractNoteTitles,
   getNotesFromPath,
   getNotesFromTags,
   isFolderMatch,
   isPathInList,
-  processVariableNameForNotePath,
-} from "../src/utils";
+} from "@/helpers/noteHelper";
+import { extractNoteTitles, processVariableNameForNotePath } from "@/helpers/promptHelpers";
 
 describe("isFolderMatch", () => {
   it("should return file from the folder name 1", async () => {

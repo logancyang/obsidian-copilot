@@ -1,6 +1,6 @@
 import { ListPromptModal } from "@/components/ListPromptModal";
 import { NoteTitleModal } from "@/components/NoteTitleModal";
-import { CustomPromptProcessor } from "@/customPromptProcessor";
+import { CustomPromptProcessor } from "@/services/customPromptProcessor";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import { IconPlayerStopFilled, IconSend } from "@tabler/icons-react";
 import { App, TFile } from "obsidian";

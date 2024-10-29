@@ -1,4 +1,4 @@
-import EncryptionService from "@/encryptionService";
+import EncryptionService from "@/services/encryptionService";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import { Platform } from "obsidian";
 

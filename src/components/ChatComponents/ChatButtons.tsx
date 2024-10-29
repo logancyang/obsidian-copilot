@@ -7,7 +7,7 @@ import {
   RegenerateIcon,
 } from "@/components/Icons";
 import { USER_SENDER } from "@/constants";
-import { ChatMessage } from "@/sharedState";
+import { ChatMessage } from "@/services/sharedState";
 import React from "react";
 
 interface ChatButtonsProps {

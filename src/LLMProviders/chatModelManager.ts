@@ -1,7 +1,7 @@
-import { CustomModel, LangChainParams, ModelConfig } from "@/aiParams";
+import { CustomModel, LangChainParams, ModelConfig } from "@/models/aiParams";
 import { BUILTIN_CHAT_MODELS, ChatModelProviders } from "@/constants";
-import EncryptionService from "@/encryptionService";
-import { ChatAnthropicWrapped, ProxyChatOpenAI } from "@/langchainWrappers";
+import EncryptionService from "@/services/encryptionService";
+import { ChatAnthropicWrapped, ProxyChatOpenAI } from "@/langchain/langchainWrappers";
 import { ChatCohere } from "@langchain/cohere";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
