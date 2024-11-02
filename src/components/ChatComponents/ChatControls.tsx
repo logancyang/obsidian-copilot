@@ -1,10 +1,9 @@
 import { CustomModel, SetChainOptions } from "@/aiParams";
 import { CopilotPlusModal } from "@/components/CopilotPlusModal";
-import { AI_SENDER, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
+import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { CustomError } from "@/error";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChatMessage } from "@/sharedState";
-import { formatDateTime } from "@/utils";
 import { Notice, Vault } from "obsidian";
 import React, { useEffect, useState } from "react";
 
@@ -12,7 +11,7 @@ import { ChainType } from "@/chainFactory";
 import { RefreshIcon, SaveAsNoteIcon, UseActiveNoteAsContextIcon } from "@/components/Icons";
 import { stringToChainType } from "@/utils";
 
-interface ChatIconsProps {
+interface ChatControlsProps {
   currentModelKey: string;
   setCurrentModelKey: (modelKey: string) => void;
   currentChain: ChainType;
@@ -28,7 +27,7 @@ interface ChatIconsProps {
   debug?: boolean;
 }
 
-const ChatIcons: React.FC<ChatIconsProps> = ({
+const ChatControls: React.FC<ChatControlsProps> = ({
   currentModelKey,
   setCurrentModelKey,
   currentChain,
@@ -76,13 +75,6 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         if (vault_qa_strategy === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH) {
           await onRefreshVaultContext();
         }
-        const activeNoteOnMessage: ChatMessage = {
-          sender: AI_SENDER,
-          message: `OK Feel free to ask me questions about your vault: **${app.vault.getName()}**. \n\nIf you have *NEVER* as your auto-index strategy, you must click the *Refresh Index* button below, or run Copilot command: *Index vault for QA* first before you proceed!\n\nPlease note that this is a retrieval-based QA. Specific questions are encouraged. For generic questions like 'give me a summary', 'brainstorm based on the content', Chat mode with direct \`[[note title]]\` mention is a more suitable choice.`,
-          isVisible: true,
-          timestamp: formatDateTime(new Date()),
-        };
-        addMessage(activeNoteOnMessage);
       }
 
       try {
@@ -171,11 +163,14 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
         <>
           <button className="chat-icon-button clickable-icon" onClick={onRefreshVaultContext}>
             <UseActiveNoteAsContextIcon className="icon-scaler" />
-            <span className="tooltip-text">
-              Refresh Index
-              <br />
-              for Vault
-            </span>
+            <div
+              className="tooltip-text"
+              style={{
+                transform: "translateX(-90%)",
+              }}
+            >
+              <span>Refresh Index for Vault</span>
+            </div>
           </button>
           {/* <button className="chat-icon-button clickable-icon" onClick={handleFindSimilarNotes}>
             <ConnectionIcon className="icon-scaler" />
@@ -187,4 +182,4 @@ const ChatIcons: React.FC<ChatIconsProps> = ({
   );
 };
 
-export default ChatIcons;
+export default ChatControls;
