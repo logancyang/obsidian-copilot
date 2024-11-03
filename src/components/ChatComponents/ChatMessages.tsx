@@ -1,4 +1,7 @@
+import { ChainType } from "@/chainFactory";
 import ChatSingleMessage from "@/components/ChatComponents/ChatSingleMessage";
+import { SuggestedPrompts } from "@/components/ChatComponents/SuggestedPrompts";
+import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { ChatMessage } from "@/sharedState";
 import { App } from "obsidian";
 import React, { useEffect, useState } from "react";
@@ -8,21 +11,27 @@ interface ChatMessagesProps {
   currentAiMessage: string;
   loading?: boolean;
   app: App;
+  indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY;
+  currentChain: ChainType;
   onInsertAtCursor: (message: string) => void;
   onRegenerate: (messageIndex: number) => void;
   onEdit: (messageIndex: number, newMessage: string) => void;
   onDelete: (messageIndex: number) => void;
+  onSelectSuggestedPrompt: (prompt: string) => void;
 }
 
 const ChatMessages: React.FC<ChatMessagesProps> = ({
   chatHistory,
   currentAiMessage,
   loading,
+  currentChain,
+  indexVaultToVectorStore,
   app,
   onInsertAtCursor,
   onRegenerate,
   onEdit,
   onDelete,
+  onSelectSuggestedPrompt,
 }) => {
   const [loadingDots, setLoadingDots] = useState("");
 
@@ -50,6 +59,18 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
     }
     return () => clearInterval(intervalId);
   }, [loading]);
+
+  if (!chatHistory.filter((message) => message.isVisible).length && !currentAiMessage) {
+    return (
+      <div className="chat-messages">
+        <SuggestedPrompts
+          chainType={currentChain}
+          indexVaultToVectorStore={indexVaultToVectorStore}
+          onClick={onSelectSuggestedPrompt}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="chat-messages">

@@ -91,6 +91,7 @@ If your plugin does not need CSS, delete this file.
 }
 
 .tooltip-text {
+  max-width: 400px;
   visibility: hidden;
   opacity: 0;
   background-color: #333;

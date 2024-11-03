@@ -1,10 +1,16 @@
 import ChainManager from "@/LLMProviders/chainManager";
 import { useAIState } from "@/aiState";
 import { updateChatMemory } from "@/chatUtils";
-import ChatIcons from "@/components/ChatComponents/ChatIcons";
+import ChatControls from "@/components/ChatComponents/ChatControls";
 import ChatInput from "@/components/ChatComponents/ChatInput";
 import ChatMessages from "@/components/ChatComponents/ChatMessages";
-import { ABORT_REASON, AI_SENDER, EVENT_NAMES, USER_SENDER } from "@/constants";
+import {
+  ABORT_REASON,
+  AI_SENDER,
+  EVENT_NAMES,
+  USER_SENDER,
+  VAULT_VECTOR_STORE_STRATEGY,
+} from "@/constants";
 import { AppContext } from "@/context";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { getAIResponse } from "@/langchainStream";
@@ -525,17 +531,22 @@ ${chatContent}`;
   return (
     <div className="chat-container">
       <ChatMessages
+        currentChain={currentChain}
         chatHistory={chatHistory}
         currentAiMessage={currentAiMessage}
+        indexVaultToVectorStore={settings.indexVaultToVectorStore as VAULT_VECTOR_STORE_STRATEGY}
         loading={loading}
         app={app}
         onInsertAtCursor={handleInsertAtCursor}
         onRegenerate={handleRegenerate}
         onEdit={handleEdit}
         onDelete={handleDelete}
+        onSelectSuggestedPrompt={(prompt) => {
+          setInputMessage(prompt);
+        }}
       />
       <div className="bottom-container">
-        <ChatIcons
+        <ChatControls
           currentModelKey={currentModelKey}
           setCurrentModelKey={setModelKey}
           currentChain={currentChain}
