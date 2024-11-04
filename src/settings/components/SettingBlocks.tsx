@@ -192,7 +192,7 @@ const ModelCard: React.FC<{
 
   return (
     <div className={`model-card ${isExpanded ? "expanded" : ""} ${isDefault ? "selected" : ""}`}>
-      {onDelete && (
+      {!isDefault && onDelete && (
         <button
           className="model-delete-icon"
           onClick={(e) => {
@@ -370,7 +370,7 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
                   )}
                 </td>
                 <td>
-                  {!model.core && (
+                  {getModelKey(model) !== defaultModelKey && !model.core && (
                     <button onClick={() => onDeleteModel(getModelKey(model))}>Delete</button>
                   )}
                 </td>
