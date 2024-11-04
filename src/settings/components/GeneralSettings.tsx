@@ -74,8 +74,8 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         isEmbeddingModel={false}
       />
       <div className="chat-icon-selection-tooltip">
+        <h2>Default Mode</h2>
         <div className="select-wrapper">
-          <h2>Default Mode</h2>
           <select
             id="defaultChainSelect"
             className="chat-icon-selection"
@@ -85,7 +85,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
             <option value={ChainType.LLM_CHAIN}>Chat</option>
             <option value={ChainType.VAULT_QA_CHAIN}>Vault QA (Basic)</option>
           </select>
-          <span className="tooltip-text">Default Mode Selection</span>
+          {/*<span className="tooltip-text">Default Mode Selection</span>*/}
         </div>
       </div>
       <TextComponent
