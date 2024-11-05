@@ -24,10 +24,6 @@ SPECIAL THANKS TO OUR TOP SPONSORS:
 
 [Changelog](https://github.com/logancyang/obsidian-copilot/releases)
 
-## 🚨 IMPORTANT NOTICE
-
-In the new release v2.7.0, we will migrate off of PouchDB to Orama. This will require you to re-index your vault. With the new Orama db, you can find your index file at `.obsidian/copilot-index-<hash>.json`.
-
 ## 🤖 v2.7.0 Copilot Plus (alpha) demo video - AI Agent for Obsidian! 🚀
 
 Copilot Plus is a brand new mode that brings powerful agentic capabilities to Obsidian. Think of it as Cursor inside Obsidian but optimized for PKM use cases instead of coding. It is still in limited alpha and only available to alpha testers. If you are interested in joining the alpha, please consider sponsoring the project on Github (please have your email info in your github profile or I won't be able to reach you) or buy me coffees!

@@ -1,6 +1,6 @@
 {
   "name": "obsidian-copilot",
-  "version": "2.7.0",
+  "version": "2.7.1",
   "description": "ChatGPT integration for Obsidian",
   "main": "main.js",
   "scripts": {
@@ -60,7 +60,6 @@
     "web-streams-polyfill": "^3.3.2"
   },
   "dependencies": {
-    "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
     "@huggingface/inference": "^2.6.4",
     "@koa/cors": "^5.0.0",
     "@langchain/anthropic": "^0.3.3",
@@ -75,7 +74,6 @@
     "cohere-ai": "^7.13.0",
     "crypto-js": "^4.1.1",
     "esbuild-plugin-svg": "^0.1.0",
-    "esbuild-plugins-node-modules-polyfill": "^1.6.5",
     "eventsource-parser": "^1.0.0",
     "koa": "^2.14.2",
     "koa-proxies": "^0.12.3",
