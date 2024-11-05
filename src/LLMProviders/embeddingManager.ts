@@ -180,6 +180,7 @@ export default class EmbeddingManager {
       [EmbeddingModelProviders.OLLAMA]: {
         baseUrl: customModel.baseUrl || "http://localhost:11434",
         model: modelName,
+        truncate: true,
       },
       [EmbeddingModelProviders.OPENAI_FORMAT]: {
         modelName,

@@ -29,7 +29,7 @@
   },
   "license": "AGPL-3.0",
   "devDependencies": {
-    "@langchain/ollama": "^0.1.0",
+    "@langchain/ollama": "^0.1.1",
     "@testing-library/jest-dom": "^5.16.5",
     "@testing-library/react": "^14.0.0",
     "@types/crypto-js": "^4.1.1",
