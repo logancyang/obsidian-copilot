@@ -85,7 +85,6 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
             <option value={ChainType.LLM_CHAIN}>Chat</option>
             <option value={ChainType.VAULT_QA_CHAIN}>Vault QA (Basic)</option>
           </select>
-          {/*<span className="tooltip-text">Default Mode Selection</span>*/}
         </div>
       </div>
       <TextComponent
