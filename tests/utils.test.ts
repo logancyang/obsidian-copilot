@@ -2,6 +2,7 @@ import * as Obsidian from "obsidian";
 import { TFile } from "obsidian";
 import {
   extractNoteTitles,
+  getFilePathsFromPatterns,
   getNotesFromPath,
   getNotesFromTags,
   isFolderMatch,
@@ -310,5 +311,112 @@ describe("extractNoteTitles", () => {
     const expected = ["Note-1", "Note_2", "Note#3"];
     const result = extractNoteTitles(query);
     expect(result).toEqual(expected);
+  });
+});
+
+describe("getFilePathsFromPatterns", () => {
+  it("should return files matching tag patterns", async () => {
+    const mockVault = new Obsidian.Vault();
+    const patterns = ["#tag1"];
+
+    const result = await getFilePathsFromPatterns(patterns, mockVault);
+    expect(result).toEqual(["test/test2/note1.md", "note4.md"]);
+  });
+
+  it("should return files matching file extension patterns", async () => {
+    const mockVault = new Obsidian.Vault();
+    mockVault.getFiles = jest.fn().mockReturnValue([
+      { path: "test/image1.jpg", name: "image1.jpg" },
+      { path: "test/doc.md", name: "doc.md" },
+      { path: "image2.jpg", name: "image2.jpg" },
+      { path: "test/image3.JPG", name: "image3.JPG" },
+    ]);
+
+    const patterns = ["*.jpg"];
+
+    const result = await getFilePathsFromPatterns(patterns, mockVault);
+    expect(result).toEqual(["test/image1.jpg", "image2.jpg", "test/image3.JPG"]);
+  });
+
+  it("should return files matching path patterns", async () => {
+    const mockVault = new Obsidian.Vault();
+    mockVault.getFiles = jest.fn().mockReturnValue([
+      { path: "test/test2/note1.md", name: "note1.md" },
+      { path: "test/note2.md", name: "note2.md" },
+      { path: "test2/note3.md", name: "note3.md" },
+    ]);
+
+    const patterns = ["test/test2"];
+
+    const result = await getFilePathsFromPatterns(patterns, mockVault);
+    expect(result).toEqual(["test/test2/note1.md"]);
+  });
+
+  it("should handle multiple patterns of different types", async () => {
+    const mockVault = new Obsidian.Vault();
+    mockVault.getFiles = jest.fn().mockReturnValue([
+      { path: "test/test2/note1.md", name: "note1.md" },
+      { path: "test/image1.jpg", name: "image1.jpg" },
+      { path: "note4.md", name: "note4.md" },
+      { path: "image2.jpg", name: "image2.jpg" },
+    ]);
+
+    const patterns = ["#tag1", "*.jpg", "test/test2"];
+
+    const result = await getFilePathsFromPatterns(patterns, mockVault);
+    expect(result).toEqual([
+      "test/test2/note1.md", // From tag1 and test/test2
+      "note4.md", // From tag1
+      "test/image1.jpg", // From *.jpg
+      "image2.jpg", // From *.jpg
+    ]);
+  });
+
+  it("should handle note title patterns with [[]]", async () => {
+    const mockVault = new Obsidian.Vault();
+    mockVault.getFiles = jest.fn().mockReturnValue([
+      { path: "test/test2/note1.md", name: "note1.md" },
+      { path: "test/note2.md", name: "note2.md" },
+    ]);
+
+    const patterns = ["[[note1]]"];
+
+    const result = await getFilePathsFromPatterns(patterns, mockVault);
+    expect(result).toEqual(["test/test2/note1.md"]);
+  });
+
+  it("should return empty array for non-matching patterns", async () => {
+    const mockVault = new Obsidian.Vault();
+    mockVault.getFiles = jest.fn().mockReturnValue([
+      { path: "test/test2/note1.md", name: "note1.md" },
+      { path: "test/note2.md", name: "note2.md" },
+    ]);
+
+    const patterns = ["#nonexistenttag", "*.xyz", "nonexistentfolder"];
+
+    const result = await getFilePathsFromPatterns(patterns, mockVault);
+    expect(result).toEqual([]);
+  });
+
+  it("should handle empty pattern array", async () => {
+    const mockVault = new Obsidian.Vault();
+    const patterns: string[] = [];
+
+    const result = await getFilePathsFromPatterns(patterns, mockVault);
+    expect(result).toEqual([]);
+  });
+
+  it("should be case insensitive for file extensions", async () => {
+    const mockVault = new Obsidian.Vault();
+    mockVault.getFiles = jest.fn().mockReturnValue([
+      { path: "test/image1.JPG", name: "image1.JPG" },
+      { path: "test/image2.jpg", name: "image2.jpg" },
+      { path: "image3.Jpg", name: "image3.Jpg" },
+    ]);
+
+    const patterns = ["*.jpg"];
+
+    const result = await getFilePathsFromPatterns(patterns, mockVault);
+    expect(result).toEqual(["test/image1.JPG", "test/image2.jpg", "image3.Jpg"]);
   });
 });

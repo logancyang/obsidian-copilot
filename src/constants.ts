@@ -227,6 +227,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   customPromptsFolder: "copilot-custom-prompts",
   indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH,
   qaExclusions: "",
+  qaInclusions: "",
   chatNoteContextPath: "",
   chatNoteContextTags: [],
   debug: false,

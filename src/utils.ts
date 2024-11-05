@@ -499,3 +499,35 @@ export function extractUniqueTitlesFromDocs(docs: Document[]): string[] {
 
   return Array.from(titlesSet);
 }
+
+export async function getFilePathsFromPatterns(
+  patterns: string[],
+  vault: Vault
+): Promise<string[]> {
+  const filePaths = new Set<string>();
+
+  for (const pattern of patterns) {
+    if (pattern.startsWith("#")) {
+      // Tag-based pattern
+      const taggedFiles = await getNotesFromTags(vault, [pattern]);
+      taggedFiles.forEach((file) => filePaths.add(file.path));
+    } else if (pattern.startsWith("*")) {
+      // File-extension-based pattern
+      const extensionName = pattern.slice(1);
+      vault.getFiles().forEach((file) => {
+        if (file.name.toLowerCase().endsWith(extensionName.toLowerCase())) {
+          filePaths.add(file.path);
+        }
+      });
+    } else {
+      // Path-based pattern
+      vault.getFiles().forEach((file) => {
+        if (isPathInList(file.path, pattern)) {
+          filePaths.add(file.path);
+        }
+      });
+    }
+  }
+
+  return Array.from(filePaths);
+}

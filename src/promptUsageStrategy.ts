@@ -35,7 +35,7 @@ export class TimestampUsageStrategy implements PromptUsageStrategy {
 
   removeUnusedPrompts(existingPromptTitles: Array<string>): PromptUsageStrategy {
     for (const key in this.usageData) {
-      if (!existingPromptTitles.contains(key)) {
+      if (!existingPromptTitles.includes(key)) {
         delete this.usageData[key];
       }
     }
