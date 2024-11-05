@@ -11,11 +11,27 @@ If your plugin does not need CSS, delete this file.
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1rem;
+  padding: 0 25px;
 }
 
 .button-container .mod-cta {
   flex: 1; /* Make buttons take equal width */
-  margin: 25px; /* Adds some space between buttons */
+  margin: 25px 0;
+}
+
+/* button mobile style */
+@media screen and (max-width: 768px) {
+  .button-container {
+    gap: 0.5rem;
+    padding: 0 12px;
+  }
+
+  .button-container .mod-cta {
+    margin: 12px 0;
+    font-size: 0.9rem;
+    padding: 6px 12px;
+  }
 }
 
 .warning-message {
@@ -420,12 +436,21 @@ If your plugin does not need CSS, delete this file.
   width: 8%;
 }
 
+/* Add specific styles for toggle cells */
+.model-settings-table td .copilot-setting-item {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  margin: 0;
+}
+
 .model-settings-table .switch {
   display: flex;
   justify-content: center;
   align-items: center;
   height: 100%;
-  margin-top: -1.2em;
+  margin: 0;
 }
 
 .add-custom-model {
@@ -550,4 +575,168 @@ If your plugin does not need CSS, delete this file.
 .similar-note-item details > p {
   margin-left: 20px;
   margin-top: 5px;
+}
+
+/* control pc and mobile view */
+.desktop-only {
+  display: table;
+}
+
+.mobile-only {
+  display: none;
+}
+
+@media screen and (max-width: 768px) {
+  .desktop-only {
+    display: none;
+  }
+
+  .mobile-only {
+    display: block;
+  }
+
+  .model-cards-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 8px;
+  }
+
+  .model-card {
+    background: var(--background-primary-alt);
+    border-radius: 8px;
+    padding: 0 16px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .model-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--background-modifier-border);
+  }
+
+  .model-card-header h3 {
+    margin: 0;
+    font-size: 1.1em;
+    color: var(--text-normal);
+  }
+
+  .model-provider {
+    font-size: 0.9em;
+    color: var(--text-muted);
+    padding: 2px 0px;
+    background: var(--background-secondary);
+    border-radius: 4px;
+    width: fit-content;
+    align-self: flex-start;
+  }
+
+  .model-card-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .model-card-controls {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+  }
+
+  .model-card-item {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .model-card-item span {
+    color: var(--text-muted);
+    font-size: 0.9em;
+    white-space: nowrap;
+  }
+
+  .model-card-item .switch {
+    margin: 0;
+  }
+}
+
+.model-card {
+  background: var(--background-primary-alt);
+  border-radius: 8px;
+  padding: 0 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  position: relative;
+  border-left: 4px solid transparent;
+  /*transition: border-color 0.2s ease;*/
+}
+
+.model-card.selected {
+  border-left-color: var(--interactive-accent);
+}
+
+.model-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 8px;
+  cursor: pointer;
+}
+
+.model-card-header-content {
+  display: flex;
+  align-items: baseline;
+  flex: 1;
+  margin-right: 12px;
+}
+
+.model-card-title {
+}
+
+.model-provider-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-left: 10px;
+  width: 100%;
+}
+
+.model-provider {
+  font-size: 0.85em;
+  color: var(--text-muted);
+  padding: 2px 0px;
+  background: var(--background-secondary);
+  border-radius: 4px;
+  width: fit-content;
+  align-self: flex-start;
+}
+
+/* delete icon*/
+.model-delete-icon {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-muted);
+  opacity: 0.6;
+  transition: all 0.2s ease;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.model-delete-icon:hover {
+  color: var(--text-error);
+  opacity: 1;
 }

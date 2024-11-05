@@ -1,6 +1,6 @@
 import { CustomModel } from "@/aiParams";
 import { Notice } from "obsidian";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 type DropdownComponentProps = {
   name: string;
@@ -160,8 +160,8 @@ const ToggleComponent: React.FC<ToggleComponentProps> = ({
 }) => {
   return (
     <div className="copilot-setting-item">
-      <div className="copilot-setting-item-name">{name}</div>
-      <div className="copilot-setting-item-description">{description}</div>
+      {name && <div className="copilot-setting-item-name">{name}</div>}
+      {description && <div className="copilot-setting-item-description">{description}</div>}
       <label className={`switch ${disabled ? "disabled" : ""}`}>
         <input
           type="checkbox"
@@ -171,6 +171,97 @@ const ToggleComponent: React.FC<ToggleComponentProps> = ({
         />
         <span className="slider round"></span>
       </label>
+    </div>
+  );
+};
+
+const ModelCard: React.FC<{
+  model: CustomModel;
+  isDefault: boolean;
+  onSetDefault: () => void;
+  onToggleEnabled: (value: boolean) => void;
+  onToggleCors: (value: boolean) => void;
+  onDelete?: () => void;
+  disabled?: boolean;
+}> = ({ model, isDefault, onSetDefault, onToggleEnabled, onToggleCors, onDelete, disabled }) => {
+  const [isExpanded, setIsExpanded] = useState(isDefault);
+
+  useEffect(() => {
+    setIsExpanded(isDefault);
+  }, [isDefault]);
+
+  return (
+    <div className={`model-card ${isExpanded ? "expanded" : ""} ${isDefault ? "selected" : ""}`}>
+      {!isDefault && onDelete && (
+        <button
+          className="model-delete-icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          aria-label="Delete model"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M3 6h18M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M10 11v6M14 11v6M5 6v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6H5z" />
+          </svg>
+        </button>
+      )}
+
+      <div
+        className="model-card-header"
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsExpanded(!isExpanded);
+          onSetDefault();
+        }}
+      >
+        <div className="model-card-header-content">
+          <div>
+            <span className="expand-icon">{isExpanded ? "▼" : "▶"}</span>
+          </div>
+          <div className="model-provider-wrapper">
+            <h3 className="model-card-title">{model.name}</h3>
+            <span className="model-provider">{model.provider}</span>
+          </div>
+        </div>
+      </div>
+
+      {isExpanded && (
+        <div className="model-card-content">
+          <div className="model-card-controls">
+            <div className="model-card-item">
+              <span>Enabled</span>
+              <ToggleComponent
+                name=""
+                value={model.enabled}
+                onChange={onToggleEnabled}
+                disabled={disabled}
+              />
+            </div>
+
+            {!model.isBuiltIn && (
+              <div className="model-card-item">
+                <span>CORS</span>
+                <ToggleComponent
+                  name=""
+                  value={model.enableCors || false}
+                  onChange={onToggleCors}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -225,66 +316,95 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
 
   return (
     <div>
-      <table className="model-settings-table">
-        <thead>
-          <tr>
-            <th>Default</th>
-            <th>Model</th>
-            <th>Provider</th>
-            <th>Enabled</th>
-            <th>CORS</th>
-            <th>Delete</th>
-          </tr>
-        </thead>
-        <tbody>
-          {activeModels.map((model, index) => (
-            <tr key={getModelKey(model)}>
-              <td>
-                <input
-                  type="radio"
-                  name={`selected-${isEmbeddingModel ? "embedding" : "chat"}-model`}
-                  checked={getModelKey(model) === defaultModelKey}
-                  onChange={() => handleSetDefaultModel(model)}
-                />
-              </td>
-              <td>{model.name}</td>
-              <td>{model.provider}</td>
-              <td>
-                <ToggleComponent
-                  name={""}
-                  value={model.enabled}
-                  onChange={(value) => {
-                    if (!model.isBuiltIn) {
-                      const updatedModels = [...activeModels];
-                      updatedModels[index].enabled = value;
-                      onUpdateModels(updatedModels);
-                    }
-                  }}
-                  disabled={model.isBuiltIn}
-                />
-              </td>
-              <td>
-                {!model.isBuiltIn && (
+      <div className="model-settings-container">
+        {/* Desktop View */}
+        <table className="model-settings-table desktop-only">
+          <thead>
+            <tr>
+              <th>Default</th>
+              <th>Model</th>
+              <th>Provider</th>
+              <th>Enabled</th>
+              <th>CORS</th>
+              <th>Delete</th>
+            </tr>
+          </thead>
+          <tbody>
+            {activeModels.map((model, index) => (
+              <tr key={getModelKey(model)}>
+                <td>
+                  <input
+                    type="radio"
+                    name={`selected-${isEmbeddingModel ? "embedding" : "chat"}-model`}
+                    checked={getModelKey(model) === defaultModelKey}
+                    onChange={() => handleSetDefaultModel(model)}
+                  />
+                </td>
+                <td>{model.name}</td>
+                <td>{model.provider}</td>
+                <td>
                   <ToggleComponent
                     name={""}
-                    value={model.enableCors || false}
+                    value={model.enabled}
                     onChange={(value) => {
-                      const updatedModels = [...activeModels];
-                      updatedModels[index].enableCors = value;
-                      onUpdateModels(updatedModels);
+                      if (!model.isBuiltIn) {
+                        const updatedModels = [...activeModels];
+                        updatedModels[index].enabled = value;
+                        onUpdateModels(updatedModels);
+                      }
                     }}
+                    disabled={model.isBuiltIn}
                   />
-                )}
-              </td>
-              <td>
-                {!model.core && (
-                  <button onClick={() => onDeleteModel(getModelKey(model))}>Delete</button>
-                )}
-              </td>
-            </tr>
+                </td>
+                <td>
+                  {!model.isBuiltIn && (
+                    <ToggleComponent
+                      name={""}
+                      value={model.enableCors || false}
+                      onChange={(value) => {
+                        const updatedModels = [...activeModels];
+                        updatedModels[index].enableCors = value;
+                        onUpdateModels(updatedModels);
+                      }}
+                    />
+                  )}
+                </td>
+                <td>
+                  {getModelKey(model) !== defaultModelKey && !model.core && (
+                    <button onClick={() => onDeleteModel(getModelKey(model))}>Delete</button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* Mobile View */}
+        <div className="model-cards-container mobile-only">
+          {activeModels.map((model, index) => (
+            <ModelCard
+              key={getModelKey(model)}
+              model={model}
+              isDefault={getModelKey(model) === defaultModelKey}
+              onSetDefault={() => handleSetDefaultModel(model)}
+              onToggleEnabled={(value) => {
+                if (!model.isBuiltIn) {
+                  const updatedModels = [...activeModels];
+                  updatedModels[index].enabled = value;
+                  onUpdateModels(updatedModels);
+                }
+              }}
+              onToggleCors={(value) => {
+                const updatedModels = [...activeModels];
+                updatedModels[index].enableCors = value;
+                onUpdateModels(updatedModels);
+              }}
+              onDelete={!model.core ? () => onDeleteModel(getModelKey(model)) : undefined}
+              disabled={model.isBuiltIn}
+            />
           ))}
-        </tbody>
-      </table>
+        </div>
+      </div>
       <div className="add-custom-model">
         <h2 onClick={() => setIsAddModelOpen(!isAddModelOpen)} style={{ cursor: "pointer" }}>
           Add Custom Model {isAddModelOpen ? "▼" : "▶"}
