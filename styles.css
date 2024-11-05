@@ -436,12 +436,21 @@ If your plugin does not need CSS, delete this file.
   width: 8%;
 }
 
+/* Add specific styles for toggle cells */
+.model-settings-table td .copilot-setting-item {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  margin: 0;
+}
+
 .model-settings-table .switch {
   display: flex;
   justify-content: center;
   align-items: center;
   height: 100%;
-  margin-top: -1.2em;
+  margin: 0;
 }
 
 .add-custom-model {
