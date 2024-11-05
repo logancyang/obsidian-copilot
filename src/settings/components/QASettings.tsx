@@ -131,11 +131,18 @@ const QASettings: React.FC<QASettingsProps> = ({
         onChange={(value) => updateSettings({ embeddingRequestsPerSecond: value })}
       />
       <TextAreaComponent
-        name="Indexing Exclusions"
+        name="Exclusions"
         description="Comma separated list of paths, tags, note titles or file extension, e.g. folder1, folder1/folder2, #tag1, #tag2, [[note1]], [[note2]], *.jpg, *.excallidraw.md etc, to be excluded from the indexing process. NOTE: Tags must be in the note properties, not the note content. Files which were previously indexed will remain in the index unless you force re-index."
         placeholder="folder1, folder1/folder2, #tag1, #tag2, [[note1]], [[note2]], *.jpg, *.excallidraw.md"
         value={settings.qaExclusions}
         onChange={(value) => updateSettings({ qaExclusions: value })}
+      />
+      <TextAreaComponent
+        name="Inclusions"
+        description="When specified, ONLY these paths, tags, or note titles will be indexed (comma separated). Takes precedence over exclusions. Files which were previously indexed will remain in the index unless you force re-index. Format: folder1, folder1/folder2, #tag1, #tag2, [[note1]], [[note2]]"
+        placeholder="folder1, #tag1, [[note1]]"
+        value={settings.qaInclusions}
+        onChange={(value) => updateSettings({ qaInclusions: value })}
       />
     </div>
   );

@@ -3,7 +3,7 @@ import EncryptionService from "@/encryptionService";
 import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { CopilotSettings } from "@/settings/SettingsPage";
-import { areEmbeddingModelsSame, getNotesFromTags, isPathInList } from "@/utils";
+import { areEmbeddingModelsSame, getFilePathsFromPatterns } from "@/utils";
 import VectorDBManager from "@/vectorDBManager";
 import { Embeddings } from "@langchain/core/embeddings";
 import { create, load, Orama, remove, removeMultiple, save, search } from "@orama/orama";
@@ -214,9 +214,14 @@ class VectorStoreManager {
   private updateIndexingNoticeMessage() {
     if (this.indexNoticeMessage) {
       const status = this.isIndexingPaused ? " (Paused)" : "";
-      this.indexNoticeMessage.textContent = `Copilot is indexing your vault...\n${this.indexedCount}/${this.totalFilesToIndex} files processed.${status}\nExclusions: ${
-        this.settings.qaExclusions ? this.settings.qaExclusions : "None"
-      }`;
+      const filterType = this.settings.qaInclusions
+        ? `Inclusions: ${this.settings.qaInclusions}`
+        : `Exclusions: ${this.settings.qaExclusions || "None"}`;
+
+      this.indexNoticeMessage.textContent =
+        `Copilot is indexing your vault...\n` +
+        `${this.indexedCount}/${this.totalFilesToIndex} files processed.${status}\n` +
+        filterType;
     }
   }
 
@@ -247,49 +252,36 @@ class VectorStoreManager {
     return new Notice(frag, 0);
   }
 
-  private async getExcludedFiles(): Promise<Set<string>> {
-    const excludedFiles = new Set<string>();
+  private async getFilePathsForQA(filterType: "exclusions" | "inclusions"): Promise<Set<string>> {
+    const targetFiles = new Set<string>();
 
-    if (this.settings.qaExclusions) {
+    if (filterType === "exclusions" && this.settings.qaExclusions) {
       const exclusions = this.settings.qaExclusions.split(",").map((item) => item.trim());
-
-      for (const exclusion of exclusions) {
-        if (exclusion.startsWith("#")) {
-          // Tag-based exclusion
-          const tagName = exclusion.slice(1);
-          const taggedFiles = await getNotesFromTags(this.app.vault, [tagName]);
-          taggedFiles.forEach((file) => excludedFiles.add(file.path));
-        } else if (exclusion.startsWith("*")) {
-          // File-extension-based exclusion
-          const extensionName = exclusion.slice(1);
-          this.app.vault.getFiles().forEach((file) => {
-            if (file.name.toLowerCase().contains(extensionName.toLowerCase())) {
-              excludedFiles.add(file.path);
-            }
-          });
-        } else {
-          // Path-based exclusion
-          this.app.vault.getFiles().forEach((file) => {
-            if (isPathInList(file.path, exclusion)) {
-              excludedFiles.add(file.path);
-            }
-          });
-        }
-      }
+      const excludedFilePaths = await getFilePathsFromPatterns(exclusions, this.app.vault);
+      excludedFilePaths.forEach((filePath) => targetFiles.add(filePath));
+    } else if (filterType === "inclusions" && this.settings.qaInclusions) {
+      const inclusions = this.settings.qaInclusions.split(",").map((item) => item.trim());
+      const includedFilePaths = await getFilePathsFromPatterns(inclusions, this.app.vault);
+      includedFilePaths.forEach((filePath) => targetFiles.add(filePath));
     }
 
-    return excludedFiles;
+    return targetFiles;
   }
 
-  public async getAllNonExcludedNotesContent(): Promise<string> {
+  public async getAllQAMarkdownContent(): Promise<string> {
     let allContent = "";
 
-    const excludedFiles = await this.getExcludedFiles();
-    const nonExcludedFiles = this.app.vault
-      .getMarkdownFiles()
-      .filter((file) => !excludedFiles.has(file.path));
+    const includedFiles = await this.getFilePathsForQA("inclusions");
+    const excludedFiles = await this.getFilePathsForQA("exclusions");
 
-    await Promise.all(nonExcludedFiles.map((file) => this.app.vault.cachedRead(file))).then(
+    const filteredFiles = this.app.vault.getMarkdownFiles().filter((file) => {
+      if (includedFiles.size > 0) {
+        return includedFiles.has(file.path);
+      }
+      return !excludedFiles.has(file.path);
+    });
+
+    await Promise.all(filteredFiles.map((file) => this.app.vault.cachedRead(file))).then(
       (contents) => contents.map((c) => (allContent += c + " "))
     );
 
@@ -345,7 +337,8 @@ class VectorStoreManager {
       this.isIndexingPaused = false;
       this.isIndexingCancelled = false;
 
-      const excludedFiles = await this.getExcludedFiles();
+      const includedFiles = await this.getFilePathsForQA("inclusions");
+      const excludedFiles = await this.getFilePathsForQA("exclusions");
 
       const files = this.app.vault
         .getMarkdownFiles()
@@ -353,7 +346,14 @@ class VectorStoreManager {
           if (!latestMtime || overwrite) return true;
           return file.stat.mtime > latestMtime;
         })
-        .filter((file) => !excludedFiles.has(file.path));
+        .filter((file) => {
+          if (includedFiles.size > 0) {
+            // If inclusions are specified, only include files in the inclusion set
+            return includedFiles.has(file.path);
+          }
+          // Otherwise, use exclusion filter
+          return !excludedFiles.has(file.path);
+        });
 
       const fileContents: string[] = await Promise.all(
         files.map((file) => this.app.vault.cachedRead(file))

@@ -21,6 +21,16 @@ jest.mock("@/utils", () => ({
   processVariableNameForNotePath: jest.fn(),
 }));
 
+const mockUsageStrategy = {
+  incrementPromptUsage: jest.fn(),
+  getPromptUsage: jest.fn(),
+  recordUsage: jest.fn(),
+  updateUsage: jest.fn(),
+  removeUnusedPrompts: jest.fn(),
+  compare: jest.fn(),
+  save: jest.fn(),
+};
+
 describe("CustomPromptProcessor", () => {
   let processor: CustomPromptProcessor;
   let mockVault: Vault;
@@ -40,7 +50,7 @@ describe("CustomPromptProcessor", () => {
     } as TFile;
 
     // Create an instance of CustomPromptProcessor with mocked dependencies
-    processor = CustomPromptProcessor.getInstance(mockVault, mockSettings);
+    processor = CustomPromptProcessor.getInstance(mockVault, mockSettings, mockUsageStrategy);
   });
 
   it("should add 1 context and selectedText", async () => {

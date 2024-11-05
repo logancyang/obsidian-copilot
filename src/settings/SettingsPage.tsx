@@ -43,6 +43,7 @@ export interface CopilotSettings {
   enableEncryption: boolean;
   maxSourceChunks: number;
   qaExclusions: string;
+  qaInclusions: string;
   groqApiKey: string;
   enabledCommands: Record<string, { enabled: boolean; name: string }>;
   activeModels: Array<CustomModel>;

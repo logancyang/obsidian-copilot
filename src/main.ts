@@ -549,7 +549,7 @@ export default class CopilotPlugin extends Plugin {
 
   async countTotalTokens(): Promise<number> {
     try {
-      const allContent = await this.vectorStoreManager.getAllNonExcludedNotesContent();
+      const allContent = await this.vectorStoreManager.getAllQAMarkdownContent();
       const totalTokens = await this.chainManager.chatModelManager.countTokens(allContent);
       return totalTokens;
     } catch (error) {
