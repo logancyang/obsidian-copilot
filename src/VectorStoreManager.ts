@@ -486,28 +486,34 @@ class VectorStoreManager {
     try {
       const files = this.app.vault.getMarkdownFiles();
       const filePaths = new Set(files.map((file) => file.path));
-
-      // Search for all documents in the database
+      // Get all documents in the database
       const result = await search(this.oramaDb, {
         term: "",
-        properties: ["path"],
-        limit: Infinity,
+        limit: 10000,
       });
 
-      const docsToRemove = result.hits
-        .filter((hit) => !filePaths.has(hit.document.path))
-        .map((hit) => hit.id);
+      // Identify docs to remove
+      const docsToRemove = result.hits.filter((hit) => !filePaths.has(hit.document.path));
 
       if (docsToRemove.length === 0) {
-        console.log("No documents to remove during garbage collection.");
+        new Notice("No documents to remove during garbage collection.");
         return;
       }
 
+      console.log(
+        "Copilot index: Docs to remove during garbage collection:",
+        Array.from(new Set(docsToRemove.map((hit) => hit.document.path))).join(", ")
+      );
+
       if (docsToRemove.length === 1) {
-        await remove(this.oramaDb, docsToRemove[0]);
+        await remove(this.oramaDb, docsToRemove[0].id);
       } else {
-        const removedCount = await removeMultiple(this.oramaDb, docsToRemove, 500);
-        console.log(`Removed ${removedCount} documents during garbage collection.`);
+        await removeMultiple(
+          this.oramaDb,
+          docsToRemove.map((hit) => hit.id),
+          500
+        );
+        new Notice(`Removed stale documents during garbage collection.`);
       }
 
       await this.saveDB();
