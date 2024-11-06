@@ -44,11 +44,11 @@ const SUGGESTED_PROMPTS: Record<string, NotePrompt> = {
 const PROMPT_KEYS: Record<ChainType, Array<keyof typeof SUGGESTED_PROMPTS>> = {
   [ChainType.LLM_CHAIN]: ["activeNote", "quoteNote", "fun"],
   [ChainType.VAULT_QA_CHAIN]: ["qaVault", "activeNote", "fun"],
-  [ChainType.COPILOT_PLUS]: ["activeNote", "quoteNote", "fun"],
+  [ChainType.COPILOT_PLUS_CHAIN]: ["activeNote", "quoteNote", "fun"],
 };
 
 function getRandomPrompt(type: ChainType = ChainType.LLM_CHAIN) {
-  const keys = PROMPT_KEYS[type];
+  const keys = PROMPT_KEYS[type] || PROMPT_KEYS[ChainType.LLM_CHAIN];
   return keys.map((key) => ({
     title: SUGGESTED_PROMPTS[key].title,
     text: SUGGESTED_PROMPTS[key].prompts[

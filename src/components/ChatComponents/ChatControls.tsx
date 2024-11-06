@@ -55,7 +55,7 @@ const ChatControls: React.FC<ChatControlsProps> = ({
     const newChain = stringToChainType(event.target.value);
     setSelectedChain(newChain);
 
-    if (newChain === ChainType.COPILOT_PLUS) {
+    if (newChain === ChainType.COPILOT_PLUS_CHAIN) {
       new CopilotPlusModal(app).open();
       // Reset the selected chain to the previous value
       setSelectedChain(currentChain);
