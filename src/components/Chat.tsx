@@ -1,7 +1,6 @@
 import ChainManager from "@/LLMProviders/chainManager";
 import { useAIState } from "@/aiState";
 import { updateChatMemory } from "@/chatUtils";
-import ChatControls from "@/components/ChatComponents/ChatControls";
 import ChatInput from "@/components/ChatComponents/ChatInput";
 import ChatMessages from "@/components/ChatComponents/ChatMessages";
 import {
@@ -546,7 +545,16 @@ ${chatContent}`;
         }}
       />
       <div className="bottom-container">
-        <ChatControls
+        <ChatInput
+          inputMessage={inputMessage}
+          setInputMessage={setInputMessage}
+          handleSendMessage={handleSendMessage}
+          isGenerating={loading}
+          onStopGenerating={() => handleStopGenerating(ABORT_REASON.USER_STOPPED)}
+          app={app}
+          settings={settings}
+          navigateHistory={navigateHistory}
+          chatIsVisible={chatIsVisible}
           currentModelKey={currentModelKey}
           setCurrentModelKey={setModelKey}
           currentChain={currentChain}
@@ -562,25 +570,10 @@ ${chatContent}`;
           }}
           onSaveAsNote={() => handleSaveAsNote(true)}
           onRefreshVaultContext={refreshVaultContext}
-          onFindSimilarNotes={(content, activeFilePath) =>
-            plugin.findSimilarNotes(content, activeFilePath)
-          }
-          addMessage={addMessage}
-          settings={settings}
-          vault={app.vault}
           vault_qa_strategy={plugin.settings.indexVaultToVectorStore}
           debug={debug}
-        />
-        <ChatInput
-          inputMessage={inputMessage}
-          setInputMessage={setInputMessage}
-          handleSendMessage={handleSendMessage}
-          isGenerating={loading}
-          onStopGenerating={() => handleStopGenerating(ABORT_REASON.USER_STOPPED)}
-          app={app}
-          settings={settings}
-          navigateHistory={navigateHistory}
-          chatIsVisible={chatIsVisible}
+          addMessage={addMessage}
+          vault={app.vault}
         />
       </div>
     </div>
