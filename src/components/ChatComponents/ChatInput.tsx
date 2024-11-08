@@ -1,10 +1,16 @@
+import { CustomModel, SetChainOptions } from "@/aiParams";
+import { ChainType } from "@/chainFactory";
 import { ListPromptModal } from "@/components/ListPromptModal";
 import { NoteTitleModal } from "@/components/NoteTitleModal";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { CopilotSettings } from "@/settings/SettingsPage";
-import { IconPlayerStopFilled, IconSend } from "@tabler/icons-react";
-import { App, TFile } from "obsidian";
+import { ChatMessage } from "@/sharedState";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import * as Tooltip from "@radix-ui/react-tooltip";
+import { ChevronUp, Command, CornerDownLeft, StopCircle } from "lucide-react";
+import { App, Platform, TFile, Vault } from "obsidian";
 import React, { useEffect, useRef, useState } from "react";
+import ChatControls from "./ChatControls";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -16,7 +22,20 @@ interface ChatInputProps {
   app: App;
   settings: CopilotSettings;
   navigateHistory: (direction: "up" | "down") => string;
+  currentModelKey: string;
+  setCurrentModelKey: (modelKey: string) => void;
+  currentChain: ChainType;
+  setCurrentChain: (chain: ChainType, options?: SetChainOptions) => void;
+  onNewChat: (openNote: boolean) => void;
+  onSaveAsNote: () => void;
+  onRefreshVaultContext: () => void;
+  addMessage: (message: ChatMessage) => void;
+  vault: Vault;
+  vault_qa_strategy: string;
+  debug?: boolean;
 }
+
+const getModelKey = (model: CustomModel) => `${model.name}|${model.provider}`;
 
 const ChatInput: React.FC<ChatInputProps> = ({
   inputMessage,
@@ -28,10 +47,22 @@ const ChatInput: React.FC<ChatInputProps> = ({
   settings,
   navigateHistory,
   chatIsVisible,
+  currentModelKey,
+  setCurrentModelKey,
+  currentChain,
+  setCurrentChain,
+  onNewChat,
+  onSaveAsNote,
+  onRefreshVaultContext,
+  addMessage,
+  vault,
+  vault_qa_strategy,
+  debug,
 }) => {
   const [shouldFocus, setShouldFocus] = useState(false);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [tempInput, setTempInput] = useState("");
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -166,6 +197,21 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   return (
     <div className="chat-input-container" ref={containerRef}>
+      <ChatControls
+        currentModelKey={currentModelKey}
+        setCurrentModelKey={setCurrentModelKey}
+        currentChain={currentChain}
+        setCurrentChain={setCurrentChain}
+        onNewChat={onNewChat}
+        onSaveAsNote={onSaveAsNote}
+        onRefreshVaultContext={onRefreshVaultContext}
+        settings={settings}
+        vault_qa_strategy={vault_qa_strategy}
+        debug={debug}
+        addMessage={addMessage}
+        vault={vault}
+      />
+
       <textarea
         ref={textAreaRef}
         className="chat-input-textarea"
@@ -174,12 +220,69 @@ const ChatInput: React.FC<ChatInputProps> = ({
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
       />
-      <button
-        onClick={isGenerating ? onStopGenerating : handleSendMessage}
-        aria-label={isGenerating ? "Stop generating" : "Send message"}
-      >
-        {isGenerating ? <IconPlayerStopFilled size={18} /> : <IconSend size={18} />}
-      </button>
+
+      <div className="chat-input-controls">
+        <DropdownMenu.Root open={isModelDropdownOpen} onOpenChange={setIsModelDropdownOpen}>
+          <DropdownMenu.Trigger className="model-select-button">
+            {settings.activeModels.find((model) => getModelKey(model) === currentModelKey)?.name ||
+              "Select Model"}
+            <ChevronUp size={10} />
+          </DropdownMenu.Trigger>
+
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content className="model-select-content">
+              {settings.activeModels
+                .filter((model) => model.enabled)
+                .map((model) => (
+                  <DropdownMenu.Item
+                    key={getModelKey(model)}
+                    onSelect={() => setCurrentModelKey(getModelKey(model))}
+                  >
+                    {model.name}
+                  </DropdownMenu.Item>
+                ))}
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+
+        <div className="chat-input-buttons">
+          {isGenerating && (
+            <Tooltip.Provider delayDuration={0}>
+              <Tooltip.Root>
+                <Tooltip.Trigger asChild>
+                  <button onClick={() => onStopGenerating()} className="submit-button cancel">
+                    <StopCircle />
+                  </button>
+                </Tooltip.Trigger>
+              </Tooltip.Root>
+            </Tooltip.Provider>
+          )}
+          <Tooltip.Provider delayDuration={0}>
+            <Tooltip.Root>
+              <Tooltip.Trigger asChild>
+                <button onClick={handleSendMessage} className="submit-button">
+                  <CornerDownLeft size={16} />
+                  <span>chat</span>
+                </button>
+              </Tooltip.Trigger>
+            </Tooltip.Root>
+
+            {currentChain === "copilot_plus" && (
+              <Tooltip.Root>
+                <Tooltip.Trigger asChild>
+                  <button onClick={handleSendMessage} className="submit-button vault">
+                    <div className="button-content">
+                      {Platform.isMacOS && <Command size={12} />}
+                      <CornerDownLeft size={16} />
+                      <span>vault</span>
+                    </div>
+                  </button>
+                </Tooltip.Trigger>
+              </Tooltip.Root>
+            )}
+          </Tooltip.Provider>
+        </div>
+      </div>
     </div>
   );
 };

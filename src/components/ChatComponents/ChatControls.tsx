@@ -1,4 +1,4 @@
-import { CustomModel, SetChainOptions } from "@/aiParams";
+import { SetChainOptions } from "@/aiParams";
 import { CopilotPlusModal } from "@/components/CopilotPlusModal";
 import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { CustomError } from "@/error";
@@ -10,6 +10,8 @@ import React, { useEffect, useState } from "react";
 import { ChainType } from "@/chainFactory";
 import { RefreshIcon, SaveAsNoteIcon, UseActiveNoteAsContextIcon } from "@/components/Icons";
 import { stringToChainType } from "@/utils";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { ChevronDown } from "lucide-react";
 
 interface ChatControlsProps {
   currentModelKey: string;
@@ -19,7 +21,6 @@ interface ChatControlsProps {
   onNewChat: (openNote: boolean) => void;
   onSaveAsNote: () => void;
   onRefreshVaultContext: () => void;
-  onFindSimilarNotes: (content: string, activeFilePath: string) => Promise<any>;
   addMessage: (message: ChatMessage) => void;
   settings: CopilotSettings;
   vault: Vault;
@@ -35,7 +36,6 @@ const ChatControls: React.FC<ChatControlsProps> = ({
   onNewChat,
   onSaveAsNote,
   onRefreshVaultContext,
-  onFindSimilarNotes,
   addMessage,
   settings,
   vault,
@@ -44,15 +44,8 @@ const ChatControls: React.FC<ChatControlsProps> = ({
 }) => {
   const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
 
-  const getModelKey = (model: CustomModel) => `${model.name}|${model.provider}`;
-
-  const handleModelChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedModelKey = event.target.value;
-    setCurrentModelKey(selectedModelKey);
-  };
-
-  const handleChainChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const newChain = stringToChainType(event.target.value);
+  const handleChainChange = async ({ value }: { value: string }) => {
+    const newChain = stringToChainType(value);
     setSelectedChain(newChain);
 
     if (newChain === ChainType.COPILOT_PLUS_CHAIN) {
@@ -113,25 +106,6 @@ const ChatControls: React.FC<ChatControlsProps> = ({
 
   return (
     <div className="chat-icons-container">
-      <div className="chat-icon-selection-tooltip">
-        <div className="select-wrapper">
-          <select
-            id="aiModelSelect"
-            className="chat-icon-selection model-select"
-            value={currentModelKey}
-            onChange={handleModelChange}
-          >
-            {settings.activeModels
-              .filter((model) => model.enabled)
-              .map((model) => (
-                <option key={getModelKey(model)} value={getModelKey(model)}>
-                  {model.name}
-                </option>
-              ))}
-          </select>
-          <span className="tooltip-text">Model Selection</span>
-        </div>
-      </div>
       <button className="chat-icon-button clickable-icon" onClick={() => onNewChat(false)}>
         <RefreshIcon className="icon-scaler" />
         <span className="tooltip-text">
@@ -144,21 +118,6 @@ const ChatControls: React.FC<ChatControlsProps> = ({
         <SaveAsNoteIcon className="icon-scaler" />
         <span className="tooltip-text">Save as Note</span>
       </button>
-      <div className="chat-icon-selection-tooltip">
-        <div className="select-wrapper">
-          <select
-            id="aiChainSelect"
-            className="chat-icon-selection"
-            value={currentChain}
-            onChange={handleChainChange}
-          >
-            <option value="llm_chain">Chat</option>
-            <option value="vault_qa">Vault QA (Basic)</option>
-            <option value="copilot_plus">Copilot Plus (Alpha)</option>
-          </select>
-          <span className="tooltip-text">Mode Selection</span>
-        </div>
-      </div>
       {selectedChain === "vault_qa" && (
         <>
           <button className="chat-icon-button clickable-icon" onClick={onRefreshVaultContext}>
@@ -178,6 +137,30 @@ const ChatControls: React.FC<ChatControlsProps> = ({
           </button> */}
         </>
       )}
+      <div className="chat-icon-selection-tooltip">
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger className="chain-select-button">
+            {currentChain === "llm_chain" && "Chat Mode"}
+            {currentChain === "vault_qa" && "Vault QA Mode (Basic)"}
+            {currentChain === "copilot_plus" && "Copilot Plus Mode (Alpha)"}
+            <ChevronDown size={10} />
+          </DropdownMenu.Trigger>
+
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content className="chain-select-content">
+              <DropdownMenu.Item onSelect={() => handleChainChange({ value: "llm_chain" })}>
+                Chat Mode
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={() => handleChainChange({ value: "vault_qa" })}>
+                Vault QA Mode (Basic)
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={() => handleChainChange({ value: "copilot_plus" })}>
+                Copilot Plus Mode (Alpha)
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+      </div>
     </div>
   );
 };
