@@ -2,7 +2,7 @@ import { CHUNK_SIZE } from "@/constants";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
 import { RateLimiter } from "@/rateLimiter";
 import { Embeddings } from "@langchain/core/embeddings";
-import { insert, Orama, search, update } from "@orama/orama";
+import { insert, Orama, remove, search } from "@orama/orama";
 import { MD5 } from "crypto-js";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { Notice } from "obsidian";
@@ -162,10 +162,11 @@ class VectorDBManager {
       });
 
       if (existingDoc.hits.length > 0) {
-        // Document exists, update it
-        await update(db, docToSave, {
-          id: docToSave.id,
-        });
+        // First remove the existing document
+        await remove(db, existingDoc.hits[0].id);
+        // Then insert the new version
+        await insert(db, docToSave);
+
         if (this.config.debug) {
           console.log(`Updated document ${docToSave.id} in VectorDB with path: ${docToSave.path}`);
         }
@@ -178,7 +179,7 @@ class VectorDBManager {
       }
     } catch (err) {
       console.error(`Error upserting document ${docToSave.id} in VectorDB:`, err);
-      throw err; // Rethrow the error to be handled by the caller
+      throw err;
     }
   }
 
