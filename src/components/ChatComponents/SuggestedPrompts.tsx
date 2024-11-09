@@ -98,7 +98,7 @@ export const SuggestedPrompts: React.FC<SuggestedPromptsProps> = ({
           flexDirection: "column",
         }}
       >
-        <div style={{ width: "400px" }}>
+        <div style={{ maxWidth: "500px", width: "90%" }}>
           <p>
             <b>Suggested Prompts</b>
           </p>
@@ -114,13 +114,14 @@ export const SuggestedPrompts: React.FC<SuggestedPromptsProps> = ({
                 key={i}
                 onClick={() => onClick(prompt.text)}
                 style={{
+                  cursor: "pointer",
                   display: "flex",
                   flexDirection: "column",
                   height: "fit-content",
                   gap: "0.5rem",
                   alignItems: "start",
                   padding: "0.5rem 1rem",
-                  width: "400px",
+                  width: "100%",
                   whiteSpace: "normal",
                   textAlign: "left",
                 }}
