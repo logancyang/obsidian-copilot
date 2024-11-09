@@ -55,15 +55,13 @@ function getRandomPrompt(chainType: ChainType = ChainType.LLM_CHAIN) {
   // For repeated keys, shuffle once and take multiple items
   const shuffledPrompts: Record<string, string[]> = {};
 
-  return keys.map((key, index) => {
-    // Shuffle prompts for this key if we haven't yet
+  return keys.map((key) => {
     if (!shuffledPrompts[key]) {
       shuffledPrompts[key] = [...SUGGESTED_PROMPTS[key].prompts].sort(() => Math.random() - 0.5);
     }
-
     return {
       title: SUGGESTED_PROMPTS[key].title,
-      text: shuffledPrompts[key][index],
+      text: shuffledPrompts[key].pop() || SUGGESTED_PROMPTS[key].prompts[0],
     };
   });
 }
