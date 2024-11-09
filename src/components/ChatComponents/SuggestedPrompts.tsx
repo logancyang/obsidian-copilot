@@ -18,9 +18,10 @@ const SUGGESTED_PROMPTS: Record<string, NotePrompt> = {
   quoteNote: {
     title: "Note Link Chat",
     prompts: [
-      `Based on [[<noteName>]], what improvements should we focus on next?`,
-      `Summarize the key points from [[<noteName>]]`,
-      `Summarize the recent updates from [[<noteName>]].`,
+      `Based on [[<note>]], what improvements should we focus on next?`,
+      `Summarize the key points from [[<note>]].`,
+      `Summarize the recent updates from [[<note>]].`,
+      `Roast my writing in [[<note>]] and give concrete actionable feedback`,
     ],
   },
   fun: {
@@ -37,24 +38,34 @@ const SUGGESTED_PROMPTS: Record<string, NotePrompt> = {
       `What insights can I gather about <topic> from my notes?`,
       `Explain <concept> based on my stored notes.`,
       `Highlight important details on <topic> from my notes.`,
+      `Based on my notes on <topic>, what is the question that I should be asking, but am not?`,
     ],
   },
 };
 
 const PROMPT_KEYS: Record<ChainType, Array<keyof typeof SUGGESTED_PROMPTS>> = {
   [ChainType.LLM_CHAIN]: ["activeNote", "quoteNote", "fun"],
-  [ChainType.VAULT_QA_CHAIN]: ["qaVault", "activeNote", "fun"],
+  [ChainType.VAULT_QA_CHAIN]: ["qaVault", "qaVault", "quoteNote"],
   [ChainType.COPILOT_PLUS_CHAIN]: ["activeNote", "quoteNote", "fun"],
 };
 
-function getRandomPrompt(type: ChainType = ChainType.LLM_CHAIN) {
-  const keys = PROMPT_KEYS[type] || PROMPT_KEYS[ChainType.LLM_CHAIN];
-  return keys.map((key) => ({
-    title: SUGGESTED_PROMPTS[key].title,
-    text: SUGGESTED_PROMPTS[key].prompts[
-      Math.floor(Math.random() * SUGGESTED_PROMPTS[key].prompts.length)
-    ],
-  }));
+function getRandomPrompt(chainType: ChainType = ChainType.LLM_CHAIN) {
+  const keys = PROMPT_KEYS[chainType] || PROMPT_KEYS[ChainType.LLM_CHAIN];
+
+  // For repeated keys, shuffle once and take multiple items
+  const shuffledPrompts: Record<string, string[]> = {};
+
+  return keys.map((key, index) => {
+    // Shuffle prompts for this key if we haven't yet
+    if (!shuffledPrompts[key]) {
+      shuffledPrompts[key] = [...SUGGESTED_PROMPTS[key].prompts].sort(() => Math.random() - 0.5);
+    }
+
+    return {
+      title: SUGGESTED_PROMPTS[key].title,
+      text: shuffledPrompts[key][index],
+    };
+  });
 }
 
 interface SuggestedPromptsProps {
@@ -62,6 +73,7 @@ interface SuggestedPromptsProps {
   indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY;
   onClick: (text: string) => void;
 }
+
 export const SuggestedPrompts: React.FC<SuggestedPromptsProps> = ({
   chainType,
   indexVaultToVectorStore,
