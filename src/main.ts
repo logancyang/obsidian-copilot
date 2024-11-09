@@ -15,6 +15,7 @@ import {
   BUILTIN_EMBEDDING_MODELS,
   CHAT_VIEWTYPE,
   CHUNK_SIZE,
+  DEFAULT_OPEN_AREA,
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
   EVENT_NAMES,
@@ -48,7 +49,6 @@ export default class CopilotPlugin extends Plugin {
   // Only reset when the user explicitly clicks "New Chat"
   sharedState: SharedState;
   chainManager: ChainManager;
-  activateViewPromise: Promise<void> | null = null;
   chatIsVisible = false;
   encryptionService: EncryptionService;
   userMessageHistory: string[] = [];
@@ -103,10 +103,10 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "chat-toggle-window-note-area",
-      name: "Toggle Copilot Chat Window in Note Area",
+      id: "chat-open-window",
+      name: "Open Copilot Chat Window",
       callback: () => {
-        this.toggleViewNoteArea();
+        this.activateView();
       },
     });
 
@@ -455,11 +455,17 @@ export default class CopilotPlugin extends Plugin {
 
   async activateView(): Promise<void> {
     this.app.workspace.detachLeavesOfType(CHAT_VIEWTYPE);
-    this.activateViewPromise = this.app.workspace.getRightLeaf(false).setViewState({
-      type: CHAT_VIEWTYPE,
-      active: true,
-    });
-    await this.activateViewPromise;
+    if (this.settings.defaultOpenArea === DEFAULT_OPEN_AREA.VIEW) {
+      await this.app.workspace.getRightLeaf(false).setViewState({
+        type: CHAT_VIEWTYPE,
+        active: true,
+      });
+    } else {
+      await this.app.workspace.getLeaf(true).setViewState({
+        type: CHAT_VIEWTYPE,
+        active: true,
+      });
+    }
     this.app.workspace.revealLeaf(this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]);
     this.processChatIsVisible(true);
   }
@@ -467,22 +473,6 @@ export default class CopilotPlugin extends Plugin {
   async deactivateView() {
     this.app.workspace.detachLeavesOfType(CHAT_VIEWTYPE);
     this.processChatIsVisible(false);
-  }
-
-  async toggleViewNoteArea() {
-    const leaves = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE);
-    leaves.length > 0 ? this.deactivateView() : this.activateViewNoteArea();
-  }
-
-  async activateViewNoteArea() {
-    this.app.workspace.detachLeavesOfType(CHAT_VIEWTYPE);
-    this.activateViewPromise = this.app.workspace.getLeaf(true).setViewState({
-      type: CHAT_VIEWTYPE,
-      active: true,
-    });
-    await this.activateViewPromise;
-    this.app.workspace.revealLeaf(this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]);
-    this.processChatIsVisible(true);
   }
 
   async loadSettings() {

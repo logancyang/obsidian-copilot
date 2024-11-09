@@ -1,6 +1,6 @@
 import { CustomModel, LangChainParams } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
-import { ChatModelProviders } from "@/constants";
+import { ChatModelProviders, DEFAULT_OPEN_AREA } from "@/constants";
 import EncryptionService from "@/encryptionService";
 import React from "react";
 import { useSettingsContext } from "../contexts/SettingsContext";
@@ -107,6 +107,21 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         value={settings.autosaveChat}
         onChange={(value) => updateSettings({ autosaveChat: value })}
       />
+      <div className="chat-icon-selection-tooltip">
+        <h2>Open Plugin In</h2>
+        <div className="select-wrapper">
+          <select
+            id="openPluginInSelect"
+            value={settings.defaultOpenArea}
+            onChange={(e) =>
+              updateSettings({ defaultOpenArea: e.target.value as DEFAULT_OPEN_AREA })
+            }
+          >
+            <option value={DEFAULT_OPEN_AREA.VIEW}>Sidebar View</option>
+            <option value={DEFAULT_OPEN_AREA.EDITOR}>Editor</option>
+          </select>
+        </div>
+      </div>
       <TextComponent
         name="Custom Prompts Folder Name"
         description="The default folder name where custom prompts will be saved. Default is 'copilot-custom-prompts'"

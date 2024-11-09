@@ -1,7 +1,7 @@
 import { CustomModel } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import CopilotView from "@/components/CopilotView";
-import { CHAT_VIEWTYPE } from "@/constants";
+import { CHAT_VIEWTYPE, DEFAULT_OPEN_AREA } from "@/constants";
 import CopilotPlugin from "@/main";
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import React from "react";
@@ -50,6 +50,7 @@ export interface CopilotSettings {
   activeEmbeddingModels: Array<CustomModel>;
   promptUsageTimestamps: Record<string, number>;
   embeddingRequestsPerSecond: number;
+  defaultOpenArea: DEFAULT_OPEN_AREA;
 }
 
 export class CopilotSettingTab extends PluginSettingTab {

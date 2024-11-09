@@ -178,6 +178,11 @@ export const VAULT_VECTOR_STORE_STRATEGIES = [
   VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH,
 ];
 
+export enum DEFAULT_OPEN_AREA {
+  EDITOR = "editor",
+  VIEW = "view",
+}
+
 export const COMMAND_IDS = {
   FIX_GRAMMAR: "fix-grammar-prompt",
   SUMMARIZE: "summarize-prompt",
@@ -223,7 +228,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   stream: true,
   defaultSaveFolder: "copilot-conversations",
   defaultConversationTag: "copilot-conversation",
-  autosaveChat: true,
+  autosaveChat: false,
+  defaultOpenArea: DEFAULT_OPEN_AREA.VIEW,
   customPromptsFolder: "copilot-custom-prompts",
   indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH,
   qaExclusions: "",
