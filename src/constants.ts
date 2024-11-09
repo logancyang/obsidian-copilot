@@ -2,6 +2,7 @@ import { CustomModel } from "@/aiParams";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChainType } from "./chainFactory";
 
+export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
 export const CHAT_VIEWTYPE = "copilot-chat-view";
 export const USER_SENDER = "user";
 export const AI_SENDER = "ai";
@@ -215,6 +216,7 @@ export const COMMAND_IDS = {
 };
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
+  plusLicenseKey: "",
   openAIApiKey: "",
   openAIOrgId: "",
   huggingfaceApiKey: "",

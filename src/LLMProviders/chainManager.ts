@@ -64,7 +64,7 @@ export default class ChainManager {
     );
     this.embeddingsManager = this.vectorStoreManager.getEmbeddingsManager();
     this.promptManager = PromptManager.getInstance(this.getLangChainParams());
-    IntentAnalyzer.initialize(this.chatModelManager);
+    IntentAnalyzer.initialize(this.settings.plusLicenseKey);
     this.createChainWithNewModel(this.getLangChainParams().modelKey);
   }
 

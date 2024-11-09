@@ -3,9 +3,7 @@ import { CustomError } from "@/error";
 import ChatModelManager from "@/LLMProviders/chatModelManager";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { TimeInfo } from "@/tools/TimeTools";
-import { extractJsonFromCodeBlock } from "@/utils";
 import VectorStoreManager from "@/VectorStoreManager";
-import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
@@ -90,69 +88,6 @@ const localSearchTool = tool(
   }
 );
 
-const getSalientTermsTool = tool(
-  async ({ query, llm }: { query: string; llm: BaseChatModel }) => {
-    const systemPrompt = `
-      Extract all nouns, noun phrases and tags as salient terms from a user query. These terms will be used for semantic search, so include as many as possible.
-
-      Anything that starts with # should be included. Anything that starts with @ should be ignored. The word "note" or "notes" should be ignored. If you are unsure if a term is a salient term, include it.
-
-      Respond with a JSON array of strings only.
-
-      Example:
-      Input: "Where did I mention project X or #urgent?"
-      Output: ["project X", "#urgent"]
-
-      Input: "What is the weather in Tokyo?"
-      Output: ["weather", "Tokyo"]
-
-      Input: "How many times did I practice the violin?"
-      Output: ["practice", "violin"]
-
-      Input: "Who is John Doe? @vault"
-      Output: ["John Doe"]
-
-      Input: "@vault I am looking for my notes on project ABC. "
-      Output: ["project ABC"]
-
-      Input: "I am looking for my notes on project ABC. #project #ABC"
-      Output: ["project ABC", "#project", "#ABC"]
-
-      Input: "Have I renewed my passport @vault"
-      Output: ["passport"]
-
-      Input: "I am looking for my notes on project ABC"
-      Output: ["project ABC"]
-
-      Input: "${query}"
-      Output:
-    `;
-    const response = await llm.invoke([
-      { role: "system", content: systemPrompt },
-      { role: "user", content: query },
-    ]);
-
-    try {
-      const terms = extractJsonFromCodeBlock(response.content as string);
-      if (Array.isArray(terms)) {
-        return terms;
-      }
-      return [];
-    } catch (error) {
-      console.error("Error parsing salient terms:", error, response.content);
-      return [];
-    }
-  },
-  {
-    name: "getSalientTerms",
-    description: "Extracts salient terms or tags from the user's query for semantic search",
-    schema: z.object({
-      query: z.string().describe("The user's query"),
-      llm: z.any().describe("The LLM instance"),
-    }),
-  }
-);
-
 const indexTool = tool(
   async ({ vectorStoreManager }: { vectorStoreManager: VectorStoreManager }) => {
     try {
@@ -185,4 +120,4 @@ const indexTool = tool(
   }
 );
 
-export { getSalientTermsTool, indexTool, localSearchTool };
+export { indexTool, localSearchTool };

@@ -189,12 +189,11 @@ class VectorDBManager {
   public static async getDocsByPath(db: Orama<any>, path: string): Promise<any | undefined> {
     if (!db) throw new Error("DB not initialized");
     if (!this.config) throw new Error("VectorDBManager not initialized");
-
+    if (!path) return;
     const result = await search(db, {
       term: path,
       properties: ["path"],
-      limit: 100,
-      includeVectors: true,
+      exact: true,
     });
     return result.hits;
   }

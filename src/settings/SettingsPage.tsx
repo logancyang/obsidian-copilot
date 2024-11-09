@@ -10,6 +10,7 @@ import SettingsMain from "./components/SettingsMain";
 import { SettingsProvider } from "./contexts/SettingsContext";
 
 export interface CopilotSettings {
+  plusLicenseKey: string;
   openAIApiKey: string;
   openAIOrgId: string;
   huggingfaceApiKey: string;

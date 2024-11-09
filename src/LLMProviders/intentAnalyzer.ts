@@ -1,6 +1,7 @@
 import ChatModelManager from "@/LLMProviders/chatModelManager";
 import VectorStoreManager from "@/VectorStoreManager";
-import { getSalientTermsTool, indexTool, localSearchTool } from "@/tools/SearchTools";
+import { BREVILABS_API_BASE_URL } from "@/constants";
+import { indexTool, localSearchTool } from "@/tools/SearchTools";
 import {
   getCurrentTimeTool,
   getTimeInfoByEpochTool,
@@ -9,8 +10,7 @@ import {
   TimeInfo,
 } from "@/tools/TimeTools";
 import { ToolManager } from "@/tools/toolManager";
-import { extractJsonFromCodeBlock } from "@/utils";
-import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { Notice } from "obsidian";
 
 export const COPILOT_TOOL_NAMES = ["@vault", "@web", "@youtube", "@pomodoro", "@index"];
 
@@ -20,19 +20,18 @@ type ToolCall = {
 };
 
 export class IntentAnalyzer {
-  private static chatModelManager: ChatModelManager;
+  private static licenseKey: string;
   private static tools = [
     getCurrentTimeTool,
     getTimeInfoByEpochTool,
     getTimeRangeMsTool,
     localSearchTool,
-    getSalientTermsTool,
     indexTool,
     pomodoroTool,
   ];
 
-  static initialize(chatModelManager: ChatModelManager) {
-    this.chatModelManager = chatModelManager;
+  static initialize(licenseKey: string) {
+    this.licenseKey = licenseKey;
   }
 
   static async analyzeIntent(
@@ -40,120 +39,44 @@ export class IntentAnalyzer {
     vectorStoreManager: VectorStoreManager,
     chatModelManager: ChatModelManager
   ): Promise<ToolCall[]> {
-    // NOTE: Output in JSON format only. Some weaker LLMs can return non-JSON outputs,
-    // so we need to wrap the output in a try-catch block to prevent the plugin from crashing.
-    const systemPrompt = `
-      You are tasked with determining which tools, if any, are needed to answer a user's query. Output your response in **JSON format only**.
-      Available tools:
-      1. getCurrentTime: Gets the current time info, including unix time, local time, and timezone.
-      2. getTimeRangeMs: Gets a time range [startTime<TimeInfo>, endTime<TimeInfo>] based on user time expressions.
-      3. getTimeInfoByEpoch: Gets the time info based on a Unix timestamp (in seconds or milliseconds).
+    if (!this.licenseKey) {
+      new Notice(
+        "Copilot Plus license key not found. Please enter your license key in the settings."
+      );
+      throw new Error("License key not initialized");
+    }
+    // Call brevilabs broca API
+    const response = await fetch(`${BREVILABS_API_BASE_URL}/broca`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.licenseKey}`,
+      },
+      body: JSON.stringify({
+        message: userMessage,
+      }),
+    });
 
-      Respond with a JSON array of objects containing the tool name and any necessary arguments.
-
-      Examples are provided below.
-
-      ## Single point in time queries
-      Use the getCurrentTime tool for all queries that ask for the current time-related information, or a specific point in time that is relative to now, or any planning related to the current time.
-
-      Input: "What is the time now?"
-      Output: [{"tool": "getCurrentTime"}]
-
-      Input: "What is the time in UTC now?"
-      Output: [{"tool": "getCurrentTime"}]
-
-      Input: "What is the unix time?"
-      Output: [{"tool": "getCurrentTime"}]
-
-      Input: "What is the local time?"
-      Output: [{"tool": "getCurrentTime"}]
-
-      Input: "How many days until January 1st 2025?"
-      Output: [{"tool": "getCurrentTime"}]
-
-      Input: "Given my current progress, what should be my pace if I'd like to finish all the books before the end of 2024?"
-      Output: [{"tool": "getCurrentTime"}]
-
-      ## Time range queries
-      For the getTimeRangeMs tool, extract a single "timeExpression" argument that captures the entire time-related part of the user's query. Invoke this tool for queries that ask for a time range in the past, usually used for searching past notes by metadata.
-
-      Here are some examples:
-
-      Input: "what did i do last week?"
-      Output: [{"tool": "getTimeRangeMs", "args": {"timeExpression": "last week"}}]
-
-      Input: "what did i write about topic X last month?"
-      Output: [{"tool": "getTimeRangeMs", "args": {"timeExpression": "last month"}}]
-
-      Input: "Summarize my notes from the week of 2024-07-20"
-      Output: [{"tool": "getTimeRangeMs", "args": {"timeExpression": "week of 2024-07-20"}}]
-
-      Input: "What notes did I write yesterday?"
-      Output: [{"tool": "getTimeRangeMs", "args": {"timeExpression": "yesterday"}}]
-
-      Input: "Find all my notes from August"
-      Output: [{"tool": "getTimeRangeMs", "args": {"timeExpression": "August"}}]
-
-      Input: "What notes did I write from July 20 to July 25, 2024?"
-      Output: [{"tool": "getTimeRangeMs", "args": {"timeExpression": "from July 20 to July 25, 2024"}}]
-
-      ## Unix timestamp queries
-      Use the getTimeInfoByEpoch tool for queries that ask for a specific point in time using a Unix timestamp (in seconds or milliseconds).
-
-      Input: "What is the date for 1727679600000?"
-      Output: [{"tool": "getTimeInfoByEpoch", "args": {"epoch": 1727679600000}}]
-
-      Input: "What is the time for 1728623366?"
-      Output: [{"tool": "getTimeInfoByEpoch", "args": {"epoch": 1728623366}}]
-
-      ## Open-ended queries with no specific time range
-      Input: "what did I write about topic X"
-      Output: []
-
-      Input: "Summarize #projectX"
-      Output: []
-
-      Input: "Have I renewed my passport?"
-      Output: []
-
-      Analyze the user's message and provide the appropriate tool calls.
-      Output (provide only the JSON array, no additional text, must not be in a markdown code block):
-    `;
-
-    const llm = this.chatModelManager.getChatModel();
-    const response = await llm.invoke([
-      new SystemMessage(systemPrompt),
-      new HumanMessage(userMessage),
-    ]);
+    const brocaResponse = await response.json();
+    console.log("==== brocaResponse ====:", brocaResponse);
 
     try {
-      const toolCalls = extractJsonFromCodeBlock(response.content as string);
-      // Always add the getSalientTerms tool call
-      toolCalls.push({
-        tool: "getSalientTerms",
-        args: { query: userMessage, llm },
-      });
+      const brocaToolCalls = brocaResponse.response.tool_calls;
 
       const processedToolCalls: ToolCall[] = [];
       let timeRange: { startTime: TimeInfo; endTime: TimeInfo } | undefined;
-      let salientTerms: string[] = [];
-      console.log("Initial toolCalls from IntentAnalyzer:", toolCalls);
-      for (const call of toolCalls) {
-        const tool = this.tools.find((t) => t.name === call.tool);
+      const salientTerms = brocaResponse.response.salience_terms;
+
+      console.log("Initial toolCalls from IntentAnalyzer:", brocaToolCalls);
+      for (const brocaToolCall of brocaToolCalls) {
+        const tool = this.tools.find((t) => t.name === brocaToolCall.tool);
         if (tool) {
-          const args = call.args || {};
+          const args = brocaToolCall.args || {};
 
           if (tool.name === "getTimeRangeMs") {
             // Execute getTimeRangeMs tool and store the result
             const result = await ToolManager.callTool(tool, args);
             timeRange = result;
-          }
-
-          if (tool.name === "getSalientTerms") {
-            // Execute getSalientTerms tool and store the result
-            const terms = await ToolManager.callTool(tool, args);
-            salientTerms = terms;
-            console.log("salientTerms:", salientTerms);
           }
 
           if (tool.name === "indexVault") {
@@ -169,7 +92,7 @@ export class IntentAnalyzer {
         processedToolCalls.push({
           tool: localSearchTool,
           args: {
-            timeRange,
+            timeRange: timeRange || undefined,
             // TODO: Remove all @tools from the query
             query: userMessage.replace("@vault", "").trim(),
             salientTerms,
@@ -202,7 +125,7 @@ export class IntentAnalyzer {
 
       return processedToolCalls;
     } catch (error) {
-      console.error("Error parsing LLM response:", error, response.content);
+      console.error("Error parsing LLM response:", error, brocaResponse);
       return [];
     }
   }

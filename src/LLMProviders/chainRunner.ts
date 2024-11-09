@@ -370,12 +370,10 @@ class CopilotPlusChainRunner extends BaseChainRunner {
 
   private prepareEnhancedUserMessage(userMessage: string, toolOutputs: any[]) {
     let context = "";
-    // getSalientTerms tool output should not be included in the enhanced user message
     if (toolOutputs.length > 0) {
       context =
         "Additional context:\n\n" +
         toolOutputs
-          .filter((output) => output.tool !== "getSalientTerms")
           .map((output) => `# ${output.tool}\n${JSON.stringify(output.output)}`)
           .join("\n\n");
     }
@@ -390,8 +388,8 @@ class CopilotPlusChainRunner extends BaseChainRunner {
   private formatLocalSearchResult(documents: any[], timeExpression: string): string {
     const formattedDocs = documents
       .filter((doc) => doc.includeInContext)
-      .map((doc: any) => `${doc.content}`)
-      .join("\n");
+      .map((doc: any) => `Note in Vault: ${doc.content}`)
+      .join("\n\n");
     return `Local Search Result for ${timeExpression}:\n${formattedDocs}`;
   }
 }
