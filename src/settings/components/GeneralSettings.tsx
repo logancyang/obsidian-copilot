@@ -78,7 +78,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         <div className="select-wrapper">
           <select
             id="defaultChainSelect"
-            className="chat-icon-selection"
+            className="default-chain-selection"
             value={settings.defaultChainType}
             onChange={(e) => updateSettings({ defaultChainType: e.target.value as ChainType })}
           >
