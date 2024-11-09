@@ -102,25 +102,16 @@ If your plugin does not need CSS, delete this file.
 }
 
 .icon-scaler {
-  transform: scale(0.5);
+  transform: scale(0.7);
 }
 
 .tooltip-text {
   max-width: 400px;
-  visibility: hidden;
-  opacity: 0;
   background-color: var(--background-secondary);
   color: var(--text-normal);
   text-align: center;
   border-radius: 5px;
   padding: 5px;
-  position: absolute;
-  z-index: 1;
-  bottom: 100%;
-  left: 50%;
-  margin-bottom: 4px;
-  transform: translateX(-50%);
-  transition: opacity 0.3s;
   font-size: var(--font-ui-smaller);
   white-space: nowrap;
 }
@@ -128,12 +119,6 @@ If your plugin does not need CSS, delete this file.
 .select-wrapper {
   position: relative;
   display: inline-block;
-}
-
-.select-wrapper:hover .tooltip-text,
-.chat-icon-button.clickable-icon:hover .tooltip-text {
-  visibility: visible !important;
-  opacity: 1 !important;
 }
 
 .chat-icon-button.clickable-icon,
@@ -299,47 +284,9 @@ If your plugin does not need CSS, delete this file.
   opacity: 1;
 }
 
-/* Tooltip Styles */
-.tooltip-text {
-  max-width: 400px;
-  visibility: hidden;
-  opacity: 0;
-  background-color: var(--background-secondary);
-  color: var(--text-normal);
-  text-align: center;
-  border-radius: 5px;
-  padding: 5px;
-  position: absolute;
-  z-index: 1;
-  bottom: 100%;
-  left: 50%;
-  margin-bottom: 4px;
-  transform: translateX(-50%);
-  transition: opacity 0.3s;
-  font-size: var(--font-ui-smaller);
-  white-space: nowrap;
-}
-
 /* Button and Tooltip Container */
 .chat-icon-button {
   position: relative;
-}
-
-/* Show tooltip on hover */
-.chat-icon-button:hover .tooltip-text {
-  visibility: visible;
-  opacity: 1;
-}
-
-/* Ensure tooltips are visible for all icon buttons */
-.chat-icon-button.clickable-icon .tooltip-text {
-  visibility: hidden;
-  opacity: 0;
-}
-
-.chat-icon-button.clickable-icon:hover .tooltip-text {
-  visibility: visible !important;
-  opacity: 1 !important;
 }
 
 .submit-button svg,
@@ -347,11 +294,6 @@ If your plugin does not need CSS, delete this file.
 .chain-select-button svg {
   width: 12px;
   height: 12px;
-}
-
-.chat-icon-button.clickable-icon:hover .tooltip-text {
-  visibility: visible;
-  opacity: 1;
 }
 
 .chat-messages {

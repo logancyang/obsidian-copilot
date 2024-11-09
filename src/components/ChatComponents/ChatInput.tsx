@@ -6,7 +6,6 @@ import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChatMessage } from "@/sharedState";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import * as Tooltip from "@radix-ui/react-tooltip";
 import { ChevronUp, Command, CornerDownLeft, StopCircle } from "lucide-react";
 import { App, Platform, TFile, Vault } from "obsidian";
 import React, { useEffect, useRef, useState } from "react";
@@ -198,8 +197,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
   return (
     <div className="chat-input-container" ref={containerRef}>
       <ChatControls
-        currentModelKey={currentModelKey}
-        setCurrentModelKey={setCurrentModelKey}
         currentChain={currentChain}
         setCurrentChain={setCurrentChain}
         onNewChat={onNewChat}
@@ -208,8 +205,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
         settings={settings}
         vault_qa_strategy={vault_qa_strategy}
         debug={debug}
-        addMessage={addMessage}
-        vault={vault}
       />
 
       <textarea
@@ -247,40 +242,24 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
         <div className="chat-input-buttons">
           {isGenerating && (
-            <Tooltip.Provider delayDuration={0}>
-              <Tooltip.Root>
-                <Tooltip.Trigger asChild>
-                  <button onClick={() => onStopGenerating()} className="submit-button cancel">
-                    <StopCircle />
-                  </button>
-                </Tooltip.Trigger>
-              </Tooltip.Root>
-            </Tooltip.Provider>
+            <button onClick={() => onStopGenerating()} className="submit-button cancel">
+              <StopCircle />
+            </button>
           )}
-          <Tooltip.Provider delayDuration={0}>
-            <Tooltip.Root>
-              <Tooltip.Trigger asChild>
-                <button onClick={handleSendMessage} className="submit-button">
-                  <CornerDownLeft size={16} />
-                  <span>chat</span>
-                </button>
-              </Tooltip.Trigger>
-            </Tooltip.Root>
+          <button onClick={handleSendMessage} className="submit-button">
+            <CornerDownLeft size={16} />
+            <span>chat</span>
+          </button>
 
-            {currentChain === "copilot_plus" && (
-              <Tooltip.Root>
-                <Tooltip.Trigger asChild>
-                  <button onClick={handleSendMessage} className="submit-button vault">
-                    <div className="button-content">
-                      {Platform.isMacOS && <Command size={12} />}
-                      <CornerDownLeft size={16} />
-                      <span>vault</span>
-                    </div>
-                  </button>
-                </Tooltip.Trigger>
-              </Tooltip.Root>
-            )}
-          </Tooltip.Provider>
+          {currentChain === "copilot_plus" && (
+            <button onClick={handleSendMessage} className="submit-button vault">
+              <div className="button-content">
+                {Platform.isMacOS && <Command size={12} />}
+                <CornerDownLeft size={16} />
+                <span>vault</span>
+              </div>
+            </button>
+          )}
         </div>
       </div>
     </div>

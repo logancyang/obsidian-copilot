@@ -8,6 +8,7 @@ import SharedState from "@/sharedState";
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
 import { Root, createRoot } from "react-dom/client";
+import * as Tooltip from "@radix-ui/react-tooltip";
 
 export default class CopilotView extends ItemView {
   private chainManager: ChainManager;
@@ -59,21 +60,23 @@ export default class CopilotView extends ItemView {
     root.render(
       <AppContext.Provider value={this.app}>
         <React.StrictMode>
-          <Chat
-            sharedState={this.sharedState}
-            settings={this.settings}
-            chainManager={this.chainManager}
-            emitter={this.emitter}
-            defaultSaveFolder={this.defaultSaveFolder}
-            updateUserMessageHistory={(newMessage) => {
-              this.plugin.updateUserMessageHistory(newMessage);
-            }}
-            plugin={this.plugin}
-            debug={this.debug}
-            onSaveChat={(saveFunction) => {
-              this.handleSaveAsNote = saveFunction;
-            }}
-          />
+          <Tooltip.Provider delayDuration={0}>
+            <Chat
+              sharedState={this.sharedState}
+              settings={this.settings}
+              chainManager={this.chainManager}
+              emitter={this.emitter}
+              defaultSaveFolder={this.defaultSaveFolder}
+              updateUserMessageHistory={(newMessage) => {
+                this.plugin.updateUserMessageHistory(newMessage);
+              }}
+              plugin={this.plugin}
+              debug={this.debug}
+              onSaveChat={(saveFunction) => {
+                this.handleSaveAsNote = saveFunction;
+              }}
+            />
+          </Tooltip.Provider>
         </React.StrictMode>
       </AppContext.Provider>
     );
