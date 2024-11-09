@@ -3,42 +3,33 @@ import { CopilotPlusModal } from "@/components/CopilotPlusModal";
 import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { CustomError } from "@/error";
 import { CopilotSettings } from "@/settings/SettingsPage";
-import { ChatMessage } from "@/sharedState";
-import { Notice, Vault } from "obsidian";
+import { Notice } from "obsidian";
 import React, { useEffect, useState } from "react";
 
 import { ChainType } from "@/chainFactory";
-import { RefreshIcon, SaveAsNoteIcon, UseActiveNoteAsContextIcon } from "@/components/Icons";
 import { stringToChainType } from "@/utils";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Download, Puzzle, RefreshCw } from "lucide-react";
+import { TooltipActionButton } from "@/components/ChatComponents/TooltipActionButton";
 
 interface ChatControlsProps {
-  currentModelKey: string;
-  setCurrentModelKey: (modelKey: string) => void;
   currentChain: ChainType;
   setCurrentChain: (chain: ChainType, options?: SetChainOptions) => void;
   onNewChat: (openNote: boolean) => void;
   onSaveAsNote: () => void;
   onRefreshVaultContext: () => void;
-  addMessage: (message: ChatMessage) => void;
   settings: CopilotSettings;
-  vault: Vault;
   vault_qa_strategy: string;
   debug?: boolean;
 }
 
 const ChatControls: React.FC<ChatControlsProps> = ({
-  currentModelKey,
-  setCurrentModelKey,
   currentChain,
   setCurrentChain,
   onNewChat,
   onSaveAsNote,
   onRefreshVaultContext,
-  addMessage,
   settings,
-  vault,
   vault_qa_strategy,
   debug,
 }) => {
@@ -106,36 +97,25 @@ const ChatControls: React.FC<ChatControlsProps> = ({
 
   return (
     <div className="chat-icons-container">
-      <button className="chat-icon-button clickable-icon" onClick={() => onNewChat(false)}>
-        <RefreshIcon className="icon-scaler" />
-        <span className="tooltip-text">
-          New Chat
-          <br />
-          (unsaved history will be lost)
-        </span>
-      </button>
-      <button className="chat-icon-button clickable-icon" onClick={onSaveAsNote}>
-        <SaveAsNoteIcon className="icon-scaler" />
-        <span className="tooltip-text">Save as Note</span>
-      </button>
+      <TooltipActionButton
+        onClick={() => {
+          onNewChat(false);
+        }}
+        Icon={<RefreshCw className="icon-scaler" />}
+      >
+        <div>New Chat</div>
+        {!settings.autosaveChat && <div>(Unsaved history will be lost)</div>}
+      </TooltipActionButton>
+      <TooltipActionButton onClick={onSaveAsNote} Icon={<Download className="icon-scaler" />}>
+        Save as Note
+      </TooltipActionButton>
       {selectedChain === "vault_qa" && (
-        <>
-          <button className="chat-icon-button clickable-icon" onClick={onRefreshVaultContext}>
-            <UseActiveNoteAsContextIcon className="icon-scaler" />
-            <div
-              className="tooltip-text"
-              style={{
-                transform: "translateX(-90%)",
-              }}
-            >
-              <span>Refresh Index for Vault</span>
-            </div>
-          </button>
-          {/* <button className="chat-icon-button clickable-icon" onClick={handleFindSimilarNotes}>
-            <ConnectionIcon className="icon-scaler" />
-            <span className="tooltip-text">Find Similar Notes for Active Note</span>
-          </button> */}
-        </>
+        <TooltipActionButton
+          onClick={onRefreshVaultContext}
+          Icon={<Puzzle className="icon-scaler" />}
+        >
+          Refresh Index for Vault
+        </TooltipActionButton>
       )}
       <div className="chat-icon-selection-tooltip">
         <DropdownMenu.Root>
