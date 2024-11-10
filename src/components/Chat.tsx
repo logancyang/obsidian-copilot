@@ -77,6 +77,8 @@ const Chat: React.FC<ChatProps> = ({
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES.DEFAULT);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [chatIsVisible, setChatIsVisible] = useState(false);
+  const [contextNotes, setContextNotes] = useState<TFile[]>([]);
+  const [includeActiveNote, setIncludeActiveNote] = useState(false);
 
   useEffect(() => {
     const handleChatVisibility = (evt: CustomEvent<{ chatIsVisible: boolean }>) => {
@@ -92,15 +94,50 @@ const Chat: React.FC<ChatProps> = ({
 
   const app = plugin.app || useContext(AppContext);
 
+  const processContextNotes = async (
+    processedMessage: string,
+    customPromptProcessor: CustomPromptProcessor
+  ) => {
+    // Get all variables that were processed by the custom prompt processor
+    const processedVars = await customPromptProcessor.getProcessedVariables();
+    const activeNote = app.workspace.getActiveFile();
+    let additionalContext = "";
+
+    // Process active note if included and not already processed
+    if (includeActiveNote && activeNote) {
+      const activeNoteVar = `activeNote`;
+      const activeNotePath = `[[${activeNote.basename}]]`;
+
+      if (!processedVars.has(activeNoteVar) && !processedVars.has(activeNotePath)) {
+        const content = await app.vault.read(activeNote);
+        additionalContext += `\n\nactiveNote:\n\n${activeNotePath}\n\n${content}`;
+      }
+    }
+
+    // Process context notes that weren't already processed
+    for (const note of contextNotes) {
+      const notePath = `[[${note.basename}]]`;
+      if (!processedVars.has(notePath)) {
+        const content = await app.vault.read(note);
+        additionalContext += `\n\n[[${note.basename}]]:\n\n${content}`;
+      }
+    }
+
+    return processedMessage + additionalContext;
+  };
+
   const handleSendMessage = async () => {
     if (!inputMessage) return;
 
     const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault, settings);
-    const processedUserMessage = await customPromptProcessor.processCustomPrompt(
+    let processedUserMessage = await customPromptProcessor.processCustomPrompt(
       inputMessage,
       "",
       app.workspace.getActiveFile() as TFile | undefined
     );
+
+    // Add context notes that weren't already processed
+    processedUserMessage = await processContextNotes(processedUserMessage, customPromptProcessor);
 
     const timestamp = formatDateTime(new Date());
 
@@ -576,10 +613,14 @@ ${chatContent}`;
           onSaveAsNote={() => handleSaveAsNote(true)}
           onRefreshVaultContext={refreshVaultContext}
           vault_qa_strategy={plugin.settings.indexVaultToVectorStore}
-          debug={debug}
           addMessage={addMessage}
           vault={app.vault}
           isIndexLoadedPromise={plugin.vectorStoreManager.getIsIndexLoaded()}
+          contextNotes={contextNotes}
+          setContextNotes={setContextNotes}
+          includeActiveNote={includeActiveNote}
+          setIncludeActiveNote={setIncludeActiveNote}
+          debug={debug}
         />
       </div>
     </div>

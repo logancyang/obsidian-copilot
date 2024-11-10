@@ -6,6 +6,7 @@ import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChatMessage } from "@/sharedState";
+import { extractNoteTitles } from "@/utils";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronUp, Command, CornerDownLeft, StopCircle } from "lucide-react";
 import { App, Platform, TFile, Vault } from "obsidian";
@@ -33,6 +34,10 @@ interface ChatInputProps {
   vault: Vault;
   vault_qa_strategy: string;
   isIndexLoadedPromise: Promise<boolean>;
+  contextNotes: TFile[];
+  setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
+  includeActiveNote: boolean;
+  setIncludeActiveNote: (include: boolean) => void;
   debug?: boolean;
 }
 
@@ -59,6 +64,10 @@ const ChatInput: React.FC<ChatInputProps> = ({
   vault,
   vault_qa_strategy,
   isIndexLoadedPromise,
+  contextNotes,
+  setContextNotes,
+  includeActiveNote,
+  setIncludeActiveNote,
   debug,
 }) => {
   const [shouldFocus, setShouldFocus] = useState(false);
@@ -68,6 +77,54 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const debounce = <T extends (...args: any[]) => any>(
+    fn: T,
+    delay: number
+  ): ((...args: Parameters<T>) => void) => {
+    let timeoutId: NodeJS.Timeout;
+    return (...args: Parameters<T>) => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => fn(...args), delay);
+    };
+  };
+
+  // Debounce the context update to prevent excessive re-renders
+  const debouncedUpdateContext = debounce(
+    async (
+      inputValue: string,
+      setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>,
+      currentContextNotes: TFile[],
+      includeActiveNote: boolean,
+      app: App
+    ) => {
+      // TODO: This should also handle templating with {path}, {#tag} in the future.
+      // Extract note titles from the input
+      const noteTitles = extractNoteTitles(inputValue);
+      // Find the files for the note titles
+      const notesToAdd = await Promise.all(
+        noteTitles.map(async (title) => {
+          const files = app.vault.getMarkdownFiles();
+          return files.find((file) => file.basename === title);
+        })
+      );
+
+      const activeNote = app.workspace.getActiveFile();
+      // Filter out any undefined notes and notes that are already in the context
+      const validNotes = notesToAdd.filter(
+        (note): note is TFile =>
+          note !== undefined &&
+          !currentContextNotes.some((existing) => existing.path === note.path) &&
+          (!includeActiveNote || activeNote?.path !== note.path)
+      );
+
+      // Add the valid notes to the context
+      if (validNotes.length > 0) {
+        setContextNotes((prev) => [...prev, ...validNotes]);
+      }
+    },
+    300
+  );
+
   const handleInputChange = async (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     const inputValue = event.target.value;
     const cursorPos = event.target.selectionStart;
@@ -75,6 +132,10 @@ const ChatInput: React.FC<ChatInputProps> = ({
     setInputMessage(inputValue);
     adjustTextareaHeight();
 
+    // Update context with debouncing
+    debouncedUpdateContext(inputValue, setContextNotes, contextNotes, includeActiveNote, app);
+
+    // Handle other input triggers
     if (cursorPos >= 2 && inputValue.slice(cursorPos - 2, cursorPos) === "[[") {
       showNoteTitleModal(cursorPos);
     } else if (inputValue === "/") {
@@ -99,10 +160,27 @@ const ChatInput: React.FC<ChatInputProps> = ({
     const fetchNoteTitles = async () => {
       const noteTitles = app.vault.getMarkdownFiles().map((file: TFile) => file.basename);
 
-      new NoteTitleModal(app, noteTitles, (noteTitle: string) => {
+      new NoteTitleModal(app, noteTitles, async (noteTitle: string) => {
         const before = inputMessage.slice(0, cursorPos - 2);
         const after = inputMessage.slice(cursorPos - 1);
-        setInputMessage(`${before}[[${noteTitle}]]${after}`);
+        const newInputMessage = `${before}[[${noteTitle}]]${after}`;
+        setInputMessage(newInputMessage);
+
+        const activeNote = app.workspace.getActiveFile();
+        // Immediately update context without waiting for debounce
+        const noteFile = app.vault.getMarkdownFiles().find((file) => file.basename === noteTitle);
+        if (
+          noteFile &&
+          !contextNotes.some((existing) => existing.path === noteFile.path) &&
+          (!includeActiveNote || activeNote?.path !== noteFile.path)
+        ) {
+          if (activeNote && noteFile.path === activeNote.path) {
+            setIncludeActiveNote(true);
+          } else {
+            setContextNotes((prev) => [...prev, noteFile]);
+          }
+        }
+
         // Add a delay to ensure the cursor is set after inputMessage is updated
         setTimeout(() => {
           if (textAreaRef.current) {
@@ -206,6 +284,19 @@ const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
+  useEffect(() => {
+    // Extract current note titles from input
+    const currentTitles = new Set(extractNoteTitles(inputMessage));
+    const activeNote = app.workspace.getActiveFile();
+    // Remove context notes that are no longer referenced in the input
+    setContextNotes((prev) =>
+      prev.filter(
+        (note) =>
+          currentTitles.has(note.basename) || (includeActiveNote && activeNote?.path === note.path)
+      )
+    );
+  }, [inputMessage]);
+
   return (
     <div className="chat-input-container" ref={containerRef}>
       <ChatControls
@@ -217,6 +308,11 @@ const ChatInput: React.FC<ChatInputProps> = ({
         settings={settings}
         vault_qa_strategy={vault_qa_strategy}
         isIndexLoadedPromise={isIndexLoadedPromise}
+        app={app}
+        contextNotes={contextNotes}
+        setContextNotes={setContextNotes}
+        includeActiveNote={includeActiveNote}
+        setIncludeActiveNote={setIncludeActiveNote}
         debug={debug}
       />
 

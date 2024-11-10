@@ -95,10 +95,76 @@ If your plugin does not need CSS, delete this file.
   display: flex;
   align-items: center;
   width: 100%;
-  padding: 0 0 4px;
+  padding: 0 0 8px;
+  gap: 4px;
+}
+
+.chat-context-menu {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border-bottom: none;
+  flex: 1; /* Take up available space */
+}
+
+.context-notes {
+  display: flex;
   gap: 4px;
   flex-wrap: wrap;
+  flex: 1;
+}
+
+.context-note {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  background: var(--background-secondary-alt);
+  border-radius: 4px;
+  font-size: 10px;
+  height: 20px;
+  line-height: 1;
+}
+
+.context-note.active {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+  border-left: 2px solid var(--interactive-accent);
+}
+
+.context-note.with-hover {
+  /* Use the same background as active note but without border */
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.note-badge {
+  font-size: 10px;
+  padding: 0 4px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.remove-note {
+  padding: 0 4px;
+  cursor: pointer;
+  opacity: 0.5;
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.remove-note:hover {
+  opacity: 1;
+}
+
+.chat-icons-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   justify-content: flex-end;
+  margin-left: auto; /* Push to the right */
 }
 
 .icon-scaler {
