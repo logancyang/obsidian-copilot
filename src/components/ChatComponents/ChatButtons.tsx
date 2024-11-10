@@ -1,13 +1,6 @@
-import {
-  CheckIcon,
-  CopyClipboardIcon,
-  DeleteIcon,
-  EditIcon,
-  InsertIcon,
-  RegenerateIcon,
-} from "@/components/Icons";
 import { USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/sharedState";
+import { Check, Copy, MessageSquarePlus, PenSquare, RotateCw, Trash2 } from "lucide-react";
 import React from "react";
 
 interface ChatButtonsProps {
@@ -32,15 +25,15 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
   return (
     <div className="chat-message-buttons">
       <button onClick={onCopy} className="clickable-icon" title="Copy">
-        {isCopied ? <CheckIcon /> : <CopyClipboardIcon />}
+        {isCopied ? <Check /> : <Copy />}
       </button>
       {message.sender === USER_SENDER ? (
         <>
           <button onClick={onEdit} className="clickable-icon" title="Edit">
-            <EditIcon />
+            <PenSquare />
           </button>
           <button onClick={onDelete} className="clickable-icon" title="Delete">
-            <DeleteIcon />
+            <Trash2 />
           </button>
         </>
       ) : (
@@ -50,13 +43,13 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
             className="clickable-icon"
             title="Insert to note at cursor"
           >
-            <InsertIcon />
+            <MessageSquarePlus />
           </button>
           <button onClick={onRegenerate} className="clickable-icon" title="Regenerate">
-            <RegenerateIcon />
+            <RotateCw />
           </button>
           <button onClick={onDelete} className="clickable-icon" title="Delete">
-            <DeleteIcon />
+            <Trash2 />
           </button>
         </>
       )}

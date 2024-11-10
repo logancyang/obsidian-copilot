@@ -1,7 +1,7 @@
 import { ChatButtons } from "@/components/ChatComponents/ChatButtons";
-import { BotIcon, UserIcon } from "@/components/Icons";
 import { USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/sharedState";
+import { BotMessageSquare, User } from "lucide-react";
 import { App, Component, MarkdownRenderer } from "obsidian";
 import React, { useEffect, useRef, useState } from "react";
 
@@ -122,7 +122,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     <div className="chat-message-container">
       <div className={`message ${message.sender === USER_SENDER ? "user-message" : "bot-message"}`}>
         <div className="message-icon">
-          {message.sender === USER_SENDER ? <UserIcon /> : <BotIcon />}
+          {message.sender === USER_SENDER ? <User /> : <BotMessageSquare />}
         </div>
         <div className="message-content-wrapper">
           <div className="message-content">
