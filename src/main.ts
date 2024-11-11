@@ -532,13 +532,6 @@ export default class CopilotPlugin extends Plugin {
     // Create a unique key for each model, it's model (name + provider)
     const getModelKey = (model: CustomModel) => `${model.name}|${model.provider}`;
 
-    // Add core models to the map
-    builtInModels
-      .filter((model) => model.core)
-      .forEach((model) => {
-        modelMap.set(getModelKey(model), { ...model, core: true });
-      });
-
     // Add or update existing models in the map
     existingActiveModels.forEach((model) => {
       const key = getModelKey(model);

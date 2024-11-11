@@ -370,7 +370,7 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
                   )}
                 </td>
                 <td>
-                  {getModelKey(model) !== defaultModelKey && !model.core && (
+                  {getModelKey(model) !== defaultModelKey && (
                     <button onClick={() => onDeleteModel(getModelKey(model))}>Delete</button>
                   )}
                 </td>
@@ -399,7 +399,7 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
                 updatedModels[index].enableCors = value;
                 onUpdateModels(updatedModels);
               }}
-              onDelete={!model.core ? () => onDeleteModel(getModelKey(model)) : undefined}
+              onDelete={() => onDeleteModel(getModelKey(model))}
               disabled={model.isBuiltIn}
             />
           ))}
