@@ -323,10 +323,11 @@ class VectorStoreManager {
 
         if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
           // Model has changed, reinitialize DB
-          await this.initializeDB();
+          this.oramaDb = await this.createNewDb();
           overwrite = true;
           new Notice("Detected change in embedding model. Rebuilding vector store from scratch.");
           console.log("Detected change in embedding model. Rebuilding vector store from scratch.");
+          await this.saveDB();
         }
       } else {
         console.log("No previous embedding model found in the database.");
