@@ -7,10 +7,10 @@ import { Notice } from "obsidian";
 import React, { useEffect, useState } from "react";
 
 import { ChainType } from "@/chainFactory";
+import { TooltipActionButton } from "@/components/ChatComponents/TooltipActionButton";
 import { stringToChainType } from "@/utils";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronDown, Download, Puzzle, RefreshCw } from "lucide-react";
-import { TooltipActionButton } from "@/components/ChatComponents/TooltipActionButton";
 
 interface ChatControlsProps {
   currentChain: ChainType;
@@ -120,22 +120,22 @@ const ChatControls: React.FC<ChatControlsProps> = ({
       <div className="chat-icon-selection-tooltip">
         <DropdownMenu.Root>
           <DropdownMenu.Trigger className="chain-select-button">
-            {currentChain === "llm_chain" && "Chat Mode"}
-            {currentChain === "vault_qa" && "Vault QA Mode (Basic)"}
-            {currentChain === "copilot_plus" && "Copilot Plus Mode (Alpha)"}
+            {currentChain === "llm_chain" && "chat"}
+            {currentChain === "vault_qa" && "vault QA (basic)"}
+            {currentChain === "copilot_plus" && "copilot plus (alpha)"}
             <ChevronDown size={10} />
           </DropdownMenu.Trigger>
 
           <DropdownMenu.Portal>
             <DropdownMenu.Content className="chain-select-content">
               <DropdownMenu.Item onSelect={() => handleChainChange({ value: "llm_chain" })}>
-                Chat Mode
+                chat
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={() => handleChainChange({ value: "vault_qa" })}>
-                Vault QA Mode (Basic)
+                vault QA (basic)
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={() => handleChainChange({ value: "copilot_plus" })}>
-                Copilot Plus Mode (Alpha)
+                copilot plus (alpha)
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
