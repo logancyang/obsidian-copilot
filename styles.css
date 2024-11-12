@@ -223,7 +223,7 @@ If your plugin does not need CSS, delete this file.
   border-radius: 4px;
   padding: 4px;
   font-size: 10px;
-  transform: translateX(18px);
+  transform: translateX(30px);
 }
 
 .model-select-content [role="menuitem"] {
@@ -258,7 +258,7 @@ If your plugin does not need CSS, delete this file.
   border-radius: 4px;
   padding: 4px;
   font-size: 10px;
-  transform: translateX(-18px);
+  transform: translateX(-5px);
 }
 
 .chain-select-content [role="menuitem"] {
