@@ -4,6 +4,7 @@ import { ListPromptModal } from "@/components/ListPromptModal";
 import { NoteTitleModal } from "@/components/NoteTitleModal";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
+import { Mention } from "@/mentions/Mention";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChatMessage } from "@/sharedState";
 import { extractNoteTitles } from "@/utils";
@@ -38,6 +39,7 @@ interface ChatInputProps {
   setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
   includeActiveNote: boolean;
   setIncludeActiveNote: (include: boolean) => void;
+  mention: Mention;
   debug?: boolean;
 }
 
@@ -68,12 +70,14 @@ const ChatInput: React.FC<ChatInputProps> = ({
   setContextNotes,
   includeActiveNote,
   setIncludeActiveNote,
+  mention,
   debug,
 }) => {
   const [shouldFocus, setShouldFocus] = useState(false);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [tempInput, setTempInput] = useState("");
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+  const [contextUrls, setContextUrls] = useState<string[]>([]);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -97,27 +101,29 @@ const ChatInput: React.FC<ChatInputProps> = ({
       includeActiveNote: boolean,
       app: App
     ) => {
-      // TODO: This should also handle templating with {path}, {#tag} in the future.
-      // Extract note titles from the input
       const noteTitles = extractNoteTitles(inputValue);
-      // Find the files for the note titles
       const notesToAdd = await Promise.all(
         noteTitles.map(async (title) => {
           const files = app.vault.getMarkdownFiles();
-          return files.find((file) => file.basename === title);
+          const file = files.find((file) => file.basename === title);
+          if (file) {
+            // Create a new object that extends TFile with our flag
+            return Object.assign(file, { wasAddedViaReference: true }) as TFile & {
+              wasAddedViaReference: boolean;
+            };
+          }
+          return undefined;
         })
       );
 
       const activeNote = app.workspace.getActiveFile();
-      // Filter out any undefined notes and notes that are already in the context
       const validNotes = notesToAdd.filter(
-        (note): note is TFile =>
+        (note): note is TFile & { wasAddedViaReference: boolean } =>
           note !== undefined &&
           !currentContextNotes.some((existing) => existing.path === note.path) &&
           (!includeActiveNote || activeNote?.path !== note.path)
       );
 
-      // Add the valid notes to the context
       if (validNotes.length > 0) {
         setContextNotes((prev) => [...prev, ...validNotes]);
       }
@@ -131,6 +137,16 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
     setInputMessage(inputValue);
     adjustTextareaHeight();
+
+    // Extract URLs and update mentions
+    const urls = mention.extractUrls(inputValue);
+
+    // Update URLs in context, ensuring uniqueness
+    const newUrls = urls.filter((url) => !contextUrls.includes(url));
+    if (newUrls.length > 0) {
+      // Use Set to ensure uniqueness
+      setContextUrls((prev) => Array.from(new Set([...prev, ...newUrls])));
+    }
 
     // Update context with debouncing
     debouncedUpdateContext(inputValue, setContextNotes, contextNotes, includeActiveNote, app);
@@ -177,7 +193,11 @@ const ChatInput: React.FC<ChatInputProps> = ({
           if (activeNote && noteFile.path === activeNote.path) {
             setIncludeActiveNote(true);
           } else {
-            setContextNotes((prev) => [...prev, noteFile]);
+            // Add the wasAddedViaReference flag here too
+            setContextNotes((prev) => [
+              ...prev,
+              Object.assign(noteFile, { wasAddedViaReference: true }),
+            ]);
           }
         }
 
@@ -285,16 +305,30 @@ const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   useEffect(() => {
-    // Extract current note titles from input
+    // Extract current note titles and URLs from input
     const currentTitles = new Set(extractNoteTitles(inputMessage));
+    const currentUrls = mention.extractUrls(inputMessage);
     const activeNote = app.workspace.getActiveFile();
-    // Remove context notes that are no longer referenced in the input
+
+    // Remove notes that were added via [[]] references and are no longer in the input
     setContextNotes((prev) =>
-      prev.filter(
-        (note) =>
-          currentTitles.has(note.basename) || (includeActiveNote && activeNote?.path === note.path)
-      )
+      prev.filter((note) => {
+        // Check if the note was added via reference
+        const wasAddedViaReference = "wasAddedViaReference" in note;
+
+        return (
+          // Keep the note if it's still referenced in the input
+          currentTitles.has(note.basename) ||
+          // Keep the active note if it's included
+          (includeActiveNote && activeNote?.path === note.path) ||
+          // Keep the note if it wasn't added via reference
+          !wasAddedViaReference
+        );
+      })
     );
+
+    // Remove URLs that are no longer in the input
+    setContextUrls((prev) => prev.filter((url) => currentUrls.includes(url)));
   }, [inputMessage]);
 
   return (
@@ -313,6 +347,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
         setContextNotes={setContextNotes}
         includeActiveNote={includeActiveNote}
         setIncludeActiveNote={setIncludeActiveNote}
+        contextUrls={contextUrls}
+        onRemoveUrl={(url: string) => setContextUrls((prev) => prev.filter((u) => u !== url))}
         debug={debug}
       />
 

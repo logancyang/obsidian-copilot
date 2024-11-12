@@ -15,6 +15,7 @@ import { AppContext } from "@/context";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { getAIResponse } from "@/langchainStream";
 import CopilotPlugin from "@/main";
+import { Mention } from "@/mentions/Mention";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import SharedState, { ChatMessage, useSharedState } from "@/sharedState";
 import {
@@ -80,6 +81,8 @@ const Chat: React.FC<ChatProps> = ({
   const [contextNotes, setContextNotes] = useState<TFile[]>([]);
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
 
+  const mention = Mention.getInstance(plugin.settings.plusLicenseKey);
+
   useEffect(() => {
     const handleChatVisibility = (evt: CustomEvent<{ chatIsVisible: boolean }>) => {
       setChatIsVisible(evt.detail.chatIsVisible);
@@ -129,6 +132,22 @@ const Chat: React.FC<ChatProps> = ({
   const handleSendMessage = async () => {
     if (!inputMessage) return;
 
+    const timestamp = formatDateTime(new Date());
+    const userMessage: ChatMessage = {
+      message: inputMessage,
+      sender: USER_SENDER,
+      isVisible: true,
+      timestamp: timestamp,
+    };
+
+    // Clear input and show loading immediately
+    setInputMessage("");
+    // Add messages to chat history
+    addMessage(userMessage);
+    setLoading(true);
+    setLoadingMessage(LOADING_MESSAGES.DEFAULT);
+
+    // Process the message in the background
     const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault, settings);
     let processedUserMessage = await customPromptProcessor.processCustomPrompt(
       inputMessage,
@@ -138,15 +157,8 @@ const Chat: React.FC<ChatProps> = ({
 
     // Add context notes that weren't already processed
     processedUserMessage = await processContextNotes(processedUserMessage, customPromptProcessor);
-
-    const timestamp = formatDateTime(new Date());
-
-    const userMessage: ChatMessage = {
-      message: inputMessage,
-      sender: USER_SENDER,
-      isVisible: true,
-      timestamp: timestamp,
-    };
+    // Process mentions in the message
+    processedUserMessage = await mention.processMentions(processedUserMessage);
 
     const promptMessageHidden: ChatMessage = {
       message: processedUserMessage,
@@ -155,20 +167,13 @@ const Chat: React.FC<ChatProps> = ({
       timestamp: timestamp,
     };
 
-    // Add user message to chat history
-    addMessage(userMessage);
+    // Add hidden user message to chat history
     addMessage(promptMessageHidden);
 
     // Add to user message history
     updateUserMessageHistory(inputMessage);
     setHistoryIndex(-1);
 
-    // Clear input
-    setInputMessage("");
-
-    // Display running dots to indicate loading
-    setLoading(true);
-    setLoadingMessage(LOADING_MESSAGES.DEFAULT);
     await getAIResponse(
       promptMessageHidden,
       chainManager,
@@ -620,6 +625,7 @@ ${chatContent}`;
           setContextNotes={setContextNotes}
           includeActiveNote={includeActiveNote}
           setIncludeActiveNote={setIncludeActiveNote}
+          mention={mention}
           debug={debug}
         />
       </div>

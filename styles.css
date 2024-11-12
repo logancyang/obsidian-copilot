@@ -159,6 +159,17 @@ If your plugin does not need CSS, delete this file.
   opacity: 1;
 }
 
+.context-note.url .note-badge {
+  background-color: #7c3aed;
+}
+
+.context-note.url .note-name {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chat-icons-right {
   display: flex;
   align-items: center;

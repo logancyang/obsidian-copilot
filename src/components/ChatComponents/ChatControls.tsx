@@ -3,7 +3,7 @@ import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { CustomError } from "@/error";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import { App, Notice } from "obsidian";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 import { ChainType } from "@/chainFactory";
 import { AddContextNoteModal } from "@/components/AddContextNoteModal";
@@ -29,6 +29,8 @@ interface ChatControlsProps {
   setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
   includeActiveNote: boolean;
   setIncludeActiveNote: React.Dispatch<React.SetStateAction<boolean>>;
+  contextUrls: string[];
+  onRemoveUrl: (url: string) => void;
   debug?: boolean;
 }
 
@@ -46,12 +48,13 @@ const ChatControls: React.FC<ChatControlsProps> = ({
   setContextNotes,
   includeActiveNote,
   setIncludeActiveNote,
+  contextUrls,
+  onRemoveUrl,
   debug,
 }) => {
   const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
   const [isIndexLoaded, setIsIndexLoaded] = useState(false);
   const activeNote = app.workspace.getActiveFile();
-  const prevActiveNoteRef = useRef<TFile | null>(null);
 
   useEffect(() => {
     isIndexLoadedPromise.then((loaded) => {
@@ -120,35 +123,6 @@ const ChatControls: React.FC<ChatControlsProps> = ({
   //   new SimilarNotesModal(app, similarChunks).open();
   // };
 
-  useEffect(() => {
-    if (!activeNote) return;
-
-    // Only proceed if we're including the active note
-    if (includeActiveNote) {
-      setContextNotes((prev) => {
-        let newContext = [...prev];
-
-        // If we're switching to a note that's already in context
-        if (newContext.some((note) => note.path === activeNote.path)) {
-          // Remove it from context since it will be shown as active
-          newContext = newContext.filter((note) => note.path !== activeNote.path);
-
-          // If we had a previous active note, add it to context
-          if (
-            prevActiveNoteRef.current &&
-            !newContext.some((note) => note.path === prevActiveNoteRef.current?.path)
-          ) {
-            newContext.push(prevActiveNoteRef.current);
-          }
-        }
-
-        // Update the previous active note reference
-        prevActiveNoteRef.current = activeNote;
-        return newContext;
-      });
-    }
-  }, [activeNote, includeActiveNote]);
-
   const handleAddContext = () => {
     const excludeNotes = [
       ...contextNotes.map((note) => note.path),
@@ -160,8 +134,8 @@ const ChatControls: React.FC<ChatControlsProps> = ({
       onNoteSelect: (note) => {
         if (activeNote && note.path === activeNote.path) {
           setIncludeActiveNote(true);
-          // Remove active note from context notes if it's already included
-          setContextNotes((prev) => prev.filter((n) => n.path !== activeNote.path));
+          // Remove the note from contextNotes if it exists there
+          setContextNotes((prev) => prev.filter((n) => n.path !== note.path));
         } else {
           setContextNotes((prev) => [...prev, note]);
         }
@@ -187,6 +161,8 @@ const ChatControls: React.FC<ChatControlsProps> = ({
             contextNotes={contextNotes}
             onAddContext={handleAddContext}
             onRemoveContext={handleRemoveContext}
+            contextUrls={contextUrls}
+            onRemoveUrl={onRemoveUrl}
           />
         )}
         <div className="chat-icons-right">
