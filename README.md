@@ -13,7 +13,7 @@ My goal is to make it the **ultimate AI assistant** that truly **understands** y
 
 It has a **local** index that powers the question-answering. Your notes are always stored on your own device and nowhere else! More features are under construction. Stay tuned!
 
-<img src="./images/ui.png" alt="UI">
+<img src="./images/ui.jpg" alt="UI">
 
 If you enjoy Copilot for Obsidian, please consider [sponsoring this project](https://github.com/sponsors/logancyang), or donate by clicking the button below. It will help me keep this project going to build toward a privacy-focused AI experience. Thank you!
 
