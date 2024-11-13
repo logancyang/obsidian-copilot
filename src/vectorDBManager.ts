@@ -196,7 +196,7 @@ class VectorDBManager {
     return result.hits;
   }
 
-  public static async getLatestFileMtime(db: Orama<any>): Promise<number> {
+  public static async getLatestFileMtime(db: Orama<any> | undefined): Promise<number> {
     if (!db) throw new Error("DB not initialized");
 
     try {

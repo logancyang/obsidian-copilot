@@ -57,6 +57,8 @@ const SettingsMain: React.FC<{ plugin: CopilotPlugin; reloadPlugin: () => Promis
         setHuggingfaceApiKey={(value) => updateSettings({ huggingfaceApiKey: value })}
         setIndexVaultToVectorStore={(value) => updateSettings({ indexVaultToVectorStore: value })}
         setMaxSourceChunks={(value) => updateSettings({ maxSourceChunks: value })}
+        disableIndexOnMobile={settings.disableIndexOnMobile}
+        setDisableIndexOnMobile={(value) => updateSettings({ disableIndexOnMobile: value })}
       />
       <AdvancedSettings
         {...settings}

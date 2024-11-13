@@ -224,6 +224,7 @@ If your plugin does not need CSS, delete this file.
   padding: 4px;
   font-size: 10px;
   transform: translateX(30px);
+  z-index: 1000;
 }
 
 .model-select-content [role="menuitem"] {
@@ -259,6 +260,7 @@ If your plugin does not need CSS, delete this file.
   padding: 4px;
   font-size: 10px;
   transform: translateX(-5px);
+  z-index: 1000;
 }
 
 .chain-select-content [role="menuitem"] {
@@ -774,6 +776,25 @@ If your plugin does not need CSS, delete this file.
 
   .model-card-item .switch {
     margin: 0;
+  }
+
+  .model-select-content,
+  .chain-select-content {
+    background: var(--background-primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+
+  .model-select-content [role="menuitem"],
+  .chain-select-content [role="menuitem"] {
+    background: var(--background-primary);
+    color: var(--text-normal);
+    padding: 8px 12px;
+    font-size: 14px;
+  }
+
+  .model-select-content [role="menuitem"]:hover,
+  .chain-select-content [role="menuitem"]:hover {
+    background: var(--background-modifier-hover);
   }
 }
 

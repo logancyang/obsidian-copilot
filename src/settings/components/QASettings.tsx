@@ -7,6 +7,7 @@ import {
   ModelSettingsComponent,
   SliderComponent,
   TextAreaComponent,
+  ToggleComponent,
 } from "./SettingBlocks";
 
 interface QASettingsProps {
@@ -16,6 +17,8 @@ interface QASettingsProps {
   setIndexVaultToVectorStore: (value: string) => void;
   maxSourceChunks: number;
   setMaxSourceChunks: (value: number) => void;
+  disableIndexOnMobile: boolean;
+  setDisableIndexOnMobile: (value: boolean) => void;
 }
 
 const QASettings: React.FC<QASettingsProps> = ({
@@ -23,6 +26,8 @@ const QASettings: React.FC<QASettingsProps> = ({
   setIndexVaultToVectorStore,
   maxSourceChunks,
   setMaxSourceChunks,
+  disableIndexOnMobile,
+  setDisableIndexOnMobile,
 }) => {
   const { settings, updateSettings } = useSettingsContext();
 
@@ -143,6 +148,12 @@ const QASettings: React.FC<QASettingsProps> = ({
         placeholder="folder1, #tag1, [[note1]]"
         value={settings.qaInclusions}
         onChange={(value) => updateSettings({ qaInclusions: value })}
+      />
+      <ToggleComponent
+        name="Disable index loading on mobile"
+        description="When enabled, vector store index won't be loaded on mobile devices to save resources. Only chat mode will be available. Any existing index from desktop sync will be preserved."
+        value={disableIndexOnMobile}
+        onChange={setDisableIndexOnMobile}
       />
     </div>
   );

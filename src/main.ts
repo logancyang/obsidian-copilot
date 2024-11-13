@@ -662,6 +662,9 @@ export default class CopilotPlugin extends Plugin {
     await this.vectorStoreManager.waitForInitialization();
 
     const db = this.vectorStoreManager.getDb();
+    if (!db) {
+      throw new CustomError("Orama database not found.");
+    }
 
     // Check if the index is empty
     const singleDoc = await search(db, {
