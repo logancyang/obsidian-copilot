@@ -181,7 +181,7 @@ export class CustomPromptProcessor {
           .join("\n\n");
         variablesWithContent.push(markdownContent);
       } else {
-        new Notice(`Warning: No valid notes found for the provided path '${variableName}'.`);
+        console.warn(`No notes found for variable: ${variableName}`);
       }
     }
 
