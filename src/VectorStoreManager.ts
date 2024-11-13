@@ -51,7 +51,11 @@ class VectorStoreManager {
     this.initializationPromise = this.initializeDB()
       .then((db) => {
         this.oramaDb = db;
-        console.log("Copilot database initialized successfully.");
+        if (db) {
+          console.log("Copilot database initialized successfully.");
+        } else {
+          console.log("Copilot index is disabled on mobile devices.");
+        }
 
         // Perform any operations that depend on the initialized database here
         this.performPostInitializationTasks();
@@ -171,6 +175,7 @@ class VectorStoreManager {
       `Created new Orama database for ${this.dbPath}. ` +
         `Embedding model: ${EmbeddingsManager.getModelName(embeddingInstance)} with vector length ${vectorLength}.`
     );
+    this.isIndexLoaded = true;
     return db;
   }
 
@@ -467,6 +472,9 @@ class VectorStoreManager {
           }
         }
       }
+
+      // Set isIndexLoaded to true after successful indexing
+      this.isIndexLoaded = true;
 
       // Hide the notice after completion
       setTimeout(() => {
