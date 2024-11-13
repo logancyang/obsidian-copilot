@@ -8,14 +8,14 @@ import VectorDBManager from "@/vectorDBManager";
 import { Embeddings } from "@langchain/core/embeddings";
 import { create, load, Orama, remove, removeMultiple, save, search } from "@orama/orama";
 import { MD5 } from "crypto-js";
-import { App, Notice } from "obsidian";
+import { App, Notice, Platform } from "obsidian";
 import { VAULT_VECTOR_STORE_STRATEGY } from "./constants";
 
 class VectorStoreManager {
   private app: App;
   private settings: CopilotSettings;
   private encryptionService: EncryptionService;
-  private oramaDb: Orama<any>;
+  private oramaDb: Orama<any> | undefined;
   private dbPath: string;
   private embeddingsManager: EmbeddingsManager;
   private getLangChainParams: () => LangChainParams;
@@ -27,6 +27,8 @@ class VectorStoreManager {
   private indexedCount = 0;
   private totalFilesToIndex = 0;
   private initializationPromise: Promise<void>;
+  private isIndexLoaded = false;
+
   constructor(
     app: App,
     settings: CopilotSettings,
@@ -97,7 +99,15 @@ class VectorStoreManager {
     };
   }
 
-  private async initializeDB(): Promise<Orama<any>> {
+  private async initializeDB(): Promise<Orama<any> | undefined> {
+    // Check if we should skip index loading on mobile
+    if (Platform.isMobile && this.settings.disableIndexOnMobile) {
+      console.log("Index loading disabled on mobile device");
+      this.isIndexLoaded = false;
+      this.oramaDb = undefined;
+      return;
+    }
+
     this.dbPath = this.getDbPath();
     // Ensure the config directory exists
     const configDir = this.app.vault.configDir;
@@ -120,15 +130,23 @@ class VectorStoreManager {
         await load(newDb, parsedDb);
 
         console.log(`Loaded existing Orama database for ${this.dbPath} from disk.`);
+        this.isIndexLoaded = true;
         return newDb;
       } else {
-        // Create new database
+        // Only create new DB if not on mobile with disabled index
         return await this.createNewDb();
       }
     } catch (error) {
       console.error(`Error initializing Orama database:`, error);
+      if (Platform.isMobile && this.settings.disableIndexOnMobile) {
+        return;
+      }
       return await this.createNewDb();
     }
+  }
+
+  public getIsIndexLoaded(): boolean {
+    return this.isIndexLoaded;
   }
 
   private async createNewDb(): Promise<Orama<any>> {
@@ -175,7 +193,15 @@ class VectorStoreManager {
   }
 
   private async saveDB() {
+    // Add check at the start of the method
+    if (Platform.isMobile && this.settings.disableIndexOnMobile) {
+      return;
+    }
+
     try {
+      if (!this.oramaDb) {
+        throw new CustomError("Orama database not found.");
+      }
       const rawData = await save(this.oramaDb);
       const dataToSave = {
         schema: this.oramaDb.schema,
@@ -193,7 +219,7 @@ class VectorStoreManager {
     return MD5(vaultName).toString();
   }
 
-  public getDb(): Orama<any> {
+  public getDb(): Orama<any> | undefined {
     return this.oramaDb;
   }
 
@@ -289,6 +315,12 @@ class VectorStoreManager {
   }
 
   public async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
+    // Add check at the start of the method
+    if ((Platform.isMobile && this.settings.disableIndexOnMobile) || !this.oramaDb) {
+      new Notice("Indexing is disabled on mobile devices");
+      return 0;
+    }
+
     await this.waitForInitialization();
     let rateLimitNoticeShown = false;
 
@@ -299,7 +331,7 @@ class VectorStoreManager {
       }
       await this.ensureCorrectSchema(this.oramaDb, embeddingInstance);
 
-      const singleDoc = await search(this.getDb(), {
+      const singleDoc = await search(this.oramaDb, {
         term: "",
         limit: 1,
       });
@@ -484,6 +516,9 @@ class VectorStoreManager {
   }
 
   public async garbageCollectVectorStore(): Promise<void> {
+    if (!this.oramaDb) {
+      throw new CustomError("Orama database not found.");
+    }
     try {
       const files = this.app.vault.getMarkdownFiles();
       const filePaths = new Set(files.map((file) => file.path));
@@ -528,6 +563,9 @@ class VectorStoreManager {
   }
 
   public async removeDocs(filePath: string) {
+    if (!this.oramaDb) {
+      throw new CustomError("Orama database not found.");
+    }
     // Handle file deletion
     try {
       const searchResult = await search(this.oramaDb, {
@@ -553,6 +591,9 @@ class VectorStoreManager {
 
   // Test query to retrieve record by id from the database
   public async getDocById(id: string): Promise<any | undefined> {
+    if (!this.oramaDb) {
+      throw new CustomError("Orama database not found.");
+    }
     const result = await search(this.oramaDb, {
       term: id,
       properties: ["id"],

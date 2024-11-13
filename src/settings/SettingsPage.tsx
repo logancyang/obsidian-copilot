@@ -51,6 +51,7 @@ export interface CopilotSettings {
   promptUsageTimestamps: Record<string, number>;
   embeddingRequestsPerSecond: number;
   defaultOpenArea: DEFAULT_OPEN_AREA;
+  disableIndexOnMobile: boolean;
 }
 
 export class CopilotSettingTab extends PluginSettingTab {

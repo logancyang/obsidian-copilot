@@ -21,6 +21,7 @@ interface ChatControlsProps {
   settings: CopilotSettings;
   vault_qa_strategy: string;
   debug?: boolean;
+  isIndexLoaded: boolean;
 }
 
 const ChatControls: React.FC<ChatControlsProps> = ({
@@ -32,6 +33,7 @@ const ChatControls: React.FC<ChatControlsProps> = ({
   settings,
   vault_qa_strategy,
   debug,
+  isIndexLoaded,
 }) => {
   const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
 
@@ -131,11 +133,19 @@ const ChatControls: React.FC<ChatControlsProps> = ({
               <DropdownMenu.Item onSelect={() => handleChainChange({ value: "llm_chain" })}>
                 chat
               </DropdownMenu.Item>
-              <DropdownMenu.Item onSelect={() => handleChainChange({ value: "vault_qa" })}>
-                vault QA (basic)
+              <DropdownMenu.Item
+                onSelect={() => handleChainChange({ value: "vault_qa" })}
+                disabled={!isIndexLoaded}
+                className={!isIndexLoaded ? "disabled-menu-item" : ""}
+              >
+                vault QA (basic) {!isIndexLoaded && "(index not loaded)"}
               </DropdownMenu.Item>
-              <DropdownMenu.Item onSelect={() => handleChainChange({ value: "copilot_plus" })}>
-                copilot plus (alpha)
+              <DropdownMenu.Item
+                onSelect={() => handleChainChange({ value: "copilot_plus" })}
+                disabled={!isIndexLoaded}
+                className={!isIndexLoaded ? "disabled-menu-item" : ""}
+              >
+                copilot plus (alpha) {!isIndexLoaded && "(index not loaded)"}
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>

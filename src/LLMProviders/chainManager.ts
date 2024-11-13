@@ -195,8 +195,14 @@ export default class ChainManager {
           return;
         }
 
+        const db = this.vectorStoreManager.getDb();
+        if (!db) {
+          console.error("Copilot index is not loaded. Please check your settings.");
+          return;
+        }
+
         const retriever = new HybridRetriever(
-          this.vectorStoreManager.getDb(),
+          db,
           this.app.vault,
           chatModel,
           embeddingsAPI,
@@ -428,6 +434,8 @@ export default class ChainManager {
 
   async indexFile(noteFile: any): Promise<any | undefined> {
     const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
+    const db = this.vectorStoreManager.getDb();
+
     if (!embeddingsAPI) {
       const errorMsg =
         "Failed to load file, embedding API is not set correctly, please check your settings.";
@@ -435,11 +443,15 @@ export default class ChainManager {
       console.error(errorMsg);
       return;
     }
-    return await VectorDBManager.indexFile(
-      this.vectorStoreManager.getDb(),
-      embeddingsAPI,
-      noteFile
-    );
+
+    if (!db) {
+      const errorMsg = "Vector database is not initialized or disabled on mobile.";
+      new Notice(errorMsg);
+      console.error(errorMsg);
+      return;
+    }
+
+    return await VectorDBManager.indexFile(db, embeddingsAPI, noteFile);
   }
 
   async updateMemoryWithLoadedMessages(messages: ChatMessage[]) {

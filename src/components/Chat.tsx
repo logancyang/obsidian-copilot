@@ -574,6 +574,7 @@ ${chatContent}`;
           debug={debug}
           addMessage={addMessage}
           vault={app.vault}
+          isIndexLoaded={plugin.vectorStoreManager.getIsIndexLoaded()}
         />
       </div>
     </div>
