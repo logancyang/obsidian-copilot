@@ -228,7 +228,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
           </DropdownMenu.Trigger>
 
           <DropdownMenu.Portal>
-            <DropdownMenu.Content className="model-select-content">
+            <DropdownMenu.Content className="model-select-content" align="start">
               {settings.activeModels
                 .filter((model) => model.enabled)
                 .map((model) => (

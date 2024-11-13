@@ -129,7 +129,7 @@ const ChatControls: React.FC<ChatControlsProps> = ({
           </DropdownMenu.Trigger>
 
           <DropdownMenu.Portal>
-            <DropdownMenu.Content className="chain-select-content">
+            <DropdownMenu.Content className="chain-select-content" align="end" sideOffset={5}>
               <DropdownMenu.Item onSelect={() => handleChainChange({ value: "llm_chain" })}>
                 chat
               </DropdownMenu.Item>
