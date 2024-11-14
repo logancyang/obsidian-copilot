@@ -223,7 +223,6 @@ If your plugin does not need CSS, delete this file.
   border-radius: 4px;
   padding: 4px;
   font-size: 10px;
-  transform: translateX(30px);
   z-index: 1000;
 }
 
@@ -259,7 +258,6 @@ If your plugin does not need CSS, delete this file.
   border-radius: 4px;
   padding: 4px;
   font-size: 10px;
-  transform: translateX(-5px);
   z-index: 1000;
 }
 
