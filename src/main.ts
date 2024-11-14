@@ -54,7 +54,7 @@ export default class CopilotPlugin extends Plugin {
   encryptionService: EncryptionService;
   userMessageHistory: string[] = [];
   vectorStoreManager: VectorStoreManager;
-
+  langChainParams: LangChainParams;
   isChatVisible = () => this.chatIsVisible;
 
   async onload(): Promise<void> {
@@ -62,13 +62,14 @@ export default class CopilotPlugin extends Plugin {
     this.addSettingTab(new CopilotSettingTab(this.app, this));
     // Always have one instance of sharedState and chainManager in the plugin
     this.sharedState = new SharedState();
+    this.langChainParams = this.getLangChainParams();
 
     this.encryptionService = new EncryptionService(this.settings);
     this.vectorStoreManager = new VectorStoreManager(
       this.app,
       this.settings,
       this.encryptionService,
-      () => this.getLangChainParams()
+      () => this.langChainParams
     );
 
     // Initialize event listeners for the VectorStoreManager, e.g. onModify triggers reindexing
@@ -88,7 +89,7 @@ export default class CopilotPlugin extends Plugin {
     this.mergeAllActiveModelsWithCoreModels();
     this.chainManager = new ChainManager(
       this.app,
-      () => this.getLangChainParams(),
+      () => this.langChainParams,
       this.encryptionService,
       this.settings,
       this.vectorStoreManager
@@ -713,7 +714,9 @@ export default class CopilotPlugin extends Plugin {
   async customSearchDB(query: string, salientTerms: string[], textWeight: number): Promise<any[]> {
     await this.vectorStoreManager.waitForInitialization();
     const db = this.vectorStoreManager.getDb();
-
+    if (!db) {
+      throw new CustomError("Orama database not found.");
+    }
     const hybridRetriever = new HybridRetriever(
       db,
       this.app.vault,
