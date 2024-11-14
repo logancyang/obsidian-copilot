@@ -9,7 +9,7 @@ import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChatMessage } from "@/sharedState";
 import { extractNoteTitles } from "@/utils";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ChevronUp, Command, CornerDownLeft, StopCircle } from "lucide-react";
+import { ArrowBigUp, ChevronUp, Command, CornerDownLeft, StopCircle } from "lucide-react";
 import { App, Platform, TFile, Vault } from "obsidian";
 import React, { useEffect, useRef, useState } from "react";
 import ChatControls from "./ChatControls";
@@ -17,7 +17,7 @@ import ChatControls from "./ChatControls";
 interface ChatInputProps {
   inputMessage: string;
   setInputMessage: (message: string) => void;
-  handleSendMessage: () => void;
+  handleSendMessage: (toolCalls?: string[]) => void;
   isGenerating: boolean;
   chatIsVisible: boolean;
   onStopGenerating: () => void;
@@ -255,6 +255,21 @@ const ChatInput: React.FC<ChatInputProps> = ({
     const lines = value.split("\n");
     const currentLineIndex = value.substring(0, selectionStart).split("\n").length - 1;
 
+    // Check for Cmd+Shift+Enter (Mac) or Ctrl+Shift+Enter (Windows)
+    if (e.key === "Enter" && e.shiftKey && (Platform.isMacOS ? e.metaKey : e.ctrlKey)) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (currentChain === ChainType.COPILOT_PLUS_CHAIN) {
+        handleSendMessage(["@vault"]);
+      } else {
+        handleSendMessage();
+      }
+      setHistoryIndex(-1);
+      setTempInput("");
+      return;
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
@@ -391,16 +406,27 @@ const ChatInput: React.FC<ChatInputProps> = ({
               <StopCircle />
             </button>
           )}
-          <button onClick={handleSendMessage} className="submit-button">
+          <button onClick={() => handleSendMessage()} className="submit-button">
             <CornerDownLeft size={16} />
             <span>chat</span>
           </button>
 
           {currentChain === "copilot_plus" && (
-            <button onClick={handleSendMessage} className="submit-button vault">
+            <button onClick={() => handleSendMessage(["@vault"])} className="submit-button vault">
               <div className="button-content">
-                {Platform.isMacOS && <Command size={12} />}
-                <CornerDownLeft size={16} />
+                {Platform.isMacOS ? (
+                  <>
+                    <Command size={12} />
+                    <ArrowBigUp size={16} />
+                    <CornerDownLeft size={16} />
+                  </>
+                ) : (
+                  <>
+                    <span>Ctrl</span>
+                    <ArrowBigUp size={16} />
+                    <CornerDownLeft size={16} />
+                  </>
+                )}
                 <span>vault</span>
               </div>
             </button>

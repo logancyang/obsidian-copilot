@@ -129,7 +129,7 @@ const Chat: React.FC<ChatProps> = ({
     return processedMessage + additionalContext;
   };
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = async (toolCalls?: string[]) => {
     if (!inputMessage) return;
 
     const timestamp = formatDateTime(new Date());
@@ -159,6 +159,7 @@ const Chat: React.FC<ChatProps> = ({
     processedUserMessage = await processContextNotes(processedUserMessage, customPromptProcessor);
     // Process mentions in the message
     processedUserMessage = await mention.processMentions(processedUserMessage);
+    processedUserMessage += toolCalls ? " " + toolCalls?.join("\n") : "";
 
     const promptMessageHidden: ChatMessage = {
       message: processedUserMessage,
