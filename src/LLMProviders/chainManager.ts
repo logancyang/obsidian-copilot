@@ -298,7 +298,7 @@ export default class ChainManager {
   }
 
   async runChain(
-    userMessage: string,
+    userMessage: ChatMessage,
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void,
     addMessage: (message: ChatMessage) => void,

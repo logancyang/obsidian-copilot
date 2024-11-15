@@ -22,7 +22,7 @@ export const getAIResponse = async (
   updateShouldAbort(abortController);
   try {
     await chainManager.runChain(
-      userMessage.message,
+      userMessage,
       abortController,
       updateCurrentAiMessage,
       addMessage,

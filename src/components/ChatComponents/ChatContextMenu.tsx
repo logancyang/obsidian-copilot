@@ -20,12 +20,15 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   onRemoveContext,
   onRemoveUrl,
 }) => {
-  const uniqueUrls = Array.from(new Set(contextUrls));
-  const uniqueNotes = Array.from(
-    new Set(contextNotes.filter((note) => note.path !== activeNote?.path).map((note) => note.path))
-  )
-    .map((path) => contextNotes.find((note) => note.path === path))
-    .filter((note): note is TFile => note !== undefined);
+  const uniqueNotes = React.useMemo(() => {
+    const notesMap = new Map(contextNotes.map((note) => [note.path, note]));
+
+    return Array.from(notesMap.values()).filter(
+      (note) => !(activeNote && note.path === activeNote.path)
+    );
+  }, [contextNotes, activeNote]);
+
+  const uniqueUrls = React.useMemo(() => Array.from(new Set(contextUrls)), [contextUrls]);
 
   return (
     <div className="chat-context-menu">
@@ -47,12 +50,8 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
           </div>
         )}
         {uniqueNotes.map((note) => (
-          <div
-            key={note.path}
-            className={`context-note ${note.path === activeNote?.path ? "active" : "with-hover"}`}
-          >
+          <div key={note.path} className="context-note with-hover">
             <span className="note-name">{note.basename}</span>
-            {note.path === activeNote?.path && <span className="note-badge">current</span>}
             <button
               className="remove-note"
               onClick={() => onRemoveContext(note.path)}

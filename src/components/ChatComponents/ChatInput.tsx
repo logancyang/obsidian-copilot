@@ -9,10 +9,12 @@ import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChatMessage } from "@/sharedState";
 import { extractNoteTitles } from "@/utils";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ArrowBigUp, ChevronUp, Command, CornerDownLeft, StopCircle } from "lucide-react";
+import { ArrowBigUp, ChevronUp, Command, CornerDownLeft, Image, StopCircle } from "lucide-react";
 import { App, Platform, TFile, Vault } from "obsidian";
 import React, { useEffect, useRef, useState } from "react";
+import { AddImageModal } from "../AddImageModal";
 import ChatControls from "./ChatControls";
+import { TooltipActionButton } from "./TooltipActionButton";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -40,6 +42,9 @@ interface ChatInputProps {
   includeActiveNote: boolean;
   setIncludeActiveNote: (include: boolean) => void;
   mention: Mention;
+  selectedImages: File[];
+  onAddImage: (files: File[]) => void;
+  setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
   debug?: boolean;
 }
 
@@ -71,6 +76,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
   includeActiveNote,
   setIncludeActiveNote,
   mention,
+  selectedImages,
+  onAddImage,
+  setSelectedImages,
   debug,
 }) => {
   const [shouldFocus, setShouldFocus] = useState(false);
@@ -367,6 +375,27 @@ const ChatInput: React.FC<ChatInputProps> = ({
         debug={debug}
       />
 
+      {selectedImages.length > 0 && (
+        <div className="selected-images">
+          {selectedImages.map((file, index) => (
+            <div key={index} className="image-preview-container">
+              <img
+                src={URL.createObjectURL(file)}
+                alt={file.name}
+                className="selected-image-preview"
+              />
+              <button
+                className="remove-image-button"
+                onClick={() => setSelectedImages((prev) => prev.filter((_, i) => i !== index))}
+                title="Remove image"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <textarea
         ref={textAreaRef}
         className="chat-input-textarea"
@@ -377,28 +406,46 @@ const ChatInput: React.FC<ChatInputProps> = ({
       />
 
       <div className="chat-input-controls">
-        <DropdownMenu.Root open={isModelDropdownOpen} onOpenChange={setIsModelDropdownOpen}>
-          <DropdownMenu.Trigger className="model-select-button">
-            {settings.activeModels.find((model) => getModelKey(model) === currentModelKey)?.name ||
-              "Select Model"}
-            <ChevronUp size={10} />
-          </DropdownMenu.Trigger>
+        <div className="chat-input-left">
+          <DropdownMenu.Root open={isModelDropdownOpen} onOpenChange={setIsModelDropdownOpen}>
+            <DropdownMenu.Trigger className="model-select-button">
+              {settings.activeModels.find((model) => getModelKey(model) === currentModelKey)
+                ?.name || "Select Model"}
+              <ChevronUp size={10} />
+            </DropdownMenu.Trigger>
 
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content className="model-select-content" align="start">
-              {settings.activeModels
-                .filter((model) => model.enabled)
-                .map((model) => (
-                  <DropdownMenu.Item
-                    key={getModelKey(model)}
-                    onSelect={() => setCurrentModelKey(getModelKey(model))}
-                  >
-                    {model.name}
-                  </DropdownMenu.Item>
-                ))}
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content className="model-select-content" align="start">
+                {settings.activeModels
+                  .filter((model) => model.enabled)
+                  .map((model) => (
+                    <DropdownMenu.Item
+                      key={getModelKey(model)}
+                      onSelect={() => setCurrentModelKey(getModelKey(model))}
+                    >
+                      {model.name}
+                    </DropdownMenu.Item>
+                  ))}
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
+
+          {currentChain === ChainType.COPILOT_PLUS_CHAIN && (
+            <TooltipActionButton
+              onClick={() => {
+                new AddImageModal(app, onAddImage).open();
+              }}
+              Icon={
+                <div className="button-content">
+                  <span>image</span>
+                  <Image className="icon-scaler" />
+                </div>
+              }
+            >
+              Add Image
+            </TooltipActionButton>
+          )}
+        </div>
 
         <div className="chat-input-buttons">
           {isGenerating && (

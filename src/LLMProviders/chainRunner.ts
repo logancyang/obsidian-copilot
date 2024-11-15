@@ -8,7 +8,7 @@ import { IntentAnalyzer } from "./intentAnalyzer";
 
 export interface ChainRunner {
   run(
-    userMessage: string,
+    userMessage: ChatMessage,
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void,
     addMessage: (message: ChatMessage) => void,
@@ -24,7 +24,7 @@ abstract class BaseChainRunner implements ChainRunner {
   constructor(protected chainManager: ChainManager) {}
 
   abstract run(
-    userMessage: string,
+    userMessage: ChatMessage,
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void,
     addMessage: (message: ChatMessage) => void,
@@ -37,7 +37,7 @@ abstract class BaseChainRunner implements ChainRunner {
 
   protected async handleResponse(
     fullAIResponse: string,
-    userMessage: string,
+    userMessage: ChatMessage,
     abortController: AbortController,
     addMessage: (message: ChatMessage) => void,
     updateCurrentAiMessage: (message: string) => void,
@@ -79,7 +79,7 @@ abstract class BaseChainRunner implements ChainRunner {
 
 class LLMChainRunner extends BaseChainRunner {
   async run(
-    userMessage: string,
+    userMessage: ChatMessage,
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void,
     addMessage: (message: ChatMessage) => void,
@@ -95,7 +95,7 @@ class LLMChainRunner extends BaseChainRunner {
     try {
       const chain = ChainManager.getChain();
       const chatStream = await chain.stream({
-        input: userMessage,
+        input: userMessage.message,
       } as any);
 
       for await (const chunk of chatStream) {
@@ -120,7 +120,7 @@ class LLMChainRunner extends BaseChainRunner {
 
 class VaultQAChainRunner extends BaseChainRunner {
   async run(
-    userMessage: string,
+    userMessage: ChatMessage,
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void,
     addMessage: (message: ChatMessage) => void,
@@ -138,7 +138,7 @@ class VaultQAChainRunner extends BaseChainRunner {
       const memoryVariables = await memory.loadMemoryVariables({});
       const chatHistory = extractChatHistory(memoryVariables);
       const qaStream = await ChainManager.getRetrievalChain().stream({
-        question: userMessage,
+        question: userMessage.message,
         chat_history: chatHistory,
       } as any);
 
@@ -181,8 +181,51 @@ class VaultQAChainRunner extends BaseChainRunner {
 }
 
 class CopilotPlusChainRunner extends BaseChainRunner {
+  private async streamMultimodalResponse(
+    textContent: string,
+    userMessage: ChatMessage,
+    abortController: AbortController,
+    updateCurrentAiMessage: (message: string) => void,
+    debug: boolean
+  ): Promise<string> {
+    // Create message content array
+    const content = [
+      {
+        type: "text",
+        text: textContent,
+      },
+    ];
+
+    // Only add image content if it exists
+    if (userMessage.content && userMessage.content.length > 0) {
+      // Filter for image content and add directly
+      const imageContent = userMessage.content.filter(
+        (item) => item.type === "image_url" && item.image_url?.url
+      );
+      content.push(...imageContent);
+    }
+
+    const message = {
+      role: "user",
+      content,
+    };
+
+    if (debug) console.log("Final multimodal message:", message);
+
+    let fullAIResponse = "";
+    const chatStream = await this.chainManager.chatModelManager.getChatModel().stream([message]);
+
+    for await (const chunk of chatStream) {
+      if (abortController.signal.aborted) break;
+      fullAIResponse += chunk.content;
+      updateCurrentAiMessage(fullAIResponse);
+    }
+
+    return fullAIResponse;
+  }
+
   async run(
-    userMessage: string,
+    userMessage: ChatMessage,
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void,
     addMessage: (message: ChatMessage) => void,
@@ -200,7 +243,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     try {
       if (debug) console.log("==== Step 1: Analyzing intent ====");
       const toolCalls = await IntentAnalyzer.analyzeIntent(
-        userMessage,
+        userMessage.message,
         this.chainManager.vectorStoreManager,
         this.chainManager.chatModelManager
       );
@@ -210,9 +253,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
           toolCalls.map((call) => call.tool.name)
         );
 
-      // TODO: Remove all @tools from the user message
-      const cleanedUserMessage = userMessage.replace("@vault", "").trim();
-
+      const cleanedUserMessage = userMessage.message.replace("@vault", "").trim();
       const toolOutputs = await this.executeToolCalls(toolCalls, debug, updateLoadingMessage);
       const localSearchResult = toolOutputs.find(
         (output) => output.tool === "localSearch" && output.output && output.output.length > 0
@@ -246,13 +287,13 @@ class CopilotPlusChainRunner extends BaseChainRunner {
           systemMessage: this.chainManager.getLangChainParams().systemMessage,
         });
 
-        const chatStream = await this.chainManager.chatModelManager.getChatModel().stream(qaPrompt);
-
-        for await (const chunk of chatStream) {
-          if (abortController.signal.aborted) break;
-          fullAIResponse += chunk.content;
-          updateCurrentAiMessage(fullAIResponse);
-        }
+        fullAIResponse = await this.streamMultimodalResponse(
+          qaPrompt,
+          userMessage,
+          abortController,
+          updateCurrentAiMessage,
+          debug
+        );
 
         // Append sources to the response
         sources = this.getSources(documents);
@@ -267,15 +308,13 @@ class CopilotPlusChainRunner extends BaseChainRunner {
           console.log("Enhanced user message:", enhancedUserMessage);
         }
 
-        const chatStream = await ChainManager.getChain().stream({
-          input: enhancedUserMessage,
-        } as any);
-
-        for await (const chunk of chatStream) {
-          if (abortController.signal.aborted) break;
-          fullAIResponse += chunk.content;
-          updateCurrentAiMessage(fullAIResponse);
-        }
+        fullAIResponse = await this.streamMultimodalResponse(
+          enhancedUserMessage,
+          userMessage,
+          abortController,
+          updateCurrentAiMessage,
+          debug
+        );
       }
     } catch (error) {
       // Reset loading message to default

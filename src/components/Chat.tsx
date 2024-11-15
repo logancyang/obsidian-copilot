@@ -80,6 +80,7 @@ const Chat: React.FC<ChatProps> = ({
   const [chatIsVisible, setChatIsVisible] = useState(false);
   const [contextNotes, setContextNotes] = useState<TFile[]>([]);
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<File[]>([]);
 
   const mention = Mention.getInstance(plugin.settings.plusLicenseKey);
 
@@ -130,18 +131,45 @@ const Chat: React.FC<ChatProps> = ({
   };
 
   const handleSendMessage = async (toolCalls?: string[]) => {
-    if (!inputMessage) return;
+    if (!inputMessage && selectedImages.length === 0) return;
 
     const timestamp = formatDateTime(new Date());
+
+    // Create message content array
+    const content: any[] = [];
+
+    // Add text content if present
+    if (inputMessage) {
+      content.push({
+        type: "text",
+        text: inputMessage,
+      });
+    }
+
+    // Add images if present
+    for (const image of selectedImages) {
+      const imageData = await image.arrayBuffer();
+      const base64Image = Buffer.from(imageData).toString("base64");
+      content.push({
+        type: "image_url",
+        image_url: {
+          url: `data:${image.type};base64,${base64Image}`,
+        },
+      });
+    }
+
     const userMessage: ChatMessage = {
-      message: inputMessage,
+      message: inputMessage || "Image message",
       sender: USER_SENDER,
       isVisible: true,
       timestamp: timestamp,
+      content: content,
     };
 
-    // Clear input and show loading immediately
+    // Clear input and images
     setInputMessage("");
+    setSelectedImages([]);
+
     // Add messages to chat history
     addMessage(userMessage);
     setLoading(true);
@@ -150,7 +178,7 @@ const Chat: React.FC<ChatProps> = ({
     // Process the message in the background
     const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault, settings);
     let processedUserMessage = await customPromptProcessor.processCustomPrompt(
-      inputMessage,
+      inputMessage || "",
       "",
       app.workspace.getActiveFile() as TFile | undefined
     );
@@ -166,14 +194,17 @@ const Chat: React.FC<ChatProps> = ({
       sender: USER_SENDER,
       isVisible: false,
       timestamp: timestamp,
+      content: content,
     };
 
     // Add hidden user message to chat history
     addMessage(promptMessageHidden);
 
-    // Add to user message history
-    updateUserMessageHistory(inputMessage);
-    setHistoryIndex(-1);
+    // Add to user message history if there's text
+    if (inputMessage) {
+      updateUserMessageHistory(inputMessage);
+      setHistoryIndex(-1);
+    }
 
     await getAIResponse(
       promptMessageHidden,
@@ -348,7 +379,7 @@ ${chatContent}`;
     setLoading(true);
     try {
       const regeneratedResponse = await chainManager.runChain(
-        lastUserMessage.message,
+        lastUserMessage,
         new AbortController(),
         setCurrentAiMessage,
         addMessage,
@@ -627,6 +658,9 @@ ${chatContent}`;
           includeActiveNote={includeActiveNote}
           setIncludeActiveNote={setIncludeActiveNote}
           mention={mention}
+          selectedImages={selectedImages}
+          onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
+          setSelectedImages={setSelectedImages}
           debug={debug}
         />
       </div>

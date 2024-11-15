@@ -288,9 +288,77 @@ If your plugin does not need CSS, delete this file.
   padding: 0 4px;
 }
 
+.chat-input-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.selected-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px;
+  background: var(--background-secondary);
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.image-preview-container {
+  position: relative;
+  width: 80px;
+  height: 80px;
+}
+
+.selected-image-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.remove-image-button {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--background-modifier-error);
+  color: white;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  padding: 0;
+  line-height: 1;
+}
+
+.remove-image-button:hover {
+  background: var(--background-modifier-error-hover);
+}
+
+.button-content {
+  display: flex;
+  align-items: center;
+}
+
+.button-content span {
+  font-size: 10px;
+}
+
+/* Make sure the icon scales consistently */
+.button-content .icon-scaler {
+  width: 18px;
+  height: 18px;
+}
+
 .chat-input-buttons {
   display: flex;
-  gap: 8px;
+  gap: 12px;
 }
 
 .model-select-content {
@@ -493,6 +561,26 @@ If your plugin does not need CSS, delete this file.
 .message-content ol {
   padding-left: 20px;
   margin: 10px;
+}
+
+.message-content-items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.message-image-content {
+  width: 100%;
+  max-width: 400px;
+  padding: 8px 0;
+}
+
+.chat-message-image {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
 }
 
 .message-buttons-wrapper {
