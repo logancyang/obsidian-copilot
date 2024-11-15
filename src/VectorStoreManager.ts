@@ -359,8 +359,21 @@ class VectorStoreManager {
   private async getFilePathsForQA(filterType: "exclusions" | "inclusions"): Promise<Set<string>> {
     const targetFiles = new Set<string>();
 
-    if (filterType === "exclusions" && this.settings.qaExclusions) {
-      const exclusions = this.settings.qaExclusions.split(",").map((item) => item.trim());
+    // not documented in Obsidian API, but I got this answer from Obsidian's discord
+    const userIgnoreFilters: string[] = (app.vault as any).getConfig("userIgnoreFilters");
+
+    if (filterType === "exclusions") {
+      const exclusions: string[] = [];
+      if (userIgnoreFilters) {
+        // inherit from the Obsidian "master exclusion" settings
+        exclusions.push(
+          ...userIgnoreFilters.map((it) => (it.endsWith("/") ? it.slice(0, -1) : it))
+        );
+      }
+      if (this.settings.qaExclusions) {
+        exclusions.push(...this.settings.qaExclusions.split(",").map((item) => item.trim()));
+      }
+
       const excludedFilePaths = await getFilePathsFromPatterns(exclusions, this.app.vault);
       excludedFilePaths.forEach((filePath) => targetFiles.add(filePath));
     } else if (filterType === "inclusions" && this.settings.qaInclusions) {
