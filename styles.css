@@ -1039,3 +1039,12 @@ If your plugin does not need CSS, delete this file.
   color: var(--text-error);
   opacity: 1;
 }
+
+.loading-button {
+  margin-left: 10px;
+}
+
+.loading-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}

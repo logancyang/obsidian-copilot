@@ -1,6 +1,8 @@
 import { CustomModel } from "@/aiParams";
 import { Notice } from "obsidian";
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import { err2String } from "@/utils";
+import { ChatModelProviders, EmbeddingModelProviders } from "@/constants";
 
 type DropdownComponentProps = {
   name: string;
@@ -274,6 +276,7 @@ interface ModelSettingsComponentProps {
   defaultModelKey: string;
   onSetDefaultModelKey: (modelKey: string) => void;
   isEmbeddingModel: boolean;
+  ping: (customModel: CustomModel) => Promise<"PONG">;
 }
 
 const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
@@ -284,7 +287,9 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
   defaultModelKey,
   onSetDefaultModelKey,
   isEmbeddingModel,
+  ping,
 }) => {
+  const [isVerifying, setIsVerifying] = useState(false);
   const emptyModel: CustomModel = {
     name: "",
     provider: providers.length > 0 ? providers[0] : "",
@@ -310,9 +315,32 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
     }
   };
 
+  const handleVerify = async () => {
+    if (newModel.name && newModel.provider) {
+      setIsVerifying(true);
+      await ping({ ...newModel })
+        .then((_) => new Notice("Model verification successful!"))
+        .catch((err) => {
+          const errorMessage = "Model verification failed: " + err2String(err);
+          console.error(err);
+          new Notice(errorMessage);
+        });
+
+      setIsVerifying(false);
+    } else {
+      new Notice("Please fill in necessary fields!");
+    }
+  };
+
   const handleSetDefaultModel = (model: CustomModel) => {
     onSetDefaultModelKey(getModelKey(model));
   };
+
+  const showBaseUrlOption = !isEmbeddingModel
+    ? newModel.provider !== ChatModelProviders.GROQ &&
+      newModel.provider !== ChatModelProviders.COHEREAI
+    : newModel.provider !== EmbeddingModelProviders.COHEREAI &&
+      EmbeddingModelProviders.GOOGLE !== newModel.provider;
 
   return (
     <div>
@@ -428,24 +456,35 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
                 setNewModel({ ...newModel, provider: value });
               }}
             />
-            <TextComponent
-              name="Base URL (optional)"
-              description="For 3rd party OpenAI Format endpoints only. Leave blank for other providers."
-              value={newModel.baseUrl || ""}
-              placeholder="https://api.example.com/v1"
-              onChange={(value) => setNewModel({ ...newModel, baseUrl: value })}
-            />
+
+            {showBaseUrlOption && (
+              <TextComponent
+                name="Base URL (optional)"
+                description="Leave it blank, unless you are using a proxy."
+                value={newModel.baseUrl || ""}
+                placeholder="https://api.example.com/v1"
+                onChange={(value) => setNewModel({ ...newModel, baseUrl: value })}
+              />
+            )}
+
             <TextComponent
               name="API Key (optional)"
-              description="API key for the 3rd party provider"
+              description="Please fill in the key, unless it is not required."
               value={newModel.apiKey || ""}
               placeholder="Enter API key"
               type="password"
               onChange={(value) => setNewModel({ ...newModel, apiKey: value })}
             />
-            <button onClick={handleAddModel} className="add-model-button">
-              Add Model
-            </button>
+            <div>
+              <button onClick={handleAddModel} className="add-model-button">
+                Add Model
+              </button>
+              {
+                <button onClick={handleVerify} className="loading-button" disabled={isVerifying}>
+                  {isVerifying ? "Verifying..." : "Verify"}
+                </button>
+              }
+            </div>
           </div>
         )}
       </div>

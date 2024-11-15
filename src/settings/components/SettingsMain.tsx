@@ -6,6 +6,7 @@ import ApiSettings from "./ApiSettings";
 import CopilotPlusSettings from "./CopilotPlusSettings";
 import GeneralSettings from "./GeneralSettings";
 import QASettings from "./QASettings";
+import { CustomModel } from "@/aiParams";
 
 const SettingsMain: React.FC<{ plugin: CopilotPlugin; reloadPlugin: () => Promise<void> }> = ({
   plugin,
@@ -32,6 +33,7 @@ const SettingsMain: React.FC<{ plugin: CopilotPlugin; reloadPlugin: () => Promis
       <GeneralSettings
         getLangChainParams={plugin.getLangChainParams.bind(plugin)}
         encryptionService={plugin.getEncryptionService()}
+        ping={(customModel: CustomModel) => plugin.chainManager.ping("chat", customModel)}
       />
       <ApiSettings
         {...settings}
@@ -61,6 +63,7 @@ const SettingsMain: React.FC<{ plugin: CopilotPlugin; reloadPlugin: () => Promis
         setMaxSourceChunks={(value) => updateSettings({ maxSourceChunks: value })}
         disableIndexOnMobile={settings.disableIndexOnMobile}
         setDisableIndexOnMobile={(value) => updateSettings({ disableIndexOnMobile: value })}
+        ping={(customModel: CustomModel) => plugin.chainManager.ping("embedding", customModel)}
       />
       <AdvancedSettings
         {...settings}

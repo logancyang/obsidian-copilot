@@ -15,11 +15,13 @@ import {
 interface GeneralSettingsProps {
   getLangChainParams: () => LangChainParams;
   encryptionService: EncryptionService;
+  ping: (customModel: CustomModel) => Promise<"PONG">;
 }
 
 const GeneralSettings: React.FC<GeneralSettingsProps> = ({
   getLangChainParams,
   encryptionService,
+  ping,
 }) => {
   const { settings, updateSettings } = useSettingsContext();
 
@@ -72,6 +74,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         defaultModelKey={settings.defaultModelKey}
         onSetDefaultModelKey={onSetDefaultModelKey}
         isEmbeddingModel={false}
+        ping={ping}
       />
       <div className="chat-icon-selection-tooltip">
         <h2>Default Mode</h2>

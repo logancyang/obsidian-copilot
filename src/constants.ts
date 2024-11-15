@@ -48,6 +48,8 @@ export enum ChatModelProviders {
   OPENAI_FORMAT = "3rd party (openai-format)",
 }
 
+export type ChatModelProviderType = keyof typeof ChatModelProviders;
+
 export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.GPT_4o,

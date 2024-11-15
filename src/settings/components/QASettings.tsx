@@ -19,6 +19,7 @@ interface QASettingsProps {
   setMaxSourceChunks: (value: number) => void;
   disableIndexOnMobile: boolean;
   setDisableIndexOnMobile: (value: boolean) => void;
+  ping: (customModel: CustomModel) => Promise<"PONG">;
 }
 
 const QASettings: React.FC<QASettingsProps> = ({
@@ -28,6 +29,7 @@ const QASettings: React.FC<QASettingsProps> = ({
   setMaxSourceChunks,
   disableIndexOnMobile,
   setDisableIndexOnMobile,
+  ping,
 }) => {
   const { settings, updateSettings } = useSettingsContext();
 
@@ -74,6 +76,7 @@ const QASettings: React.FC<QASettingsProps> = ({
         defaultModelKey={settings.embeddingModelKey}
         onSetDefaultModelKey={handleSetEmbeddingModelKey}
         isEmbeddingModel={true}
+        ping={ping}
       />
       <h1>Auto-Index Strategy</h1>
       <div className="warning-message">

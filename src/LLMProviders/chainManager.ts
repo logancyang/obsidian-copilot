@@ -351,4 +351,8 @@ export default class ChainManager {
       }
     }
   }
+
+  async ping(type: "chat" | "embedding", model: CustomModel): Promise<"PONG"> {
+    return type === "chat" ? this.chatModelManager.ping(model) : this.embeddingsManager.ping(model);
+  }
 }
