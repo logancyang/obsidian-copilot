@@ -108,6 +108,12 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         value={settings.autosaveChat}
         onChange={(value) => updateSettings({ autosaveChat: value })}
       />
+      <ToggleComponent
+        name="Suggested Prompts"
+        description="Show suggested prompts in the chat view"
+        value={settings.showSuggestedPrompts}
+        onChange={(value) => updateSettings({ showSuggestedPrompts: value })}
+      />
       <div className="chat-icon-selection-tooltip">
         <h2>Open Plugin In</h2>
         <div className="select-wrapper">

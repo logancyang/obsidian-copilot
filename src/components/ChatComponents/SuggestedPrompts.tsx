@@ -1,5 +1,6 @@
 import { ChainType } from "@/chainFactory";
 import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
+import { useSettingsValueContext } from "@/settings/contexts/SettingsValueContext";
 import React, { useMemo } from "react";
 
 interface NotePrompt {
@@ -80,16 +81,19 @@ function getRandomPrompt(chainType: ChainType = ChainType.LLM_CHAIN) {
 
 interface SuggestedPromptsProps {
   chainType: ChainType;
-  indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY;
   onClick: (text: string) => void;
 }
 
-export const SuggestedPrompts: React.FC<SuggestedPromptsProps> = ({
-  chainType,
-  indexVaultToVectorStore,
-  onClick,
-}) => {
+export const SuggestedPrompts: React.FC<SuggestedPromptsProps> = ({ chainType, onClick }) => {
   const prompts = useMemo(() => getRandomPrompt(chainType), [chainType]);
+  const settings = useSettingsValueContext();
+  const indexVaultToVectorStore = settings.indexVaultToVectorStore as VAULT_VECTOR_STORE_STRATEGY;
+  const showSuggestedPrompts = settings.showSuggestedPrompts;
+
+  if (!showSuggestedPrompts) {
+    return null;
+  }
+
   return (
     <div
       style={{
