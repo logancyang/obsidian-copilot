@@ -31,7 +31,7 @@ interface ChatInputProps {
   addMessage: (message: ChatMessage) => void;
   vault: Vault;
   vault_qa_strategy: string;
-  isIndexLoaded: boolean;
+  isIndexLoadedPromise: Promise<boolean>;
   debug?: boolean;
 }
 
@@ -57,7 +57,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   addMessage,
   vault,
   vault_qa_strategy,
-  isIndexLoaded,
+  isIndexLoadedPromise,
   debug,
 }) => {
   const [shouldFocus, setShouldFocus] = useState(false);
@@ -206,7 +206,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
         onRefreshVaultContext={onRefreshVaultContext}
         settings={settings}
         vault_qa_strategy={vault_qa_strategy}
-        isIndexLoaded={isIndexLoaded}
+        isIndexLoadedPromise={isIndexLoadedPromise}
         debug={debug}
       />
 

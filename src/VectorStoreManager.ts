@@ -149,7 +149,8 @@ class VectorStoreManager {
     }
   }
 
-  public getIsIndexLoaded(): boolean {
+  public async getIsIndexLoaded(): Promise<boolean> {
+    await this.waitForInitialization();
     return this.isIndexLoaded;
   }
 

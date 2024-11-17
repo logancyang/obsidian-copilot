@@ -151,7 +151,7 @@ const QASettings: React.FC<QASettingsProps> = ({
       />
       <ToggleComponent
         name="Disable index loading on mobile"
-        description="When enabled, vector store index won't be loaded on mobile devices to save resources. Only chat mode will be available. Any existing index from desktop sync will be preserved."
+        description="When enabled, vector store index won't be loaded on mobile devices to save resources. Only chat mode will be available. Any existing index from desktop sync will be preserved. Uncheck to enable QA modes on mobile."
         value={disableIndexOnMobile}
         onChange={setDisableIndexOnMobile}
       />

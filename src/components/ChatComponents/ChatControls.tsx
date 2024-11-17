@@ -20,8 +20,8 @@ interface ChatControlsProps {
   onRefreshVaultContext: () => void;
   settings: CopilotSettings;
   vault_qa_strategy: string;
+  isIndexLoadedPromise: Promise<boolean>;
   debug?: boolean;
-  isIndexLoaded: boolean;
 }
 
 const ChatControls: React.FC<ChatControlsProps> = ({
@@ -33,9 +33,16 @@ const ChatControls: React.FC<ChatControlsProps> = ({
   settings,
   vault_qa_strategy,
   debug,
-  isIndexLoaded,
+  isIndexLoadedPromise,
 }) => {
   const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
+  const [isIndexLoaded, setIsIndexLoaded] = useState(false);
+
+  useEffect(() => {
+    isIndexLoadedPromise.then((loaded) => {
+      setIsIndexLoaded(loaded);
+    });
+  }, [isIndexLoadedPromise]);
 
   const handleChainChange = async ({ value }: { value: string }) => {
     const newChain = stringToChainType(value);
