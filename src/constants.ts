@@ -243,7 +243,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   activeModels: BUILTIN_CHAT_MODELS,
   activeEmbeddingModels: BUILTIN_EMBEDDING_MODELS,
   embeddingRequestsPerSecond: 10,
-  disableIndexOnMobile: false,
+  disableIndexOnMobile: true,
   enabledCommands: {
     [COMMAND_IDS.FIX_GRAMMAR]: {
       enabled: true,
