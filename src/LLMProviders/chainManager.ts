@@ -315,8 +315,6 @@ export default class ChainManager {
                 `system prompt: ${systemPrompt}\n` +
                 `chat context turns: ${chatContextTurns}\n`
             );
-            console.log("chain RunnableSequence:", ChainManager.chain);
-            console.log("Chat memory:", memory);
           }
 
           for await (const chunk of chatStream) {
@@ -376,6 +374,12 @@ export default class ChainManager {
         });
       }
       updateCurrentAiMessage("");
+    }
+    if (debug) {
+      console.log(
+        "Chat memory:",
+        (memory as any).chatHistory.messages.map((msg: any) => msg.content)
+      );
     }
     return fullAIResponse;
   }

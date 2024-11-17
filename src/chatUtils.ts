@@ -46,22 +46,20 @@ export async function updateChatMemory(
   messages: ChatMessage[],
   memoryManager: MemoryManager
 ): Promise<void> {
+  // Clear existing memory
   await memoryManager.clearChatMemory();
 
-  let lastUserMessage = "";
-  for (const msg of messages) {
-    if (msg.sender === USER_SENDER) {
-      lastUserMessage = msg.message;
-    } else if (msg.sender === AI_SENDER && lastUserMessage) {
-      await memoryManager
-        .getMemory()
-        .saveContext({ input: lastUserMessage }, { output: msg.message });
-      lastUserMessage = ""; // Reset after saving
-    }
-  }
+  // Process each message in sequence
+  for (let i = 0; i < messages.length - 1; i++) {
+    const msg = messages[i];
 
-  // If there's a trailing user message, save it with an empty AI response
-  if (lastUserMessage) {
-    await memoryManager.getMemory().saveContext({ input: lastUserMessage }, { output: "" });
+    if (msg.sender === USER_SENDER) {
+      const nextMsg = messages[i + 1];
+      if (nextMsg?.sender === AI_SENDER) {
+        await memoryManager
+          .getMemory()
+          .saveContext({ input: msg.message }, { output: nextMsg.message });
+      }
+    }
   }
 }
