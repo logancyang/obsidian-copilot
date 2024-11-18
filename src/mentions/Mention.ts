@@ -1,22 +1,19 @@
+import { BrevilabsClient, Url4llmResponse } from "@/LLMProviders/brevilabsClient";
+
 export interface MentionData {
   type: string;
   original: string;
   processed?: string;
 }
 
-interface BrevilabsResponse {
-  response: any;
-  elapsed_time_ms: number;
-}
-
 export class Mention {
   private static instance: Mention;
   private mentions: Map<string, MentionData>;
-  private licenseKey: string;
+  private brevilabsClient: BrevilabsClient;
 
   private constructor(licenseKey: string) {
     this.mentions = new Map();
-    this.licenseKey = licenseKey;
+    this.brevilabsClient = BrevilabsClient.getInstance(licenseKey);
   }
 
   static getInstance(licenseKey: string): Mention {
@@ -35,18 +32,9 @@ export class Mention {
       .filter((url, index, self) => self.indexOf(url) === index); // Remove duplicates
   }
 
-  async processUrl(url: string): Promise<BrevilabsResponse> {
+  async processUrl(url: string): Promise<Url4llmResponse> {
     try {
-      const response = await fetch("https://api.brevilabs.com/v1/url4llm", {
-        method: "POST",
-        body: JSON.stringify({ url }),
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.licenseKey}`,
-        },
-      });
-      const data: BrevilabsResponse = await response.json();
-      return data;
+      return await this.brevilabsClient.url4llm(url);
     } catch (error) {
       console.error(`Error processing URL ${url}:`, error);
       return { response: url, elapsed_time_ms: 0 };

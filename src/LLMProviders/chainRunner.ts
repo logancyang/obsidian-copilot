@@ -245,7 +245,8 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       const toolCalls = await IntentAnalyzer.analyzeIntent(
         userMessage.message,
         this.chainManager.vectorStoreManager,
-        this.chainManager.chatModelManager
+        this.chainManager.chatModelManager,
+        this.chainManager.brevilabsClient
       );
       if (debug)
         console.log(
@@ -367,25 +368,39 @@ class CopilotPlusChainRunner extends BaseChainRunner {
   }
 
   private getSources(documents: any): { title: string; score: number }[] {
+    if (!documents || !Array.isArray(documents)) {
+      console.warn("No valid documents provided to getSources");
+      return [];
+    }
     return this.sortUniqueDocsByScore(documents);
   }
 
   private sortUniqueDocsByScore(documents: any[]): any[] {
-    // Create a map to store the highest-scoring document for each title
     const uniqueDocs = new Map<string, any>();
 
     // Iterate through all documents
     for (const doc of documents) {
+      if (!doc.title || (!doc?.score && !doc?.rerank_score)) {
+        console.warn("Invalid document structure:", doc);
+        continue;
+      }
+
       const currentDoc = uniqueDocs.get(doc.title);
+      const isReranked = doc && "rerank_score" in doc;
+      const docScore = isReranked ? doc.rerank_score : doc.score;
 
       // If the title doesn't exist in the map, or if the new doc has a higher score, update the map
-      if (!currentDoc || doc.score > currentDoc.score) {
-        uniqueDocs.set(doc.title, doc);
+      if (!currentDoc || docScore > (currentDoc.score ?? 0)) {
+        uniqueDocs.set(doc.title, {
+          title: doc.title,
+          score: docScore,
+          isReranked: isReranked,
+        });
       }
     }
 
     // Convert the map values back to an array and sort by score in descending order
-    return Array.from(uniqueDocs.values()).sort((a, b) => b.score - a.score);
+    return Array.from(uniqueDocs.values()).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   }
 
   private async executeToolCalls(

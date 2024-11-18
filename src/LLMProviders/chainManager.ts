@@ -22,9 +22,9 @@ import { RunnableSequence } from "@langchain/core/runnables";
 import { App, Notice } from "obsidian";
 import ChatModelManager from "./chatModelManager";
 import EmbeddingsManager from "./embeddingManager";
-import { IntentAnalyzer } from "./intentAnalyzer";
 import MemoryManager from "./memoryManager";
 import PromptManager from "./promptManager";
+import { BrevilabsClient } from "./brevilabsClient";
 
 export default class ChainManager {
   private static chain: RunnableSequence;
@@ -40,6 +40,7 @@ export default class ChainManager {
   public memoryManager: MemoryManager;
   public embeddingsManager: EmbeddingsManager;
   public promptManager: PromptManager;
+  public brevilabsClient: BrevilabsClient;
   public static retrievedDocuments: Document[] = [];
 
   constructor(
@@ -64,7 +65,9 @@ export default class ChainManager {
     );
     this.embeddingsManager = this.vectorStoreManager.getEmbeddingsManager();
     this.promptManager = PromptManager.getInstance(this.getLangChainParams());
-    IntentAnalyzer.initialize(this.settings.plusLicenseKey);
+    this.brevilabsClient = BrevilabsClient.getInstance(this.settings.plusLicenseKey, {
+      debug: this.settings.debug,
+    });
     this.createChainWithNewModel(this.getLangChainParams().modelKey);
   }
 
@@ -227,6 +230,7 @@ export default class ChainManager {
           this.app.vault,
           chatModel,
           embeddingsAPI,
+          this.brevilabsClient,
           {
             minSimilarityScore: 0.01,
             maxK: this.settings.maxSourceChunks,

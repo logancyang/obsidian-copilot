@@ -690,6 +690,7 @@ export default class CopilotPlugin extends Plugin {
       this.app.vault,
       this.chainManager.chatModelManager.getChatModel(),
       this.vectorStoreManager.getEmbeddingsManager().getEmbeddingsAPI() as Embeddings,
+      this.chainManager.brevilabsClient,
       {
         minSimilarityScore: 0.3,
         maxK: 20,
@@ -722,6 +723,7 @@ export default class CopilotPlugin extends Plugin {
       this.app.vault,
       this.chainManager.chatModelManager.getChatModel(),
       this.vectorStoreManager.getEmbeddingsManager().getEmbeddingsAPI() as Embeddings,
+      this.chainManager.brevilabsClient,
       {
         minSimilarityScore: 0.3,
         maxK: 20,

@@ -1,3 +1,4 @@
+import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { extractNoteTitles, getNoteFileFromTitle } from "@/utils";
 import VectorDBManager from "@/vectorDBManager";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
@@ -15,12 +16,14 @@ export class HybridRetriever extends BaseRetriever {
   private llm: BaseLanguageModel;
   private queryRewritePrompt: ChatPromptTemplate;
   private embeddingsInstance: Embeddings;
+  private brevilabsClient: BrevilabsClient;
 
   constructor(
     private db: Orama<any>,
     private vault: Vault,
     llm: BaseLanguageModel,
     embeddingsInstance: Embeddings,
+    brevilabsClient: BrevilabsClient,
     private options: {
       minSimilarityScore: number;
       maxK: number;
@@ -28,6 +31,7 @@ export class HybridRetriever extends BaseRetriever {
       timeRange?: { startDate: string; endDate: string }; // ISO 8601 format in local timezone
       textWeight?: number;
       returnAll?: boolean;
+      useRerankerThreshold?: number;
     },
     private debug?: boolean
   ) {
@@ -37,6 +41,10 @@ export class HybridRetriever extends BaseRetriever {
     this.queryRewritePrompt = ChatPromptTemplate.fromTemplate(
       "Please write a passage to answer the question. If you don't know the answer, just make up a passage. \nQuestion: {question}\nPassage:"
     );
+    if (!brevilabsClient) {
+      throw new Error("BrevilabsClient is required but was not provided");
+    }
+    this.brevilabsClient = brevilabsClient;
   }
 
   public async getRelevantDocuments(
@@ -62,29 +70,49 @@ export class HybridRetriever extends BaseRetriever {
 
     const combinedChunks = this.filterAndFormatChunks(oramaChunks, explicitChunks);
 
+    let finalChunks = combinedChunks;
+    const maxOramaScore = combinedChunks.reduce(
+      (max, chunk) => Math.max(max, chunk.metadata.score ?? 0),
+      0
+    );
+    // Apply reranking if max score is below the threshold
+    if (this.options.useRerankerThreshold && maxOramaScore < this.options.useRerankerThreshold) {
+      const rerankResponse = await this.brevilabsClient.rerank(
+        query,
+        // Limit the context length to 3000 characters to avoid overflowing the reranker
+        combinedChunks.map((doc) => doc.pageContent.slice(0, 3000))
+      );
+
+      // Map chunks based on reranked scores and include rerank_score in metadata
+      finalChunks = rerankResponse.response.data.map((item) => ({
+        ...combinedChunks[item.index],
+        metadata: {
+          ...combinedChunks[item.index].metadata,
+          rerank_score: item.relevance_score,
+        },
+      }));
+    }
+
     if (this.debug) {
       console.log("*** HYBRID RETRIEVER DEBUG INFO: ***");
 
       if (config?.runName !== "no_hyde") {
         console.log("\nOriginal Query: ", query);
-        console.log("\nRewritten Query: ", rewrittenQuery);
+        console.log("Rewritten Query: ", rewrittenQuery);
       }
 
-      console.log(
-        "\nSalient Terms: ",
-        this.options.salientTerms,
-        "\nNote Titles extracted: ",
-        noteTitles,
-        "\n\nExplicit Chunks:",
-        explicitChunks,
-        "\n\nOrama Chunks:",
-        oramaChunks,
-        "\n\nCombined Chunks:",
-        combinedChunks
-      );
+      console.log("\nExplicit Chunks: ", explicitChunks);
+      console.log("Orama Chunks: ", oramaChunks);
+      console.log("Combined Chunks: ", combinedChunks);
+      console.log("Max Orama Score: ", maxOramaScore);
+      if (this.options.useRerankerThreshold && maxOramaScore < this.options.useRerankerThreshold) {
+        console.log("Reranked Chunks: ", finalChunks);
+      } else {
+        console.log("No reranking applied.");
+      }
     }
 
-    return combinedChunks;
+    return finalChunks;
   }
 
   private async rewriteQuery(query: string): Promise<string> {

@@ -1,0 +1,107 @@
+import { BREVILABS_API_BASE_URL } from "@/constants";
+import { Notice } from "obsidian";
+
+export interface BrocaResponse {
+  response: {
+    tool_calls: Array<{
+      tool: string;
+      args: {
+        [key: string]: any;
+      };
+    }>;
+    salience_terms: string[];
+  };
+  elapsed_time_ms: number;
+}
+
+export interface RerankResponse {
+  response: {
+    object: string;
+    data: Array<{
+      relevance_score: number;
+      index: number;
+    }>;
+    model: string;
+    usage: {
+      total_tokens: number;
+    };
+  };
+  elapsed_time_ms: number;
+}
+
+export interface ToolCall {
+  tool: any;
+  args: any;
+}
+
+export interface Url4llmResponse {
+  response: any;
+  elapsed_time_ms: number;
+}
+
+export class BrevilabsClient {
+  private static instance: BrevilabsClient;
+  private licenseKey: string;
+  private options: any;
+
+  private constructor(licenseKey: string, options?: { debug?: boolean }) {
+    this.licenseKey = licenseKey;
+    this.options = options;
+  }
+
+  static getInstance(licenseKey: string, options?: { debug?: boolean }): BrevilabsClient {
+    if (!BrevilabsClient.instance) {
+      BrevilabsClient.instance = new BrevilabsClient(licenseKey, options);
+    }
+    return BrevilabsClient.instance;
+  }
+
+  private checkLicenseKey() {
+    if (!this.licenseKey) {
+      new Notice(
+        "Copilot Plus license key not found. Please enter your license key in the settings."
+      );
+      throw new Error("License key not initialized");
+    }
+  }
+
+  private async makeRequest<T>(endpoint: string, body: any): Promise<T> {
+    this.checkLicenseKey();
+
+    const response = await fetch(`${BREVILABS_API_BASE_URL}${endpoint}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.licenseKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await response.json();
+    if (this.options?.debug) {
+      console.log(`==== ${endpoint} request ====:`, data);
+    }
+
+    return data;
+  }
+
+  async broca(userMessage: string): Promise<BrocaResponse> {
+    const brocaResponse = await this.makeRequest<BrocaResponse>("/broca", {
+      message: userMessage,
+    });
+
+    return brocaResponse;
+  }
+
+  async rerank(query: string, documents: string[]): Promise<RerankResponse> {
+    return this.makeRequest<RerankResponse>("/rerank", {
+      query,
+      documents,
+      model: "rerank-2",
+    });
+  }
+
+  async url4llm(url: string): Promise<Url4llmResponse> {
+    return this.makeRequest<Url4llmResponse>("/url4llm", { url });
+  }
+}

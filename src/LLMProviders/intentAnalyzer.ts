@@ -1,6 +1,5 @@
 import ChatModelManager from "@/LLMProviders/chatModelManager";
 import VectorStoreManager from "@/VectorStoreManager";
-import { BREVILABS_API_BASE_URL } from "@/constants";
 import { indexTool, localSearchTool } from "@/tools/SearchTools";
 import {
   getCurrentTimeTool,
@@ -10,7 +9,7 @@ import {
   TimeInfo,
 } from "@/tools/TimeTools";
 import { ToolManager } from "@/tools/toolManager";
-import { Notice } from "obsidian";
+import { BrevilabsClient } from "./brevilabsClient";
 
 export const COPILOT_TOOL_NAMES = ["@vault", "@web", "@youtube", "@pomodoro", "@index"];
 
@@ -20,7 +19,6 @@ type ToolCall = {
 };
 
 export class IntentAnalyzer {
-  private static licenseKey: string;
   private static tools = [
     getCurrentTimeTool,
     getTimeInfoByEpochTool,
@@ -30,37 +28,15 @@ export class IntentAnalyzer {
     pomodoroTool,
   ];
 
-  static initialize(licenseKey: string) {
-    this.licenseKey = licenseKey;
-  }
-
   static async analyzeIntent(
     userMessage: string,
     vectorStoreManager: VectorStoreManager,
-    chatModelManager: ChatModelManager
+    chatModelManager: ChatModelManager,
+    brevilabsClient: BrevilabsClient
   ): Promise<ToolCall[]> {
-    if (!this.licenseKey) {
-      new Notice(
-        "Copilot Plus license key not found. Please enter your license key in the settings."
-      );
-      throw new Error("License key not initialized");
-    }
-    // Call brevilabs broca API
-    const response = await fetch(`${BREVILABS_API_BASE_URL}/broca`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.licenseKey}`,
-      },
-      body: JSON.stringify({
-        message: userMessage,
-      }),
-    });
-
-    const brocaResponse = await response.json();
-    console.log("==== brocaResponse ====:", brocaResponse);
-
+    let brocaResponse;
     try {
+      brocaResponse = await brevilabsClient.broca(userMessage);
       const brocaToolCalls = brocaResponse.response.tool_calls;
 
       const processedToolCalls: ToolCall[] = [];
@@ -98,6 +74,7 @@ export class IntentAnalyzer {
             salientTerms,
             vectorStoreManager,
             chatModelManager,
+            brevilabsClient,
           },
         });
       }

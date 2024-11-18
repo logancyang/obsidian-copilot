@@ -1,4 +1,5 @@
 // src/components/SourcesModal.tsx
+import { CONTEXT_SCORE_THRESHOLD } from "@/constants";
 import { App, Modal } from "obsidian";
 
 export class SourcesModal extends Modal {
@@ -13,9 +14,6 @@ export class SourcesModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.createEl("h2", { text: "Sources" });
-
-    // TODO: Determine according to reranker output
-    const CONTEXT_SCORE_THRESHOLD = 0;
 
     const highScoreSources = this.sources.filter(
       (source) => source.score >= CONTEXT_SCORE_THRESHOLD

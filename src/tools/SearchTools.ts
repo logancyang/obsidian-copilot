@@ -1,5 +1,6 @@
 import { TEXT_WEIGHT } from "@/constants";
 import { CustomError } from "@/error";
+import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ChatModelManager from "@/LLMProviders/chatModelManager";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { TimeInfo } from "@/tools/TimeTools";
@@ -14,12 +15,14 @@ const localSearchTool = tool(
     salientTerms,
     vectorStoreManager,
     chatModelManager,
+    brevilabsClient,
   }: {
     timeRange?: { startTime: TimeInfo; endTime: TimeInfo };
     query: string;
     salientTerms: string[];
     vectorStoreManager: VectorStoreManager;
     chatModelManager: ChatModelManager;
+    brevilabsClient: BrevilabsClient;
   }) => {
     // Ensure VectorStoreManager is initialized
     await vectorStoreManager.waitForInitialization();
@@ -45,6 +48,7 @@ const localSearchTool = tool(
       vault,
       chatModelManager.getChatModel(),
       embeddingInstance,
+      brevilabsClient,
       {
         minSimilarityScore: returnAll ? 0.0 : 0.1,
         maxK: returnAll ? 100 : 15,
@@ -57,6 +61,9 @@ const localSearchTool = tool(
           : undefined,
         textWeight: TEXT_WEIGHT,
         returnAll: returnAll,
+        // Voyage AI reranker did worse than Orama in some cases, so only use it if
+        // Orama did not return anything higher than this threshold
+        useRerankerThreshold: 0.5,
       },
       settings.debug
     );
@@ -70,6 +77,7 @@ const localSearchTool = tool(
       content: doc.pageContent,
       path: doc.metadata.path,
       score: doc.metadata.score,
+      rerank_score: doc.metadata.rerank_score,
       includeInContext: doc.metadata.includeInContext,
     }));
 
@@ -89,6 +97,7 @@ const localSearchTool = tool(
       salientTerms: z.array(z.string()).describe("List of salient terms extracted from the query"),
       vectorStoreManager: z.any().describe("The VectorStoreManager instance"),
       chatModelManager: z.any().describe("The ChatModelManager instance"),
+      brevilabsClient: z.any().describe("The BrevilabsClient instance"),
     }),
   }
 );
