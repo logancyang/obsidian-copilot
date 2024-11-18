@@ -1,4 +1,3 @@
-import { CONTEXT_SCORE_THRESHOLD } from "@/constants";
 import { extractNoteTitles, getNoteFileFromTitle } from "@/utils";
 import VectorDBManager from "@/vectorDBManager";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
@@ -158,43 +157,54 @@ export class HybridRetriever extends BaseRetriever {
       throw error;
     }
 
-    let vectorWeight;
-    if (!textWeight) {
-      textWeight = 0.5;
-    }
-    vectorWeight = 1 - textWeight;
-
-    let tagOnlyQuery = true;
-    for (const term of salientTerms) {
-      if (!term.startsWith("#")) {
-        tagOnlyQuery = false;
-        break;
-      }
-    }
-
-    if (salientTerms.length > 0 && tagOnlyQuery) {
-      if (this.debug) {
-        console.log("Tag only query detected, setting textWeight to 1 and vectorWeight to 0.");
-      }
-      textWeight = 1;
-      vectorWeight = 0;
-    }
-
     const searchParams: any = {
-      mode: "hybrid",
-      term: salientTerms.join(" "),
-      vector: {
-        value: queryVector,
-        property: "embedding",
-      },
       similarity: this.options.minSimilarityScore,
       limit: this.options.maxK,
       includeVectors: true,
-      hybridWeights: {
+    };
+
+    if (salientTerms.length > 0) {
+      // Use hybrid mode when we have salient terms
+      let vectorWeight;
+      if (!textWeight) {
+        textWeight = 0.5;
+      }
+      vectorWeight = 1 - textWeight;
+
+      let tagOnlyQuery = true;
+      for (const term of salientTerms) {
+        if (!term.startsWith("#")) {
+          tagOnlyQuery = false;
+          break;
+        }
+      }
+
+      if (tagOnlyQuery) {
+        if (this.debug) {
+          console.log("Tag only query detected, setting textWeight to 1 and vectorWeight to 0.");
+        }
+        textWeight = 1;
+        vectorWeight = 0;
+      }
+
+      searchParams.mode = "hybrid";
+      searchParams.term = salientTerms.join(" ");
+      searchParams.vector = {
+        value: queryVector,
+        property: "embedding",
+      };
+      searchParams.hybridWeights = {
         text: textWeight,
         vector: vectorWeight,
-      },
-    };
+      };
+    } else {
+      // Use vector mode when no salient terms
+      searchParams.mode = "vector";
+      searchParams.vector = {
+        value: queryVector,
+        property: "embedding",
+      };
+    }
 
     // Add time range filter if provided
     if (this.options.timeRange) {
@@ -221,6 +231,7 @@ export class HybridRetriever extends BaseRetriever {
         ctime: { between: [startTimestamp, endTimestamp] },
         mtime: { between: [startTimestamp, endTimestamp] },
       };
+
       const timeIntervalResults = await search(this.db, searchParams);
 
       // Convert timeIntervalResults to Document objects
@@ -254,7 +265,6 @@ export class HybridRetriever extends BaseRetriever {
       return uniqueResults.filter((doc): doc is Document => doc !== undefined);
     }
 
-    // If no time range is provided, perform a single search
     const searchResults = await search(this.db, searchParams);
 
     // Convert Orama search results to Document objects
@@ -275,7 +285,6 @@ export class HybridRetriever extends BaseRetriever {
             extension: hit.document.extension,
             created_at: hit.document.created_at,
             nchars: hit.document.nchars,
-            includeInContext: hit.score >= CONTEXT_SCORE_THRESHOLD || this.options.returnAll,
           },
         })
     );
@@ -319,10 +328,8 @@ export class HybridRetriever extends BaseRetriever {
       ...chunk,
       metadata: {
         ...chunk.metadata,
-        includeInContext:
-          chunk.metadata.includeInContext === true ||
-          chunk.metadata.score >= CONTEXT_SCORE_THRESHOLD ||
-          this.options.returnAll,
+        // TODO: Use this for reranker output
+        includeInContext: true,
       },
     }));
   }

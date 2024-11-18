@@ -421,7 +421,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
 
   private getTimeExpression(toolCalls: any[]): string {
     const timeRangeCall = toolCalls.find((call) => call.tool.name === "getTimeRangeMs");
-    return timeRangeCall ? timeRangeCall.args.timeExpression : "recent";
+    return timeRangeCall ? timeRangeCall.args.timeExpression : "";
   }
 
   private formatLocalSearchResult(documents: any[], timeExpression: string): string {
@@ -429,7 +429,9 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       .filter((doc) => doc.includeInContext)
       .map((doc: any) => `Note in Vault: ${doc.content}`)
       .join("\n\n");
-    return `Local Search Result for ${timeExpression}:\n${formattedDocs}`;
+    return timeExpression
+      ? `Local Search Result for ${timeExpression}:\n${formattedDocs}`
+      : `Local Search Result:\n${formattedDocs}`;
   }
 }
 

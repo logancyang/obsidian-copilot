@@ -35,8 +35,13 @@ const localSearchTool = tool(
 
     const returnAll = timeRange !== undefined;
 
+    const db = vectorStoreManager.getDb();
+    if (!db) {
+      throw new CustomError("Orama database not found.");
+    }
+
     const hybridRetriever = new HybridRetriever(
-      vectorStoreManager.getDb(),
+      db,
       vault,
       chatModelManager.getChatModel(),
       embeddingInstance,

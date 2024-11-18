@@ -13,7 +13,6 @@ export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assist
   4. If the user mentions "@vault", it means the user wants you to search the Obsidian vault for information relevant to the query. The search results will be provided to you in the context. If there's no relevant information in the vault, just say so.
   5. If the user mentions any other tool with the @ symbol, check the context for their results. If nothing is found, just ignore the @ symbol in the query.`;
 export const CHUNK_SIZE = 4000;
-export const CONTEXT_SCORE_THRESHOLD = 0.5;
 export const RETURN_ALL_CONTEXT_SCORE_THRESHOLD = 0.1;
 export const TEXT_WEIGHT = 0.4;
 export const LOADING_MESSAGES = {

@@ -228,7 +228,7 @@ export default class ChainManager {
           chatModel,
           embeddingsAPI,
           {
-            minSimilarityScore: 0.3,
+            minSimilarityScore: 0.01,
             maxK: this.settings.maxSourceChunks,
             salientTerms: [],
           },
