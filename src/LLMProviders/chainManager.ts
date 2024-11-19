@@ -20,11 +20,11 @@ import {
 } from "@langchain/core/prompts";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { App, Notice } from "obsidian";
+import { BrevilabsClient } from "./brevilabsClient";
 import ChatModelManager from "./chatModelManager";
 import EmbeddingsManager from "./embeddingManager";
 import MemoryManager from "./memoryManager";
 import PromptManager from "./promptManager";
-import { BrevilabsClient } from "./brevilabsClient";
 
 export default class ChainManager {
   private static chain: RunnableSequence;
@@ -48,7 +48,6 @@ export default class ChainManager {
     getLangChainParams: () => LangChainParams,
     encryptionService: EncryptionService,
     settings: CopilotSettings,
-    // Ensure ChainManager always has the up-to-date dbVectorStores
     vectorStoreManager: VectorStoreManager
   ) {
     // Instantiate singletons
@@ -56,7 +55,7 @@ export default class ChainManager {
     this.langChainParams = getLangChainParams();
     this.settings = settings;
     this.vectorStoreManager = vectorStoreManager;
-    this.memoryManager = MemoryManager.getInstance(this.getLangChainParams());
+    this.memoryManager = MemoryManager.getInstance(this.getLangChainParams(), settings.debug);
     this.encryptionService = encryptionService;
     this.chatModelManager = ChatModelManager.getInstance(
       () => this.getLangChainParams(),

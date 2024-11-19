@@ -44,11 +44,11 @@ abstract class BaseChainRunner implements ChainRunner {
     debug: boolean,
     sources?: { title: string; score: number }[]
   ) {
-    if (debug) console.log("==== Final AI Response ====\n", fullAIResponse);
     if (fullAIResponse && abortController.signal.reason !== ABORT_REASON.NEW_CHAT) {
       await this.chainManager.memoryManager
         .getMemory()
-        .saveContext({ input: userMessage }, { output: fullAIResponse });
+        .saveContext({ input: userMessage.message }, { output: fullAIResponse });
+
       addMessage({
         message: fullAIResponse,
         sender: AI_SENDER,
@@ -58,6 +58,15 @@ abstract class BaseChainRunner implements ChainRunner {
       });
     }
     updateCurrentAiMessage("");
+    if (debug) {
+      console.log(
+        "==== Chat Memory ====\n",
+        (this.chainManager.memoryManager.getMemory().chatHistory as any).messages.map(
+          (m: any) => m.content
+        )
+      );
+      console.log("==== Final AI Response ====\n", fullAIResponse);
+    }
     return fullAIResponse;
   }
 
@@ -188,7 +197,39 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     updateCurrentAiMessage: (message: string) => void,
     debug: boolean
   ): Promise<string> {
-    // Create message content array
+    // Get chat history
+    const memory = this.chainManager.memoryManager.getMemory();
+    const memoryVariables = await memory.loadMemoryVariables({});
+    const chatHistory = extractChatHistory(memoryVariables);
+
+    // Create messages array starting with system message
+    const messages: any[] = [];
+
+    // Add system message if available
+    const systemMessage = this.chainManager.getLangChainParams().systemMessage;
+    if (systemMessage) {
+      messages.push({
+        role: "system",
+        content: `${systemMessage}\nIMPORTANT: Maintain consistency with previous responses in the conversation. If you've provided information about a person or topic before, use that same information in follow-up questions.`,
+      });
+    }
+
+    // Add chat history with explicit instruction to maintain context
+    if (chatHistory.length > 0) {
+      messages.push({
+        role: "system",
+        content:
+          "The following is the relevant conversation history. Use this context to maintain consistency in your responses:",
+      });
+    }
+
+    // Add chat history
+    for (const [human, ai] of chatHistory) {
+      messages.push({ role: "user", content: human });
+      messages.push({ role: "assistant", content: ai });
+    }
+
+    // Create content array for current message
     const content = [
       {
         type: "text",
@@ -196,24 +237,22 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       },
     ];
 
-    // Only add image content if it exists
+    // Add image content if present
     if (userMessage.content && userMessage.content.length > 0) {
-      // Filter for image content and add directly
       const imageContent = userMessage.content.filter(
         (item) => item.type === "image_url" && item.image_url?.url
       );
       content.push(...imageContent);
     }
 
-    const message = {
+    // Add current user message
+    messages.push({
       role: "user",
       content,
-    };
-
-    if (debug) console.log("Final multimodal message:", message);
+    });
 
     let fullAIResponse = "";
-    const chatStream = await this.chainManager.chatModelManager.getChatModel().stream([message]);
+    const chatStream = await this.chainManager.chatModelManager.getChatModel().stream(messages);
 
     for await (const chunk of chatStream) {
       if (abortController.signal.aborted) break;

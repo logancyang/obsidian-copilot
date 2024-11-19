@@ -79,17 +79,18 @@ export class IntentAnalyzer {
         });
       }
 
-      const indexRegex =
-        /\b(?:index|create\s+an?\s+index)(?:\s+(?:the|my|all|this))?\s*(?:vault|notes?)?\b/i;
-      if (
-        indexRegex.test(userMessage.toLowerCase()) ||
-        userMessage.toLowerCase().includes("@index")
-      ) {
-        processedToolCalls.push({
-          tool: indexTool,
-          args: { vectorStoreManager },
-        });
-      }
+      // TODO: Re-enable this for indexing pdfs and other files in the vault
+      // const indexRegex =
+      //   /\b(?:index|create\s+an?\s+index)(?:\s+(?:the|my|all|this))?\s*(?:vault|notes?)?\b/i;
+      // if (
+      //   indexRegex.test(userMessage.toLowerCase()) ||
+      //   userMessage.toLowerCase().includes("@index")
+      // ) {
+      //   processedToolCalls.push({
+      //     tool: indexTool,
+      //     args: { vectorStoreManager },
+      //   });
+      // }
 
       if (userMessage.toLowerCase().includes("@pomodoro")) {
         const pomodoroMatch = userMessage.match(/@pomodoro\s+(\S+)/i);
