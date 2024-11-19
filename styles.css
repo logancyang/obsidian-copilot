@@ -160,7 +160,7 @@ If your plugin does not need CSS, delete this file.
 }
 
 .context-note.url .note-badge {
-  background-color: #7c3aed;
+  background-color: var(--interactive-accent);
 }
 
 .context-note.url .note-name {
@@ -168,6 +168,10 @@ If your plugin does not need CSS, delete this file.
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.context-note .note-badge.pdf {
+  background-color: var(--background-modifier-error);
 }
 
 .chat-icons-right {

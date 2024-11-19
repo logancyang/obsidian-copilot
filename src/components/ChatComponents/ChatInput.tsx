@@ -2,6 +2,7 @@ import { CustomModel, SetChainOptions } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { ListPromptModal } from "@/components/ListPromptModal";
 import { NoteTitleModal } from "@/components/NoteTitleModal";
+import { ContextProcessor } from "@/contextProcessor";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
@@ -106,16 +107,15 @@ const ChatInput: React.FC<ChatInputProps> = ({
       inputValue: string,
       setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>,
       currentContextNotes: TFile[],
-      includeActiveNote: boolean,
       app: App
     ) => {
       const noteTitles = extractNoteTitles(inputValue);
+
       const notesToAdd = await Promise.all(
         noteTitles.map(async (title) => {
           const files = app.vault.getMarkdownFiles();
           const file = files.find((file) => file.basename === title);
           if (file) {
-            // Create a new object that extends TFile with our flag
             return Object.assign(file, { wasAddedViaReference: true }) as TFile & {
               wasAddedViaReference: boolean;
             };
@@ -124,19 +124,16 @@ const ChatInput: React.FC<ChatInputProps> = ({
         })
       );
 
-      const activeNote = app.workspace.getActiveFile();
       const validNotes = notesToAdd.filter(
         (note): note is TFile & { wasAddedViaReference: boolean } =>
-          note !== undefined &&
-          !currentContextNotes.some((existing) => existing.path === note.path) &&
-          (!includeActiveNote || activeNote?.path !== note.path)
+          note !== undefined && !currentContextNotes.some((existing) => existing.path === note.path)
       );
 
       if (validNotes.length > 0) {
         setContextNotes((prev) => [...prev, ...validNotes]);
       }
     },
-    300
+    50
   );
 
   const handleInputChange = async (event: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -157,7 +154,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
     }
 
     // Update context with debouncing
-    debouncedUpdateContext(inputValue, setContextNotes, contextNotes, includeActiveNote, app);
+    debouncedUpdateContext(inputValue, setContextNotes, contextNotes, app);
 
     // Handle other input triggers
     if (cursorPos >= 2 && inputValue.slice(cursorPos - 2, cursorPos) === "[[") {
@@ -183,6 +180,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const showNoteTitleModal = (cursorPos: number) => {
     const fetchNoteTitles = async () => {
       const noteTitles = app.vault.getMarkdownFiles().map((file: TFile) => file.basename);
+      const contextProcessor = ContextProcessor.getInstance();
 
       new NoteTitleModal(app, noteTitles, async (noteTitle: string) => {
         const before = inputMessage.slice(0, cursorPos - 2);
@@ -190,23 +188,21 @@ const ChatInput: React.FC<ChatInputProps> = ({
         const newInputMessage = `${before}[[${noteTitle}]]${after}`;
         setInputMessage(newInputMessage);
 
+        // Manually invoke debouncedUpdateContext
+        debouncedUpdateContext(newInputMessage, setContextNotes, contextNotes, app);
+
         const activeNote = app.workspace.getActiveFile();
-        // Immediately update context without waiting for debounce
         const noteFile = app.vault.getMarkdownFiles().find((file) => file.basename === noteTitle);
-        if (
-          noteFile &&
-          !contextNotes.some((existing) => existing.path === noteFile.path) &&
-          (!includeActiveNote || activeNote?.path !== noteFile.path)
-        ) {
-          if (activeNote && noteFile.path === activeNote.path) {
-            setIncludeActiveNote(true);
-          } else {
-            // Add the wasAddedViaReference flag here too
-            setContextNotes((prev) => [
-              ...prev,
-              Object.assign(noteFile, { wasAddedViaReference: true }),
-            ]);
-          }
+
+        if (noteFile) {
+          await contextProcessor.addNoteToContext(
+            noteFile,
+            vault,
+            contextNotes,
+            activeNote,
+            setContextNotes,
+            setIncludeActiveNote
+          );
         }
 
         // Add a delay to ensure the cursor is set after inputMessage is updated
@@ -218,7 +214,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
         }, 0);
       }).open();
     };
-
     fetchNoteTitles();
   };
 
@@ -328,31 +323,51 @@ const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   useEffect(() => {
-    // Extract current note titles and URLs from input
+    // Get all note titles that are referenced using [[note]] syntax in the input
     const currentTitles = new Set(extractNoteTitles(inputMessage));
+    // Get all URLs mentioned in the input
     const currentUrls = mention.extractUrls(inputMessage);
+    // Get the currently open note in the editor
     const activeNote = app.workspace.getActiveFile();
 
-    // Remove notes that were added via [[]] references and are no longer in the input
     setContextNotes((prev) =>
       prev.filter((note) => {
-        // Check if the note was added via reference
-        const wasAddedViaReference = "wasAddedViaReference" in note;
+        // Check if this note was added by typing [[note]] in the input
+        // as opposed to being added via the "Add Note to Context" button
+        const wasAddedViaReference = (note as any).wasAddedViaReference === true;
 
-        return (
-          // Keep the note if it's still referenced in the input
-          currentTitles.has(note.basename) ||
-          // Keep the active note if it's included
-          (includeActiveNote && activeNote?.path === note.path) ||
-          // Keep the note if it wasn't added via reference
-          !wasAddedViaReference
-        );
+        // Special handling for the active note (currently open in editor)
+        if (note.path === activeNote?.path) {
+          if (wasAddedViaReference) {
+            // Case 1: Active note was added by typing [[note]]
+            // Keep it only if its title is still in the input
+            // This ensures it's removed when you delete the [[note]] reference
+            return currentTitles.has(note.basename);
+          } else {
+            // Case 2: Active note was NOT added by [[note]], but by the includeActiveNote toggle
+            // Keep it only if includeActiveNote is true
+            // This handles the "Include active note" toggle in the UI
+            return includeActiveNote;
+          }
+        } else {
+          // Handling for all other notes (not the active note)
+          if (wasAddedViaReference) {
+            // Case 3: Other note was added by typing [[note]]
+            // Keep it only if its title is still in the input
+            // This ensures it's removed when you delete the [[note]] reference
+            return currentTitles.has(note.basename);
+          } else {
+            // Case 4: Other note was added via "Add Note to Context" button
+            // Always keep these notes as they were manually added
+            return true;
+          }
+        }
       })
     );
 
-    // Remove URLs that are no longer in the input
+    // Remove any URLs that are no longer present in the input
     setContextUrls((prev) => prev.filter((url) => currentUrls.includes(url)));
-  }, [inputMessage]);
+  }, [inputMessage, includeActiveNote]);
 
   return (
     <div className="chat-input-container" ref={containerRef}>

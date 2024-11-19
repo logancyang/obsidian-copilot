@@ -5,13 +5,15 @@ import { AppContext } from "@/context";
 import CopilotPlugin from "@/main";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import SharedState from "@/sharedState";
+import { FileParserManager } from "@/tools/FileParserManager";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
 import { Root, createRoot } from "react-dom/client";
-import * as Tooltip from "@radix-ui/react-tooltip";
 
 export default class CopilotView extends ItemView {
   private chainManager: ChainManager;
+  private fileParserManager: FileParserManager;
   private root: Root | null = null;
   private settings: CopilotSettings;
   private defaultSaveFolder: string;
@@ -30,6 +32,7 @@ export default class CopilotView extends ItemView {
     this.settings = plugin.settings;
     this.app = plugin.app;
     this.chainManager = plugin.chainManager;
+    this.fileParserManager = plugin.fileParserManager;
     this.debug = plugin.settings.debug;
     this.emitter = new EventTarget();
     this.userSystemPrompt = plugin.settings.userSystemPrompt;
@@ -70,6 +73,7 @@ export default class CopilotView extends ItemView {
               updateUserMessageHistory={(newMessage) => {
                 this.plugin.updateUserMessageHistory(newMessage);
               }}
+              fileParserManager={this.fileParserManager}
               plugin={this.plugin}
               debug={this.debug}
               onSaveChat={(saveFunction) => {

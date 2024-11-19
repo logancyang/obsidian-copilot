@@ -17,25 +17,35 @@ export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
       .filter(
         (file): file is TFile =>
           file instanceof TFile &&
+          (file.extension === "md" || file.extension === "pdf") &&
           !excludeNotes.includes(file.path) &&
           file.path !== this.activeNote?.path
       );
 
     // Get all other files that weren't recently opened
-    const otherFiles = this.app.vault
-      .getMarkdownFiles()
-      .filter(
-        (file) =>
-          !recentFiles.some((recent) => recent.path === file.path) &&
-          !excludeNotes.includes(file.path) &&
-          file.path !== this.activeNote?.path
-      );
+    const allFiles = this.app.vault
+      .getFiles()
+      .filter((file) => file.extension === "md" || file.extension === "pdf");
+
+    const otherFiles = allFiles.filter(
+      (file) =>
+        !recentFiles.some((recent) => recent.path === file.path) &&
+        !excludeNotes.includes(file.path) &&
+        file.path !== this.activeNote?.path
+    );
 
     // Combine active note (if exists) with recent files and other files
     return [...(this.activeNote ? [this.activeNote] : []), ...recentFiles, ...otherFiles];
   }
 
-  protected formatNoteTitle(basename: string, isActive: boolean): string {
-    return isActive ? `${basename} (current)` : basename;
+  protected formatNoteTitle(basename: string, isActive: boolean, extension?: string): string {
+    let title = basename;
+    if (isActive) {
+      title += " (current)";
+    }
+    if (extension === "pdf") {
+      title += " (PDF)";
+    }
+    return title;
   }
 }

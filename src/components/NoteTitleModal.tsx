@@ -7,7 +7,9 @@ export class NoteTitleModal extends BaseNoteModal<string> {
   constructor(app: App, noteTitles: string[], onChooseNoteTitle: (noteTitle: string) => void) {
     super(app);
     this.onChooseNoteTitle = onChooseNoteTitle;
-    this.availableNotes = this.getOrderedNotes().map((file) => file.basename);
+    this.availableNotes = this.getOrderedNotes()
+      .filter((file) => file.extension === "md")
+      .map((file) => file.basename);
   }
 
   getItems(): string[] {

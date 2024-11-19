@@ -1,3 +1,4 @@
+import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ChainManager from "@/LLMProviders/chainManager";
 import VectorStoreManager from "@/VectorStoreManager";
 import { CustomModel, LangChainParams, SetChainOptions } from "@/aiParams";
@@ -29,6 +30,7 @@ import { TimestampUsageStrategy } from "@/promptUsageStrategy";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { CopilotSettings, CopilotSettingTab } from "@/settings/SettingsPage";
 import SharedState from "@/sharedState";
+import { FileParserManager } from "@/tools/FileParserManager";
 import { sanitizeSettings } from "@/utils";
 import VectorDBManager from "@/vectorDBManager";
 import { Embeddings } from "@langchain/core/embeddings";
@@ -50,11 +52,13 @@ export default class CopilotPlugin extends Plugin {
   // Only reset when the user explicitly clicks "New Chat"
   sharedState: SharedState;
   chainManager: ChainManager;
+  brevilabsClient: BrevilabsClient;
   chatIsVisible = false;
   encryptionService: EncryptionService;
   userMessageHistory: string[] = [];
   vectorStoreManager: VectorStoreManager;
   langChainParams: LangChainParams;
+  fileParserManager: FileParserManager;
   isChatVisible = () => this.chatIsVisible;
 
   async onload(): Promise<void> {
@@ -85,6 +89,11 @@ export default class CopilotPlugin extends Plugin {
       debug: this.settings.debug,
     });
 
+    // Initialize BrevilabsClient
+    this.brevilabsClient = BrevilabsClient.getInstance(this.settings.plusLicenseKey, {
+      debug: this.settings.debug,
+    });
+
     // Ensure activeModels always includes core models
     this.mergeAllActiveModelsWithCoreModels();
     this.chainManager = new ChainManager(
@@ -92,8 +101,12 @@ export default class CopilotPlugin extends Plugin {
       () => this.langChainParams,
       this.encryptionService,
       this.settings,
-      this.vectorStoreManager
+      this.vectorStoreManager,
+      this.brevilabsClient
     );
+
+    // Initialize FileParserManager early with other core services
+    this.fileParserManager = new FileParserManager(this.brevilabsClient);
 
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
 

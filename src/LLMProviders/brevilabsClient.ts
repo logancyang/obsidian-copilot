@@ -39,6 +39,11 @@ export interface Url4llmResponse {
   elapsed_time_ms: number;
 }
 
+export interface Pdf4llmResponse {
+  response: any;
+  elapsed_time_ms: number;
+}
+
 export class BrevilabsClient {
   private static instance: BrevilabsClient;
   private licenseKey: string;
@@ -103,5 +108,14 @@ export class BrevilabsClient {
 
   async url4llm(url: string): Promise<Url4llmResponse> {
     return this.makeRequest<Url4llmResponse>("/url4llm", { url });
+  }
+
+  async pdf4llm(binaryContent: ArrayBuffer): Promise<Pdf4llmResponse> {
+    // Convert ArrayBuffer to base64 string
+    const base64Content = Buffer.from(binaryContent).toString("base64");
+
+    return this.makeRequest<Pdf4llmResponse>("/pdf4llm", {
+      pdf: base64Content,
+    });
   }
 }

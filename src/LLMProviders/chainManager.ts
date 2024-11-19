@@ -48,7 +48,8 @@ export default class ChainManager {
     getLangChainParams: () => LangChainParams,
     encryptionService: EncryptionService,
     settings: CopilotSettings,
-    vectorStoreManager: VectorStoreManager
+    vectorStoreManager: VectorStoreManager,
+    brevilabsClient: BrevilabsClient
   ) {
     // Instantiate singletons
     this.app = app;
@@ -64,9 +65,7 @@ export default class ChainManager {
     );
     this.embeddingsManager = this.vectorStoreManager.getEmbeddingsManager();
     this.promptManager = PromptManager.getInstance(this.getLangChainParams());
-    this.brevilabsClient = BrevilabsClient.getInstance(this.settings.plusLicenseKey, {
-      debug: this.settings.debug,
-    });
+    this.brevilabsClient = brevilabsClient;
     this.createChainWithNewModel(this.getLangChainParams().modelKey);
   }
 

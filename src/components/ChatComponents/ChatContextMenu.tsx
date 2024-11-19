@@ -30,37 +30,29 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
 
   const uniqueUrls = React.useMemo(() => Array.from(new Set(contextUrls)), [contextUrls]);
 
+  const renderNote = (note: TFile, isActive = false) => (
+    <div key={note.path} className={`context-note ${isActive ? "active" : "with-hover"}`}>
+      <span className="note-name">{note.basename}</span>
+      {isActive && <span className="note-badge">current</span>}
+      {note.extension === "pdf" && <span className="note-badge pdf">pdf</span>}
+      <button
+        className="remove-note"
+        onClick={() => onRemoveContext(note.path)}
+        aria-label="Remove from context"
+      >
+        ×
+      </button>
+    </div>
+  );
+
   return (
     <div className="chat-context-menu">
       <TooltipActionButton onClick={onAddContext} Icon={<Plus className="icon-scaler" />}>
         Add Note to Context
       </TooltipActionButton>
       <div className="context-notes">
-        {activeNote && (
-          <div className="context-note active">
-            <span className="note-name">{activeNote.basename}</span>
-            <span className="note-badge">current</span>
-            <button
-              className="remove-note"
-              onClick={() => onRemoveContext(activeNote.path)}
-              aria-label="Remove from context"
-            >
-              ×
-            </button>
-          </div>
-        )}
-        {uniqueNotes.map((note) => (
-          <div key={note.path} className="context-note with-hover">
-            <span className="note-name">{note.basename}</span>
-            <button
-              className="remove-note"
-              onClick={() => onRemoveContext(note.path)}
-              aria-label="Remove from context"
-            >
-              ×
-            </button>
-          </div>
-        ))}
+        {activeNote && renderNote(activeNote, true)}
+        {uniqueNotes.map((note) => renderNote(note))}
         {uniqueUrls.map((url) => (
           <div key={url} className="context-note url">
             <span className="note-name" title={url}>

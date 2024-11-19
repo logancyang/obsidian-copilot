@@ -12,12 +12,14 @@ import {
   VAULT_VECTOR_STORE_STRATEGY,
 } from "@/constants";
 import { AppContext } from "@/context";
+import { ContextProcessor } from "@/contextProcessor";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { getAIResponse } from "@/langchainStream";
 import CopilotPlugin from "@/main";
 import { Mention } from "@/mentions/Mention";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import SharedState, { ChatMessage, useSharedState } from "@/sharedState";
+import { FileParserManager } from "@/tools/FileParserManager";
 import {
   createChangeToneSelectionPrompt,
   createTranslateSelectionPrompt,
@@ -53,6 +55,7 @@ interface ChatProps {
   defaultSaveFolder: string;
   onSaveChat: (saveAsNote: () => Promise<void>) => void;
   updateUserMessageHistory: (newMessage: string) => void;
+  fileParserManager: FileParserManager;
   plugin: CopilotPlugin;
   debug: boolean;
 }
@@ -65,6 +68,7 @@ const Chat: React.FC<ChatProps> = ({
   defaultSaveFolder,
   onSaveChat,
   updateUserMessageHistory,
+  fileParserManager,
   plugin,
   debug,
 }) => {
@@ -84,6 +88,8 @@ const Chat: React.FC<ChatProps> = ({
 
   const mention = Mention.getInstance(plugin.settings.plusLicenseKey);
 
+  const contextProcessor = ContextProcessor.getInstance();
+
   useEffect(() => {
     const handleChatVisibility = (evt: CustomEvent<{ chatIsVisible: boolean }>) => {
       setChatIsVisible(evt.detail.chatIsVisible);
@@ -98,33 +104,19 @@ const Chat: React.FC<ChatProps> = ({
 
   const app = plugin.app || useContext(AppContext);
 
-  const processContextNotes = async (customPromptProcessor: CustomPromptProcessor) => {
-    // Get all variables that were processed by the custom prompt processor
-    const processedVars = await customPromptProcessor.getProcessedVariables();
+  const processContextNotes = async (
+    customPromptProcessor: CustomPromptProcessor,
+    fileParserManager: FileParserManager
+  ) => {
     const activeNote = app.workspace.getActiveFile();
-    let additionalContext = "";
-
-    // Process active note if included and not already processed
-    if (includeActiveNote && activeNote) {
-      const activeNoteVar = `activeNote`;
-      const activeNotePath = `[[${activeNote.basename}]]`;
-
-      if (!processedVars.has(activeNoteVar) && !processedVars.has(activeNotePath)) {
-        const content = await app.vault.read(activeNote);
-        additionalContext += `\n\nactiveNote:\n\n${activeNotePath}\n\n${content}`;
-      }
-    }
-
-    // Process context notes that weren't already processed
-    for (const note of contextNotes) {
-      const notePath = `[[${note.basename}]]`;
-      if (!processedVars.has(notePath)) {
-        const content = await app.vault.read(note);
-        additionalContext += `\n\n[[${note.basename}]]:\n\n${content}`;
-      }
-    }
-
-    return additionalContext;
+    return await contextProcessor.processContextNotes(
+      customPromptProcessor,
+      fileParserManager,
+      app.vault,
+      contextNotes,
+      includeActiveNote,
+      activeNote
+    );
   };
 
   const handleSendMessage = async (toolCalls?: string[]) => {
@@ -185,7 +177,7 @@ const Chat: React.FC<ChatProps> = ({
     const mentionContextAddition = await mention.processMentions(inputMessage || "");
 
     // Add context notes
-    const noteContextAddition = await processContextNotes(customPromptProcessor);
+    const noteContextAddition = await processContextNotes(customPromptProcessor, fileParserManager);
 
     // Combine everything in the correct order
     processedUserMessage = processedUserMessage + mentionContextAddition + noteContextAddition;

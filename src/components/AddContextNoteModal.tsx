@@ -24,7 +24,7 @@ export class AddContextNoteModal extends BaseNoteModal<TFile> {
 
   getItemText(note: TFile): string {
     const isActive = note.path === this.activeNote?.path;
-    return this.formatNoteTitle(note.basename, isActive);
+    return this.formatNoteTitle(note.basename, isActive, note.extension);
   }
 
   onChooseItem(note: TFile, evt: MouseEvent | KeyboardEvent) {
