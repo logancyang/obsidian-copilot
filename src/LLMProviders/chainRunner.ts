@@ -281,8 +281,10 @@ class CopilotPlusChainRunner extends BaseChainRunner {
 
     try {
       if (debug) console.log("==== Step 1: Analyzing intent ====");
+      // Use the original message for intent analysis
+      const messageForAnalysis = userMessage.originalMessage || userMessage.message;
       const toolCalls = await IntentAnalyzer.analyzeIntent(
-        userMessage.message,
+        messageForAnalysis,
         this.chainManager.vectorStoreManager,
         this.chainManager.chatModelManager,
         this.chainManager.brevilabsClient
@@ -465,7 +467,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     let context = "";
     if (toolOutputs.length > 0) {
       context =
-        "Additional context:\n\n" +
+        "\n# Additional context:\n\n" +
         toolOutputs
           .map((output) => `# ${output.tool}\n${JSON.stringify(output.output)}`)
           .join("\n\n");

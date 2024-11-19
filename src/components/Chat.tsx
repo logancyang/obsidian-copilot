@@ -98,10 +98,7 @@ const Chat: React.FC<ChatProps> = ({
 
   const app = plugin.app || useContext(AppContext);
 
-  const processContextNotes = async (
-    processedMessage: string,
-    customPromptProcessor: CustomPromptProcessor
-  ) => {
+  const processContextNotes = async (customPromptProcessor: CustomPromptProcessor) => {
     // Get all variables that were processed by the custom prompt processor
     const processedVars = await customPromptProcessor.getProcessedVariables();
     const activeNote = app.workspace.getActiveFile();
@@ -127,7 +124,7 @@ const Chat: React.FC<ChatProps> = ({
       }
     }
 
-    return processedMessage + additionalContext;
+    return additionalContext;
   };
 
   const handleSendMessage = async (toolCalls?: string[]) => {
@@ -160,6 +157,7 @@ const Chat: React.FC<ChatProps> = ({
 
     const userMessage: ChatMessage = {
       message: inputMessage || "Image message",
+      originalMessage: inputMessage,
       sender: USER_SENDER,
       isVisible: true,
       timestamp: timestamp,
@@ -175,7 +173,7 @@ const Chat: React.FC<ChatProps> = ({
     setLoading(true);
     setLoadingMessage(LOADING_MESSAGES.DEFAULT);
 
-    // Process the message in the background
+    // First, process the original user message for custom prompts
     const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault, settings);
     let processedUserMessage = await customPromptProcessor.processCustomPrompt(
       inputMessage || "",
@@ -183,14 +181,24 @@ const Chat: React.FC<ChatProps> = ({
       app.workspace.getActiveFile() as TFile | undefined
     );
 
-    // Add context notes that weren't already processed
-    processedUserMessage = await processContextNotes(processedUserMessage, customPromptProcessor);
-    // Process mentions in the message
-    processedUserMessage = await mention.processMentions(processedUserMessage);
-    processedUserMessage += toolCalls ? " " + toolCalls?.join("\n") : "";
+    // Extract Mentions (such as URLs) from original input message only
+    const mentionContextAddition = await mention.processMentions(inputMessage || "");
+
+    // Add context notes
+    const noteContextAddition = await processContextNotes(customPromptProcessor);
+
+    // Combine everything in the correct order
+    processedUserMessage = processedUserMessage + mentionContextAddition + noteContextAddition;
+
+    let messageWithToolCalls = inputMessage;
+    // Add tool calls last
+    if (toolCalls) {
+      messageWithToolCalls += " " + toolCalls.join("\n");
+    }
 
     const promptMessageHidden: ChatMessage = {
       message: processedUserMessage,
+      originalMessage: messageWithToolCalls,
       sender: USER_SENDER,
       isVisible: false,
       timestamp: timestamp,

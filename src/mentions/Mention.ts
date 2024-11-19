@@ -43,11 +43,11 @@ export class Mention {
 
   async processMentions(text: string): Promise<string> {
     const urls = this.extractUrls(text);
-    let processedText = text;
+    let mentionContext = "";
 
     // Return immediately if no URLs to process
     if (urls.length === 0) {
-      return processedText;
+      return text;
     }
 
     // Process all URLs concurrently
@@ -68,11 +68,11 @@ export class Mention {
     // Append all processed content
     processedMentions.forEach((mentionData) => {
       if (mentionData?.processed) {
-        processedText += `\n\nContent from ${mentionData.original}:\n${mentionData.processed}`;
+        mentionContext += `\n\nContent from ${mentionData.original}:\n${mentionData.processed}`;
       }
     });
 
-    return processedText;
+    return mentionContext;
   }
 
   getMentions(): Map<string, MentionData> {

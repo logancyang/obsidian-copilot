@@ -29,30 +29,28 @@ export class IntentAnalyzer {
   ];
 
   static async analyzeIntent(
-    userMessage: string,
+    originalMessage: string,
     vectorStoreManager: VectorStoreManager,
     chatModelManager: ChatModelManager,
     brevilabsClient: BrevilabsClient
   ): Promise<ToolCall[]> {
-    let brocaResponse;
     try {
-      brocaResponse = await brevilabsClient.broca(userMessage);
+      // Only analyze the original message
+      const brocaResponse = await brevilabsClient.broca(originalMessage);
       const brocaToolCalls = brocaResponse.response.tool_calls;
+      const salientTerms = brocaResponse.response.salience_terms;
 
       const processedToolCalls: ToolCall[] = [];
       let timeRange: { startTime: TimeInfo; endTime: TimeInfo } | undefined;
-      const salientTerms = brocaResponse.response.salience_terms;
 
-      console.log("Initial toolCalls from IntentAnalyzer:", brocaToolCalls);
+      // Process tool calls from broca
       for (const brocaToolCall of brocaToolCalls) {
         const tool = this.tools.find((t) => t.name === brocaToolCall.tool);
         if (tool) {
           const args = brocaToolCall.args || {};
 
           if (tool.name === "getTimeRangeMs") {
-            // Execute getTimeRangeMs tool and store the result
-            const result = await ToolManager.callTool(tool, args);
-            timeRange = result;
+            timeRange = await ToolManager.callTool(tool, args);
           }
 
           if (tool.name === "indexVault") {
@@ -63,48 +61,71 @@ export class IntentAnalyzer {
         }
       }
 
-      // Add localSearchTool if there are salient terms or a time range
-      if (userMessage.toLowerCase().includes("@vault") && (salientTerms.length > 0 || timeRange)) {
-        processedToolCalls.push({
-          tool: localSearchTool,
-          args: {
-            timeRange: timeRange || undefined,
-            // TODO: Remove all @tools from the query
-            query: userMessage.replace("@vault", "").trim(),
-            salientTerms,
-            vectorStoreManager,
-            chatModelManager,
-            brevilabsClient,
-          },
-        });
-      }
-
-      // TODO: Re-enable this for indexing pdfs and other files in the vault
-      // const indexRegex =
-      //   /\b(?:index|create\s+an?\s+index)(?:\s+(?:the|my|all|this))?\s*(?:vault|notes?)?\b/i;
-      // if (
-      //   indexRegex.test(userMessage.toLowerCase()) ||
-      //   userMessage.toLowerCase().includes("@index")
-      // ) {
-      //   processedToolCalls.push({
-      //     tool: indexTool,
-      //     args: { vectorStoreManager },
-      //   });
-      // }
-
-      if (userMessage.toLowerCase().includes("@pomodoro")) {
-        const pomodoroMatch = userMessage.match(/@pomodoro\s+(\S+)/i);
-        const interval = pomodoroMatch ? pomodoroMatch[1] : "25min";
-        processedToolCalls.push({
-          tool: pomodoroTool,
-          args: { interval },
-        });
-      }
+      // Process @ commands from original message only
+      await this.processAtCommands(originalMessage, processedToolCalls, {
+        timeRange,
+        salientTerms,
+        vectorStoreManager,
+        chatModelManager,
+        brevilabsClient,
+      });
 
       return processedToolCalls;
     } catch (error) {
-      console.error("Error parsing LLM response:", error, brocaResponse);
+      console.error("Error in intent analysis:", error);
       return [];
     }
+  }
+
+  private static async processAtCommands(
+    originalMessage: string,
+    processedToolCalls: ToolCall[],
+    context: {
+      timeRange?: { startTime: TimeInfo; endTime: TimeInfo };
+      salientTerms: string[];
+      vectorStoreManager: VectorStoreManager;
+      chatModelManager: ChatModelManager;
+      brevilabsClient: BrevilabsClient;
+    }
+  ): Promise<void> {
+    const message = originalMessage.toLowerCase();
+    const { timeRange, salientTerms, vectorStoreManager, chatModelManager, brevilabsClient } =
+      context;
+
+    // Handle @vault command
+    if (message.includes("@vault") && (salientTerms.length > 0 || timeRange)) {
+      // Remove all @commands from the query
+      const cleanQuery = this.removeAtCommands(originalMessage);
+
+      processedToolCalls.push({
+        tool: localSearchTool,
+        args: {
+          timeRange: timeRange || undefined,
+          query: cleanQuery,
+          salientTerms,
+          vectorStoreManager,
+          chatModelManager,
+          brevilabsClient,
+        },
+      });
+    }
+
+    // Handle @pomodoro command
+    if (message.includes("@pomodoro")) {
+      const pomodoroMatch = originalMessage.match(/@pomodoro\s+(\S+)/i);
+      const interval = pomodoroMatch ? pomodoroMatch[1] : "25min";
+      processedToolCalls.push({
+        tool: pomodoroTool,
+        args: { interval },
+      });
+    }
+  }
+
+  private static removeAtCommands(message: string): string {
+    return message
+      .split(" ")
+      .filter((word) => !COPILOT_TOOL_NAMES.includes(word.toLowerCase()))
+      .join(" ")
+      .trim();
   }
 }
