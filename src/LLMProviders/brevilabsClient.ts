@@ -49,6 +49,13 @@ export interface WebSearchResponse {
   elapsed_time_ms: number;
 }
 
+export interface Youtube4llmResponse {
+  response: {
+    transcript: string;
+  };
+  elapsed_time_ms: number;
+}
+
 export class BrevilabsClient {
   private static instance: BrevilabsClient;
   private licenseKey: string;
@@ -134,5 +141,9 @@ export class BrevilabsClient {
 
   async webSearch(query: string): Promise<WebSearchResponse> {
     return this.makeRequest<WebSearchResponse>("/websearch", { q: query }, "GET");
+  }
+
+  async youtube4llm(url: string): Promise<Youtube4llmResponse> {
+    return this.makeRequest<Youtube4llmResponse>("/youtube4llm", { url });
   }
 }

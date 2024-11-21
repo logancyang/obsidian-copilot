@@ -537,3 +537,15 @@ export function extractJsonFromCodeBlock(content: string): any {
   const jsonContent = codeBlockMatch ? codeBlockMatch[1].trim() : content.trim();
   return JSON.parse(jsonContent);
 }
+
+const YOUTUBE_URL_REGEX =
+  /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([^\s&]+)/;
+
+export function isYoutubeUrl(url: string): boolean {
+  return YOUTUBE_URL_REGEX.test(url);
+}
+
+export function extractYoutubeUrl(text: string): string | null {
+  const match = text.match(YOUTUBE_URL_REGEX);
+  return match ? match[0] : null;
+}

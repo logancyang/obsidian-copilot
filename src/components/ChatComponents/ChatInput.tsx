@@ -144,7 +144,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
     adjustTextareaHeight();
 
     // Extract URLs and update mentions
-    const urls = mention.extractUrls(inputValue);
+    const urls = mention.extractAllUrls(inputValue);
 
     // Update URLs in context, ensuring uniqueness
     const newUrls = urls.filter((url) => !contextUrls.includes(url));
@@ -326,7 +326,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
     // Get all note titles that are referenced using [[note]] syntax in the input
     const currentTitles = new Set(extractNoteTitles(inputMessage));
     // Get all URLs mentioned in the input
-    const currentUrls = mention.extractUrls(inputMessage);
+    const currentUrls = mention.extractAllUrls(inputMessage);
     // Get the currently open note in the editor
     const activeNote = app.workspace.getActiveFile();
 

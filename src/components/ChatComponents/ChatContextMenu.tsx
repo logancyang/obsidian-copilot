@@ -56,7 +56,13 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
         {uniqueUrls.map((url) => (
           <div key={url} className="context-note url">
             <span className="note-name" title={url}>
-              {new URL(url).hostname}
+              {(() => {
+                const hostname = new URL(url).hostname;
+                const cleanUrl = url.replace(/\/+$/, "");
+                const path = cleanUrl.slice(cleanUrl.indexOf(hostname) + hostname.length);
+                if (path.length <= 1) return hostname;
+                return `${hostname}/...${cleanUrl.slice(-2)}`;
+              })()}
             </span>
             <span className="note-badge">url</span>
             <button

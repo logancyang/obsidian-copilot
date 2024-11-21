@@ -1,4 +1,5 @@
 import { BrevilabsClient, Url4llmResponse } from "@/LLMProviders/brevilabsClient";
+import { isYoutubeUrl } from "@/utils";
 
 export interface MentionData {
   type: string;
@@ -23,13 +24,20 @@ export class Mention {
     return Mention.instance;
   }
 
-  // TODO: Need to distinguish between normal URLs and youtube links
-  extractUrls(text: string): string[] {
+  extractAllUrls(text: string): string[] {
     // Match URLs and trim any trailing commas
     const urlRegex = /https?:\/\/[^\s"'<>]+/g;
     return (text.match(urlRegex) || [])
       .map((url) => url.replace(/,+$/, "")) // Remove trailing commas
       .filter((url, index, self) => self.indexOf(url) === index); // Remove duplicates
+  }
+
+  extractUrls(text: string): string[] {
+    const urlRegex = /https?:\/\/[^\s"'<>]+/g;
+    return (text.match(urlRegex) || [])
+      .map((url) => url.replace(/,+$/, ""))
+      .filter((url, index, self) => self.indexOf(url) === index)
+      .filter((url) => !isYoutubeUrl(url));
   }
 
   async processUrl(url: string): Promise<Url4llmResponse> {

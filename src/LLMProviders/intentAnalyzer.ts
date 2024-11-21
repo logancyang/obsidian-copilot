@@ -8,7 +8,9 @@ import {
   pomodoroTool,
   TimeInfo,
 } from "@/tools/TimeTools";
+import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools";
 import { ToolManager } from "@/tools/toolManager";
+import { extractYoutubeUrl } from "@/utils";
 import { BrevilabsClient } from "./brevilabsClient";
 
 // TODO: Add @index with explicit pdf files in chat context menu
@@ -132,6 +134,20 @@ export class IntentAnalyzer {
         tool: pomodoroTool,
         args: { interval },
       });
+    }
+
+    // Handle @youtube command
+    if (message.includes("@youtube")) {
+      const youtubeUrl = extractYoutubeUrl(originalMessage);
+      if (youtubeUrl) {
+        processedToolCalls.push({
+          tool: simpleYoutubeTranscriptionTool,
+          args: {
+            url: youtubeUrl,
+            brevilabsClient,
+          },
+        });
+      }
     }
   }
 
