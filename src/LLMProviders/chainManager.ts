@@ -1,6 +1,6 @@
 import { CustomModel, LangChainParams, SetChainOptions } from "@/aiParams";
 import ChainFactory, { ChainType, Document } from "@/chainFactory";
-import { BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
+import { AI_SENDER, BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
 import EncryptionService from "@/encryptionService";
 import {
   ChainRunner,
@@ -317,12 +317,26 @@ export default class ChainManager {
     this.validateChatModel();
     this.validateChainInitialization();
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const chatModel = (ChainManager.chain as any).last.bound;
+    const modelName = chatModel.modelName || chatModel.model;
+    const isO1Model = modelName.startsWith("o1");
+
     // Handle ignoreSystemMessage
-    if (ignoreSystemMessage) {
-      const effectivePrompt = ChatPromptTemplate.fromMessages([
+    if (ignoreSystemMessage || isO1Model) {
+      let effectivePrompt = ChatPromptTemplate.fromMessages([
         new MessagesPlaceholder("history"),
         HumanMessagePromptTemplate.fromTemplate("{input}"),
       ]);
+
+      if (isO1Model) {
+        //  Temporary fix：for o1-xx model need to covert systemMessage to aiMessage
+        effectivePrompt = ChatPromptTemplate.fromMessages([
+          [AI_SENDER, this.getLangChainParams().systemMessage || ""],
+          effectivePrompt,
+        ]);
+      }
+
       this.setChain(this.getLangChainParams().chainType, {
         ...this.getLangChainParams().options,
         prompt: effectivePrompt,

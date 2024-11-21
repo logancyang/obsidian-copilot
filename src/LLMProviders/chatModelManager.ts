@@ -104,13 +104,18 @@ export default class ChatModelManager {
     return ChatModelManager.instance;
   }
 
-  private getModelConfig(customModel: CustomModel, ignoreDefaultSettings = false): ModelConfig {
+  private getModelConfig(customModel: CustomModel): ModelConfig {
     const decrypt = (key: string) => this.encryptionService.getDecryptedKey(key);
     const params = this.getLangChainParams();
+
+    // Check if the model starts with "o1"
+    const modelName = customModel.name;
+    const isO1Model = modelName.startsWith("o1");
+
     const baseConfig: ModelConfig = {
-      modelName: customModel.name,
-      temperature: params.temperature,
-      streaming: true,
+      modelName: modelName,
+      temperature: isO1Model ? 1 : params.temperature,
+      streaming: isO1Model ? false : true,
       maxRetries: 3,
       maxConcurrency: 3,
       enableCors: customModel.enableCors,
@@ -123,19 +128,21 @@ export default class ChatModelManager {
       >[0] /*& Record<string, unknown>;*/;
     } = {
       [ChatModelProviders.OPENAI]: {
-        modelName: customModel.name,
+        modelName: modelName,
         openAIApiKey: decrypt(customModel.apiKey || params.openAIApiKey),
-        // @ts-ignore
-        openAIOrgId: decrypt(params.openAIOrgId),
-        maxTokens: params.maxTokens,
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
+        maxTokens: isO1Model ? undefined : params.maxTokens,
+        // @ts-ignore
+        maxCompletionTokens: isO1Model ? params.maxTokens : undefined,
+        // @ts-ignore
+        openAIOrgId: decrypt(params.openAIOrgId),
       },
       [ChatModelProviders.ANTHROPIC]: {
         anthropicApiKey: decrypt(customModel.apiKey || params.anthropicApiKey),
-        modelName: customModel.name,
+        modelName: modelName,
         anthropicApiUrl: customModel.baseUrl,
         clientOptions: {
           // Required to bypass CORS restrictions
@@ -144,7 +151,6 @@ export default class ChatModelManager {
         },
       },
       [ChatModelProviders.AZURE_OPENAI]: {
-        maxTokens: params.maxTokens,
         azureOpenAIApiKey: decrypt(customModel.apiKey || params.azureOpenAIApiKey),
         azureOpenAIApiInstanceName: params.azureOpenAIApiInstanceName,
         azureOpenAIApiDeploymentName: params.azureOpenAIApiDeploymentName,
@@ -153,14 +159,17 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
+        maxTokens: isO1Model ? undefined : params.maxTokens,
+        // @ts-ignore
+        maxCompletionTokens: isO1Model ? params.maxTokens : undefined,
       },
       [ChatModelProviders.COHEREAI]: {
         apiKey: decrypt(customModel.apiKey || params.cohereApiKey),
-        model: customModel.name,
+        model: modelName,
       },
       [ChatModelProviders.GOOGLE]: {
         apiKey: decrypt(customModel.apiKey || params.googleApiKey),
-        model: customModel.name,
+        model: modelName,
         safetySettings: [
           {
             category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
@@ -182,7 +191,7 @@ export default class ChatModelManager {
         baseUrl: customModel.baseUrl,
       },
       [ChatModelProviders.OPENROUTERAI]: {
-        modelName: customModel.name,
+        modelName: modelName,
         openAIApiKey: decrypt(customModel.apiKey || params.openRouterAiApiKey),
         configuration: {
           baseURL: customModel.baseUrl || "https://openrouter.ai/api/v1",
@@ -191,18 +200,18 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.GROQ]: {
         apiKey: decrypt(customModel.apiKey || params.groqApiKey),
-        modelName: customModel.name,
+        modelName: modelName,
       },
       [ChatModelProviders.OLLAMA]: {
         // ChatOllama has `model` instead of `modelName`!!
-        model: customModel.name,
-        // @ts-ignore
-        apiKey: customModel.apiKey || "default-key",
+        model: modelName,
         // MUST NOT use /v1 in the baseUrl for ollama
         baseUrl: customModel.baseUrl || "http://localhost:11434",
+        // @ts-ignore
+        apiKey: customModel.apiKey || "default-key",
       },
       [ChatModelProviders.LM_STUDIO]: {
-        modelName: customModel.name,
+        modelName: modelName,
         openAIApiKey: customModel.apiKey || "default-key",
         configuration: {
           baseURL: customModel.baseUrl || "http://localhost:1234/v1",
@@ -210,14 +219,16 @@ export default class ChatModelManager {
         },
       },
       [ChatModelProviders.OPENAI_FORMAT]: {
-        modelName: customModel.name,
+        modelName: modelName,
         openAIApiKey: decrypt(customModel.apiKey || "default-key"),
-        maxTokens: params.maxTokens,
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
           dangerouslyAllowBrowser: true,
         },
+        maxTokens: isO1Model ? undefined : params.maxTokens,
+        // @ts-ignore
+        maxCompletionTokens: isO1Model ? params.maxTokens : undefined,
       },
     };
 
