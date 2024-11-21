@@ -18,6 +18,7 @@ export const TEXT_WEIGHT = 0.4;
 export const LOADING_MESSAGES = {
   DEFAULT: "",
   READING_FILES: "Reading files",
+  SEARCHING_WEB: "Searching the web",
 };
 
 export enum ChatModels {

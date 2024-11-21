@@ -4,7 +4,7 @@ import { ToolManager } from "@/tools/toolManager";
 import { extractChatHistory, extractUniqueTitlesFromDocs, formatDateTime } from "@/utils";
 import { Notice } from "obsidian";
 import ChainManager from "./chainManager";
-import { IntentAnalyzer } from "./intentAnalyzer";
+import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "./intentAnalyzer";
 
 export interface ChainRunner {
   run(
@@ -295,7 +295,13 @@ class CopilotPlusChainRunner extends BaseChainRunner {
           toolCalls.map((call) => call.tool.name)
         );
 
-      const cleanedUserMessage = userMessage.message.replace("@vault", "").trim();
+      // Use the same removeAtCommands logic as IntentAnalyzer
+      const cleanedUserMessage = userMessage.message
+        .split(" ")
+        .filter((word) => !COPILOT_TOOL_NAMES.includes(word.toLowerCase()))
+        .join(" ")
+        .trim();
+
       const toolOutputs = await this.executeToolCalls(toolCalls, debug, updateLoadingMessage);
       const localSearchResult = toolOutputs.find(
         (output) => output.tool === "localSearch" && output.output && output.output.length > 0
@@ -456,6 +462,8 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       }
       if (toolCall.tool.name === "localSearch") {
         updateLoadingMessage?.(LOADING_MESSAGES.READING_FILES);
+      } else if (toolCall.tool.name === "webSearch") {
+        updateLoadingMessage?.(LOADING_MESSAGES.SEARCHING_WEB);
       }
       const output = await ToolManager.callTool(toolCall.tool, toolCall.args);
       toolOutputs.push({ tool: toolCall.tool.name, output });

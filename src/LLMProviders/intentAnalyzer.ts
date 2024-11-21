@@ -1,6 +1,6 @@
 import ChatModelManager from "@/LLMProviders/chatModelManager";
 import VectorStoreManager from "@/VectorStoreManager";
-import { indexTool, localSearchTool } from "@/tools/SearchTools";
+import { indexTool, localSearchTool, webSearchTool } from "@/tools/SearchTools";
 import {
   getCurrentTimeTool,
   getTimeInfoByEpochTool,
@@ -11,7 +11,8 @@ import {
 import { ToolManager } from "@/tools/toolManager";
 import { BrevilabsClient } from "./brevilabsClient";
 
-export const COPILOT_TOOL_NAMES = ["@vault", "@web", "@youtube", "@pomodoro", "@index"];
+// TODO: Add @index with explicit pdf files in chat context menu
+export const COPILOT_TOOL_NAMES = ["@vault", "@web", "@youtube", "@pomodoro"];
 
 type ToolCall = {
   tool: any;
@@ -26,6 +27,7 @@ export class IntentAnalyzer {
     localSearchTool,
     indexTool,
     pomodoroTool,
+    webSearchTool,
   ];
 
   static async analyzeIntent(
@@ -105,6 +107,18 @@ export class IntentAnalyzer {
           salientTerms,
           vectorStoreManager,
           chatModelManager,
+          brevilabsClient,
+        },
+      });
+    }
+
+    // Handle @web command
+    if (message.includes("@web")) {
+      const cleanQuery = this.removeAtCommands(originalMessage);
+      processedToolCalls.push({
+        tool: webSearchTool,
+        args: {
+          query: cleanQuery,
           brevilabsClient,
         },
       });

@@ -174,13 +174,13 @@ const Chat: React.FC<ChatProps> = ({
     );
 
     // Extract Mentions (such as URLs) from original input message only
-    const mentionContextAddition = await mention.processMentions(inputMessage || "");
+    const urlContextAddition = await mention.processUrls(inputMessage || "");
 
     // Add context notes
     const noteContextAddition = await processContextNotes(customPromptProcessor, fileParserManager);
 
-    // Combine everything in the correct order
-    processedUserMessage = processedUserMessage + mentionContextAddition + noteContextAddition;
+    // Combine everything
+    processedUserMessage = processedUserMessage + urlContextAddition + noteContextAddition;
 
     let messageWithToolCalls = inputMessage;
     // Add tool calls last

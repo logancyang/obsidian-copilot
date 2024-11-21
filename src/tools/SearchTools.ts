@@ -134,4 +134,28 @@ const indexTool = tool(
   }
 );
 
-export { indexTool, localSearchTool };
+// Add new web search tool
+const webSearchTool = tool(
+  async ({ query, brevilabsClient }: { query: string; brevilabsClient: BrevilabsClient }) => {
+    try {
+      const response = await brevilabsClient.webSearch(query);
+      return (
+        "\n\nWeb search results below, don't forget to list the sources at the end of your answer:\n" +
+        response.response
+      );
+    } catch (error) {
+      console.error(`Error processing web search query ${query}:`, error);
+      return "";
+    }
+  },
+  {
+    name: "webSearch",
+    description: "Search the web for information",
+    schema: z.object({
+      query: z.string().describe("The search query"),
+      brevilabsClient: z.any().describe("The BrevilabsClient instance"),
+    }),
+  }
+);
+
+export { indexTool, localSearchTool, webSearchTool };

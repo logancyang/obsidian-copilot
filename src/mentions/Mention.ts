@@ -41,13 +41,14 @@ export class Mention {
     }
   }
 
-  async processMentions(text: string): Promise<string> {
+  // For non-youtube URLs
+  async processUrls(text: string): Promise<string> {
     const urls = this.extractUrls(text);
-    let mentionContext = "";
+    let urlContext = "";
 
-    // Return immediately if no URLs to process
+    // Return empty string if no URLs to process
     if (urls.length === 0) {
-      return text;
+      return "";
     }
 
     // Process all URLs concurrently
@@ -63,16 +64,16 @@ export class Mention {
       return this.mentions.get(url);
     });
 
-    const processedMentions = await Promise.all(processPromises);
+    const processedUrls = await Promise.all(processPromises);
 
     // Append all processed content
-    processedMentions.forEach((mentionData) => {
-      if (mentionData?.processed) {
-        mentionContext += `\n\nContent from ${mentionData.original}:\n${mentionData.processed}`;
+    processedUrls.forEach((urlData) => {
+      if (urlData?.processed) {
+        urlContext += `\n\nContent from ${urlData.original}:\n${urlData.processed}`;
       }
     });
 
-    return mentionContext;
+    return urlContext;
   }
 
   getMentions(): Map<string, MentionData> {

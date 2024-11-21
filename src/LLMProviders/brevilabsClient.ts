@@ -44,6 +44,11 @@ export interface Pdf4llmResponse {
   elapsed_time_ms: number;
 }
 
+export interface WebSearchResponse {
+  response: any;
+  elapsed_time_ms: number;
+}
+
 export class BrevilabsClient {
   private static instance: BrevilabsClient;
   private licenseKey: string;
@@ -70,16 +75,24 @@ export class BrevilabsClient {
     }
   }
 
-  private async makeRequest<T>(endpoint: string, body: any): Promise<T> {
+  private async makeRequest<T>(endpoint: string, body: any, method = "POST"): Promise<T> {
     this.checkLicenseKey();
 
-    const response = await fetch(`${BREVILABS_API_BASE_URL}${endpoint}`, {
-      method: "POST",
+    const url = new URL(`${BREVILABS_API_BASE_URL}${endpoint}`);
+    if (method === "GET") {
+      // Add query parameters for GET requests
+      Object.entries(body).forEach(([key, value]) => {
+        url.searchParams.append(key, value as string);
+      });
+    }
+
+    const response = await fetch(url.toString(), {
+      method,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${this.licenseKey}`,
       },
-      body: JSON.stringify(body),
+      ...(method === "POST" && { body: JSON.stringify(body) }),
     });
 
     const data = await response.json();
@@ -117,5 +130,9 @@ export class BrevilabsClient {
     return this.makeRequest<Pdf4llmResponse>("/pdf4llm", {
       pdf: base64Content,
     });
+  }
+
+  async webSearch(query: string): Promise<WebSearchResponse> {
+    return this.makeRequest<WebSearchResponse>("/websearch", { q: query }, "GET");
   }
 }
