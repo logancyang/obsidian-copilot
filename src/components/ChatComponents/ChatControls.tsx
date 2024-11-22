@@ -83,10 +83,12 @@ const ChatControls: React.FC<ChatControlsProps> = ({
         return;
       }
 
-      if (selectedChain === ChainType.VAULT_QA_CHAIN) {
-        if (vault_qa_strategy === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH) {
-          await onRefreshVaultContext();
-        }
+      if (
+        (selectedChain === ChainType.VAULT_QA_CHAIN ||
+          selectedChain === ChainType.COPILOT_PLUS_CHAIN) &&
+        vault_qa_strategy === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH
+      ) {
+        await onRefreshVaultContext();
       }
 
       try {
