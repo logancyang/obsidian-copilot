@@ -9,9 +9,10 @@ const CopilotPlusSettings: React.FC = () => {
     <div>
       <br />
       <br />
-      <h1>Copilot Plus (Alpha)</h1>
+      <h2>Copilot Plus (Alpha)</h2>
       <p>
-        Copilot Plus brings powerful AI agent capabilities to Obsidian. Learn more at{" "}
+        Copilot Plus brings powerful AI agent capabilities to Obsidian. Alpha access is limited to
+        sponsors and early supporters. Learn more at{" "}
         <a href="https://obsidiancopilot.com" target="_blank" rel="noopener noreferrer">
           https://obsidiancopilot.com
         </a>
