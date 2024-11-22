@@ -3,6 +3,7 @@ import React from "react";
 import { useSettingsContext } from "../contexts/SettingsContext";
 import AdvancedSettings from "./AdvancedSettings";
 import ApiSettings from "./ApiSettings";
+import CopilotPlusSettings from "./CopilotPlusSettings";
 import GeneralSettings from "./GeneralSettings";
 import QASettings from "./QASettings";
 
@@ -27,6 +28,7 @@ const SettingsMain: React.FC<{ plugin: CopilotPlugin; reloadPlugin: () => Promis
         Please Save and Reload the plugin when you change any setting below!
       </div>
 
+      <CopilotPlusSettings />
       <GeneralSettings
         getLangChainParams={plugin.getLangChainParams.bind(plugin)}
         encryptionService={plugin.getEncryptionService()}

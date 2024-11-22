@@ -1,3 +1,4 @@
+import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ChainManager from "@/LLMProviders/chainManager";
 import VectorStoreManager from "@/VectorStoreManager";
 import { CustomModel, LangChainParams, SetChainOptions } from "@/aiParams";
@@ -9,6 +10,7 @@ import { AdhocPromptModal } from "@/components/AdhocPromptModal";
 import CopilotView from "@/components/CopilotView";
 import { ListPromptModal } from "@/components/ListPromptModal";
 import { LoadChatHistoryModal } from "@/components/LoadChatHistoryModal";
+import { OramaSearchModal } from "@/components/OramaSearchModal";
 import { SimilarNotesModal } from "@/components/SimilarNotesModal";
 import {
   BUILTIN_CHAT_MODELS,
@@ -28,6 +30,7 @@ import { TimestampUsageStrategy } from "@/promptUsageStrategy";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { CopilotSettings, CopilotSettingTab } from "@/settings/SettingsPage";
 import SharedState from "@/sharedState";
+import { FileParserManager } from "@/tools/FileParserManager";
 import { sanitizeSettings } from "@/utils";
 import VectorDBManager from "@/vectorDBManager";
 import { Embeddings } from "@langchain/core/embeddings";
@@ -49,11 +52,13 @@ export default class CopilotPlugin extends Plugin {
   // Only reset when the user explicitly clicks "New Chat"
   sharedState: SharedState;
   chainManager: ChainManager;
+  brevilabsClient: BrevilabsClient;
   chatIsVisible = false;
   encryptionService: EncryptionService;
   userMessageHistory: string[] = [];
   vectorStoreManager: VectorStoreManager;
-
+  langChainParams: LangChainParams;
+  fileParserManager: FileParserManager;
   isChatVisible = () => this.chatIsVisible;
 
   async onload(): Promise<void> {
@@ -61,14 +66,18 @@ export default class CopilotPlugin extends Plugin {
     this.addSettingTab(new CopilotSettingTab(this.app, this));
     // Always have one instance of sharedState and chainManager in the plugin
     this.sharedState = new SharedState();
+    this.langChainParams = this.getLangChainParams();
 
     this.encryptionService = new EncryptionService(this.settings);
     this.vectorStoreManager = new VectorStoreManager(
       this.app,
       this.settings,
       this.encryptionService,
-      () => this.getLangChainParams()
+      () => this.langChainParams
     );
+
+    // Initialize event listeners for the VectorStoreManager, e.g. onModify triggers reindexing
+    await this.vectorStoreManager.initializeEventListeners();
 
     if (this.settings.enableEncryption) {
       await this.saveSettings();
@@ -80,15 +89,24 @@ export default class CopilotPlugin extends Plugin {
       debug: this.settings.debug,
     });
 
+    // Initialize BrevilabsClient
+    this.brevilabsClient = BrevilabsClient.getInstance(this.settings.plusLicenseKey, {
+      debug: this.settings.debug,
+    });
+
     // Ensure activeModels always includes core models
     this.mergeAllActiveModelsWithCoreModels();
     this.chainManager = new ChainManager(
       this.app,
-      () => this.getLangChainParams(),
+      () => this.langChainParams,
       this.encryptionService,
       this.settings,
-      this.vectorStoreManager
+      this.vectorStoreManager,
+      this.brevilabsClient
     );
+
+    // Initialize FileParserManager early with other core services
+    this.fileParserManager = new FileParserManager(this.brevilabsClient);
 
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
 
@@ -336,11 +354,13 @@ export default class CopilotPlugin extends Plugin {
       },
     });
 
-    this.registerEvent(
-      this.app.vault.on("delete", async (file) => {
-        await this.vectorStoreManager.removeDocs(file.path);
-      })
-    );
+    this.addCommand({
+      id: "copilot-db-search",
+      name: "CopilotDB Search",
+      callback: () => {
+        new OramaSearchModal(this.app, this).open();
+      },
+    });
 
     // Index vault to vector store on startup and after loading all commands
     // This can take a while, so we don't want to block the startup process
@@ -683,9 +703,11 @@ export default class CopilotPlugin extends Plugin {
       this.app.vault,
       this.chainManager.chatModelManager.getChatModel(),
       this.vectorStoreManager.getEmbeddingsManager().getEmbeddingsAPI() as Embeddings,
+      this.chainManager.brevilabsClient,
       {
         minSimilarityScore: 0.3,
         maxK: 20,
+        salientTerms: [],
       },
       this.settings.debug
     );
@@ -701,5 +723,33 @@ export default class CopilotPlugin extends Plugin {
         score: doc.metadata.score || 0,
       }))
       .sort((a, b) => b.score - a.score);
+  }
+
+  async customSearchDB(query: string, salientTerms: string[], textWeight: number): Promise<any[]> {
+    await this.vectorStoreManager.waitForInitialization();
+    const db = this.vectorStoreManager.getDb();
+    if (!db) {
+      throw new CustomError("Orama database not found.");
+    }
+    const hybridRetriever = new HybridRetriever(
+      db,
+      this.app.vault,
+      this.chainManager.chatModelManager.getChatModel(),
+      this.vectorStoreManager.getEmbeddingsManager().getEmbeddingsAPI() as Embeddings,
+      this.chainManager.brevilabsClient,
+      {
+        minSimilarityScore: 0.3,
+        maxK: 20,
+        salientTerms: salientTerms,
+        textWeight: textWeight,
+      },
+      this.settings.debug
+    );
+
+    const results = await hybridRetriever.getOramaChunks(query, salientTerms);
+    return results.map((doc) => ({
+      content: doc.pageContent,
+      metadata: doc.metadata,
+    }));
   }
 }

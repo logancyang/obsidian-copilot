@@ -1,6 +1,14 @@
 import { USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/sharedState";
-import { Check, Copy, MessageSquarePlus, PenSquare, RotateCw, Trash2 } from "lucide-react";
+import {
+  Check,
+  Copy,
+  LibraryBig,
+  MessageSquarePlus,
+  PenSquare,
+  RotateCw,
+  Trash2,
+} from "lucide-react";
 import React from "react";
 
 interface ChatButtonsProps {
@@ -11,6 +19,8 @@ interface ChatButtonsProps {
   onRegenerate?: () => void;
   onEdit?: () => void;
   onDelete: () => void;
+  onShowSources?: () => void;
+  hasSources: boolean;
 }
 
 export const ChatButtons: React.FC<ChatButtonsProps> = ({
@@ -21,6 +31,8 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
   onRegenerate,
   onEdit,
   onDelete,
+  onShowSources,
+  hasSources,
 }) => {
   return (
     <div className="chat-message-buttons">
@@ -38,6 +50,11 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
         </>
       ) : (
         <>
+          {hasSources && (
+            <button onClick={onShowSources} className="clickable-icon" title="Show Sources">
+              <LibraryBig />
+            </button>
+          )}
           <button
             onClick={onInsertAtCursor}
             className="clickable-icon"

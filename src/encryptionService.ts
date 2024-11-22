@@ -31,13 +31,12 @@ export default class EncryptionService {
   }
 
   public encryptAllKeys(): void {
-    const keysToEncrypt = Object.keys(this.settings).filter((key) =>
-      key.toLowerCase().includes("apikey".toLowerCase())
+    const keysToEncrypt = Object.keys(this.settings).filter(
+      (key) => key.toLowerCase().includes("apikey") || key === "plusLicenseKey"
     );
 
     for (const key of keysToEncrypt) {
       const apiKey = this.settings[key as keyof CopilotSettings] as string;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (this.settings[key as keyof CopilotSettings] as any) = this.getEncryptedKey(apiKey);
     }
 

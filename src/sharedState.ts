@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { FormattedDateTime } from "./utils";
+
 export interface ChatMessage {
   message: string;
+  originalMessage?: string;
   sender: string;
   timestamp: FormattedDateTime | null;
   isVisible: boolean;
+  sources?: { title: string; score: number }[];
+  content?: any[];
 }
 
 class SharedState {

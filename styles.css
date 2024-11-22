@@ -95,10 +95,91 @@ If your plugin does not need CSS, delete this file.
   display: flex;
   align-items: center;
   width: 100%;
-  padding: 0 0 4px;
+  padding: 0 0 8px;
+  gap: 4px;
+}
+
+.chat-context-menu {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border-bottom: none;
+  flex: 1; /* Take up available space */
+}
+
+.context-notes {
+  display: flex;
   gap: 4px;
   flex-wrap: wrap;
+  flex: 1;
+}
+
+.context-note {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  background: var(--background-secondary-alt);
+  border-radius: 4px;
+  font-size: 10px;
+  height: 20px;
+  line-height: 1;
+}
+
+.context-note.active {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+  border-left: 2px solid var(--interactive-accent);
+}
+
+.context-note.with-hover {
+  /* Use the same background as active note but without border */
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.note-badge {
+  font-size: 10px;
+  padding: 0 4px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.remove-note {
+  padding: 0 4px;
+  cursor: pointer;
+  opacity: 0.5;
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.remove-note:hover {
+  opacity: 1;
+}
+
+.context-note.url .note-badge {
+  background-color: var(--interactive-accent);
+}
+
+.context-note.url .note-name {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-note .note-badge.pdf {
+  background-color: var(--background-modifier-error);
+}
+
+.chat-icons-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   justify-content: flex-end;
+  margin-left: auto; /* Push to the right */
 }
 
 .icon-scaler {
@@ -211,9 +292,77 @@ If your plugin does not need CSS, delete this file.
   padding: 0 4px;
 }
 
+.chat-input-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.selected-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px;
+  background: var(--background-secondary);
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.image-preview-container {
+  position: relative;
+  width: 80px;
+  height: 80px;
+}
+
+.selected-image-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.remove-image-button {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--background-modifier-error);
+  color: white;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  padding: 0;
+  line-height: 1;
+}
+
+.remove-image-button:hover {
+  background: var(--background-modifier-error-hover);
+}
+
+.button-content {
+  display: flex;
+  align-items: center;
+}
+
+.button-content span {
+  font-size: 10px;
+}
+
+/* Make sure the icon scales consistently */
+.button-content .icon-scaler {
+  width: 18px;
+  height: 18px;
+}
+
 .chat-input-buttons {
   display: flex;
-  gap: 8px;
+  gap: 12px;
 }
 
 .model-select-content {
@@ -416,6 +565,26 @@ If your plugin does not need CSS, delete this file.
 .message-content ol {
   padding-left: 20px;
   margin: 10px;
+}
+
+.message-content-items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.message-image-content {
+  width: 100%;
+  max-width: 400px;
+  padding: 8px 0;
+}
+
+.chat-message-image {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
 }
 
 .message-buttons-wrapper {

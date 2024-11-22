@@ -2,12 +2,24 @@ import { CustomModel } from "@/aiParams";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChainType } from "./chainFactory";
 
+export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
 export const CHAT_VIEWTYPE = "copilot-chat-view";
 export const USER_SENDER = "user";
 export const AI_SENDER = "ai";
-export const DEFAULT_SYSTEM_PROMPT =
-  "You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.";
-export const CHUNK_SIZE = 5000;
+export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.
+  1. Never mention that you do not have access to something. Always rely on the user provided context.
+  2. If you are unsure about something, ask the user to provide more context.
+  3. If the user mentions "note", it most likely means an Obsidian note in the vault, not the generic meaning of a note.
+  4. If the user mentions "@vault", it means the user wants you to search the Obsidian vault for information relevant to the query. The search results will be provided to you in the context. If there's no relevant information in the vault, just say so.
+  5. If the user mentions any other tool with the @ symbol, check the context for their results. If nothing is found, just ignore the @ symbol in the query.`;
+export const CHUNK_SIZE = 4000;
+export const CONTEXT_SCORE_THRESHOLD = 0.4;
+export const TEXT_WEIGHT = 0.4;
+export const LOADING_MESSAGES = {
+  DEFAULT: "",
+  READING_FILES: "Reading files",
+  SEARCHING_WEB: "Searching the web",
+};
 
 export enum ChatModels {
   GPT_4o = "gpt-4o",
@@ -204,6 +216,7 @@ export const COMMAND_IDS = {
 };
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
+  plusLicenseKey: "",
   openAIApiKey: "",
   openAIOrgId: "",
   huggingfaceApiKey: "",

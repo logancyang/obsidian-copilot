@@ -1,4 +1,3 @@
-import { LangChainParams } from "@/aiParams";
 import EncryptionService from "@/encryptionService";
 import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
@@ -8,7 +7,9 @@ import VectorDBManager from "@/vectorDBManager";
 import { Embeddings } from "@langchain/core/embeddings";
 import { create, load, Orama, remove, removeMultiple, save, search } from "@orama/orama";
 import { MD5 } from "crypto-js";
-import { App, Notice, Platform } from "obsidian";
+import { App, Notice, Platform, TAbstractFile, TFile, Vault } from "obsidian";
+import { LangChainParams } from "./aiParams";
+import { ChainType } from "./chainFactory";
 import { VAULT_VECTOR_STORE_STRATEGY } from "./constants";
 
 class VectorStoreManager {
@@ -28,6 +29,10 @@ class VectorStoreManager {
   private totalFilesToIndex = 0;
   private initializationPromise: Promise<void>;
   private isIndexLoaded = false;
+  private excludedFiles: Set<string> = new Set();
+
+  private debounceDelay = 5000; // 5 seconds
+  private debounceTimer: number | null = null;
 
   constructor(
     app: App,
@@ -69,6 +74,8 @@ class VectorStoreManager {
       getEmbeddingRequestsPerSecond: () => this.settings.embeddingRequestsPerSecond,
       debug: this.settings.debug,
     });
+
+    this.updateExcludedFiles();
   }
 
   private async performPostInitializationTasks() {
@@ -161,6 +168,12 @@ class VectorStoreManager {
     }
 
     const vectorLength = await this.getVectorLength(embeddingInstance);
+    if (!vectorLength || vectorLength === 0) {
+      throw new CustomError(
+        "Invalid vector length detected. Please check if your embedding model is working."
+      );
+    }
+
     const schema = this.createDynamicSchema(vectorLength);
 
     const db = await create({
@@ -180,10 +193,33 @@ class VectorStoreManager {
     return db;
   }
 
+  public getVault(): Vault {
+    return this.app.vault;
+  }
+
+  public getSettings(): CopilotSettings {
+    return this.settings;
+  }
+
   private async getVectorLength(embeddingInstance: Embeddings): Promise<number> {
-    const sampleText = "Sample text for embedding";
-    const sampleEmbedding = await embeddingInstance.embedQuery(sampleText);
-    return sampleEmbedding.length;
+    try {
+      const sampleText = "Sample text for embedding";
+      const sampleEmbedding = await embeddingInstance.embedQuery(sampleText);
+
+      if (!sampleEmbedding || sampleEmbedding.length === 0) {
+        throw new CustomError("Failed to get valid embedding vector length");
+      }
+
+      console.log(
+        `Detected vector length: ${sampleEmbedding.length} for model: ${EmbeddingsManager.getModelName(embeddingInstance)}`
+      );
+      return sampleEmbedding.length;
+    } catch (error) {
+      console.error("Error getting vector length:", error);
+      throw new CustomError(
+        "Failed to determine embedding vector length. Please check your embedding model settings."
+      );
+    }
   }
 
   private async ensureCorrectSchema(db: Orama<any>, embeddingInstance: Embeddings): Promise<void> {
@@ -320,6 +356,49 @@ class VectorStoreManager {
     return allContent;
   }
 
+  private async checkAndHandleEmbeddingModelChange(
+    db: Orama<any>,
+    embeddingInstance: Embeddings
+  ): Promise<boolean> {
+    const singleDoc = await search(db, {
+      term: "",
+      limit: 1,
+    });
+
+    let prevEmbeddingModel: string | undefined;
+
+    if (singleDoc.hits.length > 0) {
+      const oramaDocSample = singleDoc.hits[0];
+      if (
+        typeof oramaDocSample === "object" &&
+        oramaDocSample !== null &&
+        "document" in oramaDocSample
+      ) {
+        const document = oramaDocSample.document as { embeddingModel?: string };
+        prevEmbeddingModel = document.embeddingModel;
+      }
+    }
+
+    if (prevEmbeddingModel) {
+      const currEmbeddingModel = EmbeddingsManager.getModelName(embeddingInstance);
+
+      if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
+        // Model has changed, notify user and rebuild DB
+        new Notice("New embedding model detected. Rebuilding vector store from scratch.");
+        console.log("Detected change in embedding model. Rebuilding vector store from scratch.");
+
+        // Create new DB with new model
+        this.oramaDb = await this.createNewDb();
+        await this.saveDB();
+        return true;
+      }
+    } else {
+      console.log("No previous embedding model found in the database.");
+    }
+
+    return false;
+  }
+
   public async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
     // Add check at the start of the method
     if ((Platform.isMobile && this.settings.disableIndexOnMobile) || !this.oramaDb) {
@@ -337,38 +416,13 @@ class VectorStoreManager {
       }
       await this.ensureCorrectSchema(this.oramaDb, embeddingInstance);
 
-      const singleDoc = await search(this.oramaDb, {
-        term: "",
-        limit: 1,
-      });
-
-      let prevEmbeddingModel: string | undefined;
-
-      if (singleDoc.hits.length > 0) {
-        const oramaDocSample = singleDoc.hits[0];
-        if (
-          typeof oramaDocSample === "object" &&
-          oramaDocSample !== null &&
-          "document" in oramaDocSample
-        ) {
-          const document = oramaDocSample.document as { embeddingModel?: string };
-          prevEmbeddingModel = document.embeddingModel;
-        }
-      }
-
-      if (prevEmbeddingModel) {
-        const currEmbeddingModel = EmbeddingsManager.getModelName(embeddingInstance);
-
-        if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
-          // Model has changed, reinitialize DB
-          this.oramaDb = await this.createNewDb();
-          overwrite = true;
-          new Notice("Detected change in embedding model. Rebuilding vector store from scratch.");
-          console.log("Detected change in embedding model. Rebuilding vector store from scratch.");
-          await this.saveDB();
-        }
-      } else {
-        console.log("No previous embedding model found in the database.");
+      // Check for model change
+      const modelChanged = await this.checkAndHandleEmbeddingModelChange(
+        this.oramaDb,
+        embeddingInstance
+      );
+      if (modelChanged) {
+        overwrite = true;
       }
 
       const latestMtime = await VectorDBManager.getLatestFileMtime(this.oramaDb);
@@ -432,7 +486,7 @@ class VectorStoreManager {
             embeddingModel: EmbeddingsManager.getModelName(embeddingInstance),
             ctime: file.stat.ctime,
             mtime: file.stat.mtime,
-            tags: fileMetadatas[index]?.tags ?? [], // Assuming tags are in the metadata
+            tags: fileMetadatas[index]?.tags?.map((tag) => tag.tag) ?? [],
             extension: file.extension,
             metadata: fileMetadatas[index]?.frontmatter ?? {},
           };
@@ -510,8 +564,13 @@ class VectorStoreManager {
 
   public async clearVectorStore(): Promise<void> {
     try {
-      // Create a new, empty database instance
+      // Create a new, empty database instance with fresh schema
       this.oramaDb = await this.createNewDb();
+
+      // Delete the existing database file
+      if (await this.app.vault.adapter.exists(this.dbPath)) {
+        await this.app.vault.adapter.remove(this.dbPath);
+      }
 
       // Save the new, empty database
       await this.saveDB();
@@ -580,7 +639,6 @@ class VectorStoreManager {
       const searchResult = await search(this.oramaDb, {
         term: filePath,
         properties: ["path"],
-        tolerance: 1,
       });
       if (searchResult.hits.length > 0) {
         await removeMultiple(
@@ -588,6 +646,9 @@ class VectorStoreManager {
           searchResult.hits.map((hit) => hit.id),
           500
         );
+        if (this.settings.debug) {
+          console.log(`Deleted document from local Copilot index: ${filePath}`);
+        }
       }
     } catch (err) {
       console.error("Error deleting document from local Copilotindex:", err);
@@ -610,6 +671,98 @@ class VectorStoreManager {
       includeVectors: true,
     });
     return result.hits[0]?.document;
+  }
+
+  public async initializeEventListeners() {
+    if (this.settings.debug) {
+      console.log("Copilot Plus: Initializing event listeners");
+    }
+    this.app.vault.on("modify", this.handleFileModify);
+    this.app.vault.on("delete", this.handleFileDelete);
+  }
+
+  private debouncedReindexFile = (file: TFile) => {
+    if (this.debounceTimer !== null) {
+      window.clearTimeout(this.debounceTimer);
+    }
+    this.debounceTimer = window.setTimeout(() => {
+      this.reindexFile(file);
+      this.debounceTimer = null;
+    }, this.debounceDelay);
+  };
+
+  private handleFileModify = async (file: TAbstractFile) => {
+    await this.updateExcludedFiles();
+    const currentChainType = this.getLangChainParams().chainType;
+    if (
+      file instanceof TFile &&
+      file.extension === "md" &&
+      !this.excludedFiles.has(file.path) &&
+      currentChainType === ChainType.COPILOT_PLUS_CHAIN
+    ) {
+      if (this.settings.debug) {
+        console.log("Copilot Plus: Triggering reindex for file ", file.path);
+      }
+      await this.removeDocs(file.path);
+      this.debouncedReindexFile(file);
+    }
+  };
+
+  private handleFileDelete = async (file: TAbstractFile) => {
+    if (file instanceof TFile) {
+      await this.removeDocs(file.path);
+    }
+  };
+
+  private updateExcludedFiles = async () => {
+    this.excludedFiles = await this.getFilePathsForQA("exclusions");
+  };
+
+  private async reindexFile(file: TFile) {
+    try {
+      const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
+      if (!embeddingInstance) {
+        throw new CustomError("Embedding instance not found.");
+      }
+
+      const db = this.oramaDb;
+      if (!db) {
+        throw new CustomError("Copilot index is not loaded.");
+      }
+
+      // Check for model change
+      const modelChanged = await this.checkAndHandleEmbeddingModelChange(db, embeddingInstance);
+      if (modelChanged) {
+        // Trigger full reindex and exit
+        await this.indexVaultToVectorStore(true);
+        return;
+      }
+
+      // Proceed with single file reindex
+      const content = await this.app.vault.cachedRead(file);
+      const fileCache = this.app.metadataCache.getFileCache(file);
+
+      const fileToSave = {
+        title: file.basename,
+        path: file.path,
+        content: content,
+        embeddingModel: EmbeddingsManager.getModelName(embeddingInstance),
+        ctime: file.stat.ctime,
+        mtime: file.stat.mtime,
+        tags: fileCache?.tags?.map((tag) => tag.tag) ?? [],
+        extension: file.extension,
+        metadata: fileCache?.frontmatter ?? {},
+      };
+
+      await VectorDBManager.indexFile(db, embeddingInstance, fileToSave);
+      await this.saveDB();
+
+      if (this.settings.debug) {
+        console.log(`Reindexed file: ${file.path}`);
+      }
+    } catch (error) {
+      console.error(`Error reindexing file ${file.path}:`, error);
+    }
   }
 }
 

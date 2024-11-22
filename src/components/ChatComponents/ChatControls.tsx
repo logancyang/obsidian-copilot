@@ -1,16 +1,19 @@
 import { SetChainOptions } from "@/aiParams";
-import { CopilotPlusModal } from "@/components/CopilotPlusModal";
 import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { CustomError } from "@/error";
 import { CopilotSettings } from "@/settings/SettingsPage";
-import { Notice } from "obsidian";
+import { App, Notice } from "obsidian";
 import React, { useEffect, useState } from "react";
 
 import { ChainType } from "@/chainFactory";
+import { AddContextNoteModal } from "@/components/AddContextNoteModal";
 import { TooltipActionButton } from "@/components/ChatComponents/TooltipActionButton";
 import { stringToChainType } from "@/utils";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronDown, Download, Puzzle, RefreshCw } from "lucide-react";
+
+import { TFile } from "obsidian";
+import { ChatContextMenu } from "./ChatContextMenu";
 
 interface ChatControlsProps {
   currentChain: ChainType;
@@ -21,6 +24,13 @@ interface ChatControlsProps {
   settings: CopilotSettings;
   vault_qa_strategy: string;
   isIndexLoadedPromise: Promise<boolean>;
+  app: App;
+  contextNotes: TFile[];
+  setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
+  includeActiveNote: boolean;
+  setIncludeActiveNote: React.Dispatch<React.SetStateAction<boolean>>;
+  contextUrls: string[];
+  onRemoveUrl: (url: string) => void;
   debug?: boolean;
 }
 
@@ -32,11 +42,19 @@ const ChatControls: React.FC<ChatControlsProps> = ({
   onRefreshVaultContext,
   settings,
   vault_qa_strategy,
-  debug,
   isIndexLoadedPromise,
+  app,
+  contextNotes,
+  setContextNotes,
+  includeActiveNote,
+  setIncludeActiveNote,
+  contextUrls,
+  onRemoveUrl,
+  debug,
 }) => {
   const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
   const [isIndexLoaded, setIsIndexLoaded] = useState(false);
+  const activeNote = app.workspace.getActiveFile();
 
   useEffect(() => {
     isIndexLoadedPromise.then((loaded) => {
@@ -48,13 +66,14 @@ const ChatControls: React.FC<ChatControlsProps> = ({
     const newChain = stringToChainType(value);
     setSelectedChain(newChain);
 
-    if (newChain === ChainType.COPILOT_PLUS_CHAIN) {
-      new CopilotPlusModal(app).open();
-      // Reset the selected chain to the previous value
-      setSelectedChain(currentChain);
-    } else {
-      setCurrentChain(newChain, { debug });
-    }
+    // TODO: Update Copilot Plus Modal to check the license key when ready to ship
+    // if (newChain === ChainType.COPILOT_PLUS_CHAIN) {
+    //   new CopilotPlusModal(app).open();
+    //   // Reset the selected chain to the previous value
+    //   setSelectedChain(currentChain);
+    // } else {
+    //   setCurrentChain(newChain, { debug });
+    // }
   };
 
   useEffect(() => {
@@ -64,10 +83,12 @@ const ChatControls: React.FC<ChatControlsProps> = ({
         return;
       }
 
-      if (selectedChain === ChainType.VAULT_QA_CHAIN) {
-        if (vault_qa_strategy === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH) {
-          await onRefreshVaultContext();
-        }
+      if (
+        (selectedChain === ChainType.VAULT_QA_CHAIN ||
+          selectedChain === ChainType.COPILOT_PLUS_CHAIN) &&
+        vault_qa_strategy === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH
+      ) {
+        await onRefreshVaultContext();
       }
 
       try {
@@ -104,59 +125,102 @@ const ChatControls: React.FC<ChatControlsProps> = ({
   //   new SimilarNotesModal(app, similarChunks).open();
   // };
 
-  return (
-    <div className="chat-icons-container">
-      <TooltipActionButton
-        onClick={() => {
-          onNewChat(false);
-        }}
-        Icon={<RefreshCw className="icon-scaler" />}
-      >
-        <div>New Chat</div>
-        {!settings.autosaveChat && <div>(Unsaved history will be lost)</div>}
-      </TooltipActionButton>
-      <TooltipActionButton onClick={onSaveAsNote} Icon={<Download className="icon-scaler" />}>
-        Save as Note
-      </TooltipActionButton>
-      {selectedChain === "vault_qa" && (
-        <TooltipActionButton
-          onClick={onRefreshVaultContext}
-          Icon={<Puzzle className="icon-scaler" />}
-        >
-          Refresh Index for Vault
-        </TooltipActionButton>
-      )}
-      <div className="chat-icon-selection-tooltip">
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger className="chain-select-button">
-            {currentChain === "llm_chain" && "chat"}
-            {currentChain === "vault_qa" && "vault QA (basic)"}
-            {currentChain === "copilot_plus" && "copilot plus (alpha)"}
-            <ChevronDown size={10} />
-          </DropdownMenu.Trigger>
+  const handleAddContext = () => {
+    const excludeNotes = [
+      ...contextNotes.map((note) => note.path),
+      ...(includeActiveNote && activeNote ? [activeNote.path] : []),
+    ].filter(Boolean) as string[];
 
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content className="chain-select-content" align="end" sideOffset={5}>
-              <DropdownMenu.Item onSelect={() => handleChainChange({ value: "llm_chain" })}>
-                chat
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                onSelect={() => handleChainChange({ value: "vault_qa" })}
-                disabled={!isIndexLoaded}
-                className={!isIndexLoaded ? "disabled-menu-item" : ""}
-              >
-                vault QA (basic) {!isIndexLoaded && "(index not loaded)"}
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                onSelect={() => handleChainChange({ value: "copilot_plus" })}
-                disabled={!isIndexLoaded}
-                className={!isIndexLoaded ? "disabled-menu-item" : ""}
-              >
-                copilot plus (alpha) {!isIndexLoaded && "(index not loaded)"}
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+    new AddContextNoteModal({
+      app,
+      onNoteSelect: (note) => {
+        if (activeNote && note.path === activeNote.path) {
+          setIncludeActiveNote(true);
+          // Remove the note from contextNotes if it exists there
+          setContextNotes((prev) => prev.filter((n) => n.path !== note.path));
+        } else {
+          setContextNotes((prev) => [...prev, note]);
+        }
+      },
+      excludeNotes,
+    }).open();
+  };
+
+  const handleRemoveContext = (path: string) => {
+    if (activeNote && path === activeNote.path) {
+      setIncludeActiveNote(false);
+    } else {
+      setContextNotes((prev) => prev.filter((note) => note.path !== path));
+    }
+  };
+
+  return (
+    <div className="chat-controls-wrapper">
+      <div className="chat-icons-container">
+        {currentChain === ChainType.COPILOT_PLUS_CHAIN && (
+          <ChatContextMenu
+            activeNote={includeActiveNote ? activeNote : null}
+            contextNotes={contextNotes}
+            onAddContext={handleAddContext}
+            onRemoveContext={handleRemoveContext}
+            contextUrls={contextUrls}
+            onRemoveUrl={onRemoveUrl}
+          />
+        )}
+        <div className="chat-icons-right">
+          <TooltipActionButton
+            onClick={() => {
+              onNewChat(false);
+            }}
+            Icon={<RefreshCw className="icon-scaler" />}
+          >
+            <div>New Chat</div>
+            {!settings.autosaveChat && <div>(Unsaved history will be lost)</div>}
+          </TooltipActionButton>
+          <TooltipActionButton onClick={onSaveAsNote} Icon={<Download className="icon-scaler" />}>
+            Save as Note
+          </TooltipActionButton>
+          {selectedChain === "vault_qa" && (
+            <TooltipActionButton
+              onClick={onRefreshVaultContext}
+              Icon={<Puzzle className="icon-scaler" />}
+            >
+              Refresh Index for Vault
+            </TooltipActionButton>
+          )}
+          <div className="chat-icon-selection-tooltip">
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger className="chain-select-button">
+                {currentChain === "llm_chain" && "chat"}
+                {currentChain === "vault_qa" && "vault QA (basic)"}
+                {currentChain === "copilot_plus" && "copilot plus (alpha)"}
+                <ChevronDown size={10} />
+              </DropdownMenu.Trigger>
+
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content className="chain-select-content" align="end" sideOffset={5}>
+                  <DropdownMenu.Item onSelect={() => handleChainChange({ value: "llm_chain" })}>
+                    chat
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item
+                    onSelect={() => handleChainChange({ value: "vault_qa" })}
+                    disabled={!isIndexLoaded}
+                    className={!isIndexLoaded ? "disabled-menu-item" : ""}
+                  >
+                    vault QA (basic) {!isIndexLoaded && "(index not loaded)"}
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item
+                    onSelect={() => handleChainChange({ value: "copilot_plus" })}
+                    disabled={!isIndexLoaded}
+                    className={!isIndexLoaded ? "disabled-menu-item" : ""}
+                  >
+                    copilot plus (alpha) {!isIndexLoaded && "(index not loaded)"}
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
+          </div>
+        </div>
       </div>
     </div>
   );

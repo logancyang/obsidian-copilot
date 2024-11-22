@@ -7,15 +7,19 @@ import {
   ABORT_REASON,
   AI_SENDER,
   EVENT_NAMES,
+  LOADING_MESSAGES,
   USER_SENDER,
   VAULT_VECTOR_STORE_STRATEGY,
 } from "@/constants";
 import { AppContext } from "@/context";
+import { ContextProcessor } from "@/contextProcessor";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { getAIResponse } from "@/langchainStream";
 import CopilotPlugin from "@/main";
+import { Mention } from "@/mentions/Mention";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import SharedState, { ChatMessage, useSharedState } from "@/sharedState";
+import { FileParserManager } from "@/tools/FileParserManager";
 import {
   createChangeToneSelectionPrompt,
   createTranslateSelectionPrompt,
@@ -51,6 +55,7 @@ interface ChatProps {
   defaultSaveFolder: string;
   onSaveChat: (saveAsNote: () => Promise<void>) => void;
   updateUserMessageHistory: (newMessage: string) => void;
+  fileParserManager: FileParserManager;
   plugin: CopilotPlugin;
   debug: boolean;
 }
@@ -63,6 +68,7 @@ const Chat: React.FC<ChatProps> = ({
   defaultSaveFolder,
   onSaveChat,
   updateUserMessageHistory,
+  fileParserManager,
   plugin,
   debug,
 }) => {
@@ -73,8 +79,16 @@ const Chat: React.FC<ChatProps> = ({
   const [inputMessage, setInputMessage] = useState("");
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES.DEFAULT);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [chatIsVisible, setChatIsVisible] = useState(false);
+  const [contextNotes, setContextNotes] = useState<TFile[]>([]);
+  const [includeActiveNote, setIncludeActiveNote] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<File[]>([]);
+
+  const mention = Mention.getInstance(plugin.settings.plusLicenseKey);
+
+  const contextProcessor = ContextProcessor.getInstance();
 
   useEffect(() => {
     const handleChatVisibility = (evt: CustomEvent<{ chatIsVisible: boolean }>) => {
@@ -90,54 +104,118 @@ const Chat: React.FC<ChatProps> = ({
 
   const app = plugin.app || useContext(AppContext);
 
-  const handleSendMessage = async () => {
-    if (!inputMessage) return;
+  const processContextNotes = async (
+    customPromptProcessor: CustomPromptProcessor,
+    fileParserManager: FileParserManager
+  ) => {
+    const activeNote = app.workspace.getActiveFile();
+    return await contextProcessor.processContextNotes(
+      customPromptProcessor,
+      fileParserManager,
+      app.vault,
+      contextNotes,
+      includeActiveNote,
+      activeNote
+    );
+  };
 
+  const handleSendMessage = async (toolCalls?: string[]) => {
+    if (!inputMessage && selectedImages.length === 0) return;
+
+    const timestamp = formatDateTime(new Date());
+
+    // Create message content array
+    const content: any[] = [];
+
+    // Add text content if present
+    if (inputMessage) {
+      content.push({
+        type: "text",
+        text: inputMessage,
+      });
+    }
+
+    // Add images if present
+    for (const image of selectedImages) {
+      const imageData = await image.arrayBuffer();
+      const base64Image = Buffer.from(imageData).toString("base64");
+      content.push({
+        type: "image_url",
+        image_url: {
+          url: `data:${image.type};base64,${base64Image}`,
+        },
+      });
+    }
+
+    const userMessage: ChatMessage = {
+      message: inputMessage || "Image message",
+      originalMessage: inputMessage,
+      sender: USER_SENDER,
+      isVisible: true,
+      timestamp: timestamp,
+      content: content,
+    };
+
+    // Clear input and images
+    setInputMessage("");
+    setSelectedImages([]);
+
+    // Add messages to chat history
+    addMessage(userMessage);
+    setLoading(true);
+    setLoadingMessage(LOADING_MESSAGES.DEFAULT);
+
+    // First, process the original user message for custom prompts
     const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault, settings);
-    const processedUserMessage = await customPromptProcessor.processCustomPrompt(
-      inputMessage,
+    let processedUserMessage = await customPromptProcessor.processCustomPrompt(
+      inputMessage || "",
       "",
       app.workspace.getActiveFile() as TFile | undefined
     );
 
-    const timestamp = formatDateTime(new Date());
+    // Extract Mentions (such as URLs) from original input message only
+    const urlContextAddition = await mention.processUrls(inputMessage || "");
 
-    const userMessage: ChatMessage = {
-      message: inputMessage,
-      sender: USER_SENDER,
-      isVisible: true,
-      timestamp: timestamp,
-    };
+    // Add context notes
+    const noteContextAddition = await processContextNotes(customPromptProcessor, fileParserManager);
+
+    // Combine everything
+    processedUserMessage = processedUserMessage + urlContextAddition + noteContextAddition;
+
+    let messageWithToolCalls = inputMessage;
+    // Add tool calls last
+    if (toolCalls) {
+      messageWithToolCalls += " " + toolCalls.join("\n");
+    }
 
     const promptMessageHidden: ChatMessage = {
       message: processedUserMessage,
+      originalMessage: messageWithToolCalls,
       sender: USER_SENDER,
       isVisible: false,
       timestamp: timestamp,
+      content: content,
     };
 
-    // Add user message to chat history
-    addMessage(userMessage);
+    // Add hidden user message to chat history
     addMessage(promptMessageHidden);
 
-    // Add to user message history
-    updateUserMessageHistory(inputMessage);
-    setHistoryIndex(-1);
+    // Add to user message history if there's text
+    if (inputMessage) {
+      updateUserMessageHistory(inputMessage);
+      setHistoryIndex(-1);
+    }
 
-    // Clear input
-    setInputMessage("");
-
-    // Display running dots to indicate loading
-    setLoading(true);
     await getAIResponse(
       promptMessageHidden,
       chainManager,
       addMessage,
       setCurrentAiMessage,
       setAbortController,
-      { debug }
+      { debug, updateLoadingMessage: setLoadingMessage }
     );
     setLoading(false);
+    setLoadingMessage(LOADING_MESSAGES.DEFAULT);
   };
 
   const navigateHistory = (direction: "up" | "down"): string => {
@@ -301,7 +379,7 @@ ${chatContent}`;
     setLoading(true);
     try {
       const regeneratedResponse = await chainManager.runChain(
-        lastUserMessage.message,
+        lastUserMessage,
         new AbortController(),
         setCurrentAiMessage,
         addMessage,
@@ -535,6 +613,7 @@ ${chatContent}`;
         currentAiMessage={currentAiMessage}
         indexVaultToVectorStore={settings.indexVaultToVectorStore as VAULT_VECTOR_STORE_STRATEGY}
         loading={loading}
+        loadingMessage={loadingMessage}
         app={app}
         onInsertAtCursor={handleInsertAtCursor}
         onRegenerate={handleRegenerate}
@@ -571,10 +650,18 @@ ${chatContent}`;
           onSaveAsNote={() => handleSaveAsNote(true)}
           onRefreshVaultContext={refreshVaultContext}
           vault_qa_strategy={plugin.settings.indexVaultToVectorStore}
-          debug={debug}
           addMessage={addMessage}
           vault={app.vault}
           isIndexLoadedPromise={plugin.vectorStoreManager.getIsIndexLoaded()}
+          contextNotes={contextNotes}
+          setContextNotes={setContextNotes}
+          includeActiveNote={includeActiveNote}
+          setIncludeActiveNote={setIncludeActiveNote}
+          mention={mention}
+          selectedImages={selectedImages}
+          onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
+          setSelectedImages={setSelectedImages}
+          debug={debug}
         />
       </div>
     </div>

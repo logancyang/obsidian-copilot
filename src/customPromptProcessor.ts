@@ -188,11 +188,14 @@ export class CustomPromptProcessor {
     return variablesWithContent;
   }
 
+  // TODO: return the processed variables along with the processed prompt and
+  // remove getProcessedVariables
   async processCustomPrompt(
     customPrompt: string,
     selectedText: string,
     activeNote?: TFile
   ): Promise<string> {
+    this.lastProcessedPrompt = customPrompt;
     const variablesWithContent = await this.extractVariablesFromPrompt(customPrompt, activeNote);
     let processedPrompt = customPrompt;
     const matches = [...processedPrompt.matchAll(/\{([^}]+)\}/g)];
@@ -238,4 +241,25 @@ export class CustomPromptProcessor {
 
     return processedPrompt + "\n\n" + additionalInfo;
   }
+
+  // TODO: remove this
+  async getProcessedVariables(): Promise<Set<string>> {
+    const processedVars = new Set<string>();
+
+    // Add variables from the last processed prompt
+    const matches = this.lastProcessedPrompt?.matchAll(/\{([^}]+)\}/g) || [];
+    for (const match of matches) {
+      processedVars.add(match[1]);
+    }
+
+    // Add explicitly referenced note titles
+    const noteTitles = extractNoteTitles(this.lastProcessedPrompt || "");
+    for (const title of noteTitles) {
+      processedVars.add(`[[${title}]]`);
+    }
+
+    return processedVars;
+  }
+
+  private lastProcessedPrompt: string | null = null;
 }

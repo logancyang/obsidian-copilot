@@ -1,4 +1,5 @@
 import { ChatButtons } from "@/components/ChatComponents/ChatButtons";
+import { SourcesModal } from "@/components/SourcesModal";
 import { USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/sharedState";
 import { Bot, User } from "lucide-react";
@@ -118,28 +119,78 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     }
   };
 
+  const handleShowSources = () => {
+    if (message.sources && message.sources.length > 0) {
+      new SourcesModal(app, message.sources).open();
+    }
+  };
+
+  const renderMessageContent = () => {
+    if (message.content) {
+      return (
+        <div className="message-content-items">
+          {message.content.map((item, index) => {
+            if (item.type === "text") {
+              return (
+                <div key={index} className="message-text-content">
+                  {message.sender === USER_SENDER && isEditing ? (
+                    <textarea
+                      ref={textareaRef}
+                      value={editedMessage}
+                      onChange={handleTextareaChange}
+                      onKeyDown={handleKeyDown}
+                      onBlur={handleSaveEdit}
+                      autoFocus
+                      className="edit-textarea"
+                    />
+                  ) : message.sender === USER_SENDER ? (
+                    <span>{item.text}</span>
+                  ) : (
+                    <div ref={contentRef}></div>
+                  )}
+                </div>
+              );
+            } else if (item.type === "image_url") {
+              return (
+                <div key={index} className="message-image-content">
+                  <img
+                    src={item.image_url.url}
+                    alt="User uploaded image"
+                    className="chat-message-image"
+                  />
+                </div>
+              );
+            }
+            return null;
+          })}
+        </div>
+      );
+    }
+
+    // Fallback for messages without content array
+    return message.sender === USER_SENDER && isEditing ? (
+      <textarea
+        ref={textareaRef}
+        value={editedMessage}
+        onChange={handleTextareaChange}
+        onKeyDown={handleKeyDown}
+        onBlur={handleSaveEdit}
+        autoFocus
+        className="edit-textarea"
+      />
+    ) : message.sender === USER_SENDER ? (
+      <span>{message.message}</span>
+    ) : (
+      <div ref={contentRef}></div>
+    );
+  };
+
   return (
     <div className="chat-message-container">
       <div className={`message ${message.sender === USER_SENDER ? "user-message" : "bot-message"}`}>
         <div className="message-icon">{message.sender === USER_SENDER ? <User /> : <Bot />}</div>
         <div className="message-content-wrapper">
-          <div className="message-content">
-            {message.sender === USER_SENDER && isEditing ? (
-              <textarea
-                ref={textareaRef}
-                value={editedMessage}
-                onChange={handleTextareaChange}
-                onKeyDown={handleKeyDown}
-                onBlur={handleSaveEdit}
-                autoFocus
-                className="edit-textarea"
-              />
-            ) : message.sender === USER_SENDER ? (
-              <span>{message.message}</span>
-            ) : (
-              <div ref={contentRef}></div>
-            )}
-          </div>
+          <div className="message-content">{renderMessageContent()}</div>
 
           {!isStreaming && (
             <div className="message-buttons-wrapper">
@@ -152,6 +203,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                 onRegenerate={onRegenerate}
                 onEdit={handleEdit}
                 onDelete={onDelete}
+                onShowSources={handleShowSources}
+                hasSources={message.sources && message.sources.length > 0 ? true : false}
               />
             </div>
           )}
