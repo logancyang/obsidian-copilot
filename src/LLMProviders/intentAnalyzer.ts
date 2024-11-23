@@ -39,8 +39,13 @@ export class IntentAnalyzer {
     brevilabsClient: BrevilabsClient
   ): Promise<ToolCall[]> {
     try {
-      // Only analyze the original message
       const brocaResponse = await brevilabsClient.broca(originalMessage);
+
+      // Check if the response is successful and has the expected structure
+      if (!brocaResponse?.response) {
+        throw new Error(brocaResponse?.detail || "Broca API call failed");
+      }
+
       const brocaToolCalls = brocaResponse.response.tool_calls;
       const salientTerms = brocaResponse.response.salience_terms;
 
@@ -77,7 +82,7 @@ export class IntentAnalyzer {
       return processedToolCalls;
     } catch (error) {
       console.error("Error in intent analysis:", error);
-      return [];
+      throw error; // Re-throw the error to be caught by CopilotPlusChainRunner
     }
   }
 
