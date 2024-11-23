@@ -1,7 +1,12 @@
 import { ABORT_REASON, AI_SENDER, LOADING_MESSAGES } from "@/constants";
 import { ChatMessage } from "@/sharedState";
 import { ToolManager } from "@/tools/toolManager";
-import { extractChatHistory, extractUniqueTitlesFromDocs, formatDateTime } from "@/utils";
+import {
+  extractChatHistory,
+  extractUniqueTitlesFromDocs,
+  extractYoutubeUrl,
+  formatDateTime,
+} from "@/utils";
 import { Notice } from "obsidian";
 import ChainManager from "./chainManager";
 import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "./intentAnalyzer";
@@ -190,6 +195,19 @@ class VaultQAChainRunner extends BaseChainRunner {
 }
 
 class CopilotPlusChainRunner extends BaseChainRunner {
+  private isYoutubeOnlyMessage(message: string): boolean {
+    const trimmedMessage = message.trim();
+    const hasYoutubeCommand = trimmedMessage.includes("@youtube");
+    const youtubeUrl = extractYoutubeUrl(trimmedMessage);
+
+    // Check if message only contains @youtube command and a valid URL
+    const words = trimmedMessage
+      .split(/\s+/)
+      .filter((word) => word !== "@youtube" && word.length > 0);
+
+    return hasYoutubeCommand && youtubeUrl !== null && words.length === 1;
+  }
+
   private async streamMultimodalResponse(
     textContent: string,
     userMessage: ChatMessage,
@@ -280,6 +298,43 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     let sources: { title: string; score: number }[] = [];
 
     try {
+      // Check if this is a YouTube-only message
+      if (this.isYoutubeOnlyMessage(userMessage.message)) {
+        const url = extractYoutubeUrl(userMessage.message);
+        if (url) {
+          try {
+            const response = await this.chainManager.brevilabsClient.youtube4llm(url);
+            if (response.response.transcript) {
+              return this.handleResponse(
+                response.response.transcript,
+                userMessage,
+                abortController,
+                addMessage,
+                updateCurrentAiMessage,
+                debug
+              );
+            }
+            return this.handleResponse(
+              "Transcript not available. Only English videos with the auto transcript option turned on are supported at the moment.",
+              userMessage,
+              abortController,
+              addMessage,
+              updateCurrentAiMessage,
+              debug
+            );
+          } catch (error) {
+            return this.handleResponse(
+              "An error occurred while transcribing the YouTube video. Please check the error message in the console for more details.",
+              userMessage,
+              abortController,
+              addMessage,
+              updateCurrentAiMessage,
+              debug
+            );
+          }
+        }
+      }
+
       if (debug) console.log("==== Step 1: Analyzing intent ====");
       // Use the original message for intent analysis
       const messageForAnalysis = userMessage.originalMessage || userMessage.message;

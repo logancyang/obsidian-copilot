@@ -16,15 +16,11 @@ const simpleYoutubeTranscriptionTool = tool(
         });
       }
 
-      const transcriptResultPrompt = `Please correct any typo or obvious mistranscription in the following youtube transcript, and return the corrected version, with an empty line between each sentence. Return the TRANSCRIPT ONLY, WITHOUT any other text. If the transcript is empty, return the provided message.\n\n`;
-      return (
-        transcriptResultPrompt +
-        JSON.stringify({
-          success: true,
-          transcript: response.response.transcript,
-          elapsed_time_ms: response.elapsed_time_ms,
-        })
-      );
+      return JSON.stringify({
+        success: true,
+        transcript: response.response.transcript,
+        elapsed_time_ms: response.elapsed_time_ms,
+      });
     } catch (error) {
       console.error(`Error transcribing YouTube video ${url}:`, error);
       return JSON.stringify({
