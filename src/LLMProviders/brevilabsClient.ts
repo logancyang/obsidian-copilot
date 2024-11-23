@@ -12,6 +12,7 @@ export interface BrocaResponse {
     salience_terms: string[];
   };
   elapsed_time_ms: number;
+  detail?: string;
 }
 
 export interface RerankResponse {

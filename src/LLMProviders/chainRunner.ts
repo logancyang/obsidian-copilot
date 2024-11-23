@@ -336,19 +336,26 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       }
 
       if (debug) console.log("==== Step 1: Analyzing intent ====");
-      // Use the original message for intent analysis
-      const messageForAnalysis = userMessage.originalMessage || userMessage.message;
-      const toolCalls = await IntentAnalyzer.analyzeIntent(
-        messageForAnalysis,
-        this.chainManager.vectorStoreManager,
-        this.chainManager.chatModelManager,
-        this.chainManager.brevilabsClient
-      );
-      if (debug)
-        console.log(
-          "Tool identification result:",
-          toolCalls.map((call) => call.tool.name)
+      let toolCalls;
+      try {
+        // Use the original message for intent analysis
+        const messageForAnalysis = userMessage.originalMessage || userMessage.message;
+        toolCalls = await IntentAnalyzer.analyzeIntent(
+          messageForAnalysis,
+          this.chainManager.vectorStoreManager,
+          this.chainManager.chatModelManager,
+          this.chainManager.brevilabsClient
         );
+      } catch (error) {
+        return this.handleResponse(
+          "Copilot Plus message failed. Please provide a valid license key in your Copilot setting.",
+          userMessage,
+          abortController,
+          addMessage,
+          updateCurrentAiMessage,
+          debug
+        );
+      }
 
       // Use the same removeAtCommands logic as IntentAnalyzer
       const cleanedUserMessage = userMessage.message
