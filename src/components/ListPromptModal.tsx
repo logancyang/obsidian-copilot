@@ -3,15 +3,18 @@ import { App, FuzzySuggestModal } from "obsidian";
 export class ListPromptModal extends FuzzySuggestModal<string> {
   private onChoosePromptTitle: (promptTitle: string) => void;
   private promptTitles: string[];
+  private descriptions: string[];
 
   constructor(
     app: App,
     promptTitles: string[],
-    onChoosePromptTitle: (promptTitle: string) => void
+    onChoosePromptTitle: (promptTitle: string) => void,
+    descriptions: string[] = []
   ) {
     super(app);
     this.promptTitles = promptTitles;
     this.onChoosePromptTitle = onChoosePromptTitle;
+    this.descriptions = descriptions;
   }
 
   getItems(): string[] {
@@ -19,10 +22,13 @@ export class ListPromptModal extends FuzzySuggestModal<string> {
   }
 
   getItemText(promptTitle: string): string {
-    return promptTitle;
+    const index = this.promptTitles.indexOf(promptTitle);
+    const description = this.descriptions[index];
+    return description ? `${promptTitle} - ${description}` : promptTitle;
   }
 
   onChooseItem(promptTitle: string, evt: MouseEvent | KeyboardEvent) {
-    this.onChoosePromptTitle(promptTitle);
+    const actualTitle = promptTitle.split(" - ")[0];
+    this.onChoosePromptTitle(actualTitle);
   }
 }

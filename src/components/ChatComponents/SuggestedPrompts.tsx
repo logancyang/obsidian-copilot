@@ -41,12 +41,24 @@ const SUGGESTED_PROMPTS: Record<string, NotePrompt> = {
       `Based on my notes on <topic>, what is the question that I should be asking, but am not?`,
     ],
   },
+  copilotPlus: {
+    title: "Copilot Plus",
+    prompts: [
+      `Give me a recap of last week @vault`,
+      `What are the key takeaways from my notes on <topic> @vault`,
+      `Summarize <url> in under 10 bullet points`,
+      `@youtube <video_url>`,
+      `@web what are most recent updates in the AI industry`,
+      `What are the key insights from this paper <arxiv_url>`,
+      `What new methods are proposed in this paper [[<note_with_embedded_pdf>]]`,
+    ],
+  },
 };
 
 const PROMPT_KEYS: Record<ChainType, Array<keyof typeof SUGGESTED_PROMPTS>> = {
   [ChainType.LLM_CHAIN]: ["activeNote", "quoteNote", "fun"],
   [ChainType.VAULT_QA_CHAIN]: ["qaVault", "qaVault", "quoteNote"],
-  [ChainType.COPILOT_PLUS_CHAIN]: ["activeNote", "quoteNote", "fun"],
+  [ChainType.COPILOT_PLUS_CHAIN]: ["copilotPlus", "copilotPlus", "copilotPlus"],
 };
 
 function getRandomPrompt(chainType: ChainType = ChainType.LLM_CHAIN) {
