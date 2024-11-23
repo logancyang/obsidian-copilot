@@ -8,6 +8,7 @@ import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
 import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChatMessage } from "@/sharedState";
+import { getToolDescription } from "@/tools/toolManager";
 import { extractNoteTitles } from "@/utils";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ArrowBigUp, ChevronUp, Command, CornerDownLeft, Image, StopCircle } from "lucide-react";
@@ -232,10 +233,21 @@ const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const showCopilotPlusOptionsModal = () => {
-    const options = COPILOT_TOOL_NAMES;
-    new ListPromptModal(app, options, (selectedOption: string) => {
-      setInputMessage(inputMessage + selectedOption + " ");
-    }).open();
+    // Create a map of options with their descriptions
+    const optionsWithDescriptions = COPILOT_TOOL_NAMES.map((option) => ({
+      title: option,
+      description: getToolDescription(option),
+    }));
+
+    new ListPromptModal(
+      app,
+      optionsWithDescriptions.map((o) => o.title),
+      (selectedOption: string) => {
+        setInputMessage(inputMessage + selectedOption + " ");
+      },
+      // Add descriptions as a separate array
+      optionsWithDescriptions.map((o) => o.description)
+    ).open();
   };
 
   useEffect(() => {
