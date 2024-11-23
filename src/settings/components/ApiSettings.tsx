@@ -7,6 +7,8 @@ interface ApiSettingsProps {
   setOpenAIApiKey: (value: string) => void;
   openAIOrgId: string;
   setOpenAIOrgId: (value: string) => void;
+  mistralApiKey: string;
+  setMistralApiKey: (value: string) => void;
   googleApiKey: string;
   setGoogleApiKey: (value: string) => void;
   anthropicApiKey: string;
@@ -34,6 +36,8 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
   setOpenAIApiKey,
   openAIOrgId,
   setOpenAIOrgId,
+  mistralApiKey,
+  setMistralApiKey,
   googleApiKey,
   setGoogleApiKey,
   anthropicApiKey,
@@ -251,6 +255,24 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
           <a href="https://dashboard.cohere.ai/api-keys" target="_blank" rel="noreferrer">
             here
           </a>
+        </p>
+      </Collapsible>
+
+      <Collapsible title="Mistral AI API Settings">
+        <ApiSetting
+          title="Mistral API Key"
+          value={mistralApiKey}
+          setValue={setMistralApiKey}
+          placeholder="Enter Mistral API Key"
+        />
+        <p>
+          You can find your API key at{" "}
+          <a href="https://console.mistral.ai/api-keys/" target="_blank" rel="noreferrer">
+            here
+          </a>
+          .
+          <br />
+          Your API key is stored locally and is only used to make requests to Mistra AI services.
         </p>
       </Collapsible>
     </div>

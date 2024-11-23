@@ -13,6 +13,7 @@ export interface CopilotSettings {
   plusLicenseKey: string;
   openAIApiKey: string;
   openAIOrgId: string;
+  mistralApiKey: string;
   huggingfaceApiKey: string;
   cohereApiKey: string;
   anthropicApiKey: string;

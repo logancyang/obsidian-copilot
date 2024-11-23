@@ -9,6 +9,7 @@ import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatGroq } from "@langchain/groq";
 import { ChatOllama } from "@langchain/ollama";
 import { ChatOpenAI } from "@langchain/openai";
+import { ChatMistralAI } from "@langchain/mistralai";
 import { Notice } from "obsidian";
 
 export default class ChatModelManager {
@@ -16,6 +17,7 @@ export default class ChatModelManager {
   private static instance: ChatModelManager;
   private static chatModel: BaseChatModel;
   private static chatOpenAI: ChatOpenAI;
+  // private static chatMistralAI: ChatMistralAI;
   private static modelMap: Record<
     string,
     {
@@ -67,6 +69,12 @@ export default class ChatModelManager {
         modelName: customModel.name,
         openAIApiKey: decrypt(customModel.apiKey || params.openAIApiKey),
         openAIOrgId: decrypt(params.openAIOrgId),
+        maxTokens: params.maxTokens,
+      },
+      [ChatModelProviders.MISTRAL]: {
+        modelName: customModel.name,
+        // why it has to be apikey exactly?
+        apiKey: decrypt(customModel.apiKey || params.mistralApiKey),
         maxTokens: params.maxTokens,
       },
       [ChatModelProviders.ANTHROPIC]: {
@@ -193,6 +201,10 @@ export default class ChatModelManager {
           case ChatModelProviders.OPENAI_FORMAT:
             constructor = ProxyChatOpenAI;
             apiKey = model.apiKey || "default-key";
+            break;
+          case ChatModelProviders.MISTRAL:
+            constructor = ChatMistralAI;
+            apiKey = model.apiKey || this.getLangChainParams().mistralApiKey;
             break;
           default:
             console.warn(`Unknown provider: ${model.provider} for model: ${model.name}`);
