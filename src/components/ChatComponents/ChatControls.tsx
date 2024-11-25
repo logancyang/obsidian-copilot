@@ -127,7 +127,8 @@ const ChatControls: React.FC<ChatControlsProps> = ({
           // Remove the note from contextNotes if it exists there
           setContextNotes((prev) => prev.filter((n) => n.path !== note.path));
         } else {
-          setContextNotes((prev) => [...prev, note]);
+          // Add wasAddedManually flag to distinguish from reference-added notes
+          setContextNotes((prev) => [...prev, Object.assign(note, { wasAddedManually: true })]);
         }
       },
       excludeNotes,
