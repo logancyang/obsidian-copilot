@@ -76,7 +76,11 @@ export class HybridRetriever extends BaseRetriever {
       0
     );
     // Apply reranking if max score is below the threshold
-    if (this.options.useRerankerThreshold && maxOramaScore < this.options.useRerankerThreshold) {
+    if (
+      this.options.useRerankerThreshold &&
+      maxOramaScore < this.options.useRerankerThreshold &&
+      maxOramaScore > 0
+    ) {
       const rerankResponse = await this.brevilabsClient.rerank(
         query,
         // Limit the context length to 3000 characters to avoid overflowing the reranker
