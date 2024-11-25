@@ -10,6 +10,7 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
 import { Root, createRoot } from "react-dom/client";
+import { SettingsValueProvider } from "@/settings/contexts/SettingsValueContext";
 
 export default class CopilotView extends ItemView {
   private chainManager: ChainManager;
@@ -64,22 +65,23 @@ export default class CopilotView extends ItemView {
       <AppContext.Provider value={this.app}>
         <React.StrictMode>
           <Tooltip.Provider delayDuration={0}>
-            <Chat
-              sharedState={this.sharedState}
-              settings={this.settings}
-              chainManager={this.chainManager}
-              emitter={this.emitter}
-              defaultSaveFolder={this.defaultSaveFolder}
-              updateUserMessageHistory={(newMessage) => {
-                this.plugin.updateUserMessageHistory(newMessage);
-              }}
-              fileParserManager={this.fileParserManager}
-              plugin={this.plugin}
-              debug={this.debug}
-              onSaveChat={(saveFunction) => {
-                this.handleSaveAsNote = saveFunction;
-              }}
-            />
+            <SettingsValueProvider value={this.settings}>
+              <Chat
+                sharedState={this.sharedState}
+                chainManager={this.chainManager}
+                emitter={this.emitter}
+                defaultSaveFolder={this.defaultSaveFolder}
+                updateUserMessageHistory={(newMessage) => {
+                  this.plugin.updateUserMessageHistory(newMessage);
+                }}
+                fileParserManager={this.fileParserManager}
+                plugin={this.plugin}
+                debug={this.debug}
+                onSaveChat={(saveFunction) => {
+                  this.handleSaveAsNote = saveFunction;
+                }}
+              />
+            </SettingsValueProvider>
           </Tooltip.Provider>
         </React.StrictMode>
       </AppContext.Provider>

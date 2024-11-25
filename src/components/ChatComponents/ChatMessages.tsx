@@ -1,7 +1,6 @@
 import { ChainType } from "@/chainFactory";
 import ChatSingleMessage from "@/components/ChatComponents/ChatSingleMessage";
 import { SuggestedPrompts } from "@/components/ChatComponents/SuggestedPrompts";
-import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { ChatMessage } from "@/sharedState";
 import { App } from "obsidian";
 import React, { useEffect, useState } from "react";
@@ -12,7 +11,6 @@ interface ChatMessagesProps {
   loading?: boolean;
   loadingMessage?: string;
   app: App;
-  indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY;
   currentChain: ChainType;
   onInsertAtCursor: (message: string) => void;
   onRegenerate: (messageIndex: number) => void;
@@ -26,7 +24,6 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
   currentAiMessage,
   loading,
   currentChain,
-  indexVaultToVectorStore,
   loadingMessage,
   app,
   onInsertAtCursor,
@@ -65,11 +62,7 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
   if (!chatHistory.filter((message) => message.isVisible).length && !currentAiMessage) {
     return (
       <div className="chat-messages">
-        <SuggestedPrompts
-          chainType={currentChain}
-          indexVaultToVectorStore={indexVaultToVectorStore}
-          onClick={onSelectSuggestedPrompt}
-        />
+        <SuggestedPrompts chainType={currentChain} onClick={onSelectSuggestedPrompt} />
       </div>
     );
   }

@@ -3,21 +3,14 @@ import { useAIState } from "@/aiState";
 import { updateChatMemory } from "@/chatUtils";
 import ChatInput from "@/components/ChatComponents/ChatInput";
 import ChatMessages from "@/components/ChatComponents/ChatMessages";
-import {
-  ABORT_REASON,
-  AI_SENDER,
-  EVENT_NAMES,
-  LOADING_MESSAGES,
-  USER_SENDER,
-  VAULT_VECTOR_STORE_STRATEGY,
-} from "@/constants";
+import { ABORT_REASON, AI_SENDER, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
 import { AppContext } from "@/context";
 import { ContextProcessor } from "@/contextProcessor";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { getAIResponse } from "@/langchainStream";
 import CopilotPlugin from "@/main";
 import { Mention } from "@/mentions/Mention";
-import { CopilotSettings } from "@/settings/SettingsPage";
+import { useSettingsValueContext } from "@/settings/contexts/SettingsValueContext";
 import SharedState, { ChatMessage, useSharedState } from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import {
@@ -39,7 +32,7 @@ import {
   tocPrompt,
 } from "@/utils";
 import { MarkdownView, Notice, TFile } from "obsidian";
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 
 interface CreateEffectOptions {
   custom_temperature?: number;
@@ -49,7 +42,6 @@ interface CreateEffectOptions {
 
 interface ChatProps {
   sharedState: SharedState;
-  settings: CopilotSettings;
   chainManager: ChainManager;
   emitter: EventTarget;
   defaultSaveFolder: string;
@@ -62,7 +54,6 @@ interface ChatProps {
 
 const Chat: React.FC<ChatProps> = ({
   sharedState,
-  settings,
   chainManager,
   emitter,
   defaultSaveFolder,
@@ -81,7 +72,6 @@ const Chat: React.FC<ChatProps> = ({
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES.DEFAULT);
   const [historyIndex, setHistoryIndex] = useState(-1);
-  const [chatIsVisible, setChatIsVisible] = useState(false);
   const [contextNotes, setContextNotes] = useState<TFile[]>([]);
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
@@ -89,10 +79,14 @@ const Chat: React.FC<ChatProps> = ({
   const mention = Mention.getInstance(plugin.settings.plusLicenseKey);
 
   const contextProcessor = ContextProcessor.getInstance();
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const settings = useSettingsValueContext();
 
   useEffect(() => {
-    const handleChatVisibility = (evt: CustomEvent<{ chatIsVisible: boolean }>) => {
-      setChatIsVisible(evt.detail.chatIsVisible);
+    const handleChatVisibility = () => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
     };
     emitter.addEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
 
@@ -340,7 +334,7 @@ ${chatContent}`;
 
   const handleStopGenerating = (reason?: ABORT_REASON) => {
     if (abortController) {
-      if (plugin.settings.debug) {
+      if (settings.debug) {
         console.log(`stopping generation..., reason: ${reason}`);
       }
       abortController.abort(reason);
@@ -611,7 +605,6 @@ ${chatContent}`;
         currentChain={currentChain}
         chatHistory={chatHistory}
         currentAiMessage={currentAiMessage}
-        indexVaultToVectorStore={settings.indexVaultToVectorStore as VAULT_VECTOR_STORE_STRATEGY}
         loading={loading}
         loadingMessage={loadingMessage}
         app={app}
@@ -625,15 +618,14 @@ ${chatContent}`;
       />
       <div className="bottom-container">
         <ChatInput
+          ref={inputRef}
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}
           handleSendMessage={handleSendMessage}
           isGenerating={loading}
           onStopGenerating={() => handleStopGenerating(ABORT_REASON.USER_STOPPED)}
           app={app}
-          settings={settings}
           navigateHistory={navigateHistory}
-          chatIsVisible={chatIsVisible}
           currentModelKey={currentModelKey}
           setCurrentModelKey={setModelKey}
           currentChain={currentChain}
@@ -649,9 +641,6 @@ ${chatContent}`;
           }}
           onSaveAsNote={() => handleSaveAsNote(true)}
           onRefreshVaultContext={refreshVaultContext}
-          vault_qa_strategy={plugin.settings.indexVaultToVectorStore}
-          addMessage={addMessage}
-          vault={app.vault}
           isIndexLoadedPromise={plugin.vectorStoreManager.getIsIndexLoaded()}
           contextNotes={contextNotes}
           setContextNotes={setContextNotes}

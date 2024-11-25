@@ -1,7 +1,6 @@
 import { SetChainOptions } from "@/aiParams";
 import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { CustomError } from "@/error";
-import { CopilotSettings } from "@/settings/SettingsPage";
 import { App, Notice } from "obsidian";
 import React, { useEffect, useState } from "react";
 
@@ -11,6 +10,7 @@ import { TooltipActionButton } from "@/components/ChatComponents/TooltipActionBu
 import { stringToChainType } from "@/utils";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronDown, Download, Puzzle, RefreshCw } from "lucide-react";
+import { useSettingsValueContext } from "@/settings/contexts/SettingsValueContext";
 
 import { TFile } from "obsidian";
 import { ChatContextMenu } from "./ChatContextMenu";
@@ -21,8 +21,6 @@ interface ChatControlsProps {
   onNewChat: (openNote: boolean) => void;
   onSaveAsNote: () => void;
   onRefreshVaultContext: () => void;
-  settings: CopilotSettings;
-  vault_qa_strategy: string;
   isIndexLoadedPromise: Promise<boolean>;
   app: App;
   contextNotes: TFile[];
@@ -40,8 +38,6 @@ const ChatControls: React.FC<ChatControlsProps> = ({
   onNewChat,
   onSaveAsNote,
   onRefreshVaultContext,
-  settings,
-  vault_qa_strategy,
   isIndexLoadedPromise,
   app,
   contextNotes,
@@ -61,6 +57,8 @@ const ChatControls: React.FC<ChatControlsProps> = ({
       setIsIndexLoaded(loaded);
     });
   }, [isIndexLoadedPromise]);
+  const settings = useSettingsValueContext();
+  const indexVaultToVectorStore = settings.indexVaultToVectorStore;
 
   const handleChainChange = async ({ value }: { value: string }) => {
     const newChain = stringToChainType(value);
@@ -86,7 +84,7 @@ const ChatControls: React.FC<ChatControlsProps> = ({
       if (
         (selectedChain === ChainType.VAULT_QA_CHAIN ||
           selectedChain === ChainType.COPILOT_PLUS_CHAIN) &&
-        vault_qa_strategy === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH
+        indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH
       ) {
         await onRefreshVaultContext();
       }
@@ -108,10 +106,6 @@ const ChatControls: React.FC<ChatControlsProps> = ({
 
     handleChainSelection();
   }, [selectedChain]);
-
-  useEffect(() => {
-    setSelectedChain(settings.defaultChainType);
-  }, [settings.defaultChainType]);
 
   // const handleFindSimilarNotes = async () => {
   //   const activeFile = app.workspace.getActiveFile();

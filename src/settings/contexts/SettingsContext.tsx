@@ -8,7 +8,6 @@ interface SettingsContextType {
   updateSettings: (newSettings: Partial<CopilotSettings>) => void;
   saveSettings: () => Promise<void>;
   resetSettings: () => Promise<void>;
-  reloadPlugin: () => Promise<void>;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -51,9 +50,7 @@ export const SettingsProvider: React.FC<{
   }, [plugin, reloadPlugin]);
 
   return (
-    <SettingsContext.Provider
-      value={{ settings, updateSettings, saveSettings, resetSettings, reloadPlugin }}
-    >
+    <SettingsContext.Provider value={{ settings, updateSettings, saveSettings, resetSettings }}>
       {children}
     </SettingsContext.Provider>
   );

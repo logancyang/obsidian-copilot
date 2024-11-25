@@ -53,13 +53,11 @@ export default class CopilotPlugin extends Plugin {
   sharedState: SharedState;
   chainManager: ChainManager;
   brevilabsClient: BrevilabsClient;
-  chatIsVisible = false;
   encryptionService: EncryptionService;
   userMessageHistory: string[] = [];
   vectorStoreManager: VectorStoreManager;
   langChainParams: LangChainParams;
   fileParserManager: FileParserManager;
-  isChatVisible = () => this.chatIsVisible;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -419,21 +417,13 @@ export default class CopilotPlugin extends Plugin {
     this.processText(editor, eventType, eventSubtype);
   }
 
-  processChatIsVisible(chatIsVisible: boolean) {
-    if (this.chatIsVisible === chatIsVisible) {
-      return;
-    }
-
-    this.chatIsVisible = chatIsVisible;
-
+  emitChatIsVisible() {
     const activeCopilotView = this.app.workspace
       .getLeavesOfType(CHAT_VIEWTYPE)
       .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
 
     if (activeCopilotView) {
-      const event = new CustomEvent(EVENT_NAMES.CHAT_IS_VISIBLE, {
-        detail: { chatIsVisible: this.chatIsVisible },
-      });
+      const event = new CustomEvent(EVENT_NAMES.CHAT_IS_VISIBLE);
       activeCopilotView.emitter.dispatchEvent(event);
     }
   }
@@ -444,7 +434,9 @@ export default class CopilotPlugin extends Plugin {
         if (!leaf) {
           return;
         }
-        this.processChatIsVisible(leaf.getViewState().type === CHAT_VIEWTYPE);
+        if (leaf.getViewState().type === CHAT_VIEWTYPE) {
+          this.emitChatIsVisible();
+        }
       })
     );
   }
@@ -487,12 +479,11 @@ export default class CopilotPlugin extends Plugin {
       });
     }
     this.app.workspace.revealLeaf(this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]);
-    this.processChatIsVisible(true);
+    this.emitChatIsVisible();
   }
 
   async deactivateView() {
     this.app.workspace.detachLeavesOfType(CHAT_VIEWTYPE);
-    this.processChatIsVisible(false);
   }
 
   async loadSettings() {

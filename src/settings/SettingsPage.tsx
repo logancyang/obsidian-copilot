@@ -53,6 +53,7 @@ export interface CopilotSettings {
   embeddingRequestsPerSecond: number;
   defaultOpenArea: DEFAULT_OPEN_AREA;
   disableIndexOnMobile: boolean;
+  showSuggestedPrompts: boolean;
 }
 
 export class CopilotSettingTab extends PluginSettingTab {
@@ -97,7 +98,7 @@ export class CopilotSettingTab extends PluginSettingTab {
 
     sections.render(
       <SettingsProvider plugin={this.plugin} reloadPlugin={this.reloadPlugin.bind(this)}>
-        <SettingsMain plugin={this.plugin} reloadPlugin={this.reloadPlugin.bind(this)} />
+        <SettingsMain plugin={this.plugin} />
       </SettingsProvider>
     );
 

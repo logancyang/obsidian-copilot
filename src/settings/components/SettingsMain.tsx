@@ -7,10 +7,7 @@ import CopilotPlusSettings from "./CopilotPlusSettings";
 import GeneralSettings from "./GeneralSettings";
 import QASettings from "./QASettings";
 
-const SettingsMain: React.FC<{ plugin: CopilotPlugin; reloadPlugin: () => Promise<void> }> = ({
-  plugin,
-  reloadPlugin,
-}) => {
+const SettingsMain: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
   const { settings, updateSettings, saveSettings, resetSettings } = useSettingsContext();
 
   return (
