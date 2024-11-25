@@ -646,7 +646,7 @@ export default class CopilotPlugin extends Plugin {
       maxTokens: Number(maxTokens),
       systemMessage: this.settings.userSystemPrompt || DEFAULT_SYSTEM_PROMPT,
       chatContextTurns: Number(contextTurns),
-      chainType: ChainType.LLM_CHAIN, // Set LLM_CHAIN as default ChainType
+      chainType: this.settings.defaultChainType || ChainType.LLM_CHAIN,
       options: { forceNewCreation: true, debug: this.settings.debug } as SetChainOptions,
       openAIProxyBaseUrl: this.settings.openAIProxyBaseUrl,
       openAIEmbeddingProxyBaseUrl: this.settings.openAIEmbeddingProxyBaseUrl,

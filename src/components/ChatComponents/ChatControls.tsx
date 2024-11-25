@@ -7,10 +7,10 @@ import React, { useEffect, useState } from "react";
 import { ChainType } from "@/chainFactory";
 import { AddContextNoteModal } from "@/components/AddContextNoteModal";
 import { TooltipActionButton } from "@/components/ChatComponents/TooltipActionButton";
+import { useSettingsValueContext } from "@/settings/contexts/SettingsValueContext";
 import { stringToChainType } from "@/utils";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronDown, Download, Puzzle, RefreshCw } from "lucide-react";
-import { useSettingsValueContext } from "@/settings/contexts/SettingsValueContext";
 
 import { TFile } from "obsidian";
 import { ChatContextMenu } from "./ChatContextMenu";
@@ -63,15 +63,6 @@ const ChatControls: React.FC<ChatControlsProps> = ({
   const handleChainChange = async ({ value }: { value: string }) => {
     const newChain = stringToChainType(value);
     setSelectedChain(newChain);
-
-    // TODO: Update Copilot Plus Modal to check the license key when ready to ship
-    // if (newChain === ChainType.COPILOT_PLUS_CHAIN) {
-    //   new CopilotPlusModal(app).open();
-    //   // Reset the selected chain to the previous value
-    //   setSelectedChain(currentChain);
-    // } else {
-    //   setCurrentChain(newChain, { debug });
-    // }
   };
 
   useEffect(() => {
@@ -81,24 +72,27 @@ const ChatControls: React.FC<ChatControlsProps> = ({
         return;
       }
 
-      if (
-        (selectedChain === ChainType.VAULT_QA_CHAIN ||
-          selectedChain === ChainType.COPILOT_PLUS_CHAIN) &&
-        indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH
-      ) {
-        await onRefreshVaultContext();
-      }
-
       try {
-        await setCurrentChain(selectedChain, { debug });
+        if (
+          (selectedChain === ChainType.VAULT_QA_CHAIN ||
+            selectedChain === ChainType.COPILOT_PLUS_CHAIN) &&
+          indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH
+        ) {
+          await setCurrentChain(selectedChain, {
+            debug,
+            refreshIndex: true,
+          });
+        } else {
+          await setCurrentChain(selectedChain, { debug });
+        }
       } catch (error) {
         if (error instanceof CustomError) {
-          console.error("Error setting QA chain:", error.msg);
+          console.error("Error setting chain:", error.msg);
           new Notice(`Error: ${error.msg}. Please check your embedding model settings.`);
         } else {
-          console.error("Unexpected error setting QA chain:", error);
+          console.error("Unexpected error setting chain:", error);
           new Notice(
-            "An unexpected error occurred while setting up the QA chain. Please check the console for details."
+            "An unexpected error occurred while setting up the chain. Please check the console for details."
           );
         }
       }

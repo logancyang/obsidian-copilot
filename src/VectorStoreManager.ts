@@ -610,11 +610,11 @@ class VectorStoreManager {
 
       // Save the new, empty database
       await this.saveDB();
-      new Notice("Local vector store cleared successfully.");
-      console.log("Local vector store cleared successfully, new instance created.");
+      new Notice("Local Copilot index cleared successfully.");
+      console.log("Local Copilot index cleared successfully, new instance created.");
     } catch (err) {
-      console.error("Error clearing the local vector store:", err);
-      new Notice("An error occurred while clearing the local vector store.");
+      console.error("Error clearing the local Copilot index:", err);
+      new Notice("An error occurred while clearing the local Copilot index.");
       throw err;
     }
   }
@@ -658,11 +658,11 @@ class VectorStoreManager {
 
       await this.saveDB();
 
-      new Notice("Local vector store garbage collected successfully.");
-      console.log("Local vector store garbage collected successfully.");
+      new Notice("Local Copilot index garbage collected successfully.");
+      console.log("Local Copilot index garbage collected successfully.");
     } catch (err) {
-      console.error("Error garbage collecting the vector store:", err);
-      new Notice("An error occurred while garbage collecting the vector store.");
+      console.error("Error garbage collecting the Copilot index:", err);
+      new Notice("An error occurred while garbage collecting the Copilot index.");
     }
   }
 
@@ -722,6 +722,9 @@ class VectorStoreManager {
       window.clearTimeout(this.debounceTimer);
     }
     this.debounceTimer = window.setTimeout(() => {
+      if (this.settings.debug) {
+        console.log("Copilot Plus: Triggering reindex for file ", file.path);
+      }
       this.reindexFile(file);
       this.debounceTimer = null;
     }, this.debounceDelay);
@@ -736,9 +739,6 @@ class VectorStoreManager {
       !this.excludedFiles.has(file.path) &&
       currentChainType === ChainType.COPILOT_PLUS_CHAIN
     ) {
-      if (this.settings.debug) {
-        console.log("Copilot Plus: Triggering reindex for file ", file.path);
-      }
       this.debouncedReindexFile(file);
     }
   };
