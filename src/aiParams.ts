@@ -60,6 +60,7 @@ export interface SetChainOptions {
   forceNewCreation?: boolean;
   abortController?: AbortController;
   debug?: boolean;
+  refreshIndex?: boolean;
 }
 
 export interface CustomModel {

@@ -31,8 +31,11 @@ class VectorStoreManager {
   private isIndexLoaded = false;
   private excludedFiles: Set<string> = new Set();
 
-  private debounceDelay = 5000; // 5 seconds
+  private debounceDelay = 10000; // 10 seconds
   private debounceTimer: number | null = null;
+  private saveDBTimer: number | null = null;
+  private saveDBDelay = 30000; // Save full DB every 30 seconds
+  private hasUnsavedChanges = false;
 
   constructor(
     app: App,
@@ -76,6 +79,24 @@ class VectorStoreManager {
     });
 
     this.updateExcludedFiles();
+
+    // Initialize periodic save
+    this.initializePeriodicSave();
+  }
+
+  private initializePeriodicSave() {
+    // Clear any existing timer
+    if (this.saveDBTimer !== null) {
+      window.clearInterval(this.saveDBTimer);
+    }
+
+    // Set up periodic save
+    this.saveDBTimer = window.setInterval(() => {
+      if (this.hasUnsavedChanges) {
+        this.saveDB();
+        this.hasUnsavedChanges = false;
+      }
+    }, this.saveDBDelay);
   }
 
   private async performPostInitializationTasks() {
@@ -84,8 +105,8 @@ class VectorStoreManager {
       try {
         await this.indexVaultToVectorStore();
       } catch (err) {
-        console.error("Error indexing vault to vector store on startup:", err);
-        new Notice("An error occurred while indexing vault to vector store.");
+        console.error("Error indexing vault to Copilot index on startup:", err);
+        new Notice("An error occurred while indexing vault to Copilot index.");
       }
     }
   }
@@ -230,12 +251,11 @@ class VectorStoreManager {
       console.log(
         `Schema mismatch detected. Rebuilding database with new vector length: ${currentVectorLength}`
       );
-      await this.clearVectorStore();
+      await this.clearIndex();
     }
   }
 
   private async saveDB() {
-    // Add check at the start of the method
     if (Platform.isMobile && this.settings.disableIndexOnMobile) {
       return;
     }
@@ -249,10 +269,26 @@ class VectorStoreManager {
         schema: this.oramaDb.schema,
         ...rawData,
       };
-      await this.app.vault.adapter.write(this.dbPath, JSON.stringify(dataToSave));
-      console.log(`Saved Orama database to ${this.dbPath}.`);
+
+      // Use requestIdleCallback if available, otherwise use setTimeout
+      const saveOperation = async () => {
+        try {
+          await this.app.vault.adapter.write(this.dbPath, JSON.stringify(dataToSave));
+          if (this.settings.debug) {
+            console.log(`Saved Orama database to ${this.dbPath}.`);
+          }
+        } catch (error) {
+          console.error(`Error saving Orama database to ${this.dbPath}:`, error);
+        }
+      };
+
+      if (typeof window.requestIdleCallback !== "undefined") {
+        window.requestIdleCallback(() => saveOperation(), { timeout: 2000 });
+      } else {
+        setTimeout(saveOperation, 0);
+      }
     } catch (error) {
-      console.error(`Error saving Orama database to ${this.dbPath}:`, error);
+      console.error(`Error preparing Orama database save:`, error);
     }
   }
 
@@ -384,8 +420,8 @@ class VectorStoreManager {
 
       if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
         // Model has changed, notify user and rebuild DB
-        new Notice("New embedding model detected. Rebuilding vector store from scratch.");
-        console.log("Detected change in embedding model. Rebuilding vector store from scratch.");
+        new Notice("New embedding model detected. Rebuilding Copilot index from scratch.");
+        console.log("Detected change in embedding model. Rebuilding Copilot index from scratch.");
 
         // Create new DB with new model
         this.oramaDb = await this.createNewDb();
@@ -548,12 +584,12 @@ class VectorStoreManager {
       return files.length;
     } catch (error) {
       if (error instanceof CustomError) {
-        console.error("Error indexing vault to vector store:", error.msg);
+        console.error("Error indexing vault to Copilot index:", error.msg);
         new Notice(
           `Error indexing vault: ${error.msg}. Please check your embedding model settings.`
         );
       } else {
-        console.error("Unexpected error indexing vault to vector store:", error);
+        console.error("Unexpected error indexing vault to Copilot index:", error);
         new Notice(
           "An unexpected error occurred while indexing the vault. Please check the console for details."
         );
@@ -562,7 +598,7 @@ class VectorStoreManager {
     }
   }
 
-  public async clearVectorStore(): Promise<void> {
+  public async clearIndex(): Promise<void> {
     try {
       // Create a new, empty database instance with fresh schema
       this.oramaDb = await this.createNewDb();
@@ -574,11 +610,11 @@ class VectorStoreManager {
 
       // Save the new, empty database
       await this.saveDB();
-      new Notice("Local vector store cleared successfully.");
-      console.log("Local vector store cleared successfully, new instance created.");
+      new Notice("Local Copilot index cleared successfully.");
+      console.log("Local Copilot index cleared successfully, new instance created.");
     } catch (err) {
-      console.error("Error clearing the local vector store:", err);
-      new Notice("An error occurred while clearing the local vector store.");
+      console.error("Error clearing the local Copilot index:", err);
+      new Notice("An error occurred while clearing the local Copilot index.");
       throw err;
     }
   }
@@ -622,11 +658,11 @@ class VectorStoreManager {
 
       await this.saveDB();
 
-      new Notice("Local vector store garbage collected successfully.");
-      console.log("Local vector store garbage collected successfully.");
+      new Notice("Local Copilot index garbage collected successfully.");
+      console.log("Local Copilot index garbage collected successfully.");
     } catch (err) {
-      console.error("Error garbage collecting the vector store:", err);
-      new Notice("An error occurred while garbage collecting the vector store.");
+      console.error("Error garbage collecting the Copilot index:", err);
+      new Notice("An error occurred while garbage collecting the Copilot index.");
     }
   }
 
@@ -686,6 +722,9 @@ class VectorStoreManager {
       window.clearTimeout(this.debounceTimer);
     }
     this.debounceTimer = window.setTimeout(() => {
+      if (this.settings.debug) {
+        console.log("Copilot Plus: Triggering reindex for file ", file.path);
+      }
       this.reindexFile(file);
       this.debounceTimer = null;
     }, this.debounceDelay);
@@ -700,10 +739,6 @@ class VectorStoreManager {
       !this.excludedFiles.has(file.path) &&
       currentChainType === ChainType.COPILOT_PLUS_CHAIN
     ) {
-      if (this.settings.debug) {
-        console.log("Copilot Plus: Triggering reindex for file ", file.path);
-      }
-      await this.removeDocs(file.path);
       this.debouncedReindexFile(file);
     }
   };
@@ -721,19 +756,18 @@ class VectorStoreManager {
   private async reindexFile(file: TFile) {
     try {
       const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
-      if (!embeddingInstance) {
-        throw new CustomError("Embedding instance not found.");
+      if (!embeddingInstance || !this.oramaDb) {
+        return;
       }
 
-      const db = this.oramaDb;
-      if (!db) {
-        throw new CustomError("Copilot index is not loaded.");
-      }
+      await this.removeDocs(file.path);
 
       // Check for model change
-      const modelChanged = await this.checkAndHandleEmbeddingModelChange(db, embeddingInstance);
+      const modelChanged = await this.checkAndHandleEmbeddingModelChange(
+        this.oramaDb,
+        embeddingInstance
+      );
       if (modelChanged) {
-        // Trigger full reindex and exit
         await this.indexVaultToVectorStore(true);
         return;
       }
@@ -754,14 +788,51 @@ class VectorStoreManager {
         metadata: fileCache?.frontmatter ?? {},
       };
 
-      await VectorDBManager.indexFile(db, embeddingInstance, fileToSave);
-      await this.saveDB();
+      await VectorDBManager.indexFile(this.oramaDb, embeddingInstance, fileToSave);
+      // Mark that we have unsaved changes instead of saving immediately
+      this.hasUnsavedChanges = true;
 
       if (this.settings.debug) {
         console.log(`Reindexed file: ${file.path}`);
       }
     } catch (error) {
       console.error(`Error reindexing file ${file.path}:`, error);
+    }
+  }
+
+  // Clean up on unload
+  public onunload() {
+    if (this.saveDBTimer !== null) {
+      window.clearInterval(this.saveDBTimer);
+    }
+    if (this.hasUnsavedChanges) {
+      this.saveDB();
+    }
+  }
+
+  public async getIndexedFiles(): Promise<string[]> {
+    if (!this.oramaDb) {
+      throw new CustomError("Orama database not found.");
+    }
+
+    try {
+      // Search all documents and get unique file paths
+      const result = await search(this.oramaDb, {
+        term: "",
+        limit: 10000, // Adjust this limit based on your needs
+      });
+
+      // Use a Set to get unique file paths since multiple chunks can belong to the same file
+      const uniquePaths = new Set<string>();
+      result.hits.forEach((hit) => {
+        uniquePaths.add(hit.document.path);
+      });
+
+      // Convert Set to sorted array
+      return Array.from(uniquePaths).sort();
+    } catch (err) {
+      console.error("Error getting indexed files:", err);
+      throw new CustomError("Failed to retrieve indexed files.");
     }
   }
 }

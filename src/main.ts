@@ -8,6 +8,7 @@ import { registerBuiltInCommands } from "@/commands";
 import { AddPromptModal } from "@/components/AddPromptModal";
 import { AdhocPromptModal } from "@/components/AdhocPromptModal";
 import CopilotView from "@/components/CopilotView";
+import { IndexedFilesModal } from "@/components/IndexedFilesModal";
 import { ListPromptModal } from "@/components/ListPromptModal";
 import { LoadChatHistoryModal } from "@/components/LoadChatHistoryModal";
 import { OramaSearchModal } from "@/components/OramaSearchModal";
@@ -280,50 +281,50 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "clear-local-vector-store",
-      name: "Clear local vector store",
+      id: "clear-local-copilot-index",
+      name: "Clear Copilot index",
       callback: async () => {
-        await this.vectorStoreManager.clearVectorStore();
+        await this.vectorStoreManager.clearIndex();
       },
     });
 
     this.addCommand({
-      id: "garbage-collect-vector-store",
-      name: "Garbage collect vector store (remove files that no longer exist in vault)",
+      id: "garbage-collect-copilot-index",
+      name: "Garbage collect Copilot index (remove files that no longer exist in vault)",
       callback: async () => {
         await this.vectorStoreManager.garbageCollectVectorStore();
       },
     });
 
     this.addCommand({
-      id: "index-vault-to-vector-store",
+      id: "index-vault-to-copilot-index",
       name: "Index (refresh) vault for QA",
       callback: async () => {
         try {
           const indexedFileCount = await this.vectorStoreManager.indexVaultToVectorStore();
 
-          new Notice(`${indexedFileCount} vault files indexed to vector store.`);
-          console.log(`${indexedFileCount} vault files indexed to vector store.`);
+          new Notice(`${indexedFileCount} vault files indexed to Copilot index.`);
+          console.log(`${indexedFileCount} vault files indexed to Copilot index.`);
         } catch (err) {
-          console.error("Error indexing vault to vector store:", err);
-          new Notice("An error occurred while indexing vault to vector store.");
+          console.error("Error indexing vault to Copilot index:", err);
+          new Notice("An error occurred while indexing vault to Copilot index.");
         }
       },
     });
 
     this.addCommand({
-      id: "force-reindex-vault-to-vector-store",
+      id: "force-reindex-vault-to-copilot-index",
       name: "Force re-index vault for QA",
       callback: async () => {
         try {
-          await this.vectorStoreManager.clearVectorStore();
+          await this.vectorStoreManager.clearIndex();
           const indexedFileCount = await this.vectorStoreManager.indexVaultToVectorStore(true);
 
-          new Notice(`${indexedFileCount} vault files re-indexed to vector store.`);
-          console.log(`${indexedFileCount} vault files re-indexed to vector store.`);
+          new Notice(`${indexedFileCount} vault files re-indexed to Copilot index.`);
+          console.log(`${indexedFileCount} vault files re-indexed to Copilot index.`);
         } catch (err) {
-          console.error("Error re-indexing vault to vector store:", err);
-          new Notice("An error occurred while re-indexing vault to vector store.");
+          console.error("Error re-indexing vault to Copilot index:", err);
+          new Notice("An error occurred while re-indexing vault to Copilot index.");
         }
       },
     });
@@ -360,18 +361,45 @@ export default class CopilotPlugin extends Plugin {
       },
     });
 
-    // Index vault to vector store on startup and after loading all commands
+    this.addCommand({
+      id: "list-indexed-files",
+      name: "List all indexed files",
+      callback: async () => {
+        try {
+          const indexedFiles = await this.vectorStoreManager.getIndexedFiles();
+          if (indexedFiles.length === 0) {
+            new Notice("No indexed files found.");
+            return;
+          }
+          new IndexedFilesModal(this.app, indexedFiles).open();
+        } catch (error) {
+          console.error("Error listing indexed files:", error);
+          new Notice("Failed to list indexed files.");
+        }
+      },
+    });
+
+    // Index vault to Copilot index on startup and after loading all commands
     // This can take a while, so we don't want to block the startup process
     if (this.settings.indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP) {
       try {
         await this.vectorStoreManager.indexVaultToVectorStore();
       } catch (err) {
-        console.error("Error saving vault to vector store:", err);
-        new Notice("An error occurred while saving vault to vector store.");
+        console.error("Error saving vault to Copilot index:", err);
+        new Notice("An error occurred while saving vault to Copilot index.");
       }
     }
 
     this.registerEvent(this.app.workspace.on("editor-menu", this.handleContextMenu));
+  }
+
+  async onunload() {
+    // Clean up VectorStoreManager
+    if (this.vectorStoreManager) {
+      this.vectorStoreManager.onunload();
+    }
+
+    console.log("Copilot plugin unloaded");
   }
 
   updateUserMessageHistory(newMessage: string) {
@@ -618,7 +646,7 @@ export default class CopilotPlugin extends Plugin {
       maxTokens: Number(maxTokens),
       systemMessage: this.settings.userSystemPrompt || DEFAULT_SYSTEM_PROMPT,
       chatContextTurns: Number(contextTurns),
-      chainType: ChainType.LLM_CHAIN, // Set LLM_CHAIN as default ChainType
+      chainType: this.settings.defaultChainType || ChainType.LLM_CHAIN,
       options: { forceNewCreation: true, debug: this.settings.debug } as SetChainOptions,
       openAIProxyBaseUrl: this.settings.openAIProxyBaseUrl,
       openAIEmbeddingProxyBaseUrl: this.settings.openAIEmbeddingProxyBaseUrl,

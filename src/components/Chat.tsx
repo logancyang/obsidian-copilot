@@ -395,11 +395,19 @@ ${chatContent}`;
 
     // Check if the message has actually changed
     if (oldMessage === newMessage) {
-      return; // Exit the function if the message hasn't changed
+      return;
     }
 
     const newChatHistory = [...chatHistory];
-    newChatHistory[messageIndex].message = newMessage;
+
+    // Find and update all related messages (both visible and hidden)
+    for (let i = messageIndex; i < newChatHistory.length; i++) {
+      if (newChatHistory[i].originalMessage === oldMessage) {
+        newChatHistory[i].message = newMessage;
+        newChatHistory[i].originalMessage = newMessage;
+      }
+    }
+
     clearMessages();
     newChatHistory.forEach(addMessage);
 

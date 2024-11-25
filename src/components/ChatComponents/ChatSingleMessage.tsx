@@ -90,6 +90,10 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     }
   }, [isEditing]);
 
+  useEffect(() => {
+    setEditedMessage(message.message);
+  }, [message.message]);
+
   const adjustTextareaHeight = (element: HTMLTextAreaElement) => {
     element.style.height = "auto";
     element.style.height = `${element.scrollHeight}px`;
@@ -144,7 +148,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                       className="edit-textarea"
                     />
                   ) : message.sender === USER_SENDER ? (
-                    <span>{item.text}</span>
+                    <span>{message.message}</span>
                   ) : (
                     <div ref={contentRef}></div>
                   )}

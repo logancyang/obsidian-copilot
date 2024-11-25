@@ -167,18 +167,18 @@ export default class ChainManager {
 
   async setChain(chainType: ChainType, options: SetChainOptions = {}): Promise<void> {
     if (!this.chatModelManager.validateChatModel(this.chatModelManager.getChatModel())) {
-      // No need to throw error and trigger multiple Notices to user
       console.error("setChain failed: No chat model set.");
       return;
     }
+
     this.validateChainType(chainType);
-    // MUST set embeddingsManager when switching to QA mode
-    if (chainType === ChainType.VAULT_QA_CHAIN) {
-      this.embeddingsManager = EmbeddingsManager.getInstance(
-        () => this.getLangChainParams(),
-        this.encryptionService,
-        this.settings.activeEmbeddingModels
-      );
+
+    // Handle index refresh if needed
+    if (
+      options.refreshIndex &&
+      (chainType === ChainType.VAULT_QA_CHAIN || chainType === ChainType.COPILOT_PLUS_CHAIN)
+    ) {
+      await this.vectorStoreManager.indexVaultToVectorStore();
     }
 
     // Get chatModel, memory, prompt, and embeddingAPI from respective managers
