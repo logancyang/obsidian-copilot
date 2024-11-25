@@ -251,7 +251,7 @@ class VectorStoreManager {
       console.log(
         `Schema mismatch detected. Rebuilding database with new vector length: ${currentVectorLength}`
       );
-      await this.clearVectorStore();
+      await this.clearIndex();
     }
   }
 
@@ -598,7 +598,7 @@ class VectorStoreManager {
     }
   }
 
-  public async clearVectorStore(): Promise<void> {
+  public async clearIndex(): Promise<void> {
     try {
       // Create a new, empty database instance with fresh schema
       this.oramaDb = await this.createNewDb();
@@ -807,6 +807,32 @@ class VectorStoreManager {
     }
     if (this.hasUnsavedChanges) {
       this.saveDB();
+    }
+  }
+
+  public async getIndexedFiles(): Promise<string[]> {
+    if (!this.oramaDb) {
+      throw new CustomError("Orama database not found.");
+    }
+
+    try {
+      // Search all documents and get unique file paths
+      const result = await search(this.oramaDb, {
+        term: "",
+        limit: 10000, // Adjust this limit based on your needs
+      });
+
+      // Use a Set to get unique file paths since multiple chunks can belong to the same file
+      const uniquePaths = new Set<string>();
+      result.hits.forEach((hit) => {
+        uniquePaths.add(hit.document.path);
+      });
+
+      // Convert Set to sorted array
+      return Array.from(uniquePaths).sort();
+    } catch (err) {
+      console.error("Error getting indexed files:", err);
+      throw new CustomError("Failed to retrieve indexed files.");
     }
   }
 }

@@ -8,6 +8,7 @@ import { registerBuiltInCommands } from "@/commands";
 import { AddPromptModal } from "@/components/AddPromptModal";
 import { AdhocPromptModal } from "@/components/AdhocPromptModal";
 import CopilotView from "@/components/CopilotView";
+import { IndexedFilesModal } from "@/components/IndexedFilesModal";
 import { ListPromptModal } from "@/components/ListPromptModal";
 import { LoadChatHistoryModal } from "@/components/LoadChatHistoryModal";
 import { OramaSearchModal } from "@/components/OramaSearchModal";
@@ -281,9 +282,9 @@ export default class CopilotPlugin extends Plugin {
 
     this.addCommand({
       id: "clear-local-vector-store",
-      name: "Clear local vector store",
+      name: "Clear Copilot index",
       callback: async () => {
-        await this.vectorStoreManager.clearVectorStore();
+        await this.vectorStoreManager.clearIndex();
       },
     });
 
@@ -316,7 +317,7 @@ export default class CopilotPlugin extends Plugin {
       name: "Force re-index vault for QA",
       callback: async () => {
         try {
-          await this.vectorStoreManager.clearVectorStore();
+          await this.vectorStoreManager.clearIndex();
           const indexedFileCount = await this.vectorStoreManager.indexVaultToVectorStore(true);
 
           new Notice(`${indexedFileCount} vault files re-indexed to vector store.`);
@@ -357,6 +358,24 @@ export default class CopilotPlugin extends Plugin {
       name: "CopilotDB Search",
       callback: () => {
         new OramaSearchModal(this.app, this).open();
+      },
+    });
+
+    this.addCommand({
+      id: "list-indexed-files",
+      name: "List all indexed files",
+      callback: async () => {
+        try {
+          const indexedFiles = await this.vectorStoreManager.getIndexedFiles();
+          if (indexedFiles.length === 0) {
+            new Notice("No indexed files found.");
+            return;
+          }
+          new IndexedFilesModal(this.app, indexedFiles).open();
+        } catch (error) {
+          console.error("Error listing indexed files:", error);
+          new Notice("Failed to list indexed files.");
+        }
       },
     });
 
