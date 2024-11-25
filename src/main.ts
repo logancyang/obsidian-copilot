@@ -281,7 +281,7 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "clear-local-vector-store",
+      id: "clear-local-copilot-index",
       name: "Clear Copilot index",
       callback: async () => {
         await this.vectorStoreManager.clearIndex();
@@ -289,42 +289,42 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "garbage-collect-vector-store",
-      name: "Garbage collect vector store (remove files that no longer exist in vault)",
+      id: "garbage-collect-copilot-index",
+      name: "Garbage collect Copilot index (remove files that no longer exist in vault)",
       callback: async () => {
         await this.vectorStoreManager.garbageCollectVectorStore();
       },
     });
 
     this.addCommand({
-      id: "index-vault-to-vector-store",
+      id: "index-vault-to-copilot-index",
       name: "Index (refresh) vault for QA",
       callback: async () => {
         try {
           const indexedFileCount = await this.vectorStoreManager.indexVaultToVectorStore();
 
-          new Notice(`${indexedFileCount} vault files indexed to vector store.`);
-          console.log(`${indexedFileCount} vault files indexed to vector store.`);
+          new Notice(`${indexedFileCount} vault files indexed to Copilot index.`);
+          console.log(`${indexedFileCount} vault files indexed to Copilot index.`);
         } catch (err) {
-          console.error("Error indexing vault to vector store:", err);
-          new Notice("An error occurred while indexing vault to vector store.");
+          console.error("Error indexing vault to Copilot index:", err);
+          new Notice("An error occurred while indexing vault to Copilot index.");
         }
       },
     });
 
     this.addCommand({
-      id: "force-reindex-vault-to-vector-store",
+      id: "force-reindex-vault-to-copilot-index",
       name: "Force re-index vault for QA",
       callback: async () => {
         try {
           await this.vectorStoreManager.clearIndex();
           const indexedFileCount = await this.vectorStoreManager.indexVaultToVectorStore(true);
 
-          new Notice(`${indexedFileCount} vault files re-indexed to vector store.`);
-          console.log(`${indexedFileCount} vault files re-indexed to vector store.`);
+          new Notice(`${indexedFileCount} vault files re-indexed to Copilot index.`);
+          console.log(`${indexedFileCount} vault files re-indexed to Copilot index.`);
         } catch (err) {
-          console.error("Error re-indexing vault to vector store:", err);
-          new Notice("An error occurred while re-indexing vault to vector store.");
+          console.error("Error re-indexing vault to Copilot index:", err);
+          new Notice("An error occurred while re-indexing vault to Copilot index.");
         }
       },
     });
@@ -379,14 +379,14 @@ export default class CopilotPlugin extends Plugin {
       },
     });
 
-    // Index vault to vector store on startup and after loading all commands
+    // Index vault to Copilot index on startup and after loading all commands
     // This can take a while, so we don't want to block the startup process
     if (this.settings.indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP) {
       try {
         await this.vectorStoreManager.indexVaultToVectorStore();
       } catch (err) {
-        console.error("Error saving vault to vector store:", err);
-        new Notice("An error occurred while saving vault to vector store.");
+        console.error("Error saving vault to Copilot index:", err);
+        new Notice("An error occurred while saving vault to Copilot index.");
       }
     }
 

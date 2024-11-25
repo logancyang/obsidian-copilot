@@ -93,7 +93,7 @@ const QASettings: React.FC<QASettingsProps> = ({
       />
       <br />
       <p>
-        <strong>NEVER</strong>: Notes are never indexed to the vector store unless users run the
+        <strong>NEVER</strong>: Notes are never indexed to the Copilot index unless users run the
         command <em>Index vault for QA</em> explicitly, or hit the <em>Refresh Index</em> button.
         <br />
         <br />
@@ -106,7 +106,7 @@ const QASettings: React.FC<QASettingsProps> = ({
         <br />
         By "refreshed", it means the vault index is not rebuilt from scratch but rather updated
         incrementally with new/modified notes since the last index. If you need a complete rebuild,
-        run the commands "Clear vector store" and "Force re-index for QA" manually. This helps
+        run the commands "Clear Copilot index" and "Force re-index for QA" manually. This helps
         reduce costs when using paid embedding models.
         <br />
         <br />
@@ -151,7 +151,7 @@ const QASettings: React.FC<QASettingsProps> = ({
       />
       <ToggleComponent
         name="Disable index loading on mobile"
-        description="When enabled, vector store index won't be loaded on mobile devices to save resources. Only chat mode will be available. Any existing index from desktop sync will be preserved. Uncheck to enable QA modes on mobile."
+        description="When enabled, Copilot index won't be loaded on mobile devices to save resources. Only chat mode will be available. Any existing index from desktop sync will be preserved. Uncheck to enable QA modes on mobile."
         value={disableIndexOnMobile}
         onChange={setDisableIndexOnMobile}
       />

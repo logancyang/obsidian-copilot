@@ -127,7 +127,7 @@ const indexTool = tool(
   },
   {
     name: "indexVault",
-    description: "Index the vault to the vector store",
+    description: "Index the vault to the Copilot index",
     schema: z.object({
       vectorStoreManager: z.any().describe("The VectorStoreManager instance"),
     }),

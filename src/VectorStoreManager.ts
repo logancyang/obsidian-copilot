@@ -105,8 +105,8 @@ class VectorStoreManager {
       try {
         await this.indexVaultToVectorStore();
       } catch (err) {
-        console.error("Error indexing vault to vector store on startup:", err);
-        new Notice("An error occurred while indexing vault to vector store.");
+        console.error("Error indexing vault to Copilot index on startup:", err);
+        new Notice("An error occurred while indexing vault to Copilot index.");
       }
     }
   }
@@ -420,8 +420,8 @@ class VectorStoreManager {
 
       if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
         // Model has changed, notify user and rebuild DB
-        new Notice("New embedding model detected. Rebuilding vector store from scratch.");
-        console.log("Detected change in embedding model. Rebuilding vector store from scratch.");
+        new Notice("New embedding model detected. Rebuilding Copilot index from scratch.");
+        console.log("Detected change in embedding model. Rebuilding Copilot index from scratch.");
 
         // Create new DB with new model
         this.oramaDb = await this.createNewDb();
@@ -584,12 +584,12 @@ class VectorStoreManager {
       return files.length;
     } catch (error) {
       if (error instanceof CustomError) {
-        console.error("Error indexing vault to vector store:", error.msg);
+        console.error("Error indexing vault to Copilot index:", error.msg);
         new Notice(
           `Error indexing vault: ${error.msg}. Please check your embedding model settings.`
         );
       } else {
-        console.error("Unexpected error indexing vault to vector store:", error);
+        console.error("Unexpected error indexing vault to Copilot index:", error);
         new Notice(
           "An unexpected error occurred while indexing the vault. Please check the console for details."
         );
