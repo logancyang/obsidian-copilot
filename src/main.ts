@@ -128,7 +128,7 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.addRibbonIcon("message-square", "Copilot Chat", (evt: MouseEvent) => {
-      this.toggleView();
+      this.activateView();
     });
 
     registerBuiltInCommands(this);
@@ -494,19 +494,21 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async activateView(): Promise<void> {
-    this.app.workspace.detachLeavesOfType(CHAT_VIEWTYPE);
-    if (this.settings.defaultOpenArea === DEFAULT_OPEN_AREA.VIEW) {
-      await this.app.workspace.getRightLeaf(false).setViewState({
-        type: CHAT_VIEWTYPE,
-        active: true,
-      });
-    } else {
-      await this.app.workspace.getLeaf(true).setViewState({
-        type: CHAT_VIEWTYPE,
-        active: true,
-      });
+    const leaves = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE);
+    if (leaves.length === 0) {
+      if (this.settings.defaultOpenArea === DEFAULT_OPEN_AREA.VIEW) {
+        await this.app.workspace.getRightLeaf(false).setViewState({
+          type: CHAT_VIEWTYPE,
+          active: true,
+        });
+      } else {
+        await this.app.workspace.getLeaf(true).setViewState({
+          type: CHAT_VIEWTYPE,
+          active: true,
+        });
+      }
     }
-    this.app.workspace.revealLeaf(this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]);
+    this.app.workspace.revealLeaf(leaves[0]);
     this.emitChatIsVisible();
   }
 
