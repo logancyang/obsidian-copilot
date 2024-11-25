@@ -6,6 +6,7 @@ import { ContextProcessor } from "@/contextProcessor";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
+import { useSettingsValueContext } from "@/settings/contexts/SettingsValueContext";
 import { getToolDescription } from "@/tools/toolManager";
 import { extractNoteTitles } from "@/utils";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -15,7 +16,6 @@ import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } f
 import { AddImageModal } from "../AddImageModal";
 import ChatControls from "./ChatControls";
 import { TooltipActionButton } from "./TooltipActionButton";
-import { useSettingsValueContext } from "@/settings/contexts/SettingsValueContext";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -334,11 +334,16 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
       setContextNotes((prev) =>
         prev.filter((note) => {
+          // Check if this note was added manually via the "+" button
+          const wasAddedManually = (note as any).wasAddedManually === true;
+          // If it was added manually, always keep it
+          if (wasAddedManually) return true;
+
           // Check if this note was added by typing [[note]] in the input
           // as opposed to being added via the "Add Note to Context" button
           const wasAddedViaReference = (note as any).wasAddedViaReference === true;
 
-          // Special handling for the active note (currently open in editor)
+          // Special handling for the active note
           if (note.path === activeNote?.path) {
             if (wasAddedViaReference) {
               // Case 1: Active note was added by typing [[note]]
