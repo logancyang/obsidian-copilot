@@ -225,19 +225,19 @@ class CopilotPlusChainRunner extends BaseChainRunner {
 
     // Add system message if available
     const systemMessage = this.chainManager.getLangChainParams().systemMessage;
-    if (systemMessage) {
-      messages.push({
-        role: "system",
-        content: `${systemMessage}\nIMPORTANT: Maintain consistency with previous responses in the conversation. If you've provided information about a person or topic before, use that same information in follow-up questions.`,
-      });
+    let fullSystemMessage = systemMessage || "";
+
+    // Add chat history context to system message if exists
+    if (chatHistory.length > 0) {
+      fullSystemMessage +=
+        "\n\nThe following is the relevant conversation history. Use this context to maintain consistency in your responses:";
     }
 
-    // Add chat history with explicit instruction to maintain context
-    if (chatHistory.length > 0) {
+    // Add the combined system message
+    if (fullSystemMessage) {
       messages.push({
         role: "system",
-        content:
-          "The following is the relevant conversation history. Use this context to maintain consistency in your responses:",
+        content: `${fullSystemMessage}\nIMPORTANT: Maintain consistency with previous responses in the conversation. If you've provided information about a person or topic before, use that same information in follow-up questions.`,
       });
     }
 
