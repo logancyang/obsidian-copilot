@@ -35,8 +35,8 @@ Check out the demo video below for the first sneak peak of what Copilot Plus can
 ## 🛠️ Features
 
 - Engage with numerous LLMs seamlessly within Obsidian via the Copilot Chat window.
-- Access GPT-4 or Claude 3 without purchasing ChatGPT Plus or Claude Pro—simply use your own API key (stored locally) and pay as you go for the best value.
-- Choose from a variety of models, including OpenAI, Azure, Google, Claude, OpenRouter, Groq, Cohere, or **any third-party models with OpenAI-compatible APIs** via Custom Model.
+- Access OpenAI or Anthropic models without purchasing ChatGPT Plus or Claude Pro—simply use your own API key (stored locally) and pay as you go for the best value.
+- Choose from a variety of models, including OpenAI, Azure, Google, Anthropic, OpenRouter, Groq, Cohere, or **any third-party models with OpenAI-compatible APIs** via Custom Model.
 - Customize parameters like LLM temperature, max tokens, and conversation context to suit your needs (**be mindful of API costs**).
 - Utilize local models powered by LM Studio and Ollama.
 - Easily copy, edit, or insert any message to your note with a single click.
@@ -113,7 +113,7 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 - "**New Chat**" clears all previous chat history. Again, please use "**Save as Note**" if you would like to save the chat.
 - You can set a very long context in the setting "**Conversation turns in context**" if needed.
 
-#### 📣 Again, please always be mindful of the API cost if you use GPT-4 with a long context!
+#### 📣 Again, please always be mindful of the API cost if you use expensive models with a long context!
 
 ## 🤔 FAQ (please read before submitting an issue)
 
@@ -160,13 +160,6 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 </details>
 
 When opening an issue, please follow the issue template and include relevant console logs. You can go to Copilot's settings and turn on "Debug mode" at the bottom for more console messages. On Mac, you can open the console by pressing `Cmd+Opt+I`. On Windows, you can open the console by pressing `Ctrl+Shift+I`.
-
-## 📝 Planned features (feedback welcome)
-
-- Support **embedded PDFs** as context. Index PDFs in the vault locally same as notes.
-- Image support in chat.
-- User profile with different system prompts and model parameters for different use cases e.g. work, personal, creative writing, etc.
-- Interact with a **powerful AI agent** that knows your vault that has access to various tools like web search, note search, youtube video to markdown, etc. Explore, brainstorm and research like never before!
 
 ## 🙏 Thank You
 
