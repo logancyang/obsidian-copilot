@@ -31,8 +31,11 @@ class VectorStoreManager {
   private isIndexLoaded = false;
   private excludedFiles: Set<string> = new Set();
 
-  private debounceDelay = 5000; // 5 seconds
+  private debounceDelay = 10000; // 10 seconds
   private debounceTimer: number | null = null;
+  private saveDBTimer: number | null = null;
+  private saveDBDelay = 30000; // Save full DB every 30 seconds
+  private hasUnsavedChanges = false;
 
   constructor(
     app: App,
@@ -76,6 +79,24 @@ class VectorStoreManager {
     });
 
     this.updateExcludedFiles();
+
+    // Initialize periodic save
+    this.initializePeriodicSave();
+  }
+
+  private initializePeriodicSave() {
+    // Clear any existing timer
+    if (this.saveDBTimer !== null) {
+      window.clearInterval(this.saveDBTimer);
+    }
+
+    // Set up periodic save
+    this.saveDBTimer = window.setInterval(() => {
+      if (this.hasUnsavedChanges) {
+        this.saveDB();
+        this.hasUnsavedChanges = false;
+      }
+    }, this.saveDBDelay);
   }
 
   private async performPostInitializationTasks() {
@@ -235,7 +256,6 @@ class VectorStoreManager {
   }
 
   private async saveDB() {
-    // Add check at the start of the method
     if (Platform.isMobile && this.settings.disableIndexOnMobile) {
       return;
     }
@@ -249,10 +269,26 @@ class VectorStoreManager {
         schema: this.oramaDb.schema,
         ...rawData,
       };
-      await this.app.vault.adapter.write(this.dbPath, JSON.stringify(dataToSave));
-      console.log(`Saved Orama database to ${this.dbPath}.`);
+
+      // Use requestIdleCallback if available, otherwise use setTimeout
+      const saveOperation = async () => {
+        try {
+          await this.app.vault.adapter.write(this.dbPath, JSON.stringify(dataToSave));
+          if (this.settings.debug) {
+            console.log(`Saved Orama database to ${this.dbPath}.`);
+          }
+        } catch (error) {
+          console.error(`Error saving Orama database to ${this.dbPath}:`, error);
+        }
+      };
+
+      if (typeof window.requestIdleCallback !== "undefined") {
+        window.requestIdleCallback(() => saveOperation(), { timeout: 2000 });
+      } else {
+        setTimeout(saveOperation, 0);
+      }
     } catch (error) {
-      console.error(`Error saving Orama database to ${this.dbPath}:`, error);
+      console.error(`Error preparing Orama database save:`, error);
     }
   }
 
@@ -703,7 +739,6 @@ class VectorStoreManager {
       if (this.settings.debug) {
         console.log("Copilot Plus: Triggering reindex for file ", file.path);
       }
-      await this.removeDocs(file.path);
       this.debouncedReindexFile(file);
     }
   };
@@ -721,19 +756,18 @@ class VectorStoreManager {
   private async reindexFile(file: TFile) {
     try {
       const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
-      if (!embeddingInstance) {
-        throw new CustomError("Embedding instance not found.");
+      if (!embeddingInstance || !this.oramaDb) {
+        return;
       }
 
-      const db = this.oramaDb;
-      if (!db) {
-        throw new CustomError("Copilot index is not loaded.");
-      }
+      await this.removeDocs(file.path);
 
       // Check for model change
-      const modelChanged = await this.checkAndHandleEmbeddingModelChange(db, embeddingInstance);
+      const modelChanged = await this.checkAndHandleEmbeddingModelChange(
+        this.oramaDb,
+        embeddingInstance
+      );
       if (modelChanged) {
-        // Trigger full reindex and exit
         await this.indexVaultToVectorStore(true);
         return;
       }
@@ -754,14 +788,25 @@ class VectorStoreManager {
         metadata: fileCache?.frontmatter ?? {},
       };
 
-      await VectorDBManager.indexFile(db, embeddingInstance, fileToSave);
-      await this.saveDB();
+      await VectorDBManager.indexFile(this.oramaDb, embeddingInstance, fileToSave);
+      // Mark that we have unsaved changes instead of saving immediately
+      this.hasUnsavedChanges = true;
 
       if (this.settings.debug) {
         console.log(`Reindexed file: ${file.path}`);
       }
     } catch (error) {
       console.error(`Error reindexing file ${file.path}:`, error);
+    }
+  }
+
+  // Clean up on unload
+  public onunload() {
+    if (this.saveDBTimer !== null) {
+      window.clearInterval(this.saveDBTimer);
+    }
+    if (this.hasUnsavedChanges) {
+      this.saveDB();
     }
   }
 }

@@ -374,6 +374,15 @@ export default class CopilotPlugin extends Plugin {
     this.registerEvent(this.app.workspace.on("editor-menu", this.handleContextMenu));
   }
 
+  async onunload() {
+    // Clean up VectorStoreManager
+    if (this.vectorStoreManager) {
+      this.vectorStoreManager.onunload();
+    }
+
+    console.log("Copilot plugin unloaded");
+  }
+
   updateUserMessageHistory(newMessage: string) {
     this.userMessageHistory = [...this.userMessageHistory, newMessage];
   }
