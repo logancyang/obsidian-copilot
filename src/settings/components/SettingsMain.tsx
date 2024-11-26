@@ -34,6 +34,7 @@ const SettingsMain: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
         {...settings}
         setOpenAIApiKey={(value) => updateSettings({ openAIApiKey: value })}
         setOpenAIOrgId={(value) => updateSettings({ openAIOrgId: value })}
+        setMistralApiKey={(value) => updateSettings({ mistralApiKey: value })}
         setGoogleApiKey={(value) => updateSettings({ googleApiKey: value })}
         setAnthropicApiKey={(value) => updateSettings({ anthropicApiKey: value })}
         setOpenRouterAiApiKey={(value) => updateSettings({ openRouterAiApiKey: value })}
