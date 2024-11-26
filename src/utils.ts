@@ -6,7 +6,7 @@ import { MemoryVariables } from "@langchain/core/memory";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { BaseChain, RetrievalQAChain } from "langchain/chains";
 import moment from "moment";
-import { TFile, Vault, parseYaml } from "obsidian";
+import { TFile, Vault, parseYaml, requestUrl } from "obsidian";
 
 export const getModelNameFromKey = (modelKey: string): string => {
   return modelKey.split("|")[0];
@@ -548,4 +548,92 @@ export function isYoutubeUrl(url: string): boolean {
 export function extractYoutubeUrl(text: string): string | null {
   const match = text.match(YOUTUBE_URL_REGEX);
   return match ? match[0] : null;
+}
+
+/** Proxy function to use in place of fetch() to bypass CORS restrictions.
+ * It currently doesn't support streaming until this is implemented
+ * https://forum.obsidian.md/t/support-streaming-the-request-and-requesturl-response-body/87381 */
+export async function safeFetch(url: string, options: RequestInit): Promise<Response> {
+  // Necessary to remove 'content-length' in order to make headers compatible with requestUrl()
+  delete (options.headers as Record<string, string>)["content-length"];
+
+  if (typeof options.body === "string") {
+    const newBody = JSON.parse(options.body ?? {});
+    // frequency_penalty: default 0, but perplexity.ai requires 1 by default.
+    // so, delete this argument for now
+    delete newBody["frequency_penalty"];
+    options.body = JSON.stringify(newBody);
+  }
+
+  const response = await requestUrl({
+    url,
+    contentType: "application/json",
+    headers: options.headers as Record<string, string>,
+    method: "POST",
+    body: options.body?.toString(),
+  });
+
+  return {
+    ok: response.status >= 200 && response.status < 300,
+    status: response.status,
+    statusText: response.status.toString(),
+    headers: new Headers(response.headers),
+    url: url,
+    type: "basic",
+    redirected: false,
+    body: createReadableStreamFromString(response.text),
+    bodyUsed: true,
+    json: () => response.json,
+    text: async () => response.text,
+    clone: () => {
+      throw new Error("not implemented");
+    },
+    arrayBuffer: () => {
+      throw new Error("not implemented");
+    },
+    blob: () => {
+      throw new Error("not implemented");
+    },
+    formData: () => {
+      throw new Error("not implemented");
+    },
+  };
+}
+
+function createReadableStreamFromString(input: string) {
+  return new ReadableStream({
+    start(controller) {
+      // Convert the input string to a Uint8Array
+      const encoder = new TextEncoder();
+      const uint8Array = encoder.encode(input);
+
+      // Push the data to the stream
+      controller.enqueue(uint8Array);
+
+      // Close the stream
+      controller.close();
+    },
+  });
+}
+
+export function err2String(err: any, stack = false) {
+  // maybe to be improved
+  return err instanceof Error
+    ? err.message +
+        "\n" +
+        `${err?.cause ? "more message: " + err.cause.message : ""}` +
+        "\n" +
+        `${stack ? err.stack : ""}`
+    : JSON.stringify(err);
+}
+
+export function omit<T extends Record<string, any>, K extends keyof T>(
+  obj: T,
+  keys: K[]
+): Omit<T, K> {
+  const result = { ...obj };
+  keys.forEach((key) => {
+    delete result[key];
+  });
+  return result;
 }
