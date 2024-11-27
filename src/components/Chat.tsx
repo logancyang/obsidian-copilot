@@ -110,7 +110,8 @@ const Chat: React.FC<ChatProps> = ({
       app.vault,
       contextNotes,
       includeActiveNote,
-      activeNote
+      activeNote,
+      currentChain
     );
   };
 
