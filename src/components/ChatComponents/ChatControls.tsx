@@ -10,7 +10,7 @@ import { TooltipActionButton } from "@/components/ChatComponents/TooltipActionBu
 import { useSettingsValueContext } from "@/settings/contexts/SettingsValueContext";
 import { stringToChainType } from "@/utils";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ChevronDown, Download, Puzzle, RefreshCw } from "lucide-react";
+import { ChevronDown, Download, MessageCirclePlus, Puzzle } from "lucide-react";
 
 import { TFile } from "obsidian";
 import { ChatContextMenu } from "./ChatContextMenu";
@@ -161,7 +161,7 @@ const ChatControls: React.FC<ChatControlsProps> = ({
             onClick={() => {
               onNewChat(false);
             }}
-            Icon={<RefreshCw className="icon-scaler" />}
+            Icon={<MessageCirclePlus className="icon-scaler" />}
           >
             <div>New Chat</div>
             {!settings.autosaveChat && <div>(Unsaved history will be lost)</div>}

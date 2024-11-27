@@ -621,7 +621,7 @@ export function err2String(err: any, stack = false) {
   return err instanceof Error
     ? err.message +
         "\n" +
-        `${err?.cause ? "more message: " + err.cause.message : ""}` +
+        `${err?.cause ? "more message: " + (err.cause as Error).message : ""}` +
         "\n" +
         `${stack ? err.stack : ""}`
     : JSON.stringify(err);

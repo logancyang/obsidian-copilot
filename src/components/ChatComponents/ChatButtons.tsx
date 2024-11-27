@@ -4,9 +4,9 @@ import {
   Check,
   Copy,
   LibraryBig,
-  MessageSquarePlus,
   PenSquare,
   RotateCw,
+  TextCursorInput,
   Trash2,
 } from "lucide-react";
 import React from "react";
@@ -60,7 +60,7 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
             className="clickable-icon"
             title="Insert to note at cursor"
           >
-            <MessageSquarePlus />
+            <TextCursorInput />
           </button>
           <button onClick={onRegenerate} className="clickable-icon" title="Regenerate">
             <RotateCw />
