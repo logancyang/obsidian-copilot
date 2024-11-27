@@ -1,6 +1,7 @@
-import { CustomModel, LangChainParams, ModelConfig } from "@/aiParams";
+import { CustomModel, ModelConfig, setModelKey } from "@/aiParams";
 import { BUILTIN_CHAT_MODELS, ChatModelProviders } from "@/constants";
-import EncryptionService from "@/encryptionService";
+import { getDecryptedKey } from "@/encryptionService";
+import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
 import { ChatCohere } from "@langchain/cohere";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
@@ -30,10 +31,8 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
 type ChatProviderConstructMap = typeof CHAT_PROVIDER_CONSTRUCTORS;
 
 export default class ChatModelManager {
-  private encryptionService: EncryptionService;
   private static instance: ChatModelManager;
   private static chatModel: BaseChatModel;
-  private static chatOpenAI: ChatOpenAI;
   private static modelMap: Record<
     string,
     {
@@ -44,48 +43,35 @@ export default class ChatModelManager {
   >;
 
   private readonly providerApiKeyMap: Record<ChatModelProviders, () => string> = {
-    [ChatModelProviders.OPENAI]: () => this.getLangChainParams().openAIApiKey,
-    [ChatModelProviders.GOOGLE]: () => this.getLangChainParams().googleApiKey,
-    [ChatModelProviders.AZURE_OPENAI]: () => this.getLangChainParams().azureOpenAIApiKey,
-    [ChatModelProviders.ANTHROPIC]: () => this.getLangChainParams().anthropicApiKey,
-    [ChatModelProviders.COHEREAI]: () => this.getLangChainParams().cohereApiKey,
-    [ChatModelProviders.OPENROUTERAI]: () => this.getLangChainParams().openRouterAiApiKey,
-    [ChatModelProviders.GROQ]: () => this.getLangChainParams().groqApiKey,
+    [ChatModelProviders.OPENAI]: () => getSettings().openAIApiKey,
+    [ChatModelProviders.GOOGLE]: () => getSettings().googleApiKey,
+    [ChatModelProviders.AZURE_OPENAI]: () => getSettings().azureOpenAIApiKey,
+    [ChatModelProviders.ANTHROPIC]: () => getSettings().anthropicApiKey,
+    [ChatModelProviders.COHEREAI]: () => getSettings().cohereApiKey,
+    [ChatModelProviders.OPENROUTERAI]: () => getSettings().openRouterAiApiKey,
+    [ChatModelProviders.GROQ]: () => getSettings().groqApiKey,
     [ChatModelProviders.OLLAMA]: () => "default-key",
     [ChatModelProviders.LM_STUDIO]: () => "default-key",
     [ChatModelProviders.OPENAI_FORMAT]: () => "default-key",
   } as const;
 
-  private constructor(
-    private getLangChainParams: () => LangChainParams,
-    encryptionService: EncryptionService,
-    activeModels: CustomModel[]
-  ) {
-    this.encryptionService = encryptionService;
-    this.buildModelMap(activeModels);
+  private constructor() {
+    this.buildModelMap();
+    subscribeToSettingsChange(() => this.buildModelMap());
   }
 
-  static getInstance(
-    getLangChainParams: () => LangChainParams,
-    encryptionService: EncryptionService,
-    activeModels: CustomModel[]
-  ): ChatModelManager {
+  static getInstance(): ChatModelManager {
     if (!ChatModelManager.instance) {
-      ChatModelManager.instance = new ChatModelManager(
-        getLangChainParams,
-        encryptionService,
-        activeModels
-      );
+      ChatModelManager.instance = new ChatModelManager();
     }
     return ChatModelManager.instance;
   }
 
   private getModelConfig(customModel: CustomModel): ModelConfig {
-    const decrypt = (key: string) => this.encryptionService.getDecryptedKey(key);
-    const params = this.getLangChainParams();
+    const settings = getSettings();
     const baseConfig: ModelConfig = {
       modelName: customModel.name,
-      temperature: params.temperature,
+      temperature: settings.temperature,
       streaming: true,
       maxRetries: 3,
       maxConcurrency: 3,
@@ -93,23 +79,21 @@ export default class ChatModelManager {
     };
 
     const providerConfig: {
-      [K in keyof ChatProviderConstructMap]: ConstructorParameters<
-        ChatProviderConstructMap[K]
-      >[0] /*& Record<string, unknown>;*/;
+      [K in keyof ChatProviderConstructMap]: ConstructorParameters<ChatProviderConstructMap[K]>[0];
     } = {
       [ChatModelProviders.OPENAI]: {
         modelName: customModel.name,
-        openAIApiKey: decrypt(customModel.apiKey || params.openAIApiKey),
+        openAIApiKey: getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
         // @ts-ignore
-        openAIOrgId: decrypt(params.openAIOrgId),
-        maxTokens: params.maxTokens,
+        openAIOrgId: getDecryptedKey(settings.openAIOrgId),
+        maxTokens: settings.maxTokens,
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
       },
       [ChatModelProviders.ANTHROPIC]: {
-        anthropicApiKey: decrypt(customModel.apiKey || params.anthropicApiKey),
+        anthropicApiKey: getDecryptedKey(customModel.apiKey || settings.anthropicApiKey),
         modelName: customModel.name,
         anthropicApiUrl: customModel.baseUrl,
         clientOptions: {
@@ -119,22 +103,22 @@ export default class ChatModelManager {
         },
       },
       [ChatModelProviders.AZURE_OPENAI]: {
-        maxTokens: params.maxTokens,
-        azureOpenAIApiKey: decrypt(customModel.apiKey || params.azureOpenAIApiKey),
-        azureOpenAIApiInstanceName: params.azureOpenAIApiInstanceName,
-        azureOpenAIApiDeploymentName: params.azureOpenAIApiDeploymentName,
-        azureOpenAIApiVersion: params.azureOpenAIApiVersion,
+        maxTokens: settings.maxTokens,
+        azureOpenAIApiKey: getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
+        azureOpenAIApiInstanceName: settings.azureOpenAIApiInstanceName,
+        azureOpenAIApiDeploymentName: settings.azureOpenAIApiDeploymentName,
+        azureOpenAIApiVersion: settings.azureOpenAIApiVersion,
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
       },
       [ChatModelProviders.COHEREAI]: {
-        apiKey: decrypt(customModel.apiKey || params.cohereApiKey),
+        apiKey: getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
         model: customModel.name,
       },
       [ChatModelProviders.GOOGLE]: {
-        apiKey: decrypt(customModel.apiKey || params.googleApiKey),
+        apiKey: getDecryptedKey(customModel.apiKey || settings.googleApiKey),
         model: customModel.name,
         safetySettings: [
           {
@@ -158,14 +142,14 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.OPENROUTERAI]: {
         modelName: customModel.name,
-        openAIApiKey: decrypt(customModel.apiKey || params.openRouterAiApiKey),
+        openAIApiKey: getDecryptedKey(customModel.apiKey || settings.openRouterAiApiKey),
         configuration: {
           baseURL: customModel.baseUrl || "https://openrouter.ai/api/v1",
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
       },
       [ChatModelProviders.GROQ]: {
-        apiKey: decrypt(customModel.apiKey || params.groqApiKey),
+        apiKey: getDecryptedKey(customModel.apiKey || settings.groqApiKey),
         modelName: customModel.name,
       },
       [ChatModelProviders.OLLAMA]: {
@@ -186,8 +170,8 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.OPENAI_FORMAT]: {
         modelName: customModel.name,
-        openAIApiKey: decrypt(customModel.apiKey || "default-key"),
-        maxTokens: params.maxTokens,
+        openAIApiKey: getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
+        maxTokens: settings.maxTokens,
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -203,7 +187,8 @@ export default class ChatModelManager {
   }
 
   // Build a map of modelKey to model config
-  public buildModelMap(activeModels: CustomModel[]) {
+  public buildModelMap() {
+    const activeModels = getSettings().activeModels;
     ChatModelManager.modelMap = {};
     const modelMap = ChatModelManager.modelMap;
 
@@ -261,9 +246,7 @@ export default class ChatModelManager {
 
     const modelConfig = this.getModelConfig(model);
 
-    // MUST update it since chatModelManager is a singleton.
-    this.getLangChainParams().modelKey = modelKey;
-    new Notice(`Setting model: ${modelConfig.modelName}`);
+    setModelKey(`${model.name}|${model.provider}`);
     try {
       const newModelInstance = new selectedModel.AIConstructor({
         ...modelConfig,

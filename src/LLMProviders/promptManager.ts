@@ -1,4 +1,4 @@
-import { LangChainParams } from "@/aiParams";
+import { getSystemPrompt, subscribeToSettingsChange } from "@/settings/model";
 import {
   ChatPromptTemplate,
   HumanMessagePromptTemplate,
@@ -11,21 +11,26 @@ export default class PromptManager {
   private chatPrompt: ChatPromptTemplate;
   private qaPrompt: ChatPromptTemplate;
 
-  private constructor(private langChainParams: LangChainParams) {
+  private constructor() {
     this.initChatPrompt();
     this.initQAPrompt();
+
+    subscribeToSettingsChange(() => {
+      this.initChatPrompt();
+      this.initQAPrompt();
+    });
   }
 
-  static getInstance(langChainParams: LangChainParams): PromptManager {
+  static getInstance(): PromptManager {
     if (!PromptManager.instance) {
-      PromptManager.instance = new PromptManager(langChainParams);
+      PromptManager.instance = new PromptManager();
     }
     return PromptManager.instance;
   }
 
   private initChatPrompt(): void {
     // Escape curly braces in the system message
-    const escapedSystemMessage = this.escapeTemplateString(this.langChainParams.systemMessage);
+    const escapedSystemMessage = this.escapeTemplateString(getSystemPrompt());
 
     this.chatPrompt = ChatPromptTemplate.fromMessages([
       SystemMessagePromptTemplate.fromTemplate(escapedSystemMessage),

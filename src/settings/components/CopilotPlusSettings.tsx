@@ -1,14 +1,12 @@
 import React from "react";
-import { useSettingsContext } from "../contexts/SettingsContext";
 import ApiSetting from "./ApiSetting";
+import { updateSetting, useSettingsValue } from "@/settings/model";
 
 const CopilotPlusSettings: React.FC = () => {
-  const { settings, updateSettings } = useSettingsContext();
+  const settings = useSettingsValue();
 
   return (
     <div>
-      <br />
-      <br />
       <h2>Copilot Plus (Alpha)</h2>
       <p>
         Copilot Plus brings powerful AI agent capabilities to Obsidian. Alpha access is limited to
@@ -21,7 +19,7 @@ const CopilotPlusSettings: React.FC = () => {
         title="License Key"
         description="Enter your Copilot Plus license key"
         value={settings.plusLicenseKey}
-        setValue={(value) => updateSettings({ plusLicenseKey: value })}
+        setValue={(value) => updateSetting("plusLicenseKey", value)}
         placeholder="Enter your license key"
       />
     </div>

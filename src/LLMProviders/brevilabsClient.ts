@@ -1,6 +1,7 @@
 import { BREVILABS_API_BASE_URL } from "@/constants";
 import { Notice } from "obsidian";
-
+import { getSettings } from "@/settings/model";
+import { getDecryptedKey } from "@/encryptionService";
 export interface BrocaResponse {
   response: {
     tool_calls: Array<{
@@ -59,23 +60,16 @@ export interface Youtube4llmResponse {
 
 export class BrevilabsClient {
   private static instance: BrevilabsClient;
-  private licenseKey: string;
-  private options: any;
 
-  private constructor(licenseKey: string, options?: { debug?: boolean }) {
-    this.licenseKey = licenseKey;
-    this.options = options;
-  }
-
-  static getInstance(licenseKey: string, options?: { debug?: boolean }): BrevilabsClient {
+  static getInstance(): BrevilabsClient {
     if (!BrevilabsClient.instance) {
-      BrevilabsClient.instance = new BrevilabsClient(licenseKey, options);
+      BrevilabsClient.instance = new BrevilabsClient();
     }
     return BrevilabsClient.instance;
   }
 
   private checkLicenseKey() {
-    if (!this.licenseKey) {
+    if (!getSettings().plusLicenseKey) {
       new Notice(
         "Copilot Plus license key not found. Please enter your license key in the settings."
       );
@@ -98,13 +92,13 @@ export class BrevilabsClient {
       method,
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${this.licenseKey}`,
+        Authorization: `Bearer ${getDecryptedKey(getSettings().plusLicenseKey)}`,
       },
       ...(method === "POST" && { body: JSON.stringify(body) }),
     });
 
     const data = await response.json();
-    if (this.options?.debug) {
+    if (getSettings().debug) {
       console.log(`==== ${endpoint} request ====:`, data);
     }
 

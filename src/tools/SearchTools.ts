@@ -7,7 +7,7 @@ import { TimeInfo } from "@/tools/TimeTools";
 import VectorStoreManager from "@/VectorStoreManager";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-
+import { getSettings } from "@/settings/model";
 const localSearchTool = tool(
   async ({
     timeRange,
@@ -30,7 +30,6 @@ const localSearchTool = tool(
     const embeddingsManager = vectorStoreManager.getEmbeddingsManager();
     const vault = vectorStoreManager.getVault();
     const embeddingInstance = embeddingsManager?.getEmbeddingsAPI();
-    const settings = vectorStoreManager.getSettings();
 
     if (!embeddingInstance) {
       throw new CustomError("Embedding instance not found.");
@@ -65,7 +64,7 @@ const localSearchTool = tool(
         // Orama did not return anything higher than this threshold
         useRerankerThreshold: 0.5,
       },
-      settings.debug
+      getSettings().debug
     );
 
     // Perform the search

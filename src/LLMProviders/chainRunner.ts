@@ -10,6 +10,7 @@ import {
 import { Notice } from "obsidian";
 import ChainManager from "./chainManager";
 import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "./intentAnalyzer";
+import { getSystemPrompt } from "@/settings/model";
 
 export interface ChainRunner {
   run(
@@ -224,8 +225,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     const messages: any[] = [];
 
     // Add system message if available
-    const systemMessage = this.chainManager.getLangChainParams().systemMessage;
-    let fullSystemMessage = systemMessage || "";
+    let fullSystemMessage = getSystemPrompt();
 
     // Add chat history context to system message if exists
     if (chatHistory.length > 0) {
@@ -394,7 +394,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         const qaPrompt = await this.chainManager.promptManager.getQAPrompt({
           question: standaloneQuestion,
           context: context,
-          systemMessage: this.chainManager.getLangChainParams().systemMessage,
+          systemMessage: getSystemPrompt(),
         });
 
         fullAIResponse = await this.streamMultimodalResponse(

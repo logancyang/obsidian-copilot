@@ -1,5 +1,4 @@
 import { CustomPrompt, CustomPromptProcessor } from "@/customPromptProcessor";
-import { CopilotSettings } from "@/settings/SettingsPage";
 import { extractNoteTitles, getFileContent, getNoteFileFromTitle, getNotesFromPath } from "@/utils";
 import { Notice, TFile, Vault } from "obsidian";
 
@@ -21,20 +20,9 @@ jest.mock("@/utils", () => ({
   processVariableNameForNotePath: jest.fn(),
 }));
 
-const mockUsageStrategy = {
-  incrementPromptUsage: jest.fn(),
-  getPromptUsage: jest.fn(),
-  recordUsage: jest.fn(),
-  updateUsage: jest.fn(),
-  removeUnusedPrompts: jest.fn(),
-  compare: jest.fn(),
-  save: jest.fn(),
-};
-
 describe("CustomPromptProcessor", () => {
   let processor: CustomPromptProcessor;
   let mockVault: Vault;
-  let mockSettings: CopilotSettings;
   let mockActiveNote: TFile;
 
   beforeEach(() => {
@@ -43,14 +31,13 @@ describe("CustomPromptProcessor", () => {
 
     // Create mock objects
     mockVault = {} as Vault;
-    mockSettings = {} as CopilotSettings;
     mockActiveNote = {
       path: "path/to/active/note.md",
       basename: "Active Note",
     } as TFile;
 
     // Create an instance of CustomPromptProcessor with mocked dependencies
-    processor = CustomPromptProcessor.getInstance(mockVault, mockSettings, mockUsageStrategy);
+    processor = CustomPromptProcessor.getInstance(mockVault);
   });
 
   it("should add 1 context and selectedText", async () => {

@@ -1,4 +1,3 @@
-import { ChainType } from "@/chainFactory";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { SuggestedPrompts } from "@/components/chat-components/SuggestedPrompts";
 import { ChatMessage } from "@/sharedState";
@@ -11,7 +10,6 @@ interface ChatMessagesProps {
   loading?: boolean;
   loadingMessage?: string;
   app: App;
-  currentChain: ChainType;
   onInsertAtCursor: (message: string) => void;
   onRegenerate: (messageIndex: number) => void;
   onEdit: (messageIndex: number, newMessage: string) => void;
@@ -23,7 +21,6 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
   chatHistory,
   currentAiMessage,
   loading,
-  currentChain,
   loadingMessage,
   app,
   onInsertAtCursor,
@@ -62,7 +59,7 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
   if (!chatHistory.filter((message) => message.isVisible).length && !currentAiMessage) {
     return (
       <div className="chat-messages">
-        <SuggestedPrompts chainType={currentChain} onClick={onSelectSuggestedPrompt} />
+        <SuggestedPrompts onClick={onSelectSuggestedPrompt} />
       </div>
     );
   }

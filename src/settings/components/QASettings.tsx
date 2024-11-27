@@ -1,6 +1,5 @@
 import { CustomModel } from "@/aiParams";
 import { EmbeddingModelProviders, VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
-import { useSettingsContext } from "@/settings/contexts/SettingsContext";
 import React from "react";
 import {
   DropdownComponent,
@@ -9,27 +8,10 @@ import {
   TextAreaComponent,
   ToggleComponent,
 } from "./SettingBlocks";
+import { updateSetting, useSettingsValue } from "@/settings/model";
 
-interface QASettingsProps {
-  huggingfaceApiKey: string;
-  setHuggingfaceApiKey: (value: string) => void;
-  indexVaultToVectorStore: string;
-  setIndexVaultToVectorStore: (value: string) => void;
-  maxSourceChunks: number;
-  setMaxSourceChunks: (value: number) => void;
-  disableIndexOnMobile: boolean;
-  setDisableIndexOnMobile: (value: boolean) => void;
-}
-
-const QASettings: React.FC<QASettingsProps> = ({
-  indexVaultToVectorStore,
-  setIndexVaultToVectorStore,
-  maxSourceChunks,
-  setMaxSourceChunks,
-  disableIndexOnMobile,
-  setDisableIndexOnMobile,
-}) => {
-  const { settings, updateSettings } = useSettingsContext();
+const QASettings: React.FC = () => {
+  const settings = useSettingsValue();
 
   const handleUpdateEmbeddingModels = (models: Array<CustomModel>) => {
     const updatedActiveEmbeddingModels = models.map((model) => ({
@@ -37,17 +19,11 @@ const QASettings: React.FC<QASettingsProps> = ({
       baseUrl: model.baseUrl || "",
       apiKey: model.apiKey || "",
     }));
-    updateSettings({ activeEmbeddingModels: updatedActiveEmbeddingModels });
-  };
-
-  const handleSetEmbeddingModelKey = (modelKey: string) => {
-    updateSettings({ embeddingModelKey: modelKey });
+    updateSetting("activeEmbeddingModels", updatedActiveEmbeddingModels);
   };
 
   return (
     <div>
-      <br />
-      <br />
       <h1>QA Settings</h1>
       <p>
         QA mode relies on a <em>local</em> vector index.
@@ -69,10 +45,10 @@ const QASettings: React.FC<QASettingsProps> = ({
           const updatedActiveEmbeddingModels = settings.activeEmbeddingModels.filter(
             (model) => `${model.name}|${model.provider}` !== modelKey
           );
-          updateSettings({ activeEmbeddingModels: updatedActiveEmbeddingModels });
+          updateSetting("activeEmbeddingModels", updatedActiveEmbeddingModels);
         }}
         defaultModelKey={settings.embeddingModelKey}
-        onSetDefaultModelKey={handleSetEmbeddingModelKey}
+        onSetDefaultModelKey={(value) => updateSetting("embeddingModelKey", value)}
         isEmbeddingModel={true}
       />
       <h1>Auto-Index Strategy</h1>
@@ -87,8 +63,8 @@ const QASettings: React.FC<QASettingsProps> = ({
       <DropdownComponent
         name="Auto-index vault strategy"
         description="Decide when you want the vault to be indexed."
-        value={indexVaultToVectorStore}
-        onChange={setIndexVaultToVectorStore}
+        value={settings.indexVaultToVectorStore}
+        onChange={(value) => updateSetting("indexVaultToVectorStore", value)}
         options={VAULT_VECTOR_STORE_STRATEGIES}
       />
       <br />
@@ -121,10 +97,8 @@ const QASettings: React.FC<QASettingsProps> = ({
         min={1}
         max={10}
         step={1}
-        value={maxSourceChunks}
-        onChange={async (value) => {
-          setMaxSourceChunks(value);
-        }}
+        value={settings.maxSourceChunks}
+        onChange={(value) => updateSetting("maxSourceChunks", value)}
       />
       <SliderComponent
         name="Requests per second"
@@ -133,27 +107,27 @@ const QASettings: React.FC<QASettingsProps> = ({
         max={30}
         step={1}
         value={settings.embeddingRequestsPerSecond}
-        onChange={(value) => updateSettings({ embeddingRequestsPerSecond: value })}
+        onChange={(value) => updateSetting("embeddingRequestsPerSecond", value)}
       />
       <TextAreaComponent
         name="Exclusions"
         description="Comma separated list of paths, tags, note titles or file extension, e.g. folder1, folder1/folder2, #tag1, #tag2, [[note1]], [[note2]], *.jpg, *.excallidraw.md etc, to be excluded from the indexing process. NOTE: Tags must be in the note properties, not the note content. Files which were previously indexed will remain in the index unless you force re-index."
         placeholder="folder1, folder1/folder2, #tag1, #tag2, [[note1]], [[note2]], *.jpg, *.excallidraw.md"
         value={settings.qaExclusions}
-        onChange={(value) => updateSettings({ qaExclusions: value })}
+        onChange={(value) => updateSetting("qaExclusions", value)}
       />
       <TextAreaComponent
         name="Inclusions"
         description="When specified, ONLY these paths, tags, or note titles will be indexed (comma separated). Takes precedence over exclusions. Files which were previously indexed will remain in the index unless you force re-index. Format: folder1, folder1/folder2, #tag1, #tag2, [[note1]], [[note2]]"
         placeholder="folder1, #tag1, [[note1]]"
         value={settings.qaInclusions}
-        onChange={(value) => updateSettings({ qaInclusions: value })}
+        onChange={(value) => updateSetting("qaInclusions", value)}
       />
       <ToggleComponent
         name="Disable index loading on mobile"
         description="When enabled, Copilot index won't be loaded on mobile devices to save resources. Only chat mode will be available. Any existing index from desktop sync will be preserved. Uncheck to enable QA modes on mobile."
-        value={disableIndexOnMobile}
-        onChange={setDisableIndexOnMobile}
+        value={settings.disableIndexOnMobile}
+        onChange={(value) => updateSetting("disableIndexOnMobile", value)}
       />
     </div>
   );

@@ -1,9 +1,7 @@
-import { CustomModel, LangChainParams } from "@/aiParams";
+import { CustomModel } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { ChatModelProviders, DEFAULT_OPEN_AREA } from "@/constants";
-import EncryptionService from "@/encryptionService";
 import React from "react";
-import { useSettingsContext } from "../contexts/SettingsContext";
 import CommandToggleSettings from "./CommandToggleSettings";
 import {
   ModelSettingsComponent,
@@ -11,17 +9,10 @@ import {
   TextComponent,
   ToggleComponent,
 } from "./SettingBlocks";
+import { updateSetting, setSettings, useSettingsValue } from "@/settings/model";
 
-interface GeneralSettingsProps {
-  getLangChainParams: () => LangChainParams;
-  encryptionService: EncryptionService;
-}
-
-const GeneralSettings: React.FC<GeneralSettingsProps> = ({
-  getLangChainParams,
-  encryptionService,
-}) => {
-  const { settings, updateSettings } = useSettingsContext();
+const GeneralSettings: React.FC = () => {
+  const settings = useSettingsValue();
 
   const handleUpdateModels = (models: Array<CustomModel>) => {
     const updatedActiveModels = models.map((model) => ({
@@ -29,12 +20,12 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
       baseUrl: model.baseUrl || "",
       apiKey: model.apiKey || "",
     }));
-    updateSettings({ activeModels: updatedActiveModels });
+    updateSetting("activeModels", updatedActiveModels);
   };
 
   // modelKey is name | provider, e.g. "gpt-4o|openai"
   const onSetDefaultModelKey = (modelKey: string) => {
-    updateSettings({ defaultModelKey: modelKey });
+    updateSetting("defaultModelKey", modelKey);
   };
 
   const onDeleteModel = (modelKey: string) => {
@@ -54,8 +45,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
       }
     }
 
-    // Update both activeModels and defaultModelKey in a single operation
-    updateSettings({
+    setSettings({
       activeModels: updatedActiveModels,
       defaultModelKey: newDefaultModelKey,
     });
@@ -80,7 +70,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
             id="defaultChainSelect"
             className="default-chain-selection"
             value={settings.defaultChainType}
-            onChange={(e) => updateSettings({ defaultChainType: e.target.value as ChainType })}
+            onChange={(e) => updateSetting("defaultChainType", e.target.value as ChainType)}
           >
             <option value={ChainType.LLM_CHAIN}>Chat</option>
             <option value={ChainType.VAULT_QA_CHAIN}>Vault QA (Basic)</option>
@@ -93,26 +83,26 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         description="The default folder name where chat conversations will be saved. Default is 'copilot-conversations'"
         placeholder="copilot-conversations"
         value={settings.defaultSaveFolder}
-        onChange={(value) => updateSettings({ defaultSaveFolder: value })}
+        onChange={(value) => updateSetting("defaultSaveFolder", value)}
       />
       <TextComponent
         name="Default Conversation Tag"
         description="The default tag to be used when saving a conversation. Default is 'ai-conversations'"
         placeholder="ai-conversation"
         value={settings.defaultConversationTag}
-        onChange={(value) => updateSettings({ defaultConversationTag: value })}
+        onChange={(value) => updateSetting("defaultConversationTag", value)}
       />
       <ToggleComponent
         name="Autosave Chat"
         description="Automatically save the chat when starting a new one or when the plugin reloads"
         value={settings.autosaveChat}
-        onChange={(value) => updateSettings({ autosaveChat: value })}
+        onChange={(value) => updateSetting("autosaveChat", value)}
       />
       <ToggleComponent
         name="Suggested Prompts"
         description="Show suggested prompts in the chat view"
         value={settings.showSuggestedPrompts}
-        onChange={(value) => updateSettings({ showSuggestedPrompts: value })}
+        onChange={(value) => updateSetting("showSuggestedPrompts", value)}
       />
       <div className="chat-icon-selection-tooltip">
         <h2>Open Plugin In</h2>
@@ -120,9 +110,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
           <select
             id="openPluginInSelect"
             value={settings.defaultOpenArea}
-            onChange={(e) =>
-              updateSettings({ defaultOpenArea: e.target.value as DEFAULT_OPEN_AREA })
-            }
+            onChange={(e) => updateSetting("defaultOpenArea", e.target.value as DEFAULT_OPEN_AREA)}
           >
             <option value={DEFAULT_OPEN_AREA.VIEW}>Sidebar View</option>
             <option value={DEFAULT_OPEN_AREA.EDITOR}>Editor</option>
@@ -134,7 +122,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         description="The default folder name where custom prompts will be saved. Default is 'copilot-custom-prompts'"
         placeholder="copilot-custom-prompts"
         value={settings.customPromptsFolder}
-        onChange={(value) => updateSettings({ customPromptsFolder: value })}
+        onChange={(value) => updateSetting("customPromptsFolder", value)}
       />
       <h6>
         Please be mindful of the number of tokens and context conversation turns you set here, as
@@ -147,7 +135,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         max={2}
         step={0.05}
         value={settings.temperature}
-        onChange={(value) => updateSettings({ temperature: value })}
+        onChange={(value) => updateSetting("temperature", value)}
       />
       <SliderComponent
         name="Token limit"
@@ -166,7 +154,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         max={16000}
         step={100}
         value={settings.maxTokens}
-        onChange={(value) => updateSettings({ maxTokens: value })}
+        onChange={(value) => updateSetting("maxTokens", value)}
       />
       <SliderComponent
         name="Conversation turns in context"
@@ -175,11 +163,11 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         max={50}
         step={1}
         value={settings.contextTurns}
-        onChange={(value) => updateSettings({ contextTurns: value })}
+        onChange={(value) => updateSetting("contextTurns", value)}
       />
       <CommandToggleSettings
         enabledCommands={settings.enabledCommands}
-        setEnabledCommands={(value) => updateSettings({ enabledCommands: value })}
+        setEnabledCommands={(value) => updateSetting("enabledCommands", value)}
       />
     </div>
   );

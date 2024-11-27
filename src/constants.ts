@@ -1,5 +1,5 @@
 import { CustomModel } from "@/aiParams";
-import { CopilotSettings } from "@/settings/SettingsPage";
+import { type CopilotSettings } from "@/settings/model";
 import { ChainType } from "./chainFactory";
 
 export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";

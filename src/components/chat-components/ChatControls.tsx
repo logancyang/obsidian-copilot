@@ -1,13 +1,10 @@
-import { SetChainOptions } from "@/aiParams";
-import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
-import { CustomError } from "@/error";
-import { App, Notice } from "obsidian";
+import { useChainType } from "@/aiParams";
+import { App } from "obsidian";
 import React, { useEffect, useState } from "react";
 
 import { ChainType } from "@/chainFactory";
 import { TooltipActionButton } from "@/components/chat-components/TooltipActionButton";
 import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
-import { useSettingsValueContext } from "@/settings/contexts/SettingsValueContext";
 import { stringToChainType } from "@/utils";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronDown, Download, MessageCirclePlus, Puzzle } from "lucide-react";
@@ -16,10 +13,9 @@ import { NewChatConfirmModal } from "@/components/modals/NewChatConfirmModal";
 import { ChatMessage } from "@/sharedState";
 import { TFile } from "obsidian";
 import { ChatContextMenu } from "./ChatContextMenu";
+import { useSettingsValue } from "@/settings/model";
 
 interface ChatControlsProps {
-  currentChain: ChainType;
-  setCurrentChain: (chain: ChainType, options?: SetChainOptions) => void;
   onNewChat: (openNote: boolean) => void;
   onSaveAsNote: () => void;
   onRefreshVaultContext: () => void;
@@ -32,12 +28,9 @@ interface ChatControlsProps {
   contextUrls: string[];
   onRemoveUrl: (url: string) => void;
   chatHistory: ChatMessage[];
-  debug?: boolean;
 }
 
 const ChatControls: React.FC<ChatControlsProps> = ({
-  currentChain,
-  setCurrentChain,
   onNewChat,
   onSaveAsNote,
   onRefreshVaultContext,
@@ -50,9 +43,8 @@ const ChatControls: React.FC<ChatControlsProps> = ({
   contextUrls,
   onRemoveUrl,
   chatHistory,
-  debug,
 }) => {
-  const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
+  const [selectedChain, setSelectedChain] = useChainType();
   const [isIndexLoaded, setIsIndexLoaded] = useState(false);
   const activeNote = app.workspace.getActiveFile();
 
@@ -61,8 +53,7 @@ const ChatControls: React.FC<ChatControlsProps> = ({
       setIsIndexLoaded(loaded);
     });
   }, [isIndexLoadedPromise]);
-  const settings = useSettingsValueContext();
-  const indexVaultToVectorStore = settings.indexVaultToVectorStore;
+  const settings = useSettingsValue();
 
   const handleChainChange = async ({ value }: { value: string }) => {
     const newChain = stringToChainType(value);
@@ -76,30 +67,7 @@ const ChatControls: React.FC<ChatControlsProps> = ({
         return;
       }
 
-      try {
-        if (
-          (selectedChain === ChainType.VAULT_QA_CHAIN ||
-            selectedChain === ChainType.COPILOT_PLUS_CHAIN) &&
-          indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH
-        ) {
-          await setCurrentChain(selectedChain, {
-            debug,
-            refreshIndex: true,
-          });
-        } else {
-          await setCurrentChain(selectedChain, { debug });
-        }
-      } catch (error) {
-        if (error instanceof CustomError) {
-          console.error("Error setting chain:", error.msg);
-          new Notice(`Error: ${error.msg}. Please check your embedding model settings.`);
-        } else {
-          console.error("Unexpected error setting chain:", error);
-          new Notice(
-            "An unexpected error occurred while setting up the chain. Please check the console for details."
-          );
-        }
-      }
+      setSelectedChain(selectedChain);
     };
 
     handleChainSelection();
@@ -150,7 +118,7 @@ const ChatControls: React.FC<ChatControlsProps> = ({
   return (
     <div className="chat-controls-wrapper">
       <div className="chat-icons-container">
-        {currentChain === ChainType.COPILOT_PLUS_CHAIN && (
+        {selectedChain === ChainType.COPILOT_PLUS_CHAIN && (
           <ChatContextMenu
             activeNote={includeActiveNote ? activeNote : null}
             contextNotes={contextNotes}
@@ -191,9 +159,9 @@ const ChatControls: React.FC<ChatControlsProps> = ({
           <div className="chat-icon-selection-tooltip">
             <DropdownMenu.Root>
               <DropdownMenu.Trigger className="chain-select-button">
-                {currentChain === "llm_chain" && "chat"}
-                {currentChain === "vault_qa" && "vault QA (basic)"}
-                {currentChain === "copilot_plus" && "copilot plus (alpha)"}
+                {selectedChain === ChainType.LLM_CHAIN && "chat"}
+                {selectedChain === ChainType.VAULT_QA_CHAIN && "vault QA (basic)"}
+                {selectedChain === ChainType.COPILOT_PLUS_CHAIN && "copilot plus (alpha)"}
                 <ChevronDown size={10} />
               </DropdownMenu.Trigger>
 

@@ -3,26 +3,20 @@ import Chat from "@/components/Chat";
 import { CHAT_VIEWTYPE } from "@/constants";
 import { AppContext } from "@/context";
 import CopilotPlugin from "@/main";
-import { CopilotSettings } from "@/settings/SettingsPage";
 import SharedState from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
 import { Root, createRoot } from "react-dom/client";
-import { SettingsValueProvider } from "@/settings/contexts/SettingsValueContext";
 
 export default class CopilotView extends ItemView {
   private chainManager: ChainManager;
   private fileParserManager: FileParserManager;
   private root: Root | null = null;
-  private settings: CopilotSettings;
-  private defaultSaveFolder: string;
   private handleSaveAsNote: (() => Promise<void>) | null = null;
-  private debug = false;
   sharedState: SharedState;
   emitter: EventTarget;
-  userSystemPrompt = "";
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -30,15 +24,11 @@ export default class CopilotView extends ItemView {
   ) {
     super(leaf);
     this.sharedState = plugin.sharedState;
-    this.settings = plugin.settings;
     this.app = plugin.app;
     this.chainManager = plugin.chainManager;
     this.fileParserManager = plugin.fileParserManager;
-    this.debug = plugin.settings.debug;
     this.emitter = new EventTarget();
-    this.userSystemPrompt = plugin.settings.userSystemPrompt;
     this.plugin = plugin;
-    this.defaultSaveFolder = plugin.settings.defaultSaveFolder;
   }
 
   getViewType(): string {
@@ -65,23 +55,19 @@ export default class CopilotView extends ItemView {
       <AppContext.Provider value={this.app}>
         <React.StrictMode>
           <Tooltip.Provider delayDuration={0}>
-            <SettingsValueProvider value={this.settings}>
-              <Chat
-                sharedState={this.sharedState}
-                chainManager={this.chainManager}
-                emitter={this.emitter}
-                defaultSaveFolder={this.defaultSaveFolder}
-                updateUserMessageHistory={(newMessage) => {
-                  this.plugin.updateUserMessageHistory(newMessage);
-                }}
-                fileParserManager={this.fileParserManager}
-                plugin={this.plugin}
-                debug={this.debug}
-                onSaveChat={(saveFunction) => {
-                  this.handleSaveAsNote = saveFunction;
-                }}
-              />
-            </SettingsValueProvider>
+            <Chat
+              sharedState={this.sharedState}
+              chainManager={this.chainManager}
+              emitter={this.emitter}
+              updateUserMessageHistory={(newMessage) => {
+                this.plugin.updateUserMessageHistory(newMessage);
+              }}
+              fileParserManager={this.fileParserManager}
+              plugin={this.plugin}
+              onSaveChat={(saveFunction) => {
+                this.handleSaveAsNote = saveFunction;
+              }}
+            />
           </Tooltip.Provider>
         </React.StrictMode>
       </AppContext.Provider>

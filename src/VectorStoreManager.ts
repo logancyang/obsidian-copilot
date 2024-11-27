@@ -1,25 +1,21 @@
-import EncryptionService from "@/encryptionService";
 import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
-import { CopilotSettings } from "@/settings/SettingsPage";
+import { getSettings } from "@/settings/model";
 import { areEmbeddingModelsSame, getFilePathsFromPatterns } from "@/utils";
 import VectorDBManager from "@/vectorDBManager";
 import { Embeddings } from "@langchain/core/embeddings";
 import { create, load, Orama, remove, removeMultiple, save, search } from "@orama/orama";
 import { MD5 } from "crypto-js";
 import { App, Notice, Platform, TAbstractFile, TFile, Vault } from "obsidian";
-import { LangChainParams } from "./aiParams";
 import { ChainType } from "./chainFactory";
 import { VAULT_VECTOR_STORE_STRATEGY } from "./constants";
+import { getChainType } from "./aiParams";
 
 class VectorStoreManager {
   private app: App;
-  private settings: CopilotSettings;
-  private encryptionService: EncryptionService;
   private oramaDb: Orama<any> | undefined;
   private dbPath: string;
   private embeddingsManager: EmbeddingsManager;
-  private getLangChainParams: () => LangChainParams;
 
   private isIndexingPaused = false;
   private isIndexingCancelled = false;
@@ -37,23 +33,11 @@ class VectorStoreManager {
   private saveDBDelay = 30000; // Save full DB every 30 seconds
   private hasUnsavedChanges = false;
 
-  constructor(
-    app: App,
-    settings: CopilotSettings,
-    encryptionService: EncryptionService,
-    getLangChainParams: () => LangChainParams
-  ) {
+  constructor(app: App) {
     this.app = app;
-    this.settings = settings;
-    this.encryptionService = encryptionService;
-    this.getLangChainParams = getLangChainParams;
 
     this.dbPath = this.getDbPath();
-    this.embeddingsManager = EmbeddingsManager.getInstance(
-      this.getLangChainParams,
-      this.encryptionService,
-      this.settings.activeEmbeddingModels
-    );
+    this.embeddingsManager = EmbeddingsManager.getInstance();
 
     // Initialize the database asynchronously
     this.initializationPromise = this.initializeDB()
@@ -71,12 +55,6 @@ class VectorStoreManager {
       .catch((error) => {
         console.error("Failed to initialize Copilot database:", error);
       });
-
-    // Initialize the rate limiter
-    VectorDBManager.initialize({
-      getEmbeddingRequestsPerSecond: () => this.settings.embeddingRequestsPerSecond,
-      debug: this.settings.debug,
-    });
 
     this.updateExcludedFiles();
 
@@ -101,7 +79,7 @@ class VectorStoreManager {
 
   private async performPostInitializationTasks() {
     // Optionally index the vault on startup
-    if (this.settings.indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP) {
+    if (getSettings().indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP) {
       try {
         await this.indexVaultToVectorStore();
       } catch (err) {
@@ -133,7 +111,7 @@ class VectorStoreManager {
 
   private async initializeDB(): Promise<Orama<any> | undefined> {
     // Check if we should skip index loading on mobile
-    if (Platform.isMobile && this.settings.disableIndexOnMobile) {
+    if (Platform.isMobile && getSettings().disableIndexOnMobile) {
       console.log("Index loading disabled on mobile device");
       this.isIndexLoaded = false;
       this.oramaDb = undefined;
@@ -170,7 +148,7 @@ class VectorStoreManager {
       }
     } catch (error) {
       console.error(`Error initializing Orama database:`, error);
-      if (Platform.isMobile && this.settings.disableIndexOnMobile) {
+      if (Platform.isMobile && getSettings().disableIndexOnMobile) {
         return;
       }
       return await this.createNewDb();
@@ -178,7 +156,7 @@ class VectorStoreManager {
   }
 
   public async getIsIndexLoaded(): Promise<boolean> {
-    await this.waitForInitialization();
+    await this.initializationPromise;
     return this.isIndexLoaded;
   }
 
@@ -218,10 +196,6 @@ class VectorStoreManager {
     return this.app.vault;
   }
 
-  public getSettings(): CopilotSettings {
-    return this.settings;
-  }
-
   private async getVectorLength(embeddingInstance: Embeddings): Promise<number> {
     try {
       const sampleText = "Sample text for embedding";
@@ -256,7 +230,7 @@ class VectorStoreManager {
   }
 
   private async saveDB() {
-    if (Platform.isMobile && this.settings.disableIndexOnMobile) {
+    if (Platform.isMobile && getSettings().disableIndexOnMobile) {
       return;
     }
 
@@ -274,7 +248,7 @@ class VectorStoreManager {
       const saveOperation = async () => {
         try {
           await this.app.vault.adapter.write(this.dbPath, JSON.stringify(dataToSave));
-          if (this.settings.debug) {
+          if (getSettings().debug) {
             console.log(`Saved Orama database to ${this.dbPath}.`);
           }
         } catch (error) {
@@ -320,9 +294,9 @@ class VectorStoreManager {
       const status = this.isIndexingPaused ? " (Paused)" : "";
 
       const folders = this.extractAppIgnoreSettings();
-      const filterType = this.settings.qaInclusions
-        ? `Inclusions: ${this.settings.qaInclusions}`
-        : `Exclusions: ${folders.join(",") + (folders.length ? ", " : "") + this.settings.qaExclusions || "None"}`;
+      const filterType = getSettings().qaInclusions
+        ? `Inclusions: ${getSettings().qaInclusions}`
+        : `Exclusions: ${folders.join(",") + (folders.length ? ", " : "") + getSettings().qaExclusions || "None"}`;
 
       this.indexNoticeMessage.textContent =
         `Copilot is indexing your vault...\n` +
@@ -366,14 +340,20 @@ class VectorStoreManager {
 
       exclusions.push(...this.extractAppIgnoreSettings());
 
-      if (this.settings.qaExclusions) {
-        exclusions.push(...this.settings.qaExclusions.split(",").map((item) => item.trim()));
+      if (getSettings().qaExclusions) {
+        exclusions.push(
+          ...getSettings()
+            .qaExclusions.split(",")
+            .map((item) => item.trim())
+        );
       }
 
       const excludedFilePaths = await getFilePathsFromPatterns(exclusions, this.app.vault);
       excludedFilePaths.forEach((filePath) => targetFiles.add(filePath));
-    } else if (filterType === "inclusions" && this.settings.qaInclusions) {
-      const inclusions = this.settings.qaInclusions.split(",").map((item) => item.trim());
+    } else if (filterType === "inclusions" && getSettings().qaInclusions) {
+      const inclusions = getSettings()
+        .qaInclusions.split(",")
+        .map((item) => item.trim());
       const includedFilePaths = await getFilePathsFromPatterns(inclusions, this.app.vault);
       includedFilePaths.forEach((filePath) => targetFiles.add(filePath));
     }
@@ -467,12 +447,12 @@ class VectorStoreManager {
 
   public async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
     // Add check at the start of the method
-    if ((Platform.isMobile && this.settings.disableIndexOnMobile) || !this.oramaDb) {
+    await this.waitForInitialization();
+    if ((Platform.isMobile && getSettings().disableIndexOnMobile) || !this.oramaDb) {
       new Notice("Indexing is disabled on mobile devices");
       return 0;
     }
 
-    await this.waitForInitialization();
     let rateLimitNoticeShown = false;
 
     try {
@@ -712,7 +692,7 @@ class VectorStoreManager {
           searchResult.hits.map((hit) => hit.id),
           500
         );
-        if (this.settings.debug) {
+        if (getSettings().debug) {
           console.log(`Deleted document from local Copilot index: ${filePath}`);
         }
       }
@@ -739,8 +719,8 @@ class VectorStoreManager {
     return result.hits[0]?.document;
   }
 
-  public async initializeEventListeners() {
-    if (this.settings.debug) {
+  public initializeEventListeners() {
+    if (getSettings().debug) {
       console.log("Copilot Plus: Initializing event listeners");
     }
     this.app.vault.on("modify", this.handleFileModify);
@@ -752,7 +732,7 @@ class VectorStoreManager {
       window.clearTimeout(this.debounceTimer);
     }
     this.debounceTimer = window.setTimeout(() => {
-      if (this.settings.debug) {
+      if (getSettings().debug) {
         console.log("Copilot Plus: Triggering reindex for file ", file.path);
       }
       this.reindexFile(file);
@@ -762,7 +742,7 @@ class VectorStoreManager {
 
   private handleFileModify = async (file: TAbstractFile) => {
     await this.updateExcludedFiles();
-    const currentChainType = this.getLangChainParams().chainType;
+    const currentChainType = getChainType();
     if (
       file instanceof TFile &&
       file.extension === "md" &&
@@ -822,7 +802,7 @@ class VectorStoreManager {
       // Mark that we have unsaved changes instead of saving immediately
       this.hasUnsavedChanges = true;
 
-      if (this.settings.debug) {
+      if (getSettings().debug) {
         console.log(`Reindexed file: ${file.path}`);
       }
     } catch (error) {
