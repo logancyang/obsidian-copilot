@@ -3,12 +3,25 @@ import { CustomModel, LangChainParams } from "@/aiParams";
 import { EmbeddingModelProviders } from "@/constants";
 import EncryptionService from "@/encryptionService";
 import { CustomError } from "@/error";
-import { ProxyOpenAIEmbeddings } from "@/langchainWrappers";
 import { CohereEmbeddings } from "@langchain/cohere";
 import { Embeddings } from "@langchain/core/embeddings";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { OllamaEmbeddings } from "@langchain/ollama";
 import { OpenAIEmbeddings } from "@langchain/openai";
+import { safeFetch } from "@/utils";
+
+type EmbeddingConstructorType = new (config: any) => Embeddings;
+
+const EMBEDDING_PROVIDER_CONSTRUCTORS = {
+  [EmbeddingModelProviders.OPENAI]: OpenAIEmbeddings,
+  [EmbeddingModelProviders.COHEREAI]: CohereEmbeddings,
+  [EmbeddingModelProviders.GOOGLE]: GoogleGenerativeAIEmbeddings,
+  [EmbeddingModelProviders.AZURE_OPENAI]: OpenAIEmbeddings,
+  [EmbeddingModelProviders.OLLAMA]: OllamaEmbeddings,
+  [EmbeddingModelProviders.OPENAI_FORMAT]: OpenAIEmbeddings,
+} as const;
+
+type EmbeddingProviderConstructorMap = typeof EMBEDDING_PROVIDER_CONSTRUCTORS;
 
 export default class EmbeddingManager {
   private encryptionService: EncryptionService;
@@ -19,10 +32,19 @@ export default class EmbeddingManager {
     string,
     {
       hasApiKey: boolean;
-      EmbeddingConstructor: new (config: any) => Embeddings;
+      EmbeddingConstructor: EmbeddingConstructorType;
       vendor: string;
     }
   >;
+
+  private readonly providerAipKeyMap: Record<EmbeddingModelProviders, () => string> = {
+    [EmbeddingModelProviders.OPENAI]: () => this.getLangChainParams().openAIApiKey,
+    [EmbeddingModelProviders.COHEREAI]: () => this.getLangChainParams().cohereApiKey,
+    [EmbeddingModelProviders.GOOGLE]: () => this.getLangChainParams().googleApiKey,
+    [EmbeddingModelProviders.AZURE_OPENAI]: () => this.getLangChainParams().azureOpenAIApiKey,
+    [EmbeddingModelProviders.OLLAMA]: () => "default-key",
+    [EmbeddingModelProviders.OPENAI_FORMAT]: () => "",
+  };
 
   private constructor(
     private getLangChainParams: () => LangChainParams,
@@ -49,46 +71,34 @@ export default class EmbeddingManager {
     return EmbeddingManager.instance;
   }
 
+  getProviderConstructor(model: CustomModel): EmbeddingConstructorType {
+    const constructor = EMBEDDING_PROVIDER_CONSTRUCTORS[model.provider as EmbeddingModelProviders];
+    if (!constructor) {
+      console.warn(`Unknown provider: ${model.provider} for model: ${model.name}`);
+      throw new Error(`Unknown provider: ${model.provider} for model: ${model.name}`);
+    }
+    return constructor;
+  }
+
   // Build a map of modelKey to model config
   private buildModelMap(activeEmbeddingModels: CustomModel[]) {
     EmbeddingManager.modelMap = {};
     const modelMap = EmbeddingManager.modelMap;
-    const params = this.getLangChainParams();
 
     activeEmbeddingModels.forEach((model) => {
       if (model.enabled) {
-        let constructor;
-        let apiKey;
-
-        switch (model.provider) {
-          case EmbeddingModelProviders.OPENAI:
-            constructor = OpenAIEmbeddings;
-            apiKey = params.openAIApiKey;
-            break;
-          case EmbeddingModelProviders.COHEREAI:
-            constructor = CohereEmbeddings;
-            apiKey = params.cohereApiKey;
-            break;
-          case EmbeddingModelProviders.GOOGLE:
-            constructor = GoogleGenerativeAIEmbeddings;
-            apiKey = params.googleApiKey;
-            break;
-          case EmbeddingModelProviders.AZURE_OPENAI:
-            constructor = OpenAIEmbeddings;
-            apiKey = params.azureOpenAIApiKey;
-            break;
-          case EmbeddingModelProviders.OLLAMA:
-            constructor = OllamaEmbeddings;
-            apiKey = "default-key";
-            break;
-          case EmbeddingModelProviders.OPENAI_FORMAT:
-            constructor = ProxyOpenAIEmbeddings;
-            apiKey = model.apiKey;
-            break;
-          default:
-            console.warn(`Unknown provider: ${model.provider} for embedding model: ${model.name}`);
-            return;
+        if (
+          !Object.values(EmbeddingModelProviders).contains(
+            model.provider as EmbeddingModelProviders
+          )
+        ) {
+          console.warn(`Unknown provider: ${model.provider} for embedding model: ${model.name}`);
+          return;
         }
+        const constructor = this.getProviderConstructor(model);
+        const apiKey =
+          model.apiKey || this.providerAipKeyMap[model.provider as EmbeddingModelProviders]();
+
         const modelKey = `${model.name}|${model.provider}`;
         modelMap[modelKey] = {
           hasApiKey: Boolean(apiKey),
@@ -147,7 +157,7 @@ export default class EmbeddingManager {
     }
   }
 
-  private getEmbeddingConfig(customModel: CustomModel): any {
+  private getEmbeddingConfig(customModel: CustomModel) {
     const decrypt = (key: string) => this.encryptionService.getDecryptedKey(key);
     const params = this.getLangChainParams();
     const modelName = customModel.name;
@@ -157,25 +167,37 @@ export default class EmbeddingManager {
       maxConcurrency: 3,
     };
 
-    const providerConfigs = {
+    const providerConfig: {
+      [K in keyof EmbeddingProviderConstructorMap]: ConstructorParameters<
+        EmbeddingProviderConstructorMap[K]
+      >[0] /*& Record<string, unknown>;*/;
+    } = {
       [EmbeddingModelProviders.OPENAI]: {
         modelName,
-        openAIApiKey: decrypt(params.openAIApiKey),
+        openAIApiKey: decrypt(customModel.apiKey || params.openAIApiKey),
         timeout: 10000,
+        configuration: {
+          baseURL: customModel.baseUrl,
+          fetch: customModel.enableCors ? safeFetch : undefined,
+        },
       },
       [EmbeddingModelProviders.COHEREAI]: {
         model: modelName,
-        apiKey: decrypt(params.cohereApiKey),
+        apiKey: decrypt(customModel.apiKey || params.cohereApiKey),
       },
       [EmbeddingModelProviders.GOOGLE]: {
         modelName: modelName,
         apiKey: decrypt(params.googleApiKey),
       },
       [EmbeddingModelProviders.AZURE_OPENAI]: {
-        azureOpenAIApiKey: decrypt(params.azureOpenAIApiKey),
+        azureOpenAIApiKey: decrypt(customModel.apiKey || params.azureOpenAIApiKey),
         azureOpenAIApiInstanceName: params.azureOpenAIApiInstanceName,
         azureOpenAIApiDeploymentName: params.azureOpenAIApiEmbeddingDeploymentName,
         azureOpenAIApiVersion: params.azureOpenAIApiVersion,
+        configuration: {
+          baseURL: customModel.baseUrl,
+          fetch: customModel.enableCors ? safeFetch : undefined,
+        },
       },
       [EmbeddingModelProviders.OLLAMA]: {
         baseUrl: customModel.baseUrl || "http://localhost:11434",
@@ -185,18 +207,17 @@ export default class EmbeddingManager {
       [EmbeddingModelProviders.OPENAI_FORMAT]: {
         modelName,
         openAIApiKey: decrypt(customModel.apiKey || ""),
-        openAIEmbeddingProxyBaseUrl: customModel.baseUrl,
+        configuration: {
+          baseURL: customModel.baseUrl,
+          fetch: customModel.enableCors ? safeFetch : undefined,
+          dangerouslyAllowBrowser: true,
+        },
       },
     };
 
-    const modelKey = `${modelName}|${customModel.provider}`;
-    const selectedModel = EmbeddingManager.modelMap[modelKey];
-    if (!selectedModel) {
-      console.error(`No embedding model found for key: ${modelKey}`);
-    }
-    const providerConfig =
-      providerConfigs[selectedModel.vendor as keyof typeof providerConfigs] || {};
+    const selectedProviderConfig =
+      providerConfig[customModel.provider as EmbeddingModelProviders] || {};
 
-    return { ...baseConfig, ...providerConfig };
+    return { ...baseConfig, ...selectedProviderConfig };
   }
 }
