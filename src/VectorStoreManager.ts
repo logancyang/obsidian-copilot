@@ -318,9 +318,11 @@ class VectorStoreManager {
   private updateIndexingNoticeMessage() {
     if (this.indexNoticeMessage) {
       const status = this.isIndexingPaused ? " (Paused)" : "";
+
+      const folders = this.extractAppIgnoreSettings();
       const filterType = this.settings.qaInclusions
         ? `Inclusions: ${this.settings.qaInclusions}`
-        : `Exclusions: ${this.settings.qaExclusions || "None"}`;
+        : `Exclusions: ${folders.join(",") + (folders.length ? ", " : "") + this.settings.qaExclusions || "None"}`;
 
       this.indexNoticeMessage.textContent =
         `Copilot is indexing your vault...\n` +
@@ -362,21 +364,7 @@ class VectorStoreManager {
     if (filterType === "exclusions") {
       const exclusions: string[] = [];
 
-      try {
-        // not documented in Obsidian API, but I got this answer from Obsidian's discord
-        const userIgnoreFilters: unknown = (app.vault as any).getConfig("userIgnoreFilters");
-
-        // inherit from the Obsidian "master exclusion" settings
-        if (!!userIgnoreFilters && Array.isArray(userIgnoreFilters)) {
-          userIgnoreFilters.forEach((it) => {
-            if (typeof it === "string") {
-              exclusions.push(it.endsWith("/") ? it.slice(0, -1) : it);
-            }
-          });
-        }
-      } catch (e) {
-        console.warn("Error getting userIgnoreFilters from Obsidian config", e);
-      }
+      exclusions.push(...this.extractAppIgnoreSettings());
 
       if (this.settings.qaExclusions) {
         exclusions.push(...this.settings.qaExclusions.split(",").map((item) => item.trim()));
@@ -391,6 +379,27 @@ class VectorStoreManager {
     }
 
     return targetFiles;
+  }
+
+  private extractAppIgnoreSettings() {
+    const appIgnoreFolders: string[] = [];
+    try {
+      // not documented in Obsidian API, but I got this answer from Obsidian's discord
+      const userIgnoreFilters: unknown = (app.vault as any).getConfig("userIgnoreFilters");
+
+      // inherit from the Obsidian "master exclusion" settings
+      if (!!userIgnoreFilters && Array.isArray(userIgnoreFilters)) {
+        userIgnoreFilters.forEach((it) => {
+          if (typeof it === "string") {
+            appIgnoreFolders.push(it.endsWith("/") ? it.slice(0, -1) : it);
+          }
+        });
+      }
+    } catch (e) {
+      console.warn("Error getting userIgnoreFilters from Obsidian config", e);
+    }
+
+    return appIgnoreFolders;
   }
 
   public async getAllQAMarkdownContent(): Promise<string> {
