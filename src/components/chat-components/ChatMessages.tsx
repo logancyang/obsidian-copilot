@@ -1,6 +1,6 @@
 import { ChainType } from "@/chainFactory";
-import ChatSingleMessage from "@/components/ChatComponents/ChatSingleMessage";
-import { SuggestedPrompts } from "@/components/ChatComponents/SuggestedPrompts";
+import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
+import { SuggestedPrompts } from "@/components/chat-components/SuggestedPrompts";
 import { ChatMessage } from "@/sharedState";
 import { App } from "obsidian";
 import React, { useEffect, useState } from "react";

@@ -1,5 +1,5 @@
-import { LanguageModal } from "@/components/LanguageModal";
-import { ToneModal } from "@/components/ToneModal";
+import { LanguageModal } from "@/components/modals/LanguageModal";
+import { ToneModal } from "@/components/modals/ToneModal";
 import CopilotPlugin from "@/main";
 import { Editor, Notice } from "obsidian";
 import { COMMAND_IDS } from "./constants";

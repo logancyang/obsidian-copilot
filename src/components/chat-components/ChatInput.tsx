@@ -1,19 +1,20 @@
 import { CustomModel, SetChainOptions } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
-import { ListPromptModal } from "@/components/ListPromptModal";
-import { NoteTitleModal } from "@/components/NoteTitleModal";
+import { AddImageModal } from "@/components/modals/AddImageModal";
+import { ListPromptModal } from "@/components/modals/ListPromptModal";
+import { NoteTitleModal } from "@/components/modals/NoteTitleModal";
 import { ContextProcessor } from "@/contextProcessor";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
 import { useSettingsValueContext } from "@/settings/contexts/SettingsValueContext";
+import { ChatMessage } from "@/sharedState";
 import { getToolDescription } from "@/tools/toolManager";
 import { extractNoteTitles } from "@/utils";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ArrowBigUp, ChevronUp, Command, CornerDownLeft, Image, StopCircle } from "lucide-react";
 import { App, Platform, TFile } from "obsidian";
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { AddImageModal } from "../AddImageModal";
 import ChatControls from "./ChatControls";
 import { TooltipActionButton } from "./TooltipActionButton";
 
@@ -41,6 +42,7 @@ interface ChatInputProps {
   selectedImages: File[];
   onAddImage: (files: File[]) => void;
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
+  chatHistory: ChatMessage[];
   debug?: boolean;
 }
 
@@ -72,6 +74,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       selectedImages,
       onAddImage,
       setSelectedImages,
+      chatHistory,
       debug,
     },
     ref
@@ -392,6 +395,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           setIncludeActiveNote={setIncludeActiveNote}
           contextUrls={contextUrls}
           onRemoveUrl={(url: string) => setContextUrls((prev) => prev.filter((u) => u !== url))}
+          chatHistory={chatHistory}
           debug={debug}
         />
 

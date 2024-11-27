@@ -1,5 +1,5 @@
 import { App, Modal, Notice, Setting } from "obsidian";
-import CopilotPlugin from "../main";
+import CopilotPlugin from "../../main";
 
 export class OramaSearchModal extends Modal {
   plugin: CopilotPlugin;
