@@ -1,4 +1,5 @@
 import { useAIState } from "@/aiState";
+import { ChainType } from "@/chainFactory";
 import { updateChatMemory } from "@/chatUtils";
 import ChatInput from "@/components/chat-components/ChatInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
@@ -109,7 +110,8 @@ const Chat: React.FC<ChatProps> = ({
       app.vault,
       contextNotes,
       includeActiveNote,
-      activeNote
+      activeNote,
+      currentChain
     );
   };
 
@@ -167,8 +169,11 @@ const Chat: React.FC<ChatProps> = ({
       app.workspace.getActiveFile() as TFile | undefined
     );
 
-    // Extract Mentions (such as URLs) from original input message only
-    const urlContextAddition = await mention.processUrls(inputMessage || "");
+    // Extract Mentions (such as URLs) from original input message only if using Copilot Plus chain
+    const urlContextAddition =
+      currentChain === ChainType.COPILOT_PLUS_CHAIN
+        ? await mention.processUrls(inputMessage || "")
+        : "";
 
     // Add context notes
     const noteContextAddition = await processContextNotes(customPromptProcessor, fileParserManager);

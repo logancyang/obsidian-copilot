@@ -1,3 +1,4 @@
+import { ChainType } from "@/chainFactory";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { TFile, Vault } from "obsidian";
@@ -48,20 +49,31 @@ export class ContextProcessor {
     vault: Vault,
     contextNotes: TFile[],
     includeActiveNote: boolean,
-    activeNote: TFile | null
+    activeNote: TFile | null,
+    currentChain: ChainType
   ): Promise<string> {
     const processedVars = await customPromptProcessor.getProcessedVariables();
     let additionalContext = "";
 
     const processNote = async (note: TFile) => {
       try {
+        if (currentChain !== ChainType.COPILOT_PLUS_CHAIN && note.extension !== "md") {
+          if (!fileParserManager.supportsExtension(note.extension)) {
+            console.warn(`Unsupported file type: ${note.extension}`);
+          } else {
+            console.warn(`File type ${note.extension} only supported in Copilot Plus mode`);
+          }
+          return;
+        }
+
         if (!fileParserManager.supportsExtension(note.extension)) {
           console.warn(`Unsupported file type: ${note.extension}`);
           return;
         }
+
         let content = await fileParserManager.parseFile(note, vault);
 
-        if (note.extension === "md") {
+        if (note.extension === "md" && currentChain === ChainType.COPILOT_PLUS_CHAIN) {
           content = await this.processEmbeddedPDFs(content, vault, fileParserManager);
         }
 
