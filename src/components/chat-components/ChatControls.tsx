@@ -5,14 +5,14 @@ import { App, Notice } from "obsidian";
 import React, { useEffect, useState } from "react";
 
 import { ChainType } from "@/chainFactory";
-import { AddContextNoteModal } from "@/components/AddContextNoteModal";
-import { TooltipActionButton } from "@/components/ChatComponents/TooltipActionButton";
+import { TooltipActionButton } from "@/components/chat-components/TooltipActionButton";
+import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
 import { useSettingsValueContext } from "@/settings/contexts/SettingsValueContext";
 import { stringToChainType } from "@/utils";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronDown, Download, MessageCirclePlus, Puzzle } from "lucide-react";
 
-import { NewChatConfirmModal } from "@/NewChatConfirmModal";
+import { NewChatConfirmModal } from "@/components/modals/NewChatConfirmModal";
 import { ChatMessage } from "@/sharedState";
 import { TFile } from "obsidian";
 import { ChatContextMenu } from "./ChatContextMenu";

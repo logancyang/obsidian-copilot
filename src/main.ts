@@ -5,14 +5,14 @@ import { CustomModel, LangChainParams, SetChainOptions } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { parseChatContent, updateChatMemory } from "@/chatUtils";
 import { registerBuiltInCommands } from "@/commands";
-import { AddPromptModal } from "@/components/AddPromptModal";
-import { AdhocPromptModal } from "@/components/AdhocPromptModal";
 import CopilotView from "@/components/CopilotView";
-import { IndexedFilesModal } from "@/components/IndexedFilesModal";
-import { ListPromptModal } from "@/components/ListPromptModal";
-import { LoadChatHistoryModal } from "@/components/LoadChatHistoryModal";
-import { OramaSearchModal } from "@/components/OramaSearchModal";
-import { SimilarNotesModal } from "@/components/SimilarNotesModal";
+import { AddPromptModal } from "@/components/modals/AddPromptModal";
+import { AdhocPromptModal } from "@/components/modals/AdhocPromptModal";
+import { IndexedFilesModal } from "@/components/modals/IndexedFilesModal";
+import { ListPromptModal } from "@/components/modals/ListPromptModal";
+import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
+import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
+import { SimilarNotesModal } from "@/components/modals/SimilarNotesModal";
 import {
   BUILTIN_CHAT_MODELS,
   BUILTIN_EMBEDDING_MODELS,

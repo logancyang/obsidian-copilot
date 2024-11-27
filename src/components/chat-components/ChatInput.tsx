@@ -1,7 +1,8 @@
 import { CustomModel, SetChainOptions } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
-import { ListPromptModal } from "@/components/ListPromptModal";
-import { NoteTitleModal } from "@/components/NoteTitleModal";
+import { AddImageModal } from "@/components/modals/AddImageModal";
+import { ListPromptModal } from "@/components/modals/ListPromptModal";
+import { NoteTitleModal } from "@/components/modals/NoteTitleModal";
 import { ContextProcessor } from "@/contextProcessor";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
@@ -14,7 +15,6 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ArrowBigUp, ChevronUp, Command, CornerDownLeft, Image, StopCircle } from "lucide-react";
 import { App, Platform, TFile } from "obsidian";
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { AddImageModal } from "../AddImageModal";
 import ChatControls from "./ChatControls";
 import { TooltipActionButton } from "./TooltipActionButton";
 

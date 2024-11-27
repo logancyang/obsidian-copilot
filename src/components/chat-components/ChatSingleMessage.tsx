@@ -1,5 +1,5 @@
-import { ChatButtons } from "@/components/ChatComponents/ChatButtons";
-import { SourcesModal } from "@/components/SourcesModal";
+import { ChatButtons } from "@/components/chat-components/ChatButtons";
+import { SourcesModal } from "@/components/modals/SourcesModal";
 import { USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/sharedState";
 import { Bot, User } from "lucide-react";

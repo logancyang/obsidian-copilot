@@ -1,13 +1,13 @@
-import ChainManager from "@/LLMProviders/chainManager";
 import { useAIState } from "@/aiState";
 import { updateChatMemory } from "@/chatUtils";
-import ChatInput from "@/components/ChatComponents/ChatInput";
-import ChatMessages from "@/components/ChatComponents/ChatMessages";
+import ChatInput from "@/components/chat-components/ChatInput";
+import ChatMessages from "@/components/chat-components/ChatMessages";
 import { ABORT_REASON, AI_SENDER, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
 import { AppContext } from "@/context";
 import { ContextProcessor } from "@/contextProcessor";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { getAIResponse } from "@/langchainStream";
+import ChainManager from "@/LLMProviders/chainManager";
 import CopilotPlugin from "@/main";
 import { Mention } from "@/mentions/Mention";
 import { useSettingsValueContext } from "@/settings/contexts/SettingsValueContext";
