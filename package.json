@@ -82,7 +82,7 @@
     "koa": "^2.14.2",
     "koa-proxies": "^0.12.3",
     "langchain": "^0.3.2",
-    "lucide-react": "^0.454.0",
+    "lucide-react": "^0.462.0",
     "luxon": "^3.5.0",
     "next-i18next": "^13.2.2",
     "prop-types": "^15.8.1",
