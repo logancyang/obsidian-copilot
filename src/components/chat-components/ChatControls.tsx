@@ -179,7 +179,8 @@ const ChatControls: React.FC<ChatControlsProps> = ({
           <TooltipActionButton onClick={onSaveAsNote} Icon={<Download className="icon-scaler" />}>
             Save as Note
           </TooltipActionButton>
-          {selectedChain === "vault_qa" && (
+          {(selectedChain === ChainType.VAULT_QA_CHAIN ||
+            selectedChain === ChainType.COPILOT_PLUS_CHAIN) && (
             <TooltipActionButton
               onClick={onRefreshVaultContext}
               Icon={<Puzzle className="icon-scaler" />}
