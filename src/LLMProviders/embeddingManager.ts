@@ -3,12 +3,12 @@ import { CustomModel, LangChainParams } from "@/aiParams";
 import { EmbeddingModelProviders } from "@/constants";
 import EncryptionService from "@/encryptionService";
 import { CustomError } from "@/error";
+import { safeFetch } from "@/utils";
 import { CohereEmbeddings } from "@langchain/cohere";
 import { Embeddings } from "@langchain/core/embeddings";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { OllamaEmbeddings } from "@langchain/ollama";
 import { OpenAIEmbeddings } from "@langchain/openai";
-import { safeFetch } from "@/utils";
 
 type EmbeddingConstructorType = new (config: any) => Embeddings;
 
@@ -37,7 +37,7 @@ export default class EmbeddingManager {
     }
   >;
 
-  private readonly providerAipKeyMap: Record<EmbeddingModelProviders, () => string> = {
+  private readonly providerApiKeyMap: Record<EmbeddingModelProviders, () => string> = {
     [EmbeddingModelProviders.OPENAI]: () => this.getLangChainParams().openAIApiKey,
     [EmbeddingModelProviders.COHEREAI]: () => this.getLangChainParams().cohereApiKey,
     [EmbeddingModelProviders.GOOGLE]: () => this.getLangChainParams().googleApiKey,
@@ -97,7 +97,7 @@ export default class EmbeddingManager {
         }
         const constructor = this.getProviderConstructor(model);
         const apiKey =
-          model.apiKey || this.providerAipKeyMap[model.provider as EmbeddingModelProviders]();
+          model.apiKey || this.providerApiKeyMap[model.provider as EmbeddingModelProviders]();
 
         const modelKey = `${model.name}|${model.provider}`;
         modelMap[modelKey] = {
