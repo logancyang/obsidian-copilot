@@ -658,6 +658,7 @@ ${chatContent}`;
           selectedImages={selectedImages}
           onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
           setSelectedImages={setSelectedImages}
+          chatHistory={chatHistory}
           debug={debug}
         />
       </div>

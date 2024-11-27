@@ -12,6 +12,8 @@ import { stringToChainType } from "@/utils";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronDown, Download, MessageCirclePlus, Puzzle } from "lucide-react";
 
+import { NewChatConfirmModal } from "@/NewChatConfirmModal";
+import { ChatMessage } from "@/sharedState";
 import { TFile } from "obsidian";
 import { ChatContextMenu } from "./ChatContextMenu";
 
@@ -29,6 +31,7 @@ interface ChatControlsProps {
   setIncludeActiveNote: React.Dispatch<React.SetStateAction<boolean>>;
   contextUrls: string[];
   onRemoveUrl: (url: string) => void;
+  chatHistory: ChatMessage[];
   debug?: boolean;
 }
 
@@ -46,6 +49,7 @@ const ChatControls: React.FC<ChatControlsProps> = ({
   setIncludeActiveNote,
   contextUrls,
   onRemoveUrl,
+  chatHistory,
   debug,
 }) => {
   const [selectedChain, setSelectedChain] = useState<ChainType>(currentChain);
@@ -159,7 +163,13 @@ const ChatControls: React.FC<ChatControlsProps> = ({
         <div className="chat-icons-right">
           <TooltipActionButton
             onClick={() => {
-              onNewChat(false);
+              if (!settings.autosaveChat && chatHistory.length > 0) {
+                new NewChatConfirmModal(app, () => {
+                  onNewChat(false);
+                }).open();
+              } else {
+                onNewChat(false);
+              }
             }}
             Icon={<MessageCirclePlus className="icon-scaler" />}
           >

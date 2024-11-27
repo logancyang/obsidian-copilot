@@ -7,6 +7,7 @@ import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
 import { useSettingsValueContext } from "@/settings/contexts/SettingsValueContext";
+import { ChatMessage } from "@/sharedState";
 import { getToolDescription } from "@/tools/toolManager";
 import { extractNoteTitles } from "@/utils";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -41,6 +42,7 @@ interface ChatInputProps {
   selectedImages: File[];
   onAddImage: (files: File[]) => void;
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
+  chatHistory: ChatMessage[];
   debug?: boolean;
 }
 
@@ -72,6 +74,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       selectedImages,
       onAddImage,
       setSelectedImages,
+      chatHistory,
       debug,
     },
     ref
@@ -392,6 +395,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           setIncludeActiveNote={setIncludeActiveNote}
           contextUrls={contextUrls}
           onRemoveUrl={(url: string) => setContextUrls((prev) => prev.filter((u) => u !== url))}
+          chatHistory={chatHistory}
           debug={debug}
         />
 
