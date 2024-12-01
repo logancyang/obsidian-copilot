@@ -1,6 +1,6 @@
 import { CustomError } from "@/error";
-import { PromptUsageStrategy } from "@/promptUsageStrategy";
-import { CopilotSettings } from "@/settings/SettingsPage";
+import { TimestampUsageStrategy } from "@/promptUsageStrategy";
+import { getSettings } from "@/settings/model";
 import {
   extractNoteTitles,
   getFileContent,
@@ -19,33 +19,29 @@ export interface CustomPrompt {
 
 export class CustomPromptProcessor {
   private static instance: CustomPromptProcessor;
+  private usageStrategy: TimestampUsageStrategy;
 
-  private constructor(
-    private vault: Vault,
-    private settings: CopilotSettings,
-    private usageStrategy?: PromptUsageStrategy
-  ) {}
+  private constructor(private vault: Vault) {
+    this.usageStrategy = new TimestampUsageStrategy();
+  }
 
-  static getInstance(
-    vault: Vault,
-    settings: CopilotSettings,
-    usageStrategy?: PromptUsageStrategy
-  ): CustomPromptProcessor {
+  get customPromptsFolder(): string {
+    return getSettings().customPromptsFolder;
+  }
+
+  static getInstance(vault: Vault): CustomPromptProcessor {
     if (!CustomPromptProcessor.instance) {
-      if (!usageStrategy) {
-        console.warn("PromptUsageStrategy not initialize");
-      }
-      CustomPromptProcessor.instance = new CustomPromptProcessor(vault, settings, usageStrategy);
+      CustomPromptProcessor.instance = new CustomPromptProcessor(vault);
     }
     return CustomPromptProcessor.instance;
   }
 
-  async recordPromptUsage(title: string) {
-    return this.usageStrategy?.recordUsage(title).save();
+  recordPromptUsage(title: string) {
+    this.usageStrategy.recordUsage(title);
   }
 
   async getAllPrompts(): Promise<CustomPrompt[]> {
-    const folder = this.settings.customPromptsFolder;
+    const folder = this.customPromptsFolder;
     const files = this.vault
       .getFiles()
       .filter((file) => file.path.startsWith(folder) && file.extension === "md");
@@ -60,13 +56,13 @@ export class CustomPromptProcessor {
     }
 
     // Clean up promptUsageTimestamps
-    this.usageStrategy?.removeUnusedPrompts(prompts.map((prompt) => prompt.title)).save();
+    this.usageStrategy.removeUnusedPrompts(prompts.map((prompt) => prompt.title));
 
-    return prompts.sort((a, b) => this.usageStrategy?.compare(b.title, a.title) || 0);
+    return prompts.sort((a, b) => this.usageStrategy.compare(b.title, a.title) || 0);
   }
 
   async getPrompt(title: string): Promise<CustomPrompt | null> {
-    const filePath = `${this.settings.customPromptsFolder}/${title}.md`;
+    const filePath = `${this.customPromptsFolder}/${title}.md`;
     const file = this.vault.getAbstractFileByPath(filePath);
     if (file instanceof TFile) {
       const content = await this.vault.read(file);
@@ -76,7 +72,7 @@ export class CustomPromptProcessor {
   }
 
   async savePrompt(title: string, content: string): Promise<void> {
-    const folderPath = normalizePath(this.settings.customPromptsFolder);
+    const folderPath = normalizePath(this.customPromptsFolder);
     const filePath = `${folderPath}/${title}.md`;
 
     // Check if the folder exists and create it if it doesn't
@@ -90,12 +86,12 @@ export class CustomPromptProcessor {
   }
 
   async updatePrompt(originTitle: string, newTitle: string, content: string): Promise<void> {
-    const filePath = `${this.settings.customPromptsFolder}/${originTitle}.md`;
+    const filePath = `${this.customPromptsFolder}/${originTitle}.md`;
     const file = this.vault.getAbstractFileByPath(filePath);
 
     if (file instanceof TFile) {
       if (originTitle !== newTitle) {
-        const newFilePath = `${this.settings.customPromptsFolder}/${newTitle}.md`;
+        const newFilePath = `${this.customPromptsFolder}/${newTitle}.md`;
         const newFileExists = this.vault.getAbstractFileByPath(newFilePath);
 
         if (newFileExists) {
@@ -104,23 +100,19 @@ export class CustomPromptProcessor {
           );
         }
 
-        await Promise.all([
-          this.usageStrategy?.updateUsage(originTitle, newTitle).save(),
-          this.vault.rename(file, newFilePath),
-        ]);
+        this.usageStrategy.updateUsage(originTitle, newTitle);
+        await this.vault.rename(file, newFilePath);
       }
       await this.vault.modify(file, content);
     }
   }
 
   async deletePrompt(title: string): Promise<void> {
-    const filePath = `${this.settings.customPromptsFolder}/${title}.md`;
+    const filePath = `${this.customPromptsFolder}/${title}.md`;
     const file = this.vault.getAbstractFileByPath(filePath);
     if (file instanceof TFile) {
-      await Promise.all([
-        this.usageStrategy?.removeUnusedPrompts([title]).save(),
-        this.vault.delete(file),
-      ]);
+      this.usageStrategy.removeUnusedPrompts([title]);
+      await this.vault.delete(file);
     }
   }
 

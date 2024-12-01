@@ -1,8 +1,8 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
+import { encryptAllKeys } from "@/encryptionService";
 import ChainManager from "@/LLMProviders/chainManager";
 import VectorStoreManager from "@/VectorStoreManager";
-import { CustomModel, LangChainParams, SetChainOptions } from "@/aiParams";
-import { ChainType } from "@/chainFactory";
+import { CustomModel } from "@/aiParams";
 import { parseChatContent, updateChatMemory } from "@/chatUtils";
 import { registerBuiltInCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
@@ -13,27 +13,19 @@ import { ListPromptModal } from "@/components/modals/ListPromptModal";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
 import { SimilarNotesModal } from "@/components/modals/SimilarNotesModal";
-import {
-  BUILTIN_CHAT_MODELS,
-  BUILTIN_EMBEDDING_MODELS,
-  CHAT_VIEWTYPE,
-  CHUNK_SIZE,
-  DEFAULT_OPEN_AREA,
-  DEFAULT_SETTINGS,
-  DEFAULT_SYSTEM_PROMPT,
-  EVENT_NAMES,
-  VAULT_VECTOR_STORE_STRATEGY,
-} from "@/constants";
+import { CHAT_VIEWTYPE, CHUNK_SIZE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
-import EncryptionService from "@/encryptionService";
 import { CustomError } from "@/error";
-import { TimestampUsageStrategy } from "@/promptUsageStrategy";
 import { HybridRetriever } from "@/search/hybridRetriever";
-import { CopilotSettings, CopilotSettingTab } from "@/settings/SettingsPage";
+import { CopilotSettingTab } from "@/settings/SettingsPage";
+import {
+  getSettings,
+  sanitizeSettings,
+  setSettings,
+  subscribeToSettingsChange,
+} from "@/settings/model";
 import SharedState from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
-import { sanitizeSettings } from "@/utils";
-import VectorDBManager from "@/vectorDBManager";
 import { Embeddings } from "@langchain/core/embeddings";
 import { search } from "@orama/orama";
 import {
@@ -48,61 +40,40 @@ import {
 } from "obsidian";
 
 export default class CopilotPlugin extends Plugin {
-  settings: CopilotSettings;
   // A chat history that stores the messages sent and received
   // Only reset when the user explicitly clicks "New Chat"
   sharedState: SharedState;
   chainManager: ChainManager;
   brevilabsClient: BrevilabsClient;
-  encryptionService: EncryptionService;
   userMessageHistory: string[] = [];
   vectorStoreManager: VectorStoreManager;
-  langChainParams: LangChainParams;
   fileParserManager: FileParserManager;
+  settingsUnsubscriber?: () => void;
 
   async onload(): Promise<void> {
     await this.loadSettings();
+    this.settingsUnsubscriber = subscribeToSettingsChange(() => {
+      const settings = getSettings();
+      if (settings.enableEncryption) {
+        this.saveData(encryptAllKeys(settings));
+      } else {
+        this.saveData(settings);
+      }
+      registerBuiltInCommands(this);
+    });
     this.addSettingTab(new CopilotSettingTab(this.app, this));
     // Always have one instance of sharedState and chainManager in the plugin
     this.sharedState = new SharedState();
-    this.langChainParams = this.getLangChainParams();
 
-    this.encryptionService = new EncryptionService(this.settings);
-    this.vectorStoreManager = new VectorStoreManager(
-      this.app,
-      this.settings,
-      this.encryptionService,
-      () => this.langChainParams
-    );
+    this.vectorStoreManager = new VectorStoreManager(this.app);
 
     // Initialize event listeners for the VectorStoreManager, e.g. onModify triggers reindexing
-    await this.vectorStoreManager.initializeEventListeners();
-
-    if (this.settings.enableEncryption) {
-      await this.saveSettings();
-    }
-
-    // Initialize the rate limiter
-    VectorDBManager.initialize({
-      getEmbeddingRequestsPerSecond: () => this.settings.embeddingRequestsPerSecond,
-      debug: this.settings.debug,
-    });
+    this.vectorStoreManager.initializeEventListeners();
 
     // Initialize BrevilabsClient
-    this.brevilabsClient = BrevilabsClient.getInstance(this.settings.plusLicenseKey, {
-      debug: this.settings.debug,
-    });
+    this.brevilabsClient = BrevilabsClient.getInstance();
 
-    // Ensure activeModels always includes core models
-    this.mergeAllActiveModelsWithCoreModels();
-    this.chainManager = new ChainManager(
-      this.app,
-      () => this.langChainParams,
-      this.encryptionService,
-      this.settings,
-      this.vectorStoreManager,
-      this.brevilabsClient
-    );
+    this.chainManager = new ChainManager(this.app, this.vectorStoreManager, this.brevilabsClient);
 
     // Initialize FileParserManager early with other core services
     this.fileParserManager = new FileParserManager(this.brevilabsClient);
@@ -133,11 +104,7 @@ export default class CopilotPlugin extends Plugin {
 
     registerBuiltInCommands(this);
 
-    const promptProcessor = CustomPromptProcessor.getInstance(
-      this.app.vault,
-      this.settings,
-      new TimestampUsageStrategy(this.settings, () => this.saveSettings())
-    );
+    const promptProcessor = CustomPromptProcessor.getInstance(this.app.vault);
 
     this.addCommand({
       id: "add-custom-prompt",
@@ -379,17 +346,6 @@ export default class CopilotPlugin extends Plugin {
       },
     });
 
-    // Index vault to Copilot index on startup and after loading all commands
-    // This can take a while, so we don't want to block the startup process
-    if (this.settings.indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP) {
-      try {
-        await this.vectorStoreManager.indexVaultToVectorStore();
-      } catch (err) {
-        console.error("Error saving vault to Copilot index:", err);
-        new Notice("An error occurred while saving vault to Copilot index.");
-      }
-    }
-
     this.registerEvent(this.app.workspace.on("editor-menu", this.handleContextMenu));
   }
 
@@ -398,6 +354,7 @@ export default class CopilotPlugin extends Plugin {
     if (this.vectorStoreManager) {
       this.vectorStoreManager.onunload();
     }
+    this.settingsUnsubscriber?.();
 
     console.log("Copilot plugin unloaded");
   }
@@ -407,7 +364,7 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async autosaveCurrentChat() {
-    if (this.settings.autosaveChat) {
+    if (getSettings().autosaveChat) {
       const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view as CopilotView;
       if (chatView && chatView.sharedState.chatHistory.length > 0) {
         await chatView.saveChat();
@@ -496,7 +453,7 @@ export default class CopilotPlugin extends Plugin {
   async activateView(): Promise<void> {
     const leaves = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE);
     if (leaves.length === 0) {
-      if (this.settings.defaultOpenArea === DEFAULT_OPEN_AREA.VIEW) {
+      if (getSettings().defaultOpenArea === DEFAULT_OPEN_AREA.VIEW) {
         await this.app.workspace.getRightLeaf(false).setViewState({
           type: CHAT_VIEWTYPE,
           active: true,
@@ -507,8 +464,9 @@ export default class CopilotPlugin extends Plugin {
           active: true,
         });
       }
+    } else {
+      this.app.workspace.revealLeaf(leaves[0]);
     }
-    this.app.workspace.revealLeaf(leaves[0]);
     this.emitChatIsVisible();
   }
 
@@ -517,10 +475,9 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-
-    // Ensure activeModels always includes core models
-    this.mergeAllActiveModelsWithCoreModels();
+    const savedSettings = await this.loadData();
+    const sanitizedSettings = sanitizeSettings(savedSettings);
+    setSettings(sanitizedSettings);
   }
 
   mergeActiveModels(
@@ -550,27 +507,6 @@ export default class CopilotPlugin extends Plugin {
     return Array.from(modelMap.values());
   }
 
-  mergeAllActiveModelsWithCoreModels(): void {
-    this.settings.activeModels = this.mergeActiveModels(
-      this.settings.activeModels,
-      BUILTIN_CHAT_MODELS
-    );
-    this.settings.activeEmbeddingModels = this.mergeActiveModels(
-      this.settings.activeEmbeddingModels,
-      BUILTIN_EMBEDDING_MODELS
-    );
-  }
-
-  async saveSettings(): Promise<void> {
-    if (this.settings.enableEncryption) {
-      // Encrypt all API keys before saving
-      this.encryptionService.encryptAllKeys();
-    }
-    // Ensure activeModels always includes core models
-    this.mergeAllActiveModelsWithCoreModels();
-    await this.saveData(this.settings);
-  }
-
   async countTotalTokens(): Promise<number> {
     try {
       const allContent = await this.vectorStoreManager.getAllQAMarkdownContent();
@@ -597,61 +533,6 @@ export default class CopilotPlugin extends Plugin {
     });
   };
 
-  getLangChainParams(): LangChainParams {
-    if (!this.settings) {
-      throw new Error("Settings are not loaded");
-    }
-
-    const {
-      openAIApiKey,
-      openAIOrgId,
-      huggingfaceApiKey,
-      cohereApiKey,
-      anthropicApiKey,
-      azureOpenAIApiKey,
-      azureOpenAIApiInstanceName,
-      azureOpenAIApiDeploymentName,
-      azureOpenAIApiVersion,
-      azureOpenAIApiEmbeddingDeploymentName,
-      googleApiKey,
-      openRouterAiApiKey,
-      embeddingModelKey,
-      temperature,
-      maxTokens,
-      contextTurns,
-      groqApiKey,
-    } = sanitizeSettings(this.settings);
-    return {
-      openAIApiKey,
-      openAIOrgId,
-      huggingfaceApiKey,
-      cohereApiKey,
-      anthropicApiKey,
-      groqApiKey,
-      azureOpenAIApiKey,
-      azureOpenAIApiInstanceName,
-      azureOpenAIApiDeploymentName,
-      azureOpenAIApiVersion,
-      azureOpenAIApiEmbeddingDeploymentName,
-      googleApiKey,
-      openRouterAiApiKey,
-      modelKey: this.settings.defaultModelKey,
-      embeddingModelKey: embeddingModelKey || DEFAULT_SETTINGS.embeddingModelKey,
-      temperature: Number(temperature),
-      maxTokens: Number(maxTokens),
-      systemMessage: this.settings.userSystemPrompt || DEFAULT_SYSTEM_PROMPT,
-      chatContextTurns: Number(contextTurns),
-      chainType: this.settings.defaultChainType || ChainType.LLM_CHAIN,
-      options: { forceNewCreation: true, debug: this.settings.debug } as SetChainOptions,
-      openAIProxyBaseUrl: this.settings.openAIProxyBaseUrl,
-      openAIEmbeddingProxyBaseUrl: this.settings.openAIEmbeddingProxyBaseUrl,
-    };
-  }
-
-  getEncryptionService(): EncryptionService {
-    return this.encryptionService;
-  }
-
   async loadCopilotChatHistory() {
     const chatFiles = await this.getChatHistoryFiles();
     if (chatFiles.length === 0) {
@@ -662,7 +543,7 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async getChatHistoryFiles(): Promise<TFile[]> {
-    const folder = this.app.vault.getAbstractFileByPath(this.settings.defaultSaveFolder);
+    const folder = this.app.vault.getAbstractFileByPath(getSettings().defaultSaveFolder);
     if (!(folder instanceof TFolder)) {
       return [];
     }
@@ -723,7 +604,7 @@ export default class CopilotPlugin extends Plugin {
         maxK: 20,
         salientTerms: [],
       },
-      this.settings.debug
+      getSettings().debug
     );
 
     const truncatedContent = content.length > CHUNK_SIZE ? content.slice(0, CHUNK_SIZE) : content;
@@ -757,7 +638,7 @@ export default class CopilotPlugin extends Plugin {
         salientTerms: salientTerms,
         textWeight: textWeight,
       },
-      this.settings.debug
+      getSettings().debug
     );
 
     const results = await hybridRetriever.getOramaChunks(query, salientTerms);

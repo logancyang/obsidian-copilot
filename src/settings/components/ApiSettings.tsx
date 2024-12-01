@@ -1,64 +1,12 @@
 import React from "react";
 import ApiSetting from "./ApiSetting";
 import Collapsible from "./Collapsible";
+import { updateSetting, useSettingsValue } from "@/settings/model";
 
-interface ApiSettingsProps {
-  openAIApiKey: string;
-  setOpenAIApiKey: (value: string) => void;
-  openAIOrgId: string;
-  setOpenAIOrgId: (value: string) => void;
-  googleApiKey: string;
-  setGoogleApiKey: (value: string) => void;
-  anthropicApiKey: string;
-  setAnthropicApiKey: (value: string) => void;
-  openRouterAiApiKey: string;
-  setOpenRouterAiApiKey: (value: string) => void;
-  azureOpenAIApiKey: string;
-  setAzureOpenAIApiKey: (value: string) => void;
-  azureOpenAIApiInstanceName: string;
-  setAzureOpenAIApiInstanceName: (value: string) => void;
-  azureOpenAIApiDeploymentName: string;
-  setAzureOpenAIApiDeploymentName: (value: string) => void;
-  azureOpenAIApiVersion: string;
-  setAzureOpenAIApiVersion: (value: string) => void;
-  azureOpenAIApiEmbeddingDeploymentName: string;
-  setAzureOpenAIApiEmbeddingDeploymentName: (value: string) => void;
-  groqApiKey: string;
-  setGroqApiKey: (value: string) => void;
-  cohereApiKey: string;
-  setCohereApiKey: (value: string) => void;
-}
-
-const ApiSettings: React.FC<ApiSettingsProps> = ({
-  openAIApiKey,
-  setOpenAIApiKey,
-  openAIOrgId,
-  setOpenAIOrgId,
-  googleApiKey,
-  setGoogleApiKey,
-  anthropicApiKey,
-  setAnthropicApiKey,
-  openRouterAiApiKey,
-  setOpenRouterAiApiKey,
-  azureOpenAIApiKey,
-  setAzureOpenAIApiKey,
-  azureOpenAIApiInstanceName,
-  setAzureOpenAIApiInstanceName,
-  azureOpenAIApiDeploymentName,
-  setAzureOpenAIApiDeploymentName,
-  azureOpenAIApiVersion,
-  setAzureOpenAIApiVersion,
-  azureOpenAIApiEmbeddingDeploymentName,
-  setAzureOpenAIApiEmbeddingDeploymentName,
-  groqApiKey,
-  setGroqApiKey,
-  cohereApiKey,
-  setCohereApiKey,
-}) => {
+const ApiSettings: React.FC = () => {
+  const settings = useSettingsValue();
   return (
     <div>
-      <br />
-      <br />
       <h1>API Settings</h1>
       <p>All your API keys are stored locally.</p>
       <div className="warning-message">
@@ -71,8 +19,8 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
         <div>
           <ApiSetting
             title="OpenAI API Key"
-            value={openAIApiKey}
-            setValue={setOpenAIApiKey}
+            value={settings.openAIApiKey}
+            setValue={(value) => updateSetting("openAIApiKey", value)}
             placeholder="Enter OpenAI API Key"
           />
           <p>
@@ -87,8 +35,8 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
           </p>
           <ApiSetting
             title="OpenAI Organization ID (optional)"
-            value={openAIOrgId}
-            setValue={setOpenAIOrgId}
+            value={settings.openAIOrgId}
+            setValue={(value) => updateSetting("openAIOrgId", value)}
             placeholder="Enter OpenAI Organization ID if applicable"
           />
         </div>
@@ -109,8 +57,8 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
         <div>
           <ApiSetting
             title="Google API Key"
-            value={googleApiKey}
-            setValue={setGoogleApiKey}
+            value={settings.googleApiKey}
+            setValue={(value) => updateSetting("googleApiKey", value)}
             placeholder="Enter Google API Key"
           />
           <p>
@@ -133,8 +81,8 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
         <div>
           <ApiSetting
             title="Anthropic API Key"
-            value={anthropicApiKey}
-            setValue={setAnthropicApiKey}
+            value={settings.anthropicApiKey}
+            setValue={(value) => updateSetting("anthropicApiKey", value)}
             placeholder="Enter Anthropic API Key"
           />
           <p>
@@ -158,8 +106,8 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
         <div>
           <ApiSetting
             title="OpenRouter AI API Key"
-            value={openRouterAiApiKey}
-            setValue={setOpenRouterAiApiKey}
+            value={settings.openRouterAiApiKey}
+            setValue={(value) => updateSetting("openRouterAiApiKey", value)}
             placeholder="Enter OpenRouter AI API Key"
           />
           <p>
@@ -182,37 +130,37 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
         <div>
           <ApiSetting
             title="Azure OpenAI API Key"
-            value={azureOpenAIApiKey}
-            setValue={setAzureOpenAIApiKey}
+            value={settings.azureOpenAIApiKey}
+            setValue={(value) => updateSetting("azureOpenAIApiKey", value)}
             placeholder="Enter Azure OpenAI API Key"
           />
           <ApiSetting
             title="Azure OpenAI API Instance Name"
-            value={azureOpenAIApiInstanceName}
-            setValue={setAzureOpenAIApiInstanceName}
+            value={settings.azureOpenAIApiInstanceName}
+            setValue={(value) => updateSetting("azureOpenAIApiInstanceName", value)}
             placeholder="Enter Azure OpenAI API Instance Name"
             type="text"
           />
           <ApiSetting
             title="Azure OpenAI API Deployment Name"
             description="This is your actual model, no need to pass a model name separately."
-            value={azureOpenAIApiDeploymentName}
-            setValue={setAzureOpenAIApiDeploymentName}
+            value={settings.azureOpenAIApiDeploymentName}
+            setValue={(value) => updateSetting("azureOpenAIApiDeploymentName", value)}
             placeholder="Enter Azure OpenAI API Deployment Name"
             type="text"
           />
           <ApiSetting
             title="Azure OpenAI API Version"
-            value={azureOpenAIApiVersion}
-            setValue={setAzureOpenAIApiVersion}
+            value={settings.azureOpenAIApiVersion}
+            setValue={(value) => updateSetting("azureOpenAIApiVersion", value)}
             placeholder="Enter Azure OpenAI API Version"
             type="text"
           />
           <ApiSetting
             title="Azure OpenAI API Embedding Deployment Name"
             description="(Optional) For embedding provider Azure OpenAI"
-            value={azureOpenAIApiEmbeddingDeploymentName}
-            setValue={setAzureOpenAIApiEmbeddingDeploymentName}
+            value={settings.azureOpenAIApiEmbeddingDeploymentName}
+            setValue={(value) => updateSetting("azureOpenAIApiEmbeddingDeploymentName", value)}
             placeholder="Enter Azure OpenAI API Embedding Deployment Name"
             type="text"
           />
@@ -223,8 +171,8 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
         <div>
           <ApiSetting
             title="Groq API Key"
-            value={groqApiKey}
-            setValue={setGroqApiKey}
+            value={settings.groqApiKey}
+            setValue={(value) => updateSetting("groqApiKey", value)}
             placeholder="Enter Groq API Key"
           />
           <p>
@@ -242,8 +190,8 @@ const ApiSettings: React.FC<ApiSettingsProps> = ({
       <Collapsible title="Cohere API Settings">
         <ApiSetting
           title="Cohere API Key"
-          value={cohereApiKey}
-          setValue={setCohereApiKey}
+          value={settings.cohereApiKey}
+          setValue={(value) => updateSetting("cohereApiKey", value)}
           placeholder="Enter Cohere API Key"
         />
         <p>

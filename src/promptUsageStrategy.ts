@@ -1,53 +1,42 @@
-import { CopilotSettings } from "@/settings/SettingsPage";
+import { getSettings, updateSetting } from "@/settings/model";
 
 export interface PromptUsageStrategy {
-  recordUsage: (promptTitle: string) => PromptUsageStrategy;
+  recordUsage: (promptTitle: string) => void;
 
-  updateUsage: (oldTitle: string, newTitle: string) => PromptUsageStrategy;
+  updateUsage: (oldTitle: string, newTitle: string) => void;
 
-  removeUnusedPrompts: (existingPromptTitles: Array<string>) => PromptUsageStrategy;
+  removeUnusedPrompts: (existingPromptTitles: Array<string>) => void;
 
   compare: (aKey: string, bKey: string) => number;
-
-  save: () => Promise<void>;
 }
 
 export class TimestampUsageStrategy implements PromptUsageStrategy {
-  private usageData: Record<string, number> = {};
-
-  constructor(
-    private settings: CopilotSettings,
-    private saveSettings: () => Promise<void>
-  ) {
-    this.usageData = { ...settings.promptUsageTimestamps };
+  get usageData(): Readonly<Record<string, number>> {
+    return getSettings().promptUsageTimestamps;
   }
 
-  recordUsage(promptTitle: string): PromptUsageStrategy {
-    this.usageData[promptTitle] = Date.now();
-    return this;
+  recordUsage(promptTitle: string) {
+    updateSetting("promptUsageTimestamps", { ...this.usageData, [promptTitle]: Date.now() });
   }
 
-  updateUsage(oldTitle: string, newTitle: string): PromptUsageStrategy {
-    this.usageData[newTitle] = this.usageData[oldTitle];
-    delete this.usageData[oldTitle];
-    return this;
+  updateUsage(oldTitle: string, newTitle: string) {
+    const newUsageData = { ...this.usageData };
+    newUsageData[newTitle] = newUsageData[oldTitle];
+    delete newUsageData[oldTitle];
+    updateSetting("promptUsageTimestamps", newUsageData);
   }
 
-  removeUnusedPrompts(existingPromptTitles: Array<string>): PromptUsageStrategy {
-    for (const key in this.usageData) {
+  removeUnusedPrompts(existingPromptTitles: Array<string>) {
+    const newUsageData = { ...this.usageData };
+    for (const key of Object.keys(newUsageData)) {
       if (!existingPromptTitles.includes(key)) {
-        delete this.usageData[key];
+        delete newUsageData[key];
       }
     }
-    return this;
+    updateSetting("promptUsageTimestamps", newUsageData);
   }
 
   compare(aKey: string, bKey: string): number {
     return (this.usageData[aKey] || 0) - (this.usageData[bKey] || 0);
-  }
-
-  async save(): Promise<void> {
-    this.settings.promptUsageTimestamps = { ...this.usageData };
-    await this.saveSettings();
   }
 }

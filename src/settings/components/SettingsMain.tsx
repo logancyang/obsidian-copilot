@@ -1,70 +1,29 @@
-import CopilotPlugin from "@/main";
 import React from "react";
-import { useSettingsContext } from "../contexts/SettingsContext";
 import AdvancedSettings from "./AdvancedSettings";
 import ApiSettings from "./ApiSettings";
 import CopilotPlusSettings from "./CopilotPlusSettings";
 import GeneralSettings from "./GeneralSettings";
 import QASettings from "./QASettings";
+import { resetSettings } from "@/settings/model";
+import { ResetSettingsConfirmModal } from "@/components/modals/ResetSettingsConfirmModal";
 
-const SettingsMain: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
-  const { settings, updateSettings, saveSettings, resetSettings } = useSettingsContext();
-
+const SettingsMain: React.FC = () => {
   return (
-    <>
-      <h2>Copilot Settings</h2>
-      <div className="button-container">
-        <button className="mod-cta" onClick={saveSettings}>
-          Save and Reload
-        </button>
-        <button className="mod-cta" onClick={resetSettings}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+      <h1 style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        Copilot Settings
+        <button onClick={() => new ResetSettingsConfirmModal(app, () => resetSettings()).open()}>
           Reset to Default Settings
         </button>
-      </div>
-      <div className="warning-message">
-        Please Save and Reload the plugin when you change any setting below!
-      </div>
+      </h1>
 
       <CopilotPlusSettings />
-      <GeneralSettings
-        getLangChainParams={plugin.getLangChainParams.bind(plugin)}
-        encryptionService={plugin.getEncryptionService()}
-      />
-      <ApiSettings
-        {...settings}
-        setOpenAIApiKey={(value) => updateSettings({ openAIApiKey: value })}
-        setOpenAIOrgId={(value) => updateSettings({ openAIOrgId: value })}
-        setGoogleApiKey={(value) => updateSettings({ googleApiKey: value })}
-        setAnthropicApiKey={(value) => updateSettings({ anthropicApiKey: value })}
-        setOpenRouterAiApiKey={(value) => updateSettings({ openRouterAiApiKey: value })}
-        setAzureOpenAIApiKey={(value) => updateSettings({ azureOpenAIApiKey: value })}
-        setAzureOpenAIApiInstanceName={(value) =>
-          updateSettings({ azureOpenAIApiInstanceName: value })
-        }
-        setAzureOpenAIApiDeploymentName={(value) =>
-          updateSettings({ azureOpenAIApiDeploymentName: value })
-        }
-        setAzureOpenAIApiVersion={(value) => updateSettings({ azureOpenAIApiVersion: value })}
-        setAzureOpenAIApiEmbeddingDeploymentName={(value) =>
-          updateSettings({ azureOpenAIApiEmbeddingDeploymentName: value })
-        }
-        setGroqApiKey={(value) => updateSettings({ groqApiKey: value })}
-        setCohereApiKey={(value) => updateSettings({ cohereApiKey: value })}
-      />
-      <QASettings
-        {...settings}
-        setHuggingfaceApiKey={(value) => updateSettings({ huggingfaceApiKey: value })}
-        setIndexVaultToVectorStore={(value) => updateSettings({ indexVaultToVectorStore: value })}
-        setMaxSourceChunks={(value) => updateSettings({ maxSourceChunks: value })}
-        disableIndexOnMobile={settings.disableIndexOnMobile}
-        setDisableIndexOnMobile={(value) => updateSettings({ disableIndexOnMobile: value })}
-      />
-      <AdvancedSettings
-        {...settings}
-        setUserSystemPrompt={(value) => updateSettings({ userSystemPrompt: value })}
-      />
-    </>
+      <GeneralSettings />
+      <ApiSettings />
+      <QASettings />
+      <AdvancedSettings />
+    </div>
   );
 };
 
-export default React.memo(SettingsMain);
+export default SettingsMain;

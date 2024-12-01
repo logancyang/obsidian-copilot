@@ -1,5 +1,6 @@
-import { CustomModel, SetChainOptions } from "@/aiParams";
+import { CustomModel, useChainType, useModelKey } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
+import { useSettingsValue } from "@/settings/model";
 import { AddImageModal } from "@/components/modals/AddImageModal";
 import { ListPromptModal } from "@/components/modals/ListPromptModal";
 import { NoteTitleModal } from "@/components/modals/NoteTitleModal";
@@ -7,7 +8,6 @@ import { ContextProcessor } from "@/contextProcessor";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
-import { useSettingsValueContext } from "@/settings/contexts/SettingsValueContext";
 import { ChatMessage } from "@/sharedState";
 import { getToolDescription } from "@/tools/toolManager";
 import { extractNoteTitles } from "@/utils";
@@ -26,10 +26,6 @@ interface ChatInputProps {
   onStopGenerating: () => void;
   app: App;
   navigateHistory: (direction: "up" | "down") => string;
-  currentModelKey: string;
-  setCurrentModelKey: (modelKey: string) => void;
-  currentChain: ChainType;
-  setCurrentChain: (chain: ChainType, options?: SetChainOptions) => void;
   onNewChat: (openNote: boolean) => void;
   onSaveAsNote: () => void;
   onRefreshVaultContext: () => void;
@@ -43,7 +39,6 @@ interface ChatInputProps {
   onAddImage: (files: File[]) => void;
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
   chatHistory: ChatMessage[];
-  debug?: boolean;
 }
 
 const getModelKey = (model: CustomModel) => `${model.name}|${model.provider}`;
@@ -58,10 +53,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       onStopGenerating,
       app,
       navigateHistory,
-      currentModelKey,
-      setCurrentModelKey,
-      currentChain,
-      setCurrentChain,
       onNewChat,
       onSaveAsNote,
       onRefreshVaultContext,
@@ -75,7 +66,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       onAddImage,
       setSelectedImages,
       chatHistory,
-      debug,
     },
     ref
   ) => {
@@ -85,7 +75,9 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const [contextUrls, setContextUrls] = useState<string[]>([]);
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-    const settings = useSettingsValueContext();
+    const [currentModelKey, setCurrentModelKey] = useModelKey();
+    const [currentChain] = useChainType();
+    const settings = useSettingsValue();
 
     useImperativeHandle(ref, () => ({
       focus: () => {
@@ -222,14 +214,14 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     };
 
     const showCustomPromptModal = async () => {
-      const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault, settings);
+      const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
       const prompts = await customPromptProcessor.getAllPrompts();
       const promptTitles = prompts.map((prompt) => prompt.title);
 
       new ListPromptModal(app, promptTitles, async (promptTitle: string) => {
         const selectedPrompt = prompts.find((prompt) => prompt.title === promptTitle);
         if (selectedPrompt) {
-          await customPromptProcessor.recordPromptUsage(selectedPrompt.title);
+          customPromptProcessor.recordPromptUsage(selectedPrompt.title);
           setInputMessage(selectedPrompt.content);
         }
       }).open();
@@ -382,8 +374,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     return (
       <div className="chat-input-container" ref={containerRef}>
         <ChatControls
-          currentChain={currentChain}
-          setCurrentChain={setCurrentChain}
           onNewChat={onNewChat}
           onSaveAsNote={onSaveAsNote}
           onRefreshVaultContext={onRefreshVaultContext}
@@ -396,7 +386,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           contextUrls={contextUrls}
           onRemoveUrl={(url: string) => setContextUrls((prev) => prev.filter((u) => u !== url))}
           chatHistory={chatHistory}
-          debug={debug}
         />
 
         {selectedImages.length > 0 && (

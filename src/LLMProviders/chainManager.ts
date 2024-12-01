@@ -1,7 +1,7 @@
-import { CustomModel, LangChainParams, SetChainOptions } from "@/aiParams";
+import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
+import { CustomModel, SetChainOptions, setChainType } from "@/aiParams";
 import ChainFactory, { ChainType, Document } from "@/chainFactory";
 import { BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
-import EncryptionService from "@/encryptionService";
 import {
   ChainRunner,
   CopilotPlusChainRunner,
@@ -9,7 +9,6 @@ import {
   VaultQAChainRunner,
 } from "@/LLMProviders/chainRunner";
 import { HybridRetriever } from "@/search/hybridRetriever";
-import { CopilotSettings } from "@/settings/SettingsPage";
 import { ChatMessage } from "@/sharedState";
 import { isSupportedChain } from "@/utils";
 import VectorStoreManager from "@/VectorStoreManager";
@@ -25,14 +24,17 @@ import ChatModelManager from "./chatModelManager";
 import EmbeddingsManager from "./embeddingManager";
 import MemoryManager from "./memoryManager";
 import PromptManager from "./promptManager";
+import {
+  getModelKey,
+  getChainType,
+  subscribeToModelKeyChange,
+  subscribeToChainTypeChange,
+} from "@/aiParams";
+import { getSettings, subscribeToSettingsChange, getSystemPrompt } from "@/settings/model";
 
 export default class ChainManager {
   private static chain: RunnableSequence;
   private static retrievalChain: RunnableSequence;
-
-  private settings: CopilotSettings;
-  private encryptionService: EncryptionService;
-  private langChainParams: LangChainParams;
 
   public app: App;
   public vectorStoreManager: VectorStoreManager;
@@ -43,41 +45,26 @@ export default class ChainManager {
   public brevilabsClient: BrevilabsClient;
   public static retrievedDocuments: Document[] = [];
 
-  constructor(
-    app: App,
-    getLangChainParams: () => LangChainParams,
-    encryptionService: EncryptionService,
-    settings: CopilotSettings,
-    vectorStoreManager: VectorStoreManager,
-    brevilabsClient: BrevilabsClient
-  ) {
+  constructor(app: App, vectorStoreManager: VectorStoreManager, brevilabsClient: BrevilabsClient) {
     // Instantiate singletons
     this.app = app;
-    this.langChainParams = getLangChainParams();
-    this.settings = settings;
     this.vectorStoreManager = vectorStoreManager;
-    this.memoryManager = MemoryManager.getInstance(this.getLangChainParams(), settings.debug);
-    this.encryptionService = encryptionService;
-    this.chatModelManager = ChatModelManager.getInstance(
-      () => this.getLangChainParams(),
-      encryptionService,
-      this.settings.activeModels
-    );
+    this.memoryManager = MemoryManager.getInstance();
+    this.chatModelManager = ChatModelManager.getInstance();
     this.embeddingsManager = this.vectorStoreManager.getEmbeddingsManager();
-    this.promptManager = PromptManager.getInstance(this.getLangChainParams());
+    this.promptManager = PromptManager.getInstance();
     this.brevilabsClient = brevilabsClient;
-    this.createChainWithNewModel(this.getLangChainParams().modelKey);
-  }
-
-  public getLangChainParams(): LangChainParams {
-    return this.langChainParams;
-  }
-
-  public setLangChainParam<K extends keyof LangChainParams>(
-    key: K,
-    value: LangChainParams[K]
-  ): void {
-    this.langChainParams[key] = value;
+    this.createChainWithNewModel();
+    subscribeToModelKeyChange(() => this.createChainWithNewModel());
+    subscribeToChainTypeChange(() =>
+      this.setChain(getChainType(), {
+        refreshIndex:
+          getSettings().indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH &&
+          (getChainType() === ChainType.VAULT_QA_CHAIN ||
+            getChainType() === ChainType.COPILOT_PLUS_CHAIN),
+      })
+    );
+    subscribeToSettingsChange(() => this.createChainWithNewModel());
   }
 
   static getChain(): RunnableSequence {
@@ -103,17 +90,14 @@ export default class ChainManager {
 
   private validateChainInitialization() {
     if (!ChainManager.chain || !isSupportedChain(ChainManager.chain)) {
-      console.error(
-        "Chain is not initialized properly, re-initializing chain: ",
-        this.getLangChainParams().chainType
-      );
-      this.setChain(this.getLangChainParams().chainType, this.getLangChainParams().options);
+      console.error("Chain is not initialized properly, re-initializing chain: ", getChainType());
+      this.setChain(getChainType());
     }
   }
 
   private findCustomModel(modelKey: string): CustomModel | undefined {
     const [name, provider] = modelKey.split("|");
-    return this.settings.activeModels.find(
+    return getSettings().activeModels.find(
       (model) => model.name === name && model.provider === provider
     );
   }
@@ -123,13 +107,11 @@ export default class ChainManager {
   }
 
   /**
-   * Update the active model and create a new chain
-   * with the specified model name.
-   *
-   * @param {string} newModel - the name of the new model in the dropdown
-   * @return {void}
+   * Update the active model and create a new chain with the specified model
+   * name.
    */
-  createChainWithNewModel(newModelKey: string): void {
+  createChainWithNewModel(): void {
+    let newModelKey = getModelKey();
     try {
       let customModel = this.findCustomModel(newModelKey);
       if (!customModel) {
@@ -138,30 +120,15 @@ export default class ChainManager {
         customModel = BUILTIN_CHAT_MODELS[0];
         newModelKey = customModel.name + "|" + customModel.provider;
       }
-      this.setLangChainParam("modelKey", newModelKey);
       this.chatModelManager.setChatModel(customModel);
       // Must update the chatModel for chain because ChainFactory always
       // retrieves the old chain without the chatModel change if it exists!
       // Create a new chain with the new chatModel
-      this.createChain(this.getLangChainParams().chainType, {
-        ...this.getLangChainParams().options,
-        forceNewCreation: true,
-      });
+      this.setChain(getChainType());
       console.log(`Setting model to ${newModelKey}`);
     } catch (error) {
       console.error("createChainWithNewModel failed: ", error);
-      console.log("modelKey:", this.getLangChainParams().modelKey);
-    }
-  }
-
-  /* Create a new chain, or update chain with new model */
-  createChain(chainType: ChainType, options?: SetChainOptions): void {
-    this.validateChainType(chainType);
-    try {
-      this.setChain(chainType, options);
-    } catch (error) {
-      new Notice("Error creating chain:", error);
-      console.error("Error creating chain:", error);
+      console.log("modelKey:", newModelKey);
     }
   }
 
@@ -174,10 +141,7 @@ export default class ChainManager {
     this.validateChainType(chainType);
 
     // Handle index refresh if needed
-    if (
-      options.refreshIndex &&
-      (chainType === ChainType.VAULT_QA_CHAIN || chainType === ChainType.COPILOT_PLUS_CHAIN)
-    ) {
+    if (options.refreshIndex) {
       await this.vectorStoreManager.indexVaultToVectorStore();
     }
 
@@ -188,25 +152,14 @@ export default class ChainManager {
 
     switch (chainType) {
       case ChainType.LLM_CHAIN: {
-        // For initial load of the plugin
-        if (options.forceNewCreation) {
-          ChainManager.chain = ChainFactory.createNewLLMChain({
-            llm: chatModel,
-            memory: memory,
-            prompt: options.prompt || chatPrompt,
-            abortController: options.abortController,
-          }) as RunnableSequence;
-        } else {
-          // For navigating back to the plugin view
-          ChainManager.chain = ChainFactory.getLLMChainFromMap({
-            llm: chatModel,
-            memory: memory,
-            prompt: options.prompt || chatPrompt,
-            abortController: options.abortController,
-          }) as RunnableSequence;
-        }
+        ChainManager.chain = ChainFactory.createNewLLMChain({
+          llm: chatModel,
+          memory: memory,
+          prompt: options.prompt || chatPrompt,
+          abortController: options.abortController,
+        }) as RunnableSequence;
 
-        this.setLangChainParam("chainType", ChainType.LLM_CHAIN);
+        setChainType(ChainType.LLM_CHAIN);
         break;
       }
 
@@ -231,10 +184,10 @@ export default class ChainManager {
           this.brevilabsClient,
           {
             minSimilarityScore: 0.01,
-            maxK: this.settings.maxSourceChunks,
+            maxK: getSettings().maxSourceChunks,
             salientTerms: [],
           },
-          options.debug
+          getSettings().debug
         );
 
         // Create new conversational retrieval chain
@@ -242,14 +195,14 @@ export default class ChainManager {
           {
             llm: chatModel,
             retriever: retriever,
-            systemMessage: this.getLangChainParams().systemMessage,
+            systemMessage: getSystemPrompt(),
           },
           ChainManager.storeRetrieverDocuments.bind(ChainManager),
-          options.debug
+          getSettings().debug
         );
 
-        this.setLangChainParam("chainType", ChainType.VAULT_QA_CHAIN);
-        if (options.debug) {
+        setChainType(ChainType.VAULT_QA_CHAIN);
+        if (getSettings().debug) {
           console.log("New Vault QA chain with hybrid retriever created for entire vault");
           console.log("Set chain:", ChainType.VAULT_QA_CHAIN);
         }
@@ -259,24 +212,14 @@ export default class ChainManager {
       case ChainType.COPILOT_PLUS_CHAIN: {
         // TODO: Create new copilotPlusChain with retriever
         // For initial load of the plugin
-        if (options.forceNewCreation) {
-          ChainManager.chain = ChainFactory.createNewLLMChain({
-            llm: chatModel,
-            memory: memory,
-            prompt: options.prompt || chatPrompt,
-            abortController: options.abortController,
-          }) as RunnableSequence;
-        } else {
-          // For navigating back to the plugin view
-          ChainManager.chain = ChainFactory.getLLMChainFromMap({
-            llm: chatModel,
-            memory: memory,
-            prompt: options.prompt || chatPrompt,
-            abortController: options.abortController,
-          }) as RunnableSequence;
-        }
+        ChainManager.chain = ChainFactory.createNewLLMChain({
+          llm: chatModel,
+          memory: memory,
+          prompt: options.prompt || chatPrompt,
+          abortController: options.abortController,
+        }) as RunnableSequence;
 
-        this.setLangChainParam("chainType", ChainType.COPILOT_PLUS_CHAIN);
+        setChainType(ChainType.COPILOT_PLUS_CHAIN);
         break;
       }
 
@@ -287,7 +230,8 @@ export default class ChainManager {
   }
 
   private getChainRunner(): ChainRunner {
-    switch (this.getLangChainParams().chainType) {
+    const chainType = getChainType();
+    switch (chainType) {
       case ChainType.LLM_CHAIN:
         return new LLMChainRunner(this);
       case ChainType.VAULT_QA_CHAIN:
@@ -295,7 +239,7 @@ export default class ChainManager {
       case ChainType.COPILOT_PLUS_CHAIN:
         return new CopilotPlusChainRunner(this);
       default:
-        throw new Error(`Unsupported chain type: ${this.getLangChainParams().chainType}`);
+        throw new Error(`Unsupported chain type: ${chainType}`);
     }
   }
 
@@ -323,8 +267,7 @@ export default class ChainManager {
         new MessagesPlaceholder("history"),
         HumanMessagePromptTemplate.fromTemplate("{input}"),
       ]);
-      this.setChain(this.getLangChainParams().chainType, {
-        ...this.getLangChainParams().options,
+      this.setChain(getChainType(), {
         prompt: effectivePrompt,
       });
     }

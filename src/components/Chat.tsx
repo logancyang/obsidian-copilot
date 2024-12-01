@@ -1,6 +1,6 @@
-import { useAIState } from "@/aiState";
-import { ChainType } from "@/chainFactory";
+import { useChainType, useModelKey } from "@/aiParams";
 import { updateChatMemory } from "@/chatUtils";
+import { ChainType } from "@/chainFactory";
 import ChatInput from "@/components/chat-components/ChatInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
 import { ABORT_REASON, AI_SENDER, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
@@ -11,7 +11,7 @@ import { getAIResponse } from "@/langchainStream";
 import ChainManager from "@/LLMProviders/chainManager";
 import CopilotPlugin from "@/main";
 import { Mention } from "@/mentions/Mention";
-import { useSettingsValueContext } from "@/settings/contexts/SettingsValueContext";
+import { useSettingsValue } from "@/settings/model";
 import SharedState, { ChatMessage, useSharedState } from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import {
@@ -45,28 +45,25 @@ interface ChatProps {
   sharedState: SharedState;
   chainManager: ChainManager;
   emitter: EventTarget;
-  defaultSaveFolder: string;
   onSaveChat: (saveAsNote: () => Promise<void>) => void;
   updateUserMessageHistory: (newMessage: string) => void;
   fileParserManager: FileParserManager;
   plugin: CopilotPlugin;
-  debug: boolean;
 }
 
 const Chat: React.FC<ChatProps> = ({
   sharedState,
   chainManager,
   emitter,
-  defaultSaveFolder,
   onSaveChat,
   updateUserMessageHistory,
   fileParserManager,
   plugin,
-  debug,
 }) => {
+  const settings = useSettingsValue();
   const [chatHistory, addMessage, clearMessages] = useSharedState(sharedState);
-  const [currentModelKey, setModelKey, currentChain, setChain, clearChatMemory] =
-    useAIState(chainManager);
+  const [currentModelKey] = useModelKey();
+  const [currentChain] = useChainType();
   const [currentAiMessage, setCurrentAiMessage] = useState("");
   const [inputMessage, setInputMessage] = useState("");
   const [abortController, setAbortController] = useState<AbortController | null>(null);
@@ -77,11 +74,10 @@ const Chat: React.FC<ChatProps> = ({
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
 
-  const mention = Mention.getInstance(plugin.settings.plusLicenseKey);
+  const mention = Mention.getInstance();
 
   const contextProcessor = ContextProcessor.getInstance();
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const settings = useSettingsValueContext();
 
   useEffect(() => {
     const handleChatVisibility = () => {
@@ -162,7 +158,7 @@ const Chat: React.FC<ChatProps> = ({
     setLoadingMessage(LOADING_MESSAGES.DEFAULT);
 
     // First, process the original user message for custom prompts
-    const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault, settings);
+    const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
     let processedUserMessage = await customPromptProcessor.processCustomPrompt(
       inputMessage || "",
       "",
@@ -211,7 +207,7 @@ const Chat: React.FC<ChatProps> = ({
       addMessage,
       setCurrentAiMessage,
       setAbortController,
-      { debug, updateLoadingMessage: setLoadingMessage }
+      { debug: settings.debug, updateLoadingMessage: setLoadingMessage }
     );
     setLoading(false);
     setLoadingMessage(LOADING_MESSAGES.DEFAULT);
@@ -256,9 +252,9 @@ const Chat: React.FC<ChatProps> = ({
 
     try {
       // Check if the default folder exists or create it
-      const folder = app.vault.getAbstractFileByPath(defaultSaveFolder);
+      const folder = app.vault.getAbstractFileByPath(settings.defaultSaveFolder);
       if (!folder) {
-        await app.vault.createFolder(defaultSaveFolder);
+        await app.vault.createFolder(settings.defaultSaveFolder);
       }
 
       const { fileName: timestampFileName } = formatDateTime(new Date(firstMessageEpoch));
@@ -281,7 +277,7 @@ const Chat: React.FC<ChatProps> = ({
         /\s+/g,
         "_"
       );
-      const noteFileName = `${defaultSaveFolder}/${sanitizedFileName}.md`;
+      const noteFileName = `${settings.defaultSaveFolder}/${sanitizedFileName}.md`;
 
       // Add the timestamp and model properties to the note content
       const noteContentWithTimestamp = `---
@@ -382,9 +378,9 @@ ${chatContent}`;
         new AbortController(),
         setCurrentAiMessage,
         addMessage,
-        { debug }
+        { debug: settings.debug }
       );
-      if (regeneratedResponse && debug) {
+      if (regeneratedResponse && settings.debug) {
         console.log("Message regenerated successfully");
       }
     } catch (error) {
@@ -485,7 +481,7 @@ ${chatContent}`;
           setCurrentAiMessage,
           setAbortController,
           {
-            debug,
+            debug: settings.debug,
             ignoreSystemMessage,
           }
         );
@@ -535,7 +531,7 @@ ${chatContent}`;
     []
   );
 
-  const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault, settings);
+  const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
   useEffect(
     createEffect(
       "applyCustomPrompt",
@@ -549,7 +545,7 @@ ${chatContent}`;
           app.workspace.getActiveFile() as TFile | undefined
         );
       },
-      { isVisible: debug, ignoreSystemMessage: true, custom_temperature: 0.1 }
+      { isVisible: settings.debug, ignoreSystemMessage: true, custom_temperature: 0.1 }
     ),
     []
   );
@@ -567,7 +563,7 @@ ${chatContent}`;
           app.workspace.getActiveFile() as TFile | undefined
         );
       },
-      { isVisible: debug, ignoreSystemMessage: true, custom_temperature: 0.1 }
+      { isVisible: settings.debug, ignoreSystemMessage: true, custom_temperature: 0.1 }
     ),
     []
   );
@@ -615,7 +611,6 @@ ${chatContent}`;
   return (
     <div className="chat-container">
       <ChatMessages
-        currentChain={currentChain}
         chatHistory={chatHistory}
         currentAiMessage={currentAiMessage}
         loading={loading}
@@ -639,17 +634,13 @@ ${chatContent}`;
           onStopGenerating={() => handleStopGenerating(ABORT_REASON.USER_STOPPED)}
           app={app}
           navigateHistory={navigateHistory}
-          currentModelKey={currentModelKey}
-          setCurrentModelKey={setModelKey}
-          currentChain={currentChain}
-          setCurrentChain={setChain}
           onNewChat={async (openNote: boolean) => {
             handleStopGenerating(ABORT_REASON.NEW_CHAT);
             if (settings.autosaveChat && chatHistory.length > 0) {
               await handleSaveAsNote(openNote);
             }
             clearMessages();
-            clearChatMemory();
+            chainManager.memoryManager.clearChatMemory();
             clearCurrentAiMessage();
           }}
           onSaveAsNote={() => handleSaveAsNote(true)}
@@ -664,7 +655,6 @@ ${chatContent}`;
           onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
           setSelectedImages={setSelectedImages}
           chatHistory={chatHistory}
-          debug={debug}
         />
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { LangChainParams } from "@/aiParams";
+import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { BaseChatMemory, BufferWindowMemory } from "langchain/memory";
 
 export default class MemoryManager {
@@ -6,30 +6,29 @@ export default class MemoryManager {
   private memory: BaseChatMemory;
   private debug: boolean;
 
-  private constructor(
-    private langChainParams: LangChainParams,
-    debug = false
-  ) {
-    this.debug = debug;
+  private constructor() {
     this.initMemory();
+    subscribeToSettingsChange(() => this.initMemory());
   }
 
-  static getInstance(langChainParams: LangChainParams, debug = false): MemoryManager {
+  static getInstance(): MemoryManager {
     if (!MemoryManager.instance) {
-      MemoryManager.instance = new MemoryManager(langChainParams, debug);
+      MemoryManager.instance = new MemoryManager();
     }
     return MemoryManager.instance;
   }
 
   private initMemory(): void {
+    const chatContextTurns = getSettings().contextTurns;
     this.memory = new BufferWindowMemory({
-      k: this.langChainParams.chatContextTurns * 2,
+      k: chatContextTurns * 2,
       memoryKey: "history",
       inputKey: "input",
       returnMessages: true,
     });
-    if (this.debug)
-      console.log("Memory initialized with context turns:", this.langChainParams.chatContextTurns);
+    if (this.debug) {
+      console.log("Memory initialized with context turns:", chatContextTurns);
+    }
   }
 
   getMemory(): BaseChatMemory {

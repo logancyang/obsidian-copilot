@@ -1,60 +1,11 @@
-import { CustomModel } from "@/aiParams";
-import { ChainType } from "@/chainFactory";
 import CopilotView from "@/components/CopilotView";
-import { CHAT_VIEWTYPE, DEFAULT_OPEN_AREA } from "@/constants";
+import { CHAT_VIEWTYPE } from "@/constants";
 import CopilotPlugin from "@/main";
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import SettingsMain from "./components/SettingsMain";
-import { SettingsProvider } from "./contexts/SettingsContext";
-
-export interface CopilotSettings {
-  plusLicenseKey: string;
-  openAIApiKey: string;
-  openAIOrgId: string;
-  huggingfaceApiKey: string;
-  cohereApiKey: string;
-  anthropicApiKey: string;
-  azureOpenAIApiKey: string;
-  azureOpenAIApiInstanceName: string;
-  azureOpenAIApiDeploymentName: string;
-  azureOpenAIApiVersion: string;
-  azureOpenAIApiEmbeddingDeploymentName: string;
-  googleApiKey: string;
-  openRouterAiApiKey: string;
-  defaultChainType: ChainType;
-  defaultModelKey: string;
-  embeddingModelKey: string;
-  temperature: number;
-  maxTokens: number;
-  contextTurns: number;
-  userSystemPrompt: string;
-  openAIProxyBaseUrl: string;
-  openAIEmbeddingProxyBaseUrl: string;
-  stream: boolean;
-  defaultSaveFolder: string;
-  defaultConversationTag: string;
-  autosaveChat: boolean;
-  customPromptsFolder: string;
-  indexVaultToVectorStore: string;
-  chatNoteContextPath: string;
-  chatNoteContextTags: string[];
-  debug: boolean;
-  enableEncryption: boolean;
-  maxSourceChunks: number;
-  qaExclusions: string;
-  qaInclusions: string;
-  groqApiKey: string;
-  enabledCommands: Record<string, { enabled: boolean; name: string }>;
-  activeModels: Array<CustomModel>;
-  activeEmbeddingModels: Array<CustomModel>;
-  promptUsageTimestamps: Record<string, number>;
-  embeddingRequestsPerSecond: number;
-  defaultOpenArea: DEFAULT_OPEN_AREA;
-  disableIndexOnMobile: boolean;
-  showSuggestedPrompts: boolean;
-}
+import { getSettings, updateSetting } from "@/settings/model";
 
 export class CopilotSettingTab extends PluginSettingTab {
   plugin: CopilotPlugin;
@@ -66,12 +17,9 @@ export class CopilotSettingTab extends PluginSettingTab {
 
   async reloadPlugin() {
     try {
-      // Save the settings before reloading
-      await this.plugin.saveSettings();
-
       // Autosave the current chat before reloading
       const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view as CopilotView;
-      if (chatView && this.plugin.settings.autosaveChat) {
+      if (chatView && getSettings().autosaveChat) {
         await this.plugin.autosaveCurrentChat();
       }
 
@@ -96,11 +44,7 @@ export class CopilotSettingTab extends PluginSettingTab {
     const div = containerEl.createDiv("div");
     const sections = createRoot(div);
 
-    sections.render(
-      <SettingsProvider plugin={this.plugin} reloadPlugin={this.reloadPlugin.bind(this)}>
-        <SettingsMain plugin={this.plugin} />
-      </SettingsProvider>
-    );
+    sections.render(<SettingsMain />);
 
     const devModeHeader = containerEl.createEl("h1", { text: "Additional Settings" });
     devModeHeader.style.marginTop = "40px";
@@ -113,9 +57,8 @@ export class CopilotSettingTab extends PluginSettingTab {
         })
       )
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.enableEncryption).onChange(async (value) => {
-          this.plugin.settings.enableEncryption = value;
-          await this.plugin.saveSettings();
+        toggle.setValue(getSettings().enableEncryption).onChange(async (value) => {
+          updateSetting("enableEncryption", value);
         })
       );
 
@@ -127,9 +70,8 @@ export class CopilotSettingTab extends PluginSettingTab {
         })
       )
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.debug).onChange(async (value) => {
-          this.plugin.settings.debug = value;
-          await this.plugin.saveSettings();
+        toggle.setValue(getSettings().debug).onChange(async (value) => {
+          updateSetting("debug", value);
         })
       );
   }

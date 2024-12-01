@@ -1,6 +1,6 @@
-import EncryptionService from "@/encryptionService";
-import { CopilotSettings } from "@/settings/SettingsPage";
+import { getDecryptedKey, getEncryptedKey, encryptAllKeys } from "@/encryptionService";
 import { Platform } from "obsidian";
+import { type CopilotSettings } from "@/settings/model";
 
 // Mocking Electron's safeStorage
 jest.mock("electron", () => {
@@ -33,41 +33,21 @@ describe("Platform-specific Tests", () => {
   });
 });
 
-interface TestSettings extends CopilotSettings {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  [key: string]: any;
-}
-
 describe("EncryptionService", () => {
-  let service: EncryptionService;
-  let settings: TestSettings;
-
   beforeEach(() => {
     jest.resetModules();
-    settings = {
-      enableEncryption: true,
-      // Add other necessary settings here
-    } as CopilotSettings;
-    service = new EncryptionService(settings);
   });
 
   describe("getEncryptedKey", () => {
     it("should encrypt an API key", () => {
       const apiKey = "testApiKey";
-      const encryptedKey = service.getEncryptedKey(apiKey);
+      const encryptedKey = getEncryptedKey(apiKey);
       expect(encryptedKey).toBe(`enc_encrypted_${apiKey}`);
-    });
-
-    it("should return the original key if encryption is not enabled", () => {
-      settings.enableEncryption = false;
-      const apiKey = "testApiKey";
-      const encryptedKey = service.getEncryptedKey(apiKey);
-      expect(encryptedKey).toBe(apiKey);
     });
 
     it("should return the original key if already encrypted", () => {
       const apiKey = "enc_testApiKey";
-      const encryptedKey = service.getEncryptedKey(apiKey);
+      const encryptedKey = getEncryptedKey(apiKey);
       expect(encryptedKey).toBe(apiKey);
     });
   });
@@ -79,40 +59,40 @@ describe("EncryptionService", () => {
       const base64Encoded = Buffer.from(mockEncryptedKey).toString("base64");
       const encryptedKey = `enc_${base64Encoded}`;
 
-      const decryptedKey = service.getDecryptedKey(encryptedKey);
+      const decryptedKey = getDecryptedKey(encryptedKey);
       expect(decryptedKey).toBe(apiKey);
     });
 
     it("should return the original key if it is in plain text", () => {
       const apiKey = "testApiKey";
-      const decryptedKey = service.getDecryptedKey(apiKey);
+      const decryptedKey = getDecryptedKey(apiKey);
       expect(decryptedKey).toBe(apiKey);
     });
   });
 
   describe("encryptAllKeys", () => {
-    beforeEach(() => {
-      settings = {
-        enableEncryption: true,
-        someApiKey: "testApiKey",
-        anotherApiKey: "anotherTestApiKey",
-        nonKey: "shouldBeIgnored",
-      } as unknown as CopilotSettings;
-      service = new EncryptionService(settings);
-    });
-
     it('should encrypt all keys containing "apikey"', () => {
-      service.encryptAllKeys();
-      expect(settings.someApiKey).toBe("enc_encrypted_testApiKey");
-      expect(settings.anotherApiKey).toBe("enc_encrypted_anotherTestApiKey");
-      expect(settings.nonApiKey).toBe(undefined);
+      const newSettings = encryptAllKeys({
+        enableEncryption: true,
+        openAIApiKey: "testApiKey",
+        cohereApiKey: "anotherTestApiKey",
+        userSystemPrompt: "shouldBeIgnored",
+      } as unknown as CopilotSettings);
+      expect(newSettings.openAIApiKey).toBe("enc_encrypted_testApiKey");
+      expect(newSettings.cohereApiKey).toBe("enc_encrypted_anotherTestApiKey");
+      expect(newSettings.userSystemPrompt).toBe("shouldBeIgnored");
     });
 
     it("should not encrypt keys when encryption is not enabled", () => {
-      settings.enableEncryption = false;
-      service.encryptAllKeys();
-      expect(settings.someApiKey).toBe("testApiKey");
-      expect(settings.anotherApiKey).toBe("anotherTestApiKey");
+      const newSettings = encryptAllKeys({
+        enableEncryption: false,
+        openAIApiKey: "testApiKey",
+        cohereApiKey: "anotherTestApiKey",
+        userSystemPrompt: "shouldBeIgnored",
+      } as unknown as CopilotSettings);
+      expect(newSettings.openAIApiKey).toBe("testApiKey");
+      expect(newSettings.cohereApiKey).toBe("anotherTestApiKey");
+      expect(newSettings.userSystemPrompt).toBe("shouldBeIgnored");
     });
   });
 });

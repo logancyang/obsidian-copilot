@@ -1,6 +1,5 @@
 import { ChainType, Document } from "@/chainFactory";
-import { DEFAULT_SETTINGS, NOMIC_EMBED_TEXT, USER_SENDER } from "@/constants";
-import { CopilotSettings } from "@/settings/SettingsPage";
+import { NOMIC_EMBED_TEXT, USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/sharedState";
 import { MemoryVariables } from "@langchain/core/memory";
 import { RunnableSequence } from "@langchain/core/runnables";
@@ -274,24 +273,6 @@ export function areEmbeddingModelsSame(
     return true;
   }
   return model1 === model2;
-}
-
-export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
-  const sanitizedSettings: CopilotSettings = { ...settings };
-
-  // Stuff in settings are string even when the interface has number type!
-  const temperature = Number(settings.temperature);
-  sanitizedSettings.temperature = isNaN(temperature) ? DEFAULT_SETTINGS.temperature : temperature;
-
-  const maxTokens = Number(settings.maxTokens);
-  sanitizedSettings.maxTokens = isNaN(maxTokens) ? DEFAULT_SETTINGS.maxTokens : maxTokens;
-
-  const contextTurns = Number(settings.contextTurns);
-  sanitizedSettings.contextTurns = isNaN(contextTurns)
-    ? DEFAULT_SETTINGS.contextTurns
-    : contextTurns;
-
-  return sanitizedSettings;
 }
 
 // Basic prompts

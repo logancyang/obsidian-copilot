@@ -3,10 +3,18 @@ import { ToneModal } from "@/components/modals/ToneModal";
 import CopilotPlugin from "@/main";
 import { Editor, Notice } from "obsidian";
 import { COMMAND_IDS } from "./constants";
+import { getSettings } from "@/settings/model";
 
 export function registerBuiltInCommands(plugin: CopilotPlugin) {
+  // Remove all built in commands first
+  Object.values(COMMAND_IDS).forEach((id) => {
+    // removeCommand is not available in TypeScript for some reasons
+    // https://docs.obsidian.md/Reference/TypeScript+API/Plugin/removeCommand
+    (plugin as any).removeCommand(id);
+  });
+
   const addCommandIfEnabled = (id: string, callback: (editor: Editor) => void) => {
-    const commandSettings = plugin.settings.enabledCommands[id];
+    const commandSettings = getSettings().enabledCommands[id];
     if (commandSettings && commandSettings.enabled) {
       plugin.addCommand({
         id,
@@ -89,7 +97,7 @@ export function registerBuiltInCommands(plugin: CopilotPlugin) {
   });
 
   plugin.addCommand({
-    id: "count-tokens",
+    id: COMMAND_IDS.COUNT_TOKENS,
     name: "Count words and tokens in selection",
     editorCallback: (editor: Editor) => {
       plugin.processSelection(editor, "countTokensSelection");
@@ -97,7 +105,7 @@ export function registerBuiltInCommands(plugin: CopilotPlugin) {
   });
 
   plugin.addCommand({
-    id: "count-total-vault-tokens",
+    id: COMMAND_IDS.COUNT_TOTAL_VAULT_TOKENS,
     name: "Count total tokens in your vault",
     callback: async () => {
       const totalTokens = await plugin.countTotalTokens();

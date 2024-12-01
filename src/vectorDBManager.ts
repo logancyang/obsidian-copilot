@@ -1,6 +1,7 @@
 import { CHUNK_SIZE } from "@/constants";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
 import { RateLimiter } from "@/rateLimiter";
+import { getSettings } from "@/settings/model";
 import { Embeddings } from "@langchain/core/embeddings";
 import { insert, Orama, remove, search } from "@orama/orama";
 import { MD5 } from "crypto-js";
@@ -22,24 +23,12 @@ export interface OramaDocument {
   nchars: number;
   metadata: Record<string, any>;
 }
-interface VectorDBConfig {
-  getEmbeddingRequestsPerSecond: () => number;
-  debug: boolean;
-}
 
 class VectorDBManager {
   private static rateLimiter: RateLimiter;
-  private static config: VectorDBConfig;
-
-  public static initialize(config: VectorDBConfig) {
-    this.config = config;
-  }
 
   private static getRateLimiter(): RateLimiter {
-    if (!this.config) {
-      throw new Error("VectorDBManager not initialized. Call initialize() first.");
-    }
-    const requestsPerSecond = this.config.getEmbeddingRequestsPerSecond();
+    const requestsPerSecond = getSettings().embeddingRequestsPerSecond;
     if (!this.rateLimiter || this.rateLimiter.getRequestsPerSecond() !== requestsPerSecond) {
       this.rateLimiter = new RateLimiter(requestsPerSecond);
     }
@@ -56,7 +45,6 @@ class VectorDBManager {
     fileToSave: any
   ): Promise<any | undefined> {
     if (!db) throw new Error("DB not initialized");
-    if (!this.config) throw new Error("VectorDBManager not initialized");
 
     const embeddingModel = EmbeddingManager.getModelName(embeddingsAPI);
     if (!embeddingModel) console.error("EmbeddingManager could not determine model name!");
@@ -151,7 +139,6 @@ class VectorDBManager {
 
   public static async upsert(db: Orama<any>, docToSave: any): Promise<any | undefined> {
     if (!db) throw new Error("DB not initialized");
-    if (!this.config) throw new Error("VectorDBManager not initialized");
 
     try {
       // Check if the document already exists
@@ -167,13 +154,13 @@ class VectorDBManager {
         // Then insert the new version
         await insert(db, docToSave);
 
-        if (this.config.debug) {
+        if (getSettings().debug) {
           console.log(`Updated document ${docToSave.id} in VectorDB with path: ${docToSave.path}`);
         }
       } else {
         // Document doesn't exist, insert it
         await insert(db, docToSave);
-        if (this.config.debug) {
+        if (getSettings().debug) {
           console.log(`Inserted document ${docToSave.id} in VectorDB with path: ${docToSave.path}`);
         }
       }
@@ -188,7 +175,6 @@ class VectorDBManager {
 
   public static async getDocsByPath(db: Orama<any>, path: string): Promise<any | undefined> {
     if (!db) throw new Error("DB not initialized");
-    if (!this.config) throw new Error("VectorDBManager not initialized");
     if (!path) return;
     const result = await search(db, {
       term: path,

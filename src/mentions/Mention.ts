@@ -12,14 +12,14 @@ export class Mention {
   private mentions: Map<string, MentionData>;
   private brevilabsClient: BrevilabsClient;
 
-  private constructor(licenseKey: string) {
+  private constructor() {
     this.mentions = new Map();
-    this.brevilabsClient = BrevilabsClient.getInstance(licenseKey);
+    this.brevilabsClient = BrevilabsClient.getInstance();
   }
 
-  static getInstance(licenseKey: string): Mention {
+  static getInstance(): Mention {
     if (!Mention.instance) {
-      Mention.instance = new Mention(licenseKey);
+      Mention.instance = new Mention();
     }
     return Mention.instance;
   }
