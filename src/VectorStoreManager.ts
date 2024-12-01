@@ -7,9 +7,9 @@ import { Embeddings } from "@langchain/core/embeddings";
 import { create, load, Orama, remove, removeMultiple, save, search } from "@orama/orama";
 import { MD5 } from "crypto-js";
 import { App, Notice, Platform, TAbstractFile, TFile, Vault } from "obsidian";
+import { getChainType } from "./aiParams";
 import { ChainType } from "./chainFactory";
 import { VAULT_VECTOR_STORE_STRATEGY } from "./constants";
-import { getChainType } from "./aiParams";
 
 class VectorStoreManager {
   private app: App;
@@ -829,7 +829,7 @@ class VectorStoreManager {
       // Search all documents and get unique file paths
       const result = await search(this.oramaDb, {
         term: "",
-        limit: 10000, // Adjust this limit based on your needs
+        limit: 100000,
       });
 
       // Use a Set to get unique file paths since multiple chunks can belong to the same file

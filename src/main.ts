@@ -1,5 +1,4 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import { encryptAllKeys } from "@/encryptionService";
 import ChainManager from "@/LLMProviders/chainManager";
 import VectorStoreManager from "@/VectorStoreManager";
 import { CustomModel } from "@/aiParams";
@@ -8,13 +7,13 @@ import { registerBuiltInCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import { AddPromptModal } from "@/components/modals/AddPromptModal";
 import { AdhocPromptModal } from "@/components/modals/AdhocPromptModal";
-import { IndexedFilesModal } from "@/components/modals/IndexedFilesModal";
 import { ListPromptModal } from "@/components/modals/ListPromptModal";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
 import { SimilarNotesModal } from "@/components/modals/SimilarNotesModal";
 import { CHAT_VIEWTYPE, CHUNK_SIZE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
+import { encryptAllKeys } from "@/encryptionService";
 import { CustomError } from "@/error";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
@@ -338,7 +337,28 @@ export default class CopilotPlugin extends Plugin {
             new Notice("No indexed files found.");
             return;
           }
-          new IndexedFilesModal(this.app, indexedFiles).open();
+
+          // Create content for the new file
+          const content = [
+            "# Copilot Indexed Files",
+            `Total files indexed: ${indexedFiles.length}`,
+            "",
+            "## Files",
+            ...indexedFiles.map((file) => `- [[${file}]]`),
+          ].join("\n");
+
+          // Create the file in the vault
+          const fileName = `Copilot-Indexed-Files-${new Date().toLocaleDateString().replace(/\//g, "-")}.md`;
+          const filePath = `${fileName}`;
+
+          await this.app.vault.create(filePath, content);
+
+          // Open the newly created file
+          const createdFile = this.app.vault.getAbstractFileByPath(filePath);
+          if (createdFile instanceof TFile) {
+            await this.app.workspace.getLeaf().openFile(createdFile);
+            new Notice(`Created list of ${indexedFiles.length} indexed files`);
+          }
         } catch (error) {
           console.error("Error listing indexed files:", error);
           new Notice("Failed to list indexed files.");
