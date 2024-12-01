@@ -1,6 +1,7 @@
 import { CustomModel } from "@/aiParams";
 import { atom, getDefaultStore, useAtomValue } from "jotai";
 
+import { type ChainType } from "@/chainFactory";
 import {
   BUILTIN_CHAT_MODELS,
   BUILTIN_EMBEDDING_MODELS,
@@ -8,7 +9,6 @@ import {
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
 } from "@/constants";
-import { type ChainType } from "@/chainFactory";
 
 export interface CopilotSettings {
   plusLicenseKey: string;
@@ -133,7 +133,8 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 }
 
 export function getSystemPrompt(): string {
-  return getSettings().userSystemPrompt || DEFAULT_SYSTEM_PROMPT;
+  const userPrompt = getSettings().userSystemPrompt;
+  return userPrompt ? `${DEFAULT_SYSTEM_PROMPT}\n\n${userPrompt}` : DEFAULT_SYSTEM_PROMPT;
 }
 
 function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {
