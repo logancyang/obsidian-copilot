@@ -448,9 +448,13 @@ class VectorStoreManager {
   public async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
     // Add check at the start of the method
     await this.waitForInitialization();
-    if ((Platform.isMobile && getSettings().disableIndexOnMobile) || !this.oramaDb) {
+    if (Platform.isMobile && getSettings().disableIndexOnMobile) {
       new Notice("Indexing is disabled on mobile devices");
       return 0;
+    }
+    if (!this.oramaDb) {
+      new Notice("Orama database not found. Please make sure you have a working embedding model.");
+      throw new CustomError("Orama database not found.");
     }
 
     let rateLimitNoticeShown = false;
