@@ -639,7 +639,7 @@ If your plugin does not need CSS, delete this file.
   white-space: pre-wrap;
   width: 95%;
   color: var(--inline-title-color);
-  background-color: var(--background-secondary);
+  background-color: var(--background-primary-alt);
   border-radius: 8px;
   padding: 14px 10px 10px 10px;
 }

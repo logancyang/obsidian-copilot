@@ -1,6 +1,5 @@
 import { CustomModel, useChainType, useModelKey } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
-import { useSettingsValue } from "@/settings/model";
 import { AddImageModal } from "@/components/modals/AddImageModal";
 import { ListPromptModal } from "@/components/modals/ListPromptModal";
 import { NoteTitleModal } from "@/components/modals/NoteTitleModal";
@@ -8,6 +7,7 @@ import { ContextProcessor } from "@/contextProcessor";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
+import { useSettingsValue } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { getToolDescription } from "@/tools/toolManager";
 import { extractNoteTitles } from "@/utils";
@@ -412,7 +412,10 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         <textarea
           ref={textAreaRef}
           className="chat-input-textarea"
-          placeholder="Ask anything. [[ for notes. / for custom prompts."
+          placeholder={
+            "Ask anything. [[ for notes. / for custom prompts. " +
+            (currentChain === ChainType.COPILOT_PLUS_CHAIN ? "@ for tools." : "")
+          }
           value={inputMessage}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
