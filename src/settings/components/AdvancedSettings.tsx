@@ -1,7 +1,6 @@
-import { DEFAULT_SYSTEM_PROMPT } from "@/constants";
+import { updateSetting, useSettingsValue } from "@/settings/model";
 import React from "react";
 import { TextAreaComponent } from "./SettingBlocks";
-import { updateSetting, useSettingsValue } from "@/settings/model";
 
 const AdvancedSettings: React.FC = () => {
   const settings = useSettingsValue();
@@ -10,10 +9,10 @@ const AdvancedSettings: React.FC = () => {
       <h1>Advanced Settings</h1>
       <TextAreaComponent
         name="User System Prompt"
-        description="Warning: It will override the default system prompt for all messages!"
+        description="Customize the system prompt for all messages, may result in unexpected behavior!"
         value={settings.userSystemPrompt}
         onChange={(value) => updateSetting("userSystemPrompt", value)}
-        placeholder={settings.userSystemPrompt || "Default: " + DEFAULT_SYSTEM_PROMPT}
+        placeholder={""}
         rows={10}
       />
     </div>
