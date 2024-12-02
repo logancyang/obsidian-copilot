@@ -23,9 +23,15 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   const uniqueNotes = React.useMemo(() => {
     const notesMap = new Map(contextNotes.map((note) => [note.path, note]));
 
-    return Array.from(notesMap.values()).filter(
-      (note) => !(activeNote && note.path === activeNote.path)
-    );
+    return Array.from(notesMap.values()).filter((note) => {
+      // If the note was added manually, always show it in the list
+      if ((note as any).wasAddedManually) {
+        return true;
+      }
+
+      // For non-manually added notes, show them if they're not the active note
+      return !(activeNote && note.path === activeNote.path);
+    });
   }, [contextNotes, activeNote]);
 
   const uniqueUrls = React.useMemo(() => Array.from(new Set(contextUrls)), [contextUrls]);
