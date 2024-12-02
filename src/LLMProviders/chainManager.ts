@@ -1,7 +1,7 @@
 import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { CustomModel, SetChainOptions, setChainType } from "@/aiParams";
 import ChainFactory, { ChainType, Document } from "@/chainFactory";
-import { BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
+import { AI_SENDER, BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
 import {
   ChainRunner,
   CopilotPlusChainRunner,
@@ -261,12 +261,26 @@ export default class ChainManager {
     this.validateChatModel();
     this.validateChainInitialization();
 
+    const chatModel = this.chatModelManager.getChatModel();
+    const modelName = (chatModel as any).modelName || (chatModel as any).model || "";
+    const isO1Model = modelName.startsWith("o1");
+
     // Handle ignoreSystemMessage
-    if (ignoreSystemMessage) {
-      const effectivePrompt = ChatPromptTemplate.fromMessages([
+    if (ignoreSystemMessage || isO1Model) {
+      let effectivePrompt = ChatPromptTemplate.fromMessages([
         new MessagesPlaceholder("history"),
         HumanMessagePromptTemplate.fromTemplate("{input}"),
       ]);
+
+      // TODO: hack for o1 models, to be removed when they support system prompt
+      if (isO1Model) {
+        //  Temporary fix：for o1-xx model need to covert systemMessage to aiMessage
+        effectivePrompt = ChatPromptTemplate.fromMessages([
+          [AI_SENDER, getSystemPrompt() || ""],
+          effectivePrompt,
+        ]);
+      }
+
       this.setChain(getChainType(), {
         prompt: effectivePrompt,
       });
