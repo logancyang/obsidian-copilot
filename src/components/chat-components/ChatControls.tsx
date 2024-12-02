@@ -10,10 +10,10 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronDown, Download, MessageCirclePlus, Puzzle } from "lucide-react";
 
 import { NewChatConfirmModal } from "@/components/modals/NewChatConfirmModal";
+import { useSettingsValue } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { TFile } from "obsidian";
 import { ChatContextMenu } from "./ChatContextMenu";
-import { useSettingsValue } from "@/settings/model";
 
 interface ChatControlsProps {
   onNewChat: (openNote: boolean) => void;
@@ -108,10 +108,20 @@ const ChatControls: React.FC<ChatControlsProps> = ({
   };
 
   const handleRemoveContext = (path: string) => {
-    if (activeNote && path === activeNote.path) {
-      setIncludeActiveNote(false);
-    } else {
+    // First check if this note was added manually
+    const noteToRemove = contextNotes.find((note) => note.path === path);
+    const wasAddedManually = noteToRemove && (noteToRemove as any).wasAddedManually;
+
+    if (wasAddedManually) {
+      // If it was added manually, just remove it from contextNotes
       setContextNotes((prev) => prev.filter((note) => note.path !== path));
+    } else {
+      // If it wasn't added manually, it could be either:
+      // 1. The active note (controlled by includeActiveNote)
+      // 2. A note added via [[reference]]
+      // In either case, we should:
+      setIncludeActiveNote(false); // Turn off includeActiveNote if this was the active note
+      setContextNotes((prev) => prev.filter((note) => note.path !== path)); // Remove from contextNotes if it was there
     }
   };
 
