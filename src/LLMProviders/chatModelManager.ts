@@ -68,9 +68,6 @@ export default class ChatModelManager {
   }
 
   private getModelConfig(customModel: CustomModel): ModelConfig {
-    const decrypt = (key: string) => this.encryptionService.getDecryptedKey(key);
-    const params = this.getLangChainParams();
-
     const settings = getSettings();
 
     // Check if the model starts with "o1"
@@ -97,7 +94,7 @@ export default class ChatModelManager {
         },
         // @ts-ignore
         openAIOrgId: getDecryptedKey(settings.openAIOrgId),
-        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature, true),
+        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
       },
       [ChatModelProviders.ANTHROPIC]: {
         anthropicApiKey: getDecryptedKey(customModel.apiKey || settings.anthropicApiKey),
@@ -118,7 +115,7 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
-        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature, true),
+        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
       },
       [ChatModelProviders.COHEREAI]: {
         apiKey: getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
@@ -183,7 +180,7 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
           dangerouslyAllowBrowser: true,
         },
-        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature, true),
+        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
       },
     };
 
@@ -193,22 +190,15 @@ export default class ChatModelManager {
     return { ...baseConfig, ...selectedProviderConfig };
   }
 
-  private handleOpenAIExtraArgs(
-    isO1Model: boolean,
-    maxTokens: number,
-    temperature: number,
-    streaming: boolean
-  ) {
+  private handleOpenAIExtraArgs(isO1Model: boolean, maxTokens: number, temperature: number) {
     return isO1Model
       ? {
           maxCompletionTokens: maxTokens,
           temperature: 1,
-          streaming: false,
         }
       : {
           maxTokens: maxTokens,
           temperature: temperature,
-          streaming: streaming,
         };
   }
 

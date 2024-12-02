@@ -276,7 +276,7 @@ export default class ChainManager {
       if (isO1Model) {
         //  Temporary fix：for o1-xx model need to covert systemMessage to aiMessage
         effectivePrompt = ChatPromptTemplate.fromMessages([
-          [AI_SENDER, this.getLangChainParams().systemMessage || ""],
+          [AI_SENDER, getSystemPrompt() || ""],
           effectivePrompt,
         ]);
       }
