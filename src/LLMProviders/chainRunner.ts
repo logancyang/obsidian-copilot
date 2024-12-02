@@ -1,4 +1,5 @@
 import { ABORT_REASON, AI_SENDER, LOADING_MESSAGES } from "@/constants";
+import { getSystemPrompt } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { ToolManager } from "@/tools/toolManager";
 import {
@@ -10,7 +11,6 @@ import {
 import { Notice } from "obsidian";
 import ChainManager from "./chainManager";
 import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "./intentAnalyzer";
-import { getSystemPrompt } from "@/settings/model";
 
 export interface ChainRunner {
   run(
@@ -324,7 +324,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
             );
           } catch (error) {
             return this.handleResponse(
-              "An error occurred while transcribing the YouTube video. Please check the error message in the console for more details.",
+              "An error occurred while transcribing the YouTube video. Right now only English videos with the auto transcript option turned on are supported. Please check the error message in the console for more details.",
               userMessage,
               abortController,
               addMessage,

@@ -640,13 +640,13 @@ If your plugin does not need CSS, delete this file.
   width: 95%;
   color: var(--inline-title-color);
   background-color: var(--background-primary-alt);
-  border-radius: 8px;
+  border-radius: 2px;
   padding: 14px 10px 10px 10px;
 }
 
 .bot-message {
   width: 95%;
-  border-radius: 8px;
+  border-radius: 2px;
   padding: 14px 10px 10px 10px;
 }
 
