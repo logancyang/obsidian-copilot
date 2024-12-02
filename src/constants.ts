@@ -29,8 +29,8 @@ export enum ChatModels {
   GEMINI_PRO = "gemini-1.5-pro",
   GEMINI_FLASH = "gemini-1.5-flash",
   AZURE_OPENAI = "azure-openai",
-  CLAUDE_3_5_SONNET = "claude-3-5-sonnet-20240620",
-  CLAUDE_3_HAIKU = "claude-3-haiku-20240307",
+  CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest",
+  CLAUDE_3_5_HAIKU = "claude-3-5-haiku-latest",
   COMMAND_R = "command-r",
   COMMAND_R_PLUS = "command-r-plus",
 }
@@ -75,9 +75,10 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.ANTHROPIC,
     enabled: true,
     isBuiltIn: true,
+    core: true,
   },
   {
-    name: ChatModels.CLAUDE_3_HAIKU,
+    name: ChatModels.CLAUDE_3_5_HAIKU,
     provider: ChatModelProviders.ANTHROPIC,
     enabled: true,
     isBuiltIn: true,
