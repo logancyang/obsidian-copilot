@@ -159,6 +159,14 @@ If your plugin does not need CSS, delete this file.
   opacity: 1;
 }
 
+.context-note .note-name {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+}
+
 .context-note.url .note-badge {
   background-color: var(--interactive-accent);
 }
