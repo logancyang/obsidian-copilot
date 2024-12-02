@@ -76,17 +76,37 @@ abstract class BaseChainRunner implements ChainRunner {
     return fullAIResponse;
   }
 
-  protected async handleError(error: any, debug: boolean) {
+  protected async handleError(
+    error: any,
+    debug: boolean,
+    addMessage?: (message: ChatMessage) => void,
+    updateCurrentAiMessage?: (message: string) => void
+  ) {
     if (debug) console.error("Error during LLM invocation:", error);
     const errorData = error?.response?.data?.error || error;
     const errorCode = errorData?.code || error;
+    let errorMessage = "";
+
     if (errorCode === "model_not_found") {
-      const modelNotFoundMsg =
+      errorMessage =
         "You do not have access to this model or the model does not exist, please check with your API provider.";
-      new Notice(modelNotFoundMsg);
-      console.error(modelNotFoundMsg);
     } else {
-      new Notice(`LangChain error: ${errorCode}`);
+      errorMessage = `${errorCode}`;
+    }
+
+    console.error(errorData);
+
+    if (addMessage && updateCurrentAiMessage) {
+      updateCurrentAiMessage("");
+      addMessage({
+        message: errorMessage,
+        sender: AI_SENDER,
+        isVisible: true,
+        timestamp: formatDateTime(new Date()),
+      });
+    } else {
+      // Fallback to Notice if message handlers aren't provided
+      new Notice(errorMessage);
       console.error(errorData);
     }
   }
@@ -119,7 +139,7 @@ class LLMChainRunner extends BaseChainRunner {
         updateCurrentAiMessage(fullAIResponse);
       }
     } catch (error) {
-      await this.handleError(error, debug);
+      await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
     }
 
     return this.handleResponse(
@@ -165,7 +185,7 @@ class VaultQAChainRunner extends BaseChainRunner {
 
       fullAIResponse = this.addSourcestoResponse(fullAIResponse);
     } catch (error) {
-      await this.handleError(error, debug);
+      await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
     }
 
     return this.handleResponse(
@@ -429,7 +449,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     } catch (error) {
       // Reset loading message to default
       updateLoadingMessage?.(LOADING_MESSAGES.DEFAULT);
-      await this.handleError(error, debug);
+      await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
     }
 
     return this.handleResponse(
