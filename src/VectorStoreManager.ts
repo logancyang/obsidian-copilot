@@ -30,7 +30,7 @@ class VectorStoreManager {
   private debounceDelay = 10000; // 10 seconds
   private debounceTimer: number | null = null;
   private saveDBTimer: number | null = null;
-  private saveDBDelay = 30000; // Save full DB every 30 seconds
+  private saveDBDelay = 120000; // Save full DB every 120 seconds
   private hasUnsavedChanges = false;
 
   constructor(app: App) {
@@ -296,7 +296,7 @@ class VectorStoreManager {
       const folders = this.extractAppIgnoreSettings();
       const filterType = getSettings().qaInclusions
         ? `Inclusions: ${getSettings().qaInclusions}`
-        : `Exclusions: ${folders.join(",") + (folders.length ? ", " : "") + getSettings().qaExclusions || "None"}`;
+        : `Exclusions: ${folders.join(", ") + (folders.length ? ", " : "") + getSettings().qaExclusions || "None"}`;
 
       this.indexNoticeMessage.textContent =
         `Copilot is indexing your vault...\n` +
@@ -514,10 +514,10 @@ class VectorStoreManager {
 
       this.currentIndexingNotice = this.createIndexingNotice();
 
+      const CHECKPOINT_INTERVAL = 50; // Save every 50 files
       const errors: string[] = [];
       for (let index = 0; index < files.length; index++) {
         if (this.isIndexingCancelled) {
-          // Handle cancellation if required
           break;
         }
 
@@ -544,6 +544,14 @@ class VectorStoreManager {
 
           this.indexedCount++;
           this.updateIndexingNoticeMessage();
+
+          // Checkpoint every CHECKPOINT_INTERVAL files
+          if (this.indexedCount % CHECKPOINT_INTERVAL === 0) {
+            if (getSettings().debug) {
+              console.log(`Checkpoint: Saving index after processing ${this.indexedCount} files`);
+            }
+            await this.saveDB();
+          }
         } catch (err) {
           console.error("Error indexing file:", err);
           errors.push(`Error indexing file: ${file.basename}`);
@@ -750,10 +758,20 @@ class VectorStoreManager {
     if (
       file instanceof TFile &&
       file.extension === "md" &&
-      !this.excludedFiles.has(file.path) &&
       currentChainType === ChainType.COPILOT_PLUS_CHAIN
     ) {
-      this.debouncedReindexFile(file);
+      // Get inclusions
+      const includedFiles = await this.getFilePathsForQA("inclusions");
+
+      // Check if file should be processed based on inclusion/exclusion rules
+      const shouldProcess =
+        includedFiles.size > 0
+          ? includedFiles.has(file.path) // If inclusions exist, file must be included
+          : !this.excludedFiles.has(file.path); // Otherwise, file must not be excluded
+
+      if (shouldProcess) {
+        this.debouncedReindexFile(file);
+      }
     }
   };
 
