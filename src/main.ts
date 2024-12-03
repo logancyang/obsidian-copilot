@@ -36,6 +36,7 @@ import {
   TFile,
   TFolder,
   WorkspaceLeaf,
+  requestUrl,
 } from "obsidian";
 
 export default class CopilotPlugin extends Plugin {
@@ -50,6 +51,7 @@ export default class CopilotPlugin extends Plugin {
   settingsUnsubscriber?: () => void;
 
   async onload(): Promise<void> {
+    await this.checkForUpdates();
     await this.loadSettings();
     this.settingsUnsubscriber = subscribeToSettingsChange(() => {
       const settings = getSettings();
@@ -666,5 +668,35 @@ export default class CopilotPlugin extends Plugin {
       content: doc.pageContent,
       metadata: doc.metadata,
     }));
+  }
+
+  private async checkForUpdates(): Promise<void> {
+    try {
+      const response = await requestUrl({
+        url: "https://api.github.com/repos/logancyang/obsidian-copilot/releases/latest",
+        method: "GET",
+      });
+
+      const latestVersion = response.json.tag_name.replace("v", "");
+      if (this.isNewerVersion(latestVersion, this.manifest.version)) {
+        new Notice(
+          `A new version (${latestVersion}) of Obsidian Copilot is available. You are currently on version ${this.manifest.version}. Please update to the latest version.`,
+          10000
+        );
+      }
+    } catch (error) {
+      console.error("Failed to check for updates:", error);
+    }
+  }
+
+  private isNewerVersion(latest: string, current: string): boolean {
+    const latestParts = latest.split(".").map(Number);
+    const currentParts = current.split(".").map(Number);
+
+    for (let i = 0; i < 3; i++) {
+      if (latestParts[i] > currentParts[i]) return true;
+      if (latestParts[i] < currentParts[i]) return false;
+    }
+    return false;
   }
 }
