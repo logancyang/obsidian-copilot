@@ -750,10 +750,20 @@ class VectorStoreManager {
     if (
       file instanceof TFile &&
       file.extension === "md" &&
-      !this.excludedFiles.has(file.path) &&
       currentChainType === ChainType.COPILOT_PLUS_CHAIN
     ) {
-      this.debouncedReindexFile(file);
+      // Get inclusions
+      const includedFiles = await this.getFilePathsForQA("inclusions");
+
+      // Check if file should be processed based on inclusion/exclusion rules
+      const shouldProcess =
+        includedFiles.size > 0
+          ? includedFiles.has(file.path) // If inclusions exist, file must be included
+          : !this.excludedFiles.has(file.path); // Otherwise, file must not be excluded
+
+      if (shouldProcess) {
+        this.debouncedReindexFile(file);
+      }
     }
   };
 
