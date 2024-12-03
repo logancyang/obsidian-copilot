@@ -115,16 +115,18 @@ export function useSettingsValue(): Readonly<CopilotSettings> {
  * Note: This will be better handled by Zod in the future.
  */
 export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
-  const sanitizedSettings: CopilotSettings = { ...settings };
+  // If settings is null/undefined, use DEFAULT_SETTINGS
+  const settingsToSanitize = settings || DEFAULT_SETTINGS;
+  const sanitizedSettings: CopilotSettings = { ...settingsToSanitize };
 
   // Stuff in settings are string even when the interface has number type!
-  const temperature = Number(settings.temperature);
+  const temperature = Number(settingsToSanitize.temperature);
   sanitizedSettings.temperature = isNaN(temperature) ? DEFAULT_SETTINGS.temperature : temperature;
 
-  const maxTokens = Number(settings.maxTokens);
+  const maxTokens = Number(settingsToSanitize.maxTokens);
   sanitizedSettings.maxTokens = isNaN(maxTokens) ? DEFAULT_SETTINGS.maxTokens : maxTokens;
 
-  const contextTurns = Number(settings.contextTurns);
+  const contextTurns = Number(settingsToSanitize.contextTurns);
   sanitizedSettings.contextTurns = isNaN(contextTurns)
     ? DEFAULT_SETTINGS.contextTurns
     : contextTurns;
