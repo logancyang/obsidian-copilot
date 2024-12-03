@@ -30,7 +30,7 @@ class VectorStoreManager {
   private debounceDelay = 10000; // 10 seconds
   private debounceTimer: number | null = null;
   private saveDBTimer: number | null = null;
-  private saveDBDelay = 30000; // Save full DB every 30 seconds
+  private saveDBDelay = 120000; // Save full DB every 120 seconds
   private hasUnsavedChanges = false;
 
   constructor(app: App) {
@@ -296,7 +296,7 @@ class VectorStoreManager {
       const folders = this.extractAppIgnoreSettings();
       const filterType = getSettings().qaInclusions
         ? `Inclusions: ${getSettings().qaInclusions}`
-        : `Exclusions: ${folders.join(",") + (folders.length ? ", " : "") + getSettings().qaExclusions || "None"}`;
+        : `Exclusions: ${folders.join(", ") + (folders.length ? ", " : "") + getSettings().qaExclusions || "None"}`;
 
       this.indexNoticeMessage.textContent =
         `Copilot is indexing your vault...\n` +

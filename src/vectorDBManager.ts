@@ -26,6 +26,7 @@ export interface OramaDocument {
 
 class VectorDBManager {
   private static rateLimiter: RateLimiter;
+  private static errorMessageShown: Set<string> = new Set<string>();
 
   private static getRateLimiter(): RateLimiter {
     const requestsPerSecond = getSettings().embeddingRequestsPerSecond;
@@ -61,79 +62,82 @@ class VectorDBManager {
     });
 
     const docVectors: number[][] = [];
+    let hasEmbeddingError = false;
+
     try {
       for (let i = 0; i < chunks.length; i++) {
         try {
-          // Apply rate limiting before making the API call
           await this.getRateLimiter().wait();
           const embedding = await embeddingsAPI.embedDocuments([chunks[i].pageContent]);
-          if (embedding.length > 0) {
+
+          if (embedding.length > 0 && embedding[0].length > 0) {
             docVectors.push(embedding[0]);
           } else {
-            console.error("indexFile - Empty embedding for chunk:", {
-              index: i,
-              length: chunks[i].pageContent.length,
-            });
+            throw new Error("Received empty embedding vector");
           }
         } catch (error) {
+          hasEmbeddingError = true;
+
+          // Show notice for all types of errors, but only once per unique error message
+          if (!this.errorMessageShown.has(error.message)) {
+            new Notice(
+              `Indexing failed for "${fileToSave.title}". Check the console for more details. If this persists, try reducing requests per second in settings.`,
+              10000
+            );
+            this.errorMessageShown.add(error.message);
+          }
+
           console.error("indexFile - Error during embeddings API call for chunk:", {
+            file: fileToSave.title,
             index: i,
             length: chunks[i].pageContent.length,
             error: error,
           });
-
-          // Check if the error is related to context length
-          if (error instanceof Error) {
-            new Notice(
-              `Embedding error: please check your embedding model context length, and consider switching to a model with a larger context length: ${error.message}`
-            );
-          }
-
-          // Rethrow the error to stop the indexing process
-          throw error;
         }
       }
+
+      // Only proceed with saving if we have valid vectors
+      if (docVectors.length > 0) {
+        const chunkWithVectors = chunks.slice(0, docVectors.length).map((chunk, i) => ({
+          id: VectorDBManager.getDocHash(chunk.pageContent),
+          content: chunk.pageContent,
+          embedding: docVectors[i],
+        }));
+
+        for (const chunkWithVector of chunkWithVectors) {
+          try {
+            // Prepare and save document as before
+            const docToSave: OramaDocument = {
+              id: chunkWithVector.id,
+              title: fileToSave.title,
+              content: chunkWithVector.content,
+              embedding: chunkWithVector.embedding,
+              path: fileToSave.path,
+              embeddingModel: embeddingModel,
+              created_at: Date.now(),
+              ctime: fileToSave.ctime,
+              mtime: fileToSave.mtime,
+              tags: Array.isArray(fileToSave.tags) ? fileToSave.tags : [],
+              extension: fileToSave.extension,
+              nchars: chunkWithVector.content.length,
+              metadata: fileToSave.metadata,
+            };
+
+            docToSave.tags = docToSave.tags.map((tag: any) => String(tag));
+            await this.upsert(db, docToSave);
+          } catch (err) {
+            console.error("Error storing vectors in VectorDB:", err);
+            // Continue with next chunk even if one fails
+          }
+        }
+      }
+
+      // Return undefined if we had embedding errors, otherwise return fileToSave
+      return hasEmbeddingError ? undefined : fileToSave;
     } catch (error) {
       console.error("indexFile - Unexpected error during embedding process:", error);
-      // Rethrow the error to be handled by the caller
-      throw error;
-    }
-
-    const chunkWithVectors =
-      docVectors.length > 0
-        ? chunks.map((chunk, i) => ({
-            id: VectorDBManager.getDocHash(chunk.pageContent),
-            content: chunk.pageContent,
-            embedding: docVectors[i],
-          }))
-        : [];
-
-    for (const chunkWithVector of chunkWithVectors) {
-      try {
-        // Prepare the document to be saved.
-        const docToSave: OramaDocument = {
-          id: chunkWithVector.id,
-          title: fileToSave.title,
-          content: chunkWithVector.content,
-          embedding: chunkWithVector.embedding,
-          path: fileToSave.path,
-          embeddingModel: fileToSave.embeddingModel,
-          created_at: Date.now(),
-          ctime: fileToSave.ctime,
-          mtime: fileToSave.mtime,
-          tags: Array.isArray(fileToSave.tags) ? fileToSave.tags : [],
-          extension: fileToSave.extension,
-          nchars: chunkWithVector.content.length,
-          metadata: fileToSave.metadata,
-        };
-
-        // Ensure tags are strings
-        docToSave.tags = docToSave.tags.map((tag: any) => String(tag));
-        // Save the document.
-        await this.upsert(db, docToSave);
-      } catch (err) {
-        console.error("Error storing vectors in VectorDB:", err);
-      }
+      new Notice(`indexFile - Unexpected error during embedding process: ${error}`);
+      return undefined;
     }
   }
 
