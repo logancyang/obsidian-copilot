@@ -514,10 +514,10 @@ class VectorStoreManager {
 
       this.currentIndexingNotice = this.createIndexingNotice();
 
+      const CHECKPOINT_INTERVAL = 50; // Save every 50 files
       const errors: string[] = [];
       for (let index = 0; index < files.length; index++) {
         if (this.isIndexingCancelled) {
-          // Handle cancellation if required
           break;
         }
 
@@ -544,6 +544,14 @@ class VectorStoreManager {
 
           this.indexedCount++;
           this.updateIndexingNoticeMessage();
+
+          // Checkpoint every CHECKPOINT_INTERVAL files
+          if (this.indexedCount % CHECKPOINT_INTERVAL === 0) {
+            if (getSettings().debug) {
+              console.log(`Checkpoint: Saving index after processing ${this.indexedCount} files`);
+            }
+            await this.saveDB();
+          }
         } catch (err) {
           console.error("Error indexing file:", err);
           errors.push(`Error indexing file: ${file.basename}`);
