@@ -40,6 +40,7 @@ export interface ModelConfig {
   maxRetries: number;
   maxConcurrency: number;
   maxTokens?: number;
+  maxCompletionTokens?: number;
   openAIApiKey?: string;
   openAIOrgId?: string;
   anthropicApiKey?: string;

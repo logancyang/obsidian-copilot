@@ -124,12 +124,33 @@ export default class ChainManager {
       // Must update the chatModel for chain because ChainFactory always
       // retrieves the old chain without the chatModel change if it exists!
       // Create a new chain with the new chatModel
-      this.setChain(getChainType());
+      this.setChain(getChainType(), {
+        prompt: this.getEffectivePrompt(customModel),
+      });
       console.log(`Setting model to ${newModelKey}`);
     } catch (error) {
       console.error("createChainWithNewModel failed: ", error);
       console.log("modelKey:", newModelKey);
     }
+  }
+
+  private getEffectivePrompt(customModel: CustomModel): ChatPromptTemplate {
+    const modelName = customModel.name;
+    const isO1Model = modelName.startsWith("o1");
+
+    let effectivePrompt = ChatPromptTemplate.fromMessages([
+      new MessagesPlaceholder("history"),
+      HumanMessagePromptTemplate.fromTemplate("{input}"),
+    ]);
+
+    if (isO1Model) {
+      effectivePrompt = ChatPromptTemplate.fromMessages([
+        [AI_SENDER, getSystemPrompt() || ""],
+        effectivePrompt,
+      ]);
+    }
+
+    return effectivePrompt;
   }
 
   async setChain(chainType: ChainType, options: SetChainOptions = {}): Promise<void> {
