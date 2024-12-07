@@ -77,6 +77,9 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const containerRef = useRef<HTMLDivElement>(null);
     const [currentModelKey, setCurrentModelKey] = useModelKey();
     const [currentChain] = useChainType();
+    const [currentActiveNote, setCurrentActiveNote] = useState<TFile | null>(
+      app.workspace.getActiveFile()
+    );
     const settings = useSettingsValue();
 
     useImperativeHandle(ref, () => ({
@@ -324,8 +327,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       const currentTitles = new Set(extractNoteTitles(inputMessage));
       // Get all URLs mentioned in the input
       const currentUrls = mention.extractAllUrls(inputMessage);
-      // Get the currently open note in the editor
-      const activeNote = app.workspace.getActiveFile();
 
       setContextNotes((prev) =>
         prev.filter((note) => {
@@ -339,7 +340,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           const wasAddedViaReference = (note as any).wasAddedViaReference === true;
 
           // Special handling for the active note
-          if (note.path === activeNote?.path) {
+          if (note.path === currentActiveNote?.path) {
             if (wasAddedViaReference) {
               // Case 1: Active note was added by typing [[note]]
               // Keep it only if its title is still in the input
@@ -369,7 +370,30 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
       // Remove any URLs that are no longer present in the input
       setContextUrls((prev) => prev.filter((url) => currentUrls.includes(url)));
-    }, [inputMessage, includeActiveNote]);
+    }, [inputMessage, includeActiveNote, currentActiveNote]);
+
+    // Update the current active note whenever it changes
+    useEffect(() => {
+      let timeoutId: ReturnType<typeof setTimeout>;
+
+      const handleActiveLeafChange = () => {
+        // Clear any existing timeout
+        clearTimeout(timeoutId);
+
+        // Set new timeout
+        timeoutId = setTimeout(() => {
+          const activeNote = app.workspace.getActiveFile();
+          setCurrentActiveNote(activeNote);
+        }, 100); // Wait 100ms after the last event because it fires multiple times
+      };
+
+      const eventRef = app.workspace.on("active-leaf-change", handleActiveLeafChange);
+
+      return () => {
+        clearTimeout(timeoutId); // Clean up any pending timeout
+        app.workspace.offref(eventRef); // unregister
+      };
+    }, [app.workspace]);
 
     return (
       <div className="chat-input-container" ref={containerRef}>
@@ -383,6 +407,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           setContextNotes={setContextNotes}
           includeActiveNote={includeActiveNote}
           setIncludeActiveNote={setIncludeActiveNote}
+          activeNote={currentActiveNote}
           contextUrls={contextUrls}
           onRemoveUrl={(url: string) => setContextUrls((prev) => prev.filter((u) => u !== url))}
           chatHistory={chatHistory}

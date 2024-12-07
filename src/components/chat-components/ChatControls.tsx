@@ -25,6 +25,7 @@ interface ChatControlsProps {
   setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
   includeActiveNote: boolean;
   setIncludeActiveNote: React.Dispatch<React.SetStateAction<boolean>>;
+  activeNote: TFile | null;
   contextUrls: string[];
   onRemoveUrl: (url: string) => void;
   chatHistory: ChatMessage[];
@@ -40,13 +41,13 @@ const ChatControls: React.FC<ChatControlsProps> = ({
   setContextNotes,
   includeActiveNote,
   setIncludeActiveNote,
+  activeNote,
   contextUrls,
   onRemoveUrl,
   chatHistory,
 }) => {
   const [selectedChain, setSelectedChain] = useChainType();
   const [isIndexLoaded, setIsIndexLoaded] = useState(false);
-  const activeNote = app.workspace.getActiveFile();
 
   useEffect(() => {
     isIndexLoadedPromise.then((loaded) => {
