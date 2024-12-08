@@ -22,6 +22,7 @@ export interface ChainRunner {
       debug?: boolean;
       ignoreSystemMessage?: boolean;
       updateLoading?: (loading: boolean) => void;
+      updateLoadingMessage?: (message: string) => void;
     }
   ): Promise<string>;
 }
@@ -38,6 +39,7 @@ abstract class BaseChainRunner implements ChainRunner {
       debug?: boolean;
       ignoreSystemMessage?: boolean;
       updateLoading?: (loading: boolean) => void;
+      updateLoadingMessage?: (message: string) => void;
     }
   ): Promise<string>;
 
@@ -122,20 +124,34 @@ class LLMChainRunner extends BaseChainRunner {
       debug?: boolean;
       ignoreSystemMessage?: boolean;
       updateLoading?: (loading: boolean) => void;
+      updateLoadingMessage?: (message: string) => void;
     }
   ): Promise<string> {
-    const { debug = false } = options;
+    const { debug = false, updateLoadingMessage } = options;
     let fullAIResponse = "";
 
     try {
       const chain = ChainManager.getChain();
-      const chatStream = await chain.stream({
-        input: userMessage.message,
-      } as any);
+      const chatModel = this.chainManager.chatModelManager.getChatModel();
+      const isO1PreviewModel = chatModel.modelName === "o1-preview";
 
-      for await (const chunk of chatStream) {
-        if (abortController.signal.aborted) break;
-        fullAIResponse += chunk.content;
+      if (!isO1PreviewModel) {
+        updateLoadingMessage?.(LOADING_MESSAGES.STREAMING);
+        const chatStream = await chain.stream({
+          input: userMessage.message,
+        } as any);
+
+        for await (const chunk of chatStream) {
+          if (abortController.signal.aborted) break;
+          fullAIResponse += chunk.content;
+          updateCurrentAiMessage(fullAIResponse);
+        }
+      } else {
+        updateLoadingMessage?.(LOADING_MESSAGES.GENERATING);
+        const result = await chain.invoke({
+          input: userMessage.message,
+        } as any);
+        fullAIResponse = result.response;
         updateCurrentAiMessage(fullAIResponse);
       }
     } catch (error) {
@@ -163,23 +179,38 @@ class VaultQAChainRunner extends BaseChainRunner {
       debug?: boolean;
       ignoreSystemMessage?: boolean;
       updateLoading?: (loading: boolean) => void;
+      updateLoadingMessage?: (message: string) => void;
     }
   ): Promise<string> {
-    const { debug = false } = options;
+    const { debug = false, updateLoadingMessage } = options;
     let fullAIResponse = "";
 
     try {
       const memory = this.chainManager.memoryManager.getMemory();
       const memoryVariables = await memory.loadMemoryVariables({});
       const chatHistory = extractChatHistory(memoryVariables);
-      const qaStream = await ChainManager.getRetrievalChain().stream({
-        question: userMessage.message,
-        chat_history: chatHistory,
-      } as any);
+      const chatModel = this.chainManager.chatModelManager.getChatModel();
+      const isO1PreviewModel = chatModel.modelName === "o1-preview";
 
-      for await (const chunk of qaStream) {
-        if (abortController.signal.aborted) break;
-        fullAIResponse += chunk.content;
+      if (!isO1PreviewModel) {
+        updateLoadingMessage?.(LOADING_MESSAGES.STREAMING);
+        const qaStream = await ChainManager.getRetrievalChain().stream({
+          question: userMessage.message,
+          chat_history: chatHistory,
+        } as any);
+
+        for await (const chunk of qaStream) {
+          if (abortController.signal.aborted) break;
+          fullAIResponse += chunk.content;
+          updateCurrentAiMessage(fullAIResponse);
+        }
+      } else {
+        updateLoadingMessage?.(LOADING_MESSAGES.GENERATING);
+        const result = await ChainManager.getRetrievalChain().invoke({
+          question: userMessage.message,
+          chat_history: chatHistory,
+        } as any);
+        fullAIResponse = result.response;
         updateCurrentAiMessage(fullAIResponse);
       }
 
@@ -290,11 +321,20 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     });
 
     let fullAIResponse = "";
-    const chatStream = await this.chainManager.chatModelManager.getChatModel().stream(messages);
+    const chatModel = this.chainManager.chatModelManager.getChatModel();
+    const isO1PreviewModel = chatModel.modelName === "o1-preview";
 
-    for await (const chunk of chatStream) {
-      if (abortController.signal.aborted) break;
-      fullAIResponse += chunk.content;
+    if (!isO1PreviewModel) {
+      const chatStream = await chatModel.stream(messages);
+
+      for await (const chunk of chatStream) {
+        if (abortController.signal.aborted) break;
+        fullAIResponse += chunk.content;
+        updateCurrentAiMessage(fullAIResponse);
+      }
+    } else {
+      const result = await chatModel.invoke(messages);
+      fullAIResponse = result.content;
       updateCurrentAiMessage(fullAIResponse);
     }
 

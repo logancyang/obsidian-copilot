@@ -75,6 +75,8 @@ export interface CustomModel {
   enableCors?: boolean;
   core?: boolean;
   azureOpenAIApiDeploymentName?: string;
+  azureOpenAIApiInstanceName?: string;
+  azureOpenAIApiVersion?: string;
 }
 
 export function setModelKey(modelKey: string) {

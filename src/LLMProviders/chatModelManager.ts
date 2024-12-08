@@ -70,29 +70,37 @@ export default class ChatModelManager {
   private getModelConfig(customModel: CustomModel): ModelConfig {
     const settings = getSettings();
 
-    // Check if the model starts with "o1"
+    // Validate maxTokens and temperature
+    const { maxTokens, temperature } = settings;
+    
+    if (typeof maxTokens !== "number" || maxTokens <= 0 || !Number.isInteger(maxTokens)) {
+      new Notice(
+        "Invalid maxTokens value in settings. Please use a positive integer."
+      );
+      throw new Error(
+        "Invalid maxTokens value in settings. Please use a positive integer."
+      );
+    }
+
+    if (typeof temperature !== "number" || temperature < 0 || temperature > 2) {
+      new Notice(
+        "Invalid temperature value in settings. Please use a number between 0 and 2."
+      );
+      throw new Error(
+        "Invalid temperature value in settings. Please use a number between 0 and 2."
+      );
+    }
+
     const modelName = customModel.name;
     const isO1Model = modelName.startsWith("o1");
     const baseConfig: ModelConfig = {
       modelName: modelName,
-      temperature: isO1Model ? 1 : settings.temperature,
-      streaming: true,
+      temperature: isO1Model ? 1 : temperature, // Ensure temperature is 1 for o1-preview models
+      streaming: !isO1Model, // Set streaming to false for o1-preview model
       maxRetries: 3,
       maxConcurrency: 3,
       enableCors: customModel.enableCors,
     };
-
-    const { maxTokens, temperature } = settings;
-       
-    if (typeof maxTokens !== "number" || maxTokens <= 0 || !Number.isInteger(maxTokens)) {
-      new Notice("Invalid maxTokens value in settings. Please use a positive integer.");
-      throw new Error("Invalid maxTokens value in settings. Please use a positive integer.");
-    }
-
-    if (typeof temperature !== "number" || temperature < 0 || temperature > 2) {
-      new Notice("Invalid temperature value in settings. Please use a number between 0 and 2.");
-      throw new Error("Invalid temperature value in settings. Please use a number between 0 and 2.");
-    }
 
     const providerConfig: {
       [K in keyof ChatProviderConstructMap]: ConstructorParameters<ChatProviderConstructMap[K]>[0];
@@ -105,14 +113,13 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
         openAIOrgId: getDecryptedKey(settings.openAIOrgId),
-        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
+        ...this.handleOpenAIExtraArgs(isO1Model, maxTokens, temperature),
       },
       [ChatModelProviders.ANTHROPIC]: {
         anthropicApiKey: getDecryptedKey(customModel.apiKey || settings.anthropicApiKey),
         modelName: modelName,
         anthropicApiUrl: customModel.baseUrl,
         clientOptions: {
-          // Required to bypass CORS restrictions
           defaultHeaders: { "anthropic-dangerous-direct-browser-access": "true" },
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
@@ -122,11 +129,11 @@ export default class ChatModelManager {
         azureOpenAIApiInstanceName: settings.azureOpenAIApiInstanceName,
         azureOpenAIApiDeploymentName: customModel.azureOpenAIApiDeploymentName || "o1-preview",
         azureOpenAIApiVersion: settings.azureOpenAIApiVersion,
-        ...this.handleAzureOpenAIExtraArgs(isO1Model, maxTokens, temperature),
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
+        ...this.handleAzureOpenAIExtraArgs(isO1Model, maxTokens, temperature),
       },
       [ChatModelProviders.COHEREAI]: {
         apiKey: getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
@@ -168,11 +175,8 @@ export default class ChatModelManager {
         modelName: modelName,
       },
       [ChatModelProviders.OLLAMA]: {
-        // ChatOllama has `model` instead of `modelName`!!
         model: modelName,
-        // @ts-ignore
         apiKey: customModel.apiKey || "default-key",
-        // MUST NOT use /v1 in the baseUrl for ollama
         baseUrl: customModel.baseUrl || "http://localhost:11434",
       },
       [ChatModelProviders.LM_STUDIO]: {
@@ -191,7 +195,7 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
           dangerouslyAllowBrowser: true,
         },
-        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
+        ...this.handleOpenAIExtraArgs(isO1Model, maxTokens, temperature),
       },
     };
 
@@ -274,12 +278,10 @@ export default class ChatModelManager {
       throw new Error(`No model found for: ${modelKey}`);
     }
 
-    // Create and return the appropriate model
     const selectedModel = ChatModelManager.modelMap[modelKey];
     if (!selectedModel.hasApiKey) {
       const errorMessage = `API key is not provided for the model: ${modelKey}. Model switch failed.`;
       new Notice(errorMessage);
-      // Stop execution and deliberate fail the model switch
       throw new Error(errorMessage);
     }
 
@@ -290,7 +292,6 @@ export default class ChatModelManager {
       const newModelInstance = new selectedModel.AIConstructor({
         ...modelConfig,
       });
-      // Set the new model
       ChatModelManager.chatModel = newModelInstance;
     } catch (error) {
       console.error(error);

@@ -106,34 +106,34 @@ export default class ChainManager {
     ChainManager.retrievedDocuments = documents;
   }
 
-  /**
-   * Update the active model and create a new chain with the specified model
-   * name.
-   */
   createChainWithNewModel(): void {
     let newModelKey = getModelKey();
     try {
       let customModel = this.findCustomModel(newModelKey);
+
       if (!customModel) {
-        // Reset default model if no model is found
-        console.error("Resetting to default model. No model configuration found for: ", newModelKey);
+        console.error("Resetting to default model. No model configuration found for:", newModelKey);
         customModel = BUILTIN_CHAT_MODELS[0];
         newModelKey = customModel.name + "|" + customModel.provider;
       }
+
+      // Special handling for the "o1-preview" Azure OpenAI model
       if (customModel.name === "o1-preview") {
         customModel.apiKey = getSettings().azureOpenAIApiKey;
         customModel.azureOpenAIApiDeploymentName = "o1-preview";
         customModel.azureOpenAIApiInstanceName = getSettings().azureOpenAIApiInstanceName;
         customModel.azureOpenAIApiVersion = getSettings().azureOpenAIApiVersion;
-        // Add any additional Azure-specific settings for "o1-preview" here
+        // Add any additional Azure-specific settings for "o1-preview"
       }
+
+      // Set the chat model using the ChatModelManager
       this.chatModelManager.setChatModel(customModel);
-      // Must update the chatModel for chain because ChainFactory always
-      // retrieves the old chain without the chatModel change if it exists!
-      // Create a new chain with the new chatModel
+
+      // Create and configure the appropriate chain with the new chat model
       this.setChain(getChainType(), {
         prompt: this.getEffectivePrompt(customModel),
       });
+
       console.log(`Model successfully set to ${newModelKey}`);
     } catch (error) {
       console.error("createChainWithNewModel failed:", error);
@@ -150,13 +150,6 @@ export default class ChainManager {
       HumanMessagePromptTemplate.fromTemplate("{input}"),
     ]);
 
-    if (isO1Model) {
-      effectivePrompt = ChatPromptTemplate.fromMessages([
-        [AI_SENDER, getSystemPrompt() || ""],
-        effectivePrompt,
-      ]);
-    }
-
     return effectivePrompt;
   }
 
@@ -168,25 +161,32 @@ export default class ChainManager {
 
     this.validateChainType(chainType);
 
-    // Handle index refresh if needed
     if (options.refreshIndex) {
       await this.vectorStoreManager.indexVaultToVectorStore();
     }
 
-    // Get chatModel, memory, prompt, and embeddingAPI from respective managers
     const chatModel = this.chatModelManager.getChatModel();
     const memory = this.memoryManager.getMemory();
     const chatPrompt = this.promptManager.getChatPrompt();
+    const isO1PreviewModel = chatModel.modelName === "o1-preview";
 
     switch (chainType) {
       case ChainType.LLM_CHAIN: {
         ChainManager.chain = ChainFactory.createNewLLMChain({
-          llm: chatModel,
+          llm: isO1PreviewModel
+            ? {
+                ...chatModel,
+                azureOpenAIApiKey: getSettings().azureOpenAIApiKey,
+                azureOpenAIApiInstanceName: getSettings().azureOpenAIApiInstanceName,
+                azureOpenAIApiDeploymentName: "o1-preview",
+                azureOpenAIApiVersion: getSettings().azureOpenAIApiVersion,
+                streaming: false, // Ensure streaming is set to false for o1-preview
+              }
+            : chatModel,
           memory: memory,
           prompt: options.prompt || chatPrompt,
           abortController: options.abortController,
-        }) as RunnableSequence;
-
+        });
         setChainType(ChainType.LLM_CHAIN);
         break;
       }
@@ -218,13 +218,19 @@ export default class ChainManager {
           getSettings().debug
         );
 
-        // Create new conversational retrieval chain
+        const retrievalChainConfig = {
+          llm: chatModel,
+          retriever: retriever,
+          systemMessage: getSystemPrompt(),
+        };
+
+        if (!isO1PreviewModel) {
+          // Only include streaming if the model supports it
+          retrievalChainConfig['streaming'] = true;
+        }
+
         ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain(
-          {
-            llm: chatModel,
-            retriever: retriever,
-            systemMessage: getSystemPrompt(),
-          },
+          retrievalChainConfig,
           ChainManager.storeRetrieverDocuments.bind(ChainManager),
           getSettings().debug
         );
@@ -232,21 +238,19 @@ export default class ChainManager {
         setChainType(ChainType.VAULT_QA_CHAIN);
         if (getSettings().debug) {
           console.log("New Vault QA chain with hybrid retriever created for entire vault");
-          console.log("Set chain:", ChainType.VAULT_QA_CHAIN);
         }
         break;
       }
 
       case ChainType.COPILOT_PLUS_CHAIN: {
-        // TODO: Create new copilotPlusChain with retriever
-        // For initial load of the plugin
         ChainManager.chain = ChainFactory.createNewLLMChain({
           llm: chatModel,
-          memory: memory,
+          memory,
           prompt: options.prompt || chatPrompt,
           abortController: options.abortController,
-        }) as RunnableSequence;
-
+          // Exclude streaming for o1-preview model
+          streaming: !isO1PreviewModel
+        });
         setChainType(ChainType.COPILOT_PLUS_CHAIN);
         break;
       }
@@ -280,6 +284,7 @@ export default class ChainManager {
       debug?: boolean;
       ignoreSystemMessage?: boolean;
       updateLoading?: (loading: boolean) => void;
+      updateLoadingMessage?: (message: string) => void;
     } = {}
   ) {
     const { debug = false, ignoreSystemMessage = false } = options;
@@ -293,21 +298,11 @@ export default class ChainManager {
     const modelName = (chatModel as any).modelName || (chatModel as any).model || "";
     const isO1Model = modelName.startsWith("o1");
 
-    // Handle ignoreSystemMessage
     if (ignoreSystemMessage || isO1Model) {
       let effectivePrompt = ChatPromptTemplate.fromMessages([
         new MessagesPlaceholder("history"),
         HumanMessagePromptTemplate.fromTemplate("{input}"),
       ]);
-
-      // TODO: hack for o1 models, to be removed when they support system prompt
-      if (isO1Model) {
-        //  Temporary fix：for o1-xx model need to covert systemMessage to aiMessage
-        effectivePrompt = ChatPromptTemplate.fromMessages([
-          [AI_SENDER, getSystemPrompt() || ""],
-          effectivePrompt,
-        ]);
-      }
 
       this.setChain(getChainType(), {
         prompt: effectivePrompt,

@@ -1,53 +1,74 @@
-import { AI_SENDER } from "@/constants";
-import ChainManager from "@/LLMProviders/chainManager";
-import { ChatMessage } from "@/sharedState";
-import { formatDateTime } from "./utils";
+import { StringOutputParser } from "@langchain/core/output_parsers";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { RunnableSequence } from "@langchain/core/runnables";
 
-export type Role = "assistant" | "user" | "system";
+export async function streamLangChain(
+  input: string,
+  chain: RunnableSequence,
+  abortController: AbortController,
+  updateCurrentAiMessage: (message: string) => void
+): Promise<string> {
+  let fullAIResponse = "";
 
-export const getAIResponse = async (
-  userMessage: ChatMessage,
-  chainManager: ChainManager,
-  addMessage: (message: ChatMessage) => void,
-  updateCurrentAiMessage: (message: string) => void,
-  updateShouldAbort: (abortController: AbortController | null) => void,
-  options: {
-    debug?: boolean;
-    ignoreSystemMessage?: boolean;
-    updateLoading?: (loading: boolean) => void;
-    updateLoadingMessage?: (message: string) => void;
-  } = {}
-) => {
-  const abortController = new AbortController();
-  updateShouldAbort(abortController);
   try {
-    await chainManager.runChain(
-      userMessage,
-      abortController,
-      updateCurrentAiMessage,
-      addMessage,
-      options
-    );
-  } catch (error) {
-    console.error("Model request failed:", error);
-    let errorMessage = "Model request failed: ";
+    const chatModel = chain.steps.find((step) => step instanceof BaseChatModel) as BaseChatModel;
+    const isO1PreviewModel = chatModel.modelName === "o1-preview";
 
-    if (error instanceof Error) {
-      errorMessage += error.message;
-      if (error.cause) {
-        errorMessage += ` Cause: ${error.cause}`;
+    if (!isO1PreviewModel) {
+      const chatStream = await chain.stream({
+        input,
+      } as any);
+
+      for await (const chunk of chatStream) {
+        if (abortController.signal.aborted) break;
+        fullAIResponse += chunk.content;
+        updateCurrentAiMessage(fullAIResponse);
       }
-    } else if (typeof error === "object" && error !== null) {
-      errorMessage += JSON.stringify(error);
     } else {
-      errorMessage += String(error);
+      // For o1-preview model, do not use streaming
+      const result = await chain.invoke({
+        input,
+      } as any);
+      fullAIResponse = result.response;
+      updateCurrentAiMessage(fullAIResponse);
     }
-
-    addMessage({
-      sender: AI_SENDER,
-      message: `Error: ${errorMessage}`,
-      isVisible: true,
-      timestamp: formatDateTime(new Date()),
-    });
+  } catch (error) {
+    console.error("Error streaming response:", error);
+    throw error;
   }
-};
+
+  return fullAIResponse;
+}
+
+export async function streamMultimodal(
+  messages: any,
+  chatModel: BaseChatModel,
+  abortController: AbortController,
+  updateCurrentAiMessage: (message: string) => void
+): Promise<string> {
+  let fullAIResponse = "";
+
+  try {
+    const isO1PreviewModel = chatModel.modelName === "o1-preview";
+
+    if (!isO1PreviewModel) {
+      const chatStream = await chatModel.stream(messages);
+
+      for await (const chunk of chatStream) {
+        if (abortController.signal.aborted) break;
+        fullAIResponse += chunk.content;
+        updateCurrentAiMessage(fullAIResponse);
+      }
+    } else {
+      // For o1-preview model, do not use streaming
+      const result = await chatModel.invoke(messages);
+      fullAIResponse = result.content;
+      updateCurrentAiMessage(fullAIResponse);
+    }
+  } catch (error) {
+    console.error("Error streaming multimodal response:", error);
+    throw error;
+  }
+
+  return fullAIResponse;
+}
