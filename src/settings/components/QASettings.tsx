@@ -1,5 +1,6 @@
 import { CustomModel } from "@/aiParams";
 import { EmbeddingModelProviders, VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
+import { updateSetting, useSettingsValue } from "@/settings/model";
 import React from "react";
 import {
   DropdownComponent,
@@ -8,7 +9,6 @@ import {
   TextAreaComponent,
   ToggleComponent,
 } from "./SettingBlocks";
-import { updateSetting, useSettingsValue } from "@/settings/model";
 
 const QASettings: React.FC = () => {
   const settings = useSettingsValue();
@@ -23,7 +23,7 @@ const QASettings: React.FC = () => {
   };
 
   return (
-    <div>
+    <div className="copilot-settings-tab">
       <h1>QA Settings</h1>
       <p>
         QA mode relies on a <em>local</em> vector index.
@@ -122,6 +122,12 @@ const QASettings: React.FC = () => {
         placeholder="folder1, #tag1, [[note1]]"
         value={settings.qaInclusions}
         onChange={(value) => updateSetting("qaInclusions", value)}
+      />
+      <ToggleComponent
+        name="Enable Obsidian Sync for Copilot index"
+        description="If enabled, the index will be stored in the .obsidian folder and synced with Obsidian Sync by default. If disabled, it will be stored in .copilot-index folder at vault root."
+        value={settings.enableIndexSync}
+        onChange={(value) => updateSetting("enableIndexSync", value)}
       />
       <ToggleComponent
         name="Disable index loading on mobile"
