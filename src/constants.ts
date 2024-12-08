@@ -251,6 +251,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   qaInclusions: "",
   chatNoteContextPath: "",
   chatNoteContextTags: [],
+  enableIndexSync: true,
   debug: false,
   enableEncryption: false,
   maxSourceChunks: 3,

@@ -35,8 +35,6 @@ class VectorStoreManager {
 
   constructor(app: App) {
     this.app = app;
-
-    this.dbPath = this.getDbPath();
     this.embeddingsManager = EmbeddingsManager.getInstance();
 
     // Initialize the database asynchronously
@@ -89,8 +87,21 @@ class VectorStoreManager {
     }
   }
 
-  private getDbPath(): string {
-    return `${this.app.vault.configDir}/copilot-index-${this.getVaultIdentifier()}.json`;
+  private async getDbPath(): Promise<string> {
+    if (getSettings().enableIndexSync) {
+      return `${this.app.vault.configDir}/copilot-index-${this.getVaultIdentifier()}.json`;
+    }
+
+    // Get vault root path (parent of .obsidian directory)
+    const vaultRoot = this.app.vault.getRoot().path;
+    const indexDir = `${vaultRoot}/.copilot-index`;
+
+    // Create .copilot-index directory if it doesn't exist
+    if (!(await this.app.vault.adapter.exists(indexDir))) {
+      await this.app.vault.adapter.mkdir(indexDir);
+    }
+
+    return `${indexDir}/copilot-index-${this.getVaultIdentifier()}.json`;
   }
 
   private createDynamicSchema(vectorLength: number) {
@@ -118,7 +129,7 @@ class VectorStoreManager {
       return;
     }
 
-    this.dbPath = this.getDbPath();
+    this.dbPath = await this.getDbPath();
     // Ensure the config directory exists
     const configDir = this.app.vault.configDir;
     if (!(await this.app.vault.adapter.exists(configDir))) {
@@ -243,6 +254,13 @@ class VectorStoreManager {
         schema: this.oramaDb.schema,
         ...rawData,
       };
+
+      // Ensure the directory exists before saving
+      const dbDir = this.dbPath.substring(0, this.dbPath.lastIndexOf("/"));
+
+      if (!(await this.app.vault.adapter.exists(dbDir))) {
+        await this.app.vault.adapter.mkdir(dbDir);
+      }
 
       // Use requestIdleCallback if available, otherwise use setTimeout
       const saveOperation = async () => {

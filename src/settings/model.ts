@@ -42,6 +42,7 @@ export interface CopilotSettings {
   indexVaultToVectorStore: string;
   chatNoteContextPath: string;
   chatNoteContextTags: string[];
+  enableIndexSync: boolean;
   debug: boolean;
   enableEncryption: boolean;
   maxSourceChunks: number;
