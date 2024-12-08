@@ -1,7 +1,7 @@
-import { CustomModel, ModelConfig, setModelKey } from "@/aiParams";
-import { BUILTIN_CHAT_MODELS, ChatModelProviders } from "@/constants";
-import { getDecryptedKey } from "@/encryptionService";
-import { getSettings, subscribeToSettingsChange } from "@/settings/model";
+import { CustomModel, ModelConfig, setModelKey } from "../aiParams";
+import { BUILTIN_CHAT_MODELS, ChatModelProviders } from "../constants";
+import { getDecryptedKey } from "../encryptionService";
+import { getSettings, subscribeToSettingsChange } from "../settings/model";
 import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
 import { ChatCohere } from "@langchain/cohere";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
@@ -10,7 +10,7 @@ import { ChatGroq } from "@langchain/groq";
 import { ChatOllama } from "@langchain/ollama";
 import { ChatOpenAI } from "@langchain/openai";
 import { Notice } from "obsidian";
-import { safeFetch } from "@/utils";
+import { safeFetch } from "../utils";
 import { ChatAnthropic } from "@langchain/anthropic";
 
 type ChatConstructorType = new (config: any) => BaseChatModel;
@@ -83,7 +83,7 @@ export default class ChatModelManager {
     };
 
     const { maxTokens, temperature } = settings;
-       
+
     if (typeof maxTokens !== "number" || maxTokens <= 0 || !Number.isInteger(maxTokens)) {
       new Notice("Invalid maxTokens value in settings. Please use a positive integer.");
       throw new Error("Invalid maxTokens value in settings. Please use a positive integer.");
@@ -91,7 +91,9 @@ export default class ChatModelManager {
 
     if (typeof temperature !== "number" || temperature < 0 || temperature > 2) {
       new Notice("Invalid temperature value in settings. Please use a number between 0 and 2.");
-      throw new Error("Invalid temperature value in settings. Please use a number between 0 and 2.");
+      throw new Error(
+        "Invalid temperature value in settings. Please use a number between 0 and 2."
+      );
     }
 
     const providerConfig: {
@@ -104,7 +106,6 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
-        openAIOrgId: getDecryptedKey(settings.openAIOrgId),
         ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
       },
       [ChatModelProviders.ANTHROPIC]: {
@@ -197,6 +198,11 @@ export default class ChatModelManager {
 
     const selectedProviderConfig =
       providerConfig[customModel.provider as keyof typeof providerConfig] || {};
+
+    // Handle openAIOrgId separately
+    if (customModel.provider === ChatModelProviders.OPENAI && settings.openAIOrgId) {
+      (selectedProviderConfig as any).openAIOrgId = getDecryptedKey(settings.openAIOrgId);
+    }
 
     return { ...baseConfig, ...selectedProviderConfig };
   }
