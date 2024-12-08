@@ -9,10 +9,7 @@ const userModelKeyAtom = atom<string | null>(null);
 const modelKeyAtom = atom(
   (get) => {
     const userValue = get(userModelKeyAtom);
-    if (userValue !== null) {
-      return userValue;
-    }
-    return get(settingsAtom).defaultModelKey;
+    return userValue !== null ? userValue : get(settingsAtom).defaultModelKey;
   },
   (get, set, newValue) => {
     set(userModelKeyAtom, newValue);
@@ -23,10 +20,7 @@ const userChainTypeAtom = atom<ChainType | null>(null);
 const chainTypeAtom = atom(
   (get) => {
     const userValue = get(userChainTypeAtom);
-    if (userValue !== null) {
-      return userValue;
-    }
-    return get(settingsAtom).defaultChainType;
+    return userValue !== null ? userValue : get(settingsAtom).defaultChainType;
   },
   (get, set, newValue) => {
     set(userChainTypeAtom, newValue);
@@ -35,11 +29,12 @@ const chainTypeAtom = atom(
 
 export interface ModelConfig {
   modelName: string;
-  temperature: number;
+  temperature: number; // Ensure this is set to 1 for o1-preview models
   streaming: boolean;
   maxRetries: number;
   maxConcurrency: number;
-  maxTokens?: number;
+  maxCompletionTokens?: number; // Use this for o1-preview models
+  maxTokens?: number; // Make conditional on model type
   openAIApiKey?: string;
   openAIOrgId?: string;
   anthropicApiKey?: string;
@@ -48,8 +43,7 @@ export interface ModelConfig {
   azureOpenAIApiInstanceName?: string;
   azureOpenAIApiDeploymentName?: string;
   azureOpenAIApiVersion?: string;
-  // Google and TogetherAI API key share this property
-  apiKey?: string;
+  apiKey?: string; // Shared by Google and TogetherAI
   openAIProxyBaseUrl?: string;
   groqApiKey?: string;
   enableCors?: boolean;
@@ -73,6 +67,7 @@ export interface CustomModel {
   isBuiltIn?: boolean;
   enableCors?: boolean;
   core?: boolean;
+  azureOpenAIApiDeploymentName?: string; // Added for Azure OpenAI models
 }
 
 export function setModelKey(modelKey: string) {

@@ -164,6 +164,11 @@ const ApiSettings: React.FC = () => {
             placeholder="Enter Azure OpenAI API Embedding Deployment Name"
             type="text"
           />
+          <p>
+            For `o1-preview` model, ensure that the `azureOpenAIApiDeploymentName` is correctly
+            configured. The plugin uses `maxCompletionTokens` instead of `maxTokens` for `o1-preview`
+            models.
+          </p>
         </div>
       </Collapsible>
 
