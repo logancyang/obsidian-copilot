@@ -116,9 +116,16 @@ export default class ChainManager {
       let customModel = this.findCustomModel(newModelKey);
       if (!customModel) {
         // Reset default model if no model is found
-        console.error("Resetting default model. No model configuration found for: ", newModelKey);
+        console.error("Resetting to default model. No model configuration found for: ", newModelKey);
         customModel = BUILTIN_CHAT_MODELS[0];
         newModelKey = customModel.name + "|" + customModel.provider;
+      }
+      if (customModel.name === "o1-preview") {
+        customModel.apiKey = getSettings().azureOpenAIApiKey;
+        customModel.azureOpenAIApiDeploymentName = "o1-preview";
+        customModel.azureOpenAIApiInstanceName = getSettings().azureOpenAIApiInstanceName;
+        customModel.azureOpenAIApiVersion = getSettings().azureOpenAIApiVersion;
+        // Add any additional Azure-specific settings for "o1-preview" here
       }
       this.chatModelManager.setChatModel(customModel);
       // Must update the chatModel for chain because ChainFactory always
@@ -127,9 +134,9 @@ export default class ChainManager {
       this.setChain(getChainType(), {
         prompt: this.getEffectivePrompt(customModel),
       });
-      console.log(`Setting model to ${newModelKey}`);
+      console.log(`Model successfully set to ${newModelKey}`);
     } catch (error) {
-      console.error("createChainWithNewModel failed: ", error);
+      console.error("createChainWithNewModel failed:", error);
       console.log("modelKey:", newModelKey);
     }
   }

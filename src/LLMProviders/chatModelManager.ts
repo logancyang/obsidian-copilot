@@ -75,12 +75,24 @@ export default class ChatModelManager {
     const isO1Model = modelName.startsWith("o1");
     const baseConfig: ModelConfig = {
       modelName: modelName,
-      temperature: settings.temperature,
+      temperature: isO1Model ? 1 : settings.temperature,
       streaming: true,
       maxRetries: 3,
       maxConcurrency: 3,
       enableCors: customModel.enableCors,
     };
+
+    const { maxTokens, temperature } = settings;
+       
+    if (typeof maxTokens !== "number" || maxTokens <= 0 || !Number.isInteger(maxTokens)) {
+      new Notice("Invalid maxTokens value in settings. Please use a positive integer.");
+      throw new Error("Invalid maxTokens value in settings. Please use a positive integer.");
+    }
+
+    if (typeof temperature !== "number" || temperature < 0 || temperature > 2) {
+      new Notice("Invalid temperature value in settings. Please use a number between 0 and 2.");
+      throw new Error("Invalid temperature value in settings. Please use a number between 0 and 2.");
+    }
 
     const providerConfig: {
       [K in keyof ChatProviderConstructMap]: ConstructorParameters<ChatProviderConstructMap[K]>[0];
@@ -92,7 +104,6 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
-        // @ts-ignore
         openAIOrgId: getDecryptedKey(settings.openAIOrgId),
         ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
       },
@@ -109,13 +120,13 @@ export default class ChatModelManager {
       [ChatModelProviders.AZURE_OPENAI]: {
         azureOpenAIApiKey: getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
         azureOpenAIApiInstanceName: settings.azureOpenAIApiInstanceName,
-        azureOpenAIApiDeploymentName: settings.azureOpenAIApiDeploymentName,
+        azureOpenAIApiDeploymentName: customModel.azureOpenAIApiDeploymentName || "o1-preview",
         azureOpenAIApiVersion: settings.azureOpenAIApiVersion,
+        ...this.handleAzureOpenAIExtraArgs(isO1Model, maxTokens, temperature),
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
-        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
       },
       [ChatModelProviders.COHEREAI]: {
         apiKey: getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
@@ -202,6 +213,18 @@ export default class ChatModelManager {
         };
   }
 
+  private handleAzureOpenAIExtraArgs(isO1Model: boolean, maxTokens: number, temperature: number) {
+    return isO1Model
+      ? {
+          maxCompletionTokens: maxTokens,
+          temperature: 1,
+        }
+      : {
+          maxTokens,
+          temperature,
+        };
+  }
+
   // Build a map of modelKey to model config
   public buildModelMap() {
     const activeModels = getSettings().activeModels;
@@ -212,7 +235,7 @@ export default class ChatModelManager {
 
     allModels.forEach((model) => {
       if (model.enabled) {
-        if (!Object.values(ChatModelProviders).contains(model.provider as ChatModelProviders)) {
+        if (!Object.values(ChatModelProviders).includes(model.provider as ChatModelProviders)) {
           console.warn(`Unknown provider: ${model.provider} for model: ${model.name}`);
           return;
         }
@@ -276,10 +299,7 @@ export default class ChatModelManager {
   }
 
   validateChatModel(chatModel: BaseChatModel): boolean {
-    if (chatModel === undefined || chatModel === null) {
-      return false;
-    }
-    return true;
+    return chatModel !== undefined && chatModel !== null;
   }
 
   async countTokens(inputStr: string): Promise<number> {
