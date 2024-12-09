@@ -12,7 +12,7 @@ const ApiSettings: React.FC = () => {
       <div className="warning-message">
         Make sure you have access to the model and the correct API key.
         <br />
-        If errors occur, please try resetting to defaultand re-enter the API key.
+        If errors occur, please try resetting to default and re-enter the API key.
       </div>
       <div>
         <div>
