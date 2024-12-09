@@ -2,8 +2,8 @@ import { ChainType } from "@/chainFactory";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 
-import { atom, getDefaultStore, useAtom } from "jotai";
-import { settingsAtom } from "@/settings/model";
+import { atom, useAtom } from "jotai";
+import { settingsAtom, settingsStore } from "@/settings/model";
 
 const userModelKeyAtom = atom<string | null>(null);
 const modelKeyAtom = atom(
@@ -76,33 +76,37 @@ export interface CustomModel {
 }
 
 export function setModelKey(modelKey: string) {
-  getDefaultStore().set(modelKeyAtom, modelKey);
+  settingsStore.set(modelKeyAtom, modelKey);
 }
 
 export function getModelKey(): string {
-  return getDefaultStore().get(modelKeyAtom);
+  return settingsStore.get(modelKeyAtom);
 }
 
 export function subscribeToModelKeyChange(callback: () => void): () => void {
-  return getDefaultStore().sub(modelKeyAtom, callback);
+  return settingsStore.sub(modelKeyAtom, callback);
 }
 
 export function useModelKey() {
-  return useAtom(modelKeyAtom);
+  return useAtom(modelKeyAtom, {
+    store: settingsStore,
+  });
 }
 
 export function getChainType(): ChainType {
-  return getDefaultStore().get(chainTypeAtom);
+  return settingsStore.get(chainTypeAtom);
 }
 
 export function setChainType(chainType: ChainType) {
-  getDefaultStore().set(chainTypeAtom, chainType);
+  settingsStore.set(chainTypeAtom, chainType);
 }
 
 export function subscribeToChainTypeChange(callback: () => void): () => void {
-  return getDefaultStore().sub(chainTypeAtom, callback);
+  return settingsStore.sub(chainTypeAtom, callback);
 }
 
 export function useChainType() {
-  return useAtom(chainTypeAtom);
+  return useAtom(chainTypeAtom, {
+    store: settingsStore,
+  });
 }
