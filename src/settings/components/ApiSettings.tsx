@@ -1,7 +1,7 @@
+import { updateSetting, useSettingsValue } from "@/settings/model";
 import React from "react";
 import ApiSetting from "./ApiSetting";
 import Collapsible from "./Collapsible";
-import { updateSetting, useSettingsValue } from "@/settings/model";
 
 const ApiSettings: React.FC = () => {
   const settings = useSettingsValue();
@@ -12,8 +12,7 @@ const ApiSettings: React.FC = () => {
       <div className="warning-message">
         Make sure you have access to the model and the correct API key.
         <br />
-        If errors occur, please re-enter the API key, save and reload the plugin to see if it
-        resolves the issue.
+        If errors occur, please try resetting to defaultand re-enter the API key.
       </div>
       <div>
         <div>
