@@ -1,5 +1,5 @@
 import { useChainType } from "@/aiParams";
-import { App } from "obsidian";
+import { App, Notice } from "obsidian";
 import React, { useEffect, useState } from "react";
 
 import { ChainType } from "@/chainFactory";
@@ -48,13 +48,13 @@ const ChatControls: React.FC<ChatControlsProps> = ({
 }) => {
   const [selectedChain, setSelectedChain] = useChainType();
   const [isIndexLoaded, setIsIndexLoaded] = useState(false);
+  const settings = useSettingsValue();
 
   useEffect(() => {
     isIndexLoadedPromise.then((loaded) => {
       setIsIndexLoaded(loaded);
     });
   }, [isIndexLoadedPromise]);
-  const settings = useSettingsValue();
 
   const handleChainChange = async ({ value }: { value: string }) => {
     const newChain = stringToChainType(value);
@@ -69,6 +69,16 @@ const ChatControls: React.FC<ChatControlsProps> = ({
       }
 
       setSelectedChain(selectedChain);
+      if (
+        (selectedChain === ChainType.COPILOT_PLUS_CHAIN ||
+          selectedChain === ChainType.VAULT_QA_CHAIN) &&
+        !isIndexLoaded
+      ) {
+        new Notice(
+          "Index not loaded, please index your vault first!\n\n1. Set an embedding model in QA settings \n\n2. Click 'Refresh Index for Vault'",
+          10000
+        );
+      }
     };
 
     handleChainSelection();
@@ -178,22 +188,20 @@ const ChatControls: React.FC<ChatControlsProps> = ({
 
               <DropdownMenu.Portal>
                 <DropdownMenu.Content className="chain-select-content" align="end" sideOffset={5}>
-                  <DropdownMenu.Item onSelect={() => handleChainChange({ value: "llm_chain" })}>
+                  <DropdownMenu.Item
+                    onSelect={() => handleChainChange({ value: ChainType.LLM_CHAIN })}
+                  >
                     chat
                   </DropdownMenu.Item>
                   <DropdownMenu.Item
-                    onSelect={() => handleChainChange({ value: "vault_qa" })}
-                    disabled={!isIndexLoaded}
-                    className={!isIndexLoaded ? "disabled-menu-item" : ""}
+                    onSelect={() => handleChainChange({ value: ChainType.VAULT_QA_CHAIN })}
                   >
-                    vault QA (basic) {!isIndexLoaded && "(index not loaded)"}
+                    vault QA (basic)
                   </DropdownMenu.Item>
                   <DropdownMenu.Item
-                    onSelect={() => handleChainChange({ value: "copilot_plus" })}
-                    disabled={!isIndexLoaded}
-                    className={!isIndexLoaded ? "disabled-menu-item" : ""}
+                    onSelect={() => handleChainChange({ value: ChainType.COPILOT_PLUS_CHAIN })}
                   >
-                    copilot plus (alpha) {!isIndexLoaded && "(index not loaded)"}
+                    copilot plus (alpha)
                   </DropdownMenu.Item>
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>
