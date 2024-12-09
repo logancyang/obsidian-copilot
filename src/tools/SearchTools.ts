@@ -1,13 +1,14 @@
-import { TEXT_WEIGHT } from "@/constants";
+import { EMPTY_INDEX_ERROR_MESSAGE, TEXT_WEIGHT } from "@/constants";
 import { CustomError } from "@/error";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ChatModelManager from "@/LLMProviders/chatModelManager";
 import { HybridRetriever } from "@/search/hybridRetriever";
+import { getSettings } from "@/settings/model";
 import { TimeInfo } from "@/tools/TimeTools";
 import VectorStoreManager from "@/VectorStoreManager";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { getSettings } from "@/settings/model";
+
 const localSearchTool = tool(
   async ({
     timeRange,
@@ -26,6 +27,10 @@ const localSearchTool = tool(
   }) => {
     // Ensure VectorStoreManager is initialized
     await vectorStoreManager.waitForInitialization();
+    const indexEmpty = await vectorStoreManager.isIndexEmpty();
+    if (indexEmpty) {
+      throw new CustomError(EMPTY_INDEX_ERROR_MESSAGE);
+    }
 
     const embeddingsManager = vectorStoreManager.getEmbeddingsManager();
     const vault = vectorStoreManager.getVault();

@@ -1,6 +1,6 @@
 import { useChainType } from "@/aiParams";
 import { App } from "obsidian";
-import React, { useEffect, useState } from "react";
+import React from "react";
 
 import { ChainType } from "@/chainFactory";
 import { TooltipActionButton } from "@/components/chat-components/TooltipActionButton";
@@ -19,7 +19,6 @@ interface ChatControlsProps {
   onNewChat: (openNote: boolean) => void;
   onSaveAsNote: () => void;
   onRefreshVaultContext: () => void;
-  isIndexLoadedPromise: Promise<boolean>;
   app: App;
   contextNotes: TFile[];
   setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
@@ -35,7 +34,6 @@ const ChatControls: React.FC<ChatControlsProps> = ({
   onNewChat,
   onSaveAsNote,
   onRefreshVaultContext,
-  isIndexLoadedPromise,
   app,
   contextNotes,
   setContextNotes,
@@ -47,44 +45,12 @@ const ChatControls: React.FC<ChatControlsProps> = ({
   chatHistory,
 }) => {
   const [selectedChain, setSelectedChain] = useChainType();
-  const [isIndexLoaded, setIsIndexLoaded] = useState(false);
-
-  useEffect(() => {
-    isIndexLoadedPromise.then((loaded) => {
-      setIsIndexLoaded(loaded);
-    });
-  }, [isIndexLoadedPromise]);
   const settings = useSettingsValue();
 
   const handleChainChange = async ({ value }: { value: string }) => {
     const newChain = stringToChainType(value);
     setSelectedChain(newChain);
   };
-
-  useEffect(() => {
-    const handleChainSelection = async () => {
-      if (!app) {
-        console.error("App instance is not available.");
-        return;
-      }
-
-      setSelectedChain(selectedChain);
-    };
-
-    handleChainSelection();
-  }, [selectedChain]);
-
-  // const handleFindSimilarNotes = async () => {
-  //   const activeFile = app.workspace.getActiveFile();
-  //   if (!activeFile) {
-  //     new Notice("No active file");
-  //     return;
-  //   }
-
-  //   const activeNoteContent = await app.vault.cachedRead(activeFile);
-  //   const similarChunks = await onFindSimilarNotes(activeNoteContent, activeFile.path);
-  //   new SimilarNotesModal(app, similarChunks).open();
-  // };
 
   const handleAddContext = () => {
     const excludeNotes = [
@@ -178,22 +144,20 @@ const ChatControls: React.FC<ChatControlsProps> = ({
 
               <DropdownMenu.Portal>
                 <DropdownMenu.Content className="chain-select-content" align="end" sideOffset={5}>
-                  <DropdownMenu.Item onSelect={() => handleChainChange({ value: "llm_chain" })}>
+                  <DropdownMenu.Item
+                    onSelect={() => handleChainChange({ value: ChainType.LLM_CHAIN })}
+                  >
                     chat
                   </DropdownMenu.Item>
                   <DropdownMenu.Item
-                    onSelect={() => handleChainChange({ value: "vault_qa" })}
-                    disabled={!isIndexLoaded}
-                    className={!isIndexLoaded ? "disabled-menu-item" : ""}
+                    onSelect={() => handleChainChange({ value: ChainType.VAULT_QA_CHAIN })}
                   >
-                    vault QA (basic) {!isIndexLoaded && "(index not loaded)"}
+                    vault QA (basic)
                   </DropdownMenu.Item>
                   <DropdownMenu.Item
-                    onSelect={() => handleChainChange({ value: "copilot_plus" })}
-                    disabled={!isIndexLoaded}
-                    className={!isIndexLoaded ? "disabled-menu-item" : ""}
+                    onSelect={() => handleChainChange({ value: ChainType.COPILOT_PLUS_CHAIN })}
                   >
-                    copilot plus (alpha) {!isIndexLoaded && "(index not loaded)"}
+                    copilot plus (alpha)
                   </DropdownMenu.Item>
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>

@@ -1,7 +1,19 @@
-import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
-import { CustomModel, SetChainOptions, setChainType } from "@/aiParams";
+import {
+  CustomModel,
+  getChainType,
+  getModelKey,
+  SetChainOptions,
+  setChainType,
+  subscribeToChainTypeChange,
+  subscribeToModelKeyChange,
+} from "@/aiParams";
 import ChainFactory, { ChainType, Document } from "@/chainFactory";
-import { AI_SENDER, BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
+import {
+  AI_SENDER,
+  BUILTIN_CHAT_MODELS,
+  USER_SENDER,
+  VAULT_VECTOR_STORE_STRATEGY,
+} from "@/constants";
 import {
   ChainRunner,
   CopilotPlusChainRunner,
@@ -9,6 +21,7 @@ import {
   VaultQAChainRunner,
 } from "@/LLMProviders/chainRunner";
 import { HybridRetriever } from "@/search/hybridRetriever";
+import { getSettings, getSystemPrompt, subscribeToSettingsChange } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { isSupportedChain } from "@/utils";
 import VectorStoreManager from "@/VectorStoreManager";
@@ -24,13 +37,6 @@ import ChatModelManager from "./chatModelManager";
 import EmbeddingsManager from "./embeddingManager";
 import MemoryManager from "./memoryManager";
 import PromptManager from "./promptManager";
-import {
-  getModelKey,
-  getChainType,
-  subscribeToModelKeyChange,
-  subscribeToChainTypeChange,
-} from "@/aiParams";
-import { getSettings, subscribeToSettingsChange, getSystemPrompt } from "@/settings/model";
 
 export default class ChainManager {
   private static chain: RunnableSequence;
@@ -140,11 +146,6 @@ export default class ChainManager {
 
     this.validateChainType(chainType);
 
-    // Handle index refresh if needed
-    if (options.refreshIndex) {
-      await this.vectorStoreManager.indexVaultToVectorStore();
-    }
-
     // Get chatModel, memory, prompt, and embeddingAPI from respective managers
     const chatModel = this.chatModelManager.getChatModel();
     const memory = this.memoryManager.getMemory();
@@ -164,17 +165,7 @@ export default class ChainManager {
       }
 
       case ChainType.VAULT_QA_CHAIN: {
-        const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
-        if (!embeddingsAPI) {
-          console.error("Error getting embeddings API. Please check your settings.");
-          return;
-        }
-
-        const db = this.vectorStoreManager.getDb();
-        if (!db) {
-          console.error("Copilot index is not loaded. Please check your settings.");
-          return;
-        }
+        const { embeddingsAPI, db } = await this.initializeQAChain(options);
 
         const retriever = new HybridRetriever(
           db,
@@ -210,8 +201,8 @@ export default class ChainManager {
       }
 
       case ChainType.COPILOT_PLUS_CHAIN: {
-        // TODO: Create new copilotPlusChain with retriever
         // For initial load of the plugin
+        await this.initializeQAChain(options);
         ChainManager.chain = ChainFactory.createNewLLMChain({
           llm: chatModel,
           memory: memory,
@@ -241,6 +232,31 @@ export default class ChainManager {
       default:
         throw new Error(`Unsupported chain type: ${chainType}`);
     }
+  }
+
+  private async initializeQAChain(options: SetChainOptions) {
+    const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
+    if (!embeddingsAPI) {
+      throw new Error("Error getting embeddings API. Please check your settings.");
+    }
+
+    let db = this.vectorStoreManager.getDb();
+    if (!db) {
+      console.warn("Copilot index is not loaded. Reinitializing...");
+      // Reinitialize the database since we now have valid embeddings API
+      db = await this.vectorStoreManager.initializeDB();
+
+      if (!db) {
+        throw new Error("Database failed to initialize. Please check your settings.");
+      }
+    }
+
+    // Handle index refresh if needed
+    if (options.refreshIndex) {
+      await this.vectorStoreManager.indexVaultToVectorStore();
+    }
+
+    return { embeddingsAPI, db };
   }
 
   async runChain(
