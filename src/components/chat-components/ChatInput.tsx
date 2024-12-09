@@ -29,7 +29,6 @@ interface ChatInputProps {
   onNewChat: (openNote: boolean) => void;
   onSaveAsNote: () => void;
   onRefreshVaultContext: () => void;
-  isIndexLoadedPromise: Promise<boolean>;
   contextNotes: TFile[];
   setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
   includeActiveNote: boolean;
@@ -56,7 +55,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       onNewChat,
       onSaveAsNote,
       onRefreshVaultContext,
-      isIndexLoadedPromise,
       contextNotes,
       setContextNotes,
       includeActiveNote,
@@ -401,7 +399,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           onNewChat={onNewChat}
           onSaveAsNote={onSaveAsNote}
           onRefreshVaultContext={onRefreshVaultContext}
-          isIndexLoadedPromise={isIndexLoadedPromise}
           app={app}
           contextNotes={contextNotes}
           setContextNotes={setContextNotes}

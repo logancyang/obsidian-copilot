@@ -39,14 +39,7 @@ class VectorStoreManager {
 
     // Initialize the database asynchronously
     this.initializationPromise = this.initializeDB()
-      .then((db) => {
-        this.oramaDb = db;
-        if (db) {
-          console.log("Copilot database initialized successfully.");
-        } else {
-          console.log("Copilot index is disabled on mobile devices.");
-        }
-
+      .then(() => {
         // Perform any operations that depend on the initialized database here
         this.performPostInitializationTasks();
       })
@@ -120,7 +113,7 @@ class VectorStoreManager {
     };
   }
 
-  private async initializeDB(): Promise<Orama<any> | undefined> {
+  public async initializeDB(): Promise<Orama<any> | undefined> {
     // Check if we should skip index loading on mobile
     if (Platform.isMobile && getSettings().disableIndexOnMobile) {
       console.log("Index loading disabled on mobile device");
@@ -152,17 +145,22 @@ class VectorStoreManager {
 
         console.log(`Loaded existing Orama database for ${this.dbPath} from disk.`);
         this.isIndexLoaded = true;
+        this.oramaDb = newDb;
         return newDb;
       } else {
         // Only create new DB if not on mobile with disabled index
-        return await this.createNewDb();
+        const newDb = await this.createNewDb();
+        this.oramaDb = newDb;
+        return newDb;
       }
     } catch (error) {
       console.error(`Error initializing Orama database:`, error);
       if (Platform.isMobile && getSettings().disableIndexOnMobile) {
         return;
       }
-      return await this.createNewDb();
+      const newDb = await this.createNewDb();
+      this.oramaDb = newDb;
+      return newDb;
     }
   }
 

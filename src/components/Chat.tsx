@@ -1,6 +1,6 @@
 import { useChainType, useModelKey } from "@/aiParams";
-import { updateChatMemory } from "@/chatUtils";
 import { ChainType } from "@/chainFactory";
+import { updateChatMemory } from "@/chatUtils";
 import ChatInput from "@/components/chat-components/ChatInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
 import { ABORT_REASON, AI_SENDER, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
@@ -645,7 +645,6 @@ ${chatContent}`;
           }}
           onSaveAsNote={() => handleSaveAsNote(true)}
           onRefreshVaultContext={refreshVaultContext}
-          isIndexLoadedPromise={plugin.vectorStoreManager.getIsIndexLoaded()}
           contextNotes={contextNotes}
           setContextNotes={setContextNotes}
           includeActiveNote={includeActiveNote}

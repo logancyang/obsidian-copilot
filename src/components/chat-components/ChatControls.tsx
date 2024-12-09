@@ -1,6 +1,6 @@
 import { useChainType } from "@/aiParams";
-import { App, Notice } from "obsidian";
-import React, { useEffect, useState } from "react";
+import { App } from "obsidian";
+import React from "react";
 
 import { ChainType } from "@/chainFactory";
 import { TooltipActionButton } from "@/components/chat-components/TooltipActionButton";
@@ -19,7 +19,6 @@ interface ChatControlsProps {
   onNewChat: (openNote: boolean) => void;
   onSaveAsNote: () => void;
   onRefreshVaultContext: () => void;
-  isIndexLoadedPromise: Promise<boolean>;
   app: App;
   contextNotes: TFile[];
   setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
@@ -35,7 +34,6 @@ const ChatControls: React.FC<ChatControlsProps> = ({
   onNewChat,
   onSaveAsNote,
   onRefreshVaultContext,
-  isIndexLoadedPromise,
   app,
   contextNotes,
   setContextNotes,
@@ -47,54 +45,12 @@ const ChatControls: React.FC<ChatControlsProps> = ({
   chatHistory,
 }) => {
   const [selectedChain, setSelectedChain] = useChainType();
-  const [isIndexLoaded, setIsIndexLoaded] = useState(false);
   const settings = useSettingsValue();
-
-  useEffect(() => {
-    isIndexLoadedPromise.then((loaded) => {
-      setIsIndexLoaded(loaded);
-    });
-  }, [isIndexLoadedPromise]);
 
   const handleChainChange = async ({ value }: { value: string }) => {
     const newChain = stringToChainType(value);
     setSelectedChain(newChain);
   };
-
-  useEffect(() => {
-    const handleChainSelection = async () => {
-      if (!app) {
-        console.error("App instance is not available.");
-        return;
-      }
-
-      setSelectedChain(selectedChain);
-      if (
-        (selectedChain === ChainType.COPILOT_PLUS_CHAIN ||
-          selectedChain === ChainType.VAULT_QA_CHAIN) &&
-        !isIndexLoaded
-      ) {
-        new Notice(
-          "Index not loaded, please index your vault first!\n\n1. Set an embedding model in QA settings \n\n2. Click 'Refresh Index for Vault'",
-          10000
-        );
-      }
-    };
-
-    handleChainSelection();
-  }, [selectedChain]);
-
-  // const handleFindSimilarNotes = async () => {
-  //   const activeFile = app.workspace.getActiveFile();
-  //   if (!activeFile) {
-  //     new Notice("No active file");
-  //     return;
-  //   }
-
-  //   const activeNoteContent = await app.vault.cachedRead(activeFile);
-  //   const similarChunks = await onFindSimilarNotes(activeNoteContent, activeFile.path);
-  //   new SimilarNotesModal(app, similarChunks).open();
-  // };
 
   const handleAddContext = () => {
     const excludeNotes = [
