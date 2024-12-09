@@ -1,15 +1,8 @@
-<<<<<<< HEAD
-import { CustomModel, ModelConfig, setModelKey } from "@/aiParams";
-import { BUILTIN_CHAT_MODELS, ChatModelProviders } from "@/constants";
-import { getDecryptedKey } from "@/encryptionService";
-import { getSettings, subscribeToSettingsChange } from "@/settings/model";
-=======
 import { CustomModel, getModelKey, ModelConfig, setModelKey } from "@/aiParams";
 import { BUILTIN_CHAT_MODELS, ChatModelProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { safeFetch } from "@/utils";
->>>>>>> parent of a8c7162 (Revert "asdf")
 import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatCohere } from "@langchain/cohere";
@@ -19,11 +12,6 @@ import { ChatGroq } from "@langchain/groq";
 import { ChatOllama } from "@langchain/ollama";
 import { ChatOpenAI } from "@langchain/openai";
 import { Notice } from "obsidian";
-<<<<<<< HEAD
-import { safeFetch } from "@/utils";
-import { ChatAnthropic } from "@langchain/anthropic";
-=======
->>>>>>> parent of a8c7162 (Revert "asdf")
 
 type ChatConstructorType = new (config: any) => BaseChatModel;
 
@@ -85,6 +73,18 @@ export default class ChatModelManager {
   private getModelConfig(customModel: CustomModel): ModelConfig {
     const settings = getSettings();
 
+    // Check if the model starts with "o1"
+    const modelName = customModel.name;
+    const isO1Model = modelName.startsWith("o1");
+    const baseConfig: ModelConfig = {
+      modelName: modelName,
+      temperature: isO1Model ? 1 : settings.temperature,
+      streaming: true,
+      maxRetries: 3,
+      maxConcurrency: 3,
+      enableCors: customModel.enableCors,
+    };
+
     // Validate maxTokens and temperature
     const { maxTokens, temperature } = settings;
        
@@ -120,11 +120,7 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
         openAIOrgId: getDecryptedKey(settings.openAIOrgId),
-<<<<<<< HEAD
-        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
-=======
         ...this.handleOpenAIExtraArgs(isO1Model, maxTokens, temperature),
->>>>>>> parent of a8c7162 (Revert "asdf")
       },
       [ChatModelProviders.ANTHROPIC]: {
         anthropicApiKey: getDecryptedKey(customModel.apiKey || settings.anthropicApiKey),
