@@ -1,5 +1,4 @@
 import {
-  CustomModel,
   getChainType,
   getModelKey,
   SetChainOptions,
@@ -23,7 +22,7 @@ import {
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { getSettings, getSystemPrompt, subscribeToSettingsChange } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
-import { isSupportedChain } from "@/utils";
+import { findCustomModel, isSupportedChain } from "@/utils";
 import VectorStoreManager from "@/VectorStoreManager";
 import {
   ChatPromptTemplate,
@@ -101,13 +100,6 @@ export default class ChainManager {
     }
   }
 
-  private findCustomModel(modelKey: string): CustomModel | undefined {
-    const [name, provider] = modelKey.split("|");
-    return getSettings().activeModels.find(
-      (model) => model.name === name && model.provider === provider
-    );
-  }
-
   static storeRetrieverDocuments(documents: Document[]) {
     ChainManager.retrievedDocuments = documents;
   }
@@ -119,7 +111,7 @@ export default class ChainManager {
   createChainWithNewModel(): void {
     let newModelKey = getModelKey();
     try {
-      let customModel = this.findCustomModel(newModelKey);
+      let customModel = findCustomModel(newModelKey, getSettings().activeModels);
       if (!customModel) {
         // Reset default model if no model is found
         console.error("Resetting default model. No model configuration found for: ", newModelKey);
