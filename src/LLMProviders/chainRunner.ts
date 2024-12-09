@@ -1,4 +1,4 @@
-import { ABORT_REASON, AI_SENDER, LOADING_MESSAGES } from "@/constants";
+import { ABORT_REASON, AI_SENDER, EMPTY_INDEX_ERROR_MESSAGE, LOADING_MESSAGES } from "@/constants";
 import { getSystemPrompt } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { ToolManager } from "@/tools/toolManager";
@@ -169,6 +169,19 @@ class VaultQAChainRunner extends BaseChainRunner {
     let fullAIResponse = "";
 
     try {
+      // Add check for empty index
+      const indexEmpty = await this.chainManager.vectorStoreManager.isIndexEmpty();
+      if (indexEmpty) {
+        return this.handleResponse(
+          EMPTY_INDEX_ERROR_MESSAGE,
+          userMessage,
+          abortController,
+          addMessage,
+          updateCurrentAiMessage,
+          debug
+        );
+      }
+
       const memory = this.chainManager.memoryManager.getMemory();
       const memoryVariables = await memory.loadMemoryVariables({});
       const chatHistory = extractChatHistory(memoryVariables);
@@ -556,13 +569,16 @@ class CopilotPlusChainRunner extends BaseChainRunner {
   private prepareEnhancedUserMessage(userMessage: string, toolOutputs: any[]) {
     let context = "";
     if (toolOutputs.length > 0) {
-      context =
-        "\n# Additional context:\n\n" +
-        toolOutputs
-          .map((output) => `# ${output.tool}\n${JSON.stringify(output.output)}`)
-          .join("\n\n");
+      const validOutputs = toolOutputs.filter((output) => output.output != null);
+      if (validOutputs.length > 0) {
+        context =
+          "\n\n# Additional context:\n\n" +
+          validOutputs
+            .map((output) => `# ${output.tool}\n${JSON.stringify(output.output)}`)
+            .join("\n\n");
+      }
     }
-    return `User message: ${userMessage}\n${context}`;
+    return `User message: ${userMessage}${context}`;
   }
 
   private getTimeExpression(toolCalls: any[]): string {

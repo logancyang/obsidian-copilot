@@ -1,5 +1,5 @@
 import { CustomModel } from "@/aiParams";
-import { atom, getDefaultStore, useAtomValue } from "jotai";
+import { atom, createStore, useAtomValue } from "jotai";
 
 import { type ChainType } from "@/chainFactory";
 import {
@@ -42,6 +42,7 @@ export interface CopilotSettings {
   indexVaultToVectorStore: string;
   chatNoteContextPath: string;
   chatNoteContextTags: string[];
+  enableIndexSync: boolean;
   debug: boolean;
   enableEncryption: boolean;
   maxSourceChunks: number;
@@ -58,6 +59,7 @@ export interface CopilotSettings {
   showSuggestedPrompts: boolean;
 }
 
+export const settingsStore = createStore();
 export const settingsAtom = atom<CopilotSettings>(DEFAULT_SETTINGS);
 
 /**
@@ -65,7 +67,7 @@ export const settingsAtom = atom<CopilotSettings>(DEFAULT_SETTINGS);
  */
 export function setSettings(settings: Partial<CopilotSettings>) {
   const newSettings = mergeAllActiveModelsWithCoreModels({ ...getSettings(), ...settings });
-  getDefaultStore().set(settingsAtom, newSettings);
+  settingsStore.set(settingsAtom, newSettings);
 }
 
 /**
@@ -81,7 +83,7 @@ export function updateSetting<K extends keyof CopilotSettings>(key: K, value: Co
  * changes.
  */
 export function getSettings(): Readonly<CopilotSettings> {
-  return getDefaultStore().get(settingsAtom);
+  return settingsStore.get(settingsAtom);
 }
 
 /**
@@ -100,14 +102,16 @@ export function resetSettings(): void {
  * Subscribes to changes in the settings atom.
  */
 export function subscribeToSettingsChange(callback: () => void): () => void {
-  return getDefaultStore().sub(settingsAtom, callback);
+  return settingsStore.sub(settingsAtom, callback);
 }
 
 /**
  * Hook to get the settings value from the atom.
  */
 export function useSettingsValue(): Readonly<CopilotSettings> {
-  return useAtomValue(settingsAtom);
+  return useAtomValue(settingsAtom, {
+    store: settingsStore,
+  });
 }
 
 /**

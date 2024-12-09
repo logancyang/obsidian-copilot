@@ -1,8 +1,10 @@
-import { CustomModel, ModelConfig, setModelKey } from "@/aiParams";
+import { CustomModel, getModelKey, ModelConfig, setModelKey } from "@/aiParams";
 import { BUILTIN_CHAT_MODELS, ChatModelProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
+import { safeFetch } from "@/utils";
 import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
+import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatCohere } from "@langchain/cohere";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
@@ -10,8 +12,6 @@ import { ChatGroq } from "@langchain/groq";
 import { ChatOllama } from "@langchain/ollama";
 import { ChatOpenAI } from "@langchain/openai";
 import { Notice } from "obsidian";
-import { safeFetch } from "@/utils";
-import { ChatAnthropic } from "@langchain/anthropic";
 
 type ChatConstructorType = new (config: any) => BaseChatModel;
 
@@ -32,7 +32,7 @@ type ChatProviderConstructMap = typeof CHAT_PROVIDER_CONSTRUCTORS;
 
 export default class ChatModelManager {
   private static instance: ChatModelManager;
-  private static chatModel: BaseChatModel;
+  private static chatModel: BaseChatModel | null;
   private static modelMap: Record<
     string,
     {
@@ -57,7 +57,10 @@ export default class ChatModelManager {
 
   private constructor() {
     this.buildModelMap();
-    subscribeToSettingsChange(() => this.buildModelMap());
+    subscribeToSettingsChange(() => {
+      this.buildModelMap();
+      this.validateCurrentModel();
+    });
   }
 
   static getInstance(): ChatModelManager {
@@ -263,6 +266,9 @@ export default class ChatModelManager {
   }
 
   getChatModel(): BaseChatModel {
+    if (!ChatModelManager.chatModel) {
+      throw new Error("No valid chat model available. Please check your API key settings.");
+    }
     return ChatModelManager.chatModel;
   }
 
@@ -298,6 +304,23 @@ export default class ChatModelManager {
   }
 
   async countTokens(inputStr: string): Promise<number> {
-    return ChatModelManager.chatModel.getNumTokens(inputStr);
+    return ChatModelManager.chatModel?.getNumTokens(inputStr) ?? 0;
+  }
+
+  private validateCurrentModel(): void {
+    if (!ChatModelManager.chatModel) return;
+
+    const currentModelKey = getModelKey();
+    if (!currentModelKey) return;
+
+    // Get the model configuration
+    const selectedModel = ChatModelManager.modelMap[currentModelKey];
+
+    // If API key is missing or model doesn't exist in map
+    if (!selectedModel?.hasApiKey) {
+      // Clear the current chat model
+      ChatModelManager.chatModel = null;
+      console.log("Failed to reinitialize model due to missing API key");
+    }
   }
 }
