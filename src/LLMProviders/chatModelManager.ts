@@ -1,10 +1,8 @@
-import { CustomModel, getModelKey, ModelConfig, setModelKey } from "@/aiParams";
-import { BUILTIN_CHAT_MODELS, ChatModelProviders } from "@/constants";
-import { getDecryptedKey } from "@/encryptionService";
-import { getSettings, subscribeToSettingsChange } from "@/settings/model";
-import { safeFetch } from "@/utils";
+import { CustomModel, ModelConfig, setModelKey } from "../aiParams";
+import { BUILTIN_CHAT_MODELS, ChatModelProviders } from "../constants";
+import { getDecryptedKey } from "../encryptionService";
+import { getSettings, subscribeToSettingsChange } from "../settings/model";
 import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
-import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatCohere } from "@langchain/cohere";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
@@ -12,6 +10,8 @@ import { ChatGroq } from "@langchain/groq";
 import { ChatOllama } from "@langchain/ollama";
 import { ChatOpenAI } from "@langchain/openai";
 import { Notice } from "obsidian";
+import { safeFetch } from "../utils";
+import { ChatAnthropic } from "@langchain/anthropic";
 
 type ChatConstructorType = new (config: any) => BaseChatModel;
 
@@ -32,7 +32,7 @@ type ChatProviderConstructMap = typeof CHAT_PROVIDER_CONSTRUCTORS;
 
 export default class ChatModelManager {
   private static instance: ChatModelManager;
-  private static chatModel: BaseChatModel | null;
+  private static chatModel: BaseChatModel;
   private static modelMap: Record<
     string,
     {
@@ -57,10 +57,7 @@ export default class ChatModelManager {
 
   private constructor() {
     this.buildModelMap();
-    subscribeToSettingsChange(() => {
-      this.buildModelMap();
-      this.validateCurrentModel();
-    });
+    subscribeToSettingsChange(() => this.buildModelMap());
   }
 
   static getInstance(): ChatModelManager {
@@ -73,7 +70,18 @@ export default class ChatModelManager {
   private getModelConfig(customModel: CustomModel): ModelConfig {
     const settings = getSettings();
 
-    // Validate maxTokens and temperature
+    // Check if the model starts with "o1"
+    const modelName = customModel.name;
+    const isO1Model = modelName.startsWith("o1");
+    const baseConfig: ModelConfig = {
+      modelName: modelName,
+      temperature: isO1Model ? 1 : settings.temperature,
+      streaming: true,
+      maxRetries: 3,
+      maxConcurrency: 3,
+      enableCors: customModel.enableCors,
+    };
+
     const { maxTokens, temperature } = settings;
 
     if (typeof maxTokens !== "number" || maxTokens <= 0 || !Number.isInteger(maxTokens)) {
@@ -88,17 +96,6 @@ export default class ChatModelManager {
       );
     }
 
-    const modelName = customModel.name;
-    const isO1Model = modelName.startsWith("o1");
-    const baseConfig: ModelConfig = {
-      modelName: modelName,
-      temperature: isO1Model ? 1 : temperature, // Ensure temperature is 1 for o1-preview models
-      streaming: !isO1Model, // Set streaming to false for o1-preview model
-      maxRetries: 3,
-      maxConcurrency: 3,
-      enableCors: customModel.enableCors,
-    };
-
     const providerConfig: {
       [K in keyof ChatProviderConstructMap]: ConstructorParameters<ChatProviderConstructMap[K]>[0];
     } = {
@@ -109,14 +106,14 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
-        openAIOrgId: getDecryptedKey(settings.openAIOrgId),
-        ...this.handleOpenAIExtraArgs(isO1Model, maxTokens, temperature),
+        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
       },
       [ChatModelProviders.ANTHROPIC]: {
         anthropicApiKey: getDecryptedKey(customModel.apiKey || settings.anthropicApiKey),
         modelName: modelName,
         anthropicApiUrl: customModel.baseUrl,
         clientOptions: {
+          // Required to bypass CORS restrictions
           defaultHeaders: { "anthropic-dangerous-direct-browser-access": "true" },
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
@@ -126,11 +123,11 @@ export default class ChatModelManager {
         azureOpenAIApiInstanceName: settings.azureOpenAIApiInstanceName,
         azureOpenAIApiDeploymentName: customModel.azureOpenAIApiDeploymentName || "o1-preview",
         azureOpenAIApiVersion: settings.azureOpenAIApiVersion,
+        ...this.handleAzureOpenAIExtraArgs(isO1Model, maxTokens, temperature),
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
-        ...this.handleAzureOpenAIExtraArgs(isO1Model, maxTokens, temperature),
       },
       [ChatModelProviders.COHEREAI]: {
         apiKey: getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
@@ -172,8 +169,11 @@ export default class ChatModelManager {
         modelName: modelName,
       },
       [ChatModelProviders.OLLAMA]: {
+        // ChatOllama has `model` instead of `modelName`!!
         model: modelName,
+        // @ts-ignore
         apiKey: customModel.apiKey || "default-key",
+        // MUST NOT use /v1 in the baseUrl for ollama
         baseUrl: customModel.baseUrl || "http://localhost:11434",
       },
       [ChatModelProviders.LM_STUDIO]: {
@@ -192,12 +192,17 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
           dangerouslyAllowBrowser: true,
         },
-        ...this.handleOpenAIExtraArgs(isO1Model, maxTokens, temperature),
+        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
       },
     };
 
     const selectedProviderConfig =
       providerConfig[customModel.provider as keyof typeof providerConfig] || {};
+
+    // Handle openAIOrgId separately
+    if (customModel.provider === ChatModelProviders.OPENAI && settings.openAIOrgId) {
+      (selectedProviderConfig as any).openAIOrgId = getDecryptedKey(settings.openAIOrgId);
+    }
 
     return { ...baseConfig, ...selectedProviderConfig };
   }
@@ -266,9 +271,6 @@ export default class ChatModelManager {
   }
 
   getChatModel(): BaseChatModel {
-    if (!ChatModelManager.chatModel) {
-      throw new Error("No valid chat model available. Please check your API key settings.");
-    }
     return ChatModelManager.chatModel;
   }
 
@@ -278,10 +280,12 @@ export default class ChatModelManager {
       throw new Error(`No model found for: ${modelKey}`);
     }
 
+    // Create and return the appropriate model
     const selectedModel = ChatModelManager.modelMap[modelKey];
     if (!selectedModel.hasApiKey) {
       const errorMessage = `API key is not provided for the model: ${modelKey}. Model switch failed.`;
       new Notice(errorMessage);
+      // Stop execution and deliberate fail the model switch
       throw new Error(errorMessage);
     }
 
@@ -292,6 +296,7 @@ export default class ChatModelManager {
       const newModelInstance = new selectedModel.AIConstructor({
         ...modelConfig,
       });
+      // Set the new model
       ChatModelManager.chatModel = newModelInstance;
     } catch (error) {
       console.error(error);
@@ -304,23 +309,6 @@ export default class ChatModelManager {
   }
 
   async countTokens(inputStr: string): Promise<number> {
-    return ChatModelManager.chatModel?.getNumTokens(inputStr) ?? 0;
-  }
-
-  private validateCurrentModel(): void {
-    if (!ChatModelManager.chatModel) return;
-
-    const currentModelKey = getModelKey();
-    if (!currentModelKey) return;
-
-    // Get the model configuration
-    const selectedModel = ChatModelManager.modelMap[currentModelKey];
-
-    // If API key is missing or model doesn't exist in map
-    if (!selectedModel?.hasApiKey) {
-      // Clear the current chat model
-      ChatModelManager.chatModel = null;
-      console.log("Failed to reinitialize model due to missing API key");
-    }
+    return ChatModelManager.chatModel.getNumTokens(inputStr);
   }
 }
