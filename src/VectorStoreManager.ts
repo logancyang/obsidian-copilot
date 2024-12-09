@@ -883,6 +883,23 @@ class VectorStoreManager {
       throw new CustomError("Failed to retrieve indexed files.");
     }
   }
+
+  public async isIndexEmpty(): Promise<boolean> {
+    if (!this.oramaDb) {
+      return true;
+    }
+
+    try {
+      const result = await search(this.oramaDb, {
+        term: "",
+        limit: 1,
+      });
+      return result.hits.length === 0;
+    } catch (err) {
+      console.error("Error checking if database is empty:", err);
+      throw new CustomError("Failed to check if database is empty.");
+    }
+  }
 }
 
 export default VectorStoreManager;
