@@ -30,6 +30,7 @@ export class IntentAnalyzer {
     indexTool,
     pomodoroTool,
     webSearchTool,
+    simpleYoutubeTranscriptionTool,
   ];
 
   static async analyzeIntent(

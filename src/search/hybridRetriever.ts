@@ -246,6 +246,14 @@ export class HybridRetriever extends BaseRetriever {
 
       const dateRange = this.generateDateRange(startDate, endDate);
 
+      if (this.debug) {
+        console.log(
+          "==== Daily note date range: ====",
+          dateRange[0],
+          dateRange[dateRange.length - 1]
+        );
+      }
+
       // Perform the first search with title filter
       const dailyNoteResults = await this.getExplicitChunks(dateRange);
 
@@ -257,6 +265,10 @@ export class HybridRetriever extends BaseRetriever {
           includeInContext: true,
         },
       }));
+
+      if (this.debug) {
+        console.log("==== Modified and created time range: ====", startTimestamp, endTimestamp);
+      }
 
       // Perform a second search with time range filters
       searchParams.where = {

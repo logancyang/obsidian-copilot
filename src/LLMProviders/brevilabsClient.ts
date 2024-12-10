@@ -1,7 +1,9 @@
 import { BREVILABS_API_BASE_URL } from "@/constants";
-import { Notice } from "obsidian";
-import { getSettings } from "@/settings/model";
 import { getDecryptedKey } from "@/encryptionService";
+import { getSettings } from "@/settings/model";
+import { safeFetch } from "@/utils";
+import { Notice } from "obsidian";
+
 export interface BrocaResponse {
   response: {
     tool_calls: Array<{
@@ -88,7 +90,7 @@ export class BrevilabsClient {
       });
     }
 
-    const response = await fetch(url.toString(), {
+    const response = await safeFetch(url.toString(), {
       method,
       headers: {
         "Content-Type": "application/json",
