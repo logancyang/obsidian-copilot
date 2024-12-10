@@ -99,7 +99,7 @@ export default class CopilotPlugin extends Plugin {
       },
     });
 
-    this.addRibbonIcon("message-square", "Copilot Chat", (evt: MouseEvent) => {
+    this.addRibbonIcon("message-square", "Open Copilot Chat", (evt: MouseEvent) => {
       this.activateView();
     });
 
