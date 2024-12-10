@@ -427,10 +427,16 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         const timeExpression = this.getTimeExpression(toolCalls);
         const context = this.formatLocalSearchResult(documents, timeExpression);
 
+        const currentTimeOutputs = toolOutputs.filter((output) => output.tool === "getCurrentTime");
+        const enhancedQuestion = this.prepareEnhancedUserMessage(
+          standaloneQuestion,
+          currentTimeOutputs
+        );
+
         if (debug) console.log(context);
         if (debug) console.log("==== Step 5: Invoking QA Chain ====");
         const qaPrompt = await this.chainManager.promptManager.getQAPrompt({
-          question: standaloneQuestion,
+          question: enhancedQuestion,
           context: context,
           systemMessage: "", // System prompt is added separately in streamMultimodalResponse
         });
