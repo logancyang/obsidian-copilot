@@ -302,6 +302,11 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       content,
     });
 
+    // Add debug logging for final request
+    if (debug) {
+      console.log("==== Final Request to AI ====\n", messages);
+    }
+
     let fullAIResponse = "";
     const chatStream = await this.chainManager.chatModelManager.getChatModel().stream(messages);
 
@@ -427,7 +432,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         const qaPrompt = await this.chainManager.promptManager.getQAPrompt({
           question: standaloneQuestion,
           context: context,
-          systemMessage: getSystemPrompt(),
+          systemMessage: "", // System prompt is added separately in streamMultimodalResponse
         });
 
         fullAIResponse = await this.streamMultimodalResponse(
