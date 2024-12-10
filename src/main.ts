@@ -94,8 +94,10 @@ export default class CopilotPlugin extends Plugin {
     this.addCommand({
       id: "chat-open-window",
       name: "Open Copilot Chat Window",
-      callback: () => {
+      callback: async () => {
         this.activateView();
+        // Check version
+        await this.checkForUpdates();
       },
     });
 
@@ -680,7 +682,7 @@ export default class CopilotPlugin extends Plugin {
       const latestVersion = response.json.tag_name.replace("v", "");
       if (this.isNewerVersion(latestVersion, this.manifest.version)) {
         new Notice(
-          `A new version (${latestVersion}) of Obsidian Copilot is available. You are currently on version ${this.manifest.version}. Please update to the latest version.`,
+          `A newer version (${latestVersion}) of Obsidian Copilot is available. You are currently on version ${this.manifest.version}. Please update to the latest version.`,
           10000
         );
       }

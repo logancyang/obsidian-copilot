@@ -20,7 +20,7 @@ If you enjoy Copilot for Obsidian, please consider [sponsoring this project](htt
 <a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
 
 SPECIAL THANKS TO OUR TOP SPONSORS:
-@pedramamini, @Arlorean, @dashinja, @azagore, @MTGMAD, @gpythomas, @emaynard, @scmarinelli, @borthwick, @adamhill, @gluecode, @rusi, @timgrote, @JiaruiYu-Consilium, @ddocta, @AMOz1, @chchwy, @pborenstein, @GitTom, @kazukgw, @mjluser1, @joesfer, @rwaal, @turnoutnow-harpreet, @dreznicek, @xrise-informatik, @jeremygentles, @ZhengRui, @bfoujols
+@mikelaaron, @pedramamini, @Arlorean, @dashinja, @azagore, @MTGMAD, @gpythomas, @emaynard, @scmarinelli, @borthwick, @adamhill, @gluecode, @rusi, @timgrote, @JiaruiYu-Consilium, @ddocta, @AMOz1, @chchwy, @pborenstein, @GitTom, @kazukgw, @mjluser1, @joesfer, @rwaal, @turnoutnow-harpreet, @dreznicek, @xrise-informatik, @jeremygentles, @ZhengRui, @bfoujols, @jsmith0475, @pagiaddlemon
 
 [Changelog](https://github.com/logancyang/obsidian-copilot/releases)
 
@@ -30,7 +30,7 @@ Copilot Plus is a brand new mode that brings powerful agentic capabilities to Ob
 
 Check out the demo video below for the first sneak peak of what Copilot Plus can do. It is under active development so expect more features to come very soon!
 
-<a href="https://youtu.be/WxcBEXkQoSE?si=Y5HnJgt-Ii_ZxLDl" target="_blank"><img src="./images/thumbnail-copilot-plus.png" width="700" /></a>
+<a href="https://youtu.be/tZ2jm_UPc6c?si=KjwkHFFRAHwZqlW4" target="_blank"><img src="./images/thumbnail-copilot-plus.png" width="700" /></a>
 
 ## 🛠️ Features
 
