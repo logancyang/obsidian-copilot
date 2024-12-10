@@ -1,3 +1,5 @@
+import { Notice } from "obsidian";
+
 export const getToolDescription = (tool: string): string => {
   switch (tool) {
     case "@vault":
@@ -19,6 +21,11 @@ export class ToolManager {
       return await tool.call(args);
     } catch (error) {
       console.error(`Error calling tool: ${error}`);
+      if (error instanceof Error) {
+        new Notice(error.message);
+      } else {
+        new Notice("An error occurred while executing the tool. Check console for details.");
+      }
       return null;
     }
   }
