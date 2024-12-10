@@ -645,9 +645,9 @@ class VectorStoreManager {
       return files.length;
     } catch (error) {
       if (error instanceof CustomError) {
-        console.error("Error indexing vault to Copilot index:", error.msg);
+        console.error("Error indexing vault to Copilot index:", error.message);
         new Notice(
-          `Error indexing vault: ${error.msg}. Please check your embedding model settings.`
+          `Error indexing vault: ${error.message}. Please check your embedding model settings.`
         );
       } else {
         console.error("Unexpected error indexing vault to Copilot index:", error);

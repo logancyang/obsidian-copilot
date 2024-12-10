@@ -224,7 +224,7 @@ export default class CopilotPlugin extends Plugin {
                     } catch (err) {
                       console.error(err);
                       if (err instanceof CustomError) {
-                        new Notice(err.msg);
+                        new Notice(err.message);
                       } else {
                         new Notice("An error occurred.");
                       }
