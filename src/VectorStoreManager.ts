@@ -1,6 +1,6 @@
 import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
-import { getSettings } from "@/settings/model";
+import { CopilotSettings, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { areEmbeddingModelsSame, getFilePathsFromPatterns } from "@/utils";
 import VectorDBManager from "@/vectorDBManager";
 import { Embeddings } from "@langchain/core/embeddings";
@@ -33,6 +33,8 @@ class VectorStoreManager {
   private saveDBDelay = 120000; // Save full DB every 120 seconds
   private hasUnsavedChanges = false;
 
+  private lastKnownSettings: CopilotSettings | undefined;
+
   constructor(app: App) {
     this.app = app;
     this.embeddingsManager = EmbeddingsManager.getInstance();
@@ -40,7 +42,6 @@ class VectorStoreManager {
     // Initialize the database asynchronously
     this.initializationPromise = this.initializeDB()
       .then(() => {
-        // Perform any operations that depend on the initialized database here
         this.performPostInitializationTasks();
       })
       .catch((error) => {
@@ -48,9 +49,31 @@ class VectorStoreManager {
       });
 
     this.updateExcludedFiles();
-
-    // Initialize periodic save
     this.initializePeriodicSave();
+
+    // Subscribe to settings changes
+    subscribeToSettingsChange(async () => {
+      const settings = getSettings();
+      const prevSettings = this.lastKnownSettings;
+      this.lastKnownSettings = { ...settings };
+
+      // Handle path changes (enableIndexSync)
+      if (settings.enableIndexSync !== prevSettings?.enableIndexSync) {
+        const newDbPath = await this.getDbPath();
+        if (newDbPath !== this.dbPath) {
+          this.dbPath = newDbPath;
+          await this.initializeDB();
+        }
+      }
+
+      // Handle inclusion/exclusion changes
+      if (
+        settings.qaExclusions !== prevSettings?.qaExclusions ||
+        settings.qaInclusions !== prevSettings?.qaInclusions
+      ) {
+        await this.updateExcludedFiles();
+      }
+    });
   }
 
   private initializePeriodicSave() {
