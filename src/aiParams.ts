@@ -1,9 +1,11 @@
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "./chainFactory";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 
 import { atom, useAtom } from "jotai";
 import { settingsAtom, settingsStore } from "@/settings/model";
+import { atom, getDefaultStore, useAtom } from "jotai";
+import { settingsAtom } from "./settings/model";
 
 const userModelKeyAtom = atom<string | null>(null);
 const modelKeyAtom = atom(
@@ -40,6 +42,7 @@ export interface ModelConfig {
   maxRetries: number;
   maxConcurrency: number;
   maxTokens?: number;
+  maxCompletionTokens?: number;
   openAIApiKey?: string;
   openAIOrgId?: string;
   anthropicApiKey?: string;
@@ -73,6 +76,9 @@ export interface CustomModel {
   isBuiltIn?: boolean;
   enableCors?: boolean;
   core?: boolean;
+  azureOpenAIApiDeploymentName?: string;
+  azureOpenAIApiInstanceName?: string; // Added
+  azureOpenAIApiVersion?: string; // Added
 }
 
 export function setModelKey(modelKey: string) {
