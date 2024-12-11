@@ -355,7 +355,9 @@ export default class CopilotPlugin extends Plugin {
           const fileName = `Copilot-Indexed-Files-${new Date().toLocaleDateString().replace(/\//g, "-")}.md`;
           const filePath = `${fileName}`;
 
-          await this.app.vault.create(filePath, content);
+          if (!this.app.vault.getAbstractFileByPath(filePath)) {
+            await this.app.vault.create(filePath, content);
+          }
 
           // Open the newly created file
           const createdFile = this.app.vault.getAbstractFileByPath(filePath);

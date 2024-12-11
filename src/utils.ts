@@ -551,8 +551,8 @@ export async function safeFetch(url: string, options: RequestInit): Promise<Resp
     url,
     contentType: "application/json",
     headers: options.headers as Record<string, string>,
-    method: "POST",
-    body: options.body?.toString(),
+    method: options.method,
+    ...(options.method === "POST" && { body: options.body?.toString() }),
   });
 
   return {
