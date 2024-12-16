@@ -57,6 +57,18 @@ export interface CopilotSettings {
   defaultOpenArea: DEFAULT_OPEN_AREA;
   disableIndexOnMobile: boolean;
   showSuggestedPrompts: boolean;
+  // New RAG-specific settings
+  ragMinSimilarityScore: number;
+  ragMaxK: number;
+  ragTextWeight: number;
+  ragRerankerThreshold: number;
+  ragMaxTokens: number;
+  ragRerankerTemp: number;
+  ragHybridSearchWeight: number;
+  ragEnableDebug: boolean;
+  ragCustomPrompt: string;
+  ragShowSources: boolean;
+  ragIncludeMetadata: boolean;
 }
 
 export const settingsStore = createStore();

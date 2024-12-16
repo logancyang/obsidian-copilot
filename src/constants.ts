@@ -263,6 +263,17 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   embeddingRequestsPerSecond: 10,
   disableIndexOnMobile: true,
   showSuggestedPrompts: true,
+  ragMinSimilarityScore: 0.4,
+  ragMaxK: 10,
+  ragTextWeight: 0.5,
+  ragRerankerThreshold: 0.7,
+  ragMaxTokens: 3000,
+  ragRerankerTemp: 0.7,
+  ragHybridSearchWeight: 0.5,
+  ragEnableDebug: false,
+  ragCustomPrompt: "",
+  ragShowSources: true,
+  ragIncludeMetadata: true,
   enabledCommands: {
     [COMMAND_IDS.FIX_GRAMMAR]: {
       enabled: true,
