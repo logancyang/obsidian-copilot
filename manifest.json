@@ -1,13 +1,13 @@
 {
   "id": "copilot",
   "name": "Copilot",
-  "version": "2.7.9",
+  "version": "4.3",
   "minAppVersion": "0.15.0",
-  "description": "An AI Copilot in Obsidian.",
-  "author": "Logan Yang",
-  "authorUrl": "https://twitter.com/logancyang",
+  "description": "An AI Copilot in Obsidian with RAG.",
+  "author": "Inusah Diallo",
+  "authorUrl": "",
   "fundingUrl": {
-    "Buy Me a Coffee": "https://www.buymeacoffee.com/logancyang",
-    "GitHub Sponsor": "https://github.com/sponsors/logancyang"
+    "Buy Me a Coffee": "",
+    "GitHub Sponsor": "https://github.com/InusahLore42/obsidian-copilot"
   }
 }
