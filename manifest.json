@@ -1,13 +1,13 @@
 {
-	"id": "copilot",
-	"name": "Copilot",
-	"version": "3.0.0",
-	"minAppVersion": "0.15.0",
-	"description": "An AI Copilot in Obsidian with RAG.",
-	"author": "Inusah Diallo",
-	"authorUrl": "",
-	"fundingUrl": {
-		"Buy Me a Coffee": "",
-		"GitHub Sponsor": "https://github.com/InusahLore42/obsidian-copilot"
-	}
+  "id": "copilot-rag",
+  "name": "Copilot-rag",
+  "version": "3.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "An AI Copilot in Obsidian with RAG.",
+  "author": "Inusah Diallo",
+  "authorUrl": "",
+  "fundingUrl": {
+    "Buy Me a Coffee": "",
+    "GitHub Sponsor": "https://github.com/InusahLore42/obsidian-copilot"
+  }
 }
