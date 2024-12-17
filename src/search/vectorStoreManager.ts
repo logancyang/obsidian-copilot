@@ -8,11 +8,11 @@ import { IndexEventHandler } from "./indexEventHandler";
 import { IndexOperations } from "./indexOperations";
 
 export default class VectorStoreManager {
-  private dbOps: DBOperations;
   private indexOps: IndexOperations;
   private eventHandler: IndexEventHandler;
   private initializationPromise: Promise<void>;
   private lastKnownSettings: CopilotSettings | undefined;
+  public dbOps: DBOperations;
   public embeddingsManager: EmbeddingsManager;
 
   constructor(private app: App) {

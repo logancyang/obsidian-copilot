@@ -157,10 +157,10 @@ export default class ChainManager {
       }
 
       case ChainType.VAULT_QA_CHAIN: {
-        const { embeddingsAPI, db } = await this.initializeQAChain(options);
+        const { embeddingsAPI } = await this.initializeQAChain(options);
 
         const retriever = new HybridRetriever(
-          db,
+          this.vectorStoreManager.dbOps,
           this.app.vault,
           chatModel,
           embeddingsAPI,

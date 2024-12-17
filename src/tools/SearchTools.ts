@@ -43,10 +43,8 @@ const localSearchTool = tool(
 
     const returnAll = timeRange !== undefined;
 
-    const db = await vectorStoreManager.getOrInitializeDb(embeddingInstance);
-
     const hybridRetriever = new HybridRetriever(
-      db,
+      vectorStoreManager.dbOps,
       vault,
       chatModelManager.getChatModel(),
       embeddingInstance,

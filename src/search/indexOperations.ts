@@ -145,6 +145,11 @@ export class IndexOperations {
         throw new CustomError("Embedding instance not found.");
       }
 
+      // Run garbage collection first to clean up stale documents
+      if (!overwrite) {
+        await this.dbOps.garbageCollect();
+      }
+
       const files = await this.getFilesToIndex(overwrite);
       if (files.length === 0) {
         new Notice("Copilot vault index is up-to-date.");
@@ -190,26 +195,65 @@ export class IndexOperations {
     return MD5(sourceDocument).toString();
   }
 
-  // TODO: Files to index should include 1. modified files, 2. new files, 3. files that are in the inclusions, or 4. files that are previously excluded but now included
   private async getFilesToIndex(overwrite?: boolean): Promise<TFile[]> {
-    const latestMtime = overwrite ? 0 : await this.dbOps.getLatestFileMtime();
-    const allMarkdownFiles = this.app.vault
-      .getMarkdownFiles()
-      .filter((file) => !latestMtime || overwrite || file.stat.mtime > latestMtime);
+    // If overwrite is true, return all markdown files that match current filters
+    if (overwrite) {
+      const allMarkdownFiles = this.app.vault.getMarkdownFiles();
+      const includedFiles = await getFilePathsForQA("inclusions", this.app);
+      const excludedFiles = await getFilePathsForQA("exclusions", this.app);
 
-    // Apply inclusions/exclusions filter
+      return allMarkdownFiles.filter((file) => {
+        if (includedFiles.size > 0) {
+          return includedFiles.has(file.path);
+        } else {
+          return !excludedFiles.has(file.path);
+        }
+      });
+    }
+
+    // Get currently indexed files and latest mtime
+    const indexedFilePaths = new Set(await this.dbOps.getIndexedFiles());
+    const latestMtime = await this.dbOps.getLatestFileMtime();
+
+    // Get current inclusion/exclusion rules
     const includedFiles = await getFilePathsForQA("inclusions", this.app);
     const excludedFiles = await getFilePathsForQA("exclusions", this.app);
 
-    return allMarkdownFiles.filter((file) => {
-      if (includedFiles.size > 0) {
-        // If inclusions are specified, only include files that are in the inclusions list
-        return includedFiles.has(file.path);
-      } else {
-        // Otherwise, exclude files that are in the exclusions list
-        return !excludedFiles.has(file.path);
+    // Get all markdown files that should be indexed under current rules
+    const allMarkdownFiles = this.app.vault.getMarkdownFiles();
+    const filesToIndex = new Set<TFile>();
+
+    for (const file of allMarkdownFiles) {
+      const shouldBeIndexed =
+        includedFiles.size > 0 ? includedFiles.has(file.path) : !excludedFiles.has(file.path);
+
+      if (shouldBeIndexed) {
+        // Add file if:
+        // 1. It's not currently indexed but should be (newly included)
+        // 2. It's indexed but has been modified since last index
+        if (!indexedFilePaths.has(file.path) || file.stat.mtime > latestMtime) {
+          filesToIndex.add(file);
+        }
       }
-    });
+    }
+
+    // Also check for files that were previously indexed but should no longer be
+    for (const indexedPath of indexedFilePaths) {
+      const shouldBeIndexed =
+        includedFiles.size > 0 ? includedFiles.has(indexedPath) : !excludedFiles.has(indexedPath);
+
+      if (!shouldBeIndexed) {
+        // Remove from index if it no longer matches rules
+        await this.dbOps.removeDocs(indexedPath);
+      }
+    }
+
+    if (getSettings().debug) {
+      console.log(`Files to index: ${filesToIndex.size}`);
+      console.log(`Previously indexed: ${indexedFilePaths.size}`);
+    }
+
+    return Array.from(filesToIndex);
   }
 
   private initializeIndexingState(totalFiles: number) {

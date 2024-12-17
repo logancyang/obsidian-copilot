@@ -69,6 +69,7 @@ export default class CopilotPlugin extends Plugin {
     this.sharedState = new SharedState();
 
     this.vectorStoreManager = new VectorStoreManager(this.app);
+    await this.vectorStoreManager.waitForInitialization();
 
     // Initialize BrevilabsClient
     this.brevilabsClient = BrevilabsClient.getInstance();
@@ -341,7 +342,7 @@ export default class CopilotPlugin extends Plugin {
             return;
           }
 
-          // Create content for the new file
+          // Create content for the file
           const content = [
             "# Copilot Indexed Files",
             `Total files indexed: ${indexedFiles.length}`,
@@ -350,19 +351,22 @@ export default class CopilotPlugin extends Plugin {
             ...indexedFiles.map((file) => `- [[${file}]]`),
           ].join("\n");
 
-          // Create the file in the vault
+          // Create or update the file in the vault
           const fileName = `Copilot-Indexed-Files-${new Date().toLocaleDateString().replace(/\//g, "-")}.md`;
           const filePath = `${fileName}`;
 
-          if (!this.app.vault.getAbstractFileByPath(filePath)) {
+          const existingFile = this.app.vault.getAbstractFileByPath(filePath);
+          if (existingFile instanceof TFile) {
+            await this.app.vault.modify(existingFile, content);
+          } else {
             await this.app.vault.create(filePath, content);
           }
 
-          // Open the newly created file
-          const createdFile = this.app.vault.getAbstractFileByPath(filePath);
-          if (createdFile instanceof TFile) {
-            await this.app.workspace.getLeaf().openFile(createdFile);
-            new Notice(`Created list of ${indexedFiles.length} indexed files`);
+          // Open the file
+          const file = this.app.vault.getAbstractFileByPath(filePath);
+          if (file instanceof TFile) {
+            await this.app.workspace.getLeaf().openFile(file);
+            new Notice(`Listed ${indexedFiles.length} indexed files`);
           }
         } catch (error) {
           console.error("Error listing indexed files:", error);
@@ -620,7 +624,7 @@ export default class CopilotPlugin extends Plugin {
     }
 
     const hybridRetriever = new HybridRetriever(
-      db,
+      this.vectorStoreManager.dbOps,
       this.app.vault,
       this.chainManager.chatModelManager.getChatModel(),
       embeddingsAPI as Embeddings,
@@ -652,10 +656,9 @@ export default class CopilotPlugin extends Plugin {
     if (!embeddingsAPI) {
       throw new CustomError("Embeddings API not found.");
     }
-    const db = await this.vectorStoreManager.getOrInitializeDb(embeddingsAPI);
 
     const hybridRetriever = new HybridRetriever(
-      db,
+      this.vectorStoreManager.dbOps,
       this.app.vault,
       this.chainManager.chatModelManager.getChatModel(),
       embeddingsAPI as Embeddings,
