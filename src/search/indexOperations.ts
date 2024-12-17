@@ -2,13 +2,13 @@ import { CHUNK_SIZE } from "@/constants";
 import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { RateLimiter } from "@/rateLimiter";
-import { getSettings } from "@/settings/model";
+import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { Embeddings } from "@langchain/core/embeddings";
-import { Orama } from "@orama/orama";
 import { MD5 } from "crypto-js";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { App, Notice, TFile } from "obsidian";
 import { DBOperations } from "./dbOperations";
+import { extractAppIgnoreSettings, getFilePathsForQA } from "./searchUtils";
 
 export interface IndexingState {
   isIndexingPaused: boolean;
@@ -36,9 +36,17 @@ export class IndexOperations {
     private embeddingsManager: EmbeddingsManager
   ) {
     this.rateLimiter = new RateLimiter(getSettings().embeddingRequestsPerSecond);
+
+    // Subscribe to settings changes
+    subscribeToSettingsChange(async () => {
+      const settings = getSettings();
+      // Update rate limiter when embeddingRequestsPerSecond changes
+      console.log("Embedding requests per second changed:", settings.embeddingRequestsPerSecond);
+      this.rateLimiter = new RateLimiter(settings.embeddingRequestsPerSecond);
+    });
   }
 
-  public async indexFile(db: Orama<any>, file: TFile): Promise<void> {
+  public async indexFile(file: TFile): Promise<void> {
     const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
     if (!embeddingInstance) {
       throw new CustomError("Embedding instance not found.");
@@ -80,6 +88,7 @@ export class IndexOperations {
     const docVectors: number[][] = [];
     let hasEmbeddingError = false;
 
+    // Generate all embeddings first
     for (let i = 0; i < chunks.length; i++) {
       try {
         await this.rateLimiter.wait();
@@ -105,22 +114,29 @@ export class IndexOperations {
         embedding: docVectors[i],
       }));
 
-      for (const chunkWithVector of chunkWithVectors) {
-        await this.dbOps.upsert({
-          ...fileToSave,
-          id: chunkWithVector.id,
-          content: chunkWithVector.content,
-          embedding: chunkWithVector.embedding,
-          created_at: Date.now(),
-          nchars: chunkWithVector.content.length,
-        });
+      // Wait for all database operations to complete before considering the document indexed
+      try {
+        for (const chunkWithVector of chunkWithVectors) {
+          await this.dbOps.upsert({
+            ...fileToSave,
+            id: chunkWithVector.id,
+            content: chunkWithVector.content,
+            embedding: chunkWithVector.embedding,
+            created_at: Date.now(),
+            nchars: chunkWithVector.content.length,
+          });
+        }
+      } catch (error) {
+        hasEmbeddingError = true;
+        console.error("Error during database upsert:", error);
+        throw error;
       }
     }
 
     return hasEmbeddingError ? undefined : fileToSave;
   }
 
-  public async indexVaultToVectorStore(db: Orama<any>, overwrite?: boolean): Promise<number> {
+  public async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
     let rateLimitNoticeShown = false;
 
     try {
@@ -146,7 +162,8 @@ export class IndexOperations {
         await this.handlePause();
 
         try {
-          await this.indexFile(db, files[index]);
+          await this.indexFile(files[index]);
+          this.state.indexedCount++;
           this.updateIndexingNoticeMessage();
 
           if (this.state.indexedCount % CHECKPOINT_INTERVAL === 0) {
@@ -176,9 +193,23 @@ export class IndexOperations {
   // TODO: Files to index should include 1. modified files, 2. new files, 3. files that are in the inclusions, or 4. files that are previously excluded but now included
   private async getFilesToIndex(overwrite?: boolean): Promise<TFile[]> {
     const latestMtime = overwrite ? 0 : await this.dbOps.getLatestFileMtime();
-    return this.app.vault
+    const allMarkdownFiles = this.app.vault
       .getMarkdownFiles()
       .filter((file) => !latestMtime || overwrite || file.stat.mtime > latestMtime);
+
+    // Apply inclusions/exclusions filter
+    const includedFiles = await getFilePathsForQA("inclusions", this.app);
+    const excludedFiles = await getFilePathsForQA("exclusions", this.app);
+
+    return allMarkdownFiles.filter((file) => {
+      if (includedFiles.size > 0) {
+        // If inclusions are specified, only include files that are in the inclusions list
+        return includedFiles.has(file.path);
+      } else {
+        // Otherwise, exclude files that are in the exclusions list
+        return !excludedFiles.has(file.path);
+      }
+    });
   }
 
   private initializeIndexingState(totalFiles: number) {
@@ -216,7 +247,8 @@ export class IndexOperations {
     frag.appendChild(this.state.indexNoticeMessage);
     frag.appendChild(pauseButton);
 
-    return new Notice(frag, 0);
+    this.state.currentIndexingNotice = new Notice(frag, 0);
+    return this.state.currentIndexingNotice;
   }
 
   private async handlePause(): Promise<void> {
@@ -235,9 +267,20 @@ export class IndexOperations {
 
   private updateIndexingNoticeMessage(): void {
     if (this.state.indexNoticeMessage) {
-      this.state.indexNoticeMessage.textContent = `Indexing vault: ${this.state.indexedCount}/${this.state.totalFilesToIndex} files processed`;
+      const status = this.state.isIndexingPaused ? " (Paused)" : "";
+
+      // Get the settings
+      const settings = getSettings();
+      const folders = extractAppIgnoreSettings(this.app);
+      const filterType = settings.qaInclusions
+        ? `Inclusions: ${settings.qaInclusions}`
+        : `Exclusions: ${folders.join(", ") + (folders.length ? ", " : "") + settings.qaExclusions || "None"}`;
+
+      this.state.indexNoticeMessage.textContent =
+        `Copilot is indexing your vault...\n` +
+        `${this.state.indexedCount}/${this.state.totalFilesToIndex} files processed${status}\n` +
+        filterType;
     }
-    this.state.indexedCount++;
   }
 
   private handleIndexingError(
@@ -275,5 +318,49 @@ export class IndexOperations {
       this.state.currentIndexingNotice.hide();
     }
     new Notice("Fatal error during indexing. Check console for details.");
+  }
+
+  public async reindexFile(file: TFile): Promise<void> {
+    try {
+      const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
+      if (!embeddingInstance) {
+        return;
+      }
+
+      await this.dbOps.removeDocs(file.path);
+
+      // Check for model change
+      const modelChanged = await this.dbOps.checkAndHandleEmbeddingModelChange(embeddingInstance);
+      if (modelChanged) {
+        await this.indexVaultToVectorStore(true);
+        return;
+      }
+
+      // Proceed with single file reindex
+      const content = await this.app.vault.cachedRead(file);
+      const fileCache = this.app.metadataCache.getFileCache(file);
+
+      const fileToSave = {
+        title: file.basename,
+        path: file.path,
+        content: content,
+        embeddingModel: EmbeddingsManager.getModelName(embeddingInstance),
+        ctime: file.stat.ctime,
+        mtime: file.stat.mtime,
+        tags: fileCache?.tags?.map((tag) => tag.tag) ?? [],
+        extension: file.extension,
+        metadata: fileCache?.frontmatter ?? {},
+      };
+
+      await this.indexDocument(embeddingInstance, fileToSave);
+      // Mark that we have unsaved changes instead of saving immediately
+      this.dbOps.markUnsavedChanges();
+
+      if (getSettings().debug) {
+        console.log(`Reindexed file: ${file.path}`);
+      }
+    } catch (error) {
+      console.error(`Error reindexing file ${file.path}:`, error);
+    }
   }
 }

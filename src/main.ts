@@ -1,6 +1,6 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ChainManager from "@/LLMProviders/chainManager";
-import VectorStoreManager from "@/VectorStoreManager";
+import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { CustomModel } from "@/aiParams";
 import { parseChatContent, updateChatMemory } from "@/chatUtils";
 import { registerBuiltInCommands } from "@/commands";
@@ -16,6 +16,8 @@ import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { encryptAllKeys } from "@/encryptionService";
 import { CustomError } from "@/error";
 import { HybridRetriever } from "@/search/hybridRetriever";
+import { getAllQAMarkdownContent } from "@/search/searchUtils";
+import VectorStoreManager from "@/search/vectorStoreManager";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
 import {
   getSettings,
@@ -67,9 +69,6 @@ export default class CopilotPlugin extends Plugin {
     this.sharedState = new SharedState();
 
     this.vectorStoreManager = new VectorStoreManager(this.app);
-
-    // Initialize event listeners for the VectorStoreManager, e.g. onModify triggers reindexing
-    this.vectorStoreManager.initializeEventListeners();
 
     // Initialize BrevilabsClient
     this.brevilabsClient = BrevilabsClient.getInstance();
@@ -535,7 +534,7 @@ export default class CopilotPlugin extends Plugin {
 
   async countTotalTokens(): Promise<number> {
     try {
-      const allContent = await this.vectorStoreManager.getAllQAMarkdownContent();
+      const allContent = await getAllQAMarkdownContent(this.app);
       const totalTokens = await this.chainManager.chatModelManager.countTokens(allContent);
       return totalTokens;
     } catch (error) {
@@ -602,10 +601,11 @@ export default class CopilotPlugin extends Plugin {
     // Wait for the VectorStoreManager to initialize
     await this.vectorStoreManager.waitForInitialization();
 
-    const db = this.vectorStoreManager.getDb();
-    if (!db) {
-      throw new CustomError("Orama database not found.");
+    const embeddingsAPI = EmbeddingsManager.getInstance().getEmbeddingsAPI();
+    if (!embeddingsAPI) {
+      throw new CustomError("Embeddings API not found.");
     }
+    const db = await this.vectorStoreManager.getOrInitializeDb(embeddingsAPI);
 
     // Check if the index is empty
     const singleDoc = await search(db, {
@@ -623,7 +623,7 @@ export default class CopilotPlugin extends Plugin {
       db,
       this.app.vault,
       this.chainManager.chatModelManager.getChatModel(),
-      this.vectorStoreManager.getEmbeddingsManager().getEmbeddingsAPI() as Embeddings,
+      embeddingsAPI as Embeddings,
       this.chainManager.brevilabsClient,
       {
         minSimilarityScore: 0.3,
@@ -648,15 +648,17 @@ export default class CopilotPlugin extends Plugin {
 
   async customSearchDB(query: string, salientTerms: string[], textWeight: number): Promise<any[]> {
     await this.vectorStoreManager.waitForInitialization();
-    const db = this.vectorStoreManager.getDb();
-    if (!db) {
-      throw new CustomError("Orama database not found.");
+    const embeddingsAPI = EmbeddingsManager.getInstance().getEmbeddingsAPI();
+    if (!embeddingsAPI) {
+      throw new CustomError("Embeddings API not found.");
     }
+    const db = await this.vectorStoreManager.getOrInitializeDb(embeddingsAPI);
+
     const hybridRetriever = new HybridRetriever(
       db,
       this.app.vault,
       this.chainManager.chatModelManager.getChatModel(),
-      this.vectorStoreManager.getEmbeddingsManager().getEmbeddingsAPI() as Embeddings,
+      embeddingsAPI as Embeddings,
       this.chainManager.brevilabsClient,
       {
         minSimilarityScore: 0.3,

@@ -1,6 +1,7 @@
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { CustomError } from "@/error";
-import { getSettings } from "@/settings/model";
+import { getSettings, subscribeToSettingsChange } from "@/settings/model";
+import { areEmbeddingModelsSame } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
 import { create, insert, load, Orama, remove, removeMultiple, save, search } from "@orama/orama";
 import { MD5 } from "crypto-js";
@@ -34,6 +35,22 @@ export class DBOperations {
 
   constructor(private app: App) {
     this.initializePeriodicSave();
+
+    // Subscribe to settings changes
+    subscribeToSettingsChange(async () => {
+      const settings = getSettings();
+
+      // Handle mobile index loading setting change
+      if (Platform.isMobile && settings.disableIndexOnMobile) {
+        this.isIndexLoaded = false;
+        this.oramaDb = undefined;
+        console.log("Copilot index disabled on mobile device due to settings change");
+      } else if (Platform.isMobile && !settings.disableIndexOnMobile && !this.oramaDb) {
+        // Re-initialize DB if mobile setting is enabled
+        await this.initializeDB(EmbeddingsManager.getInstance().getEmbeddingsAPI());
+        console.log("Copilot index re-enabled on mobile device due to settings change");
+      }
+    });
   }
 
   private initializePeriodicSave() {
@@ -132,7 +149,7 @@ export class DBOperations {
     }
   }
 
-  public async clearIndex(embeddingInstance: Embeddings): Promise<void> {
+  public async clearIndex(embeddingInstance: Embeddings | undefined): Promise<void> {
     try {
       this.oramaDb = await this.createNewDb(embeddingInstance);
       if (await this.app.vault.adapter.exists(this.dbPath)) {
@@ -194,7 +211,13 @@ export class DBOperations {
     }
   }
 
-  private async getDbPath(): Promise<string> {
+  public getCurrentDbPath(): string {
+    // This is the old path before any setting changes, used for comparison
+    return this.dbPath;
+  }
+
+  // This is the path according to the setting's enableIndexSync
+  public async getDbPath(): Promise<string> {
     if (getSettings().enableIndexSync) {
       return `${this.app.vault.configDir}/copilot-index-${this.getVaultIdentifier()}.json`;
     }
@@ -315,24 +338,36 @@ export class DBOperations {
       if (existingDoc.hits.length > 0) {
         // First remove the existing document
         await remove(this.oramaDb, existingDoc.hits[0].id);
-        // Then insert the new version
-        await insert(this.oramaDb, docToSave);
-
-        if (getSettings().debug) {
-          console.log(`Updated document ${docToSave.id} in VectorDB with path: ${docToSave.path}`);
-        }
-      } else {
-        // Document doesn't exist, insert it
-        await insert(this.oramaDb, docToSave);
-        if (getSettings().debug) {
-          console.log(`Inserted document ${docToSave.id} in VectorDB with path: ${docToSave.path}`);
-        }
       }
-      this.markUnsavedChanges();
-      return docToSave;
+
+      // Try to insert the new document
+      try {
+        await insert(this.oramaDb, docToSave);
+        if (getSettings().debug) {
+          console.log(
+            `${existingDoc.hits.length > 0 ? "Updated" : "Inserted"} document ${docToSave.id} in VectorDB with path: ${docToSave.path}`
+          );
+        }
+        this.markUnsavedChanges();
+        return docToSave;
+      } catch (insertErr) {
+        console.error(
+          `Failed to ${existingDoc.hits.length > 0 ? "update" : "insert"} document ${docToSave.id}:`,
+          insertErr
+        );
+        // If we removed an existing document but failed to insert the new one,
+        // we should try to restore the old document
+        if (existingDoc.hits.length > 0) {
+          try {
+            await insert(this.oramaDb, existingDoc.hits[0].document);
+          } catch (restoreErr) {
+            console.error("Failed to restore previous document version:", restoreErr);
+          }
+        }
+        return undefined;
+      }
     } catch (err) {
       console.error(`Error upserting document ${docToSave.id} in VectorDB:`, err);
-      // Instead of throwing, we'll return undefined to indicate failure
       return undefined;
     }
   }
@@ -359,6 +394,142 @@ export class DBOperations {
     } catch (err) {
       console.error("Error getting latest file mtime from VectorDB:", err);
       return 0;
+    }
+  }
+
+  async checkAndHandleEmbeddingModelChange(embeddingInstance: Embeddings): Promise<boolean> {
+    if (!this.oramaDb) {
+      console.error(
+        "Orama database not found. Please make sure you have a working embedding model."
+      );
+      return false;
+    }
+    const singleDoc = await search(this.oramaDb, {
+      term: "",
+      limit: 1,
+    });
+
+    let prevEmbeddingModel: string | undefined;
+
+    if (singleDoc.hits.length > 0) {
+      const oramaDocSample = singleDoc.hits[0];
+      if (
+        typeof oramaDocSample === "object" &&
+        oramaDocSample !== null &&
+        "document" in oramaDocSample
+      ) {
+        const document = oramaDocSample.document as { embeddingModel?: string };
+        prevEmbeddingModel = document.embeddingModel;
+      }
+    }
+
+    if (prevEmbeddingModel) {
+      const currEmbeddingModel = EmbeddingsManager.getModelName(embeddingInstance);
+
+      if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
+        // Model has changed, notify user and rebuild DB
+        new Notice("New embedding model detected. Rebuilding Copilot index from scratch.");
+        console.log("Detected change in embedding model. Rebuilding Copilot index from scratch.");
+
+        // Create new DB with new model
+        this.oramaDb = await this.createNewDb(embeddingInstance);
+        await this.saveDB();
+        return true;
+      }
+    } else {
+      console.log("No previous embedding model found in the database.");
+    }
+
+    return false;
+  }
+
+  public async garbageCollect(): Promise<void> {
+    if (!this.oramaDb) {
+      throw new CustomError("Orama database not found.");
+    }
+    try {
+      const files = this.app.vault.getMarkdownFiles();
+      const filePaths = new Set(files.map((file) => file.path));
+      // Get all documents in the database
+      const result = await search(this.oramaDb, {
+        term: "",
+        limit: 100000,
+      });
+
+      // Identify docs to remove
+      const docsToRemove = result.hits.filter((hit) => !filePaths.has(hit.document.path));
+
+      if (docsToRemove.length === 0) {
+        new Notice("No documents to remove during garbage collection.");
+        return;
+      }
+
+      console.log(
+        "Copilot index: Docs to remove during garbage collection:",
+        Array.from(new Set(docsToRemove.map((hit) => hit.document.path))).join(", ")
+      );
+
+      if (docsToRemove.length === 1) {
+        await remove(this.oramaDb, docsToRemove[0].id);
+      } else {
+        await removeMultiple(
+          this.oramaDb,
+          docsToRemove.map((hit) => hit.id),
+          500
+        );
+        new Notice(`Removed stale documents during garbage collection.`);
+      }
+
+      await this.saveDB();
+
+      new Notice("Local Copilot index garbage collected successfully.");
+      console.log("Local Copilot index garbage collected successfully.");
+    } catch (err) {
+      console.error("Error garbage collecting the Copilot index:", err);
+      new Notice("An error occurred while garbage collecting the Copilot index.");
+    }
+  }
+
+  public async getIndexedFiles(): Promise<string[]> {
+    if (!this.oramaDb) {
+      throw new CustomError("Orama database not found.");
+    }
+
+    try {
+      // Search all documents and get unique file paths
+      const result = await search(this.oramaDb, {
+        term: "",
+        limit: 100000,
+      });
+
+      // Use a Set to get unique file paths since multiple chunks can belong to the same file
+      const uniquePaths = new Set<string>();
+      result.hits.forEach((hit) => {
+        uniquePaths.add(hit.document.path);
+      });
+
+      // Convert Set to sorted array
+      return Array.from(uniquePaths).sort();
+    } catch (err) {
+      console.error("Error getting indexed files:", err);
+      throw new CustomError("Failed to retrieve indexed files.");
+    }
+  }
+
+  public async isIndexEmpty(): Promise<boolean> {
+    if (!this.oramaDb) {
+      return true;
+    }
+
+    try {
+      const result = await search(this.oramaDb, {
+        term: "",
+        limit: 1,
+      });
+      return result.hits.length === 0;
+    } catch (err) {
+      console.error("Error checking if database is empty:", err);
+      throw new CustomError("Failed to check if database is empty.");
     }
   }
 }
