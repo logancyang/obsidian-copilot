@@ -10,6 +10,7 @@ import { AdhocPromptModal } from "@/components/modals/AdhocPromptModal";
 import { ListPromptModal } from "@/components/modals/ListPromptModal";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
+import { RemoveFromIndexModal } from "@/components/modals/RemoveFromIndexModal";
 import { SimilarNotesModal } from "@/components/modals/SimilarNotesModal";
 import { CHAT_VIEWTYPE, CHUNK_SIZE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
@@ -372,6 +373,25 @@ export default class CopilotPlugin extends Plugin {
           console.error("Error listing indexed files:", error);
           new Notice("Failed to list indexed files.");
         }
+      },
+    });
+
+    this.addCommand({
+      id: "remove-files-from-copilot-index",
+      name: "Remove files from Copilot index",
+      callback: async () => {
+        new RemoveFromIndexModal(this.app, async (filePaths: string[]) => {
+          try {
+            for (const path of filePaths) {
+              await this.vectorStoreManager.dbOps.removeDocs(path);
+            }
+            await this.vectorStoreManager.dbOps.saveDB();
+            new Notice(`Successfully removed ${filePaths.length} files from the index.`);
+          } catch (err) {
+            console.error("Error removing files from index:", err);
+            new Notice("An error occurred while removing files from the index.");
+          }
+        }).open();
       },
     });
 
