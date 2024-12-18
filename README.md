@@ -56,6 +56,8 @@ Chat and Vault QA modes are completely free to use. Copilot Plus is currently in
 
 **LM Studio** and **Ollama** are supported for local models. Please check out the super simple setup guide [here](local_copilot.md). Don't forget to flex your creativity in custom prompts using local models!
 
+**Azure OpenAI o1-preview** model is supported. Ensure that the `azureOpenAIApiDeploymentName` is correctly configured in the settings.
+
 ## 🤗 New to Copilot? Quick Guide for Beginners
 
 The simplest way to get started is to get an OpenAI API key (with payment method set up with OpenAI) and set it in the Copilot settings. Then simply pick `gpt-4o` or `gpt-4o-mini` in the model dropdown to start chatting. Please check out the [documentation](https://obsidiancopilot.com/en/docs) for more details.
