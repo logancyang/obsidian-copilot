@@ -38,6 +38,7 @@ const QASettings: React.FC = () => {
       </p>
       <h2>Embedding Models</h2>
       <ModelSettingsComponent
+        app={app}
         activeModels={settings.activeEmbeddingModels}
         onUpdateModels={handleUpdateEmbeddingModels}
         providers={Object.values(EmbeddingModelProviders)}

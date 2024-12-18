@@ -40,8 +40,6 @@ export class IndexOperations {
     // Subscribe to settings changes
     subscribeToSettingsChange(async () => {
       const settings = getSettings();
-      // Update rate limiter when embeddingRequestsPerSecond changes
-      console.log("Embedding requests per second changed:", settings.embeddingRequestsPerSecond);
       this.rateLimiter = new RateLimiter(settings.embeddingRequestsPerSecond);
     });
   }
@@ -143,6 +141,13 @@ export class IndexOperations {
       const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
       if (!embeddingInstance) {
         throw new CustomError("Embedding instance not found.");
+      }
+
+      // Check for model change first
+      const modelChanged = await this.dbOps.checkAndHandleEmbeddingModelChange(embeddingInstance);
+      if (modelChanged) {
+        // If model changed, force a full reindex by setting overwrite to true
+        overwrite = true;
       }
 
       // Run garbage collection first to clean up stale documents
