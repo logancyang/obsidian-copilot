@@ -1,5 +1,5 @@
 import ChatModelManager from "@/LLMProviders/chatModelManager";
-import VectorStoreManager from "@/VectorStoreManager";
+import VectorStoreManager from "@/search/vectorStoreManager";
 import { indexTool, localSearchTool, webSearchTool } from "@/tools/SearchTools";
 import {
   getCurrentTimeTool,

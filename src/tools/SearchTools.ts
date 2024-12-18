@@ -2,10 +2,11 @@ import { EMPTY_INDEX_ERROR_MESSAGE, TEXT_WEIGHT } from "@/constants";
 import { CustomError } from "@/error";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ChatModelManager from "@/LLMProviders/chatModelManager";
+import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { HybridRetriever } from "@/search/hybridRetriever";
+import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings } from "@/settings/model";
 import { TimeInfo } from "@/tools/TimeTools";
-import VectorStoreManager from "@/VectorStoreManager";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
@@ -32,8 +33,8 @@ const localSearchTool = tool(
       throw new CustomError(EMPTY_INDEX_ERROR_MESSAGE);
     }
 
-    const embeddingsManager = vectorStoreManager.getEmbeddingsManager();
-    const vault = vectorStoreManager.getVault();
+    const embeddingsManager = EmbeddingsManager.getInstance();
+    const vault = app.vault;
     const embeddingInstance = embeddingsManager?.getEmbeddingsAPI();
 
     if (!embeddingInstance) {
@@ -42,13 +43,8 @@ const localSearchTool = tool(
 
     const returnAll = timeRange !== undefined;
 
-    const db = vectorStoreManager.getDb();
-    if (!db) {
-      throw new CustomError("Orama database not found.");
-    }
-
     const hybridRetriever = new HybridRetriever(
-      db,
+      vectorStoreManager.dbOps,
       vault,
       chatModelManager.getChatModel(),
       embeddingInstance,

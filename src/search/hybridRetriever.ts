@@ -1,14 +1,14 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { extractNoteTitles, getNoteFileFromTitle } from "@/utils";
-import VectorDBManager from "@/vectorDBManager";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
 import { Embeddings } from "@langchain/core/embeddings";
 import { BaseLanguageModel } from "@langchain/core/language_models/base";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { BaseRetriever } from "@langchain/core/retrievers";
-import { Orama, search } from "@orama/orama";
+import { search } from "@orama/orama";
 import { Vault } from "obsidian";
+import { DBOperations } from "./dbOperations";
 
 export class HybridRetriever extends BaseRetriever {
   public lc_namespace = ["hybrid_retriever"];
@@ -19,7 +19,7 @@ export class HybridRetriever extends BaseRetriever {
   private brevilabsClient: BrevilabsClient;
 
   constructor(
-    private db: Orama<any>,
+    private dbOps: DBOperations,
     private vault: Vault,
     llm: BaseLanguageModel,
     embeddingsInstance: Embeddings,
@@ -141,7 +141,11 @@ export class HybridRetriever extends BaseRetriever {
     const explicitChunks: Document[] = [];
     for (const noteTitle of noteTitles) {
       const noteFile = await getNoteFileFromTitle(this.vault, noteTitle);
-      const hits = await VectorDBManager.getDocsByPath(this.db, noteFile?.path ?? "");
+      const db = this.dbOps.getDb();
+      if (!db) {
+        throw new Error("Database not initialized");
+      }
+      const hits = await DBOperations.getDocsByPath(db, noteFile?.path ?? "");
       if (hits) {
         const matchingChunks = hits.map(
           (hit: any) =>
@@ -187,6 +191,11 @@ export class HybridRetriever extends BaseRetriever {
         query
       );
       throw error;
+    }
+
+    const db = this.dbOps.getDb();
+    if (!db) {
+      throw new Error("Database not initialized");
     }
 
     const searchParams: any = {
@@ -276,7 +285,7 @@ export class HybridRetriever extends BaseRetriever {
         mtime: { between: [startTimestamp, endTimestamp] },
       };
 
-      const timeIntervalResults = await search(this.db, searchParams);
+      const timeIntervalResults = await search(db, searchParams);
 
       // Convert timeIntervalResults to Document objects
       const timeIntervalDocuments = timeIntervalResults.hits.map(
@@ -309,7 +318,7 @@ export class HybridRetriever extends BaseRetriever {
       return uniqueResults.filter((doc): doc is Document => doc !== undefined);
     }
 
-    const searchResults = await search(this.db, searchParams);
+    const searchResults = await search(db, searchParams);
 
     // Convert Orama search results to Document objects
     return searchResults.hits.map(
