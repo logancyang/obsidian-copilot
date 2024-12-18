@@ -203,11 +203,15 @@ export class IndexOperations {
       const excludedFiles = await getFilePathsForQA("exclusions", this.app);
 
       return allMarkdownFiles.filter((file) => {
+        // Always respect exclusions, even with inclusion filters
+        if (excludedFiles.has(file.path)) {
+          return false;
+        }
+        // If there are inclusion filters, file must match one
         if (includedFiles.size > 0) {
           return includedFiles.has(file.path);
-        } else {
-          return !excludedFiles.has(file.path);
         }
+        return true;
       });
     }
 
@@ -224,8 +228,12 @@ export class IndexOperations {
     const filesToIndex = new Set<TFile>();
 
     for (const file of allMarkdownFiles) {
-      const shouldBeIndexed =
-        includedFiles.size > 0 ? includedFiles.has(file.path) : !excludedFiles.has(file.path);
+      // Always skip excluded files
+      if (excludedFiles.has(file.path)) {
+        continue;
+      }
+
+      const shouldBeIndexed = includedFiles.size === 0 || includedFiles.has(file.path);
 
       if (shouldBeIndexed) {
         // Add file if:
@@ -234,17 +242,6 @@ export class IndexOperations {
         if (!indexedFilePaths.has(file.path) || file.stat.mtime > latestMtime) {
           filesToIndex.add(file);
         }
-      }
-    }
-
-    // Also check for files that were previously indexed but should no longer be
-    for (const indexedPath of indexedFilePaths) {
-      const shouldBeIndexed =
-        includedFiles.size > 0 ? includedFiles.has(indexedPath) : !excludedFiles.has(indexedPath);
-
-      if (!shouldBeIndexed) {
-        // Remove from index if it no longer matches rules
-        await this.dbOps.removeDocs(indexedPath);
       }
     }
 

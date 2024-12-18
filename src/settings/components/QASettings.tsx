@@ -118,7 +118,7 @@ const QASettings: React.FC = () => {
       />
       <TextAreaComponent
         name="Inclusions"
-        description="When specified, ONLY these paths, tags, or note titles will be indexed (comma separated). Takes precedence over exclusions. Files which were previously indexed will remain in the index unless you force re-index. Format: folder1, folder1/folder2, #tag1, #tag2, [[note1]], [[note2]]"
+        description="When specified, ONLY these paths, tags, or note titles will be indexed (comma separated). Files which were previously indexed will remain in the index unless you force re-index. If overlapping with exclusions, exclusions take precedence. Format: folder1, folder1/folder2, #tag1, #tag2, [[note1]], [[note2]]"
         placeholder="folder1, #tag1, [[note1]]"
         value={settings.qaInclusions}
         onChange={(value) => updateSetting("qaInclusions", value)}
