@@ -121,7 +121,7 @@ const QASettings: React.FC<QASettingsProps> = ({ vectorStoreManager }) => {
         name="Max Sources"
         description="Copilot goes through your vault to find relevant blocks and passes the top N blocks to the LLM. Default for N is 3. Increase if you want more sources included in the answer generation step."
         min={1}
-        max={10}
+        max={30}
         step={1}
         value={settings.maxSourceChunks}
         onChange={(value) => updateSetting("maxSourceChunks", value)}
