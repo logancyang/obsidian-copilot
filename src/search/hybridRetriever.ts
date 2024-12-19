@@ -73,8 +73,11 @@ Enhanced query:`);
     config?: BaseCallbackConfig
   ): Promise<Document[]> {
     const noteTitles = extractNoteTitles(query);
+    console.log("Extracted note titles:", noteTitles);
     const explicitChunks = await this.getExplicitChunks(noteTitles);
-
+    console.log("Explicit chunks found:", explicitChunks.length);
+    console.log("Debug - Query:", query);
+    console.log("Debug - DB Status:", this.db);
     let rewrittenQuery = query;
     if (config?.runName !== "no_hyde") {
       rewrittenQuery = await this.rewriteQuery(query);
@@ -172,11 +175,15 @@ Enhanced query:`);
     salientTerms: string[],
     textWeight?: number
   ): Promise<Document[]> {
+    console.log("=== Orama Search Debug ===");
+    console.log("Search query:", query);
+    console.log("Salient terms:", salientTerms);
     let queryVector: number[];
     try {
       queryVector = await this.convertQueryToVector(query);
+      console.log("Query vector generated:", !!queryVector);
     } catch (error) {
-      console.error("Error in convertQueryToVector:", error, "\nQuery:", query);
+      console.error("Vector conversion error:", error);
       throw error;
     }
 

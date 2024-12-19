@@ -411,7 +411,14 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         if (debug) console.log("==== Step 2: Processing local search results ====");
         const documents = JSON.parse(localSearchResult.output);
 
-        // Format chat history from memory
+        // Add Smart Connections results
+        const retriever = await this.chainManager.getEnhancedRetriever();
+        const smartConnectionsDocs = await retriever.getRelevantDocuments(cleanedUserMessage);
+
+        // Merge documents directly
+        documents.push(...smartConnectionsDocs);
+
+        // Continue with existing code using documents
         const memory = this.chainManager.memoryManager.getMemory();
         const memoryVariables = await memory.loadMemoryVariables({});
         const chatHistory = extractChatHistory(memoryVariables);

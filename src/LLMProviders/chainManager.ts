@@ -19,7 +19,6 @@ import {
   LLMChainRunner,
   VaultQAChainRunner,
 } from "@/LLMProviders/chainRunner";
-import { HybridRetriever } from "@/search/hybridRetriever";
 import { getSettings, getSystemPrompt, subscribeToSettingsChange } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { findCustomModel, isSupportedChain } from "@/utils";
@@ -36,7 +35,7 @@ import ChatModelManager from "./chatModelManager";
 import EmbeddingsManager from "./embeddingManager";
 import MemoryManager from "./memoryManager";
 import PromptManager from "./promptManager";
-
+import CopilotPlugin from "@/main";
 export default class ChainManager {
   private static chain: RunnableSequence;
   private static retrievalChain: RunnableSequence;
@@ -50,7 +49,12 @@ export default class ChainManager {
   public brevilabsClient: BrevilabsClient;
   public static retrievedDocuments: Document[] = [];
 
-  constructor(app: App, vectorStoreManager: VectorStoreManager, brevilabsClient: BrevilabsClient) {
+  constructor(
+    app: App,
+    vectorStoreManager: VectorStoreManager,
+    brevilabsClient: BrevilabsClient,
+    private plugin: CopilotPlugin // Add this
+  ) {
     // Instantiate singletons
     this.app = app;
     this.vectorStoreManager = vectorStoreManager;
@@ -157,21 +161,7 @@ export default class ChainManager {
       }
 
       case ChainType.VAULT_QA_CHAIN: {
-        const { embeddingsAPI, db } = await this.initializeQAChain(options);
-
-        const retriever = new HybridRetriever(
-          db,
-          this.app.vault,
-          chatModel,
-          embeddingsAPI,
-          this.brevilabsClient,
-          {
-            minSimilarityScore: 0.01,
-            maxK: getSettings().maxSourceChunks,
-            salientTerms: [],
-          },
-          getSettings().debug
-        );
+        const retriever = await this.plugin.initializeEnhancedRetriever();
 
         // Create new conversational retrieval chain
         ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain(
@@ -195,6 +185,7 @@ export default class ChainManager {
       case ChainType.COPILOT_PLUS_CHAIN: {
         // For initial load of the plugin
         await this.initializeQAChain(options);
+
         ChainManager.chain = ChainFactory.createNewLLMChain({
           llm: chatModel,
           memory: memory,
@@ -225,7 +216,9 @@ export default class ChainManager {
         throw new Error(`Unsupported chain type: ${chainType}`);
     }
   }
-
+  public async getEnhancedRetriever() {
+    return this.plugin.initializeEnhancedRetriever();
+  }
   private async initializeQAChain(options: SetChainOptions) {
     const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
     if (!embeddingsAPI) {

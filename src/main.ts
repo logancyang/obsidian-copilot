@@ -76,7 +76,12 @@ export default class CopilotPlugin extends Plugin {
     this.vectorStoreManager.initializeEventListeners();
 
     this.brevilabsClient = BrevilabsClient.getInstance();
-    this.chainManager = new ChainManager(this.app, this.vectorStoreManager, this.brevilabsClient);
+    this.chainManager = new ChainManager(
+      this.app,
+      this.vectorStoreManager,
+      this.brevilabsClient,
+      this
+    );
     this.fileParserManager = new FileParserManager(this.brevilabsClient);
 
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
@@ -514,7 +519,31 @@ Please provide a response based on the context above while maintaining consisten
       },
     });
   }
+  // In main.ts, add or modify:
+  public async initializeEnhancedRetriever(): Promise<HybridRetriever> {
+    const db = this.vectorStoreManager.getDb();
+    if (!db) {
+      throw new CustomError("Database not initialized");
+    }
 
+    return new HybridRetriever(
+      db,
+      this.app.vault,
+      this.chainManager.chatModelManager.getChatModel(),
+      this.vectorStoreManager.getEmbeddingsManager().getEmbeddingsAPI() as Embeddings,
+      this.chainManager.brevilabsClient,
+      {
+        minSimilarityScore: getSettings().ragMinSimilarityScore,
+        maxK: getSettings().ragMaxK,
+        salientTerms: [], // We'll fill this per query
+        textWeight: getSettings().ragTextWeight,
+        useRerankerThreshold: getSettings().ragRerankerThreshold,
+        maxTokens: getSettings().ragMaxTokens,
+        rerankerTemp: getSettings().ragRerankerTemp,
+      },
+      getSettings().debug
+    );
+  }
   private async setupSearchCommands(): Promise<void> {
     this.addCommand({
       id: "find-similar-notes",
