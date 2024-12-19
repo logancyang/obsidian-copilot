@@ -294,7 +294,6 @@ export default class CopilotPlugin extends Plugin {
       name: "Force re-index vault for QA",
       callback: async () => {
         try {
-          await this.vectorStoreManager.clearIndex();
           const indexedFileCount = await this.vectorStoreManager.indexVaultToVectorStore(true);
 
           new Notice(`${indexedFileCount} vault files re-indexed to Copilot index.`);
