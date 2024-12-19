@@ -1,6 +1,7 @@
 import { CustomModel } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { ChatModelProviders, DEFAULT_OPEN_AREA } from "@/constants";
+import { setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import React from "react";
 import CommandToggleSettings from "./CommandToggleSettings";
 import {
@@ -9,7 +10,6 @@ import {
   TextComponent,
   ToggleComponent,
 } from "./SettingBlocks";
-import { updateSetting, setSettings, useSettingsValue } from "@/settings/model";
 
 const GeneralSettings: React.FC = () => {
   const settings = useSettingsValue();
@@ -55,6 +55,7 @@ const GeneralSettings: React.FC = () => {
     <div>
       <h2>General Settings</h2>
       <ModelSettingsComponent
+        app={app}
         activeModels={settings.activeModels}
         onUpdateModels={handleUpdateModels}
         providers={Object.values(ChatModelProviders)}

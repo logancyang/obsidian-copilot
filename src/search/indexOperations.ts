@@ -40,8 +40,6 @@ export class IndexOperations {
     // Subscribe to settings changes
     subscribeToSettingsChange(async () => {
       const settings = getSettings();
-      // Update rate limiter when embeddingRequestsPerSecond changes
-      console.log("Embedding requests per second changed:", settings.embeddingRequestsPerSecond);
       this.rateLimiter = new RateLimiter(settings.embeddingRequestsPerSecond);
     });
   }
@@ -145,8 +143,18 @@ export class IndexOperations {
         throw new CustomError("Embedding instance not found.");
       }
 
-      // Run garbage collection first to clean up stale documents
-      if (!overwrite) {
+      // Check for model change first
+      const modelChanged = await this.dbOps.checkAndHandleEmbeddingModelChange(embeddingInstance);
+      if (modelChanged) {
+        // If model changed, force a full reindex by setting overwrite to true
+        overwrite = true;
+      }
+
+      // Clear index if overwrite is true
+      if (overwrite) {
+        await this.dbOps.clearIndex(embeddingInstance);
+      } else {
+        // Run garbage collection first to clean up stale documents
         await this.dbOps.garbageCollect();
       }
 
@@ -159,7 +167,7 @@ export class IndexOperations {
       this.initializeIndexingState(files.length);
       this.createIndexingNotice();
 
-      const CHECKPOINT_INTERVAL = 50;
+      const CHECKPOINT_INTERVAL = 200;
       const errors: string[] = [];
 
       for (let index = 0; index < files.length; index++) {
@@ -173,6 +181,7 @@ export class IndexOperations {
 
           if (this.state.indexedCount % CHECKPOINT_INTERVAL === 0) {
             await this.dbOps.saveDB();
+            console.log("Copilot index checkpoint save completed.");
           }
         } catch (err) {
           this.handleIndexingError(err, files[index], errors, rateLimitNoticeShown);
@@ -184,6 +193,8 @@ export class IndexOperations {
       }
 
       this.finalizeIndexing(errors);
+      await this.dbOps.saveDB();
+      console.log("Copilot index final save completed.");
       return files.length;
     } catch (error) {
       this.handleFatalError(error);

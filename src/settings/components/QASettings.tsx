@@ -1,5 +1,7 @@
 import { CustomModel } from "@/aiParams";
+import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
 import { EmbeddingModelProviders, VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
+import VectorStoreManager from "@/search/vectorStoreManager";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import React from "react";
 import {
@@ -10,7 +12,11 @@ import {
   ToggleComponent,
 } from "./SettingBlocks";
 
-const QASettings: React.FC = () => {
+interface QASettingsProps {
+  vectorStoreManager: VectorStoreManager;
+}
+
+const QASettings: React.FC<QASettingsProps> = ({ vectorStoreManager }) => {
   const settings = useSettingsValue();
 
   const handleUpdateEmbeddingModels = (models: Array<CustomModel>) => {
@@ -20,6 +26,25 @@ const QASettings: React.FC = () => {
       apiKey: model.apiKey || "",
     }));
     updateSetting("activeEmbeddingModels", updatedActiveEmbeddingModels);
+  };
+
+  const handleSetDefaultEmbeddingModel = async (modelKey: string) => {
+    if (modelKey !== settings.embeddingModelKey) {
+      new RebuildIndexConfirmModal(app, async () => {
+        updateSetting("embeddingModelKey", modelKey);
+        await vectorStoreManager.indexVaultToVectorStore(true);
+      }).open();
+    }
+  };
+
+  const handlePartitionsChange = (value: string) => {
+    const numValue = parseInt(value);
+    if (numValue !== settings.numPartitions) {
+      new RebuildIndexConfirmModal(app, async () => {
+        updateSetting("numPartitions", numValue);
+        await vectorStoreManager.indexVaultToVectorStore(true);
+      }).open();
+    }
   };
 
   return (
@@ -38,6 +63,7 @@ const QASettings: React.FC = () => {
       </p>
       <h2>Embedding Models</h2>
       <ModelSettingsComponent
+        app={app}
         activeModels={settings.activeEmbeddingModels}
         onUpdateModels={handleUpdateEmbeddingModels}
         providers={Object.values(EmbeddingModelProviders)}
@@ -48,7 +74,7 @@ const QASettings: React.FC = () => {
           updateSetting("activeEmbeddingModels", updatedActiveEmbeddingModels);
         }}
         defaultModelKey={settings.embeddingModelKey}
-        onSetDefaultModelKey={(value) => updateSetting("embeddingModelKey", value)}
+        onSetDefaultModelKey={handleSetDefaultEmbeddingModel}
         isEmbeddingModel={true}
       />
       <h1>Auto-Index Strategy</h1>
@@ -108,6 +134,13 @@ const QASettings: React.FC = () => {
         step={1}
         value={settings.embeddingRequestsPerSecond}
         onChange={(value) => updateSetting("embeddingRequestsPerSecond", value)}
+      />
+      <DropdownComponent
+        name="Number of Partitions"
+        description="Number of partitions for Copilot index. Default is 1. Increase if you have issues indexing large vaults. Warning: Changes require clearing and rebuilding the index!"
+        value={settings.numPartitions.toString()}
+        onChange={handlePartitionsChange}
+        options={["1", "2", "3", "4", "5", "6", "7", "8"]}
       />
       <TextAreaComponent
         name="Exclusions"

@@ -1,6 +1,6 @@
 import { CustomModel } from "@/aiParams";
-import { Notice } from "obsidian";
-import React, { useState, useEffect } from "react";
+import { App, Notice } from "obsidian";
+import React, { useEffect, useState } from "react";
 
 type DropdownComponentProps = {
   name: string;
@@ -267,6 +267,7 @@ const ModelCard: React.FC<{
 };
 
 interface ModelSettingsComponentProps {
+  app: App;
   activeModels: Array<CustomModel>;
   onUpdateModels: (models: Array<CustomModel>) => void;
   providers: string[];
@@ -277,6 +278,7 @@ interface ModelSettingsComponentProps {
 }
 
 const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
+  app,
   activeModels,
   onUpdateModels,
   providers,
@@ -311,7 +313,8 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
   };
 
   const handleSetDefaultModel = (model: CustomModel) => {
-    onSetDefaultModelKey(getModelKey(model));
+    const modelKey = getModelKey(model);
+    onSetDefaultModelKey(modelKey);
   };
 
   return (
