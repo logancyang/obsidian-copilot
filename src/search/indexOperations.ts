@@ -3,6 +3,7 @@ import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { RateLimiter } from "@/rateLimiter";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
+import { formatDateTime } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
 import { MD5 } from "crypto-js";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
@@ -62,7 +63,11 @@ export class IndexOperations {
       mtime: file.stat.mtime,
       tags: fileCache?.tags?.map((tag) => tag.tag) ?? [],
       extension: file.extension,
-      metadata: fileCache?.frontmatter ?? {},
+      metadata: {
+        ...(fileCache?.frontmatter ?? {}),
+        created: formatDateTime(new Date(file.stat.ctime)).display,
+        modified: formatDateTime(new Date(file.stat.mtime)).display,
+      },
     };
 
     await this.indexDocument(embeddingInstance, fileToSave);
@@ -79,7 +84,9 @@ export class IndexOperations {
     // Add note title as contextual chunk headers
     // https://js.langchain.com/docs/modules/data_connection/document_transformers/contextual_chunk_headers
     const chunks = await textSplitter.createDocuments([fileToSave.content], [], {
-      chunkHeader: `\n\nNOTE TITLE: [[${fileToSave.title}]]\n\nNOTE BLOCK CONTENT:\n\n`,
+      chunkHeader: `\n\nNOTE TITLE: [[${fileToSave.title}]]\n\nMETADATA:${JSON.stringify(
+        fileToSave.metadata
+      )}\n\nNOTE BLOCK CONTENT:\n\n`,
       appendChunkOverlapHeader: true,
     });
 
@@ -401,7 +408,11 @@ export class IndexOperations {
         mtime: file.stat.mtime,
         tags: fileCache?.tags?.map((tag) => tag.tag) ?? [],
         extension: file.extension,
-        metadata: fileCache?.frontmatter ?? {},
+        metadata: {
+          ...(fileCache?.frontmatter ?? {}),
+          created: file.stat.ctime,
+          modified: file.stat.mtime,
+        },
       };
 
       await this.indexDocument(embeddingInstance, fileToSave);

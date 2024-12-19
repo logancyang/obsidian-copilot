@@ -104,10 +104,8 @@ export class DBOperations {
       return newDb;
     } catch (error) {
       console.error(`Error initializing Orama database:`, error);
-      if (error instanceof CustomError) {
-        throw error;
-      }
-      throw new CustomError(`Failed to initialize database: ${error.message}`);
+      new Notice("Failed to initialize Copilot database. Some features may be limited.");
+      return undefined;
     }
   }
 
@@ -181,6 +179,9 @@ export class DBOperations {
   }
 
   public getDb(): Orama<any> | undefined {
+    if (!this.oramaDb) {
+      console.warn("Database not initialized. Some features may be limited.");
+    }
     return this.oramaDb;
   }
 
