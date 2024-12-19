@@ -310,23 +310,36 @@ export default class ChatModelManager {
   }
 
   async ping(model: CustomModel): Promise<boolean> {
-    try {
-      const modelConfig = this.getModelConfig(model);
+    const tryPing = async (enableCors: boolean) => {
+      const modelToTest = { ...model, enableCors };
+      const modelConfig = this.getModelConfig(modelToTest);
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { streaming, temperature, ...pingConfig } = modelConfig;
       pingConfig.maxTokens = 10;
 
-      const testModel = new (this.getProviderConstructor(model))(pingConfig);
-
-      // Send a minimal request to test the connection
+      const testModel = new (this.getProviderConstructor(modelToTest))(pingConfig);
       await testModel.invoke([{ role: "user", content: "hello" }], {
-        timeout: 5000, // 5 second timeout
+        timeout: 3000,
       });
+    };
 
+    try {
+      // First try without CORS
+      await tryPing(false);
       return true;
     } catch (error) {
-      console.error("Chat model ping failed:", error);
-      throw error;
+      console.log("First ping attempt failed, trying with CORS...");
+      try {
+        // Second try with CORS
+        await tryPing(true);
+        new Notice(
+          "Connection successful, but requires CORS to be enabled. Please enable CORS for this model once you add it above."
+        );
+        return true;
+      } catch (error) {
+        console.error("Chat model ping failed:", error);
+        throw error;
+      }
     }
   }
 }

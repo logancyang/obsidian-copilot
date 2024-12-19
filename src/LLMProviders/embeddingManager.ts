@@ -10,6 +10,7 @@ import { Embeddings } from "@langchain/core/embeddings";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { OllamaEmbeddings } from "@langchain/ollama";
 import { OpenAIEmbeddings } from "@langchain/openai";
+import { Notice } from "obsidian";
 
 type EmbeddingConstructorType = new (config: any) => Embeddings;
 
@@ -224,17 +225,30 @@ export default class EmbeddingManager {
   }
 
   async ping(model: CustomModel): Promise<boolean> {
-    try {
-      const config = this.getEmbeddingConfig(model);
-      const testModel = new (this.getProviderConstructor(model))(config);
-
-      // Send a minimal embedding request
+    const tryPing = async (enableCors: boolean) => {
+      const modelToTest = { ...model, enableCors };
+      const config = this.getEmbeddingConfig(modelToTest);
+      const testModel = new (this.getProviderConstructor(modelToTest))(config);
       await testModel.embedQuery("test");
+    };
 
+    try {
+      // First try without CORS
+      await tryPing(false);
       return true;
     } catch (error) {
-      console.error("Embedding model ping failed:", error);
-      throw error;
+      console.log("First ping attempt failed, trying with CORS...");
+      try {
+        // Second try with CORS
+        await tryPing(true);
+        new Notice(
+          "Connection successful, but requires CORS to be enabled. Please enable CORS for this model once you add it above."
+        );
+        return true;
+      } catch (error) {
+        console.error("Embedding model ping failed:", error);
+        throw error;
+      }
     }
   }
 }
