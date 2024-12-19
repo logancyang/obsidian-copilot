@@ -308,4 +308,25 @@ export default class ChatModelManager {
       console.log("Failed to reinitialize model due to missing API key");
     }
   }
+
+  async ping(model: CustomModel): Promise<boolean> {
+    try {
+      const modelConfig = this.getModelConfig(model);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { streaming, temperature, ...pingConfig } = modelConfig;
+      pingConfig.maxTokens = 10;
+
+      const testModel = new (this.getProviderConstructor(model))(pingConfig);
+
+      // Send a minimal request to test the connection
+      await testModel.invoke([{ role: "user", content: "hello" }], {
+        timeout: 5000, // 5 second timeout
+      });
+
+      return true;
+    } catch (error) {
+      console.error("Chat model ping failed:", error);
+      throw error;
+    }
+  }
 }

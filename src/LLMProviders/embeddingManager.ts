@@ -222,4 +222,19 @@ export default class EmbeddingManager {
 
     return { ...baseConfig, ...selectedProviderConfig };
   }
+
+  async ping(model: CustomModel): Promise<boolean> {
+    try {
+      const config = this.getEmbeddingConfig(model);
+      const testModel = new (this.getProviderConstructor(model))(config);
+
+      // Send a minimal embedding request
+      await testModel.embedQuery("test");
+
+      return true;
+    } catch (error) {
+      console.error("Embedding model ping failed:", error);
+      throw error;
+    }
+  }
 }
