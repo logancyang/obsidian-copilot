@@ -1,3 +1,4 @@
+import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { CopilotSettings, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { Embeddings } from "@langchain/core/embeddings";
@@ -56,7 +57,26 @@ export default class VectorStoreManager {
 
   private async initialize(): Promise<void> {
     try {
-      await this.dbOps.initializeDB(this.embeddingsManager.getEmbeddingsAPI());
+      // Add retry logic for initialization
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          await this.dbOps.initializeDB(this.embeddingsManager.getEmbeddingsAPI());
+          break;
+        } catch (error) {
+          if (
+            error instanceof CustomError &&
+            error.message.includes("Vault adapter not available")
+          ) {
+            retries--;
+            if (retries > 0) {
+              await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second before retry
+              continue;
+            }
+          }
+          throw error;
+        }
+      }
       this.eventHandler.initializeEventListeners();
     } catch (error) {
       console.error("Failed to initialize vector store:", error);

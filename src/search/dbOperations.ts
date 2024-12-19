@@ -3,9 +3,10 @@ import { CustomError } from "@/error";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { areEmbeddingModelsSame } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
-import { create, insert, load, Orama, remove, removeMultiple, save, search } from "@orama/orama";
+import { create, insert, Orama, remove, removeMultiple, search } from "@orama/orama";
 import { MD5 } from "crypto-js";
 import { App, Notice, Platform } from "obsidian";
+import { ChunkedStorage, ChunkMetadata, DEFAULT_NUM_PARTITIONS } from "./chunkedStorage";
 import { getVectorLength } from "./searchUtils";
 
 export interface OramaDocument {
@@ -26,6 +27,8 @@ export interface OramaDocument {
 
 export class DBOperations {
   private oramaDb: Orama<any> | undefined;
+  private chunkedStorage: ChunkedStorage | undefined;
+  private isInitialized = false;
   private dbPath: string;
   private initializationPromise: Promise<void>;
   private isIndexLoaded = false;
@@ -66,32 +69,38 @@ export class DBOperations {
     }, this.saveDBDelay);
   }
 
+  private async initializeChunkedStorage() {
+    if (!this.app.vault.adapter) {
+      throw new CustomError("Vault adapter not available. Please try again later.");
+    }
+    const baseDir = (await this.getDbPath()).substring(
+      0,
+      (await this.getDbPath()).lastIndexOf("/")
+    );
+    this.chunkedStorage = new ChunkedStorage(this.app, baseDir, this.getVaultIdentifier());
+    this.isInitialized = true;
+  }
+
   async initializeDB(embeddingInstance: Embeddings | undefined): Promise<Orama<any> | undefined> {
-    if (Platform.isMobile && getSettings().disableIndexOnMobile) {
-      console.log("Index loading disabled on mobile device");
-      this.isIndexLoaded = false;
-      this.oramaDb = undefined;
-      return;
-    }
-
-    this.dbPath = await this.getDbPath();
-    const configDir = this.app.vault.configDir;
-    if (!(await this.app.vault.adapter.exists(configDir))) {
-      console.log(`Config directory does not exist. Creating: ${configDir}`);
-      await this.app.vault.adapter.mkdir(configDir);
-    }
-
     try {
-      if (await this.app.vault.adapter.exists(this.dbPath)) {
-        const savedDb = await this.app.vault.adapter.read(this.dbPath);
-        const parsedDb = JSON.parse(savedDb);
-        const schema = parsedDb.schema;
-        const newDb = await create({ schema });
-        await load(newDb, parsedDb);
-        console.log(`Loaded existing Orama database for ${this.dbPath} from disk.`);
-        this.isIndexLoaded = true;
-        this.oramaDb = newDb;
-        return newDb;
+      if (!this.isInitialized) {
+        await this.initializeChunkedStorage();
+      }
+
+      if (Platform.isMobile && getSettings().disableIndexOnMobile) {
+        this.isIndexLoaded = false;
+        this.oramaDb = undefined;
+        return;
+      }
+
+      if (!this.chunkedStorage) {
+        throw new CustomError("Storage not initialized properly");
+      }
+
+      if (await this.chunkedStorage.exists()) {
+        this.oramaDb = await this.chunkedStorage.loadDatabase();
+        console.log("Loaded existing chunked Orama database from disk.");
+        return this.oramaDb;
       } else {
         const newDb = await this.createNewDb(embeddingInstance);
         this.oramaDb = newDb;
@@ -99,12 +108,10 @@ export class DBOperations {
       }
     } catch (error) {
       console.error(`Error initializing Orama database:`, error);
-      if (Platform.isMobile && getSettings().disableIndexOnMobile) {
-        return;
+      if (error instanceof CustomError) {
+        throw error;
       }
-      const newDb = await this.createNewDb(embeddingInstance);
-      this.oramaDb = newDb;
-      return newDb;
+      throw new CustomError(`Failed to initialize database: ${error.message}`);
     }
   }
 
@@ -114,47 +121,25 @@ export class DBOperations {
     }
 
     try {
-      if (!this.oramaDb) {
+      if (!this.oramaDb || !this.chunkedStorage) {
         throw new CustomError("Orama database not found.");
       }
-      const rawData = await save(this.oramaDb);
-      const dataToSave = {
-        schema: this.oramaDb.schema,
-        ...rawData,
-      };
+      await this.chunkedStorage.saveDatabase(this.oramaDb);
+      this.hasUnsavedChanges = false;
 
-      const dbDir = this.dbPath.substring(0, this.dbPath.lastIndexOf("/"));
-      if (!(await this.app.vault.adapter.exists(dbDir))) {
-        await this.app.vault.adapter.mkdir(dbDir);
-      }
-
-      const saveOperation = async () => {
-        try {
-          await this.app.vault.adapter.write(this.dbPath, JSON.stringify(dataToSave));
-          if (getSettings().debug) {
-            console.log(`Saved Orama database to ${this.dbPath}.`);
-          }
-        } catch (error) {
-          console.error(`Error saving Orama database to ${this.dbPath}:`, error);
-        }
-      };
-
-      if (typeof window.requestIdleCallback !== "undefined") {
-        window.requestIdleCallback(() => saveOperation(), { timeout: 2000 });
-      } else {
-        setTimeout(saveOperation, 0);
+      if (getSettings().debug) {
+        console.log("Saved Orama database successfully.");
       }
     } catch (error) {
-      console.error(`Error preparing Orama database save:`, error);
+      console.error(`Error saving Orama database:`, error);
+      throw error;
     }
   }
 
-  public async clearIndex(embeddingInstance: Embeddings | undefined): Promise<void> {
+  async clearIndex(embeddingInstance: Embeddings | undefined): Promise<void> {
     try {
       this.oramaDb = await this.createNewDb(embeddingInstance);
-      if (await this.app.vault.adapter.exists(this.dbPath)) {
-        await this.app.vault.adapter.remove(this.dbPath);
-      }
+      await this.chunkedStorage?.clearStorage();
       await this.saveDB();
       new Notice("Local Copilot index cleared successfully.");
       console.log("Local Copilot index cleared successfully, new instance created.");
@@ -324,11 +309,27 @@ export class DBOperations {
     };
   }
 
+  async getDocumentPartition(docId: string): Promise<number | undefined> {
+    if (!this.chunkedStorage) {
+      throw new CustomError("Storage not initialized properly");
+    }
+
+    const metadataPath = this.chunkedStorage.getMetadataPath();
+    const metadata: ChunkMetadata = JSON.parse(await this.app.vault.adapter.read(metadataPath));
+    return metadata.documentPartitions[docId];
+  }
+
   async upsert(docToSave: any): Promise<any | undefined> {
     if (!this.oramaDb) throw new Error("DB not initialized");
 
     try {
-      // Check if the document already exists
+      // Calculate partition first
+      const partition = this.chunkedStorage?.assignDocumentToPartition(
+        docToSave.id,
+        DEFAULT_NUM_PARTITIONS
+      );
+
+      // Check if document exists
       const existingDoc = await search(this.oramaDb, {
         term: docToSave.id,
         properties: ["id"],
@@ -336,16 +337,15 @@ export class DBOperations {
       });
 
       if (existingDoc.hits.length > 0) {
-        // First remove the existing document
         await remove(this.oramaDb, existingDoc.hits[0].id);
       }
 
-      // Try to insert the new document
+      // Insert into the assigned partition
       try {
         await insert(this.oramaDb, docToSave);
         if (getSettings().debug) {
           console.log(
-            `${existingDoc.hits.length > 0 ? "Updated" : "Inserted"} document ${docToSave.id} in VectorDB with path: ${docToSave.path}`
+            `${existingDoc.hits.length > 0 ? "Updated" : "Inserted"} document ${docToSave.id} in partition ${partition}`
           );
         }
         this.markUnsavedChanges();
@@ -367,7 +367,7 @@ export class DBOperations {
         return undefined;
       }
     } catch (err) {
-      console.error(`Error upserting document ${docToSave.id} in VectorDB:`, err);
+      console.error(`Error upserting document ${docToSave.id}:`, err);
       return undefined;
     }
   }
@@ -443,6 +443,14 @@ export class DBOperations {
     return false;
   }
 
+  public static async getAllDocuments(db: Orama<any>): Promise<any[]> {
+    const result = await search(db, {
+      term: "",
+      limit: 100000,
+    });
+    return result.hits.map((hit) => hit.document);
+  }
+
   public async garbageCollect(): Promise<void> {
     if (!this.oramaDb) {
       throw new CustomError("Orama database not found.");
@@ -451,13 +459,10 @@ export class DBOperations {
       const files = this.app.vault.getMarkdownFiles();
       const filePaths = new Set(files.map((file) => file.path));
       // Get all documents in the database
-      const result = await search(this.oramaDb, {
-        term: "",
-        limit: 100000,
-      });
+      const docs = await DBOperations.getAllDocuments(this.oramaDb);
 
       // Identify docs to remove
-      const docsToRemove = result.hits.filter((hit) => !filePaths.has(hit.document.path));
+      const docsToRemove = docs.filter((doc) => !filePaths.has(doc.path));
 
       if (docsToRemove.length === 0) {
         new Notice("No documents to remove during garbage collection.");
@@ -466,7 +471,7 @@ export class DBOperations {
 
       console.log(
         "Copilot index: Docs to remove during garbage collection:",
-        Array.from(new Set(docsToRemove.map((hit) => hit.document.path))).join(", ")
+        Array.from(new Set(docsToRemove.map((doc) => doc.path))).join(", ")
       );
 
       if (docsToRemove.length === 1) {
@@ -497,15 +502,12 @@ export class DBOperations {
 
     try {
       // Search all documents and get unique file paths
-      const result = await search(this.oramaDb, {
-        term: "",
-        limit: 100000,
-      });
+      const docs = await DBOperations.getAllDocuments(this.oramaDb);
 
       // Use a Set to get unique file paths since multiple chunks can belong to the same file
       const uniquePaths = new Set<string>();
-      result.hits.forEach((hit) => {
-        uniquePaths.add(hit.document.path);
+      docs.forEach((doc) => {
+        uniquePaths.add(doc.path);
       });
 
       // Convert Set to sorted array
