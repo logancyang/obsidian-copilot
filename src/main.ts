@@ -263,7 +263,13 @@ export default class CopilotPlugin extends Plugin {
       id: "garbage-collect-copilot-index",
       name: "Garbage collect Copilot index (remove files that no longer exist in vault)",
       callback: async () => {
-        await this.vectorStoreManager.garbageCollectVectorStore();
+        try {
+          const removedDocs = await this.vectorStoreManager.garbageCollectVectorStore();
+          new Notice(`${removedDocs} documents removed from Copilot index.`);
+        } catch (err) {
+          console.error("Error garbage collecting the Copilot index:", err);
+          new Notice("An error occurred while garbage collecting the Copilot index.");
+        }
       },
     });
 

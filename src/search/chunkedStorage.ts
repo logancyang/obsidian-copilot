@@ -4,8 +4,6 @@ import { create, load, Orama, save } from "@orama/orama";
 import { App } from "obsidian";
 import { DBOperations } from "./dbOperations";
 
-// TODO: Make this a setting
-export const DEFAULT_NUM_PARTITIONS = 1;
 const CHUNK_PREFIX = "copilot-index-chunk-";
 const LEGACY_INDEX_SUFFIX = ".json";
 
@@ -81,12 +79,9 @@ export class ChunkedStorage {
 
     let totalDistributed = 0;
     partitions.forEach((docs, i) => {
-      const partitionSize = new TextEncoder().encode(JSON.stringify(docs)).length;
       totalDistributed += docs.length;
       if (getSettings().debug) {
-        console.log(
-          `Partition ${i + 1}: ${Math.round((partitionSize / 1024 / 1024) * 100) / 100}MB with ${docs.length} documents`
-        );
+        console.log(`Partition ${i + 1}: ${docs.length} documents`);
       }
     });
 
@@ -113,7 +108,7 @@ export class ChunkedStorage {
     try {
       const rawData = await save(db);
       const documents = await DBOperations.getAllDocuments(db);
-      const numPartitions = DEFAULT_NUM_PARTITIONS;
+      const numPartitions = getSettings().numPartitions;
 
       if (numPartitions === 1) {
         const legacyPath = this.getLegacyPath();
@@ -123,6 +118,7 @@ export class ChunkedStorage {
           JSON.stringify({
             ...rawData,
             documents: documents,
+            schema: db.schema,
           })
         );
         return;
@@ -189,9 +185,6 @@ export class ChunkedStorage {
       }
 
       if (getSettings().debug) {
-        console.log(
-          `Completed save. Original count: ${documents.length}, Saved count: ${savedTotal}`
-        );
         if (savedTotal !== documents.length) {
           console.error(
             `Document count mismatch during save! Original: ${documents.length}, Saved: ${savedTotal}`
@@ -208,27 +201,56 @@ export class ChunkedStorage {
     try {
       const legacyPath = this.getLegacyPath();
 
+      // Try loading legacy format first
       if (await this.app.vault.adapter.exists(legacyPath)) {
         const legacyData = JSON.parse(await this.app.vault.adapter.read(legacyPath));
+        if (!legacyData?.schema) {
+          throw new CustomError("Invalid legacy database format");
+        }
         const newDb = await create({
           schema: legacyData.schema,
-          language: "english",
+          components: {
+            tokenizer: {
+              stemmer: undefined,
+              stopWords: undefined,
+            },
+          },
         });
         await load(newDb, legacyData);
         return newDb;
       }
 
+      // Try loading chunked format
       const metadataPath = this.getMetadataPath();
+      if (!(await this.app.vault.adapter.exists(metadataPath))) {
+        throw new CustomError("No existing database found");
+      }
+
       const metadata: ChunkMetadata = JSON.parse(await this.app.vault.adapter.read(metadataPath));
-      const newDb = await create({ schema: metadata.schema });
+      if (!metadata?.schema) {
+        throw new CustomError("Invalid metadata file: missing schema");
+      }
+
+      const newDb = await create({
+        schema: metadata.schema,
+        components: {
+          tokenizer: {
+            stemmer: undefined,
+            stopWords: undefined,
+          },
+        },
+      });
 
       for (let i = 0; i < metadata.numPartitions; i++) {
         const chunkPath = this.getChunkPath(i);
-        const chunkData = JSON.parse(await this.app.vault.adapter.read(chunkPath));
-        await load(newDb, chunkData);
-
-        if (getSettings().debug) {
-          console.log(`Loaded partition ${i + 1}/${metadata.numPartitions}`);
+        if (await this.app.vault.adapter.exists(chunkPath)) {
+          const chunkData = JSON.parse(await this.app.vault.adapter.read(chunkPath));
+          if (chunkData) {
+            await load(newDb, chunkData);
+            if (getSettings().debug) {
+              console.log(`Loaded partition ${i + 1}/${metadata.numPartitions}`);
+            }
+          }
         }
       }
 
@@ -241,28 +263,19 @@ export class ChunkedStorage {
 
   async clearStorage(): Promise<void> {
     try {
+      // First try to remove legacy file if it exists
       const legacyPath = this.getLegacyPath();
-
       if (await this.app.vault.adapter.exists(legacyPath)) {
         await this.app.vault.adapter.remove(legacyPath);
-        return;
       }
 
-      if (DEFAULT_NUM_PARTITIONS > 1) {
-        const metadataPath = this.getMetadataPath();
-        if (await this.app.vault.adapter.exists(metadataPath)) {
-          const metadata: ChunkMetadata = JSON.parse(
-            await this.app.vault.adapter.read(metadataPath)
-          );
+      // Get list of all files in the base directory
+      const files = await this.app.vault.adapter.list(this.baseDir);
 
-          for (let i = 0; i < metadata.numPartitions; i++) {
-            const chunkPath = this.getChunkPath(i);
-            if (await this.app.vault.adapter.exists(chunkPath)) {
-              await this.app.vault.adapter.remove(chunkPath);
-            }
-          }
-
-          await this.app.vault.adapter.remove(metadataPath);
+      // Remove all files that match our index pattern
+      for (const file of files.files) {
+        if (file.startsWith(`${this.baseDir}/${CHUNK_PREFIX}${this.identifier}`)) {
+          await this.app.vault.adapter.remove(file);
         }
       }
     } catch (error) {
@@ -274,7 +287,7 @@ export class ChunkedStorage {
   async exists(): Promise<boolean> {
     const legacyPath = this.getLegacyPath();
 
-    if (DEFAULT_NUM_PARTITIONS === 1) {
+    if (getSettings().numPartitions === 1) {
       return await this.app.vault.adapter.exists(legacyPath);
     }
 

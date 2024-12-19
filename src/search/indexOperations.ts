@@ -164,7 +164,7 @@ export class IndexOperations {
       this.initializeIndexingState(files.length);
       this.createIndexingNotice();
 
-      const CHECKPOINT_INTERVAL = 50;
+      const CHECKPOINT_INTERVAL = 200;
       const errors: string[] = [];
 
       for (let index = 0; index < files.length; index++) {
@@ -178,6 +178,7 @@ export class IndexOperations {
 
           if (this.state.indexedCount % CHECKPOINT_INTERVAL === 0) {
             await this.dbOps.saveDB();
+            console.log("Copilot index checkpoint save completed.");
           }
         } catch (err) {
           this.handleIndexingError(err, files[index], errors, rateLimitNoticeShown);
@@ -189,6 +190,8 @@ export class IndexOperations {
       }
 
       this.finalizeIndexing(errors);
+      await this.dbOps.saveDB();
+      console.log("Copilot index final save completed.");
       return files.length;
     } catch (error) {
       this.handleFatalError(error);

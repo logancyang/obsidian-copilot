@@ -263,6 +263,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   embeddingRequestsPerSecond: 10,
   disableIndexOnMobile: true,
   showSuggestedPrompts: true,
+  numPartitions: 1,
   enabledCommands: {
     [COMMAND_IDS.FIX_GRAMMAR]: {
       enabled: true,

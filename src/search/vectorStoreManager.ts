@@ -70,7 +70,7 @@ export default class VectorStoreManager {
           ) {
             retries--;
             if (retries > 0) {
-              await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second before retry
+              await new Promise((resolve) => setTimeout(resolve, 100)); // Wait 0.1 second before retry
               continue;
             }
           }
@@ -98,9 +98,9 @@ export default class VectorStoreManager {
     await this.dbOps.clearIndex(this.embeddingsManager.getEmbeddingsAPI());
   }
 
-  public async garbageCollectVectorStore(): Promise<void> {
+  public async garbageCollectVectorStore(): Promise<number> {
     await this.waitForInitialization();
-    await this.dbOps.garbageCollect();
+    return this.dbOps.garbageCollect();
   }
 
   public async getIndexedFiles(): Promise<string[]> {

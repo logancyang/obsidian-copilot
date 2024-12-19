@@ -57,6 +57,7 @@ export interface CopilotSettings {
   defaultOpenArea: DEFAULT_OPEN_AREA;
   disableIndexOnMobile: boolean;
   showSuggestedPrompts: boolean;
+  numPartitions: number;
 }
 
 export const settingsStore = createStore();

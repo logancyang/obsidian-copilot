@@ -110,6 +110,15 @@ const QASettings: React.FC = () => {
         value={settings.embeddingRequestsPerSecond}
         onChange={(value) => updateSetting("embeddingRequestsPerSecond", value)}
       />
+      <SliderComponent
+        name="Number of Partitions"
+        description="Number of partitions for Copilot index. Default is 1. Increase if you have issues indexing large vaults. Warning: Changes require clearing and rebuilding the index (Run the command: Force re-index for QA)!"
+        min={1}
+        max={10}
+        step={1}
+        value={settings.numPartitions}
+        onChange={(value) => updateSetting("numPartitions", value)}
+      />
       <TextAreaComponent
         name="Exclusions"
         description="Comma separated list of paths, tags, note titles or file extension, e.g. folder1, folder1/folder2, #tag1, #tag2, [[note1]], [[note2]], *.jpg, *.excallidraw.md etc, to be excluded from the indexing process. NOTE: Tags must be in the note properties, not the note content. Files which were previously indexed will remain in the index unless you force re-index."
