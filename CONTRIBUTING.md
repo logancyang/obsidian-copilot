@@ -53,6 +53,57 @@ In the case of Copilot for Obsidian, you will need to:
 
 Try to be descriptive in your branch names and pull requests. Happy coding!
 
+## Manual Testing Checklist
+
+This is a list of items to manually test after any non-trivial code change. Test the items relevant to your code change. If not sure, randomly choose items below.
+
+First, **turn on debug mode in settings**, and open the dev console.
+
+The most basic ones are model changes and mode changes.
+
+### Test Fresh Install
+
+- To ensure any **new users** can use the plugin on a **fresh install**, manually delete the `data.json` file in the plugin directory, disable the plugin in Obsidian, and re-enable it, enter the OpenAI API key and other API key(s) to see if **onboarding** is working.
+
+### Chat / Plus mode
+
+- Switch the model and check if the log has the new model key
+- Test model selection: Ask the model "what company trained you" to double check. Models from OpenAI, Claude, Gemini models can properly answer this question.
+- Test chat memory: Tell the model your name, and in a turn or two ask "what's my name" to ensure chat memory is working.
+- Use `[[note title]]` in chat and see if the model can access the content.
+
+### Vault QA / Plus mode (with a small test vault)
+
+- Use the "Refresh index" button and see if it properly starts indexing. If it says "index is up-to-date", use "Clear Copilot index" and start indexing again (or equivalently, use "force re-index" command).
+- Check if there's any error or warning during indexing in the console, and if the exclusions and inclusions are shown correctly in the notice banner. Click pause and resume.
+- After indexing is successful, ask a specific question where the answer is in your docs. For example, two of my docs are a biography of a person named "Mike", I ask "who is mike" and it should be able to answer using the two docs.
+  - In Plus mode make sure you trigger this query with `@vault` or cmd/ctrl + shift + enter. And then check "Show Sources" button for the expected docs.
+- To debug any failed QA query, we need to understand if it failed at 1. indexing 2. retrieval 3. generation.
+  - First use "list all indexed files" command to check if the docs are indexed correctly.
+  - Then check the console log for "retrieved chunks" from the hybrid retriever.
+  - If correctly retrieved, it means the Chat Model is too weak to process the context effectively. Use a stronger Chat Model
+
+### Plus mode
+
+- "Give me a recap of this week" or some other time-based query. If you have daily notes or modified notes in this period, it should be able to retrieve them.
+- Pass an image with text and ask gpt-4o-mini or gemini flash to describe the image.
+- Try some random `@` tool and see if it's working as expected.
+- Use `+` or `[[]]` to add notes to context. Ask the AI to summarize.
+- Paste a URL and ask the AI to summarize.
+
+### Settings
+
+- If you updated model logic, test adding/deleting a custom model, whether you can use a new model in chat correctly.
+- Switch the embedding model and click "refresh index" to see if it starts from scratch (it should detect that the existing index has a different type of embedding, and hence start indexing from scratch).
+- Any behaviors related to the settings that you added, updated or may have affected.
+
+### Copilot Commands
+
+- Select text in a note and apply a built-in one like "translation" or a custom one you have as Custom Prompts.
+- Any commands that you added, updated or may have affected.
+- Try the `/` custom prompt
+- Whether custom prompt templating works correctly with `{folder}`, `{#tag1, #tag2}`, etc.
+
 ## Getting Help
 
 - **Discord**: [Join](https://discord.gg/bFtfKDQqZt) the server for Copilot dev discussions.
