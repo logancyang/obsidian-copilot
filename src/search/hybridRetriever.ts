@@ -28,7 +28,7 @@ export class HybridRetriever extends BaseRetriever {
       minSimilarityScore: number;
       maxK: number;
       salientTerms: string[];
-      timeRange?: { startDate: string; endDate: string }; // ISO 8601 format in local timezone
+      timeRange?: { startTime: number; endTime: number };
       textWeight?: number;
       returnAll?: boolean;
       useRerankerThreshold?: number;
@@ -249,11 +249,9 @@ export class HybridRetriever extends BaseRetriever {
 
     // Add time range filter if provided
     if (this.options.timeRange) {
-      const { startDate, endDate } = this.options.timeRange;
-      const startTimestamp = new Date(startDate).getTime();
-      const endTimestamp = new Date(endDate).getTime();
+      const { startTime, endTime } = this.options.timeRange;
 
-      const dateRange = this.generateDateRange(startDate, endDate);
+      const dateRange = this.generateDateRange(startTime, endTime);
 
       if (this.debug) {
         console.log(
@@ -276,13 +274,13 @@ export class HybridRetriever extends BaseRetriever {
       }));
 
       if (this.debug) {
-        console.log("==== Modified and created time range: ====", startTimestamp, endTimestamp);
+        console.log("==== Modified and created time range: ====", startTime, endTime);
       }
 
       // Perform a second search with time range filters
       searchParams.where = {
-        ctime: { between: [startTimestamp, endTimestamp] },
-        mtime: { between: [startTimestamp, endTimestamp] },
+        ctime: { between: [startTime, endTime] },
+        mtime: { between: [startTime, endTime] },
       };
 
       const timeIntervalResults = await search(db, searchParams);
@@ -347,14 +345,15 @@ export class HybridRetriever extends BaseRetriever {
     return await this.embeddingsInstance.embedQuery(query);
   }
 
-  private generateDateRange(startDate: string, endDate: string): string[] {
+  private generateDateRange(startTime: number, endTime: number): string[] {
     const dateRange: string[] = [];
-    const currentDate = new Date(startDate);
-    const end = new Date(endDate);
+    const start = new Date(startTime);
+    const end = new Date(endTime);
 
-    while (currentDate <= end) {
-      dateRange.push(`${currentDate.toISOString().split("T")[0]}`);
-      currentDate.setDate(currentDate.getDate() + 1);
+    const current = new Date(start);
+    while (current <= end) {
+      dateRange.push(current.toLocaleDateString("en-CA"));
+      current.setDate(current.getDate() + 1);
     }
 
     return dateRange;
