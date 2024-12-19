@@ -3,8 +3,8 @@ import { CustomModel } from "@/aiParams";
 import { EmbeddingModelProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { CustomError } from "@/error";
-import { safeFetch } from "@/utils";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
+import { safeFetch } from "@/utils";
 import { CohereEmbeddings } from "@langchain/cohere";
 import { Embeddings } from "@langchain/core/embeddings";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
@@ -19,6 +19,7 @@ const EMBEDDING_PROVIDER_CONSTRUCTORS = {
   [EmbeddingModelProviders.GOOGLE]: GoogleGenerativeAIEmbeddings,
   [EmbeddingModelProviders.AZURE_OPENAI]: OpenAIEmbeddings,
   [EmbeddingModelProviders.OLLAMA]: OllamaEmbeddings,
+  [EmbeddingModelProviders.LM_STUDIO]: OpenAIEmbeddings,
   [EmbeddingModelProviders.OPENAI_FORMAT]: OpenAIEmbeddings,
 } as const;
 
@@ -43,6 +44,7 @@ export default class EmbeddingManager {
     [EmbeddingModelProviders.GOOGLE]: () => getSettings().googleApiKey,
     [EmbeddingModelProviders.AZURE_OPENAI]: () => getSettings().azureOpenAIApiKey,
     [EmbeddingModelProviders.OLLAMA]: () => "default-key",
+    [EmbeddingModelProviders.LM_STUDIO]: () => "default-key",
     [EmbeddingModelProviders.OPENAI_FORMAT]: () => "",
   };
 
@@ -195,6 +197,14 @@ export default class EmbeddingManager {
         baseUrl: customModel.baseUrl || "http://localhost:11434",
         model: modelName,
         truncate: true,
+      },
+      [EmbeddingModelProviders.LM_STUDIO]: {
+        modelName,
+        openAIApiKey: getDecryptedKey(customModel.apiKey || "default-key"),
+        configuration: {
+          baseURL: customModel.baseUrl || "http://localhost:1234/v1",
+          fetch: customModel.enableCors ? safeFetch : undefined,
+        },
       },
       [EmbeddingModelProviders.OPENAI_FORMAT]: {
         modelName,

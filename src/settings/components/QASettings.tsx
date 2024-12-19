@@ -32,7 +32,6 @@ const QASettings: React.FC<QASettingsProps> = ({ vectorStoreManager }) => {
     if (modelKey !== settings.embeddingModelKey) {
       new RebuildIndexConfirmModal(app, async () => {
         updateSetting("embeddingModelKey", modelKey);
-        await vectorStoreManager.indexVaultToVectorStore(true);
       }).open();
     }
   };
@@ -119,7 +118,7 @@ const QASettings: React.FC<QASettingsProps> = ({ vectorStoreManager }) => {
       <br />
       <SliderComponent
         name="Max Sources"
-        description="Copilot goes through your vault to find relevant blocks and passes the top N blocks to the LLM. Default for N is 3. Increase if you want more sources included in the answer generation step."
+        description="Copilot goes through your vault to find relevant blocks and passes the top N blocks to the LLM. Default for N is 3. Increase if you want more sources included in the answer generation step. WARNING: more sources significantly degrades answer quality if the chat model is weak!"
         min={1}
         max={30}
         step={1}
