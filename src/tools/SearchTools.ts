@@ -55,8 +55,8 @@ const localSearchTool = tool(
         salientTerms,
         timeRange: timeRange
           ? {
-              startDate: timeRange.startTime.localDateString,
-              endDate: timeRange.endTime.localDateString,
+              startTime: timeRange.startTime.epoch,
+              endTime: timeRange.endTime.epoch,
             }
           : undefined,
         textWeight: TEXT_WEIGHT,
