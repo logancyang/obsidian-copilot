@@ -32,13 +32,9 @@ export class DBOperations {
   private dbPath: string;
   private initializationPromise: Promise<void>;
   private isIndexLoaded = false;
-  private saveDBTimer: number | null = null;
-  private saveDBDelay = 120000; // Save full DB every 120 seconds
   private hasUnsavedChanges = false;
 
   constructor(private app: App) {
-    this.initializePeriodicSave();
-
     // Subscribe to settings changes
     subscribeToSettingsChange(async () => {
       const settings = getSettings();
@@ -63,19 +59,6 @@ export class DBOperations {
         console.log("Database reinitialized with new path:", newPath);
       }
     });
-  }
-
-  private initializePeriodicSave() {
-    if (this.saveDBTimer !== null) {
-      window.clearInterval(this.saveDBTimer);
-    }
-
-    this.saveDBTimer = window.setInterval(() => {
-      if (this.hasUnsavedChanges) {
-        this.saveDB();
-        this.hasUnsavedChanges = false;
-      }
-    }, this.saveDBDelay);
   }
 
   private async initializeChunkedStorage() {
@@ -210,9 +193,6 @@ export class DBOperations {
   }
 
   public onunload() {
-    if (this.saveDBTimer !== null) {
-      window.clearInterval(this.saveDBTimer);
-    }
     if (this.hasUnsavedChanges) {
       this.saveDB();
     }

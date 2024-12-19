@@ -150,8 +150,11 @@ export class IndexOperations {
         overwrite = true;
       }
 
-      // Run garbage collection first to clean up stale documents
-      if (!overwrite) {
+      // Clear index if overwrite is true
+      if (overwrite) {
+        await this.dbOps.clearIndex(embeddingInstance);
+      } else {
+        // Run garbage collection first to clean up stale documents
         await this.dbOps.garbageCollect();
       }
 

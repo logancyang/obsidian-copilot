@@ -1,5 +1,4 @@
 import { CustomModel } from "@/aiParams";
-import { SwitchEmbeddingConfirmModal } from "@/components/modals/SwitchEmbeddingConfirmModal";
 import { App, Notice } from "obsidian";
 import React, { useEffect, useState } from "react";
 
@@ -315,13 +314,7 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
 
   const handleSetDefaultModel = (model: CustomModel) => {
     const modelKey = getModelKey(model);
-    if (isEmbeddingModel && modelKey !== defaultModelKey) {
-      new SwitchEmbeddingConfirmModal(app, () => {
-        onSetDefaultModelKey(modelKey);
-      }).open();
-    } else {
-      onSetDefaultModelKey(modelKey);
-    }
+    onSetDefaultModelKey(modelKey);
   };
 
   return (
