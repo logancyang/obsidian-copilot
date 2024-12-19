@@ -178,7 +178,12 @@ export class IndexOperations {
       const errors: string[] = [];
 
       for (let index = 0; index < files.length; index++) {
-        if (this.state.isIndexingCancelled) break;
+        if (this.state.isIndexingCancelled) {
+          console.log(
+            `Indexing stopped at ${this.state.indexedCount}/${files.length} files due to cancellation`
+          );
+          break;
+        }
         await this.handlePause();
 
         try {
@@ -202,7 +207,7 @@ export class IndexOperations {
       this.finalizeIndexing(errors);
       await this.dbOps.saveDB();
       console.log("Copilot index final save completed.");
-      return files.length;
+      return this.state.indexedCount;
     } catch (error) {
       this.handleFatalError(error);
       return 0;
@@ -289,7 +294,11 @@ export class IndexOperations {
     this.state.indexNoticeMessage = container.createEl("div", { cls: "copilot-notice-message" });
     this.updateIndexingNoticeMessage();
 
-    const pauseButton = frag.createEl("button");
+    // Create button container for better layout
+    const buttonContainer = container.createEl("div", { cls: "copilot-notice-buttons" });
+
+    // Pause/Resume button
+    const pauseButton = buttonContainer.createEl("button");
     pauseButton.textContent = "Pause";
     pauseButton.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -303,16 +312,44 @@ export class IndexOperations {
       }
     });
 
+    // Stop button
+    const stopButton = buttonContainer.createEl("button");
+    stopButton.textContent = "Stop";
+    stopButton.style.marginLeft = "8px";
+    stopButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      event.preventDefault();
+      this.cancelIndexing();
+    });
+
     frag.appendChild(this.state.indexNoticeMessage);
-    frag.appendChild(pauseButton);
+    frag.appendChild(buttonContainer);
 
     this.state.currentIndexingNotice = new Notice(frag, 0);
     return this.state.currentIndexingNotice;
   }
 
   private async handlePause(): Promise<void> {
-    while (this.state.isIndexingPaused && !this.state.isIndexingCancelled) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+    if (this.state.isIndexingPaused) {
+      while (this.state.isIndexingPaused && !this.state.isIndexingCancelled) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
+      // After we exit the pause loop (meaning we've resumed), re-evaluate files
+      if (!this.state.isIndexingCancelled) {
+        const files = await this.getFilesToIndex();
+        if (files.length === 0) {
+          // If no files to index after filter change, cancel the indexing
+          console.log("No files to index after filter change, stopping indexing");
+          this.cancelIndexing();
+          new Notice("No files to index with current filters");
+          return;
+        }
+        this.state.totalFilesToIndex = files.length;
+        console.log("Total files to index:", this.state.totalFilesToIndex);
+        console.log("Files to index:", files);
+        this.updateIndexingNoticeMessage();
+      }
     }
   }
 
@@ -331,14 +368,20 @@ export class IndexOperations {
       // Get the settings
       const settings = getSettings();
       const folders = extractAppIgnoreSettings(this.app);
-      const filterType = settings.qaInclusions
+
+      // Prepare inclusion and exclusion filter messages
+      const inclusions = settings.qaInclusions
         ? `Inclusions: ${settings.qaInclusions}`
-        : `Exclusions: ${folders.join(", ") + (folders.length ? ", " : "") + settings.qaExclusions || "None"}`;
+        : "Inclusions: None";
+      const exclusions =
+        folders.length > 0 || settings.qaExclusions
+          ? `Exclusions: ${folders.join(", ")}${folders.length ? ", " : ""}${settings.qaExclusions || "None"}`
+          : "Exclusions: None";
 
       this.state.indexNoticeMessage.textContent =
         `Copilot is indexing your vault...\n` +
         `${this.state.indexedCount}/${this.state.totalFilesToIndex} files processed${status}\n` +
-        filterType;
+        `${exclusions}\n${inclusions}`;
     }
   }
 
@@ -362,6 +405,11 @@ export class IndexOperations {
   private finalizeIndexing(errors: string[]): void {
     if (this.state.currentIndexingNotice) {
       this.state.currentIndexingNotice.hide();
+    }
+
+    if (this.state.isIndexingCancelled) {
+      new Notice(`Indexing cancelled`);
+      return;
     }
 
     if (errors.length > 0) {
@@ -424,6 +472,14 @@ export class IndexOperations {
       }
     } catch (error) {
       console.error(`Error reindexing file ${file.path}:`, error);
+    }
+  }
+
+  public cancelIndexing(): void {
+    console.log("Indexing cancelled by user");
+    this.state.isIndexingCancelled = true;
+    if (this.state.currentIndexingNotice) {
+      this.state.currentIndexingNotice.hide();
     }
   }
 }
