@@ -57,7 +57,6 @@ export default class VectorStoreManager {
 
   private async initialize(): Promise<void> {
     try {
-      // Add retry logic for initialization
       let retries = 3;
       while (retries > 0) {
         try {
@@ -70,17 +69,17 @@ export default class VectorStoreManager {
           ) {
             retries--;
             if (retries > 0) {
-              await new Promise((resolve) => setTimeout(resolve, 100)); // Wait 0.1 second before retry
+              await new Promise((resolve) => setTimeout(resolve, 100));
               continue;
             }
           }
-          throw error;
+          console.error("Failed to initialize vector store:", error);
+          break;
         }
       }
       this.eventHandler.initializeEventListeners();
     } catch (error) {
       console.error("Failed to initialize vector store:", error);
-      throw error;
     }
   }
 
