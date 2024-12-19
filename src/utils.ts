@@ -547,12 +547,14 @@ export async function safeFetch(url: string, options: RequestInit): Promise<Resp
     options.body = JSON.stringify(newBody);
   }
 
+  const method = options.method?.toLowerCase() || "post";
+  const methodsWithBody = ["post", "put", "patch"];
   const response = await requestUrl({
     url,
     contentType: "application/json",
     headers: options.headers as Record<string, string>,
-    method: options.method,
-    ...(options.method === "POST" && { body: options.body?.toString() }),
+    method: method,
+    ...(methodsWithBody.includes(method) && { body: options.body?.toString() }),
   });
 
   return {
