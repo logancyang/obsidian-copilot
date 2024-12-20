@@ -475,9 +475,13 @@ export class IndexOperations {
     }
   }
 
-  public cancelIndexing(): void {
+  public async cancelIndexing(): Promise<void> {
     console.log("Indexing cancelled by user");
     this.state.isIndexingCancelled = true;
+
+    // Add a small delay to ensure all state updates are processed
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
     if (this.state.currentIndexingNotice) {
       this.state.currentIndexingNotice.hide();
     }
