@@ -5,6 +5,7 @@ import {
   setChainType,
   subscribeToChainTypeChange,
   subscribeToModelKeyChange,
+  updateModelConfig,
 } from "@/aiParams";
 import ChainFactory, { ChainType, Document } from "@/chainFactory";
 import {
@@ -119,10 +120,18 @@ export default class ChainManager {
         newModelKey = customModel.name + "|" + customModel.provider;
       }
       this.chatModelManager.setChatModel(customModel);
+
+      const settings = getSettings();
+      const modelConfig = settings.modelConfigs[newModelKey] || {};
+      const { maxCompletionTokens, reasoningEffort } = modelConfig;
+
       // Must update the chatModel for chain because ChainFactory always
       // retrieves the old chain without the chatModel change if it exists!
       // Create a new chain with the new chatModel
-      this.setChain(getChainType());
+      this.setChain(getChainType(), {
+        maxCompletionTokens,
+        reasoningEffort,
+      });
       console.log(`Setting model to ${newModelKey}`);
     } catch (error) {
       console.error("createChainWithNewModel failed: ", error);
@@ -143,6 +152,10 @@ export default class ChainManager {
     const memory = this.memoryManager.getMemory();
     const chatPrompt = this.promptManager.getChatPrompt();
 
+    const settings = getSettings();
+    const modelConfig = settings.modelConfigs[getModelKey()] || {};
+    const { maxCompletionTokens, reasoningEffort } = modelConfig;
+
     switch (chainType) {
       case ChainType.LLM_CHAIN: {
         ChainManager.chain = ChainFactory.createNewLLMChain({
@@ -150,6 +163,8 @@ export default class ChainManager {
           memory: memory,
           prompt: options.prompt || chatPrompt,
           abortController: options.abortController,
+          maxCompletionTokens,
+          reasoningEffort,
         }) as RunnableSequence;
 
         setChainType(ChainType.LLM_CHAIN);
@@ -179,6 +194,8 @@ export default class ChainManager {
             llm: chatModel,
             retriever: retriever,
             systemMessage: getSystemPrompt(),
+            maxCompletionTokens,
+            reasoningEffort,
           },
           ChainManager.storeRetrieverDocuments.bind(ChainManager),
           getSettings().debug
@@ -200,6 +217,8 @@ export default class ChainManager {
           memory: memory,
           prompt: options.prompt || chatPrompt,
           abortController: options.abortController,
+          maxCompletionTokens,
+          reasoningEffort,
         }) as RunnableSequence;
 
         setChainType(ChainType.COPILOT_PLUS_CHAIN);
