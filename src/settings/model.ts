@@ -8,6 +8,7 @@ import {
   DEFAULT_OPEN_AREA,
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
+  EmbeddingModelProviders,
 } from "@/constants";
 
 export interface CopilotSettings {
@@ -122,6 +123,16 @@ export function useSettingsValue(): Readonly<CopilotSettings> {
 export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // If settings is null/undefined, use DEFAULT_SETTINGS
   const settingsToSanitize = settings || DEFAULT_SETTINGS;
+
+  // fix: Maintain consistency between EmbeddingModelProviders.AZURE_OPENAI and ChatModelProviders.AZURE_OPENAI,
+  // where it was 'azure_openai' before EmbeddingModelProviders.AZURE_OPENAI.
+  settingsToSanitize.activeEmbeddingModels = settingsToSanitize.activeEmbeddingModels.map((m) => {
+    return {
+      ...m,
+      provider: m.provider === "azure_openai" ? EmbeddingModelProviders.AZURE_OPENAI : m.provider,
+    };
+  });
+
   const sanitizedSettings: CopilotSettings = { ...settingsToSanitize };
 
   // Stuff in settings are string even when the interface has number type!
