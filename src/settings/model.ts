@@ -59,6 +59,7 @@ export interface CopilotSettings {
   showSuggestedPrompts: boolean;
   numPartitions: number;
   modelConfigs: Record<string, ModelConfig>;
+  maxCompletionTokens?: number;
 }
 
 export const settingsStore = createStore();
