@@ -3,13 +3,14 @@ import { CustomModel } from "@/aiParams";
 import { EmbeddingModelProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { CustomError } from "@/error";
-import { safeFetch } from "@/utils";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
+import { safeFetch } from "@/utils";
 import { CohereEmbeddings } from "@langchain/cohere";
 import { Embeddings } from "@langchain/core/embeddings";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { OllamaEmbeddings } from "@langchain/ollama";
 import { OpenAIEmbeddings } from "@langchain/openai";
+import { Notice } from "obsidian";
 
 type EmbeddingConstructorType = new (config: any) => Embeddings;
 
@@ -19,6 +20,7 @@ const EMBEDDING_PROVIDER_CONSTRUCTORS = {
   [EmbeddingModelProviders.GOOGLE]: GoogleGenerativeAIEmbeddings,
   [EmbeddingModelProviders.AZURE_OPENAI]: OpenAIEmbeddings,
   [EmbeddingModelProviders.OLLAMA]: OllamaEmbeddings,
+  [EmbeddingModelProviders.LM_STUDIO]: OpenAIEmbeddings,
   [EmbeddingModelProviders.OPENAI_FORMAT]: OpenAIEmbeddings,
 } as const;
 
@@ -43,6 +45,7 @@ export default class EmbeddingManager {
     [EmbeddingModelProviders.GOOGLE]: () => getSettings().googleApiKey,
     [EmbeddingModelProviders.AZURE_OPENAI]: () => getSettings().azureOpenAIApiKey,
     [EmbeddingModelProviders.OLLAMA]: () => "default-key",
+    [EmbeddingModelProviders.LM_STUDIO]: () => "default-key",
     [EmbeddingModelProviders.OPENAI_FORMAT]: () => "",
   };
 
@@ -196,6 +199,14 @@ export default class EmbeddingManager {
         model: modelName,
         truncate: true,
       },
+      [EmbeddingModelProviders.LM_STUDIO]: {
+        modelName,
+        openAIApiKey: getDecryptedKey(customModel.apiKey || "default-key"),
+        configuration: {
+          baseURL: customModel.baseUrl || "http://localhost:1234/v1",
+          fetch: customModel.enableCors ? safeFetch : undefined,
+        },
+      },
       [EmbeddingModelProviders.OPENAI_FORMAT]: {
         modelName,
         openAIApiKey: getDecryptedKey(customModel.apiKey || ""),
@@ -211,5 +222,33 @@ export default class EmbeddingManager {
       providerConfig[customModel.provider as EmbeddingModelProviders] || {};
 
     return { ...baseConfig, ...selectedProviderConfig };
+  }
+
+  async ping(model: CustomModel): Promise<boolean> {
+    const tryPing = async (enableCors: boolean) => {
+      const modelToTest = { ...model, enableCors };
+      const config = this.getEmbeddingConfig(modelToTest);
+      const testModel = new (this.getProviderConstructor(modelToTest))(config);
+      await testModel.embedQuery("test");
+    };
+
+    try {
+      // First try without CORS
+      await tryPing(false);
+      return true;
+    } catch (error) {
+      console.log("First ping attempt failed, trying with CORS...");
+      try {
+        // Second try with CORS
+        await tryPing(true);
+        new Notice(
+          "Connection successful, but requires CORS to be enabled. Please enable CORS for this model once you add it above."
+        );
+        return true;
+      } catch (error) {
+        console.error("Embedding model ping failed:", error);
+        throw error;
+      }
+    }
   }
 }

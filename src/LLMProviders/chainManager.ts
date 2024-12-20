@@ -20,10 +20,10 @@ import {
   VaultQAChainRunner,
 } from "@/LLMProviders/chainRunner";
 import { HybridRetriever } from "@/search/hybridRetriever";
+import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings, getSystemPrompt, subscribeToSettingsChange } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { findCustomModel, isSupportedChain } from "@/utils";
-import VectorStoreManager from "@/VectorStoreManager";
 import {
   ChatPromptTemplate,
   HumanMessagePromptTemplate,
@@ -56,7 +56,7 @@ export default class ChainManager {
     this.vectorStoreManager = vectorStoreManager;
     this.memoryManager = MemoryManager.getInstance();
     this.chatModelManager = ChatModelManager.getInstance();
-    this.embeddingsManager = this.vectorStoreManager.getEmbeddingsManager();
+    this.embeddingsManager = EmbeddingsManager.getInstance();
     this.promptManager = PromptManager.getInstance();
     this.brevilabsClient = brevilabsClient;
     this.createChainWithNewModel();
@@ -185,10 +185,10 @@ export default class ChainManager {
       }
 
       case ChainType.VAULT_QA_CHAIN: {
-        const { embeddingsAPI, db } = await this.initializeQAChain(options);
+        const { embeddingsAPI } = await this.initializeQAChain(options);
 
         const retriever = new HybridRetriever(
-          db,
+          this.vectorStoreManager.dbOps,
           this.app.vault,
           chatModel,
           embeddingsAPI,
@@ -260,16 +260,7 @@ export default class ChainManager {
       throw new Error("Error getting embeddings API. Please check your settings.");
     }
 
-    let db = this.vectorStoreManager.getDb();
-    if (!db) {
-      console.warn("Copilot index is not loaded. Reinitializing...");
-      // Reinitialize the database since we now have valid embeddings API
-      db = await this.vectorStoreManager.initializeDB();
-
-      if (!db) {
-        throw new Error("Database failed to initialize. Please check your settings.");
-      }
-    }
+    const db = await this.vectorStoreManager.getOrInitializeDb(embeddingsAPI);
 
     // Handle index refresh if needed
     if (options.refreshIndex) {

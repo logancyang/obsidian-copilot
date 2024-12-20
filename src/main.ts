@@ -1,6 +1,6 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ChainManager from "@/LLMProviders/chainManager";
-import VectorStoreManager from "@/VectorStoreManager";
+import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { CustomModel } from "@/aiParams";
 import { parseChatContent, updateChatMemory } from "@/chatUtils";
 import { registerBuiltInCommands } from "@/commands";
@@ -10,12 +10,15 @@ import { AdhocPromptModal } from "@/components/modals/AdhocPromptModal";
 import { ListPromptModal } from "@/components/modals/ListPromptModal";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
+import { RemoveFromIndexModal } from "@/components/modals/RemoveFromIndexModal";
 import { SimilarNotesModal } from "@/components/modals/SimilarNotesModal";
 import { CHAT_VIEWTYPE, CHUNK_SIZE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { encryptAllKeys } from "@/encryptionService";
 import { CustomError } from "@/error";
 import { HybridRetriever } from "@/search/hybridRetriever";
+import { getAllQAMarkdownContent } from "@/search/searchUtils";
+import VectorStoreManager from "@/search/vectorStoreManager";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
 import {
   getSettings,
@@ -67,9 +70,7 @@ export default class CopilotPlugin extends Plugin {
     this.sharedState = new SharedState();
 
     this.vectorStoreManager = new VectorStoreManager(this.app);
-
-    // Initialize event listeners for the VectorStoreManager, e.g. onModify triggers reindexing
-    this.vectorStoreManager.initializeEventListeners();
+    await this.vectorStoreManager.waitForInitialization();
 
     // Initialize BrevilabsClient
     this.brevilabsClient = BrevilabsClient.getInstance();
@@ -94,12 +95,14 @@ export default class CopilotPlugin extends Plugin {
     this.addCommand({
       id: "chat-open-window",
       name: "Open Copilot Chat Window",
-      callback: () => {
+      callback: async () => {
         this.activateView();
+        // Check version
+        await this.checkForUpdates();
       },
     });
 
-    this.addRibbonIcon("message-square", "Copilot Chat", (evt: MouseEvent) => {
+    this.addRibbonIcon("message-square", "Open Copilot Chat", (evt: MouseEvent) => {
       this.activateView();
     });
 
@@ -224,7 +227,7 @@ export default class CopilotPlugin extends Plugin {
                     } catch (err) {
                       console.error(err);
                       if (err instanceof CustomError) {
-                        new Notice(err.msg);
+                        new Notice(err.message);
                       } else {
                         new Notice("An error occurred.");
                       }
@@ -260,7 +263,13 @@ export default class CopilotPlugin extends Plugin {
       id: "garbage-collect-copilot-index",
       name: "Garbage collect Copilot index (remove files that no longer exist in vault)",
       callback: async () => {
-        await this.vectorStoreManager.garbageCollectVectorStore();
+        try {
+          const removedDocs = await this.vectorStoreManager.garbageCollectVectorStore();
+          new Notice(`${removedDocs} documents removed from Copilot index.`);
+        } catch (err) {
+          console.error("Error garbage collecting the Copilot index:", err);
+          new Notice("An error occurred while garbage collecting the Copilot index.");
+        }
       },
     });
 
@@ -285,7 +294,6 @@ export default class CopilotPlugin extends Plugin {
       name: "Force re-index vault for QA",
       callback: async () => {
         try {
-          await this.vectorStoreManager.clearIndex();
           const indexedFileCount = await this.vectorStoreManager.indexVaultToVectorStore(true);
 
           new Notice(`${indexedFileCount} vault files re-indexed to Copilot index.`);
@@ -340,7 +348,7 @@ export default class CopilotPlugin extends Plugin {
             return;
           }
 
-          // Create content for the new file
+          // Create content for the file
           const content = [
             "# Copilot Indexed Files",
             `Total files indexed: ${indexedFiles.length}`,
@@ -349,22 +357,46 @@ export default class CopilotPlugin extends Plugin {
             ...indexedFiles.map((file) => `- [[${file}]]`),
           ].join("\n");
 
-          // Create the file in the vault
+          // Create or update the file in the vault
           const fileName = `Copilot-Indexed-Files-${new Date().toLocaleDateString().replace(/\//g, "-")}.md`;
           const filePath = `${fileName}`;
 
-          await this.app.vault.create(filePath, content);
+          const existingFile = this.app.vault.getAbstractFileByPath(filePath);
+          if (existingFile instanceof TFile) {
+            await this.app.vault.modify(existingFile, content);
+          } else {
+            await this.app.vault.create(filePath, content);
+          }
 
-          // Open the newly created file
-          const createdFile = this.app.vault.getAbstractFileByPath(filePath);
-          if (createdFile instanceof TFile) {
-            await this.app.workspace.getLeaf().openFile(createdFile);
-            new Notice(`Created list of ${indexedFiles.length} indexed files`);
+          // Open the file
+          const file = this.app.vault.getAbstractFileByPath(filePath);
+          if (file instanceof TFile) {
+            await this.app.workspace.getLeaf().openFile(file);
+            new Notice(`Listed ${indexedFiles.length} indexed files`);
           }
         } catch (error) {
           console.error("Error listing indexed files:", error);
           new Notice("Failed to list indexed files.");
         }
+      },
+    });
+
+    this.addCommand({
+      id: "remove-files-from-copilot-index",
+      name: "Remove files from Copilot index",
+      callback: async () => {
+        new RemoveFromIndexModal(this.app, async (filePaths: string[]) => {
+          try {
+            for (const path of filePaths) {
+              await this.vectorStoreManager.dbOps.removeDocs(path);
+            }
+            await this.vectorStoreManager.dbOps.saveDB();
+            new Notice(`Successfully removed ${filePaths.length} files from the index.`);
+          } catch (err) {
+            console.error("Error removing files from index:", err);
+            new Notice("An error occurred while removing files from the index.");
+          }
+        }).open();
       },
     });
 
@@ -531,7 +563,7 @@ export default class CopilotPlugin extends Plugin {
 
   async countTotalTokens(): Promise<number> {
     try {
-      const allContent = await this.vectorStoreManager.getAllQAMarkdownContent();
+      const allContent = await getAllQAMarkdownContent(this.app);
       const totalTokens = await this.chainManager.chatModelManager.countTokens(allContent);
       return totalTokens;
     } catch (error) {
@@ -598,10 +630,11 @@ export default class CopilotPlugin extends Plugin {
     // Wait for the VectorStoreManager to initialize
     await this.vectorStoreManager.waitForInitialization();
 
-    const db = this.vectorStoreManager.getDb();
-    if (!db) {
-      throw new CustomError("Orama database not found.");
+    const embeddingsAPI = EmbeddingsManager.getInstance().getEmbeddingsAPI();
+    if (!embeddingsAPI) {
+      throw new CustomError("Embeddings API not found.");
     }
+    const db = await this.vectorStoreManager.getOrInitializeDb(embeddingsAPI);
 
     // Check if the index is empty
     const singleDoc = await search(db, {
@@ -616,10 +649,10 @@ export default class CopilotPlugin extends Plugin {
     }
 
     const hybridRetriever = new HybridRetriever(
-      db,
+      this.vectorStoreManager.dbOps,
       this.app.vault,
       this.chainManager.chatModelManager.getChatModel(),
-      this.vectorStoreManager.getEmbeddingsManager().getEmbeddingsAPI() as Embeddings,
+      embeddingsAPI as Embeddings,
       this.chainManager.brevilabsClient,
       {
         minSimilarityScore: 0.3,
@@ -644,15 +677,16 @@ export default class CopilotPlugin extends Plugin {
 
   async customSearchDB(query: string, salientTerms: string[], textWeight: number): Promise<any[]> {
     await this.vectorStoreManager.waitForInitialization();
-    const db = this.vectorStoreManager.getDb();
-    if (!db) {
-      throw new CustomError("Orama database not found.");
+    const embeddingsAPI = EmbeddingsManager.getInstance().getEmbeddingsAPI();
+    if (!embeddingsAPI) {
+      throw new CustomError("Embeddings API not found.");
     }
+
     const hybridRetriever = new HybridRetriever(
-      db,
+      this.vectorStoreManager.dbOps,
       this.app.vault,
       this.chainManager.chatModelManager.getChatModel(),
-      this.vectorStoreManager.getEmbeddingsManager().getEmbeddingsAPI() as Embeddings,
+      embeddingsAPI as Embeddings,
       this.chainManager.brevilabsClient,
       {
         minSimilarityScore: 0.3,
@@ -680,7 +714,7 @@ export default class CopilotPlugin extends Plugin {
       const latestVersion = response.json.tag_name.replace("v", "");
       if (this.isNewerVersion(latestVersion, this.manifest.version)) {
         new Notice(
-          `A new version (${latestVersion}) of Obsidian Copilot is available. You are currently on version ${this.manifest.version}. Please update to the latest version.`,
+          `A newer version (${latestVersion}) of Obsidian Copilot is available. You are currently on version ${this.manifest.version}. Please update to the latest version.`,
           10000
         );
       }

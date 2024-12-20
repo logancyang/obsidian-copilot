@@ -642,6 +642,8 @@ ${chatContent}`;
             clearMessages();
             chainManager.memoryManager.clearChatMemory();
             clearCurrentAiMessage();
+            setContextNotes([]);
+            setIncludeActiveNote(false);
           }}
           onSaveAsNote={() => handleSaveAsNote(true)}
           onRefreshVaultContext={refreshVaultContext}

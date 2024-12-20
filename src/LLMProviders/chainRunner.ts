@@ -302,6 +302,11 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       content,
     });
 
+    // Add debug logging for final request
+    if (debug) {
+      console.log("==== Final Request to AI ====\n", messages);
+    }
+
     let fullAIResponse = "";
     const chatStream = await this.chainManager.chatModelManager.getChatModel().stream(messages);
 
@@ -422,12 +427,18 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         const timeExpression = this.getTimeExpression(toolCalls);
         const context = this.formatLocalSearchResult(documents, timeExpression);
 
+        const currentTimeOutputs = toolOutputs.filter((output) => output.tool === "getCurrentTime");
+        const enhancedQuestion = this.prepareEnhancedUserMessage(
+          standaloneQuestion,
+          currentTimeOutputs
+        );
+
         if (debug) console.log(context);
         if (debug) console.log("==== Step 5: Invoking QA Chain ====");
         const qaPrompt = await this.chainManager.promptManager.getQAPrompt({
-          question: standaloneQuestion,
+          question: enhancedQuestion,
           context: context,
-          systemMessage: getSystemPrompt(),
+          systemMessage: "", // System prompt is added separately in streamMultimodalResponse
         });
 
         fullAIResponse = await this.streamMultimodalResponse(

@@ -1,6 +1,8 @@
 import { CustomModel } from "@/aiParams";
-import { Notice } from "obsidian";
-import React, { useState, useEffect } from "react";
+import ChatModelManager from "@/LLMProviders/chatModelManager";
+import EmbeddingManager from "@/LLMProviders/embeddingManager";
+import { App, Notice } from "obsidian";
+import React, { useEffect, useState } from "react";
 
 type DropdownComponentProps = {
   name: string;
@@ -267,6 +269,7 @@ const ModelCard: React.FC<{
 };
 
 interface ModelSettingsComponentProps {
+  app: App;
   activeModels: Array<CustomModel>;
   onUpdateModels: (models: Array<CustomModel>) => void;
   providers: string[];
@@ -277,6 +280,7 @@ interface ModelSettingsComponentProps {
 }
 
 const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
+  app,
   activeModels,
   onUpdateModels,
   providers,
@@ -297,6 +301,7 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
   };
   const [newModel, setNewModel] = useState(emptyModel);
   const [isAddModelOpen, setIsAddModelOpen] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const getModelKey = (model: CustomModel) => `${model.name}|${model.provider}`;
 
@@ -311,7 +316,30 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
   };
 
   const handleSetDefaultModel = (model: CustomModel) => {
-    onSetDefaultModelKey(getModelKey(model));
+    const modelKey = getModelKey(model);
+    onSetDefaultModelKey(modelKey);
+  };
+
+  const handleVerifyModel = async () => {
+    if (!newModel.name || !newModel.provider) {
+      new Notice("Please fill in necessary fields!");
+      return;
+    }
+
+    setIsVerifying(true);
+    try {
+      if (isEmbeddingModel) {
+        await EmbeddingManager.getInstance().ping(newModel);
+      } else {
+        await ChatModelManager.getInstance().ping(newModel);
+      }
+      new Notice("Model connection verified successfully!");
+    } catch (error) {
+      console.error("Model verification failed:", error);
+      new Notice(`Model verification failed: ${error.message}`);
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   return (
@@ -443,9 +471,49 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
               type="password"
               onChange={(value) => setNewModel({ ...newModel, apiKey: value })}
             />
-            <button onClick={handleAddModel} className="add-model-button">
-              Add Model
-            </button>
+            <div style={{ marginTop: "20px" }}>
+              <div
+                style={{
+                  marginBottom: "10px",
+                  color: "var(--text-muted)",
+                  fontSize: "0.9em",
+                }}
+              >
+                Verify the connection before adding the model to ensure it's properly configured and
+                accessible.
+              </div>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  onClick={handleVerifyModel}
+                  style={{
+                    backgroundColor: "var(--interactive-accent)",
+                    color: "var(--text-on-accent)",
+                    padding: "8px 16px",
+                    borderRadius: "4px",
+                    cursor: isVerifying ? "not-allowed" : "pointer",
+                    border: "none",
+                    opacity: isVerifying ? 0.6 : 1,
+                  }}
+                  disabled={isVerifying}
+                >
+                  {isVerifying ? "Verifying..." : "Verify Connection"}
+                </button>
+                <button
+                  onClick={handleAddModel}
+                  style={{
+                    backgroundColor: "var(--interactive-accent)",
+                    color: "var(--text-on-accent)",
+                    padding: "8px 16px",
+                    borderRadius: "4px",
+                    cursor: isVerifying ? "not-allowed" : "pointer",
+                    opacity: isVerifying ? 0.6 : 1,
+                  }}
+                  disabled={isVerifying}
+                >
+                  Add Model
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

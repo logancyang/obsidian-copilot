@@ -41,6 +41,32 @@ const getCurrentTimeTool = tool(async () => getCurrentTime(), {
   schema: z.object({}), // No input required
 });
 
+const monthNames = {
+  jan: 1,
+  january: 1,
+  feb: 2,
+  february: 2,
+  mar: 3,
+  march: 3,
+  apr: 4,
+  april: 4,
+  may: 5,
+  jun: 6,
+  june: 6,
+  jul: 7,
+  july: 7,
+  aug: 8,
+  august: 8,
+  sep: 9,
+  september: 9,
+  oct: 10,
+  october: 10,
+  nov: 11,
+  november: 11,
+  dec: 12,
+  december: 12,
+} as const;
+
 function getTimeRangeMs(timeExpression: string):
   | {
       startTime: TimeInfo;
@@ -51,38 +77,109 @@ function getTimeRangeMs(timeExpression: string):
   let start: DateTime;
   let end: DateTime;
 
-  // Add handling for single month names
-  const monthNames = {
-    jan: 1,
-    january: 1,
-    feb: 2,
-    february: 2,
-    mar: 3,
-    march: 3,
-    apr: 4,
-    april: 4,
-    may: 5,
-    jun: 6,
-    june: 6,
-    jul: 7,
-    july: 7,
-    aug: 8,
-    august: 8,
-    sep: 9,
-    september: 9,
-    oct: 10,
-    october: 10,
-    nov: 11,
-    november: 11,
-    dec: 12,
-    december: 12,
-  };
+  const normalizedInput = timeExpression.toLowerCase().replace("@vault", "").trim();
 
-  const normalizedInput = timeExpression.toLowerCase().trim();
+  // Handle special cases first
+  switch (normalizedInput) {
+    case "yesterday":
+      start = now.minus({ days: 1 }).startOf("day");
+      end = now.minus({ days: 1 }).endOf("day");
+      return {
+        startTime: convertToTimeInfo(start),
+        endTime: convertToTimeInfo(end),
+      };
+    case "last week":
+      start = now.minus({ weeks: 1 }).startOf("week");
+      end = now.minus({ weeks: 1 }).endOf("week");
+      return {
+        startTime: convertToTimeInfo(start),
+        endTime: convertToTimeInfo(end),
+      };
+    case "this week":
+      start = now.startOf("week");
+      end = now.endOf("week");
+      return {
+        startTime: convertToTimeInfo(start),
+        endTime: convertToTimeInfo(end),
+      };
+    case "next week":
+      start = now.plus({ weeks: 1 }).startOf("week");
+      end = now.plus({ weeks: 1 }).endOf("week");
+      return {
+        startTime: convertToTimeInfo(start),
+        endTime: convertToTimeInfo(end),
+      };
+    case "last month":
+      start = now.minus({ months: 1 }).startOf("month");
+      end = now.minus({ months: 1 }).endOf("month");
+      return {
+        startTime: convertToTimeInfo(start),
+        endTime: convertToTimeInfo(end),
+      };
+    case "this month":
+      start = now.startOf("month");
+      end = now.endOf("month");
+      return {
+        startTime: convertToTimeInfo(start),
+        endTime: convertToTimeInfo(end),
+      };
+    case "next month":
+      start = now.plus({ months: 1 }).startOf("month");
+      end = now.plus({ months: 1 }).endOf("month");
+      return {
+        startTime: convertToTimeInfo(start),
+        endTime: convertToTimeInfo(end),
+      };
+    case "last year":
+      start = now.minus({ years: 1 }).startOf("year");
+      end = now.minus({ years: 1 }).endOf("year");
+      return {
+        startTime: convertToTimeInfo(start),
+        endTime: convertToTimeInfo(end),
+      };
+    case "this year":
+      start = now.startOf("year");
+      end = now.endOf("year");
+      return {
+        startTime: convertToTimeInfo(start),
+        endTime: convertToTimeInfo(end),
+      };
+    case "next year":
+      start = now.plus({ years: 1 }).startOf("year");
+      end = now.plus({ years: 1 }).endOf("year");
+      return {
+        startTime: convertToTimeInfo(start),
+        endTime: convertToTimeInfo(end),
+      };
+  }
+
+  // Check for "week of" pattern first
+  const weekOfMatch = normalizedInput.match(/(?:the\s+)?week\s+of\s+(.+)/i);
+  if (weekOfMatch) {
+    const dateStr = weekOfMatch[1];
+    const parsedDates = chrono.parse(dateStr, now.toJSDate(), { forwardDate: false });
+    if (parsedDates.length > 0) {
+      start = DateTime.fromJSDate(parsedDates[0].start.date()).startOf("week");
+      end = start.endOf("week");
+
+      if (start > now) {
+        start = start.minus({ years: 1 });
+        end = end.minus({ years: 1 });
+      }
+
+      return {
+        startTime: convertToTimeInfo(start),
+        endTime: convertToTimeInfo(end),
+      };
+    }
+  }
 
   // Check if input is just a month name
-  if (monthNames[normalizedInput as keyof typeof monthNames]) {
-    const monthNum = monthNames[normalizedInput as keyof typeof monthNames];
+  const monthMatch = normalizedInput.match(
+    /^(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|september|oct|october|nov|november|dec|december)$/i
+  );
+  if (monthMatch) {
+    const monthNum = monthNames[monthMatch[1] as keyof typeof monthNames];
     let year = now.year;
 
     // If the month is in the future, use last year
@@ -90,72 +187,50 @@ function getTimeRangeMs(timeExpression: string):
       year--;
     }
 
-    start = DateTime.fromObject({ year, month: monthNum }).startOf("month");
-    end = start.endOf("month");
-  } else {
-    // Original switch case and chrono parsing logic remains the same
-    switch (normalizedInput) {
-      case "yesterday":
-        start = now.minus({ days: 1 }).startOf("day");
-        end = now.minus({ days: 1 }).endOf("day");
-        break;
-      case "last week":
-        start = now.minus({ weeks: 1 }).startOf("week");
-        end = now.minus({ weeks: 1 }).endOf("week");
-        break;
-      case "this week":
-        start = now.startOf("week");
-        end = now.endOf("week");
-        break;
-      case "next week":
-        start = now.plus({ weeks: 1 }).startOf("week");
-        end = now.plus({ weeks: 1 }).endOf("week");
-        break;
-      case "last month":
-        start = now.minus({ months: 1 }).startOf("month");
-        end = now.minus({ months: 1 }).endOf("month");
-        break;
-      case "this month":
-        start = now.startOf("month");
-        end = now.endOf("month");
-        break;
-      case "next month":
-        start = now.plus({ months: 1 }).startOf("month");
-        end = now.plus({ months: 1 }).endOf("month");
-        break;
-      case "last year":
-        start = now.minus({ years: 1 }).startOf("year");
-        end = now.minus({ years: 1 }).endOf("year");
-        break;
-      case "this year":
-        start = now.startOf("year");
-        end = now.endOf("year");
-        break;
-      case "next year":
-        start = now.plus({ years: 1 }).startOf("year");
-        end = now.plus({ years: 1 }).endOf("year");
-        break;
-      default: {
-        // Use Chrono.js for more complex expressions
-        const parsedDates = chrono.parse(timeExpression, now.toJSDate(), { forwardDate: false });
-        if (parsedDates.length > 0) {
-          start = DateTime.fromJSDate(parsedDates[0].start.date());
-          end = parsedDates[0].end
-            ? DateTime.fromJSDate(parsedDates[0].end.date())
-            : start.endOf("month"); // Default to end of month if no end date is specified
+    // Create start and end dates for the entire month
+    start = DateTime.fromObject({
+      year,
+      month: monthNum,
+      day: 1,
+    });
 
-          // If the parsed date is in the future, adjust it to the previous occurrence
-          if (start > now) {
-            start = start.minus({ years: 1 });
-            end = end.minus({ years: 1 });
-          }
-        } else {
-          console.warn(`Unable to parse time expression: ${timeExpression}`);
-          return;
-        }
-        break;
-      }
+    end = start.endOf("month");
+
+    if (start > now) {
+      start = start.minus({ years: 1 });
+      end = end.minus({ years: 1 });
     }
+
+    if (start > end) {
+      [start, end] = [end, start];
+    }
+
+    return {
+      startTime: convertToTimeInfo(start),
+      endTime: convertToTimeInfo(end),
+    };
+  }
+
+  // Use Chrono.js for parsing dates
+  timeExpression = timeExpression.replace("@vault", "");
+  const parsedDates = chrono.parse(timeExpression, now.toJSDate(), { forwardDate: false });
+  if (parsedDates.length > 0) {
+    // Convert to DateTime while preserving the local timezone
+    start = DateTime.fromJSDate(parsedDates[0].start.date()).startOf("day");
+
+    // If no end date is specified, use the same day as end date
+    end = parsedDates[0].end
+      ? DateTime.fromJSDate(parsedDates[0].end.date()).endOf("day")
+      : start.endOf("day");
+
+    // If the parsed date is in the future, adjust it to the previous occurrence
+    if (start > now) {
+      start = start.minus({ years: 1 });
+      end = end.minus({ years: 1 });
+    }
+  } else {
+    console.warn(`Unable to parse time expression: ${timeExpression}`);
+    return;
   }
 
   return {

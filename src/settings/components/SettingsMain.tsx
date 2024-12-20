@@ -27,7 +27,7 @@ const SettingsMain: React.FC<SettingsMainProps> = ({ plugin }) => {
       <CopilotPlusSettings />
       <GeneralSettings />
       <ApiSettings />
-      <QASettings />
+      <QASettings vectorStoreManager={plugin.vectorStoreManager} />
       <AdvancedSettings />
     </div>
   );

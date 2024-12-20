@@ -1,14 +1,14 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { extractNoteTitles, getNoteFileFromTitle } from "@/utils";
-import VectorDBManager from "@/vectorDBManager";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
 import { Embeddings } from "@langchain/core/embeddings";
 import { BaseLanguageModel } from "@langchain/core/language_models/base";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { BaseRetriever } from "@langchain/core/retrievers";
-import { Orama, search } from "@orama/orama";
+import { search } from "@orama/orama";
 import { Vault } from "obsidian";
+import { DBOperations } from "./dbOperations";
 
 export class HybridRetriever extends BaseRetriever {
   public lc_namespace = ["hybrid_retriever"];
@@ -19,7 +19,7 @@ export class HybridRetriever extends BaseRetriever {
   private brevilabsClient: BrevilabsClient;
 
   constructor(
-    private db: Orama<any>,
+    private dbOps: DBOperations,
     private vault: Vault,
     llm: BaseLanguageModel,
     embeddingsInstance: Embeddings,
@@ -28,7 +28,7 @@ export class HybridRetriever extends BaseRetriever {
       minSimilarityScore: number;
       maxK: number;
       salientTerms: string[];
-      timeRange?: { startDate: string; endDate: string }; // ISO 8601 format in local timezone
+      timeRange?: { startTime: number; endTime: number };
       textWeight?: number;
       returnAll?: boolean;
       useRerankerThreshold?: number;
@@ -141,7 +141,11 @@ export class HybridRetriever extends BaseRetriever {
     const explicitChunks: Document[] = [];
     for (const noteTitle of noteTitles) {
       const noteFile = await getNoteFileFromTitle(this.vault, noteTitle);
-      const hits = await VectorDBManager.getDocsByPath(this.db, noteFile?.path ?? "");
+      const db = this.dbOps.getDb();
+      if (!db) {
+        throw new Error("Database not initialized");
+      }
+      const hits = await DBOperations.getDocsByPath(db, noteFile?.path ?? "");
       if (hits) {
         const matchingChunks = hits.map(
           (hit: any) =>
@@ -187,6 +191,11 @@ export class HybridRetriever extends BaseRetriever {
         query
       );
       throw error;
+    }
+
+    const db = this.dbOps.getDb();
+    if (!db) {
+      throw new Error("Database not initialized");
     }
 
     const searchParams: any = {
@@ -240,11 +249,17 @@ export class HybridRetriever extends BaseRetriever {
 
     // Add time range filter if provided
     if (this.options.timeRange) {
-      const { startDate, endDate } = this.options.timeRange;
-      const startTimestamp = new Date(startDate).getTime();
-      const endTimestamp = new Date(endDate).getTime();
+      const { startTime, endTime } = this.options.timeRange;
 
-      const dateRange = this.generateDateRange(startDate, endDate);
+      const dateRange = this.generateDateRange(startTime, endTime);
+
+      if (this.debug) {
+        console.log(
+          "==== Daily note date range: ====",
+          dateRange[0],
+          dateRange[dateRange.length - 1]
+        );
+      }
 
       // Perform the first search with title filter
       const dailyNoteResults = await this.getExplicitChunks(dateRange);
@@ -258,13 +273,17 @@ export class HybridRetriever extends BaseRetriever {
         },
       }));
 
+      if (this.debug) {
+        console.log("==== Modified and created time range: ====", startTime, endTime);
+      }
+
       // Perform a second search with time range filters
       searchParams.where = {
-        ctime: { between: [startTimestamp, endTimestamp] },
-        mtime: { between: [startTimestamp, endTimestamp] },
+        ctime: { between: [startTime, endTime] },
+        mtime: { between: [startTime, endTime] },
       };
 
-      const timeIntervalResults = await search(this.db, searchParams);
+      const timeIntervalResults = await search(db, searchParams);
 
       // Convert timeIntervalResults to Document objects
       const timeIntervalDocuments = timeIntervalResults.hits.map(
@@ -297,7 +316,7 @@ export class HybridRetriever extends BaseRetriever {
       return uniqueResults.filter((doc): doc is Document => doc !== undefined);
     }
 
-    const searchResults = await search(this.db, searchParams);
+    const searchResults = await search(db, searchParams);
 
     // Convert Orama search results to Document objects
     return searchResults.hits.map(
@@ -326,14 +345,15 @@ export class HybridRetriever extends BaseRetriever {
     return await this.embeddingsInstance.embedQuery(query);
   }
 
-  private generateDateRange(startDate: string, endDate: string): string[] {
+  private generateDateRange(startTime: number, endTime: number): string[] {
     const dateRange: string[] = [];
-    const currentDate = new Date(startDate);
-    const end = new Date(endDate);
+    const start = new Date(startTime);
+    const end = new Date(endTime);
 
-    while (currentDate <= end) {
-      dateRange.push(`${currentDate.toISOString().split("T")[0]}`);
-      currentDate.setDate(currentDate.getDate() + 1);
+    const current = new Date(start);
+    while (current <= end) {
+      dateRange.push(current.toLocaleDateString("en-CA"));
+      current.setDate(current.getDate() + 1);
     }
 
     return dateRange;
