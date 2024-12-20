@@ -1,4 +1,4 @@
-import { CustomModel } from "@/aiParams";
+import { CustomModel, ModelConfig } from "@/aiParams";
 import { atom, createStore, useAtomValue } from "jotai";
 
 import { type ChainType } from "@/chainFactory";
@@ -58,6 +58,8 @@ export interface CopilotSettings {
   disableIndexOnMobile: boolean;
   showSuggestedPrompts: boolean;
   numPartitions: number;
+  modelConfigs: Record<string, ModelConfig>;
+  maxCompletionTokens?: number;
 }
 
 export const settingsStore = createStore();

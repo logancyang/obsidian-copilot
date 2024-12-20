@@ -113,7 +113,7 @@ export default class ChatModelManager {
         azureOpenAIApiKey: getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
         azureOpenAIApiInstanceName: settings.azureOpenAIApiInstanceName,
         azureOpenAIApiDeploymentName: settings.azureOpenAIApiDeploymentName,
-        azureOpenAIApiVersion: settings.azureOpenAIApiVersion,
+        azureOpenAIApiVersion: isO1Model ? "2024-09-01-preview" : settings.azureOpenAIApiVersion,
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -194,10 +194,15 @@ export default class ChatModelManager {
   }
 
   private handleOpenAIExtraArgs(isO1Model: boolean, maxTokens: number, temperature: number) {
+    const settings = getSettings();
+    const modelConfig = settings.modelConfigs[getModelKey()] || {};
+    const { maxCompletionTokens, reasoningEffort } = modelConfig;
+
     return isO1Model
       ? {
-          maxCompletionTokens: maxTokens,
+          maxCompletionTokens: maxCompletionTokens || maxTokens,
           temperature: 1,
+          reasoningEffort: reasoningEffort || "default",
         }
       : {
           maxTokens: maxTokens,

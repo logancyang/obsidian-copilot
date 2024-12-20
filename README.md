@@ -170,3 +170,15 @@ If you share my vision, please consider [sponsoring this project](https://github
 Please also help spread the word by sharing about the Copilot for Obsidian Plugin on Twitter/X, Reddit, or any other social media platform you use.
 
 You can find me on Twitter/X [@logancyang](https://twitter.com/logancyang).
+
+## Configuring Settings for `o1-preview` Deployments
+
+To configure settings for `o1-preview` deployments, follow these steps:
+
+1. **Max Completion Tokens**: Set the maximum number of tokens for completions.
+2. **Reasoning Effort**: Set the reasoning effort for the `o1` model.
+
+### Limitations
+
+- System messages are not supported for `o1-preview` models.
+- The deployment name set in Azure must be used in settings.
