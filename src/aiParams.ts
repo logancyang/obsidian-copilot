@@ -73,6 +73,17 @@ export interface CustomModel {
   isBuiltIn?: boolean;
   enableCors?: boolean;
   core?: boolean;
+  stream?: boolean;
+  temperature?: number;
+  context?: number;
+  // OpenAI specific fields
+  openAIOrgId?: string;
+
+  // Azure OpenAI specific fields
+  azureOpenAIApiInstanceName?: string;
+  azureOpenAIApiDeploymentName?: string;
+  azureOpenAIApiVersion?: string;
+  azureOpenAIApiEmbeddingDeploymentName?: string;
 }
 
 export function setModelKey(modelKey: string) {
