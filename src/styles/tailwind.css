@@ -1,3 +1,110 @@
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+@layer base {
+  body {
+    /* preDefine CSS variables in Obsidian.(https://docs.obsidian.md/Reference/CSS+variables/Foundations/Colors) */
+    /*Primary background*/
+    --ob-bg-primary: var(--background-primary);
+    /*Background for surfaces on top of primary background*/
+    --ob-bg-primary-alt: var(--background-primary-alt);
+
+    /*Secondary background*/
+    --ob-bg-secondary: var(--background-secondary);
+    /*Background for surfaces on top of secondary background*/
+    --ob-bg-secondary-alt: var(--background-secondary-alt);
+
+    /* Hovered elements */
+    --ob-bg-modifier-hover: var(--background-modifier-hover);
+    /*Active hovered elements*/
+    --ob-bg-modifier-active-hover: var(--background-modifier-active-hover);
+
+    /*Border color*/
+    --ob-bg-modifier-border: var(--background-modifier-border);
+    /*Border color (hover)*/
+    --ob-bg-modifier-border-hover: var(--background-modifier-border-hover);
+    /*Border color (focus)*/
+    --ob-bg-modifier-border-focus: var(--background-modifier-border-focus);
+
+    /*Error background, RGB value*/
+    --ob-bg-modifier-error-rgb: var(--background-modifier-error-rgb);
+    /*Error background*/
+    --ob-bg-modifier-error: var(--background-modifier-error);
+    /*Error background (hover)*/
+    --ob-bg-modifier-error-hover: var(--background-modifier-error-hover);
+
+    /*Success background, RGB value*/
+    --ob-bg-modifier-success-rgb: var(--background-modifier-success-rgb);
+    /*Success background*/
+    --ob-bg-modifier-success: var(--background-modifier-success);
+
+    /*Messages background*/
+    --ob-bg-modifier-message: var(--background-modifier-message);
+
+    /*Form field background*/
+    --ob-bg-modifier-form-field: var(--background-modifier-form-field);
+
+    /*Interactive colors*/
+    --ob-interactive-normal: var(
+      --interactive-normal
+    ); /* Background for standard interactive elements */
+    --ob-interactive-hover: var(
+      --interactive-hover
+    ); /*Background for standard interactive elements (hover)*/
+    --ob-interactive-accent: var(
+      --interactive-accent
+    ); /*Background for accented interactive elements*/
+    --ob-interactive-accent-hsl: var(
+      --interactive-accent-hsl
+    ); /* Background for accented interactive elements in HSL */
+    --ob-interactive-accent-hover: var(
+      --interactive-accent-hover
+    ); /*Background for accented interactive elements (hover)*/
+
+    /*Text foreground colors*/
+    --ob-text-normal: var(--text-normal); /*Normal text*/
+    --ob-text-muted: var(--text-muted); /*Muted text*/
+    --ob-text-faint: var(--text-faint); /*Faint text*/
+    --ob-text-on-accent: var(--text-on-accent); /*Text on accent background when accent is dark*/
+    --ob-text-on-accent-inverted: var(
+      --text-on-accent-inverted
+    ); /*Text on accent background when accent is light*/
+    --ob-text-success: var(--text-success); /*Success text*/
+    --ob-text-warning: var(--text-warning); /*Error text*/
+    --ob-text-error: var(--text-error); /*Error text*/
+    --ob-text-accent: var(--text-accent); /*Accent text*/
+    --ob-text-accent-hover: var(--text-accent-hover); /*Accent text (hover)*/
+
+    /*Text background colors*/
+    --ob-text-selection: var(--text-selection); /*Selected text background*/
+    --ob-text-highlight-bg: var(--text-highlight-bg); /*Highlighted text background*/
+  }
+}
+
+/* this layer for overwrite Obsidian default css style(file: app.css) and theme css style */
+@layer components {
+  .modal-container input.input-reset,
+  input[type="text"].input-reset,
+  input[type="password"].input-reset,
+  input[type="number"].input-reset {
+    @apply h-9 !min-w-[50px] border border-solid rounded-md bg-transparent px-3 py-1 text-base md:text-sm shadow-sm transition-colors;
+    @apply focus-visible:shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring;
+  }
+
+  .modal-container button.select-trigger-reset {
+    @apply h-9 border border-solid rounded-md bg-transparent px-3 py-1 text-base md:text-sm shadow-sm transition-colors;
+    @apply focus-visible:shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring;
+    @apply hover:data-[state=closed]:bg-accent hover:data-[state=closed]:text-accent-foreground;
+  }
+
+  .modal-container button.checkbox-reset {
+    @apply h-4 w-4 shrink-0 p-0 rounded-sm border border-solid bg-transparent shadow transition-colors;
+    @apply hover:bg-primary hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring;
+    @apply disabled:cursor-not-allowed disabled:opacity-50;
+    @apply data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground;
+  }
+}
 /*
 
 This CSS file will be included with your plugin, and
