@@ -2,9 +2,23 @@ import { updateSetting, useSettingsValue } from "@/settings/model";
 import React from "react";
 import ApiSetting from "./ApiSetting";
 import Collapsible from "./Collapsible";
+import { getModelKey, updateModelConfig } from "@/aiParams";
 
 const ApiSettings: React.FC = () => {
   const settings = useSettingsValue();
+  const selectedModelKey = getModelKey();
+
+  const handleMaxCompletionTokensChange = (value: string) => {
+    const maxCompletionTokens = parseInt(value, 10);
+    if (!isNaN(maxCompletionTokens)) {
+      updateModelConfig(selectedModelKey, { maxCompletionTokens });
+    }
+  };
+
+  const handleReasoningEffortChange = (value: string) => {
+    updateModelConfig(selectedModelKey, { reasoningEffort: value });
+  };
+
   return (
     <div>
       <h1>API Settings</h1>
@@ -200,6 +214,25 @@ const ApiSettings: React.FC = () => {
           </a>
         </p>
       </Collapsible>
+
+      {selectedModelKey.startsWith("o1") && (
+        <div>
+          <ApiSetting
+            title="Max Completion Tokens"
+            value={settings.modelConfigs[selectedModelKey]?.maxCompletionTokens?.toString() || ""}
+            setValue={handleMaxCompletionTokensChange}
+            placeholder="Enter Max Completion Tokens"
+            type="number"
+          />
+          <ApiSetting
+            title="Reasoning Effort"
+            value={settings.modelConfigs[selectedModelKey]?.reasoningEffort || ""}
+            setValue={handleReasoningEffortChange}
+            placeholder="Enter Reasoning Effort"
+            type="text"
+          />
+        </div>
+      )}
     </div>
   );
 };

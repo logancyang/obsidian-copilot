@@ -1,6 +1,7 @@
 import { ChainType } from "@/chainFactory";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
+import merge from "lodash.merge";
 
 import { atom, useAtom } from "jotai";
 import { settingsAtom, settingsStore } from "@/settings/model";
@@ -53,6 +54,8 @@ export interface ModelConfig {
   openAIProxyBaseUrl?: string;
   groqApiKey?: string;
   enableCors?: boolean;
+  maxCompletionTokens?: number;
+  reasoningEffort?: string;
 }
 
 export interface SetChainOptions {
@@ -109,4 +112,12 @@ export function useChainType() {
   return useAtom(chainTypeAtom, {
     store: settingsStore,
   });
+}
+
+export function updateModelConfig(modelKey: string, newConfig: Partial<ModelConfig>) {
+  const settings = settingsStore.get(settingsAtom);
+  const currentConfig = settings.modelConfigs[modelKey] || {};
+  const mergedConfig = merge({}, currentConfig, newConfig);
+  settings.modelConfigs[modelKey] = mergedConfig;
+  settingsStore.set(settingsAtom, settings);
 }
