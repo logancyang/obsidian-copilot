@@ -452,7 +452,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                 <ChevronUp size={10} />
               </DropdownMenu.Trigger>
 
-              <DropdownMenu.Portal>
+              <DropdownMenu.Portal container={activeDocument.body}>
                 <DropdownMenu.Content className="model-select-content" align="start">
                   {settings.activeModels
                     .filter((model) => model.enabled)

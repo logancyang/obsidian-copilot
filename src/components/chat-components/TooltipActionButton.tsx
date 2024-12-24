@@ -15,7 +15,7 @@ export function TooltipActionButton({ onClick, Icon, children }: PropsWithChildr
           {Icon}
         </button>
       </Tooltip.Trigger>
-      <Tooltip.Portal>
+      <Tooltip.Portal container={activeDocument.body}>
         <Tooltip.Content sideOffset={5} className="tooltip-text">
           {children}
         </Tooltip.Content>
