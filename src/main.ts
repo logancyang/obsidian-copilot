@@ -343,18 +343,49 @@ export default class CopilotPlugin extends Plugin {
       callback: async () => {
         try {
           const indexedFiles = await this.vectorStoreManager.getIndexedFiles();
-          if (indexedFiles.length === 0) {
-            new Notice("No indexed files found.");
+          const indexedFilePaths = new Set(indexedFiles);
+          const allMarkdownFiles = this.app.vault.getMarkdownFiles();
+          const emptyFiles = new Set<string>();
+          const unindexedFiles = new Set<string>();
+
+          // Categorize files
+          for (const file of allMarkdownFiles) {
+            const content = await this.app.vault.cachedRead(file);
+            if (!content || content.trim().length === 0) {
+              emptyFiles.add(file.path);
+            } else if (!indexedFilePaths.has(file.path)) {
+              unindexedFiles.add(file.path);
+            }
+          }
+
+          if (indexedFiles.length === 0 && emptyFiles.size === 0 && unindexedFiles.size === 0) {
+            new Notice("No files found to list.");
             return;
           }
 
           // Create content for the file
           const content = [
-            "# Copilot Indexed Files",
-            `Total files indexed: ${indexedFiles.length}`,
+            "# Copilot Files Status",
+            `- Indexed files: ${indexedFiles.length}`,
+            `- Unindexed files: ${unindexedFiles.size}`,
+            `- Empty files: ${emptyFiles.size}`,
             "",
-            "## Files",
+            "## Indexed Files",
             ...indexedFiles.map((file) => `- [[${file}]]`),
+            "",
+            "## Unindexed Files",
+            ...(unindexedFiles.size > 0
+              ? Array.from(unindexedFiles)
+                  .sort()
+                  .map((file) => `- [[${file}]]`)
+              : ["No unindexed files found."]),
+            "",
+            "## Empty Files",
+            ...(emptyFiles.size > 0
+              ? Array.from(emptyFiles)
+                  .sort()
+                  .map((file) => `- [[${file}]]`)
+              : ["No empty files found."]),
           ].join("\n");
 
           // Create or update the file in the vault
