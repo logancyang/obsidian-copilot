@@ -139,7 +139,24 @@ const QASettings: React.FC<QASettingsProps> = ({ vectorStoreManager }) => {
         description="Number of partitions for Copilot index. Default is 1. Increase if you have issues indexing large vaults. Warning: Changes require clearing and rebuilding the index!"
         value={settings.numPartitions.toString()}
         onChange={handlePartitionsChange}
-        options={["1", "2", "3", "4", "5", "6", "7", "8"]}
+        options={[
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "12",
+          "16",
+          "20",
+          "24",
+          "28",
+          "32",
+          "36",
+          "40",
+        ]}
       />
       <TextAreaComponent
         name="Exclusions"

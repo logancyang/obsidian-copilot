@@ -249,28 +249,33 @@ export class IndexOperations {
     // Get all markdown files that should be indexed under current rules
     const allMarkdownFiles = this.app.vault.getMarkdownFiles();
     const filesToIndex = new Set<TFile>();
+    const emptyFiles = new Set<string>();
 
     for (const file of allMarkdownFiles) {
-      // Always skip excluded files
+      // Skip excluded files
       if (excludedFiles.has(file.path)) {
         continue;
       }
 
-      const shouldBeIndexed = includedFiles.size === 0 || includedFiles.has(file.path);
+      // Check actual content
+      const content = await this.app.vault.cachedRead(file);
+      if (!content || content.trim().length === 0) {
+        emptyFiles.add(file.path);
+        continue;
+      }
 
-      if (shouldBeIndexed) {
-        // Add file if:
-        // 1. It's not currently indexed but should be (newly included)
-        // 2. It's indexed but has been modified since last index
-        if (!indexedFilePaths.has(file.path) || file.stat.mtime > latestMtime) {
-          filesToIndex.add(file);
-        }
+      const shouldBeIndexed = includedFiles.size === 0 || includedFiles.has(file.path);
+      const isIndexed = indexedFilePaths.has(file.path);
+
+      if (shouldBeIndexed && (!isIndexed || file.stat.mtime > latestMtime)) {
+        filesToIndex.add(file);
       }
     }
 
     if (getSettings().debug) {
       console.log(`Files to index: ${filesToIndex.size}`);
       console.log(`Previously indexed: ${indexedFilePaths.size}`);
+      console.log(`Empty files skipped: ${emptyFiles.size}`);
     }
 
     return Array.from(filesToIndex);
