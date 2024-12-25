@@ -258,19 +258,6 @@ export async function getAllNotesContent(vault: Vault): Promise<string> {
   return allContent;
 }
 
-import { EmbeddingModelProviders } from "@/constants";
-
-export function areEmbeddingModelsSame(
-  prevModel: string,
-  currModel: string,
-  currentEmbeddingModelKey: string
-): boolean {
-  if (prevModel.split("|")[1] === EmbeddingModelProviders.AZURE_OPENAI) {
-    return currentEmbeddingModelKey === prevModel;
-  }
-
-  return prevModel === currModel;
-}
 
 // Basic prompts
 export function sendNotesContentPrompt(notes: { name: string; content: string }[]): string {
