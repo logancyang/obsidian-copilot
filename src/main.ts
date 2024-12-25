@@ -22,6 +22,7 @@ import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
 import {
+  getModelKeyFromModel,
   getSettings,
   sanitizeSettings,
   setSettings,
@@ -614,11 +615,10 @@ export default class CopilotPlugin extends Plugin {
     const modelMap = new Map<string, CustomModel>();
 
     // Create a unique key for each model, it's model (name + provider)
-    const getModelKey = (model: CustomModel) => `${model.name}|${model.provider}`;
 
     // Add or update existing models in the map
     existingActiveModels.forEach((model) => {
-      const key = getModelKey(model);
+      const key = getModelKeyFromModel(model);
       const existingModel = modelMap.get(key);
       if (existingModel) {
         // If it's a built-in model, preserve the built-in status

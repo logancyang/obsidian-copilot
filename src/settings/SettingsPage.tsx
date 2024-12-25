@@ -2,10 +2,11 @@ import CopilotView from "@/components/CopilotView";
 import { CHAT_VIEWTYPE } from "@/constants";
 import CopilotPlugin from "@/main";
 import { getSettings, updateSetting } from "@/settings/model";
-import { App, Notice, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, Platform, PluginSettingTab, Setting } from "obsidian";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import SettingsMain from "./components/SettingsMain";
+import SettingsMainV2 from "@/settings/v2/SettingsMainV2";
 
 export class CopilotSettingTab extends PluginSettingTab {
   plugin: CopilotPlugin;
@@ -44,6 +45,10 @@ export class CopilotSettingTab extends PluginSettingTab {
     const div = containerEl.createDiv("div");
     const sections = createRoot(div);
 
+    if (!Platform.isMobile) {
+      sections.render(<SettingsMainV2 plugin={this.plugin} />);
+      return;
+    }
     sections.render(<SettingsMain plugin={this.plugin} />);
 
     const devModeHeader = containerEl.createEl("h1", { text: "Additional Settings" });

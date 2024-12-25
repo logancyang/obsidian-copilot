@@ -41,6 +41,8 @@ export enum ChatModels {
   CLAUDE_3_5_HAIKU = "claude-3-5-haiku-latest",
   COMMAND_R = "command-r",
   COMMAND_R_PLUS = "command-r-plus",
+  OPENROUTER_GPT_4o = "openai/chatgpt-4o-latest",
+  GROQ_LLAMA_8b = "llama3-8b-8192",
 }
 
 // Model Providers
@@ -209,6 +211,98 @@ export const NOMIC_EMBED_TEXT = "nomic-embed-text";
 // export const DISTILBERT_NLI = 'sentence-transformers/distilbert-base-nli-mean-tokens';
 // export const INSTRUCTOR_XL = 'hkunlp/instructor-xl'; // Inference API is off for this
 // export const MPNET_V2 = 'sentence-transformers/all-mpnet-base-v2'; // Inference API returns 400
+
+export type Provider = ChatModelProviders | EmbeddingModelProviders;
+
+export type DisplayKeyProviders = Exclude<
+  ChatModelProviders,
+  ChatModelProviders.OPENAI_FORMAT | ChatModelProviders.LM_STUDIO | ChatModelProviders.OLLAMA
+>;
+
+// Provider metadata interface
+export interface ProviderMetadata {
+  label: string;
+  host: string;
+  keyManagementURL: string;
+  testModel?: ChatModels;
+}
+
+// Unified provider information
+export const ProviderInfo: Record<Provider, ProviderMetadata> = {
+  [ChatModelProviders.OPENAI]: {
+    label: "OpenAI",
+    host: "https://api.openai.com",
+    keyManagementURL: "https://platform.openai.com/api-keys",
+    testModel: ChatModels.GPT_4o,
+  },
+  [ChatModelProviders.AZURE_OPENAI]: {
+    label: "Azure OpenAI",
+    host: "",
+    keyManagementURL: "",
+    testModel: ChatModels.AZURE_OPENAI,
+  },
+  [ChatModelProviders.ANTHROPIC]: {
+    label: "Anthropic",
+    host: "https://api.anthropic.com/",
+    keyManagementURL: "https://console.anthropic.com/settings/keys",
+    testModel: ChatModels.CLAUDE_3_5_SONNET,
+  },
+  [ChatModelProviders.COHEREAI]: {
+    label: "Cohere",
+    host: "https://api.cohere.com",
+    keyManagementURL: "https://dashboard.cohere.ai/api-keys",
+    testModel: ChatModels.COMMAND_R,
+  },
+  [ChatModelProviders.GOOGLE]: {
+    label: "Gemini",
+    host: "https://generativelanguage.googleapis.com",
+    keyManagementURL: "https://makersuite.google.com/app/apikey",
+    testModel: ChatModels.GEMINI_FLASH,
+  },
+  [ChatModelProviders.OPENROUTERAI]: {
+    label: "OpenRouter",
+    host: "https://openrouter.ai/api/v1/",
+    keyManagementURL: "https://openrouter.ai/keys",
+    testModel: ChatModels.OPENROUTER_GPT_4o,
+  },
+  [ChatModelProviders.GROQ]: {
+    label: "Groq",
+    host: "https://api.groq.com/openai",
+    keyManagementURL: "https://console.groq.com/keys",
+    testModel: ChatModels.GROQ_LLAMA_8b,
+  },
+  [ChatModelProviders.OLLAMA]: {
+    label: "Ollama",
+    host: "http://localhost:11434/v1/",
+    keyManagementURL: "",
+  },
+  [ChatModelProviders.LM_STUDIO]: {
+    label: "LM Studio",
+    host: "http://localhost:1234/v1",
+    keyManagementURL: "",
+  },
+  [ChatModelProviders.OPENAI_FORMAT]: {
+    label: "OpenAI Format",
+    host: "https://api.example.com/v1",
+    keyManagementURL: "",
+  },
+  [EmbeddingModelProviders.COPILOT_PLUS]: {
+    label: "Copilot Plus",
+    host: "https://api.brevilabs.com/v1",
+    keyManagementURL: "",
+  },
+};
+
+// Map provider to its settings key for API key
+export const ProviderSettingsKeyMap: Record<DisplayKeyProviders, keyof CopilotSettings> = {
+  anthropic: "anthropicApiKey",
+  openai: "openAIApiKey",
+  "azure openai": "azureOpenAIApiKey",
+  google: "googleApiKey",
+  groq: "groqApiKey",
+  openrouterai: "openRouterAiApiKey",
+  cohereai: "cohereApiKey",
+};
 
 export enum VAULT_VECTOR_STORE_STRATEGY {
   NEVER = "NEVER",

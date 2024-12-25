@@ -1,8 +1,8 @@
 import { CustomModel, getModelKey, ModelConfig, setModelKey } from "@/aiParams";
 import { BUILTIN_CHAT_MODELS, ChatModelProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
-import { getSettings, subscribeToSettingsChange } from "@/settings/model";
-import { safeFetch } from "@/utils";
+import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
+import { err2String, safeFetch } from "@/utils";
 import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatCohere } from "@langchain/cohere";
@@ -78,8 +78,8 @@ export default class ChatModelManager {
     const isO1Model = modelName.startsWith("o1");
     const baseConfig: ModelConfig = {
       modelName: modelName,
-      temperature: settings.temperature,
-      streaming: true,
+      temperature: customModel.temperature ?? settings.temperature,
+      streaming: customModel.stream ?? true,
       maxRetries: 3,
       maxConcurrency: 3,
       enableCors: customModel.enableCors,
@@ -96,7 +96,7 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
         // @ts-ignore
-        openAIOrgId: getDecryptedKey(settings.openAIOrgId),
+        openAIOrgId: getDecryptedKey(customModel.openAIOrgId || settings.openAIOrgId),
         ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
       },
       [ChatModelProviders.ANTHROPIC]: {
@@ -111,9 +111,11 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.AZURE_OPENAI]: {
         azureOpenAIApiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
-        azureOpenAIApiInstanceName: settings.azureOpenAIApiInstanceName,
-        azureOpenAIApiDeploymentName: settings.azureOpenAIApiDeploymentName,
-        azureOpenAIApiVersion: settings.azureOpenAIApiVersion,
+        azureOpenAIApiInstanceName:
+          customModel.azureOpenAIApiInstanceName || settings.azureOpenAIApiInstanceName,
+        azureOpenAIApiDeploymentName:
+          customModel.azureOpenAIApiDeploymentName || settings.azureOpenAIApiDeploymentName,
+        azureOpenAIApiVersion: customModel.azureOpenAIApiVersion || settings.azureOpenAIApiVersion,
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -224,7 +226,7 @@ export default class ChatModelManager {
         const getDefaultApiKey = this.providerApiKeyMap[model.provider as ChatModelProviders];
 
         const apiKey = model.apiKey || getDefaultApiKey();
-        const modelKey = `${model.name}|${model.provider}`;
+        const modelKey = getModelKeyFromModel(model);
         modelMap[modelKey] = {
           hasApiKey: Boolean(model.apiKey || apiKey),
           AIConstructor: constructor,
@@ -252,7 +254,7 @@ export default class ChatModelManager {
   }
 
   async setChatModel(model: CustomModel): Promise<void> {
-    const modelKey = `${model.name}|${model.provider}`;
+    const modelKey = getModelKeyFromModel(model);
     if (!ChatModelManager.modelMap.hasOwnProperty(modelKey)) {
       throw new Error(`No model found for: ${modelKey}`);
     }
@@ -268,7 +270,7 @@ export default class ChatModelManager {
 
     const modelConfig = await this.getModelConfig(model);
 
-    setModelKey(`${model.name}|${model.provider}`);
+    setModelKey(modelKey);
     try {
       const newModelInstance = new selectedModel.AIConstructor({
         ...modelConfig,
@@ -327,7 +329,7 @@ export default class ChatModelManager {
       // First try without CORS
       await tryPing(false);
       return true;
-    } catch {
+    } catch (firstError) {
       console.log("First ping attempt failed, trying with CORS...");
       try {
         // Second try with CORS
@@ -337,8 +339,13 @@ export default class ChatModelManager {
         );
         return true;
       } catch (error) {
-        console.error("Chat model ping failed:", error);
-        throw error;
+        const msg =
+          "\nwithout CORS Error: " +
+          err2String(firstError) +
+          "\nwith CORS Error: " +
+          err2String(error);
+        // console.error("Chat model ping failed:", error);
+        throw new Error(msg);
       }
     }
   }

@@ -2,6 +2,27 @@
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
 
+/* this layer for overwrite Obsidian default css style(file: app.css) and theme css style */
+@layer components {
+  .modal-container input.input-reset,
+  input[type="text"].input-reset,
+  input[type="password"].input-reset,
+  input[type="number"].input-reset {
+    @apply h-9 !min-w-[50px] border border-solid rounded-md bg-transparent px-3 py-1 md:text-base text-sm shadow-sm transition-colors;
+    @apply focus-visible:shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring;
+  }
+
+  .modal-container button.select-trigger-reset {
+    @apply h-9 border border-solid rounded-md bg-dropdown px-3 py-1 text-base md:text-sm shadow-sm transition-colors;
+    @apply focus-visible:shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring;
+  }
+
+  .modal-container button.checkbox-reset {
+    @apply h-4 w-4 shrink-0 p-0 rounded-sm border border-solid bg-transparent shadow transition-colors;
+    @apply hover:bg-interactive-accent hover:text-on-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring;
+    @apply data-[state=checked]:bg-interactive-accent data-[state=checked]:text-on-accent;
+  }
+}
 /*
 
 This CSS file will be included with your plugin, and
