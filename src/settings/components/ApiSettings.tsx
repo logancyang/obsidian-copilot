@@ -40,6 +40,15 @@ const ApiSettings: React.FC = () => {
     setAzureDeployments(settings.azureOpenAIApiDeployments || []);
   }, [settings.azureOpenAIApiDeployments]);
 
+  const validateAzureDeployment = (deployment: AzureOpenAIDeployment): boolean => {
+    return (
+      deployment.deploymentName.trim() !== "" &&
+      deployment.instanceName.trim() !== "" &&
+      deployment.apiKey.trim() !== "" &&
+      deployment.apiVersion.trim() !== ""
+    );
+  };
+
   const handleAddAzureDeployment = () => {
     const newDeployment = {
       deploymentName: defaultAzureDeployment.deploymentName,
@@ -47,6 +56,12 @@ const ApiSettings: React.FC = () => {
       apiKey: defaultAzureDeployment.apiKey,
       apiVersion: defaultAzureDeployment.apiVersion,
     };
+
+    if (!validateAzureDeployment(newDeployment)) {
+      alert("Please fill in all fields for the Azure deployment.");
+      return;
+    }
+
     const updatedDeployments = [...azureDeployments, newDeployment];
     setAzureDeployments(updatedDeployments);
     updateSetting("azureOpenAIApiDeployments", updatedDeployments);
@@ -61,6 +76,11 @@ const ApiSettings: React.FC = () => {
   };
 
   const handleUpdateAzureDeployment = (index: number, updatedDeployment: AzureOpenAIDeployment) => {
+    if (!validateAzureDeployment(updatedDeployment)) {
+      alert("Please fill in all fields for the Azure deployment.");
+      return;
+    }
+
     const updatedDeployments = [...azureDeployments];
     updatedDeployments[index] = updatedDeployment;
     setAzureDeployments(updatedDeployments);
