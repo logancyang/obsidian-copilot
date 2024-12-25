@@ -1,8 +1,7 @@
 import { CustomError } from "@/error";
 import { getSettings } from "@/settings/model";
-import { create, load, Orama, save } from "@orama/orama";
+import { create, load, Orama, RawData, save } from "@orama/orama";
 import { App } from "obsidian";
-import { DBOperations } from "./dbOperations";
 
 const CHUNK_PREFIX = "copilot-index-chunk-";
 const LEGACY_INDEX_SUFFIX = ".json";
@@ -106,8 +105,8 @@ export class ChunkedStorage {
 
   async saveDatabase(db: Orama<any>): Promise<void> {
     try {
-      const rawData = await save(db);
-      const documents = await DBOperations.getAllDocuments(db);
+      const rawData: RawData = await save(db);
+      console.log("!!!! rawData::", rawData);
       const numPartitions = getSettings().numPartitions;
 
       if (numPartitions === 1) {
@@ -117,18 +116,19 @@ export class ChunkedStorage {
           legacyPath,
           JSON.stringify({
             ...rawData,
-            documents: documents,
             schema: db.schema,
           })
         );
         return;
       }
 
+      const rawDocs = (rawData as any).docs?.docs;
+
       if (getSettings().debug) {
-        console.log(`Starting save with ${documents.length} total documents`);
+        console.log(`Starting save with ${rawDocs.length ?? 0} total documents`);
       }
 
-      if (!documents || documents.length === 0) {
+      if (!rawDocs || rawDocs.length === 0) {
         const metadata: ChunkMetadata = {
           numPartitions,
           vectorLength: db.schema.embedding.match(/\d+/)[0],
@@ -147,7 +147,7 @@ export class ChunkedStorage {
         return;
       }
 
-      const partitions = this.distributeDocumentsToPartitions(documents, numPartitions);
+      const partitions = this.distributeDocumentsToPartitions(rawDocs, numPartitions);
 
       const metadata: ChunkMetadata = {
         numPartitions,
@@ -155,7 +155,7 @@ export class ChunkedStorage {
         schema: db.schema,
         lastModified: Date.now(),
         documentPartitions: Object.fromEntries(
-          documents.map((doc) => [doc.id, this.assignDocumentToPartition(doc.id, numPartitions)])
+          rawDocs.map((doc: any) => [doc.id, this.assignDocumentToPartition(doc.id, numPartitions)])
         ),
       };
 
@@ -185,9 +185,9 @@ export class ChunkedStorage {
       }
 
       if (getSettings().debug) {
-        if (savedTotal !== documents.length) {
+        if (savedTotal !== rawDocs.length) {
           console.error(
-            `Document count mismatch during save! Original: ${documents.length}, Saved: ${savedTotal}`
+            `Document count mismatch during save! Original: ${rawDocs.length}, Saved: ${savedTotal}`
           );
         }
       }
