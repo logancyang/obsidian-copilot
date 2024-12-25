@@ -351,20 +351,12 @@ const ApiSettings: React.FC = () => {
             placeholder="Enter Max Completion Tokens"
             type="number"
           />
-          <select
+          <DropdownComponent
+            options={azureDeployments.map((d) => d.deploymentName)}
             value={selectedDeployment}
-            onChange={(e) => setSelectedDeployment(e.target.value)}
+            onChange={(value) => setSelectedDeployment(value)}
             disabled={azureDeployments.length === 0}
-          >
-            <option value="" disabled>
-              Select Deployment
-            </option>
-            {azureDeployments.map((d) => (
-              <option key={d.deploymentName} value={d.deploymentName}>
-                {d.deploymentName}
-              </option>
-            ))}
-          </select>
+          />
           <ApiSetting
             title="Reasoning Effort"
             value={reasoningEffort?.toString() || ""}

@@ -38,7 +38,7 @@ export class DBOperations {
   constructor(private app: App) {
     // Subscribe to settings changes
     subscribeToSettingsChange(async () => {
-      const settings = getSettings(); // Removed arg1 and arg2
+      const settings = getSettings(arg1, arg2);
       const newPath = await this.getDbPath();
 
       // Handle mobile index loading setting change
