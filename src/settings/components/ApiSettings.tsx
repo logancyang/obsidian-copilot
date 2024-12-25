@@ -8,14 +8,10 @@ import ApiSetting from "./ApiSetting";
 import Collapsible from "./Collapsible";
 import {
   AzureOpenAIDeployment,
-  CustomModel,
-  ModelConfig,
   updateModelConfig,
 } from "@/aiParams";
 import {
-  BUILTIN_CHAT_MODELS,
   ChatModelProviders,
-  ChatModels,
 } from "@/constants";
 
 const ApiSettings: React.FC = () => {
@@ -32,35 +28,12 @@ const ApiSettings: React.FC = () => {
   const [defaultAzureDeployment, setDefaultAzureDeployment] = useState<
     AzureOpenAIDeployment
   >(deployment);
-  const [modelProvider, setModelProvider] = useState<string>(
-    ChatModelProviders.OPENAI
-  );
-  const [apiKey, setApiKey] = useState<string>("");
-  const [selectedModel, setSelectedModel] = useState<string>(
-    settings.defaultModelKey
-  );
   const [maxCompletionTokens, setMaxCompletionTokens] = useState<
     number | undefined
   >(undefined);
   const [reasoningEffort, setReasoningEffort] = useState<number | undefined>(
     undefined
   );
-  const [selectedDeployment, setSelectedDeployment] = useState<string>("");
-
-  const handleDeploymentSelect = (deploymentName: string) => {
-    setSelectedDeployment(deploymentName);
-    const selectedDeploymentConfig = azureDeployments.find(
-      (d) => d.deploymentName === deploymentName
-    );
-    if (selectedDeploymentConfig) {
-      const modelKey = `o1-preview|${deploymentName}`;
-
-      setMaxCompletionTokens(
-        settings.modelConfigs[modelKey]?.maxCompletionTokens
-      );
-      setReasoningEffort(settings.modelConfigs[modelKey]?.reasoningEffort);
-    }
-  };
 
   useEffect(() => {
     const currentModel = settings.activeModels.find(

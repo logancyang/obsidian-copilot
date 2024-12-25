@@ -1,5 +1,5 @@
 import { CustomModel, getModelKey, ModelConfig, setModelKey } from "@/aiParams";
-import { BUILTIN_CHAT_MODELS, ChatModelProviders, ChatModels } from "@/constants";
+import { BUILTIN_CHAT_MODELS, ChatModelProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { safeFetch } from "@/utils";
