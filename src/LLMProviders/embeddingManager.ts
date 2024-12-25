@@ -106,15 +106,30 @@ export default class EmbeddingManager {
 
   static getModelName(embeddingsInstance: Embeddings): string {
     const emb = embeddingsInstance as any;
-    if ("model" in emb && emb.model) {
-      return emb.model as string;
-    } else if ("modelName" in emb && emb.modelName) {
+    if (emb.modelName) {
       return emb.modelName as string;
-    } else {
-      throw new Error(
-        `Embeddings instance missing model or modelName properties: ${embeddingsInstance}`
-      );
+    } else if (
+      emb.constructor.name === "OllamaEmbeddings" &&
+      emb.model !== undefined
+    ) {
+      return emb.model as string;
+    } else if (
+      emb.constructor.name === "CohereEmbeddings" &&
+      emb.model !== undefined
+    ) {
+      return emb.model as string;
+    } else if (emb.constructor.name === "HuggingFaceInferenceEmbeddings") {
+      // Assuming HuggingFaceInferenceEmbeddings has a model property
+      return emb.model as string;
+    } else if (
+      emb.constructor.name === "GoogleGenerativeAIEmbeddings" &&
+      emb.modelName !== undefined
+    ) {
+      return emb.modelName as string;
     }
+    throw new Error(
+      `Embeddings instance missing model or modelName properties: ${embeddingsInstance}`
+    );
   }
 
   // Get the custom model that matches the name and provider from the model key
