@@ -10,12 +10,16 @@ import {
   DEFAULT_SYSTEM_PROMPT,
 } from "@/constants";
 
+export { DEFAULT_SETTINGS };
+
 export interface AzureOpenAIDeployment {
   deploymentName: string;
   instanceName: string;
   apiKey: string;
   apiVersion: string;
 }
+
+export { AzureOpenAIDeployment };
 
 export interface ModelConfig {
   modelName: string;

@@ -3,7 +3,7 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 
 import { atom, useAtom } from "jotai";
-import { settingsAtom, settingsStore, getSettings } from "@/settings/model";
+import { settingsAtom, settingsStore, getSettings, setSettings } from "@/settings/model";
 import { ChatModelProviders } from "./constants";
 import { merge } from "lodash";
 
