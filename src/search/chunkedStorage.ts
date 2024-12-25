@@ -121,7 +121,9 @@ export class ChunkedStorage {
         return;
       }
 
-      const rawDocs = (rawData as any).docs?.docs;
+      // NOTE: Orama RawData docs can be either an array or an object
+      const docsData = (rawData as any).docs?.docs;
+      const rawDocs = Array.isArray(docsData) ? docsData : Object.values(docsData || {});
 
       if (getSettings().debug) {
         console.log(`Starting save with ${rawDocs.length ?? 0} total documents`);

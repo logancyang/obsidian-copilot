@@ -1,5 +1,5 @@
 import { CustomModel, getModelKey } from "@/aiParams";
-import { EmbeddingModelProviders } from "@/constants";
+import { EmbeddingModelProviders, BREVILABS_API_BASE_URL, EmbeddingModelProvider } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { CustomError } from "@/error";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
@@ -14,6 +14,7 @@ import { Notice } from "obsidian";
 type EmbeddingConstructorType = new (config: any) => Embeddings;
 
 const EMBEDDING_PROVIDER_CONSTRUCTORS = {
+  [EmbeddingModelProviders.COPILOT_PLUS]: OpenAIEmbeddings,
   [EmbeddingModelProviders.OPENAI]: OpenAIEmbeddings,
   [EmbeddingModelProviders.COHEREAI]: CohereEmbeddings,
   [EmbeddingModelProviders.GOOGLE]: GoogleGenerativeAIEmbeddings,
@@ -39,6 +40,7 @@ export default class EmbeddingManager {
   >;
 
   private readonly providerApiKeyMap: Record<EmbeddingModelProviders, () => string> = {
+    [EmbeddingModelProviders.COPILOT_PLUS]: () => getSettings().plusLicenseKey,
     [EmbeddingModelProviders.OPENAI]: () => getSettings().openAIApiKey,
     [EmbeddingModelProviders.COHEREAI]: () => getSettings().cohereApiKey,
     [EmbeddingModelProviders.GOOGLE]: () => getSettings().googleApiKey,
@@ -161,6 +163,15 @@ export default class EmbeddingManager {
         EmbeddingProviderConstructorMap[K]
       >[0];
     } = {
+      [EmbeddingModelProviders.COPILOT_PLUS]: {
+        modelName,
+        apiKey: getDecryptedKey(settings.plusLicenseKey),
+        timeout: 10000,
+        configuration: {
+          baseURL: BREVILABS_API_BASE_URL,
+          fetch: customModel.enableCors ? safeFetch : undefined,
+        },
+      },
       [EmbeddingModelProviders.OPENAI]: {
         modelName,
         openAIApiKey: getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
