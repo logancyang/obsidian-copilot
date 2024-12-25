@@ -351,20 +351,31 @@ const ApiSettings: React.FC = () => {
             placeholder="Enter Max Completion Tokens"
             type="number"
           />
-          <DropdownComponent
-            options={azureDeployments.map((d) => d.deploymentName)}
+          <select
             value={selectedDeployment}
-            onChange={(value) => setSelectedDeployment(value)}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+              setSelectedDeployment(e.target.value)
+            }
             disabled={azureDeployments.length === 0}
-          />
-          <ApiSetting
-            title="Reasoning Effort"
-            value={reasoningEffort?.toString() || ""}
-            setValue={(value) => handleReasoningEffortChange(Number(value))}
-            placeholder="Enter Reasoning Effort (0-100)"
-            type="number"
-            disabled={azureDeployments.length === 0 || selectedDeployment === ""}
-          />
+          >
+            <option value="" disabled>
+              Select a deployment
+            </option>
+            {azureDeployments.map((d) => (
+              <option key={d.deploymentName} value={d.deploymentName}>
+                {d.deploymentName}
+              </option>
+            ))}
+          </select>
+          {(azureDeployments.length > 0 && selectedDeployment !== "") && (
+            <ApiSetting
+              title="Reasoning Effort"
+              value={reasoningEffort?.toString() || ""}
+              setValue={(value) => handleReasoningEffortChange(Number(value))}
+              placeholder="Enter Reasoning Effort (0-100)"
+              type="number"
+            />
+          )}
         </div>
       </Collapsible>
       <Collapsible title="Groq API Settings">
