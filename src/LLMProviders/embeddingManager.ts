@@ -248,18 +248,20 @@ export default class EmbeddingManager {
       );
 
       if (azureDeployment) {
-        providerConfig[
-          EmbeddingModelProviders.AZURE_OPENAI
-        ].azureOpenAIApiKey = getDecryptedKey(azureDeployment.apiKey);
-        providerConfig[
-          EmbeddingModelProviders.AZURE_OPENAI
-        ].azureOpenAIApiInstanceName = azureDeployment.instanceName;
-        providerConfig[
-          EmbeddingModelProviders.AZURE_OPENAI
-        ].azureOpenAIApiDeploymentName = azureDeployment.deploymentName;
-        providerConfig[
-          EmbeddingModelProviders.AZURE_OPENAI
-        ].azureOpenAIApiVersion = azureDeployment.apiVersion;
+        if (azureDeployment) {
+          providerConfig[
+            EmbeddingModelProviders.AZURE_OPENAI
+          ].azureOpenAIApiKey = getDecryptedKey(azureDeployment.apiKey);
+          providerConfig[
+            EmbeddingModelProviders.AZURE_OPENAI
+          ].azureOpenAIApiInstanceName = azureDeployment.instanceName;
+          providerConfig[
+            EmbeddingModelProviders.AZURE_OPENAI
+          ].azureOpenAIApiDeploymentName = azureDeployment.deploymentName;
+          providerConfig[
+            EmbeddingModelProviders.AZURE_OPENAI
+          ].azureOpenAIApiVersion = azureDeployment.apiVersion;
+        }
       } else {
         console.error(
           `No Azure OpenAI deployment found for model key: ${modelKey}`

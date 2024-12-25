@@ -199,7 +199,7 @@ export default class ChainManager {
     // Check if the model is an Azure OpenAI model
     if (
       chatModel instanceof ChatOpenAI &&
-      chatModel.provider === ChatModelProviders.AZURE_OPENAI
+      (chatModel as any).provider === ChatModelProviders.AZURE_OPENAI
     ) {
       const modelKey = getModelKey();
       let deploymentName = "";

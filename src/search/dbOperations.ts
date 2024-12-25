@@ -76,8 +76,7 @@ export class DBOperations {
           {
             name: getSettings().embeddingModelKey,
             provider: getSettings().embeddingModelKey.split("|")[1],
-          },
-          getSettings().embeddingModelKey
+          }
         )
       ) {
         console.log("Embedding model change detected, reinitializing database...");
