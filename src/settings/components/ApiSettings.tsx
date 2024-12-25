@@ -24,9 +24,10 @@ const ApiSettings: React.FC = () => {
   const [azureDeployments, setAzureDeployments] = useState<
     AzureOpenAIDeployment[]
   >(settings.azureOpenAIApiDeployments || []);
+  const deployment: AzureOpenAIDeployment = settings.azureOpenAIApiDeployments?.[0] || DEFAULT_SETTINGS.azureOpenAIApiDeployments?.[0] || {};
   const [defaultAzureDeployment, setDefaultAzureDeployment] = useState<
     AzureOpenAIDeployment
-  >(DEFAULT_SETTINGS.azureOpenAIApiDeployments?.[0] || {});
+  >(deployment);
   const [modelProvider, setModelProvider] = useState<string>(
     ChatModelProviders.OPENAI
   );
@@ -386,8 +387,8 @@ const ApiSettings: React.FC = () => {
           <DropdownComponent
             options={azureDeployments.map((d) => d.deploymentName)}
             selectedOption={selectedDeployment}
-            onSelect={handleDeploymentSelect}
             placeholder="Select Deployment"
+            disabled={azureDeployments.length === 0}
           />
           <ApiSetting
             title="Max Completion Tokens"
@@ -458,3 +459,4 @@ const ApiSettings: React.FC = () => {
 };
 
 export default ApiSettings;
+
