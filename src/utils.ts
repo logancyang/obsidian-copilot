@@ -258,22 +258,18 @@ export async function getAllNotesContent(vault: Vault): Promise<string> {
   return allContent;
 }
 
+import { EmbeddingModelProviders } from "@/constants";
+
 export function areEmbeddingModelsSame(
-  model1: string | undefined,
-  model2: string | undefined
+  prevModel: string,
+  currModel: string,
+  currentEmbeddingModelKey: string
 ): boolean {
-  if (!model1 || !model2) return false;
-  // TODO: Hacks to handle different embedding model names for the same model. Need better handling.
-  if (model1.includes(NOMIC_EMBED_TEXT) && model2.includes(NOMIC_EMBED_TEXT)) {
-    return true;
+  if (prevModel.split("|")[1] === EmbeddingModelProviders.AZURE_OPENAI) {
+    return currentEmbeddingModelKey === prevModel;
   }
-  if (
-    (model1 === "small" && model2 === "cohereai") ||
-    (model1 === "cohereai" && model2 === "small")
-  ) {
-    return true;
-  }
-  return model1 === model2;
+
+  return prevModel === currModel;
 }
 
 // Basic prompts
