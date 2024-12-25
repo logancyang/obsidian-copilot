@@ -499,14 +499,8 @@ export class DBOperations {
 
       if (
         !areEmbeddingModelsSame(
-          {
-            name: prevEmbeddingModel,
-            provider: prevEmbeddingModel.split("|")[1],
-          },
-          {
-            name: currEmbeddingModelName,
-            provider: currEmbeddingModelName.split("|")[1],
-          }
+          prevEmbeddingModel,
+          currEmbeddingModelName
         )
       ) {
         // Model has changed, notify user and rebuild DB
