@@ -18,6 +18,7 @@
     "esModuleInterop": true,
     "strictNullChecks": true,
     "types": ["jest"],
+    "typeRoots": ["./node_modules/@types", "./src/types"],
     "lib": ["DOM", "ES5", "ES6", "ES7", "ES2022"]
   },
   "include": ["**/*.ts", "src", "typings/**/*.ts", "src/types/**/*.d.ts"]
