@@ -158,3 +158,4 @@ export function updateModelConfig(
 
   setSettings({ ...settings, modelConfigs });
 }
+export type { AzureOpenAIDeployment };
