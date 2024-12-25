@@ -31,6 +31,9 @@ module.exports = {
       "accent-hover": "var(--text-accent-hover)",
       selection: "var(--text-selection)",
       "highlight-bg": "var(--text-highlight-bg)",
+      callout: {
+        warning: "rgba(var(--callout-warning),<alpha-value>)",
+      },
     },
     backgroundColor: {
       inherit: colors.inherit,
@@ -52,9 +55,6 @@ module.exports = {
         "success-rgb": "rgba(var(--background-modifier-success-rgb),<alpha-value>)",
         message: "var(--background-modifier-message)",
         "form-field": "var(--background-form-field)",
-        dropdown: {
-          DEFAULT: "var(--dropdown-background)",
-        },
       },
       interactive: {
         normal: "var(--interactive-normal)",
@@ -62,6 +62,15 @@ module.exports = {
         accent: "var(--interactive-accent)",
         "accent-hsl": "hsl(var(--interactive-accent-hsl),<alpha-value>)",
         "accent-hover": "var(--interactive-accent-hover)",
+      },
+      dropdown: {
+        DEFAULT: "var(--dropdown-background)",
+      },
+      callout: {
+        warning: "rgba(var(--callout-warning),<alpha-value>)",
+      },
+      overlay: {
+        DEFAULT: "#000",
       },
     },
     borderColor: {
@@ -71,7 +80,15 @@ module.exports = {
       border: "var(--background-modifier-border)",
       "border-hover": "var(--background-modifier-border-hover)",
       "border-focus": "var(--background-modifier-border-focus)",
+      "interactive-accent": "var(--interactive-accent)",
     },
+    ringColor: {
+      ring: "var(--interactive-accent)",
+    },
+    ringOffsetColor: {
+      ring: "var(--interactive-accent)",
+    },
+
     colors: {
       inherit: colors.inherit,
       current: colors.current,

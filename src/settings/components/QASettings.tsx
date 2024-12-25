@@ -2,7 +2,7 @@ import { CustomModel } from "@/aiParams";
 import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
 import { EmbeddingModelProviders, VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
 import VectorStoreManager from "@/search/vectorStoreManager";
-import { updateSetting, useSettingsValue } from "@/settings/model";
+import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
 import React from "react";
 import {
   DropdownComponent,
@@ -68,7 +68,7 @@ const QASettings: React.FC<QASettingsProps> = ({ vectorStoreManager }) => {
         providers={Object.values(EmbeddingModelProviders)}
         onDeleteModel={(modelKey) => {
           const updatedActiveEmbeddingModels = settings.activeEmbeddingModels.filter(
-            (model) => `${model.name}|${model.provider}` !== modelKey
+            (model) => getModelKeyFromModel(model) !== modelKey
           );
           updateSetting("activeEmbeddingModels", updatedActiveEmbeddingModels);
         }}
