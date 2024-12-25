@@ -12,12 +12,7 @@ import {
 
 export { DEFAULT_SETTINGS };
 
-export interface AzureOpenAIDeployment {
-  deploymentName: string;
-  instanceName: string;
-  apiKey: string;
-  apiVersion: string;
-}
+export type { AzureOpenAIDeployment };
 
 export type { AzureOpenAIDeployment };
 

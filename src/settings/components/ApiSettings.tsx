@@ -391,12 +391,8 @@ const ApiSettings: React.FC = () => {
           />
           <ApiSetting
             title="Max Completion Tokens"
-            value={maxCompletionTokens ?? undefined}
-            setValue={
-              maxCompletionTokens !== undefined
-                ? handleMaxCompletionTokensChange
-                : () => {}
-            }
+            value={maxCompletionTokens?.toString() || ""}
+            setValue={(value) => handleMaxCompletionTokensChange(Number(value))}
             placeholder="Enter Max Completion Tokens"
             type="number"
             disabled={
@@ -405,12 +401,8 @@ const ApiSettings: React.FC = () => {
           />
           <ApiSetting
             title="Reasoning Effort"
-            value={reasoningEffort ?? undefined}
-            setValue={
-              reasoningEffort !== undefined
-                ? handleReasoningEffortChange
-                : () => {}
-            }
+            value={reasoningEffort?.toString() || ""}
+            setValue={(value) => handleReasoningEffortChange(Number(value))}
             placeholder="Enter Reasoning Effort (0-100)"
             type="number"
             disabled={

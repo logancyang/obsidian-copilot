@@ -261,6 +261,8 @@ export default class EmbeddingManager {
           providerConfig[
             EmbeddingModelProviders.AZURE_OPENAI
           ].azureOpenAIApiVersion = azureDeployment.apiVersion;
+        } else {
+          console.error("Azure deployment is undefined. Please check your settings.");
         }
       } else {
         console.error(
