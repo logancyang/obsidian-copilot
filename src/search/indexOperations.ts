@@ -3,7 +3,7 @@ import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { RateLimiter } from "@/rateLimiter";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
-import { formatDateTime, normalize } from "@/utils";
+import { formatDateTime } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
 import { MD5 } from "crypto-js";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
@@ -180,7 +180,7 @@ export class IndexOperations {
 
       // Clear index if overwrite is true
       if (overwrite) {
-        await this.dbOps.clearIndex(embeddingInstance);
+        await this.dbOps.clearIndex();
       } else {
         // Run garbage collection first to clean up stale documents
         await this.dbOps.garbageCollect();

@@ -17,7 +17,7 @@ import {
   ChatModelProviders,
   ChatModels,
 } from "@/constants";
-import { DropdownComponent } from "./Dropdown";
+import { DropdownComponent } from "@/settings/components/Dropdown";
 
 const ApiSettings: React.FC = () => {
   const settings = useSettingsValue();
