@@ -10,9 +10,6 @@ import {
   AzureOpenAIDeployment,
   updateModelConfig,
 } from "@/aiParams";
-import {
-  ChatModelProviders,
-} from "@/constants";
 
 const ApiSettings: React.FC = () => {
   const settings = useSettingsValue();
@@ -109,17 +106,6 @@ const ApiSettings: React.FC = () => {
     updateModelConfig(modelKey, { reasoningEffort: value });
   };
 
-  const handleModelChange = (modelName: string) => {
-    setSelectedModel(modelName);
-    const modelConfig = settings.modelConfigs[modelName];
-    if (modelConfig) {
-      setMaxCompletionTokens(modelConfig.maxCompletionTokens);
-      setReasoningEffort(modelConfig.reasoningEffort);
-    } else {
-      setMaxCompletionTokens(undefined);
-      setReasoningEffort(undefined);
-    }
-  };
 
   return (
     <div>
