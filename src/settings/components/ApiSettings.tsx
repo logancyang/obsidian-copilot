@@ -10,12 +10,11 @@ const ApiSettings: React.FC = () => {
   const [azureDeployments, setAzureDeployments] = useState<AzureOpenAIDeployment[]>(
     settings.azureOpenAIApiDeployments || []
   );
-  const deployment: AzureOpenAIDeployment = {
+  const deployment: AzureOpenAIDeployment = settings.azureOpenAIApiDeployments?.[0] || {
     deploymentName: "",
     instanceName: "",
     apiKey: "",
     apiVersion: "",
-    ...settings.azureOpenAIApiDeployments?.[0],
   };
   const [defaultAzureDeployment, setDefaultAzureDeployment] =
     useState<AzureOpenAIDeployment>(deployment);
@@ -351,7 +350,6 @@ const ApiSettings: React.FC = () => {
             setValue={(value) => handleMaxCompletionTokensChange(Number(value))}
             placeholder="Enter Max Completion Tokens"
             type="number"
-            disabled={azureDeployments.length === 0 || selectedDeployment === ""}
           />
           <ApiSetting
             title="Max Completion Tokens"
