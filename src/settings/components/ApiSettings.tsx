@@ -345,20 +345,14 @@ const ApiSettings: React.FC = () => {
       </Collapsible>
       <Collapsible title="o1-preview Settings">
         <div>
-          <select
-            value={selectedDeployment}
-            onChange={(e) => setSelectedDeployment(e.target.value)}
-            disabled={azureDeployments.length === 0}
-          >
-            <option value="" disabled>
-              Select Deployment
-            </option>
-            {azureDeployments.map((d) => (
-              <option key={d.deploymentName} value={d.deploymentName}>
-                {d.deploymentName}
-              </option>
-            ))}
-          </select>
+          <ApiSetting
+            title="Max Completion Tokens"
+            value={maxCompletionTokens?.toString() || ""}
+            setValue={(value) => handleMaxCompletionTokensChange(Number(value))}
+            placeholder="Enter Max Completion Tokens"
+            type="number"
+            disabled={azureDeployments.length === 0 || selectedDeployment === ""}
+          />
           <ApiSetting
             title="Max Completion Tokens"
             value={maxCompletionTokens?.toString() || ""}
