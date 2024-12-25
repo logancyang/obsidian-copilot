@@ -108,7 +108,7 @@ export default class VectorStoreManager {
 
   public async clearIndex(): Promise<void> {
     await this.waitForInitialization();
-    await this.dbOps.clearIndex(this.embeddingsManager.getEmbeddingsAPI());
+    await this.dbOps.clearIndex();
   }
 
   public async garbageCollectVectorStore(): Promise<number> {

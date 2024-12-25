@@ -19,7 +19,7 @@ export interface AzureOpenAIDeployment {
   apiVersion: string;
 }
 
-export { AzureOpenAIDeployment };
+export type { AzureOpenAIDeployment };
 
 export interface ModelConfig {
   modelName: string;
