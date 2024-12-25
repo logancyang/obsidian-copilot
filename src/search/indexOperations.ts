@@ -1,21 +1,23 @@
 import { CHUNK_SIZE } from "@/constants";
-import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { RateLimiter } from "@/rateLimiter";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { formatDateTime } from "@/utils";
-import { Embeddings } from "@langchain/core/embeddings";
 import { MD5 } from "crypto-js";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { App, Notice, TFile } from "obsidian";
 import { DBOperations } from "./dbOperations";
 import { extractAppIgnoreSettings, getFilePathsForQA } from "./searchUtils";
 
+const EMBEDDING_BATCH_SIZE = 50;
+const CHECKPOINT_INTERVAL = 4 * EMBEDDING_BATCH_SIZE;
+
 export interface IndexingState {
   isIndexingPaused: boolean;
   isIndexingCancelled: boolean;
   indexedCount: number;
   totalFilesToIndex: number;
+  processedFiles: Set<string>;
   currentIndexingNotice: Notice | null;
   indexNoticeMessage: HTMLSpanElement | null;
 }
@@ -27,6 +29,7 @@ export class IndexOperations {
     isIndexingCancelled: false,
     indexedCount: 0,
     totalFilesToIndex: 0,
+    processedFiles: new Set(),
     currentIndexingNotice: null,
     indexNoticeMessage: null,
   };
@@ -45,109 +48,14 @@ export class IndexOperations {
     });
   }
 
-  public async indexFile(file: TFile): Promise<void> {
-    const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
-    if (!embeddingInstance) {
-      throw new CustomError("Embedding instance not found.");
-    }
-
-    const content = await this.app.vault.cachedRead(file);
-    const fileCache = this.app.metadataCache.getFileCache(file);
-
-    const fileToSave = {
-      title: file.basename,
-      path: file.path,
-      content: content,
-      embeddingModel: EmbeddingsManager.getModelName(embeddingInstance),
-      ctime: file.stat.ctime,
-      mtime: file.stat.mtime,
-      tags: fileCache?.tags?.map((tag) => tag.tag) ?? [],
-      extension: file.extension,
-      metadata: {
-        ...(fileCache?.frontmatter ?? {}),
-        created: formatDateTime(new Date(file.stat.ctime)).display,
-        modified: formatDateTime(new Date(file.stat.mtime)).display,
-      },
-    };
-
-    await this.indexDocument(embeddingInstance, fileToSave);
-  }
-
-  private async indexDocument(
-    embeddingsAPI: Embeddings,
-    fileToSave: any
-  ): Promise<any | undefined> {
-    const textSplitter = RecursiveCharacterTextSplitter.fromLanguage("markdown", {
-      chunkSize: CHUNK_SIZE,
-    });
-
-    // Add note title as contextual chunk headers
-    // https://js.langchain.com/docs/modules/data_connection/document_transformers/contextual_chunk_headers
-    const chunks = await textSplitter.createDocuments([fileToSave.content], [], {
-      chunkHeader: `\n\nNOTE TITLE: [[${fileToSave.title}]]\n\nMETADATA:${JSON.stringify(
-        fileToSave.metadata
-      )}\n\nNOTE BLOCK CONTENT:\n\n`,
-      appendChunkOverlapHeader: true,
-    });
-
-    const docVectors: number[][] = [];
-    let hasEmbeddingError = false;
-
-    // Generate all embeddings first
-    for (let i = 0; i < chunks.length; i++) {
-      try {
-        await this.rateLimiter.wait();
-        const embedding = await embeddingsAPI.embedDocuments([chunks[i].pageContent]);
-
-        if (embedding.length > 0 && embedding[0].length > 0) {
-          docVectors.push(embedding[0]);
-        } else {
-          throw new Error("Received empty embedding vector");
-        }
-      } catch (error) {
-        hasEmbeddingError = true;
-        console.error("Error during embeddings API call for chunk:", error);
-        throw error;
-      }
-    }
-
-    // Only proceed with saving if we have valid vectors
-    if (docVectors.length > 0) {
-      const chunkWithVectors = chunks.slice(0, docVectors.length).map((chunk, i) => ({
-        id: this.getDocHash(chunk.pageContent),
-        content: chunk.pageContent,
-        embedding: docVectors[i],
-      }));
-
-      // Wait for all database operations to complete before considering the document indexed
-      try {
-        for (const chunkWithVector of chunkWithVectors) {
-          await this.dbOps.upsert({
-            ...fileToSave,
-            id: chunkWithVector.id,
-            content: chunkWithVector.content,
-            embedding: chunkWithVector.embedding,
-            created_at: Date.now(),
-            nchars: chunkWithVector.content.length,
-          });
-        }
-      } catch (error) {
-        hasEmbeddingError = true;
-        console.error("Error during database upsert:", error);
-        throw error;
-      }
-    }
-
-    return hasEmbeddingError ? undefined : fileToSave;
-  }
-
   public async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
     let rateLimitNoticeShown = false;
 
     try {
       const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
       if (!embeddingInstance) {
-        throw new CustomError("Embedding instance not found.");
+        console.error("Embedding instance not found.");
+        return 0;
       }
 
       // Check for model change first
@@ -174,21 +82,43 @@ export class IndexOperations {
       this.initializeIndexingState(files.length);
       this.createIndexingNotice();
 
-      const CHECKPOINT_INTERVAL = 200;
-      const errors: string[] = [];
+      // New: Prepare all chunks first
+      const allChunks = await this.prepareAllChunks(files);
+      if (allChunks.length === 0) {
+        new Notice("No valid content to index.");
+        return 0;
+      }
 
-      for (let index = 0; index < files.length; index++) {
-        if (this.state.isIndexingCancelled) {
-          console.log(
-            `Indexing stopped at ${this.state.indexedCount}/${files.length} files due to cancellation`
-          );
-          break;
-        }
+      // Process chunks in batches
+      const errors: string[] = [];
+      for (let i = 0; i < allChunks.length; i += EMBEDDING_BATCH_SIZE) {
+        if (this.state.isIndexingCancelled) break;
         await this.handlePause();
 
+        const batch = allChunks.slice(i, i + EMBEDDING_BATCH_SIZE);
         try {
-          await this.indexFile(files[index]);
-          this.state.indexedCount++;
+          await this.rateLimiter.wait();
+          const embeddings = await embeddingInstance.embedDocuments(
+            batch.map((chunk) => chunk.content)
+          );
+
+          // Save batch to database
+          for (let j = 0; j < batch.length; j++) {
+            const chunk = batch[j];
+            await this.dbOps.upsert({
+              ...chunk.fileInfo,
+              id: this.getDocHash(chunk.content),
+              content: chunk.content,
+              embedding: embeddings[j],
+              created_at: Date.now(),
+              nchars: chunk.content.length,
+            });
+          }
+
+          batch.forEach((chunk) => {
+            this.state.processedFiles.add(chunk.fileInfo.path);
+          });
+          this.state.indexedCount = this.state.processedFiles.size;
           this.updateIndexingNoticeMessage();
 
           if (this.state.indexedCount % CHECKPOINT_INTERVAL === 0) {
@@ -196,7 +126,7 @@ export class IndexOperations {
             console.log("Copilot index checkpoint save completed.");
           }
         } catch (err) {
-          this.handleIndexingError(err, files[index], errors, rateLimitNoticeShown);
+          this.handleIndexingError(err, batch[0].fileInfo.path, errors, rateLimitNoticeShown);
           if (this.isRateLimitError(err)) {
             rateLimitNoticeShown = true;
             break;
@@ -212,6 +142,66 @@ export class IndexOperations {
       this.handleFatalError(error);
       return 0;
     }
+  }
+
+  private async prepareAllChunks(files: TFile[]): Promise<
+    Array<{
+      content: string;
+      fileInfo: any;
+    }>
+  > {
+    const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
+    if (!embeddingInstance) {
+      console.error("Embedding instance not found.");
+      return [];
+    }
+    const embeddingModel = EmbeddingsManager.getModelName(embeddingInstance);
+
+    const textSplitter = RecursiveCharacterTextSplitter.fromLanguage("markdown", {
+      chunkSize: CHUNK_SIZE,
+    });
+    const allChunks: Array<{ content: string; fileInfo: any }> = [];
+
+    for (const file of files) {
+      const content = await this.app.vault.cachedRead(file);
+      if (!content?.trim()) continue;
+
+      const fileCache = this.app.metadataCache.getFileCache(file);
+      const fileInfo = {
+        title: file.basename,
+        path: file.path,
+        embeddingModel,
+        ctime: file.stat.ctime,
+        mtime: file.stat.mtime,
+        tags: fileCache?.tags?.map((tag) => tag.tag) ?? [],
+        extension: file.extension,
+        metadata: {
+          ...(fileCache?.frontmatter ?? {}),
+          created: formatDateTime(new Date(file.stat.ctime)).display,
+          modified: formatDateTime(new Date(file.stat.mtime)).display,
+        },
+      };
+
+      // Add note title as contextual chunk headers
+      // https://js.langchain.com/docs/modules/data_connection/document_transformers/contextual_chunk_headers
+      const chunks = await textSplitter.createDocuments([content], [], {
+        chunkHeader: `\n\nNOTE TITLE: [[${fileInfo.title}]]\n\nMETADATA:${JSON.stringify(
+          fileInfo.metadata
+        )}\n\nNOTE BLOCK CONTENT:\n\n`,
+        appendChunkOverlapHeader: true,
+      });
+
+      chunks.forEach((chunk) => {
+        if (chunk.pageContent.trim()) {
+          allChunks.push({
+            content: chunk.pageContent,
+            fileInfo,
+          });
+        }
+      });
+    }
+
+    return allChunks;
   }
 
   private getDocHash(sourceDocument: string): string {
@@ -287,6 +277,7 @@ export class IndexOperations {
       isIndexingCancelled: false,
       indexedCount: 0,
       totalFilesToIndex: totalFiles,
+      processedFiles: new Set(),
       currentIndexingNotice: null,
       indexNoticeMessage: null,
     };
@@ -448,27 +439,28 @@ export class IndexOperations {
         return;
       }
 
-      // Proceed with single file reindex
-      const content = await this.app.vault.cachedRead(file);
-      const fileCache = this.app.metadataCache.getFileCache(file);
+      // Reuse prepareAllChunks with a single file
+      const chunks = await this.prepareAllChunks([file]);
+      if (chunks.length === 0) return;
 
-      const fileToSave = {
-        title: file.basename,
-        path: file.path,
-        content: content,
-        embeddingModel: EmbeddingsManager.getModelName(embeddingInstance),
-        ctime: file.stat.ctime,
-        mtime: file.stat.mtime,
-        tags: fileCache?.tags?.map((tag) => tag.tag) ?? [],
-        extension: file.extension,
-        metadata: {
-          ...(fileCache?.frontmatter ?? {}),
-          created: file.stat.ctime,
-          modified: file.stat.mtime,
-        },
-      };
+      // Process chunks
+      const embeddings = await embeddingInstance.embedDocuments(
+        chunks.map((chunk) => chunk.content)
+      );
 
-      await this.indexDocument(embeddingInstance, fileToSave);
+      // Save to database
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        await this.dbOps.upsert({
+          ...chunk.fileInfo,
+          id: this.getDocHash(chunk.content),
+          content: chunk.content,
+          embedding: embeddings[i],
+          created_at: Date.now(),
+          nchars: chunk.content.length,
+        });
+      }
+
       // Mark that we have unsaved changes instead of saving immediately
       this.dbOps.markUnsavedChanges();
 
