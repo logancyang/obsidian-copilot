@@ -1,49 +1,50 @@
-import {
-  DEFAULT_SETTINGS,
-  updateSetting,
-  useSettingsValue,
-} from "@/settings/model";
+import { DEFAULT_SETTINGS, updateSetting, useSettingsValue } from "@/settings/model";
 import React, { useEffect, useState } from "react";
 import ApiSetting from "./ApiSetting";
 import Collapsible from "./Collapsible";
-import {
-  AzureOpenAIDeployment,
-  updateModelConfig,
-} from "@/aiParams";
+import { AzureOpenAIDeployment, CustomModel, ModelConfig, updateModelConfig } from "@/aiParams";
+import { BUILTIN_CHAT_MODELS, ChatModelProviders, ChatModels } from "@/constants";
+import { DropdownComponent } from "@/settings/components/Dropdown";
 
 const ApiSettings: React.FC = () => {
   const settings = useSettingsValue();
-  const [azureDeployments, setAzureDeployments] = useState<
-    AzureOpenAIDeployment[]
-  >(settings.azureOpenAIApiDeployments || []);
-  const deployment: AzureOpenAIDeployment = settings.azureOpenAIApiDeployments?.[0] || DEFAULT_SETTINGS.azureOpenAIApiDeployments?.[0] || {
-    deploymentName: "",
-    apiKey: "",
-    instanceName: "",
-    apiVersion: "",
-  };
-  const [defaultAzureDeployment, setDefaultAzureDeployment] = useState<
-    AzureOpenAIDeployment
-  >(deployment);
-  const [maxCompletionTokens, setMaxCompletionTokens] = useState<
-    number | undefined
-  >(undefined);
-  const [reasoningEffort, setReasoningEffort] = useState<number | undefined>(
-    undefined
+  const [azureDeployments, setAzureDeployments] = useState<AzureOpenAIDeployment[]>(
+    settings.azureOpenAIApiDeployments || []
   );
+  const deployment: AzureOpenAIDeployment =
+    settings.azureOpenAIApiDeployments?.[0] ||
+    DEFAULT_SETTINGS.azureOpenAIApiDeployments?.[0] ||
+    {};
+  const [defaultAzureDeployment, setDefaultAzureDeployment] =
+    useState<AzureOpenAIDeployment>(deployment);
+  const [modelProvider, setModelProvider] = useState<string>(ChatModelProviders.OPENAI);
+  const [apiKey, setApiKey] = useState<string>("");
+  const [selectedModel, setSelectedModel] = useState<string>(settings.defaultModelKey);
+  const [maxCompletionTokens, setMaxCompletionTokens] = useState<number | undefined>(undefined);
+  const [reasoningEffort, setReasoningEffort] = useState<number | undefined>(undefined);
+  const [selectedDeployment, setSelectedDeployment] = useState<string>("");
+
+  const handleDeploymentSelect = (deploymentName: string) => {
+    setSelectedDeployment(deploymentName);
+    const selectedDeploymentConfig = azureDeployments.find(
+      (d) => d.deploymentName === deploymentName
+    );
+    if (selectedDeploymentConfig) {
+      const modelKey = `o1-preview|${deploymentName}`;
+
+      setMaxCompletionTokens(settings.modelConfigs[modelKey]?.maxCompletionTokens);
+      setReasoningEffort(settings.modelConfigs[modelKey]?.reasoningEffort);
+    }
+  };
 
   useEffect(() => {
     const currentModel = settings.activeModels.find(
-      (model) =>
-        `${model.name}|${model.provider}` ===
-        `${selectedModel}|${modelProvider}`
+      (model) => `${model.name}|${model.provider}` === `${selectedModel}|${modelProvider}`
     );
 
     if (currentModel) {
       const modelKey = `${currentModel.name}|${currentModel.provider}`;
-      setMaxCompletionTokens(
-        settings.modelConfigs[modelKey]?.maxCompletionTokens
-      );
+      setMaxCompletionTokens(settings.modelConfigs[modelKey]?.maxCompletionTokens);
       setReasoningEffort(settings.modelConfigs[modelKey]?.reasoningEffort);
     }
   }, [selectedModel, settings.activeModels, settings.modelConfigs]);
@@ -72,10 +73,7 @@ const ApiSettings: React.FC = () => {
     });
   };
 
-  const handleUpdateAzureDeployment = (
-    index: number,
-    updatedDeployment: AzureOpenAIDeployment
-  ) => {
+  const handleUpdateAzureDeployment = (index: number, updatedDeployment: AzureOpenAIDeployment) => {
     const updatedDeployments = [...azureDeployments];
     updatedDeployments[index] = updatedDeployment;
     setAzureDeployments(updatedDeployments);
@@ -106,6 +104,17 @@ const ApiSettings: React.FC = () => {
     updateModelConfig(modelKey, { reasoningEffort: value });
   };
 
+  const handleModelChange = (modelName: string) => {
+    setSelectedModel(modelName);
+    const modelConfig = settings.modelConfigs[modelName];
+    if (modelConfig) {
+      setMaxCompletionTokens(modelConfig.maxCompletionTokens);
+      setReasoningEffort(modelConfig.reasoningEffort);
+    } else {
+      setMaxCompletionTokens(undefined);
+      setReasoningEffort(undefined);
+    }
+  };
 
   return (
     <div>
@@ -114,8 +123,7 @@ const ApiSettings: React.FC = () => {
       <div className="warning-message">
         Make sure you have access to the model and the correct API key.
         <br />
-        If errors occur, please try resetting to default and re-enter the API
-        key.
+        If errors occur, please try resetting to default and re-enter the API key.
       </div>
       <div>
         <div>
@@ -174,8 +182,7 @@ const ApiSettings: React.FC = () => {
             </a>
             .
             <br />
-            Your API key is stored locally and is only used to make requests to
-            Google's services.
+            Your API key is stored locally and is only used to make requests to Google's services.
           </p>
         </div>
       </Collapsible>
@@ -198,8 +205,8 @@ const ApiSettings: React.FC = () => {
             </a>
             .
             <br />
-            Your API key is stored locally and is only used to make requests to
-            Anthropic's services.
+            Your API key is stored locally and is only used to make requests to Anthropic's
+            services.
           </p>
         </div>
       </Collapsible>
@@ -213,21 +220,13 @@ const ApiSettings: React.FC = () => {
           />
           <p>
             You can get your OpenRouterAI key{" "}
-            <a
-              href="https://openrouter.ai/keys"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">
               here
             </a>
             .
             <br />
             Find models{" "}
-            <a
-              href="https://openrouter.ai/models"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer">
               here
             </a>
             .
@@ -286,10 +285,7 @@ const ApiSettings: React.FC = () => {
                 placeholder="Enter API Version"
                 type="text"
               />
-              <button
-                className="mod-cta"
-                onClick={() => handleRemoveAzureDeployment(index)}
-              >
+              <button className="mod-cta" onClick={() => handleRemoveAzureDeployment(index)}>
                 Remove
               </button>
             </div>
@@ -347,26 +343,19 @@ const ApiSettings: React.FC = () => {
       </Collapsible>
       <Collapsible title="o1-preview Settings">
         <div>
-          <select
-            value={selectedDeployment}
-            onChange={(e) => setSelectedDeployment(e.target.value)}
+          <DropdownComponent
+            options={azureDeployments.map((d) => d.deploymentName)}
+            selectedOption={selectedDeployment}
+            placeholder="Select Deployment"
             disabled={azureDeployments.length === 0}
-          >
-            <option value="" disabled>
-              Select Deployment
-            </option>
-            {azureDeployments.map((d, index) => (
-              <option key={index} value={d.deploymentName}>
-                {d.deploymentName}
-              </option>
-            ))}
-          </select>
+          />
           <ApiSetting
             title="Max Completion Tokens"
             value={maxCompletionTokens?.toString() || ""}
             setValue={(value) => handleMaxCompletionTokensChange(Number(value))}
             placeholder="Enter Max Completion Tokens"
             type="number"
+            disabled={azureDeployments.length === 0 || selectedDeployment === ""}
           />
           <ApiSetting
             title="Reasoning Effort"
@@ -374,6 +363,7 @@ const ApiSettings: React.FC = () => {
             setValue={(value) => handleReasoningEffortChange(Number(value))}
             placeholder="Enter Reasoning Effort (0-100)"
             type="number"
+            disabled={azureDeployments.length === 0 || selectedDeployment === ""}
           />
         </div>
       </Collapsible>
@@ -387,17 +377,12 @@ const ApiSettings: React.FC = () => {
           />
           <p>
             If you have Groq API access, you can get the API key{" "}
-            <a
-              href="https://console.groq.com/keys"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer">
               here
             </a>
             .
             <br />
-            Your API key is stored locally and is only used to make requests to
-            Groq's services.
+            Your API key is stored locally and is only used to make requests to Groq's services.
           </p>
         </div>
       </Collapsible>
@@ -410,11 +395,7 @@ const ApiSettings: React.FC = () => {
         />
         <p>
           Get your free Cohere API key{" "}
-          <a
-            href="https://dashboard.cohere.ai/api-keys"
-            target="_blank"
-            rel="noreferrer"
-          >
+          <a href="https://dashboard.cohere.ai/api-keys" target="_blank" rel="noreferrer">
             here
           </a>
         </p>
@@ -424,4 +405,3 @@ const ApiSettings: React.FC = () => {
 };
 
 export default ApiSettings;
-
