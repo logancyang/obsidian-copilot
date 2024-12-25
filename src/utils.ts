@@ -507,6 +507,8 @@ export function areEmbeddingModelsSame(
   }
 
   // For Azure OpenAI models, compare the full model key
+import { EmbeddingModelProviders } from "@/aiParams";
+
   if (currentEmbeddingModelKey.startsWith(EmbeddingModelProviders.AZURE_OPENAI)) {
     return currentEmbeddingModelKey === prevModel;
   }

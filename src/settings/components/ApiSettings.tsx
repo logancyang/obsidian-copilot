@@ -25,7 +25,7 @@ const ApiSettings: React.FC = () => {
 
   useEffect(() => {
     const currentModel = settings.activeModels.find(
-      (model) => `${model.name}|${model.provider}` === `${selectedModel}|${modelProvider}`
+      (model) => `${model.name}|${model.provider}` === `${selectedModel}|${settings.modelProvider}`
     );
 
     if (currentModel) {
@@ -74,7 +74,7 @@ const ApiSettings: React.FC = () => {
 
   const handleMaxCompletionTokensChange = (value: number) => {
     setMaxCompletionTokens(value);
-    let modelKey = `${selectedModel}|${modelProvider}`;
+    let modelKey = `${selectedModel}|${settings.modelProvider}`;
     if (selectedModel === "o1-preview") {
       modelKey = `o1-preview|${selectedDeployment}`;
     }
@@ -83,7 +83,7 @@ const ApiSettings: React.FC = () => {
 
   const handleReasoningEffortChange = (value: number) => {
     setReasoningEffort(value);
-    let modelKey = `${selectedModel}|${modelProvider}`;
+    let modelKey = `${selectedModel}|${settings.modelProvider}`;
     if (selectedModel === "o1-preview") {
       modelKey = `o1-preview|${selectedDeployment}`;
     }
