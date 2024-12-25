@@ -4,17 +4,19 @@ import ApiSetting from "./ApiSetting";
 import Collapsible from "./Collapsible";
 import { AzureOpenAIDeployment, CustomModel, ModelConfig, updateModelConfig } from "@/aiParams";
 import { BUILTIN_CHAT_MODELS, ChatModelProviders, ChatModels } from "@/constants";
-import { DropdownComponent } from "@/settings/components/Dropdown";
 
 const ApiSettings: React.FC = () => {
   const settings = useSettingsValue();
   const [azureDeployments, setAzureDeployments] = useState<AzureOpenAIDeployment[]>(
     settings.azureOpenAIApiDeployments || []
   );
-  const deployment: AzureOpenAIDeployment =
-    settings.azureOpenAIApiDeployments?.[0] ||
-    DEFAULT_SETTINGS.azureOpenAIApiDeployments?.[0] ||
-    {};
+  const deployment: AzureOpenAIDeployment = {
+    deploymentName: "",
+    instanceName: "",
+    apiKey: "",
+    apiVersion: "",
+    ...settings.azureOpenAIApiDeployments?.[0],
+  };
   const [defaultAzureDeployment, setDefaultAzureDeployment] =
     useState<AzureOpenAIDeployment>(deployment);
   const [modelProvider, setModelProvider] = useState<string>(ChatModelProviders.OPENAI);
@@ -343,12 +345,20 @@ const ApiSettings: React.FC = () => {
       </Collapsible>
       <Collapsible title="o1-preview Settings">
         <div>
-          <DropdownComponent
-            options={azureDeployments.map((d) => d.deploymentName)}
-            selectedOption={selectedDeployment}
-            placeholder="Select Deployment"
+          <select
+            value={selectedDeployment}
+            onChange={(e) => setSelectedDeployment(e.target.value)}
             disabled={azureDeployments.length === 0}
-          />
+          >
+            <option value="" disabled>
+              Select Deployment
+            </option>
+            {azureDeployments.map((d) => (
+              <option key={d.deploymentName} value={d.deploymentName}>
+                {d.deploymentName}
+              </option>
+            ))}
+          </select>
           <ApiSetting
             title="Max Completion Tokens"
             value={maxCompletionTokens?.toString() || ""}
