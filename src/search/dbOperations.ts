@@ -1,7 +1,6 @@
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { CustomError } from "@/error";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
-import { areEmbeddingModelsSame } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
 import { create, insert, Orama, remove, removeMultiple, search } from "@orama/orama";
 import { MD5 } from "crypto-js";
@@ -61,41 +60,20 @@ export class DBOperations {
       }
 
       // Handle embedding model change
-      if (
-        EmbeddingsManager.getInstance().getEmbeddingsAPI() &&
-        this.lastEmbeddingModel &&
-        !areEmbeddingModelsSame(
-          prevEmbeddingModel,
-          currEmbeddingModelName,
-          getSettings().embeddingModelKey
-        )
-      ) {
-        console.log("Embedding model change detected, reinitializing database...");
-        await this.initializeDB(EmbeddingsManager.getInstance().getEmbeddingsAPI());
-        console.log(
-          "Database reinitialized with new embedding model:",
-          getSettings().embeddingModelKey
-        );
-      }
     });
   }
 
-  private async initializeChunkedStorage(modelName: string) {
+  private async initializeChunkedStorage() {
     if (!this.app.vault.adapter) {
       throw new CustomError("Vault adapter not available. Please try again later.");
     }
     const baseDir = await this.getDbPath();
-    this.chunkedStorage = new ChunkedStorage(this.app, baseDir, this.getVaultIdentifier(), modelName);
+    this.chunkedStorage = new ChunkedStorage(this.app, baseDir, this.getVaultIdentifier());
     this.isInitialized = true;
   }
 
   async initializeDB(embeddingInstance: Embeddings | undefined): Promise<Orama<any> | undefined> {
     try {
-      let modelName = "";
-
-      if (embeddingInstance) {
-        modelName = EmbeddingsManager.getModelName(embeddingInstance);
-      }
 
       if (!this.isInitialized) {
         this.dbPath = await this.getDbPath();
@@ -156,7 +134,7 @@ export class DBOperations {
     }
   }
 
-  async clearIndex(createNewDb: boolean = true): Promise<void> {
+  async clearIndex(): Promise<void> {
     try {
       // Clear existing storage
       await this.chunkedStorage?.clearStorage();
@@ -168,10 +146,7 @@ export class DBOperations {
       this.isIndexLoaded = false;
 
       new Notice("Local Copilot index cleared successfully.");
-      console.log(
-        "Local Copilot index cleared successfully." +
-          (createNewDb ? " New instance created." : "")
-      );
+      console.log("Local Copilot index cleared successfully.");
     } catch (err) {
       console.error("Error clearing the local Copilot index:", err);
       new Notice("An error occurred while clearing the local Copilot index.");
@@ -433,65 +408,6 @@ export class DBOperations {
     }
   }
 
-  async checkAndHandleEmbeddingModelChange(embeddingInstance: Embeddings): Promise<boolean> {
-    if (!this.oramaDb) {
-      console.error(
-        "Orama database not found. Please make sure you have a working embedding model."
-      );
-      return false;
-    }
-    const singleDoc = await search(this.oramaDb, {
-      term: "",
-      limit: 1,
-    });
-
-    let prevEmbeddingModel: string | undefined;
-
-    if (singleDoc.hits.length > 0) {
-      const oramaDocSample = singleDoc.hits[0];
-      if (
-        typeof oramaDocSample === "object" &&
-        oramaDocSample !== null &&
-        "document" in oramaDocSample
-      ) {
-        const document = oramaDocSample.document as {
-          embeddingModel?: string;
-        };
-        prevEmbeddingModel = document.embeddingModel;
-      }
-    }
-
-    if (prevEmbeddingModel) {
-      const currEmbeddingModelName = EmbeddingsManager.getModelName(embeddingInstance);
-
-      if (
-        !areEmbeddingModelsSame(
-          {
-            name: prevEmbeddingModel,
-            provider: prevEmbeddingModel.split("|")[1],
-          },
-          {
-            name: currEmbeddingModelName,
-            provider: currEmbeddingModelName.split("|")[1],
-          },
-          getSettings().embeddingModelKey
-        )
-      ) {
-        // Model has changed, notify user and rebuild DB
-        new Notice("New embedding model detected. Rebuilding Copilot index from scratch.");
-        console.log("Detected change in embedding model. Rebuilding Copilot index from scratch.");
-
-        // Create new DB with new model
-        this.oramaDb = await this.createNewDb(embeddingInstance);
-        await this.saveDB();
-        return true;
-      }
-    } else {
-      console.log("No previous embedding model found in the database.");
-    }
-
-    return false;
-  }
 
   public static async getAllDocuments(db: Orama<any>): Promise<any[]> {
     const result = await search(db, {
