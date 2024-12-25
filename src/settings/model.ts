@@ -10,6 +10,37 @@ import {
   DEFAULT_SYSTEM_PROMPT,
 } from "@/constants";
 
+export interface AzureOpenAIDeployment {
+  deploymentName: string;
+  instanceName: string;
+  apiKey: string;
+  apiVersion: string;
+}
+
+export interface ModelConfig {
+  modelName: string;
+  temperature: number;
+  streaming: boolean;
+  maxRetries: number;
+  maxConcurrency: number;
+  maxTokens?: number;
+  openAIApiKey?: string;
+  openAIOrgId?: string;
+  anthropicApiKey?: string;
+  cohereApiKey?: string;
+  azureOpenAIApiKey?: string;
+  azureOpenAIApiInstanceName?: string;
+  azureOpenAIApiDeploymentName?: string;
+  azureOpenAIApiVersion?: string;
+  // Google and TogetherAI API key share this property
+  apiKey?: string;
+  openAIProxyBaseUrl?: string;
+  groqApiKey?: string;
+  enableCors?: boolean;
+  maxCompletionTokens?: number;
+  reasoningEffort?: number;
+}
+
 export interface CopilotSettings {
   plusLicenseKey: string;
   openAIApiKey: string;
@@ -22,6 +53,7 @@ export interface CopilotSettings {
   azureOpenAIApiDeploymentName: string;
   azureOpenAIApiVersion: string;
   azureOpenAIApiEmbeddingDeploymentName: string;
+  azureOpenAIApiDeployments?: AzureOpenAIDeployment[];
   googleApiKey: string;
   openRouterAiApiKey: string;
   defaultChainType: ChainType;
@@ -58,6 +90,7 @@ export interface CopilotSettings {
   disableIndexOnMobile: boolean;
   showSuggestedPrompts: boolean;
   numPartitions: number;
+  modelConfigs: Record<string, ModelConfig>;
 }
 
 export const settingsStore = createStore();
@@ -67,14 +100,20 @@ export const settingsAtom = atom<CopilotSettings>(DEFAULT_SETTINGS);
  * Sets the settings in the atom.
  */
 export function setSettings(settings: Partial<CopilotSettings>) {
-  const newSettings = mergeAllActiveModelsWithCoreModels({ ...getSettings(), ...settings });
+  const newSettings = mergeAllActiveModelsWithCoreModels({
+    ...getSettings(),
+    ...settings,
+  });
   settingsStore.set(settingsAtom, newSettings);
 }
 
 /**
  * Sets a single setting in the atom.
  */
-export function updateSetting<K extends keyof CopilotSettings>(key: K, value: CopilotSettings[K]) {
+export function updateSetting<K extends keyof CopilotSettings>(
+  key: K,
+  value: CopilotSettings[K]
+) {
   const settings = getSettings();
   setSettings({ ...settings, [key]: value });
 }
@@ -93,8 +132,14 @@ export function getSettings(): Readonly<CopilotSettings> {
 export function resetSettings(): void {
   const defaultSettingsWithBuiltIns = {
     ...DEFAULT_SETTINGS,
-    activeModels: BUILTIN_CHAT_MODELS.map((model) => ({ ...model, enabled: true })),
-    activeEmbeddingModels: BUILTIN_EMBEDDING_MODELS.map((model) => ({ ...model, enabled: true })),
+    activeModels: BUILTIN_CHAT_MODELS.map((model) => ({
+      ...model,
+      enabled: true,
+    })),
+    activeEmbeddingModels: BUILTIN_EMBEDDING_MODELS.map((model) => ({
+      ...model,
+      enabled: true,
+    })),
   };
   setSettings(defaultSettingsWithBuiltIns);
 }
@@ -126,10 +171,14 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
   // Stuff in settings are string even when the interface has number type!
   const temperature = Number(settingsToSanitize.temperature);
-  sanitizedSettings.temperature = isNaN(temperature) ? DEFAULT_SETTINGS.temperature : temperature;
+  sanitizedSettings.temperature = isNaN(temperature)
+    ? DEFAULT_SETTINGS.temperature
+    : temperature;
 
   const maxTokens = Number(settingsToSanitize.maxTokens);
-  sanitizedSettings.maxTokens = isNaN(maxTokens) ? DEFAULT_SETTINGS.maxTokens : maxTokens;
+  sanitizedSettings.maxTokens = isNaN(maxTokens)
+    ? DEFAULT_SETTINGS.maxTokens
+    : maxTokens;
 
   const contextTurns = Number(settingsToSanitize.contextTurns);
   sanitizedSettings.contextTurns = isNaN(contextTurns)
@@ -141,11 +190,18 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
 export function getSystemPrompt(): string {
   const userPrompt = getSettings().userSystemPrompt;
-  return userPrompt ? `${DEFAULT_SYSTEM_PROMPT}\n\n${userPrompt}` : DEFAULT_SYSTEM_PROMPT;
+  return userPrompt
+    ? `${DEFAULT_SYSTEM_PROMPT}\n\n${userPrompt}`
+    : DEFAULT_SYSTEM_PROMPT;
 }
 
-function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {
-  settings.activeModels = mergeActiveModels(settings.activeModels, BUILTIN_CHAT_MODELS);
+function mergeAllActiveModelsWithCoreModels(
+  settings: CopilotSettings
+): CopilotSettings {
+  settings.activeModels = mergeActiveModels(
+    settings.activeModels,
+    BUILTIN_CHAT_MODELS
+  );
   settings.activeEmbeddingModels = mergeActiveModels(
     settings.activeEmbeddingModels,
     BUILTIN_EMBEDDING_MODELS

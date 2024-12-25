@@ -3,7 +3,7 @@ import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { RateLimiter } from "@/rateLimiter";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
-import { formatDateTime } from "@/utils";
+import { formatDateTime, normalize } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
 import { MD5 } from "crypto-js";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
@@ -36,12 +36,16 @@ export class IndexOperations {
     private dbOps: DBOperations,
     private embeddingsManager: EmbeddingsManager
   ) {
-    this.rateLimiter = new RateLimiter(getSettings().embeddingRequestsPerSecond);
+    this.rateLimiter = new RateLimiter(
+      getSettings().embeddingRequestsPerSecond
+    );
 
     // Subscribe to settings changes
     subscribeToSettingsChange(async () => {
       const settings = getSettings();
-      this.rateLimiter = new RateLimiter(settings.embeddingRequestsPerSecond);
+      this.rateLimiter = new RateLimiter(
+        settings.embeddingRequestsPerSecond
+      );
     });
   }
 
@@ -77,18 +81,28 @@ export class IndexOperations {
     embeddingsAPI: Embeddings,
     fileToSave: any
   ): Promise<any | undefined> {
-    const textSplitter = RecursiveCharacterTextSplitter.fromLanguage("markdown", {
-      chunkSize: CHUNK_SIZE,
-    });
+    const textSplitter = RecursiveCharacterTextSplitter.fromLanguage(
+      "markdown",
+      {
+        chunkSize: CHUNK_SIZE,
+        chunkOverlap: CHUNK_SIZE * 0.1,
+      }
+    );
 
     // Add note title as contextual chunk headers
     // https://js.langchain.com/docs/modules/data_connection/document_transformers/contextual_chunk_headers
-    const chunks = await textSplitter.createDocuments([fileToSave.content], [], {
-      chunkHeader: `\n\nNOTE TITLE: [[${fileToSave.title}]]\n\nMETADATA:${JSON.stringify(
-        fileToSave.metadata
-      )}\n\nNOTE BLOCK CONTENT:\n\n`,
-      appendChunkOverlapHeader: true,
-    });
+    const chunks = await textSplitter.createDocuments(
+      [fileToSave.content],
+      [],
+      {
+        chunkHeader: `\n\nNOTE TITLE: [[${
+          fileToSave.title
+        }]]\n\nMETADATA:${JSON.stringify(
+          fileToSave.metadata
+        )}\n\nNOTE BLOCK CONTENT:\n\n`,
+        appendChunkOverlapHeader: true,
+      }
+    );
 
     const docVectors: number[][] = [];
     let hasEmbeddingError = false;
@@ -97,7 +111,9 @@ export class IndexOperations {
     for (let i = 0; i < chunks.length; i++) {
       try {
         await this.rateLimiter.wait();
-        const embedding = await embeddingsAPI.embedDocuments([chunks[i].pageContent]);
+        const embedding = await embeddingsAPI.embedDocuments([
+          chunks[i].pageContent,
+        ]);
 
         if (embedding.length > 0 && embedding[0].length > 0) {
           docVectors.push(embedding[0]);
@@ -113,11 +129,13 @@ export class IndexOperations {
 
     // Only proceed with saving if we have valid vectors
     if (docVectors.length > 0) {
-      const chunkWithVectors = chunks.slice(0, docVectors.length).map((chunk, i) => ({
-        id: this.getDocHash(chunk.pageContent),
-        content: chunk.pageContent,
-        embedding: docVectors[i],
-      }));
+      const chunkWithVectors = chunks
+        .slice(0, docVectors.length)
+        .map((chunk, i) => ({
+          id: this.getDocHash(chunk.pageContent),
+          content: chunk.pageContent,
+          embedding: docVectors[i],
+        }));
 
       // Wait for all database operations to complete before considering the document indexed
       try {
@@ -141,7 +159,9 @@ export class IndexOperations {
     return hasEmbeddingError ? undefined : fileToSave;
   }
 
-  public async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
+  public async indexVaultToVectorStore(
+    overwrite?: boolean
+  ): Promise<number> {
     let rateLimitNoticeShown = false;
 
     try {
@@ -151,7 +171,8 @@ export class IndexOperations {
       }
 
       // Check for model change first
-      const modelChanged = await this.dbOps.checkAndHandleEmbeddingModelChange(embeddingInstance);
+      const modelChanged =
+        await this.dbOps.checkAndHandleEmbeddingModelChange(embeddingInstance);
       if (modelChanged) {
         // If model changed, force a full reindex by setting overwrite to true
         overwrite = true;
@@ -196,7 +217,12 @@ export class IndexOperations {
             console.log("Copilot index checkpoint save completed.");
           }
         } catch (err) {
-          this.handleIndexingError(err, files[index], errors, rateLimitNoticeShown);
+          this.handleIndexingError(
+            err,
+            files[index],
+            errors,
+            rateLimitNoticeShown
+          );
           if (this.isRateLimitError(err)) {
             rateLimitNoticeShown = true;
             break;
@@ -264,7 +290,8 @@ export class IndexOperations {
         continue;
       }
 
-      const shouldBeIndexed = includedFiles.size === 0 || includedFiles.has(file.path);
+      const shouldBeIndexed =
+        includedFiles.size === 0 || includedFiles.has(file.path);
       const isIndexed = indexedFilePaths.has(file.path);
 
       if (shouldBeIndexed && (!isIndexed || file.stat.mtime > latestMtime)) {
@@ -294,13 +321,19 @@ export class IndexOperations {
 
   private createIndexingNotice(): Notice {
     const frag = document.createDocumentFragment();
-    const container = frag.createEl("div", { cls: "copilot-notice-container" });
+    const container = frag.createEl("div", {
+      cls: "copilot-notice-container",
+    });
 
-    this.state.indexNoticeMessage = container.createEl("div", { cls: "copilot-notice-message" });
+    this.state.indexNoticeMessage = container.createEl("div", {
+      cls: "copilot-notice-message",
+    });
     this.updateIndexingNoticeMessage();
 
     // Create button container for better layout
-    const buttonContainer = container.createEl("div", { cls: "copilot-notice-buttons" });
+    const buttonContainer = container.createEl("div", {
+      cls: "copilot-notice-buttons",
+    });
 
     // Pause/Resume button
     const pauseButton = buttonContainer.createEl("button");
@@ -345,7 +378,9 @@ export class IndexOperations {
         const files = await this.getFilesToIndex();
         if (files.length === 0) {
           // If no files to index after filter change, cancel the indexing
-          console.log("No files to index after filter change, stopping indexing");
+          console.log(
+            "No files to index after filter change, stopping indexing"
+          );
           this.cancelIndexing();
           new Notice("No files to index with current filters");
           return;
@@ -380,7 +415,9 @@ export class IndexOperations {
         : "Inclusions: None";
       const exclusions =
         folders.length > 0 || settings.qaExclusions
-          ? `Exclusions: ${folders.join(", ")}${folders.length ? ", " : ""}${settings.qaExclusions || "None"}`
+          ? `Exclusions: ${folders.join(", ")}${
+              folders.length ? ", " : ""
+            }${settings.qaExclusions || "None"}`
           : "Exclusions: None";
 
       this.state.indexNoticeMessage.textContent =
@@ -418,7 +455,9 @@ export class IndexOperations {
     }
 
     if (errors.length > 0) {
-      new Notice(`Indexing completed with ${errors.length} errors. Check console for details.`);
+      new Notice(
+        `Indexing completed with ${errors.length} errors. Check console for details.`
+      );
     } else {
       new Notice("Indexing completed successfully!");
     }
@@ -442,7 +481,8 @@ export class IndexOperations {
       await this.dbOps.removeDocs(file.path);
 
       // Check for model change
-      const modelChanged = await this.dbOps.checkAndHandleEmbeddingModelChange(embeddingInstance);
+      const modelChanged =
+        await this.dbOps.checkAndHandleEmbeddingModelChange(embeddingInstance);
       if (modelChanged) {
         await this.indexVaultToVectorStore(true);
         return;

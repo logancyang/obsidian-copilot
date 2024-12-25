@@ -3,7 +3,9 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 
 import { atom, useAtom } from "jotai";
-import { settingsAtom, settingsStore } from "@/settings/model";
+import { settingsAtom, settingsStore, getSettings } from "@/settings/model";
+import { ChatModelProviders } from "./constants";
+import { merge } from "lodash";
 
 const userModelKeyAtom = atom<string | null>(null);
 const modelKeyAtom = atom(
@@ -12,7 +14,19 @@ const modelKeyAtom = atom(
     if (userValue !== null) {
       return userValue;
     }
-    return get(settingsAtom).defaultModelKey;
+    const modelKey = get(settingsAtom).defaultModelKey;
+    const isAzure = modelKey.startsWith(ChatModelProviders.AZURE_OPENAI);
+    const isO1Preview = modelKey.startsWith("o1-preview");
+    if (isAzure && !isO1Preview) {
+      return modelKey;
+    }
+    const deploymentName = isO1Preview ? modelKey.split("|")[1] : "";
+    const settings = getSettings();
+    const defaultDeployment = settings.azureOpenAIApiDeployments?.[0];
+    if (isO1Preview && !deploymentName && defaultDeployment) {
+      return `${modelKey}|${defaultDeployment.deploymentName}`;
+    }
+    return modelKey;
   },
   (get, set, newValue) => {
     set(userModelKeyAtom, newValue);
@@ -53,6 +67,8 @@ export interface ModelConfig {
   openAIProxyBaseUrl?: string;
   groqApiKey?: string;
   enableCors?: boolean;
+  maxCompletionTokens?: number;
+  reasoningEffort?: number;
 }
 
 export interface SetChainOptions {
@@ -109,4 +125,36 @@ export function useChainType() {
   return useAtom(chainTypeAtom, {
     store: settingsStore,
   });
+}
+
+export function updateModelConfig(
+  modelKey: string,
+  newConfig: Partial<ModelConfig>
+) {
+  const settings = getSettings();
+  const modelConfigs = { ...settings.modelConfigs };
+
+  // Handle Azure models config update
+  if (modelKey.startsWith("o1-preview")) {
+    const deploymentName = modelKey.split("|")[1] || "";
+
+    const deploymentIndex = settings.azureOpenAIApiDeployments?.findIndex(
+      (d) => d.deploymentName === deploymentName
+    );
+
+    if (deploymentIndex !== undefined && deploymentIndex !== -1) {
+      const deployment = settings.azureOpenAIApiDeployments?.[deploymentIndex];
+      if (deployment) {
+        newConfig = merge({}, newConfig, {
+          apiKey: deployment.apiKey,
+          azureOpenAIApiInstanceName: deployment.instanceName,
+          azureOpenAIApiVersion: deployment.apiVersion,
+        });
+      }
+    }
+  }
+
+  modelConfigs[modelKey] = merge({}, modelConfigs[modelKey], newConfig);
+
+  setSettings({ ...settings, modelConfigs });
 }
