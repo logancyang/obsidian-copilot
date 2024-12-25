@@ -1,4 +1,5 @@
 import { ChainType, Document } from "@/chainFactory";
+import { EmbeddingModelProviders } from "@/constants";
 import { USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/sharedState";
 import { MemoryVariables } from "@langchain/core/memory";
@@ -507,7 +508,6 @@ export function areEmbeddingModelsSame(
   }
 
   // For Azure OpenAI models, compare the full model key
-import { EmbeddingModelProviders } from "@/aiParams";
 
   if (currentEmbeddingModelKey.startsWith(EmbeddingModelProviders.AZURE_OPENAI)) {
     return currentEmbeddingModelKey === prevModel;
