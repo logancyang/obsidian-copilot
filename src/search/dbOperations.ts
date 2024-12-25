@@ -506,8 +506,7 @@ export class DBOperations {
           {
             name: currEmbeddingModelName,
             provider: currEmbeddingModelName.split("|")[1],
-          },
-          getSettings().embeddingModelKey
+          }
         )
       ) {
         // Model has changed, notify user and rebuild DB
