@@ -28,8 +28,6 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.OPENAI_FORMAT]: ChatOpenAI,
 } as const;
 
-type ChatProviderConstructMap = typeof CHAT_PROVIDER_CONSTRUCTORS;
-
 export default class ChatModelManager {
   private static instance: ChatModelManager;
   private static chatModel: BaseChatModel | null;
@@ -112,9 +110,8 @@ export default class ChatModelManager {
       }
     }
 
-    const providerConfig: {
-      [K in keyof ChatProviderConstructMap]: ConstructorParameters<ChatProviderConstructMap[K]>[0];
-    } = {
+    // Fix the type definition - use Record instead of complex mapped type
+    const providerConfig: Record<ChatModelProviders, any> = {
       [ChatModelProviders.OPENAI]: {
         modelName: modelName,
         openAIApiKey: getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
@@ -122,7 +119,6 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
-        // @ts-ignore
         openAIOrgId: getDecryptedKey(settings.openAIOrgId),
         ...this.handleOpenAIExtraArgs(
           isO1Model,
@@ -145,16 +141,16 @@ export default class ChatModelManager {
         },
       },
       [ChatModelProviders.AZURE_OPENAI]: {
-        azureOpenAIApiKey: getDecryptedKey(azureApiKey),
-        azureOpenAIApiInstanceName: azureInstanceName,
-        azureOpenAIApiDeploymentName: azureDeploymentName,
-        azureOpenAIApiVersion: azureApiVersion,
+        azureOpenAIApiKey: getDecryptedKey(azureApiKey || settings.azureOpenAIApiKey),
+        azureOpenAIApiInstanceName: azureInstanceName || settings.azureOpenAIApiInstanceName,
+        azureOpenAIApiDeploymentName: azureDeploymentName || settings.azureOpenAIApiDeploymentName,
+        azureOpenAIApiVersion: azureApiVersion || settings.azureOpenAIApiVersion,
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
         ...this.handleOpenAIExtraArgs(
-          isO1Model,
+          modelKey.startsWith("o1-preview"),
           modelConfig.maxTokens,
           modelConfig.temperature,
           modelConfig.maxCompletionTokens,
@@ -271,7 +267,7 @@ export default class ChatModelManager {
 
     allModels.forEach((model) => {
       if (model.enabled) {
-        if (!Object.values(ChatModelProviders).contains(model.provider as ChatModelProviders)) {
+        if (!Object.values(ChatModelProviders).includes(model.provider as ChatModelProviders)) {
           console.warn(`Unknown provider: ${model.provider} for model: ${model.name}`);
           return;
         }

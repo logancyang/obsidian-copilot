@@ -162,3 +162,12 @@ export function updateModelConfig(modelKey: string, newConfig: Partial<ModelConf
 
   setSettings({ ...settings, modelConfigs });
 }
+
+export function validateAzureDeployment(deployment: AzureOpenAIDeployment): boolean {
+  return (
+    deployment.deploymentName.trim() !== "" &&
+    deployment.instanceName.trim() !== "" &&
+    deployment.apiKey.trim() !== "" &&
+    deployment.apiVersion.trim() !== ""
+  );
+}

@@ -23,7 +23,6 @@ const ApiSettings: React.FC = () => {
   const [reasoningEffort, setReasoningEffort] = useState<number | undefined>(undefined);
   const [selectedDeployment, setSelectedDeployment] = useState<string>("");
 
-
   useEffect(() => {
     const currentModel = settings.activeModels.find(
       (model) => `${model.name}|${model.provider}` === `${selectedModel}|${modelProvider}`
@@ -50,23 +49,22 @@ const ApiSettings: React.FC = () => {
   };
 
   const handleAddAzureDeployment = () => {
-    const newDeployment = {
-      deploymentName: defaultAzureDeployment.deploymentName,
-      instanceName: defaultAzureDeployment.instanceName,
-      apiKey: defaultAzureDeployment.apiKey,
-      apiVersion: defaultAzureDeployment.apiVersion,
-    };
-
-    if (!validateAzureDeployment(newDeployment)) {
-      alert("Please fill in all fields for the Azure deployment.");
+    if (!validateAzureDeployment(defaultAzureDeployment)) {
+      new Notice("All Azure OpenAI deployment fields are required");
       return;
     }
 
-    const updatedDeployments = [...azureDeployments, newDeployment];
+    // Check for duplicate deployment names
+    if (azureDeployments.some((d) => d.deploymentName === defaultAzureDeployment.deploymentName)) {
+      new Notice("A deployment with this name already exists");
+      return;
+    }
+
+    const updatedDeployments = [...azureDeployments, defaultAzureDeployment];
     setAzureDeployments(updatedDeployments);
     updateSetting("azureOpenAIApiDeployments", updatedDeployments);
 
-    // Reset the defaultAzureDeployment to empty strings
+    // Reset form
     setDefaultAzureDeployment({
       deploymentName: "",
       instanceName: "",
@@ -75,14 +73,14 @@ const ApiSettings: React.FC = () => {
     });
   };
 
-  const handleUpdateAzureDeployment = (index: number, updatedDeployment: AzureOpenAIDeployment) => {
-    if (!validateAzureDeployment(updatedDeployment)) {
-      alert("Please fill in all fields for the Azure deployment.");
+  const handleUpdateAzureDeployment = (index: number, deployment: AzureOpenAIDeployment) => {
+    if (!validateAzureDeployment(deployment)) {
+      new Notice("All Azure OpenAI deployment fields are required");
       return;
     }
 
     const updatedDeployments = [...azureDeployments];
-    updatedDeployments[index] = updatedDeployment;
+    updatedDeployments[index] = deployment;
     setAzureDeployments(updatedDeployments);
     updateSetting("azureOpenAIApiDeployments", updatedDeployments);
   };
@@ -110,7 +108,6 @@ const ApiSettings: React.FC = () => {
     }
     updateModelConfig(modelKey, { reasoningEffort: value });
   };
-
 
   return (
     <div>
@@ -362,7 +359,7 @@ const ApiSettings: React.FC = () => {
               </option>
             ))}
           </select>
-          {(azureDeployments.length > 0 && selectedDeployment !== "") && (
+          {azureDeployments.length > 0 && selectedDeployment !== "" && (
             <ApiSetting
               title="Reasoning Effort"
               value={reasoningEffort?.toString() || ""}
