@@ -1,5 +1,5 @@
 import { CustomModel, getModelKey, ModelConfig, setModelKey } from "@/aiParams";
-import { BUILTIN_CHAT_MODELS, ChatModelProviders } from "@/constants";
+import { BUILTIN_CHAT_MODELS, ChatModelProviders, ChatModels } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { safeFetch } from "@/utils";
@@ -72,18 +72,45 @@ export default class ChatModelManager {
 
   private getModelConfig(customModel: CustomModel): ModelConfig {
     const settings = getSettings();
+    const modelKey = getModelKey();
+
+    const modelConfig = settings.modelConfigs[modelKey] || {};
 
     // Check if the model starts with "o1"
     const modelName = customModel.name;
     const isO1Model = modelName.startsWith("o1");
+
     const baseConfig: ModelConfig = {
       modelName: modelName,
-      temperature: settings.temperature,
+      temperature: modelConfig.temperature || settings.temperature,
       streaming: true,
       maxRetries: 3,
       maxConcurrency: 3,
+      maxTokens: modelConfig.maxTokens,
+      maxCompletionTokens: modelConfig.maxCompletionTokens,
+      reasoningEffort: modelConfig.reasoningEffort,
       enableCors: customModel.enableCors,
     };
+
+    let azureDeploymentName = "";
+    if (modelKey.startsWith("o1-preview")) {
+      azureDeploymentName = modelKey.split("|")[1] || "";
+    }
+
+    let azureApiKey = "";
+    let azureInstanceName = "";
+    let azureApiVersion = "";
+
+    if (azureDeploymentName) {
+      const deployment = settings.azureOpenAIApiDeployments?.find(
+        (d) => d.deploymentName === azureDeploymentName
+      );
+      if (deployment) {
+        azureApiKey = deployment.apiKey;
+        azureInstanceName = deployment.instanceName;
+        azureApiVersion = deployment.apiVersion;
+      }
+    }
 
     const providerConfig: {
       [K in keyof ChatProviderConstructMap]: ConstructorParameters<ChatProviderConstructMap[K]>[0];
@@ -97,7 +124,13 @@ export default class ChatModelManager {
         },
         // @ts-ignore
         openAIOrgId: getDecryptedKey(settings.openAIOrgId),
-        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
+        ...this.handleOpenAIExtraArgs(
+          isO1Model,
+          modelConfig.maxTokens,
+          modelConfig.temperature,
+          modelConfig.maxCompletionTokens,
+          modelConfig.reasoningEffort
+        ),
       },
       [ChatModelProviders.ANTHROPIC]: {
         anthropicApiKey: getDecryptedKey(customModel.apiKey || settings.anthropicApiKey),
@@ -105,20 +138,28 @@ export default class ChatModelManager {
         anthropicApiUrl: customModel.baseUrl,
         clientOptions: {
           // Required to bypass CORS restrictions
-          defaultHeaders: { "anthropic-dangerous-direct-browser-access": "true" },
+          defaultHeaders: {
+            "anthropic-dangerous-direct-browser-access": "true",
+          },
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
       },
       [ChatModelProviders.AZURE_OPENAI]: {
-        azureOpenAIApiKey: getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
-        azureOpenAIApiInstanceName: settings.azureOpenAIApiInstanceName,
-        azureOpenAIApiDeploymentName: settings.azureOpenAIApiDeploymentName,
-        azureOpenAIApiVersion: settings.azureOpenAIApiVersion,
+        azureOpenAIApiKey: getDecryptedKey(azureApiKey),
+        azureOpenAIApiInstanceName: azureInstanceName,
+        azureOpenAIApiDeploymentName: azureDeploymentName,
+        azureOpenAIApiVersion: azureApiVersion,
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
-        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
+        ...this.handleOpenAIExtraArgs(
+          isO1Model,
+          modelConfig.maxTokens,
+          modelConfig.temperature,
+          modelConfig.maxCompletionTokens,
+          modelConfig.reasoningEffort
+        ),
       },
       [ChatModelProviders.COHEREAI]: {
         apiKey: getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
@@ -183,7 +224,13 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
           dangerouslyAllowBrowser: true,
         },
-        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
+        ...this.handleOpenAIExtraArgs(
+          isO1Model,
+          modelConfig.maxTokens,
+          modelConfig.temperature,
+          modelConfig.maxCompletionTokens,
+          modelConfig.reasoningEffort
+        ),
       },
     };
 
@@ -193,11 +240,20 @@ export default class ChatModelManager {
     return { ...baseConfig, ...selectedProviderConfig };
   }
 
-  private handleOpenAIExtraArgs(isO1Model: boolean, maxTokens: number, temperature: number) {
+  private handleOpenAIExtraArgs(
+    isO1Model: boolean,
+    maxTokens: number | undefined,
+    temperature: number | undefined,
+    maxCompletionTokens: number | undefined,
+    reasoningEffort: number | undefined
+  ) {
     return isO1Model
       ? {
-          maxCompletionTokens: maxTokens,
+          maxCompletionTokens: maxCompletionTokens,
           temperature: 1,
+          extraParams: {
+            reasoning_effort: reasoningEffort,
+          },
         }
       : {
           maxTokens: maxTokens,
