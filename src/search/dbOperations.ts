@@ -72,7 +72,8 @@ export class DBOperations {
         EmbeddingsManager.getInstance().getEmbeddingsAPI() &&
         this.lastEmbeddingModel &&
         !areEmbeddingModelsSame(
-          this.lastEmbeddingModel
+          this.lastEmbeddingModel,
+          EmbeddingsManager.getInstance().getEmbeddingsAPI()?.modelName
         )
       ) {
         console.log("Embedding model change detected, reinitializing database...");
