@@ -1,6 +1,10 @@
 import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
-import { CopilotSettings, getSettings, subscribeToSettingsChange } from "@/settings/model";
+import {
+  CopilotSettings,
+  getSettings,
+  subscribeToSettingsChange,
+} from "@/settings/model";
 import { Embeddings } from "@langchain/core/embeddings";
 import { Orama } from "@orama/orama";
 import { App, Notice, Platform } from "obsidian";
@@ -20,13 +24,17 @@ export default class VectorStoreManager {
     this.embeddingsManager = EmbeddingsManager.getInstance();
     this.dbOps = new DBOperations(app);
     this.indexOps = new IndexOperations(app, this.dbOps, this.embeddingsManager);
-    this.eventHandler = new IndexEventHandler(app, this.indexOps, this.dbOps);
+    this.eventHandler = new IndexEventHandler(
+      app,
+      this.indexOps,
+      this.dbOps
+    );
 
     this.initializationPromise = this.initialize();
     this.setupSettingsSubscription();
   }
 
-  private setupSettingsSubscription() {
+  private async setupSettingsSubscription() {
     // Initialize lastKnownSettings
     this.lastKnownSettings = { ...getSettings() };
 
@@ -41,7 +49,9 @@ export default class VectorStoreManager {
         const oldPath = this.dbOps.getCurrentDbPath();
 
         if (oldPath !== newPath) {
-          await this.dbOps.initializeDB(this.embeddingsManager.getEmbeddingsAPI());
+          await this.dbOps.initializeDB(
+            this.embeddingsManager.getEmbeddingsAPI()
+          );
         }
       }
 
@@ -60,7 +70,9 @@ export default class VectorStoreManager {
       let retries = 3;
       while (retries > 0) {
         try {
-          await this.dbOps.initializeDB(this.embeddingsManager.getEmbeddingsAPI());
+          await this.dbOps.initializeDB(
+            this.embeddingsManager.getEmbeddingsAPI()
+          );
           break;
         } catch (error) {
           if (
@@ -83,7 +95,9 @@ export default class VectorStoreManager {
     }
   }
 
-  public async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
+  public async indexVaultToVectorStore(
+    overwrite?: boolean
+  ): Promise<number> {
     await this.waitForInitialization();
     if (Platform.isMobile && getSettings().disableIndexOnMobile) {
       new Notice("Indexing is disabled on mobile devices");
@@ -116,19 +130,23 @@ export default class VectorStoreManager {
     await this.initializationPromise;
   }
 
-  public onunload(): void {
+  public onunload() {
     this.eventHandler.cleanup();
     this.dbOps.onunload();
   }
 
-  public async getOrInitializeDb(embeddingsAPI: Embeddings): Promise<Orama<any>> {
+  public async getOrInitializeDb(
+    embeddingsAPI: Embeddings
+  ): Promise<Orama<any>> {
     let db = this.dbOps.getDb();
     if (!db) {
       console.warn("Copilot index is not loaded. Reinitializing...");
       db = await this.dbOps.initializeDB(embeddingsAPI);
 
       if (!db) {
-        throw new Error("Database failed to initialize. Please check your settings.");
+        throw new Error(
+          "Database failed to initialize. Please check your settings."
+        );
       }
     }
     return db;
