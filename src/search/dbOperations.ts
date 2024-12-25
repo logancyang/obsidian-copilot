@@ -8,6 +8,7 @@ import { MD5 } from "crypto-js";
 import { App, Notice, Platform } from "obsidian";
 import { ChunkedStorage } from "./chunkedStorage";
 import { getVectorLength } from "./searchUtils";
+import { EmbeddingModelProviders } from "@/constants";
 
 export interface OramaDocument {
   id: string;
@@ -38,7 +39,7 @@ export class DBOperations {
   constructor(private app: App) {
     // Subscribe to settings changes
     subscribeToSettingsChange(async () => {
-      const settings = getSettings(arg1, arg2);
+      const settings = getSettings();
       const newPath = await this.getDbPath();
 
       // Handle mobile index loading setting change
@@ -64,8 +65,9 @@ export class DBOperations {
         EmbeddingsManager.getInstance().getEmbeddingsAPI() &&
         this.lastEmbeddingModel &&
         !areEmbeddingModelsSame(
-          { name: this.lastEmbeddingModel.name, provider: this.lastEmbeddingModel.provider },
-          { name: getSettings().embeddingModelKey, provider: getSettings().embeddingModelKey.split("|")[1] }
+          prevEmbeddingModel,
+          currEmbeddingModelName,
+          getSettings().embeddingModelKey
         )
       ) {
         console.log("Embedding model change detected, reinitializing database...");
@@ -78,17 +80,23 @@ export class DBOperations {
     });
   }
 
-  private async initializeChunkedStorage() {
+  private async initializeChunkedStorage(modelName: string) {
     if (!this.app.vault.adapter) {
       throw new CustomError("Vault adapter not available. Please try again later.");
     }
     const baseDir = await this.getDbPath();
-    this.chunkedStorage = new ChunkedStorage(this.app, baseDir, this.getVaultIdentifier());
+    this.chunkedStorage = new ChunkedStorage(this.app, baseDir, this.getVaultIdentifier(), modelName);
     this.isInitialized = true;
   }
 
   async initializeDB(embeddingInstance: Embeddings | undefined): Promise<Orama<any> | undefined> {
     try {
+      let modelName = "";
+
+      if (embeddingInstance) {
+        modelName = EmbeddingsManager.getModelName(embeddingInstance);
+      }
+
       if (!this.isInitialized) {
         this.dbPath = await this.getDbPath();
         await this.initializeChunkedStorage();
@@ -148,7 +156,7 @@ export class DBOperations {
     }
   }
 
-  async clearIndex(): Promise<void> {
+  async clearIndex(createNewDb: boolean = true): Promise<void> {
     try {
       // Clear existing storage
       await this.chunkedStorage?.clearStorage();
@@ -160,7 +168,10 @@ export class DBOperations {
       this.isIndexLoaded = false;
 
       new Notice("Local Copilot index cleared successfully.");
-      console.log("Local Copilot index cleared successfully, new instance created.");
+      console.log(
+        "Local Copilot index cleared successfully." +
+          (createNewDb ? " New instance created." : "")
+      );
     } catch (err) {
       console.error("Error clearing the local Copilot index:", err);
       new Notice("An error occurred while clearing the local Copilot index.");
