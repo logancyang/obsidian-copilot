@@ -1,13 +1,13 @@
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { CustomError } from "@/error";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
+import { areEmbeddingModelsSame } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
 import { create, insert, Orama, remove, removeMultiple, search } from "@orama/orama";
 import { MD5 } from "crypto-js";
 import { App, Notice, Platform } from "obsidian";
 import { ChunkedStorage } from "./chunkedStorage";
 import { getVectorLength } from "./searchUtils";
-import { EmbeddingModelProviders } from "@/constants";
 
 export interface OramaDocument {
   id: string;
@@ -54,16 +54,30 @@ export class DBOperations {
       if (this.dbPath && newPath !== this.dbPath) {
         console.log("Path change detected, reinitializing database...");
         this.dbPath = newPath;
-        await this.initializeChunkedStorage();
+        await this.initializeChunkedStorage(
+          EmbeddingsManager.getModelName(EmbeddingsManager.getInstance().getEmbeddingsAPI())
+        );
         await this.initializeDB(EmbeddingsManager.getInstance().getEmbeddingsAPI());
         console.log("Database reinitialized with new path:", newPath);
       }
 
       // Handle embedding model change
+      if (
+        EmbeddingsManager.getInstance().getEmbeddingsAPI() &&
+        this.lastEmbeddingModel &&
+        !areEmbeddingModelsSame(this.lastEmbeddingModel, getSettings().embeddingModelKey)
+      ) {
+        console.log("Embedding model change detected, reinitializing database...");
+        await this.initializeDB(EmbeddingsManager.getInstance().getEmbeddingsAPI());
+        console.log(
+          "Database reinitialized with new embedding model:",
+          getSettings().embeddingModelKey
+        );
+      }
     });
   }
 
-  private async initializeChunkedStorage() {
+  private async initializeChunkedStorage(modelName: string) {
     if (!this.app.vault.adapter) {
       throw new CustomError("Vault adapter not available. Please try again later.");
     }
@@ -74,10 +88,15 @@ export class DBOperations {
 
   async initializeDB(embeddingInstance: Embeddings | undefined): Promise<Orama<any> | undefined> {
     try {
+      let modelName = "";
+
+      if (embeddingInstance) {
+        modelName = EmbeddingsManager.getModelName(embeddingInstance);
+      }
 
       if (!this.isInitialized) {
         this.dbPath = await this.getDbPath();
-        await this.initializeChunkedStorage();
+        await this.initializeChunkedStorage(modelName);
       }
 
       if (Platform.isMobile && getSettings().disableIndexOnMobile) {
@@ -103,6 +122,10 @@ export class DBOperations {
       }
 
       // Create new database if none exists or loading failed
+      if (!embeddingInstance) {
+        throw new CustomError("Embedding instance is undefined. Cannot create a new database.");
+      }
+
       const newDb = await this.createNewDb(embeddingInstance);
       this.oramaDb = newDb;
       return newDb;
@@ -134,9 +157,9 @@ export class DBOperations {
     }
   }
 
-  async clearIndex(): Promise<void> {
+  async clearIndex(createNewDb = true): Promise<void> {
     try {
-      // Clear existing storage
+      // Clear existing storage first
       await this.chunkedStorage?.clearStorage();
 
       // Wait a moment to ensure file system operations complete
@@ -145,8 +168,20 @@ export class DBOperations {
       // Reset the index loaded flag
       this.isIndexLoaded = false;
 
+      // Create a new DB only if the flag is true
+      if (createNewDb) {
+        const embeddingInstance = EmbeddingsManager.getInstance().getEmbeddingsAPI();
+        // Create new database instance
+        this.oramaDb = await this.createNewDb(embeddingInstance);
+
+        // Save the empty database
+        await this.saveDB();
+      }
+
       new Notice("Local Copilot index cleared successfully.");
-      console.log("Local Copilot index cleared successfully.");
+      console.log(
+        "Local Copilot index cleared successfully." + (createNewDb ? " New instance created." : "")
+      );
     } catch (err) {
       console.error("Error clearing the local Copilot index:", err);
       new Notice("An error occurred while clearing the local Copilot index.");
@@ -236,22 +271,15 @@ export class DBOperations {
     this.hasUnsavedChanges = true;
   }
 
-  private async createNewDb(embeddingInstance: Embeddings | undefined): Promise<Orama<any>> {
-    if (!embeddingInstance) {
-      throw new CustomError("Embedding instance not found.");
-    }
-
-    this.lastEmbeddingModel = {
-      name: getSettings().embeddingModelKey,
-      provider: getSettings().embeddingModelKey.split("|")[1],
-    };
-
+  private async createNewDb(embeddingInstance: Embeddings): Promise<Orama<any>> {
     const vectorLength = await getVectorLength(embeddingInstance);
     if (!vectorLength || vectorLength === 0) {
       throw new CustomError(
         "Invalid vector length detected. Please check if your embedding model is working."
       );
     }
+
+    this.lastEmbeddingModel = getSettings().embeddingModelKey;
 
     const schema = this.createDynamicSchema(vectorLength);
 
@@ -408,11 +436,41 @@ export class DBOperations {
     }
   }
 
+  async checkAndHandleEmbeddingModelChange(
+    embeddingInstance: Embeddings,
+    currentEmbeddingModelKey: string
+  ): Promise<boolean> {
+    if (!this.oramaDb) {
+      console.error("Orama database not found");
+      return false;
+    }
+
+    const singleDoc = await search(this.oramaDb, {
+      term: "",
+      limit: 1,
+    });
+
+    const prevEmbeddingModel = singleDoc.hits[0]?.document?.embeddingModel;
+
+    if (prevEmbeddingModel) {
+      // Fix: Remove the third argument as the function only accepts two
+      if (!areEmbeddingModelsSame(prevEmbeddingModel, currentEmbeddingModelKey)) {
+        new Notice("New embedding model detected. Rebuilding index...");
+        console.log("Embedding model changed, rebuilding index");
+
+        this.oramaDb = await this.createNewDb(embeddingInstance);
+        await this.saveDB();
+        return true;
+      }
+    }
+
+    return false;
+  }
 
   public static async getAllDocuments(db: Orama<any>): Promise<any[]> {
     const result = await search(db, {
       term: "",
-      limit: 100000,
+      limit: 1000,
       includeVectors: true,
     });
     return result.hits.map((hit) => hit.document);
