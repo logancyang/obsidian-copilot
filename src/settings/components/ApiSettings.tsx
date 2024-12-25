@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import ApiSetting from "./ApiSetting";
 import Collapsible from "./Collapsible";
 import { AzureOpenAIDeployment, updateModelConfig } from "@/aiParams";
+import { Notice } from "obsidian";
 
 const ApiSettings: React.FC = () => {
   const settings = useSettingsValue();
