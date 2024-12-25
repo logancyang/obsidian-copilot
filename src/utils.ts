@@ -1,12 +1,16 @@
 import { ChainType, Document } from "@/chainFactory";
-import { NOMIC_EMBED_TEXT, USER_SENDER } from "@/constants";
+import { USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/sharedState";
 import { MemoryVariables } from "@langchain/core/memory";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { BaseChain, RetrievalQAChain } from "langchain/chains";
 import moment from "moment";
 import { TFile, Vault, parseYaml, requestUrl } from "obsidian";
-import { CustomModel } from "./aiParams";
+import { CustomModel, getModelKey } from "@/aiParams";
+import { EmbeddingModelProviders } from "@/constants";
+import { format } from "date-fns";
+import { detect } from "langdetect";
+import { getSettings } from "./settings/model";
 
 export const getModelNameFromKey = (modelKey: string): string => {
   return modelKey.split("|")[0];
@@ -495,6 +499,27 @@ export async function getFilePathsFromPatterns(
   }
 
   return Array.from(filePaths);
+}
+
+export function areEmbeddingModelsSame(
+  prevModel: string | undefined,
+  currentEmbeddingModelKey: string
+): boolean {
+  // Handle undefined case first
+  if (!prevModel) {
+    return false;
+  }
+
+  // For Azure OpenAI models, compare the full model key
+  if (currentEmbeddingModelKey.startsWith(EmbeddingModelProviders.AZURE_OPENAI)) {
+    return currentEmbeddingModelKey === prevModel;
+  }
+
+  // For all other models, split and compare only the model name part
+  const currentModelName = currentEmbeddingModelKey.split('|')[0];
+  const prevModelName = prevModel.split('|')[0];
+  
+  return currentModelName === prevModelName;
 }
 
 export function extractJsonFromCodeBlock(content: string): any {
