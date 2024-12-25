@@ -38,7 +38,7 @@ export class DBOperations {
   constructor(private app: App) {
     // Subscribe to settings changes
     subscribeToSettingsChange(async () => {
-      const settings = getSettings(arg1, arg2); // Replace arg1 and arg2 with the appropriate arguments
+      const settings = getSettings();
       const newPath = await this.getDbPath();
 
       // Handle mobile index loading setting change
@@ -72,8 +72,7 @@ export class DBOperations {
         EmbeddingsManager.getInstance().getEmbeddingsAPI() &&
         this.lastEmbeddingModel &&
         !areEmbeddingModelsSame(
-          this.lastEmbeddingModel,
-          getSettings().embeddingModelKey
+          this.lastEmbeddingModel
         )
       ) {
         console.log("Embedding model change detected, reinitializing database...");

@@ -23,7 +23,12 @@ const ApiSettings: React.FC = () => {
   const [azureDeployments, setAzureDeployments] = useState<
     AzureOpenAIDeployment[]
   >(settings.azureOpenAIApiDeployments || []);
-  const deployment: AzureOpenAIDeployment = settings.azureOpenAIApiDeployments?.[0] || DEFAULT_SETTINGS.azureOpenAIApiDeployments?.[0] || {};
+  const deployment: AzureOpenAIDeployment = settings.azureOpenAIApiDeployments?.[0] || DEFAULT_SETTINGS.azureOpenAIApiDeployments?.[0] || {
+    deploymentName: "",
+    apiKey: "",
+    instanceName: "",
+    apiVersion: "",
+  };
   const [defaultAzureDeployment, setDefaultAzureDeployment] = useState<
     AzureOpenAIDeployment
   >(deployment);
@@ -403,9 +408,6 @@ const ApiSettings: React.FC = () => {
             setValue={(value) => handleMaxCompletionTokensChange(Number(value))}
             placeholder="Enter Max Completion Tokens"
             type="number"
-            disabled={
-              azureDeployments.length === 0 || selectedDeployment === ""
-            }
           />
           <ApiSetting
             title="Reasoning Effort"
@@ -413,9 +415,6 @@ const ApiSettings: React.FC = () => {
             setValue={(value) => handleReasoningEffortChange(Number(value))}
             placeholder="Enter Reasoning Effort (0-100)"
             type="number"
-            disabled={
-              azureDeployments.length === 0 || selectedDeployment === ""
-            }
           />
         </div>
       </Collapsible>
