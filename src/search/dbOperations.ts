@@ -447,6 +447,7 @@ export class DBOperations {
     const result = await search(db, {
       term: "",
       limit: 100000,
+      includeVectors: true,
     });
     return result.hits.map((hit) => hit.document);
   }
