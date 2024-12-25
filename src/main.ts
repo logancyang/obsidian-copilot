@@ -12,10 +12,11 @@ import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
 import { RemoveFromIndexModal } from "@/components/modals/RemoveFromIndexModal";
 import { SimilarNotesModal } from "@/components/modals/SimilarNotesModal";
-import { CHAT_VIEWTYPE, CHUNK_SIZE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
+import { CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { encryptAllKeys } from "@/encryptionService";
 import { CustomError } from "@/error";
+import { findSimilarNotes } from "@/search/findSimilarNotes";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import VectorStoreManager from "@/search/vectorStoreManager";
@@ -29,7 +30,6 @@ import {
 import SharedState from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { Embeddings } from "@langchain/core/embeddings";
-import { search } from "@orama/orama";
 import {
   Editor,
   MarkdownView,
@@ -323,9 +323,16 @@ export default class CopilotPlugin extends Plugin {
           return;
         }
 
-        const activeNoteContent = await this.app.vault.cachedRead(activeFile);
-        const similarChunks = await this.findSimilarNotes(activeNoteContent, activeFile.path);
-        new SimilarNotesModal(this.app, similarChunks).open();
+        const embeddingsAPI = EmbeddingsManager.getInstance().getEmbeddingsAPI();
+        if (!embeddingsAPI) {
+          throw new CustomError("Embeddings API not found.");
+        }
+        const db = await this.vectorStoreManager.getOrInitializeDb(embeddingsAPI);
+        const hits = await findSimilarNotes({
+          db,
+          filePath: activeFile.path,
+        });
+        new SimilarNotesModal(this.app, hits).open();
       },
     });
 
@@ -655,55 +662,6 @@ export default class CopilotPlugin extends Plugin {
       const copilotView = existingView.view as CopilotView;
       copilotView.updateView();
     }
-  }
-
-  async findSimilarNotes(content: string, activeFilePath: string): Promise<any> {
-    // Wait for the VectorStoreManager to initialize
-    await this.vectorStoreManager.waitForInitialization();
-
-    const embeddingsAPI = EmbeddingsManager.getInstance().getEmbeddingsAPI();
-    if (!embeddingsAPI) {
-      throw new CustomError("Embeddings API not found.");
-    }
-    const db = await this.vectorStoreManager.getOrInitializeDb(embeddingsAPI);
-
-    // Check if the index is empty
-    const singleDoc = await search(db, {
-      term: "",
-      limit: 1,
-    });
-
-    if (singleDoc.hits.length === 0) {
-      // Index is empty, trigger indexing
-      new Notice("Index does not exist, indexing vault for similarity search...");
-      await this.vectorStoreManager.indexVaultToVectorStore();
-    }
-
-    const hybridRetriever = new HybridRetriever(
-      this.vectorStoreManager.dbOps,
-      this.app.vault,
-      this.chainManager.chatModelManager.getChatModel(),
-      embeddingsAPI as Embeddings,
-      this.chainManager.brevilabsClient,
-      {
-        minSimilarityScore: 0.3,
-        maxK: 20,
-        salientTerms: [],
-      },
-      getSettings().debug
-    );
-
-    const truncatedContent = content.length > CHUNK_SIZE ? content.slice(0, CHUNK_SIZE) : content;
-    const similarDocs = await hybridRetriever.getRelevantDocuments(truncatedContent, {
-      runName: "no_hyde",
-    });
-    return similarDocs
-      .filter((doc) => doc.metadata.path !== activeFilePath)
-      .map((doc) => ({
-        chunk: doc,
-        score: doc.metadata.score || 0,
-      }))
-      .sort((a, b) => b.score - a.score);
   }
 
   async customSearchDB(query: string, salientTerms: string[], textWeight: number): Promise<any[]> {

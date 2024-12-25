@@ -267,13 +267,32 @@ export class DBOperations {
     return db;
   }
 
-  public static async getDocsByPath(db: Orama<any>, path: string): Promise<any | undefined> {
+  public static async getDocsByPath(db: Orama<any>, path: string) {
     if (!db) throw new Error("DB not initialized");
     if (!path) return;
     const result = await search(db, {
       term: path,
       properties: ["path"],
       exact: true,
+      includeVectors: true,
+    });
+    return result.hits;
+  }
+
+  public static async getDocsByEmbedding(
+    db: Orama<any>,
+    embedding: number[],
+    options: {
+      limit: number;
+      similarity: number;
+    }
+  ) {
+    const result = await search(db, {
+      mode: "vector",
+      vector: { value: embedding, property: "embedding" },
+      limit: options.limit,
+      similarity: options.similarity,
+      includeVectors: true,
     });
     return result.hits;
   }

@@ -1,17 +1,13 @@
-import { Document } from "@langchain/core/documents";
+import { Result } from "@orama/orama";
+import { InternalTypedDocument } from "@orama/orama";
 import { App, Modal, TFile } from "obsidian";
 
-interface SimilarNoteChunk {
-  chunk: Document;
-  score: number;
-}
-
 export class SimilarNotesModal extends Modal {
-  private similarChunks: SimilarNoteChunk[];
+  private hits: Result<InternalTypedDocument<any>>[];
 
-  constructor(app: App, similarChunks: SimilarNoteChunk[]) {
+  constructor(app: App, hits: Result<InternalTypedDocument<any>>[]) {
     super(app);
-    this.similarChunks = similarChunks;
+    this.hits = hits;
   }
 
   onOpen() {
@@ -20,28 +16,20 @@ export class SimilarNotesModal extends Modal {
 
     contentEl.createEl("h2", { text: "Similar Note Blocks to Current Note" });
 
-    const containerEl = contentEl.createEl("div", { cls: "similar-notes-container" });
-    this.similarChunks.forEach((item) => {
-      const itemEl = containerEl.createEl("div", { cls: "similar-note-item" });
-
-      // Create a collapsible section
-      const collapseEl = itemEl.createEl("details");
-      const summaryEl = collapseEl.createEl("summary");
+    const containerEl = contentEl.createEl("ul", { cls: "similar-notes-container" });
+    this.hits.forEach((item) => {
+      const itemEl = containerEl.createEl("li", { cls: "similar-note-item" });
 
       // Create a clickable title
-      const titleEl = summaryEl.createEl("a", {
-        text: `${item.chunk.metadata.title} (Score: ${item.score.toFixed(2)})`,
+      const titleEl = itemEl.createEl("a", {
+        text: `${item.document.title} (Score: ${item.score.toFixed(2)})`,
         cls: "similar-note-title",
       });
 
       titleEl.addEventListener("click", (event) => {
         event.preventDefault();
-        this.navigateToNote(item.chunk.metadata.path);
+        this.navigateToNote(item.document.path);
       });
-
-      // Create the content (initially hidden)
-      const contentEl = collapseEl.createEl("p");
-      contentEl.setText(this.cleanChunkContent(item.chunk.pageContent));
     });
   }
 
@@ -60,10 +48,5 @@ export class SimilarNotesModal extends Modal {
         });
       }
     }
-  }
-
-  private cleanChunkContent(content: string): string {
-    // Remove the "[[title]] --- " part at the beginning of the chunk
-    return content.replace(/^\[\[.*?\]\]\s*---\s*/, "");
   }
 }
