@@ -106,7 +106,6 @@ export class ChunkedStorage {
   async saveDatabase(db: Orama<any>): Promise<void> {
     try {
       const rawData: RawData = await save(db);
-      console.log("!!!! rawData::", rawData);
       const numPartitions = getSettings().numPartitions;
 
       if (numPartitions === 1) {
