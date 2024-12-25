@@ -1,3 +1,10 @@
+export interface AzureOpenAIDeployment {
+  deploymentName: string;
+  apiKey: string;
+  instanceName: string;
+  apiVersion: string;
+}
+
 import { ChainType } from "@/chainFactory";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
@@ -127,10 +134,7 @@ export function useChainType() {
   });
 }
 
-export function updateModelConfig(
-  modelKey: string,
-  newConfig: Partial<ModelConfig>
-) {
+export function updateModelConfig(modelKey: string, newConfig: Partial<ModelConfig>) {
   const settings = getSettings();
   const modelConfigs = { ...settings.modelConfigs };
 
@@ -158,4 +162,3 @@ export function updateModelConfig(
 
   setSettings({ ...settings, modelConfigs });
 }
-export type { AzureOpenAIDeployment };

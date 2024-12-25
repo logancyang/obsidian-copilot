@@ -37,6 +37,7 @@
     "@types/jest": "^29.5.11",
     "@types/koa": "^2.13.7",
     "@types/koa__cors": "^4.0.0",
+    "@types/lodash": "^4.17.13",
     "@types/luxon": "^3.4.2",
     "@types/node": "^16.11.6",
     "@types/react": "^18.0.33",
@@ -93,5 +94,8 @@
     "react-markdown": "^9.0.1",
     "react-syntax-highlighter": "^15.5.0",
     "sse": "github:mpetazzoni/sse.js"
+  },
+  "directories": {
+    "test": "tests"
   }
 }
