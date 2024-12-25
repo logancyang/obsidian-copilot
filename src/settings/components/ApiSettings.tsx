@@ -18,6 +18,7 @@ const ApiSettings: React.FC = () => {
   const [defaultAzureDeployment, setDefaultAzureDeployment] =
     useState<AzureOpenAIDeployment>(deployment);
   const [selectedModel] = useState<string>(settings.defaultModelKey);
+  const [modelProvider, setModelProvider] = useState<string>("openai");
   const [maxCompletionTokens, setMaxCompletionTokens] = useState<number | undefined>(undefined);
   const [reasoningEffort, setReasoningEffort] = useState<number | undefined>(undefined);
   const [selectedDeployment, setSelectedDeployment] = useState<string>("");
@@ -25,7 +26,7 @@ const ApiSettings: React.FC = () => {
 
   useEffect(() => {
     const currentModel = settings.activeModels.find(
-      (model) => `${model.name}|${model.provider}` === `${selectedModel}|${settings.modelProvider}`
+      (model) => `${model.name}|${model.provider}` === `${selectedModel}|${modelProvider}`
     );
 
     if (currentModel) {
@@ -74,7 +75,7 @@ const ApiSettings: React.FC = () => {
 
   const handleMaxCompletionTokensChange = (value: number) => {
     setMaxCompletionTokens(value);
-    let modelKey = `${selectedModel}|${settings.modelProvider}`;
+    let modelKey = `${selectedModel}|${modelProvider}`;
     if (selectedModel === "o1-preview") {
       modelKey = `o1-preview|${selectedDeployment}`;
     }
@@ -83,7 +84,7 @@ const ApiSettings: React.FC = () => {
 
   const handleReasoningEffortChange = (value: number) => {
     setReasoningEffort(value);
-    let modelKey = `${selectedModel}|${settings.modelProvider}`;
+    let modelKey = `${selectedModel}|${modelProvider}`;
     if (selectedModel === "o1-preview") {
       modelKey = `o1-preview|${selectedDeployment}`;
     }
