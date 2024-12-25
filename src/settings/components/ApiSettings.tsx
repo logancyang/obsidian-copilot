@@ -1,10 +1,39 @@
 import { updateSetting, useSettingsValue } from "@/settings/model";
-import React from "react";
+import React, { useState } from "react";
 import ApiSetting from "./ApiSetting";
 import Collapsible from "./Collapsible";
 
 const ApiSettings: React.FC = () => {
   const settings = useSettingsValue();
+  const [azureDeployments, setAzureDeployments] = useState(settings.azureDeployments || []);
+
+  const handleAddDeployment = () => {
+    setAzureDeployments([
+      ...azureDeployments,
+      {
+        apiKey: "",
+        instanceName: "",
+        deploymentName: "",
+        version: "",
+        embeddingDeploymentName: "",
+      },
+    ]);
+  };
+
+  const handleUpdateDeployment = (index, key, value) => {
+    const updatedDeployments = azureDeployments.map((deployment, i) =>
+      i === index ? { ...deployment, [key]: value } : deployment
+    );
+    setAzureDeployments(updatedDeployments);
+    updateSetting("azureDeployments", updatedDeployments);
+  };
+
+  const handleDeleteDeployment = (index) => {
+    const updatedDeployments = azureDeployments.filter((_, i) => i !== index);
+    setAzureDeployments(updatedDeployments);
+    updateSetting("azureDeployments", updatedDeployments);
+  };
+
   return (
     <div>
       <h1>API Settings</h1>
@@ -126,44 +155,48 @@ const ApiSettings: React.FC = () => {
       </Collapsible>
 
       <Collapsible title="Azure OpenAI API Settings">
-        <div>
-          <ApiSetting
-            title="Azure OpenAI API Key"
-            value={settings.azureOpenAIApiKey}
-            setValue={(value) => updateSetting("azureOpenAIApiKey", value)}
-            placeholder="Enter Azure OpenAI API Key"
-          />
-          <ApiSetting
-            title="Azure OpenAI API Instance Name"
-            value={settings.azureOpenAIApiInstanceName}
-            setValue={(value) => updateSetting("azureOpenAIApiInstanceName", value)}
-            placeholder="Enter Azure OpenAI API Instance Name"
-            type="text"
-          />
-          <ApiSetting
-            title="Azure OpenAI API Deployment Name"
-            description="This is your actual model, no need to pass a model name separately."
-            value={settings.azureOpenAIApiDeploymentName}
-            setValue={(value) => updateSetting("azureOpenAIApiDeploymentName", value)}
-            placeholder="Enter Azure OpenAI API Deployment Name"
-            type="text"
-          />
-          <ApiSetting
-            title="Azure OpenAI API Version"
-            value={settings.azureOpenAIApiVersion}
-            setValue={(value) => updateSetting("azureOpenAIApiVersion", value)}
-            placeholder="Enter Azure OpenAI API Version"
-            type="text"
-          />
-          <ApiSetting
-            title="Azure OpenAI API Embedding Deployment Name"
-            description="(Optional) For embedding provider Azure OpenAI"
-            value={settings.azureOpenAIApiEmbeddingDeploymentName}
-            setValue={(value) => updateSetting("azureOpenAIApiEmbeddingDeploymentName", value)}
-            placeholder="Enter Azure OpenAI API Embedding Deployment Name"
-            type="text"
-          />
-        </div>
+        {azureDeployments.map((deployment, index) => (
+          <div key={index}>
+            <ApiSetting
+              title={`Azure OpenAI API Key ${index + 1}`}
+              value={deployment.apiKey}
+              setValue={(value) => handleUpdateDeployment(index, "apiKey", value)}
+              placeholder="Enter Azure OpenAI API Key"
+            />
+            <ApiSetting
+              title={`Azure OpenAI API Instance Name ${index + 1}`}
+              value={deployment.instanceName}
+              setValue={(value) => handleUpdateDeployment(index, "instanceName", value)}
+              placeholder="Enter Azure OpenAI API Instance Name"
+              type="text"
+            />
+            <ApiSetting
+              title={`Azure OpenAI API Deployment Name ${index + 1}`}
+              description="This is your actual model, no need to pass a model name separately."
+              value={deployment.deploymentName}
+              setValue={(value) => handleUpdateDeployment(index, "deploymentName", value)}
+              placeholder="Enter Azure OpenAI API Deployment Name"
+              type="text"
+            />
+            <ApiSetting
+              title={`Azure OpenAI API Version ${index + 1}`}
+              value={deployment.version}
+              setValue={(value) => handleUpdateDeployment(index, "version", value)}
+              placeholder="Enter Azure OpenAI API Version"
+              type="text"
+            />
+            <ApiSetting
+              title={`Azure OpenAI API Embedding Deployment Name ${index + 1}`}
+              description="(Optional) For embedding provider Azure OpenAI"
+              value={deployment.embeddingDeploymentName}
+              setValue={(value) => handleUpdateDeployment(index, "embeddingDeploymentName", value)}
+              placeholder="Enter Azure OpenAI API Embedding Deployment Name"
+              type="text"
+            />
+            <button onClick={() => handleDeleteDeployment(index)}>Delete Deployment</button>
+          </div>
+        ))}
+        <button onClick={handleAddDeployment}>Add Deployment</button>
       </Collapsible>
 
       <Collapsible title="Groq API Settings">

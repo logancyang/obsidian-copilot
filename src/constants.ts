@@ -37,6 +37,7 @@ export enum ChatModels {
   CLAUDE_3_5_HAIKU = "claude-3-5-haiku-latest",
   COMMAND_R = "command-r",
   COMMAND_R_PLUS = "command-r-plus",
+  O1_PREVIEW = "o1-preview",
 }
 
 // Model Providers
@@ -114,6 +115,12 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.AZURE_OPENAI,
     provider: ChatModelProviders.AZURE_OPENAI,
+    enabled: true,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.O1_PREVIEW,
+    provider: ChatModelProviders.OPENAI,
     enabled: true,
     isBuiltIn: true,
   },
