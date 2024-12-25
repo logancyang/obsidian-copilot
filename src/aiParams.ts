@@ -48,6 +48,7 @@ export interface ModelConfig {
   azureOpenAIApiInstanceName?: string;
   azureOpenAIApiDeploymentName?: string;
   azureOpenAIApiVersion?: string;
+  azureOpenAIApiEmbeddingDeploymentName?: string;
   // Google and TogetherAI API key share this property
   apiKey?: string;
   openAIProxyBaseUrl?: string;
