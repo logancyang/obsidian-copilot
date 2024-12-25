@@ -1,9 +1,8 @@
-import { DEFAULT_SETTINGS, updateSetting, useSettingsValue } from "@/settings/model";
+import { updateSetting, useSettingsValue } from "@/settings/model";
 import React, { useEffect, useState } from "react";
 import ApiSetting from "./ApiSetting";
 import Collapsible from "./Collapsible";
-import { AzureOpenAIDeployment, CustomModel, ModelConfig, updateModelConfig } from "@/aiParams";
-import { BUILTIN_CHAT_MODELS, ChatModelProviders, ChatModels } from "@/constants";
+import { AzureOpenAIDeployment, updateModelConfig } from "@/aiParams";
 
 const ApiSettings: React.FC = () => {
   const settings = useSettingsValue();
@@ -18,25 +17,11 @@ const ApiSettings: React.FC = () => {
   };
   const [defaultAzureDeployment, setDefaultAzureDeployment] =
     useState<AzureOpenAIDeployment>(deployment);
-  const [modelProvider, setModelProvider] = useState<string>(ChatModelProviders.OPENAI);
-  const [apiKey, setApiKey] = useState<string>("");
   const [selectedModel, setSelectedModel] = useState<string>(settings.defaultModelKey);
   const [maxCompletionTokens, setMaxCompletionTokens] = useState<number | undefined>(undefined);
   const [reasoningEffort, setReasoningEffort] = useState<number | undefined>(undefined);
   const [selectedDeployment, setSelectedDeployment] = useState<string>("");
 
-  const handleDeploymentSelect = (deploymentName: string) => {
-    setSelectedDeployment(deploymentName);
-    const selectedDeploymentConfig = azureDeployments.find(
-      (d) => d.deploymentName === deploymentName
-    );
-    if (selectedDeploymentConfig) {
-      const modelKey = `o1-preview|${deploymentName}`;
-
-      setMaxCompletionTokens(settings.modelConfigs[modelKey]?.maxCompletionTokens);
-      setReasoningEffort(settings.modelConfigs[modelKey]?.reasoningEffort);
-    }
-  };
 
   useEffect(() => {
     const currentModel = settings.activeModels.find(
@@ -105,17 +90,6 @@ const ApiSettings: React.FC = () => {
     updateModelConfig(modelKey, { reasoningEffort: value });
   };
 
-  const handleModelChange = (modelName: string) => {
-    setSelectedModel(modelName);
-    const modelConfig = settings.modelConfigs[modelName];
-    if (modelConfig) {
-      setMaxCompletionTokens(modelConfig.maxCompletionTokens);
-      setReasoningEffort(modelConfig.reasoningEffort);
-    } else {
-      setMaxCompletionTokens(undefined);
-      setReasoningEffort(undefined);
-    }
-  };
 
   return (
     <div>

@@ -6,11 +6,7 @@ import { RunnableSequence } from "@langchain/core/runnables";
 import { BaseChain, RetrievalQAChain } from "langchain/chains";
 import moment from "moment";
 import { TFile, Vault, parseYaml, requestUrl } from "obsidian";
-import { CustomModel, getModelKey } from "@/aiParams";
-import { EmbeddingModelProviders } from "@/constants";
-import { format } from "date-fns";
-import { detect } from "langdetect";
-import { getSettings } from "./settings/model";
+import { CustomModel } from "@/aiParams";
 
 export const getModelNameFromKey = (modelKey: string): string => {
   return modelKey.split("|")[0];
