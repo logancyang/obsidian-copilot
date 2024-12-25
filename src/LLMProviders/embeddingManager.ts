@@ -248,19 +248,20 @@ export default class EmbeddingManager {
       );
 
       if (azureDeployment) {
-        if (azureDeployment) {
-          providerConfig[
-            EmbeddingModelProviders.AZURE_OPENAI
-          ].azureOpenAIApiKey = getDecryptedKey(azureDeployment.apiKey);
-          providerConfig[
-            EmbeddingModelProviders.AZURE_OPENAI
-          ].azureOpenAIApiInstanceName = azureDeployment.instanceName;
-          providerConfig[
-            EmbeddingModelProviders.AZURE_OPENAI
-          ].azureOpenAIApiDeploymentName = azureDeployment.deploymentName;
-          providerConfig[
-            EmbeddingModelProviders.AZURE_OPENAI
-          ].azureOpenAIApiVersion = azureDeployment.apiVersion;
+        providerConfig[
+          EmbeddingModelProviders.AZURE_OPENAI
+        ].azureOpenAIApiKey = getDecryptedKey(azureDeployment.apiKey);
+        providerConfig[
+          EmbeddingModelProviders.AZURE_OPENAI
+        ].azureOpenAIApiInstanceName = azureDeployment.instanceName;
+        providerConfig[
+          EmbeddingModelProviders.AZURE_OPENAI
+        ].azureOpenAIApiDeploymentName = azureDeployment.deploymentName;
+        providerConfig[
+          EmbeddingModelProviders.AZURE_OPENAI
+        ].azureOpenAIApiVersion = azureDeployment.apiVersion;
+      } else {
+        console.error("Azure deployment is undefined. Please check your settings.");
         } else {
           console.error("Azure deployment is undefined. Please check your settings.");
         }

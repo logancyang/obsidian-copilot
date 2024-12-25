@@ -14,8 +14,6 @@ export { DEFAULT_SETTINGS };
 
 export type { AzureOpenAIDeployment };
 
-export type { AzureOpenAIDeployment };
-
 export interface ModelConfig {
   modelName: string;
   temperature: number;
