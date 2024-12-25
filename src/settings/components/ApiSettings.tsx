@@ -18,7 +18,7 @@ const ApiSettings: React.FC = () => {
   const [defaultAzureDeployment, setDefaultAzureDeployment] =
     useState<AzureOpenAIDeployment>(deployment);
   const [selectedModel] = useState<string>(settings.defaultModelKey);
-  const [modelProvider, setModelProvider] = useState<string>("openai");
+  const [modelProvider] = useState<string>("openai");
   const [maxCompletionTokens, setMaxCompletionTokens] = useState<number | undefined>(undefined);
   const [reasoningEffort, setReasoningEffort] = useState<number | undefined>(undefined);
   const [selectedDeployment, setSelectedDeployment] = useState<string>("");
