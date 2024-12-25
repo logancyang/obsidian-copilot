@@ -17,7 +17,6 @@ import {
   ChatModelProviders,
   ChatModels,
 } from "@/constants";
-import { DropdownComponent } from "@/settings/components/Dropdown";
 
 const ApiSettings: React.FC = () => {
   const settings = useSettingsValue();
@@ -384,12 +383,20 @@ const ApiSettings: React.FC = () => {
       </Collapsible>
       <Collapsible title="o1-preview Settings">
         <div>
-          <DropdownComponent
-            options={azureDeployments.map((d) => d.deploymentName)}
-            selectedOption={selectedDeployment}
-            placeholder="Select Deployment"
+          <select
+            value={selectedDeployment}
+            onChange={(e) => setSelectedDeployment(e.target.value)}
             disabled={azureDeployments.length === 0}
-          />
+          >
+            <option value="" disabled>
+              Select Deployment
+            </option>
+            {azureDeployments.map((d, index) => (
+              <option key={index} value={d.deploymentName}>
+                {d.deploymentName}
+              </option>
+            ))}
+          </select>
           <ApiSetting
             title="Max Completion Tokens"
             value={maxCompletionTokens?.toString() || ""}
