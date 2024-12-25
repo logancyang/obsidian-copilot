@@ -73,10 +73,7 @@ export class DBOperations {
         this.lastEmbeddingModel &&
         !areEmbeddingModelsSame(
           this.lastEmbeddingModel,
-          {
-            name: getSettings().embeddingModelKey,
-            provider: getSettings().embeddingModelKey.split("|")[1],
-          }
+          getSettings().embeddingModelKey
         )
       ) {
         console.log("Embedding model change detected, reinitializing database...");
