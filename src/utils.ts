@@ -40,9 +40,7 @@ export async function getNoteFileFromTitle(vault: Vault, noteTitle: string): Pro
   return null;
 }
 
-/**
- * @deprecated Use app.vault.getAbstractFileByPath() instead.
- */
+/** TODO: Rewrite with app.vault.getAbstractFileByPath() */
 export const getNotesFromPath = async (vault: Vault, path: string): Promise<TFile[]> => {
   const files = vault.getMarkdownFiles();
 
@@ -452,9 +450,6 @@ export function extractChatHistory(memoryVariables: MemoryVariables): [string, s
   return chatHistory;
 }
 
-/**
- * @deprecated Use noteUtils getLinkedNotes() instead.
- */
 export function extractNoteTitles(query: string): string[] {
   // Use a regular expression to extract note titles wrapped in [[]]
   const regex = /\[\[(.*?)\]\]/g;
@@ -575,6 +570,7 @@ export async function safeFetch(url: string, options: RequestInit): Promise<Resp
     url: url,
     type: "basic",
     redirected: false,
+    bytes: () => Promise.resolve(new Uint8Array(0)),
     body: createReadableStreamFromString(response.text),
     bodyUsed: true,
     json: () => response.json,
