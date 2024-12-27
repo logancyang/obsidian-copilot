@@ -160,37 +160,62 @@ export class ChunkedStorage {
         ),
       };
 
-      const metadataPath = this.getMetadataPath();
-      await this.ensureDirectoryExists(metadataPath);
-      await this.app.vault.adapter.write(metadataPath, JSON.stringify(metadata));
+      await this.saveMetadata(metadata);
+      // Create global data object (excluding partitioned fields)
+      const globalData = {
+        ...rawData,
+        docs: { docs: {}, count: 0 },
+        index: {
+          ...(rawData as any).index,
+          vectorIndexes: undefined,
+        },
+      };
 
+      // Save partitions
       for (const [partitionIndex, docs] of partitions.entries()) {
+        // Create partition-specific data
         const partitionData = {
-          ...rawData,
-          documents: docs,
+          index: {
+            vectorIndexes: {
+              embedding: {
+                size: (rawData as any).index.vectorIndexes.embedding.size,
+                vectors: Object.fromEntries(
+                  Object.entries((rawData as any).index.vectorIndexes.embedding.vectors).filter(
+                    ([id]) => docs.some((doc) => doc.id === id)
+                  )
+                ),
+              },
+            },
+          },
+          docs: {
+            docs: Object.fromEntries(docs.map((doc, index) => [(index + 1).toString(), doc])),
+            count: docs.length,
+          },
         };
+
+        // For first partition, include global data
+        const finalPartitionData =
+          partitionIndex === 0
+            ? {
+                ...globalData,
+                docs: partitionData.docs,
+                index: {
+                  ...globalData.index,
+                  vectorIndexes: partitionData.index.vectorIndexes,
+                },
+              }
+            : partitionData;
+
         const chunkPath = this.getChunkPath(partitionIndex);
         await this.ensureDirectoryExists(chunkPath);
-        await this.app.vault.adapter.write(chunkPath, JSON.stringify(partitionData));
+        await this.app.vault.adapter.write(chunkPath, JSON.stringify(finalPartitionData));
 
         if (getSettings().debug) {
           console.log(`Saved partition ${partitionIndex + 1}/${numPartitions}`);
         }
       }
-
-      let savedTotal = 0;
-      for (let i = 0; i < numPartitions; i++) {
-        const chunkPath = this.getChunkPath(i);
-        const chunkData = JSON.parse(await this.app.vault.adapter.read(chunkPath));
-        savedTotal += chunkData.documents.length;
-      }
-
       if (getSettings().debug) {
-        if (savedTotal !== rawDocs.length) {
-          console.error(
-            `Document count mismatch during save! Original: ${rawDocs.length}, Saved: ${savedTotal}`
-          );
-        }
+        console.log("Saved all partitions");
       }
     } catch (error) {
       console.error(`Error saving database:`, error);
@@ -221,17 +246,8 @@ export class ChunkedStorage {
         return newDb;
       }
 
-      // Try loading chunked format
-      const metadataPath = this.getMetadataPath();
-      if (!(await this.app.vault.adapter.exists(metadataPath))) {
-        throw new CustomError("No existing database found");
-      }
-
-      const metadata: ChunkMetadata = JSON.parse(await this.app.vault.adapter.read(metadataPath));
-      if (!metadata?.schema) {
-        throw new CustomError("Invalid metadata file: missing schema");
-      }
-
+      // Load metadata
+      const metadata = await this.loadMetadata();
       const newDb = await create({
         schema: metadata.schema,
         components: {
@@ -242,19 +258,58 @@ export class ChunkedStorage {
         },
       });
 
+      // Load and merge all partitions
+      let mergedData = null;
+      const allChunks = [];
+
+      // First, load all chunks
       for (let i = 0; i < metadata.numPartitions; i++) {
         const chunkPath = this.getChunkPath(i);
         if (await this.app.vault.adapter.exists(chunkPath)) {
           const chunkData = JSON.parse(await this.app.vault.adapter.read(chunkPath));
-          if (chunkData) {
-            await load(newDb, chunkData);
-            if (getSettings().debug) {
-              console.log(`Loaded partition ${i + 1}/${metadata.numPartitions}`);
-            }
+          allChunks.push(chunkData);
+
+          // First chunk contains global data
+          if (i === 0) {
+            mergedData = chunkData;
           }
         }
       }
 
+      if (!mergedData) {
+        throw new CustomError("No data found in chunks");
+      }
+
+      // Create new docs object based on internalDocumentIDStore order
+      const orderedDocs: Record<string, any> = {};
+      let nextDocId = 1;
+
+      for (const internalId of mergedData.internalDocumentIDStore.internalIdToId) {
+        // Find document in any chunk
+        const doc = allChunks
+          .flatMap((chunk) => Object.values(chunk.docs.docs))
+          .find((doc: any) => (doc as any).id === internalId);
+
+        if (doc) {
+          orderedDocs[nextDocId.toString()] = doc;
+          nextDocId++;
+        } else if (getSettings().debug) {
+          console.warn(`Document ${internalId} not found in any chunk`);
+        }
+      }
+
+      // Replace docs with ordered version
+      mergedData.docs.docs = orderedDocs;
+      mergedData.docs.count = Object.keys(orderedDocs).length;
+
+      // Merge vectors from all chunks
+      mergedData.index.vectorIndexes.embedding.vectors = Object.assign(
+        {},
+        ...allChunks.map((chunk) => chunk.index?.vectorIndexes?.embedding?.vectors || {})
+      );
+
+      // Load merged data into database
+      await load(newDb, mergedData);
       return newDb;
     } catch (error) {
       console.error(`Error loading database:`, error);
@@ -297,5 +352,27 @@ export class ChunkedStorage {
       (await this.app.vault.adapter.exists(metadataPath)) ||
       (await this.app.vault.adapter.exists(legacyPath))
     );
+  }
+
+  // Helper method to load metadata
+  private async loadMetadata(): Promise<ChunkMetadata> {
+    const metadataPath = this.getMetadataPath();
+    if (!(await this.app.vault.adapter.exists(metadataPath))) {
+      throw new CustomError("No existing database found");
+    }
+
+    const metadata: ChunkMetadata = JSON.parse(await this.app.vault.adapter.read(metadataPath));
+    if (!metadata?.schema) {
+      throw new CustomError("Invalid metadata file: missing schema");
+    }
+
+    return metadata;
+  }
+
+  // Helper method to save metadata
+  private async saveMetadata(metadata: ChunkMetadata): Promise<void> {
+    const metadataPath = this.getMetadataPath();
+    await this.ensureDirectoryExists(metadataPath);
+    await this.app.vault.adapter.write(metadataPath, JSON.stringify(metadata));
   }
 }
