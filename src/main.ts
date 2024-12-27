@@ -54,7 +54,6 @@ export default class CopilotPlugin extends Plugin {
   settingsUnsubscriber?: () => void;
 
   async onload(): Promise<void> {
-    await this.checkForUpdates();
     await this.loadSettings();
     this.settingsUnsubscriber = subscribeToSettingsChange(() => {
       const settings = getSettings();
@@ -97,8 +96,6 @@ export default class CopilotPlugin extends Plugin {
       name: "Open Copilot Chat Window",
       callback: async () => {
         this.activateView();
-        // Check version
-        await this.checkForUpdates();
       },
     });
 
@@ -735,6 +732,7 @@ export default class CopilotPlugin extends Plugin {
     }));
   }
 
+  // TODO: Add a setting for this. Disable for now.
   private async checkForUpdates(): Promise<void> {
     try {
       const response = await requestUrl({
