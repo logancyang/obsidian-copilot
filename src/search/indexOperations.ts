@@ -9,8 +9,8 @@ import { App, Notice, TFile } from "obsidian";
 import { DBOperations } from "./dbOperations";
 import { extractAppIgnoreSettings, getFilePathsForQA } from "./searchUtils";
 
-const EMBEDDING_BATCH_SIZE = 50;
-const CHECKPOINT_INTERVAL = 4 * EMBEDDING_BATCH_SIZE;
+const EMBEDDING_BATCH_SIZE = 64;
+const CHECKPOINT_INTERVAL = 8 * EMBEDDING_BATCH_SIZE;
 
 export interface IndexingState {
   isIndexingPaused: boolean;
@@ -121,7 +121,13 @@ export class IndexOperations {
           this.state.indexedCount = this.state.processedFiles.size;
           this.updateIndexingNoticeMessage();
 
-          if (this.state.indexedCount % CHECKPOINT_INTERVAL === 0) {
+          // Calculate if we've crossed a checkpoint threshold
+          const previousCheckpoint = Math.floor(
+            (this.state.indexedCount - batch.length) / CHECKPOINT_INTERVAL
+          );
+          const currentCheckpoint = Math.floor(this.state.indexedCount / CHECKPOINT_INTERVAL);
+
+          if (currentCheckpoint > previousCheckpoint) {
             await this.dbOps.saveDB();
             console.log("Copilot index checkpoint save completed.");
           }
