@@ -16,7 +16,7 @@ import { CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { encryptAllKeys } from "@/encryptionService";
 import { CustomError } from "@/error";
-import { findSimilarNotes } from "@/search/findSimilarNotes";
+import { findRelevantNotes } from "@/search/findRelevantNotes";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import VectorStoreManager from "@/search/vectorStoreManager";
@@ -314,8 +314,8 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "find-similar-notes",
-      name: "Find similar notes to active note",
+      id: "find-relevant-notes",
+      name: "Find relevant notes to active note",
       callback: async () => {
         const activeFile = this.app.workspace.getActiveFile();
         if (!activeFile) {
@@ -328,11 +328,11 @@ export default class CopilotPlugin extends Plugin {
           throw new CustomError("Embeddings API not found.");
         }
         const db = await this.vectorStoreManager.getOrInitializeDb(embeddingsAPI);
-        const hits = await findSimilarNotes({
+        const relevantNotes = await findRelevantNotes({
           db,
           filePath: activeFile.path,
         });
-        new SimilarNotesModal(this.app, hits).open();
+        new SimilarNotesModal(this.app, relevantNotes).open();
       },
     });
 

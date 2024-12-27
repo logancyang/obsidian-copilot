@@ -17,6 +17,10 @@ export const isFolderMatch = (fileFullpath: string, inputPath: string): boolean 
   return fileSegments.includes(inputPath.toLowerCase());
 };
 
+/**
+ * @deprecated File display title can be duplicated, so we should use file path
+ * instead of title to find the note file.
+ */
 export async function getNoteFileFromTitle(vault: Vault, noteTitle: string): Promise<TFile | null> {
   // Get all markdown files in the vault
   const files = vault.getMarkdownFiles();
@@ -36,6 +40,9 @@ export async function getNoteFileFromTitle(vault: Vault, noteTitle: string): Pro
   return null;
 }
 
+/**
+ * @deprecated Use app.vault.getAbstractFileByPath() instead.
+ */
 export const getNotesFromPath = async (vault: Vault, path: string): Promise<TFile[]> => {
   const files = vault.getMarkdownFiles();
 
@@ -445,6 +452,9 @@ export function extractChatHistory(memoryVariables: MemoryVariables): [string, s
   return chatHistory;
 }
 
+/**
+ * @deprecated Use noteUtils getLinkedNotes() instead.
+ */
 export function extractNoteTitles(query: string): string[] {
   // Use a regular expression to extract note titles wrapped in [[]]
   const regex = /\[\[(.*?)\]\]/g;
