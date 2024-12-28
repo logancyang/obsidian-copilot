@@ -11,6 +11,7 @@ import {
 import { Notice } from "obsidian";
 import ChainManager from "./chainManager";
 import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "./intentAnalyzer";
+import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 
 export interface ChainRunner {
   run(
@@ -341,7 +342,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         const url = extractYoutubeUrl(userMessage.message);
         if (url) {
           try {
-            const response = await this.chainManager.brevilabsClient.youtube4llm(url);
+            const response = await BrevilabsClient.getInstance().youtube4llm(url);
             if (response.response.transcript) {
               return this.handleResponse(
                 response.response.transcript,
@@ -378,12 +379,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       try {
         // Use the original message for intent analysis
         const messageForAnalysis = userMessage.originalMessage || userMessage.message;
-        toolCalls = await IntentAnalyzer.analyzeIntent(
-          messageForAnalysis,
-          this.chainManager.vectorStoreManager,
-          this.chainManager.chatModelManager,
-          this.chainManager.brevilabsClient
-        );
+        toolCalls = await IntentAnalyzer.analyzeIntent(messageForAnalysis);
       } catch (error) {
         return this.handleResponse(
           "Copilot Plus message failed. Please provide a valid license key in your Copilot setting.",

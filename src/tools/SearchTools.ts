@@ -1,11 +1,8 @@
 import { EMPTY_INDEX_ERROR_MESSAGE, TEXT_WEIGHT } from "@/constants";
 import { CustomError } from "@/error";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import ChatModelManager from "@/LLMProviders/chatModelManager";
-import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import VectorStoreManager from "@/search/vectorStoreManager";
-import { getSettings } from "@/settings/model";
 import { TimeInfo } from "@/tools/TimeTools";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
@@ -15,58 +12,34 @@ const localSearchTool = tool(
     timeRange,
     query,
     salientTerms,
-    vectorStoreManager,
-    chatModelManager,
-    brevilabsClient,
   }: {
     timeRange?: { startTime: TimeInfo; endTime: TimeInfo };
     query: string;
     salientTerms: string[];
-    vectorStoreManager: VectorStoreManager;
-    chatModelManager: ChatModelManager;
-    brevilabsClient: BrevilabsClient;
   }) => {
-    // Ensure VectorStoreManager is initialized
-    await vectorStoreManager.waitForInitialization();
-    const indexEmpty = await vectorStoreManager.isIndexEmpty();
+    const indexEmpty = await VectorStoreManager.getInstance().isIndexEmpty();
     if (indexEmpty) {
       throw new CustomError(EMPTY_INDEX_ERROR_MESSAGE);
     }
 
-    const embeddingsManager = EmbeddingsManager.getInstance();
-    const vault = app.vault;
-    const embeddingInstance = embeddingsManager?.getEmbeddingsAPI();
-
-    if (!embeddingInstance) {
-      throw new CustomError("Embedding instance not found.");
-    }
-
     const returnAll = timeRange !== undefined;
 
-    const hybridRetriever = new HybridRetriever(
-      vectorStoreManager.dbOps,
-      vault,
-      chatModelManager.getChatModel(),
-      embeddingInstance,
-      brevilabsClient,
-      {
-        minSimilarityScore: returnAll ? 0.0 : 0.1,
-        maxK: returnAll ? 100 : 15,
-        salientTerms,
-        timeRange: timeRange
-          ? {
-              startTime: timeRange.startTime.epoch,
-              endTime: timeRange.endTime.epoch,
-            }
-          : undefined,
-        textWeight: TEXT_WEIGHT,
-        returnAll: returnAll,
-        // Voyage AI reranker did worse than Orama in some cases, so only use it if
-        // Orama did not return anything higher than this threshold
-        useRerankerThreshold: 0.5,
-      },
-      getSettings().debug
-    );
+    const hybridRetriever = new HybridRetriever({
+      minSimilarityScore: returnAll ? 0.0 : 0.1,
+      maxK: returnAll ? 100 : 15,
+      salientTerms,
+      timeRange: timeRange
+        ? {
+            startTime: timeRange.startTime.epoch,
+            endTime: timeRange.endTime.epoch,
+          }
+        : undefined,
+      textWeight: TEXT_WEIGHT,
+      returnAll: returnAll,
+      // Voyage AI reranker did worse than Orama in some cases, so only use it if
+      // Orama did not return anything higher than this threshold
+      useRerankerThreshold: 0.5,
+    });
 
     // Perform the search
     const documents = await hybridRetriever.getRelevantDocuments(query);
@@ -95,17 +68,14 @@ const localSearchTool = tool(
         .optional(),
       query: z.string().describe("The search query"),
       salientTerms: z.array(z.string()).describe("List of salient terms extracted from the query"),
-      vectorStoreManager: z.any().describe("The VectorStoreManager instance"),
-      chatModelManager: z.any().describe("The ChatModelManager instance"),
-      brevilabsClient: z.any().describe("The BrevilabsClient instance"),
     }),
   }
 );
 
 const indexTool = tool(
-  async ({ vectorStoreManager }: { vectorStoreManager: VectorStoreManager }) => {
+  async () => {
     try {
-      const indexedCount = await vectorStoreManager.indexVaultToVectorStore();
+      const indexedCount = await VectorStoreManager.getInstance().indexVaultToVectorStore();
       const indexResultPrompt = `Please report whether the indexing was successful.\nIf success is true, just say it is successful. If 0 files is indexed, say there are no new files to index.`;
       return (
         indexResultPrompt +
@@ -128,17 +98,14 @@ const indexTool = tool(
   {
     name: "indexVault",
     description: "Index the vault to the Copilot index",
-    schema: z.object({
-      vectorStoreManager: z.any().describe("The VectorStoreManager instance"),
-    }),
   }
 );
 
 // Add new web search tool
 const webSearchTool = tool(
-  async ({ query, brevilabsClient }: { query: string; brevilabsClient: BrevilabsClient }) => {
+  async ({ query }: { query: string }) => {
     try {
-      const response = await brevilabsClient.webSearch(query);
+      const response = await BrevilabsClient.getInstance().webSearch(query);
       return (
         "\n\nWeb search results below, don't forget to list the sources at the end of your answer:\n" +
         response.response
@@ -153,7 +120,6 @@ const webSearchTool = tool(
     description: "Search the web for information",
     schema: z.object({
       query: z.string().describe("The search query"),
-      brevilabsClient: z.any().describe("The BrevilabsClient instance"),
     }),
   }
 );

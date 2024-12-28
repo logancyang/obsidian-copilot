@@ -1,6 +1,5 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ChainManager from "@/LLMProviders/chainManager";
-import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { CustomModel } from "@/aiParams";
 import { parseChatContent, updateChatMemory } from "@/chatUtils";
 import { registerBuiltInCommands } from "@/commands";
@@ -29,7 +28,6 @@ import {
 } from "@/settings/model";
 import SharedState from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
-import { Embeddings } from "@langchain/core/embeddings";
 import {
   Editor,
   MarkdownView,
@@ -68,13 +66,12 @@ export default class CopilotPlugin extends Plugin {
     // Always have one instance of sharedState and chainManager in the plugin
     this.sharedState = new SharedState();
 
-    this.vectorStoreManager = new VectorStoreManager(this.app);
-    await this.vectorStoreManager.waitForInitialization();
+    this.vectorStoreManager = VectorStoreManager.getInstance();
 
     // Initialize BrevilabsClient
     this.brevilabsClient = BrevilabsClient.getInstance();
 
-    this.chainManager = new ChainManager(this.app, this.vectorStoreManager, this.brevilabsClient);
+    this.chainManager = new ChainManager(this.app, this.vectorStoreManager);
 
     // Initialize FileParserManager early with other core services
     this.fileParserManager = new FileParserManager(this.brevilabsClient);
@@ -320,11 +317,7 @@ export default class CopilotPlugin extends Plugin {
           return;
         }
 
-        const embeddingsAPI = EmbeddingsManager.getInstance().getEmbeddingsAPI();
-        if (!embeddingsAPI) {
-          throw new CustomError("Embeddings API not found.");
-        }
-        const db = await this.vectorStoreManager.getOrInitializeDb(embeddingsAPI);
+        const db = await this.vectorStoreManager.getDb();
         const relevantNotes = await findRelevantNotes({
           db,
           filePath: activeFile.path,
@@ -421,11 +414,12 @@ export default class CopilotPlugin extends Plugin {
       name: "Remove files from Copilot index",
       callback: async () => {
         new RemoveFromIndexModal(this.app, async (filePaths: string[]) => {
+          const dbOps = await this.vectorStoreManager.getDbOps();
           try {
             for (const path of filePaths) {
-              await this.vectorStoreManager.dbOps.removeDocs(path);
+              await dbOps.removeDocs(path);
             }
-            await this.vectorStoreManager.dbOps.saveDB();
+            await dbOps.saveDB();
             new Notice(`Successfully removed ${filePaths.length} files from the index.`);
           } catch (err) {
             console.error("Error removing files from index:", err);
@@ -662,26 +656,12 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async customSearchDB(query: string, salientTerms: string[], textWeight: number): Promise<any[]> {
-    await this.vectorStoreManager.waitForInitialization();
-    const embeddingsAPI = EmbeddingsManager.getInstance().getEmbeddingsAPI();
-    if (!embeddingsAPI) {
-      throw new CustomError("Embeddings API not found.");
-    }
-
-    const hybridRetriever = new HybridRetriever(
-      this.vectorStoreManager.dbOps,
-      this.app.vault,
-      this.chainManager.chatModelManager.getChatModel(),
-      embeddingsAPI as Embeddings,
-      this.chainManager.brevilabsClient,
-      {
-        minSimilarityScore: 0.3,
-        maxK: 20,
-        salientTerms: salientTerms,
-        textWeight: textWeight,
-      },
-      getSettings().debug
-    );
+    const hybridRetriever = new HybridRetriever({
+      minSimilarityScore: 0.3,
+      maxK: 20,
+      salientTerms: salientTerms,
+      textWeight: textWeight,
+    });
 
     const results = await hybridRetriever.getOramaChunks(query, salientTerms);
     return results.map((doc) => ({
