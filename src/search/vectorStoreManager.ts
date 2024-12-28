@@ -94,6 +94,10 @@ export default class VectorStoreManager {
     }
   }
 
+  private async waitForInitialization(): Promise<void> {
+    await this.initializationPromise;
+  }
+
   public async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
     await this.waitForInitialization();
     if (Platform.isMobile && getSettings().disableIndexOnMobile) {
@@ -123,8 +127,9 @@ export default class VectorStoreManager {
     return this.dbOps.isIndexEmpty();
   }
 
-  public async waitForInitialization(): Promise<void> {
-    await this.initializationPromise;
+  public async hasIndex(notePath: string): Promise<boolean> {
+    await this.waitForInitialization();
+    return this.dbOps.hasIndex(notePath);
   }
 
   public onunload(): void {

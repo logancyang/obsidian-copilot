@@ -1,7 +1,10 @@
 import { useChainType } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
+import { Card, CardTitle, CardContent, CardHeader } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { useSettingsValue } from "@/settings/model";
+import { PlusCircle, TriangleAlert } from "lucide-react";
 import React, { useMemo } from "react";
 
 interface NotePrompt {
@@ -89,97 +92,58 @@ export const SuggestedPrompts: React.FC<SuggestedPromptsProps> = ({ onClick }) =
   const prompts = useMemo(() => getRandomPrompt(chainType), [chainType]);
   const settings = useSettingsValue();
   const indexVaultToVectorStore = settings.indexVaultToVectorStore as VAULT_VECTOR_STORE_STRATEGY;
-  const showSuggestedPrompts = settings.showSuggestedPrompts;
-
-  if (!showSuggestedPrompts) {
-    return null;
-  }
 
   return (
-    <div
-      style={{
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      <div
-        style={{
-          alignItems: "center",
-          width: "100%",
-          height: "100%",
-          flex: 1,
-          display: "flex",
-          justifyContent: "center",
-          flexDirection: "column",
-        }}
-      >
-        <div style={{ maxWidth: "500px", width: "90%" }}>
-          <p>
-            <b>Suggested Prompts</b>
-          </p>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "1rem",
-            }}
-          >
+    <div className="flex flex-col gap-4">
+      <Card className="w-full bg-secondary border border-solid border-border">
+        <CardHeader>
+          <CardTitle>Suggested Prompts</CardTitle>
+        </CardHeader>
+        <CardContent className="p-2 px-4 pt-0">
+          <div className="flex flex-col gap-2">
             {prompts.map((prompt, i) => (
-              <button
+              <div
                 key={i}
-                onClick={() => onClick(prompt.text)}
-                style={{
-                  cursor: "pointer",
-                  display: "flex",
-                  flexDirection: "column",
-                  height: "fit-content",
-                  gap: "0.5rem",
-                  alignItems: "start",
-                  padding: "0.5rem 1rem",
-                  width: "100%",
-                  whiteSpace: "normal",
-                  textAlign: "left",
-                }}
+                className="flex gap-2 p-2 justify-between text-sm rounded-md border border-border border-solid"
               >
-                <div style={{ color: "var(--text-muted)" }}>{prompt.title}</div>
-                <div>{prompt.text}</div>
-              </button>
+                <div className="flex flex-col gap-1">
+                  <div className="text-muted">{prompt.title}</div>
+                  <div>{prompt.text}</div>
+                </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      className="size-6 p-0 !bg-transparent border-none !shadow-none hover:!bg-interactive-hover"
+                      onClick={() => onClick(prompt.text)}
+                    >
+                      <PlusCircle className="size-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>Add to Chat</TooltipContent>
+                </Tooltip>
+              </div>
             ))}
           </div>
-          {chainType === ChainType.VAULT_QA_CHAIN && (
-            <p
-              style={{
-                border: "1px solid var(--background-modifier-border)",
-                padding: "0.5rem",
-                borderRadius: "var(--radius-s)",
-              }}
-            >
-              Please note that this is a retrieval-based QA. Questions should contain keywords and
-              concepts that exist literally in your vault
-            </p>
-          )}
-          {chainType === ChainType.VAULT_QA_CHAIN &&
-            indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.NEVER && (
-              <p
-                style={{
-                  border: "1px solid var(--background-modifier-border)",
-                  padding: "0.5rem",
-                  borderRadius: "var(--radius-s)",
-                }}
-              >
-                ⚠️ Your auto-index strategy is set to <b>NEVER</b>. Before proceeding, click the{" "}
-                <span style={{ color: "var(--color-blue" }}>Refresh Index</span> button below or run
-                the{" "}
-                <span style={{ color: "var(--color-blue" }}>
-                  Copilot command: Index (refresh) vault for QA
-                </span>{" "}
-                to update the index.
-              </p>
-            )}
+        </CardContent>
+      </Card>
+      {chainType === ChainType.VAULT_QA_CHAIN && (
+        <div className="text-sm border border-border border-solid p-2 rounded-md">
+          Please note that this is a retrieval-based QA. Questions should contain keywords and
+          concepts that exist literally in your vault
         </div>
-      </div>
+      )}
+      {chainType === ChainType.VAULT_QA_CHAIN &&
+        indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.NEVER && (
+          <div className="text-sm border border-border border-solid p-2 rounded-md">
+            <div>
+              <TriangleAlert className="size-4" /> Your auto-index strategy is set to <b>NEVER</b>.
+              Before proceeding, click the <span className="text-accent">Refresh Index</span> button
+              below or run the{" "}
+              <span className="text-accent">Copilot command: Index (refresh) vault for QA</span> to
+              update the index.
+            </div>
+          </div>
+        )}
     </div>
   );
 };

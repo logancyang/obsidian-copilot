@@ -4,7 +4,7 @@ import { getSettings } from "@/settings/model";
 import { InternalTypedDocument, Orama, Result } from "@orama/orama";
 import { TFile } from "obsidian";
 
-const MIN_SIMILARITY_SCORE = 0.3;
+const MIN_SIMILARITY_SCORE = 0.4;
 const MAX_K = 20;
 const ORIGINAL_WEIGHT = 0.7;
 const LINKS_WEIGHT = 0.3;

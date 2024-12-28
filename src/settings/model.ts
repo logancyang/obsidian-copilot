@@ -58,6 +58,7 @@ export interface CopilotSettings {
   defaultOpenArea: DEFAULT_OPEN_AREA;
   disableIndexOnMobile: boolean;
   showSuggestedPrompts: boolean;
+  showRelevantNotes: boolean;
   numPartitions: number;
 }
 

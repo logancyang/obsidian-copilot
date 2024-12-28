@@ -11,6 +11,11 @@ If your plugin does not need CSS, delete this file.
 
 */
 
+/* Popover needs to render on top of the workspace-leaf-resize-handle */
+[data-radix-popper-content-wrapper] {
+  z-index: 9999 !important;
+}
+
 .button-container {
   display: flex;
   justify-content: space-between;
@@ -455,24 +460,6 @@ If your plugin does not need CSS, delete this file.
 .chain-select-button svg {
   width: 12px;
   height: 12px;
-}
-
-.chat-messages {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-start;
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px;
-  width: 100%;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  font-size: calc(var(--font-text-size) - 2px);
-  box-sizing: border-box;
-  scroll-behavior: smooth;
-  margin-top: auto;
-  user-select: text;
 }
 
 .chat-message-container {

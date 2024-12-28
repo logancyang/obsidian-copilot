@@ -15,6 +15,9 @@ module.exports = {
   // https://github.com/tailwindlabs/tailwindcss/blob/main/stubs/config.full.js
   theme: {
     textColor: {
+      inherit: colors.inherit,
+      current: colors.current,
+      transparent: colors.transparent,
       normal: "var(--text-normal)",
       muted: "var(--text-muted)",
       faint: "var(--text-faint)",
@@ -27,10 +30,12 @@ module.exports = {
       "accent-hover": "var(--text-accent-hover)",
       selection: "var(--text-selection)",
       "highlight-bg": "var(--text-highlight-bg)",
-      bold: "var(--bold-color)",
-      italic: "var(--italic-color)",
     },
     backgroundColor: {
+      inherit: colors.inherit,
+      current: colors.current,
+      transparent: colors.transparent,
+      background: "var(--background-primary)",
       primary: "var(--background-primary)",
       "primary-alt": "var(--background-primary-alt)",
       secondary: "var(--background-secondary)",
@@ -50,8 +55,18 @@ module.exports = {
           DEFAULT: "var(--dropdown-background)",
         },
       },
+      interactive: {
+        normal: "var(--interactive-normal)",
+        hover: "var(--interactive-hover)",
+        accent: "var(--interactive-accent)",
+        "accent-hsl": "hsl(var(--interactive-accent-hsl),<alpha-value>)",
+        "accent-hover": "var(--interactive-accent-hover)",
+      },
     },
     borderColor: {
+      inherit: colors.inherit,
+      current: colors.current,
+      transparent: colors.transparent,
       border: "var(--background-modifier-border)",
       "border-hover": "var(--background-modifier-border-hover)",
       "border-focus": "var(--background-modifier-border-focus)",
@@ -97,13 +112,7 @@ module.exports = {
         0: "rgba(var(--mono-rgb-0),<alpha-value>)",
         100: "rgba(var(--mono-rgb-100),<alpha-value>)",
       },
-      interactive: {
-        normal: "var(--interactive-normal)",
-        hover: "var(--interactive-hover)",
-        accent: "var(--interactive-accent)",
-        "accent-hsl": "hsl(var(--interactive-accent-hsl),<alpha-value>)",
-        "accent-hover": "var(--interactive-accent-hover)",
-      },
+
       caret: "var(--caret-color)",
       icon: {
         DEFAULT: "var(--icon-color)",

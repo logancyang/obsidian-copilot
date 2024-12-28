@@ -550,4 +550,12 @@ export class DBOperations {
       throw new CustomError("Failed to check if database is empty.");
     }
   }
+
+  public async hasIndex(notePath: string): Promise<boolean> {
+    if (!this.oramaDb) {
+      return false;
+    }
+    const docs = await DBOperations.getDocsByPath(this.oramaDb, notePath);
+    return docs !== undefined && docs.length > 0;
+  }
 }

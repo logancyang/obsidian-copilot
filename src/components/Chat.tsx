@@ -620,9 +620,10 @@ ${chatContent}`;
         onRegenerate={handleRegenerate}
         onEdit={handleEdit}
         onDelete={handleDelete}
-        onSelectSuggestedPrompt={(prompt) => {
-          setInputMessage(prompt);
+        onInsertToChat={(prompt) => {
+          setInputMessage((prev) => `${prev} ${prompt} `);
         }}
+        onReplaceChat={setInputMessage}
       />
       <div className="bottom-container">
         <ChatInput
