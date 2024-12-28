@@ -128,7 +128,7 @@ export default class EmbeddingManager {
     })[0];
   }
 
-  getEmbeddingsAPI(): Embeddings | undefined {
+  getEmbeddingsAPI(): Embeddings {
     const { embeddingModelKey } = getSettings();
 
     if (!EmbeddingManager.modelMap.hasOwnProperty(embeddingModelKey)) {

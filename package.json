@@ -63,7 +63,7 @@
     "tailwindcss": "^3.4.15",
     "ts-jest": "^29.1.0",
     "tslib": "2.4.0",
-    "typescript": "4.7.4",
+    "typescript": "^5.7.2",
     "web-streams-polyfill": "^3.3.2"
   },
   "dependencies": {
