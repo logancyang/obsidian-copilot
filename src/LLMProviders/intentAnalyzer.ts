@@ -1,5 +1,3 @@
-import ChatModelManager from "@/LLMProviders/chatModelManager";
-import VectorStoreManager from "@/search/vectorStoreManager";
 import { indexTool, localSearchTool, webSearchTool } from "@/tools/SearchTools";
 import {
   getCurrentTimeTool,
@@ -33,14 +31,9 @@ export class IntentAnalyzer {
     simpleYoutubeTranscriptionTool,
   ];
 
-  static async analyzeIntent(
-    originalMessage: string,
-    vectorStoreManager: VectorStoreManager,
-    chatModelManager: ChatModelManager,
-    brevilabsClient: BrevilabsClient
-  ): Promise<ToolCall[]> {
+  static async analyzeIntent(originalMessage: string): Promise<ToolCall[]> {
     try {
-      const brocaResponse = await brevilabsClient.broca(originalMessage);
+      const brocaResponse = await BrevilabsClient.getInstance().broca(originalMessage);
 
       // Check if the response is successful and has the expected structure
       if (!brocaResponse?.response) {
@@ -63,10 +56,6 @@ export class IntentAnalyzer {
             timeRange = await ToolManager.callTool(tool, args);
           }
 
-          if (tool.name === "indexVault") {
-            args.vectorStoreManager = vectorStoreManager;
-          }
-
           processedToolCalls.push({ tool, args });
         }
       }
@@ -75,9 +64,6 @@ export class IntentAnalyzer {
       await this.processAtCommands(originalMessage, processedToolCalls, {
         timeRange,
         salientTerms,
-        vectorStoreManager,
-        chatModelManager,
-        brevilabsClient,
       });
 
       return processedToolCalls;
@@ -93,14 +79,10 @@ export class IntentAnalyzer {
     context: {
       timeRange?: { startTime: TimeInfo; endTime: TimeInfo };
       salientTerms: string[];
-      vectorStoreManager: VectorStoreManager;
-      chatModelManager: ChatModelManager;
-      brevilabsClient: BrevilabsClient;
     }
   ): Promise<void> {
     const message = originalMessage.toLowerCase();
-    const { timeRange, salientTerms, vectorStoreManager, chatModelManager, brevilabsClient } =
-      context;
+    const { timeRange, salientTerms } = context;
 
     // Handle @vault command
     if (message.includes("@vault") && (salientTerms.length > 0 || timeRange)) {
@@ -113,9 +95,6 @@ export class IntentAnalyzer {
           timeRange: timeRange || undefined,
           query: cleanQuery,
           salientTerms,
-          vectorStoreManager,
-          chatModelManager,
-          brevilabsClient,
         },
       });
     }
@@ -127,7 +106,6 @@ export class IntentAnalyzer {
         tool: webSearchTool,
         args: {
           query: cleanQuery,
-          brevilabsClient,
         },
       });
     }
@@ -150,7 +128,6 @@ export class IntentAnalyzer {
           tool: simpleYoutubeTranscriptionTool,
           args: {
             url: youtubeUrl,
-            brevilabsClient,
           },
         });
       }

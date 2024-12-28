@@ -31,9 +31,7 @@ import {
 } from "@langchain/core/prompts";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { App, Notice } from "obsidian";
-import { BrevilabsClient } from "./brevilabsClient";
 import ChatModelManager from "./chatModelManager";
-import EmbeddingsManager from "./embeddingManager";
 import MemoryManager from "./memoryManager";
 import PromptManager from "./promptManager";
 
@@ -45,20 +43,16 @@ export default class ChainManager {
   public vectorStoreManager: VectorStoreManager;
   public chatModelManager: ChatModelManager;
   public memoryManager: MemoryManager;
-  public embeddingsManager: EmbeddingsManager;
   public promptManager: PromptManager;
-  public brevilabsClient: BrevilabsClient;
   public static retrievedDocuments: Document[] = [];
 
-  constructor(app: App, vectorStoreManager: VectorStoreManager, brevilabsClient: BrevilabsClient) {
+  constructor(app: App, vectorStoreManager: VectorStoreManager) {
     // Instantiate singletons
     this.app = app;
     this.vectorStoreManager = vectorStoreManager;
     this.memoryManager = MemoryManager.getInstance();
     this.chatModelManager = ChatModelManager.getInstance();
-    this.embeddingsManager = EmbeddingsManager.getInstance();
     this.promptManager = PromptManager.getInstance();
-    this.brevilabsClient = brevilabsClient;
     this.createChainWithNewModel();
     subscribeToModelKeyChange(() => this.createChainWithNewModel());
     subscribeToChainTypeChange(() =>
@@ -157,21 +151,13 @@ export default class ChainManager {
       }
 
       case ChainType.VAULT_QA_CHAIN: {
-        const { embeddingsAPI } = await this.initializeQAChain(options);
+        await this.initializeQAChain(options);
 
-        const retriever = new HybridRetriever(
-          this.vectorStoreManager.dbOps,
-          this.app.vault,
-          chatModel,
-          embeddingsAPI,
-          this.brevilabsClient,
-          {
-            minSimilarityScore: 0.01,
-            maxK: getSettings().maxSourceChunks,
-            salientTerms: [],
-          },
-          getSettings().debug
-        );
+        const retriever = new HybridRetriever({
+          minSimilarityScore: 0.01,
+          maxK: getSettings().maxSourceChunks,
+          salientTerms: [],
+        });
 
         // Create new conversational retrieval chain
         ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain(
@@ -227,19 +213,10 @@ export default class ChainManager {
   }
 
   private async initializeQAChain(options: SetChainOptions) {
-    const embeddingsAPI = this.embeddingsManager.getEmbeddingsAPI();
-    if (!embeddingsAPI) {
-      throw new Error("Error getting embeddings API. Please check your settings.");
-    }
-
-    const db = await this.vectorStoreManager.getOrInitializeDb(embeddingsAPI);
-
     // Handle index refresh if needed
     if (options.refreshIndex) {
       await this.vectorStoreManager.indexVaultToVectorStore();
     }
-
-    return { embeddingsAPI, db };
   }
 
   async runChain(

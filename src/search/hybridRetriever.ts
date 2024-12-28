@@ -2,28 +2,21 @@ import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { extractNoteTitles, getNoteFileFromTitle } from "@/utils";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
-import { Embeddings } from "@langchain/core/embeddings";
-import { BaseLanguageModel } from "@langchain/core/language_models/base";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { search } from "@orama/orama";
-import { Vault } from "obsidian";
 import { DBOperations } from "./dbOperations";
+import VectorStoreManager from "@/search/vectorStoreManager";
+import ChatModelManager from "@/LLMProviders/chatModelManager";
+import EmbeddingManager from "@/LLMProviders/embeddingManager";
+import { getSettings } from "@/settings/model";
 
 export class HybridRetriever extends BaseRetriever {
   public lc_namespace = ["hybrid_retriever"];
 
-  private llm: BaseLanguageModel;
   private queryRewritePrompt: ChatPromptTemplate;
-  private embeddingsInstance: Embeddings;
-  private brevilabsClient: BrevilabsClient;
 
   constructor(
-    private dbOps: DBOperations,
-    private vault: Vault,
-    llm: BaseLanguageModel,
-    embeddingsInstance: Embeddings,
-    brevilabsClient: BrevilabsClient,
     private options: {
       minSimilarityScore: number;
       maxK: number;
@@ -32,19 +25,12 @@ export class HybridRetriever extends BaseRetriever {
       textWeight?: number;
       returnAll?: boolean;
       useRerankerThreshold?: number;
-    },
-    private debug?: boolean
+    }
   ) {
     super();
-    this.llm = llm;
-    this.embeddingsInstance = embeddingsInstance;
     this.queryRewritePrompt = ChatPromptTemplate.fromTemplate(
       "Please write a passage to answer the question. If you don't know the answer, just make up a passage. \nQuestion: {question}\nPassage:"
     );
-    if (!brevilabsClient) {
-      throw new Error("BrevilabsClient is required but was not provided");
-    }
-    this.brevilabsClient = brevilabsClient;
   }
 
   public async getRelevantDocuments(
@@ -81,7 +67,7 @@ export class HybridRetriever extends BaseRetriever {
       maxOramaScore < this.options.useRerankerThreshold &&
       maxOramaScore > 0
     ) {
-      const rerankResponse = await this.brevilabsClient.rerank(
+      const rerankResponse = await BrevilabsClient.getInstance().rerank(
         query,
         // Limit the context length to 3000 characters to avoid overflowing the reranker
         combinedChunks.map((doc) => doc.pageContent.slice(0, 3000))
@@ -97,7 +83,7 @@ export class HybridRetriever extends BaseRetriever {
       }));
     }
 
-    if (this.debug) {
+    if (getSettings().debug) {
       console.log("*** HYBRID RETRIEVER DEBUG INFO: ***");
 
       if (config?.runName !== "no_hyde") {
@@ -122,11 +108,12 @@ export class HybridRetriever extends BaseRetriever {
   private async rewriteQuery(query: string): Promise<string> {
     try {
       const promptResult = await this.queryRewritePrompt.format({ question: query });
-      const rewrittenQueryObject = await this.llm.invoke(promptResult);
+      const chatModel = ChatModelManager.getInstance().getChatModel();
+      const rewrittenQueryObject = await chatModel.invoke(promptResult);
 
       // Directly return the content assuming it's structured as expected
       if (rewrittenQueryObject && "content" in rewrittenQueryObject) {
-        return rewrittenQueryObject.content;
+        return rewrittenQueryObject.content as string;
       }
       console.warn("Unexpected rewrittenQuery format. Falling back to original query.");
       return query;
@@ -140,11 +127,8 @@ export class HybridRetriever extends BaseRetriever {
   private async getExplicitChunks(noteTitles: string[]): Promise<Document[]> {
     const explicitChunks: Document[] = [];
     for (const noteTitle of noteTitles) {
-      const noteFile = await getNoteFileFromTitle(this.vault, noteTitle);
-      const db = this.dbOps.getDb();
-      if (!db) {
-        throw new Error("Database not initialized");
-      }
+      const noteFile = await getNoteFileFromTitle(app.vault, noteTitle);
+      const db = await VectorStoreManager.getInstance().getDb();
       const hits = await DBOperations.getDocsByPath(db, noteFile?.path ?? "");
       if (hits) {
         const matchingChunks = hits.map(
@@ -193,10 +177,7 @@ export class HybridRetriever extends BaseRetriever {
       throw error;
     }
 
-    const db = this.dbOps.getDb();
-    if (!db) {
-      throw new Error("Database not initialized");
-    }
+    const db = await VectorStoreManager.getInstance().getDb();
 
     const searchParams: any = {
       similarity: this.options.minSimilarityScore,
@@ -221,7 +202,7 @@ export class HybridRetriever extends BaseRetriever {
       }
 
       if (tagOnlyQuery) {
-        if (this.debug) {
+        if (getSettings().debug) {
           console.log("Tag only query detected, setting textWeight to 1 and vectorWeight to 0.");
         }
         textWeight = 1;
@@ -253,7 +234,7 @@ export class HybridRetriever extends BaseRetriever {
 
       const dateRange = this.generateDateRange(startTime, endTime);
 
-      if (this.debug) {
+      if (getSettings().debug) {
         console.log(
           "==== Daily note date range: ====",
           dateRange[0],
@@ -273,7 +254,7 @@ export class HybridRetriever extends BaseRetriever {
         },
       }));
 
-      if (this.debug) {
+      if (getSettings().debug) {
         console.log("==== Modified and created time range: ====", startTime, endTime);
       }
 
@@ -342,7 +323,7 @@ export class HybridRetriever extends BaseRetriever {
   }
 
   private async convertQueryToVector(query: string): Promise<number[]> {
-    return await this.embeddingsInstance.embedQuery(query);
+    return await EmbeddingManager.getInstance().getEmbeddingsAPI().embedQuery(query);
   }
 
   private generateDateRange(startTime: number, endTime: number): string[] {

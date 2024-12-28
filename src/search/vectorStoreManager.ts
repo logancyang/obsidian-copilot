@@ -1,22 +1,22 @@
 import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { CopilotSettings, getSettings, subscribeToSettingsChange } from "@/settings/model";
-import { Embeddings } from "@langchain/core/embeddings";
 import { Orama } from "@orama/orama";
-import { App, Notice, Platform } from "obsidian";
+import { Notice, Platform } from "obsidian";
 import { DBOperations } from "./dbOperations";
 import { IndexEventHandler } from "./indexEventHandler";
 import { IndexOperations } from "./indexOperations";
 
 export default class VectorStoreManager {
+  private static instance: VectorStoreManager;
   private indexOps: IndexOperations;
   private eventHandler: IndexEventHandler;
   private initializationPromise: Promise<void>;
   private lastKnownSettings: CopilotSettings | undefined;
-  public dbOps: DBOperations;
-  public embeddingsManager: EmbeddingsManager;
+  private embeddingsManager: EmbeddingsManager;
+  private dbOps: DBOperations;
 
-  constructor(private app: App) {
+  private constructor() {
     this.embeddingsManager = EmbeddingsManager.getInstance();
     this.dbOps = new DBOperations(app);
     this.indexOps = new IndexOperations(app, this.dbOps, this.embeddingsManager);
@@ -26,11 +26,18 @@ export default class VectorStoreManager {
     this.setupSettingsSubscription();
   }
 
+  static getInstance(): VectorStoreManager {
+    if (!VectorStoreManager.instance) {
+      VectorStoreManager.instance = new VectorStoreManager();
+    }
+    return VectorStoreManager.instance;
+  }
+
   private setupSettingsSubscription() {
     // Initialize lastKnownSettings
     this.lastKnownSettings = { ...getSettings() };
 
-    subscribeToSettingsChange(async () => {
+    const reinitialize = async () => {
       const settings = getSettings();
       const prevSettings = this.lastKnownSettings;
       this.lastKnownSettings = { ...settings };
@@ -52,6 +59,10 @@ export default class VectorStoreManager {
       ) {
         await this.eventHandler.updateExcludedFiles();
       }
+    };
+
+    subscribeToSettingsChange(() => {
+      this.initializationPromise = reinitialize();
     });
   }
 
@@ -121,15 +132,16 @@ export default class VectorStoreManager {
     this.dbOps.onunload();
   }
 
-  public async getOrInitializeDb(embeddingsAPI: Embeddings): Promise<Orama<any>> {
-    let db = this.dbOps.getDb();
-    if (!db) {
-      console.warn("Copilot index is not loaded. Reinitializing...");
-      db = await this.dbOps.initializeDB(embeddingsAPI);
+  public async getDbOps(): Promise<DBOperations> {
+    await this.waitForInitialization();
+    return this.dbOps;
+  }
 
-      if (!db) {
-        throw new Error("Database failed to initialize. Please check your settings.");
-      }
+  public async getDb(): Promise<Orama<any>> {
+    await this.waitForInitialization();
+    const db = this.dbOps.getDb();
+    if (!db) {
+      throw new Error("Database is not loaded. Please restart the plugin.");
     }
     return db;
   }
