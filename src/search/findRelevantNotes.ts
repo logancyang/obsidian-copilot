@@ -6,9 +6,8 @@ import { TFile } from "obsidian";
 
 const MIN_SIMILARITY_SCORE = 0.3;
 const MAX_K = 20;
-const ORIGINAL_WEIGHT = 0.5;
-const OUTGOING_LINKED_WEIGHT = 0.25;
-const BACKLINK_WEIGHT = 0.25;
+const ORIGINAL_WEIGHT = 0.7;
+const LINKS_WEIGHT = 0.3;
 
 /**
  * Gets the embeddings for the given note path.
@@ -107,41 +106,48 @@ async function calculateSimilarityScore({
   return getHighestScoreHits(hits, filePath);
 }
 
-function calculateOutgoingLinksScore(file: TFile) {
-  const scoreMap = new Map<string, number>();
+function getNoteLinks(file: TFile) {
+  const resultMap = new Map<string, { links: boolean; backlinks: boolean }>();
   const linkedNotes = getLinkedNotes(file);
   const linkedNotePaths = linkedNotes.map((note) => note.path);
   for (const notePath of linkedNotePaths) {
-    scoreMap.set(notePath, 1);
+    resultMap.set(notePath, { links: true, backlinks: false });
   }
-  return scoreMap;
-}
 
-function calculateBacklinksScore(file: TFile) {
-  const scoreMap = new Map<string, number>();
   const backlinkedNotes = getBacklinkedNotes(file);
   const backlinkedNotePaths = backlinkedNotes.map((note) => note.path);
   for (const notePath of backlinkedNotePaths) {
-    scoreMap.set(notePath, 1);
+    if (resultMap.has(notePath)) {
+      resultMap.set(notePath, { links: true, backlinks: true });
+    } else {
+      resultMap.set(notePath, { links: false, backlinks: true });
+    }
   }
-  return scoreMap;
+
+  return resultMap;
 }
 
 function mergeScoreMaps(
   similarityScoreMap: Map<string, number>,
-  outgoingLinksScoreMap: Map<string, number>,
-  backlinksScoreMap: Map<string, number>
+  noteLinks: Map<string, { links: boolean; backlinks: boolean }>
 ) {
   const mergedMap = new Map<string, number>();
-  const totalWeight = ORIGINAL_WEIGHT + OUTGOING_LINKED_WEIGHT + BACKLINK_WEIGHT;
+  const totalWeight = ORIGINAL_WEIGHT + LINKS_WEIGHT;
   for (const [key, value] of similarityScoreMap) {
     mergedMap.set(key, (value * ORIGINAL_WEIGHT) / totalWeight);
   }
-  for (const [key, value] of outgoingLinksScoreMap) {
-    mergedMap.set(key, (mergedMap.get(key) ?? 0) + (value * OUTGOING_LINKED_WEIGHT) / totalWeight);
-  }
-  for (const [key, value] of backlinksScoreMap) {
-    mergedMap.set(key, (mergedMap.get(key) ?? 0) + (value * BACKLINK_WEIGHT) / totalWeight);
+  for (const [key, value] of noteLinks) {
+    let score = 0;
+    if (value.links && value.backlinks) {
+      score = LINKS_WEIGHT;
+    } else if (value.links) {
+      // If the note only has outgoing or incoming links, give it a 80% links
+      // weight.
+      score = LINKS_WEIGHT * 0.8;
+    } else if (value.backlinks) {
+      score = LINKS_WEIGHT * 0.8;
+    }
+    mergedMap.set(key, (mergedMap.get(key) ?? 0) + score);
   }
   return mergedMap;
 }
@@ -178,13 +184,8 @@ export async function findRelevantNotes({
   }
 
   const similarityScoreMap = await calculateSimilarityScore({ db, filePath });
-  const outgoingLinksScoreMap = calculateOutgoingLinksScore(file);
-  const backlinksScoreMap = calculateBacklinksScore(file);
-  const mergedScoreMap = mergeScoreMaps(
-    similarityScoreMap,
-    outgoingLinksScoreMap,
-    backlinksScoreMap
-  );
+  const noteLinks = getNoteLinks(file);
+  const mergedScoreMap = mergeScoreMaps(similarityScoreMap, noteLinks);
   const sortedHits = Array.from(mergedScoreMap.entries()).sort((a, b) => b[1] - a[1]);
   return sortedHits
     .map(([path, score]) => {
@@ -200,8 +201,8 @@ export async function findRelevantNotes({
         metadata: {
           score,
           similarityScore: similarityScoreMap.get(path),
-          hasOutgoingLinks: !!outgoingLinksScoreMap.get(path),
-          hasBacklinks: !!backlinksScoreMap.get(path),
+          hasOutgoingLinks: noteLinks.get(path)?.links ?? false,
+          hasBacklinks: noteLinks.get(path)?.backlinks ?? false,
         },
       };
     })

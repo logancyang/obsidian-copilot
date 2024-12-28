@@ -25,7 +25,7 @@ export class SimilarNotesModal extends Modal {
           : `Similarity: ${Math.round(similarityScore * 100)}%`,
       ];
       if (item.metadata.hasOutgoingLinks) {
-        metadataTexts.push("Link");
+        metadataTexts.push("Outgoing Link");
       }
       if (item.metadata.hasBacklinks) {
         metadataTexts.push("Backlink");
