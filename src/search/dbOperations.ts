@@ -33,11 +33,13 @@ export class DBOperations {
   private initializationPromise: Promise<void>;
   private isIndexLoaded = false;
   private hasUnsavedChanges = false;
+  private lastEmbeddingModel: any = undefined;
 
   constructor(private app: App) {
     // Subscribe to settings changes
     subscribeToSettingsChange(async () => {
       const settings = getSettings();
+      const newPath = await this.getDbPath();
 
       // Handle mobile index loading setting change
       if (Platform.isMobile && settings.disableIndexOnMobile) {
@@ -49,19 +51,33 @@ export class DBOperations {
       }
 
       // Handle index sync setting change
-      const newPath = await this.getDbPath();
-
       if (this.dbPath && newPath !== this.dbPath) {
         console.log("Path change detected, reinitializing database...");
         this.dbPath = newPath;
-        await this.initializeChunkedStorage();
+        await this.initializeChunkedStorage(
+          EmbeddingsManager.getModelName(EmbeddingsManager.getInstance().getEmbeddingsAPI())
+        );
         await this.initializeDB(EmbeddingsManager.getInstance().getEmbeddingsAPI());
         console.log("Database reinitialized with new path:", newPath);
+      }
+
+      // Handle embedding model change
+      if (
+        EmbeddingsManager.getInstance().getEmbeddingsAPI() &&
+        this.lastEmbeddingModel &&
+        !areEmbeddingModelsSame(this.lastEmbeddingModel, getSettings().embeddingModelKey)
+      ) {
+        console.log("Embedding model change detected, reinitializing database...");
+        await this.initializeDB(EmbeddingsManager.getInstance().getEmbeddingsAPI());
+        console.log(
+          "Database reinitialized with new embedding model:",
+          getSettings().embeddingModelKey
+        );
       }
     });
   }
 
-  private async initializeChunkedStorage() {
+  private async initializeChunkedStorage(modelName: string) {
     if (!this.app.vault.adapter) {
       throw new CustomError("Vault adapter not available. Please try again later.");
     }
@@ -72,9 +88,15 @@ export class DBOperations {
 
   async initializeDB(embeddingInstance: Embeddings | undefined): Promise<Orama<any> | undefined> {
     try {
+      let modelName = "";
+
+      if (embeddingInstance) {
+        modelName = EmbeddingsManager.getModelName(embeddingInstance);
+      }
+
       if (!this.isInitialized) {
         this.dbPath = await this.getDbPath();
-        await this.initializeChunkedStorage();
+        await this.initializeChunkedStorage(modelName);
       }
 
       if (Platform.isMobile && getSettings().disableIndexOnMobile) {
@@ -91,6 +113,7 @@ export class DBOperations {
         if (await this.chunkedStorage.exists()) {
           this.oramaDb = await this.chunkedStorage.loadDatabase();
           console.log("Loaded existing chunked Orama database from disk.");
+          this.isIndexLoaded = true;
           return this.oramaDb;
         }
       } catch (error) {
@@ -99,6 +122,10 @@ export class DBOperations {
       }
 
       // Create new database if none exists or loading failed
+      if (!embeddingInstance) {
+        throw new CustomError("Embedding instance is undefined. Cannot create a new database.");
+      }
+
       const newDb = await this.createNewDb(embeddingInstance);
       this.oramaDb = newDb;
       return newDb;
@@ -130,7 +157,7 @@ export class DBOperations {
     }
   }
 
-  async clearIndex(embeddingInstance: Embeddings | undefined): Promise<void> {
+  async clearIndex(createNewDb = true): Promise<void> {
     try {
       // Clear existing storage first
       await this.chunkedStorage?.clearStorage();
@@ -138,14 +165,23 @@ export class DBOperations {
       // Wait a moment to ensure file system operations complete
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Create new database instance
-      this.oramaDb = await this.createNewDb(embeddingInstance);
+      // Reset the index loaded flag
+      this.isIndexLoaded = false;
 
-      // Save the empty database
-      await this.saveDB();
+      // Create a new DB only if the flag is true
+      if (createNewDb) {
+        const embeddingInstance = EmbeddingsManager.getInstance().getEmbeddingsAPI();
+        // Create new database instance
+        this.oramaDb = await this.createNewDb(embeddingInstance);
+
+        // Save the empty database
+        await this.saveDB();
+      }
 
       new Notice("Local Copilot index cleared successfully.");
-      console.log("Local Copilot index cleared successfully, new instance created.");
+      console.log(
+        "Local Copilot index cleared successfully." + (createNewDb ? " New instance created." : "")
+      );
     } catch (err) {
       console.error("Error clearing the local Copilot index:", err);
       new Notice("An error occurred while clearing the local Copilot index.");
@@ -158,23 +194,22 @@ export class DBOperations {
       throw new CustomError("Orama database not found.");
     }
     try {
-      const searchResult = await search(this.oramaDb, {
-        term: filePath,
-        properties: ["path"],
+      const docsToRemove = await search(this.oramaDb, {
+        where: { path: filePath },
+        limit: 10000,
       });
-      if (searchResult.hits.length > 0) {
-        await removeMultiple(
-          this.oramaDb,
-          searchResult.hits.map((hit) => hit.id),
-          500
-        );
+      if (docsToRemove.hits.length > 0) {
+        const uniqueIdsToRemove = new Set(docsToRemove.hits.map((hit) => hit.id));
+        await removeMultiple(this.oramaDb, Array.from(uniqueIdsToRemove));
         if (getSettings().debug) {
-          console.log(`Deleted document from local Copilot index: ${filePath}`);
+          console.log(
+            `Deleted ${uniqueIdsToRemove.size} documents from local Copilot index for path: ${filePath}`
+          );
         }
       }
       this.markUnsavedChanges();
     } catch (err) {
-      console.error("Error deleting document from local Copilotindex:", err);
+      console.error("Error deleting document from local Copilot index:", err);
     }
   }
 
@@ -236,17 +271,15 @@ export class DBOperations {
     this.hasUnsavedChanges = true;
   }
 
-  private async createNewDb(embeddingInstance: Embeddings | undefined): Promise<Orama<any>> {
-    if (!embeddingInstance) {
-      throw new CustomError("Embedding instance not found.");
-    }
-
+  private async createNewDb(embeddingInstance: Embeddings): Promise<Orama<any>> {
     const vectorLength = await getVectorLength(embeddingInstance);
     if (!vectorLength || vectorLength === 0) {
       throw new CustomError(
         "Invalid vector length detected. Please check if your embedding model is working."
       );
     }
+
+    this.lastEmbeddingModel = getSettings().embeddingModelKey;
 
     const schema = this.createDynamicSchema(vectorLength);
 
@@ -261,7 +294,9 @@ export class DBOperations {
     });
     console.log(
       `Created new Orama database for ${this.dbPath}. ` +
-        `Embedding model: ${EmbeddingsManager.getModelName(embeddingInstance)} with vector length ${vectorLength}.`
+        `Embedding model: ${EmbeddingsManager.getModelName(
+          embeddingInstance
+        )} with vector length ${vectorLength}.`
     );
     this.isIndexLoaded = true;
     return db;
@@ -345,14 +380,18 @@ export class DBOperations {
         await insert(this.oramaDb, docToSave);
         if (getSettings().debug) {
           console.log(
-            `${existingDoc.hits.length > 0 ? "Updated" : "Inserted"} document ${docToSave.id} in partition ${partition}`
+            `${
+              existingDoc.hits.length > 0 ? "Updated" : "Inserted"
+            } document ${docToSave.id} in partition ${partition}`
           );
         }
         this.markUnsavedChanges();
         return docToSave;
       } catch (insertErr) {
         console.error(
-          `Failed to ${existingDoc.hits.length > 0 ? "update" : "insert"} document ${docToSave.id}:`,
+          `Failed to ${
+            existingDoc.hits.length > 0 ? "update" : "insert"
+          } document ${docToSave.id}:`,
           insertErr
         );
         // If we removed an existing document but failed to insert the new one,
@@ -397,47 +436,32 @@ export class DBOperations {
     }
   }
 
-  async checkAndHandleEmbeddingModelChange(embeddingInstance: Embeddings): Promise<boolean> {
+  async checkAndHandleEmbeddingModelChange(
+    embeddingInstance: Embeddings,
+    currentEmbeddingModelKey: string
+  ): Promise<boolean> {
     if (!this.oramaDb) {
-      console.error(
-        "Orama database not found. Please make sure you have a working embedding model."
-      );
+      console.error("Orama database not found");
       return false;
     }
+
     const singleDoc = await search(this.oramaDb, {
       term: "",
       limit: 1,
     });
 
-    let prevEmbeddingModel: string | undefined;
-
-    if (singleDoc.hits.length > 0) {
-      const oramaDocSample = singleDoc.hits[0];
-      if (
-        typeof oramaDocSample === "object" &&
-        oramaDocSample !== null &&
-        "document" in oramaDocSample
-      ) {
-        const document = oramaDocSample.document as { embeddingModel?: string };
-        prevEmbeddingModel = document.embeddingModel;
-      }
-    }
+    const prevEmbeddingModel = singleDoc.hits[0]?.document?.embeddingModel;
 
     if (prevEmbeddingModel) {
-      const currEmbeddingModel = EmbeddingsManager.getModelName(embeddingInstance);
+      // Fix: Remove the third argument as the function only accepts two
+      if (!areEmbeddingModelsSame(prevEmbeddingModel, currentEmbeddingModelKey)) {
+        new Notice("New embedding model detected. Rebuilding index...");
+        console.log("Embedding model changed, rebuilding index");
 
-      if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
-        // Model has changed, notify user and rebuild DB
-        new Notice("New embedding model detected. Rebuilding Copilot index from scratch.");
-        console.log("Detected change in embedding model. Rebuilding Copilot index from scratch.");
-
-        // Create new DB with new model
         this.oramaDb = await this.createNewDb(embeddingInstance);
         await this.saveDB();
         return true;
       }
-    } else {
-      console.log("No previous embedding model found in the database.");
     }
 
     return false;
@@ -446,7 +470,7 @@ export class DBOperations {
   public static async getAllDocuments(db: Orama<any>): Promise<any[]> {
     const result = await search(db, {
       term: "",
-      limit: 100000,
+      limit: 1000,
       includeVectors: true,
     });
     return result.hits.map((hit) => hit.document);
@@ -474,14 +498,9 @@ export class DBOperations {
         Array.from(new Set(docsToRemove.map((doc) => doc.path))).join(", ")
       );
 
-      if (docsToRemove.length === 1) {
-        await remove(this.oramaDb, docsToRemove[0].id);
-      } else {
-        await removeMultiple(
-          this.oramaDb,
-          docsToRemove.map((hit) => hit.id),
-          500
-        );
+      // Remove docs
+      for (const doc of docsToRemove) {
+        await remove(this.oramaDb, doc.id);
       }
 
       await this.saveDB();

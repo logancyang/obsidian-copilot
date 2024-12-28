@@ -1,10 +1,115 @@
 import { updateSetting, useSettingsValue } from "@/settings/model";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import ApiSetting from "./ApiSetting";
 import Collapsible from "./Collapsible";
+import { AzureOpenAIDeployment, updateModelConfig } from "@/aiParams";
+import { Notice } from "obsidian";
 
 const ApiSettings: React.FC = () => {
   const settings = useSettingsValue();
+  const [azureDeployments, setAzureDeployments] = useState<AzureOpenAIDeployment[]>(
+    settings.azureOpenAIApiDeployments || []
+  );
+  const deployment: AzureOpenAIDeployment = settings.azureOpenAIApiDeployments?.[0] || {
+    deploymentName: "",
+    instanceName: "",
+    apiKey: "",
+    apiVersion: "",
+  };
+  const [defaultAzureDeployment, setDefaultAzureDeployment] =
+    useState<AzureOpenAIDeployment>(deployment);
+  const [selectedModel] = useState<string>(settings.defaultModelKey);
+  const [modelProvider] = useState<string>("openai");
+  const [maxCompletionTokens, setMaxCompletionTokens] = useState<number | undefined>(undefined);
+  const [reasoningEffort, setReasoningEffort] = useState<number | undefined>(undefined);
+  const [selectedDeployment, setSelectedDeployment] = useState<string>("");
+
+  useEffect(() => {
+    const currentModel = settings.activeModels.find(
+      (model) => `${model.name}|${model.provider}` === `${selectedModel}|${modelProvider}`
+    );
+
+    if (currentModel) {
+      const modelKey = `${currentModel.name}|${currentModel.provider}`;
+      setMaxCompletionTokens(settings.modelConfigs[modelKey]?.maxCompletionTokens);
+      setReasoningEffort(settings.modelConfigs[modelKey]?.reasoningEffort);
+    }
+  }, [selectedModel, settings.activeModels, settings.modelConfigs]);
+
+  useEffect(() => {
+    setAzureDeployments(settings.azureOpenAIApiDeployments || []);
+  }, [settings.azureOpenAIApiDeployments]);
+
+  const validateAzureDeployment = (deployment: AzureOpenAIDeployment): boolean => {
+    return (
+      deployment.deploymentName.trim() !== "" &&
+      deployment.instanceName.trim() !== "" &&
+      deployment.apiKey.trim() !== "" &&
+      deployment.apiVersion.trim() !== ""
+    );
+  };
+
+  const handleAddAzureDeployment = () => {
+    if (!validateAzureDeployment(defaultAzureDeployment)) {
+      new Notice("All Azure OpenAI deployment fields are required");
+      return;
+    }
+
+    // Check for duplicate deployment names
+    if (azureDeployments.some((d) => d.deploymentName === defaultAzureDeployment.deploymentName)) {
+      new Notice("A deployment with this name already exists");
+      return;
+    }
+
+    const updatedDeployments = [...azureDeployments, defaultAzureDeployment];
+    setAzureDeployments(updatedDeployments);
+    updateSetting("azureOpenAIApiDeployments", updatedDeployments);
+
+    // Reset form
+    setDefaultAzureDeployment({
+      deploymentName: "",
+      instanceName: "",
+      apiKey: "",
+      apiVersion: "",
+    });
+  };
+
+  const handleUpdateAzureDeployment = (index: number, deployment: AzureOpenAIDeployment) => {
+    if (!validateAzureDeployment(deployment)) {
+      new Notice("All Azure OpenAI deployment fields are required");
+      return;
+    }
+
+    const updatedDeployments = [...azureDeployments];
+    updatedDeployments[index] = deployment;
+    setAzureDeployments(updatedDeployments);
+    updateSetting("azureOpenAIApiDeployments", updatedDeployments);
+  };
+
+  const handleRemoveAzureDeployment = (index: number) => {
+    const updatedDeployments = azureDeployments.filter((_, i) => i !== index);
+    setAzureDeployments(updatedDeployments);
+    updateSetting("azureOpenAIApiDeployments", updatedDeployments);
+  };
+
+  const handleMaxCompletionTokensChange = (value: number) => {
+    setMaxCompletionTokens(value);
+    let modelKey = `${selectedModel}|${modelProvider}`;
+    if (selectedModel === "o1-preview") {
+      modelKey = `o1-preview|${selectedDeployment}`;
+    }
+    updateModelConfig(modelKey, { maxCompletionTokens: value });
+  };
+
+  const handleReasoningEffortChange = (value: number) => {
+    setReasoningEffort(value);
+    let modelKey = `${selectedModel}|${modelProvider}`;
+    if (selectedModel === "o1-preview") {
+      modelKey = `o1-preview|${selectedDeployment}`;
+    }
+    updateModelConfig(modelKey, { reasoningEffort: value });
+  };
+
   return (
     <div>
       <h1>API Settings</h1>
@@ -75,7 +180,6 @@ const ApiSettings: React.FC = () => {
           </p>
         </div>
       </Collapsible>
-
       <Collapsible title="Anthropic API Settings">
         <div>
           <ApiSetting
@@ -100,7 +204,6 @@ const ApiSettings: React.FC = () => {
           </p>
         </div>
       </Collapsible>
-
       <Collapsible title="OpenRouter.ai API Settings">
         <div>
           <ApiSetting
@@ -124,48 +227,150 @@ const ApiSettings: React.FC = () => {
           </p>
         </div>
       </Collapsible>
-
       <Collapsible title="Azure OpenAI API Settings">
         <div>
-          <ApiSetting
-            title="Azure OpenAI API Key"
-            value={settings.azureOpenAIApiKey}
-            setValue={(value) => updateSetting("azureOpenAIApiKey", value)}
-            placeholder="Enter Azure OpenAI API Key"
-          />
-          <ApiSetting
-            title="Azure OpenAI API Instance Name"
-            value={settings.azureOpenAIApiInstanceName}
-            setValue={(value) => updateSetting("azureOpenAIApiInstanceName", value)}
-            placeholder="Enter Azure OpenAI API Instance Name"
-            type="text"
-          />
-          <ApiSetting
-            title="Azure OpenAI API Deployment Name"
-            description="This is your actual model, no need to pass a model name separately."
-            value={settings.azureOpenAIApiDeploymentName}
-            setValue={(value) => updateSetting("azureOpenAIApiDeploymentName", value)}
-            placeholder="Enter Azure OpenAI API Deployment Name"
-            type="text"
-          />
-          <ApiSetting
-            title="Azure OpenAI API Version"
-            value={settings.azureOpenAIApiVersion}
-            setValue={(value) => updateSetting("azureOpenAIApiVersion", value)}
-            placeholder="Enter Azure OpenAI API Version"
-            type="text"
-          />
-          <ApiSetting
-            title="Azure OpenAI API Embedding Deployment Name"
-            description="(Optional) For embedding provider Azure OpenAI"
-            value={settings.azureOpenAIApiEmbeddingDeploymentName}
-            setValue={(value) => updateSetting("azureOpenAIApiEmbeddingDeploymentName", value)}
-            placeholder="Enter Azure OpenAI API Embedding Deployment Name"
-            type="text"
-          />
+          {azureDeployments.map((deployment, index) => (
+            <div key={index} className="api-setting">
+              <ApiSetting
+                title="Deployment Name"
+                value={deployment.deploymentName}
+                setValue={(value) =>
+                  handleUpdateAzureDeployment(index, {
+                    ...deployment,
+                    deploymentName: value,
+                  })
+                }
+                placeholder="Enter Deployment Name"
+                type="text"
+              />
+              <ApiSetting
+                title="Instance Name"
+                value={deployment.instanceName}
+                setValue={(value) =>
+                  handleUpdateAzureDeployment(index, {
+                    ...deployment,
+                    instanceName: value,
+                  })
+                }
+                placeholder="Enter Instance Name"
+                type="text"
+              />
+              <ApiSetting
+                title="API Key"
+                value={deployment.apiKey}
+                setValue={(value) =>
+                  handleUpdateAzureDeployment(index, {
+                    ...deployment,
+                    apiKey: value,
+                  })
+                }
+                placeholder="Enter API Key"
+                type="password"
+              />
+              <ApiSetting
+                title="API Version"
+                value={deployment.apiVersion}
+                setValue={(value) =>
+                  handleUpdateAzureDeployment(index, {
+                    ...deployment,
+                    apiVersion: value,
+                  })
+                }
+                placeholder="Enter API Version"
+                type="text"
+              />
+              <button className="mod-cta" onClick={() => handleRemoveAzureDeployment(index)}>
+                Remove
+              </button>
+            </div>
+          ))}
+          <div className="api-setting">
+            <input
+              type="text"
+              placeholder="Enter Deployment Name"
+              value={defaultAzureDeployment.deploymentName}
+              onChange={(e) =>
+                setDefaultAzureDeployment({
+                  ...defaultAzureDeployment,
+                  deploymentName: e.target.value,
+                })
+              }
+            />
+            <input
+              type="text"
+              placeholder="Enter Instance Name"
+              value={defaultAzureDeployment.instanceName}
+              onChange={(e) =>
+                setDefaultAzureDeployment({
+                  ...defaultAzureDeployment,
+                  instanceName: e.target.value,
+                })
+              }
+            />
+            <input
+              type="password"
+              placeholder="Enter API Key"
+              value={defaultAzureDeployment.apiKey}
+              onChange={(e) =>
+                setDefaultAzureDeployment({
+                  ...defaultAzureDeployment,
+                  apiKey: e.target.value,
+                })
+              }
+            />
+            <input
+              type="text"
+              placeholder="Enter API Version"
+              value={defaultAzureDeployment.apiVersion}
+              onChange={(e) =>
+                setDefaultAzureDeployment({
+                  ...defaultAzureDeployment,
+                  apiVersion: e.target.value,
+                })
+              }
+            />
+            <button className="mod-cta" onClick={handleAddAzureDeployment}>
+              Add Deployment
+            </button>
+          </div>
         </div>
       </Collapsible>
-
+      <Collapsible title="o1-preview Settings">
+        <div>
+          <ApiSetting
+            title="Max Completion Tokens"
+            value={maxCompletionTokens?.toString() || ""}
+            setValue={(value) => handleMaxCompletionTokensChange(Number(value))}
+            placeholder="Enter Max Completion Tokens"
+            type="number"
+          />
+          <select
+            value={selectedDeployment}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+              setSelectedDeployment(e.target.value)
+            }
+            disabled={azureDeployments.length === 0}
+          >
+            <option value="" disabled>
+              Select a deployment
+            </option>
+            {azureDeployments.map((d) => (
+              <option key={d.deploymentName} value={d.deploymentName}>
+                {d.deploymentName}
+              </option>
+            ))}
+          </select>
+          {azureDeployments.length > 0 && selectedDeployment !== "" && (
+            <ApiSetting
+              title="Reasoning Effort"
+              value={reasoningEffort?.toString() || ""}
+              setValue={(value) => handleReasoningEffortChange(Number(value))}
+              placeholder="Enter Reasoning Effort (0-100)"
+              type="number"
+            />
+          )}
+        </div>
+      </Collapsible>
       <Collapsible title="Groq API Settings">
         <div>
           <ApiSetting
@@ -185,7 +390,6 @@ const ApiSettings: React.FC = () => {
           </p>
         </div>
       </Collapsible>
-
       <Collapsible title="Cohere API Settings">
         <ApiSetting
           title="Cohere API Key"

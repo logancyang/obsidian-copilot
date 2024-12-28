@@ -26,7 +26,7 @@ export default class VectorStoreManager {
     this.setupSettingsSubscription();
   }
 
-  private setupSettingsSubscription() {
+  private async setupSettingsSubscription() {
     // Initialize lastKnownSettings
     this.lastKnownSettings = { ...getSettings() };
 
@@ -94,7 +94,7 @@ export default class VectorStoreManager {
 
   public async clearIndex(): Promise<void> {
     await this.waitForInitialization();
-    await this.dbOps.clearIndex(this.embeddingsManager.getEmbeddingsAPI());
+    await this.dbOps.clearIndex();
   }
 
   public async garbageCollectVectorStore(): Promise<number> {
@@ -116,7 +116,7 @@ export default class VectorStoreManager {
     await this.initializationPromise;
   }
 
-  public onunload(): void {
+  public onunload() {
     this.eventHandler.cleanup();
     this.dbOps.onunload();
   }
@@ -125,11 +125,11 @@ export default class VectorStoreManager {
     let db = this.dbOps.getDb();
     if (!db) {
       console.warn("Copilot index is not loaded. Reinitializing...");
-      db = await this.dbOps.initializeDB(embeddingsAPI);
-
-      if (!db) {
+      const newDb = await this.dbOps.initializeDB(embeddingsAPI);
+      if (!newDb) {
         throw new Error("Database failed to initialize. Please check your settings.");
       }
+      db = newDb;
     }
     return db;
   }

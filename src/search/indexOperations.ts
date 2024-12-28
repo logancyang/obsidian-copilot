@@ -48,6 +48,103 @@ export class IndexOperations {
     });
   }
 
+  public async indexFile(file: TFile): Promise<void> {
+    const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
+    if (!embeddingInstance) {
+      throw new CustomError("Embedding instance not found.");
+    }
+
+    const content = await this.app.vault.cachedRead(file);
+    const fileCache = this.app.metadataCache.getFileCache(file);
+
+    const fileToSave = {
+      title: file.basename,
+      path: file.path,
+      content: content,
+      embeddingModel: EmbeddingsManager.getModelName(embeddingInstance),
+      ctime: file.stat.ctime,
+      mtime: file.stat.mtime,
+      tags: fileCache?.tags?.map((tag) => tag.tag) ?? [],
+      extension: file.extension,
+      metadata: {
+        ...(fileCache?.frontmatter ?? {}),
+        created: formatDateTime(new Date(file.stat.ctime)).display,
+        modified: formatDateTime(new Date(file.stat.mtime)).display,
+      },
+    };
+
+    await this.indexDocument(embeddingInstance, fileToSave);
+  }
+
+  private async indexDocument(
+    embeddingsAPI: Embeddings,
+    fileToSave: any
+  ): Promise<any | undefined> {
+    const textSplitter = RecursiveCharacterTextSplitter.fromLanguage("markdown", {
+      chunkSize: CHUNK_SIZE,
+      chunkOverlap: CHUNK_SIZE * 0.1,
+    });
+
+    // Add note title as contextual chunk headers
+    // https://js.langchain.com/docs/modules/data_connection/document_transformers/contextual_chunk_headers
+    const chunks = await textSplitter.createDocuments([fileToSave.content], [], {
+      chunkHeader: `\n\nNOTE TITLE: [[${fileToSave.title}]]\n\nMETADATA:${JSON.stringify(
+        fileToSave.metadata
+      )}\n\nNOTE BLOCK CONTENT:\n\n`,
+      appendChunkOverlapHeader: true,
+    });
+
+    const docVectors: number[][] = [];
+    let hasEmbeddingError = false;
+
+    // Generate all embeddings first
+    for (let i = 0; i < chunks.length; i++) {
+      try {
+        await this.rateLimiter.wait();
+        const embedding = await embeddingsAPI.embedDocuments([chunks[i].pageContent]);
+
+        if (embedding.length > 0 && embedding[0].length > 0) {
+          docVectors.push(embedding[0]);
+        } else {
+          throw new Error("Received empty embedding vector");
+        }
+      } catch (error) {
+        hasEmbeddingError = true;
+        console.error("Error during embeddings API call for chunk:", error);
+        throw error;
+      }
+    }
+
+    // Only proceed with saving if we have valid vectors
+    if (docVectors.length > 0) {
+      const chunkWithVectors = chunks.slice(0, docVectors.length).map((chunk, i) => ({
+        id: this.getDocHash(chunk.pageContent),
+        content: chunk.pageContent,
+        embedding: docVectors[i],
+      }));
+
+      // Wait for all database operations to complete before considering the document indexed
+      try {
+        for (const chunkWithVector of chunkWithVectors) {
+          await this.dbOps.upsert({
+            ...fileToSave,
+            id: chunkWithVector.id,
+            content: chunkWithVector.content,
+            embedding: chunkWithVector.embedding,
+            created_at: Date.now(),
+            nchars: chunkWithVector.content.length,
+          });
+        }
+      } catch (error) {
+        hasEmbeddingError = true;
+        console.error("Error during database upsert:", error);
+        throw error;
+      }
+    }
+
+    return hasEmbeddingError ? undefined : fileToSave;
+  }
+
   public async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
     let rateLimitNoticeShown = false;
 
@@ -58,8 +155,14 @@ export class IndexOperations {
         return 0;
       }
 
+      // Get the current embedding model key
+      const currentEmbeddingModelKey = getSettings().embeddingModelKey;
+
       // Check for model change first
-      const modelChanged = await this.dbOps.checkAndHandleEmbeddingModelChange(embeddingInstance);
+      const modelChanged = await this.dbOps.checkAndHandleEmbeddingModelChange(
+        embeddingInstance,
+        currentEmbeddingModelKey
+      );
       if (modelChanged) {
         // If model changed, force a full reindex by setting overwrite to true
         overwrite = true;
@@ -67,7 +170,7 @@ export class IndexOperations {
 
       // Clear index if overwrite is true
       if (overwrite) {
-        await this.dbOps.clearIndex(embeddingInstance);
+        await this.dbOps.clearIndex();
       } else {
         // Run garbage collection first to clean up stale documents
         await this.dbOps.garbageCollect();
@@ -291,13 +394,19 @@ export class IndexOperations {
 
   private createIndexingNotice(): Notice {
     const frag = document.createDocumentFragment();
-    const container = frag.createEl("div", { cls: "copilot-notice-container" });
+    const container = frag.createEl("div", {
+      cls: "copilot-notice-container",
+    });
 
-    this.state.indexNoticeMessage = container.createEl("div", { cls: "copilot-notice-message" });
+    this.state.indexNoticeMessage = container.createEl("div", {
+      cls: "copilot-notice-message",
+    });
     this.updateIndexingNoticeMessage();
 
     // Create button container for better layout
-    const buttonContainer = container.createEl("div", { cls: "copilot-notice-buttons" });
+    const buttonContainer = container.createEl("div", {
+      cls: "copilot-notice-buttons",
+    });
 
     // Pause/Resume button
     const pauseButton = buttonContainer.createEl("button");
@@ -377,7 +486,9 @@ export class IndexOperations {
         : "Inclusions: None";
       const exclusions =
         folders.length > 0 || settings.qaExclusions
-          ? `Exclusions: ${folders.join(", ")}${folders.length ? ", " : ""}${settings.qaExclusions || "None"}`
+          ? `Exclusions: ${folders.join(", ")}${
+              folders.length ? ", " : ""
+            }${settings.qaExclusions || "None"}`
           : "Exclusions: None";
 
       this.state.indexNoticeMessage.textContent =
@@ -438,8 +549,14 @@ export class IndexOperations {
 
       await this.dbOps.removeDocs(file.path);
 
+      // Get the current embedding model key
+      const currentEmbeddingModelKey = getSettings().embeddingModelKey;
+
       // Check for model change
-      const modelChanged = await this.dbOps.checkAndHandleEmbeddingModelChange(embeddingInstance);
+      const modelChanged = await this.dbOps.checkAndHandleEmbeddingModelChange(
+        embeddingInstance,
+        currentEmbeddingModelKey
+      );
       if (modelChanged) {
         await this.indexVaultToVectorStore(true);
         return;

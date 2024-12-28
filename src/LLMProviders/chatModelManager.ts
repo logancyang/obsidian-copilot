@@ -28,8 +28,6 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.OPENAI_FORMAT]: ChatOpenAI,
 } as const;
 
-type ChatProviderConstructMap = typeof CHAT_PROVIDER_CONSTRUCTORS;
-
 export default class ChatModelManager {
   private static instance: ChatModelManager;
   private static chatModel: BaseChatModel | null;
@@ -72,22 +70,48 @@ export default class ChatModelManager {
 
   private getModelConfig(customModel: CustomModel): ModelConfig {
     const settings = getSettings();
+    const modelKey = getModelKey();
+
+    const modelConfig = settings.modelConfigs[modelKey] || {};
 
     // Check if the model starts with "o1"
     const modelName = customModel.name;
     const isO1Model = modelName.startsWith("o1");
+
     const baseConfig: ModelConfig = {
       modelName: modelName,
-      temperature: settings.temperature,
+      temperature: modelConfig.temperature || settings.temperature,
       streaming: true,
       maxRetries: 3,
       maxConcurrency: 3,
+      maxTokens: modelConfig.maxTokens,
+      maxCompletionTokens: modelConfig.maxCompletionTokens,
+      reasoningEffort: modelConfig.reasoningEffort,
       enableCors: customModel.enableCors,
     };
 
-    const providerConfig: {
-      [K in keyof ChatProviderConstructMap]: ConstructorParameters<ChatProviderConstructMap[K]>[0];
-    } = {
+    let azureDeploymentName = "";
+    if (modelKey.startsWith("o1-preview")) {
+      azureDeploymentName = modelKey.split("|")[1] || "";
+    }
+
+    let azureApiKey = "";
+    let azureInstanceName = "";
+    let azureApiVersion = "";
+
+    if (azureDeploymentName) {
+      const deployment = settings.azureOpenAIApiDeployments?.find(
+        (d) => d.deploymentName === azureDeploymentName
+      );
+      if (deployment) {
+        azureApiKey = deployment.apiKey;
+        azureInstanceName = deployment.instanceName;
+        azureApiVersion = deployment.apiVersion;
+      }
+    }
+
+    // Fix the type definition - use Record instead of complex mapped type
+    const providerConfig: Record<ChatModelProviders, any> = {
       [ChatModelProviders.OPENAI]: {
         modelName: modelName,
         openAIApiKey: getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
@@ -95,9 +119,14 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
-        // @ts-ignore
         openAIOrgId: getDecryptedKey(settings.openAIOrgId),
-        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
+        ...this.handleOpenAIExtraArgs(
+          isO1Model,
+          modelConfig.maxTokens,
+          modelConfig.temperature,
+          modelConfig.maxCompletionTokens,
+          modelConfig.reasoningEffort
+        ),
       },
       [ChatModelProviders.ANTHROPIC]: {
         anthropicApiKey: getDecryptedKey(customModel.apiKey || settings.anthropicApiKey),
@@ -105,20 +134,28 @@ export default class ChatModelManager {
         anthropicApiUrl: customModel.baseUrl,
         clientOptions: {
           // Required to bypass CORS restrictions
-          defaultHeaders: { "anthropic-dangerous-direct-browser-access": "true" },
+          defaultHeaders: {
+            "anthropic-dangerous-direct-browser-access": "true",
+          },
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
       },
       [ChatModelProviders.AZURE_OPENAI]: {
-        azureOpenAIApiKey: getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
-        azureOpenAIApiInstanceName: settings.azureOpenAIApiInstanceName,
-        azureOpenAIApiDeploymentName: settings.azureOpenAIApiDeploymentName,
-        azureOpenAIApiVersion: settings.azureOpenAIApiVersion,
+        azureOpenAIApiKey: getDecryptedKey(azureApiKey || settings.azureOpenAIApiKey),
+        azureOpenAIApiInstanceName: azureInstanceName || settings.azureOpenAIApiInstanceName,
+        azureOpenAIApiDeploymentName: azureDeploymentName || settings.azureOpenAIApiDeploymentName,
+        azureOpenAIApiVersion: azureApiVersion || settings.azureOpenAIApiVersion,
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
-        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
+        ...this.handleOpenAIExtraArgs(
+          modelKey.startsWith("o1-preview"),
+          modelConfig.maxTokens,
+          modelConfig.temperature,
+          modelConfig.maxCompletionTokens,
+          modelConfig.reasoningEffort
+        ),
       },
       [ChatModelProviders.COHEREAI]: {
         apiKey: getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
@@ -183,7 +220,13 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
           dangerouslyAllowBrowser: true,
         },
-        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
+        ...this.handleOpenAIExtraArgs(
+          isO1Model,
+          modelConfig.maxTokens,
+          modelConfig.temperature,
+          modelConfig.maxCompletionTokens,
+          modelConfig.reasoningEffort
+        ),
       },
     };
 
@@ -193,11 +236,20 @@ export default class ChatModelManager {
     return { ...baseConfig, ...selectedProviderConfig };
   }
 
-  private handleOpenAIExtraArgs(isO1Model: boolean, maxTokens: number, temperature: number) {
+  private handleOpenAIExtraArgs(
+    isO1Model: boolean,
+    maxTokens: number | undefined,
+    temperature: number | undefined,
+    maxCompletionTokens: number | undefined,
+    reasoningEffort: number | undefined
+  ) {
     return isO1Model
       ? {
-          maxCompletionTokens: maxTokens,
+          maxCompletionTokens: maxCompletionTokens,
           temperature: 1,
+          extraParams: {
+            reasoning_effort: reasoningEffort,
+          },
         }
       : {
           maxTokens: maxTokens,
@@ -215,7 +267,7 @@ export default class ChatModelManager {
 
     allModels.forEach((model) => {
       if (model.enabled) {
-        if (!Object.values(ChatModelProviders).contains(model.provider as ChatModelProviders)) {
+        if (!Object.values(ChatModelProviders).includes(model.provider as ChatModelProviders)) {
           console.warn(`Unknown provider: ${model.provider} for model: ${model.name}`);
           return;
         }

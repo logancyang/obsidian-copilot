@@ -1,12 +1,13 @@
 import { ChainType, Document } from "@/chainFactory";
-import { NOMIC_EMBED_TEXT, USER_SENDER } from "@/constants";
+import { EmbeddingModelProviders } from "@/constants";
+import { USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/sharedState";
 import { MemoryVariables } from "@langchain/core/memory";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { BaseChain, RetrievalQAChain } from "langchain/chains";
 import moment from "moment";
 import { TFile, Vault, parseYaml, requestUrl } from "obsidian";
-import { CustomModel } from "./aiParams";
+import { CustomModel } from "@/aiParams";
 
 export const getModelNameFromKey = (modelKey: string): string => {
   return modelKey.split("|")[0];
@@ -258,23 +259,6 @@ export async function getAllNotesContent(vault: Vault): Promise<string> {
   return allContent;
 }
 
-export function areEmbeddingModelsSame(
-  model1: string | undefined,
-  model2: string | undefined
-): boolean {
-  if (!model1 || !model2) return false;
-  // TODO: Hacks to handle different embedding model names for the same model. Need better handling.
-  if (model1.includes(NOMIC_EMBED_TEXT) && model2.includes(NOMIC_EMBED_TEXT)) {
-    return true;
-  }
-  if (
-    (model1 === "small" && model2 === "cohereai") ||
-    (model1 === "cohereai" && model2 === "small")
-  ) {
-    return true;
-  }
-  return model1 === model2;
-}
 
 // Basic prompts
 export function sendNotesContentPrompt(notes: { name: string; content: string }[]): string {
@@ -512,6 +496,28 @@ export async function getFilePathsFromPatterns(
   }
 
   return Array.from(filePaths);
+}
+
+export function areEmbeddingModelsSame(
+  prevModel: string | undefined,
+  currentEmbeddingModelKey: string
+): boolean {
+  // Handle undefined case first
+  if (!prevModel) {
+    return false;
+  }
+
+  // For Azure OpenAI models, compare the full model key
+
+  if (currentEmbeddingModelKey.startsWith(EmbeddingModelProviders.AZURE_OPENAI)) {
+    return currentEmbeddingModelKey === prevModel;
+  }
+
+  // For all other models, split and compare only the model name part
+  const currentModelName = currentEmbeddingModelKey.split('|')[0];
+  const prevModelName = prevModel.split('|')[0];
+  
+  return currentModelName === prevModelName;
 }
 
 export function extractJsonFromCodeBlock(content: string): any {
