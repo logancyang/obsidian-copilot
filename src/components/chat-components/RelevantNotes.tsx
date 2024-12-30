@@ -17,7 +17,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import React, { forwardRef, useEffect, useState } from "react";
-import { TFile } from "obsidian";
+import { Notice, TFile } from "obsidian";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
@@ -210,6 +210,7 @@ export function RelevantNotes({
   const refreshIndex = async () => {
     if (activeFile) {
       await VectorStoreManager.getInstance().reindexFile(activeFile);
+      new Notice(`Reindexed ${activeFile.name}`);
       setRefresher(refresher + 1);
     }
   };
@@ -269,7 +270,7 @@ export function RelevantNotes({
           </div>
         )}
         {!isOpen && relevantNotes.length > 0 && (
-          <div className="flex flex-wrap gap-x-2 gap-y-1 max-h-12 overflow-y-hidden px-2">
+          <div className="flex flex-wrap gap-x-2 gap-y-1 max-h-6 overflow-y-hidden px-2">
             {relevantNotes.map((note) => (
               <RelevantNotePopover
                 key={note.document.path}
