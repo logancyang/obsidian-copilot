@@ -186,7 +186,18 @@ export async function findRelevantNotes({
   const similarityScoreMap = await calculateSimilarityScore({ db, filePath });
   const noteLinks = getNoteLinks(file);
   const mergedScoreMap = mergeScoreMaps(similarityScoreMap, noteLinks);
-  const sortedHits = Array.from(mergedScoreMap.entries()).sort((a, b) => b[1] - a[1]);
+  const sortedHits = Array.from(mergedScoreMap.entries()).sort((a, b) => {
+    const aPath = a[0];
+    const bPath = b[0];
+    const aCategory = getSimilarityCategory(similarityScoreMap.get(aPath) ?? 0);
+    const bCategory = getSimilarityCategory(similarityScoreMap.get(bPath) ?? 0);
+
+    if (aCategory !== bCategory) {
+      return bCategory - aCategory;
+    }
+
+    return b[1] - a[1];
+  });
   return sortedHits
     .map(([path, score]) => {
       const file = app.vault.getAbstractFileByPath(path);
@@ -207,4 +218,15 @@ export async function findRelevantNotes({
       };
     })
     .filter((entry) => entry !== null);
+}
+
+/**
+ * Gets the similarity category for the given score.
+ * @param score - The score to get the similarity category for.
+ * @returns The similarity category. 1 is low, 2 is medium, 3 is high.
+ */
+export function getSimilarityCategory(score: number): number {
+  if (score > 0.7) return 3;
+  if (score > 0.55) return 2;
+  return 1;
 }

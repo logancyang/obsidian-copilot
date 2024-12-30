@@ -1,6 +1,10 @@
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { findRelevantNotes, RelevantNoteEntry } from "@/search/findRelevantNotes";
+import {
+  findRelevantNotes,
+  getSimilarityCategory,
+  RelevantNoteEntry,
+} from "@/search/findRelevantNotes";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -69,9 +73,10 @@ function inSameFolder(path1: string, path2: string) {
 }
 
 function SimilarityBadge({ score }: { score: number }) {
+  const category = getSimilarityCategory(score);
   let text = "🔴 Low Similarity";
-  if (score > 0.55) text = "🟠 Medium Similarity";
-  if (score > 0.7) text = "🟢 High Similarity";
+  if (category === 2) text = "🟠 Medium Similarity";
+  if (category === 3) text = "🟢 High Similarity";
   return (
     <Tooltip>
       <TooltipTrigger asChild>
