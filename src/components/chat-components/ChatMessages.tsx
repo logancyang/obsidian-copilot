@@ -1,5 +1,7 @@
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
+import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { SuggestedPrompts } from "@/components/chat-components/SuggestedPrompts";
+import { useSettingsValue } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { App } from "obsidian";
 import React, { useEffect, useState } from "react";
@@ -14,7 +16,8 @@ interface ChatMessagesProps {
   onRegenerate: (messageIndex: number) => void;
   onEdit: (messageIndex: number, newMessage: string) => void;
   onDelete: (messageIndex: number) => void;
-  onSelectSuggestedPrompt: (prompt: string) => void;
+  onInsertToChat: (prompt: string) => void;
+  onReplaceChat: (prompt: string) => void;
 }
 
 const ChatMessages: React.FC<ChatMessagesProps> = ({
@@ -27,12 +30,14 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
   onRegenerate,
   onEdit,
   onDelete,
-  onSelectSuggestedPrompt,
+  onInsertToChat,
+  onReplaceChat,
 }) => {
   const [loadingDots, setLoadingDots] = useState("");
 
+  const settings = useSettingsValue();
   const scrollToBottom = () => {
-    const chatMessagesContainer = document.querySelector(".chat-messages");
+    const chatMessagesContainer = document.querySelector("[data-testid='chat-messages']");
     if (chatMessagesContainer) {
       chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
     }
@@ -58,8 +63,15 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
 
   if (!chatHistory.filter((message) => message.isVisible).length && !currentAiMessage) {
     return (
-      <div className="chat-messages">
-        <SuggestedPrompts onClick={onSelectSuggestedPrompt} />
+      <div className="flex flex-col gap-2 overflow-y-auto w-full h-full">
+        {settings.showRelevantNotes && (
+          <RelevantNotes
+            onInsertToChat={onInsertToChat}
+            defaultOpen={true}
+            key="relevant-notes-before-chat"
+          />
+        )}
+        {settings.showSuggestedPrompts && <SuggestedPrompts onClick={onReplaceChat} />}
       </div>
     );
   }
@@ -69,38 +81,51 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
   };
 
   return (
-    <div className="chat-messages">
-      {chatHistory.map(
-        (message, index) =>
-          message.isVisible && (
-            <ChatSingleMessage
-              key={index}
-              message={message}
-              app={app}
-              isStreaming={false}
-              onInsertAtCursor={() => {
-                onInsertAtCursor(message.message);
-              }}
-              onRegenerate={() => onRegenerate(index)}
-              onEdit={(newMessage) => onEdit(index, newMessage)}
-              onDelete={() => onDelete(index)}
-            />
-          )
-      )}
-      {(currentAiMessage || loading) && (
-        <ChatSingleMessage
-          key={`ai_message_${currentAiMessage}`}
-          message={{
-            sender: "AI",
-            message: currentAiMessage || getLoadingMessage(),
-            isVisible: true,
-            timestamp: null,
-          }}
-          app={app}
-          isStreaming={true}
-          onDelete={() => {}}
+    <div className="flex flex-col flex-1 h-full overflow-hidden">
+      {settings.showRelevantNotes && (
+        <RelevantNotes
+          className="mb-4"
+          onInsertToChat={onInsertToChat}
+          defaultOpen={false}
+          key="relevant-notes-in-chat"
         />
       )}
+      <div
+        data-testid="chat-messages"
+        className="flex flex-col items-start justify-start flex-1 overflow-y-auto w-full break-words text-[calc(var(--font-text-size)_-_2px)] box-border scroll-smooth mt-auto select-text"
+      >
+        {chatHistory.map(
+          (message, index) =>
+            message.isVisible && (
+              <ChatSingleMessage
+                key={index}
+                message={message}
+                app={app}
+                isStreaming={false}
+                onInsertAtCursor={() => {
+                  onInsertAtCursor(message.message);
+                }}
+                onRegenerate={() => onRegenerate(index)}
+                onEdit={(newMessage) => onEdit(index, newMessage)}
+                onDelete={() => onDelete(index)}
+              />
+            )
+        )}
+        {(currentAiMessage || loading) && (
+          <ChatSingleMessage
+            key={`ai_message_${currentAiMessage}`}
+            message={{
+              sender: "AI",
+              message: currentAiMessage || getLoadingMessage(),
+              isVisible: true,
+              timestamp: null,
+            }}
+            app={app}
+            isStreaming={true}
+            onDelete={() => {}}
+          />
+        )}
+      </div>
     </div>
   );
 };

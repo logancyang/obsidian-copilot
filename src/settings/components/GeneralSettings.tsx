@@ -105,6 +105,13 @@ const GeneralSettings: React.FC = () => {
         value={settings.showSuggestedPrompts}
         onChange={(value) => updateSetting("showSuggestedPrompts", value)}
       />
+      <ToggleComponent
+        name="Relevant Notes"
+        description="Show relevant notes in the chat view"
+        value={settings.showRelevantNotes}
+        onChange={(value) => updateSetting("showRelevantNotes", value)}
+      />
+
       <div className="chat-icon-selection-tooltip">
         <h2>Open Plugin In</h2>
         <div className="select-wrapper">

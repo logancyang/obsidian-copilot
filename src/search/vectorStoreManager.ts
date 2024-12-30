@@ -2,7 +2,7 @@ import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { CopilotSettings, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { Orama } from "@orama/orama";
-import { Notice, Platform } from "obsidian";
+import { Notice, Platform, TFile } from "obsidian";
 import { DBOperations } from "./dbOperations";
 import { IndexEventHandler } from "./indexEventHandler";
 import { IndexOperations } from "./indexOperations";
@@ -94,6 +94,10 @@ export default class VectorStoreManager {
     }
   }
 
+  private async waitForInitialization(): Promise<void> {
+    await this.initializationPromise;
+  }
+
   public async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
     await this.waitForInitialization();
     if (Platform.isMobile && getSettings().disableIndexOnMobile) {
@@ -123,8 +127,9 @@ export default class VectorStoreManager {
     return this.dbOps.isIndexEmpty();
   }
 
-  public async waitForInitialization(): Promise<void> {
-    await this.initializationPromise;
+  public async hasIndex(notePath: string): Promise<boolean> {
+    await this.waitForInitialization();
+    return this.dbOps.hasIndex(notePath);
   }
 
   public onunload(): void {
@@ -144,5 +149,10 @@ export default class VectorStoreManager {
       throw new Error("Database is not loaded. Please restart the plugin.");
     }
     return db;
+  }
+
+  public async reindexFile(file: TFile): Promise<void> {
+    await this.waitForInitialization();
+    await this.indexOps.reindexFile(file);
   }
 }
