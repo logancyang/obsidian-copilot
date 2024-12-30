@@ -3,12 +3,13 @@
 import tailwindcssAnimate from "tailwindcss-animate";
 import { colorOpacityPlugin } from "./src/lib/plugins/colorOpacityPlugin";
 import colors from "tailwindcss/colors";
+import containerQueries from "@tailwindcss/container-queries";
 
 /** @type {import("tailwindcss").Config} */
 module.exports = {
   content: ["./src/**/*.{js,ts,jsx,tsx}", "./src/styles/tailwind.css"],
   darkMode: ["class"],
-  plugins: [tailwindcssAnimate, colorOpacityPlugin],
+  plugins: [tailwindcssAnimate, colorOpacityPlugin, containerQueries],
   corePlugins: {
     preflight: false,
   },

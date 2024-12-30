@@ -205,7 +205,7 @@ export function RelevantNotes({
   return (
     <div
       className={cn(
-        "w-full bg-secondary border border-transparent border-b-border border-solid pb-2",
+        "@container w-full border border-transparent border-b-border border-solid pb-2",
         className
       )}
     >
@@ -280,7 +280,7 @@ export function RelevantNotes({
           </div>
         )}
         <CollapsibleContent>
-          <div className="p-2 max-h-96 overflow-y-auto flex flex-col gap-2">
+          <div className="p-2 max-h-96 overflow-y-auto flex flex-col gap-2 @lg:grid @lg:grid-cols-2 @3xl:grid-cols-3">
             {relevantNotes.map((note) => (
               <RelevantNote
                 showPath={!inSameFolder(activeFile?.path ?? "", note.document.path)}
