@@ -95,7 +95,7 @@ export const SuggestedPrompts: React.FC<SuggestedPromptsProps> = ({ onClick }) =
 
   return (
     <div className="flex flex-col gap-4">
-      <Card className="w-full bg-secondary">
+      <Card className="w-full bg-transparent">
         <CardHeader className="px-2">
           <CardTitle>Suggested Prompts</CardTitle>
         </CardHeader>

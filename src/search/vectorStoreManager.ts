@@ -2,7 +2,7 @@ import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { CopilotSettings, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { Orama } from "@orama/orama";
-import { Notice, Platform } from "obsidian";
+import { Notice, Platform, TFile } from "obsidian";
 import { DBOperations } from "./dbOperations";
 import { IndexEventHandler } from "./indexEventHandler";
 import { IndexOperations } from "./indexOperations";
@@ -149,5 +149,10 @@ export default class VectorStoreManager {
       throw new Error("Database is not loaded. Please restart the plugin.");
     }
     return db;
+  }
+
+  public async reindexFile(file: TFile): Promise<void> {
+    await this.waitForInitialization();
+    await this.indexOps.reindexFile(file);
   }
 }

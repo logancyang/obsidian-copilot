@@ -207,6 +207,12 @@ export function RelevantNotes({
   const addToChat = (prompt: string) => {
     onInsertToChat(`[[${prompt}]]`);
   };
+  const refreshIndex = async () => {
+    if (activeFile) {
+      await VectorStoreManager.getInstance().reindexFile(activeFile);
+      setRefresher(refresher + 1);
+    }
+  };
   return (
     <div
       className={cn(
@@ -241,12 +247,12 @@ export function RelevantNotes({
               <TooltipTrigger asChild>
                 <button
                   className="size-6 p-0 !bg-transparent border-none !shadow-none hover:!bg-interactive-hover"
-                  onClick={() => setRefresher(refresher + 1)}
+                  onClick={refreshIndex}
                 >
                   <RefreshCcw className="size-4" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">Refresh Relevant Notes</TooltipContent>
+              <TooltipContent side="bottom">Reindex Current Note</TooltipContent>
             </Tooltip>
             {relevantNotes.length > 0 && (
               <CollapsibleTrigger asChild>
@@ -285,7 +291,7 @@ export function RelevantNotes({
           </div>
         )}
         <CollapsibleContent>
-          <div className="p-2 max-h-96 overflow-y-auto flex flex-col gap-2 @lg:grid @lg:grid-cols-2 @3xl:grid-cols-3">
+          <div className="p-2 max-h-96 overflow-y-auto flex flex-col gap-2 @2xl:grid @2xl:grid-cols-2 @4xl:grid-cols-3">
             {relevantNotes.map((note) => (
               <RelevantNote
                 showPath={!inSameFolder(activeFile?.path ?? "", note.document.path)}
