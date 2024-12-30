@@ -1,5 +1,4 @@
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { findRelevantNotes, RelevantNoteEntry } from "@/search/findRelevantNotes";
 import VectorStoreManager from "@/search/vectorStoreManager";
@@ -204,40 +203,46 @@ export function RelevantNotes({
     onInsertToChat(`[[${prompt}]]`);
   };
   return (
-    <Card className={cn("w-full bg-secondary border border-solid border-border", className)}>
+    <div
+      className={cn(
+        "w-full bg-secondary border border-transparent border-b-border border-solid pb-2",
+        className
+      )}
+    >
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CardHeader className="p-4 border-b">
-          <CardTitle className="flex justify-between items-center">
-            <div className="flex gap-2 items-center">
-              <span>Relevant Notes</span>
+        <div className="flex justify-between items-center px-2 pb-2">
+          <div className="flex gap-2 items-center flex-1">
+            <span className="font-semibold text-normal">Relevant Notes</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Info className="size-4 text-muted" />
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="w-64">
+                Relevance is a combination of semantic similarity and links.
+              </TooltipContent>
+            </Tooltip>
+
+            {!hasIndex && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Info className="size-4 text-muted" />
+                  <TriangleAlert className="size-4 text-warning" />
                 </TooltipTrigger>
-                <TooltipContent className="w-60">
-                  Relevance is a combination of semantic similarity and links.
-                </TooltipContent>
+                <TooltipContent side="bottom">Note has not been indexed</TooltipContent>
               </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    className="size-6 p-0 !bg-transparent border-none !shadow-none hover:!bg-interactive-hover"
-                    onClick={() => setRefresher(refresher + 1)}
-                  >
-                    <RefreshCcw className="size-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Refresh Relevant Notes</TooltipContent>
-              </Tooltip>
-              {!hasIndex && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <TriangleAlert className="size-4 text-warning" />
-                  </TooltipTrigger>
-                  <TooltipContent>Note has not been indexed</TooltipContent>
-                </Tooltip>
-              )}
-            </div>
+            )}
+          </div>
+          <div className="flex gap-2 items-center">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className="size-6 p-0 !bg-transparent border-none !shadow-none hover:!bg-interactive-hover"
+                  onClick={() => setRefresher(refresher + 1)}
+                >
+                  <RefreshCcw className="size-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Refresh Relevant Notes</TooltipContent>
+            </Tooltip>
             {relevantNotes.length > 0 && (
               <CollapsibleTrigger asChild>
                 <button className="size-6 p-0 !bg-transparent border-none !shadow-none hover:!bg-interactive-hover">
@@ -245,37 +250,37 @@ export function RelevantNotes({
                 </button>
               </CollapsibleTrigger>
             )}
-          </CardTitle>
-          {relevantNotes.length === 0 && (
-            <CardDescription className="flex flex-wrap gap-x-2 gap-y-1 max-h-12 overflow-y-hidden">
-              <span className="text-xs text-muted">No relevant notes found</span>
-            </CardDescription>
-          )}
-          {!isOpen && relevantNotes.length > 0 && (
-            <CardDescription className="flex flex-wrap gap-x-2 gap-y-1 max-h-12 overflow-y-hidden">
-              {relevantNotes.map((note) => (
-                <RelevantNotePopover
+          </div>
+        </div>
+        {relevantNotes.length === 0 && (
+          <div className="flex flex-wrap gap-x-2 gap-y-1 max-h-12 overflow-y-hidden px-2">
+            <span className="text-xs text-muted">No relevant notes found</span>
+          </div>
+        )}
+        {!isOpen && relevantNotes.length > 0 && (
+          <div className="flex flex-wrap gap-x-2 gap-y-1 max-h-12 overflow-y-hidden px-2">
+            {relevantNotes.map((note) => (
+              <RelevantNotePopover
+                key={note.document.path}
+                note={note}
+                onAddToChat={() => addToChat(note.document.title)}
+                onNavigateToNote={() => navigateToNote(note.document.path)}
+              >
+                <Badge
+                  variant="outline"
                   key={note.document.path}
-                  note={note}
-                  onAddToChat={() => addToChat(note.document.title)}
-                  onNavigateToNote={() => navigateToNote(note.document.path)}
+                  className="text-xs max-w-40 text-muted hover:cursor-pointer hover:bg-interactive-hover"
                 >
-                  <Badge
-                    variant="outline"
-                    key={note.document.path}
-                    className="text-xs max-w-40 text-muted hover:cursor-pointer hover:bg-interactive-hover"
-                  >
-                    <span className="text-ellipsis overflow-hidden whitespace-nowrap">
-                      {note.document.title}
-                    </span>
-                  </Badge>
-                </RelevantNotePopover>
-              ))}
-            </CardDescription>
-          )}
-        </CardHeader>
+                  <span className="text-ellipsis overflow-hidden whitespace-nowrap">
+                    {note.document.title}
+                  </span>
+                </Badge>
+              </RelevantNotePopover>
+            ))}
+          </div>
+        )}
         <CollapsibleContent>
-          <CardContent className="px-4 pb-2 pt-0 max-h-96 overflow-y-auto flex flex-col gap-2">
+          <div className="p-2 max-h-96 overflow-y-auto flex flex-col gap-2">
             {relevantNotes.map((note) => (
               <RelevantNote
                 showPath={!inSameFolder(activeFile?.path ?? "", note.document.path)}
@@ -285,9 +290,9 @@ export function RelevantNotes({
                 onNavigateToNote={() => navigateToNote(note.document.path)}
               />
             ))}
-          </CardContent>
+          </div>
         </CollapsibleContent>
       </Collapsible>
-    </Card>
+    </div>
   );
 }

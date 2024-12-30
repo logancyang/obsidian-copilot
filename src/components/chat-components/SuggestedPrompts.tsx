@@ -95,11 +95,11 @@ export const SuggestedPrompts: React.FC<SuggestedPromptsProps> = ({ onClick }) =
 
   return (
     <div className="flex flex-col gap-4">
-      <Card className="w-full bg-secondary border border-solid border-border">
-        <CardHeader>
+      <Card className="w-full bg-secondary">
+        <CardHeader className="px-2">
           <CardTitle>Suggested Prompts</CardTitle>
         </CardHeader>
-        <CardContent className="p-2 px-4 pt-0">
+        <CardContent className="p-2 px-2 pt-0">
           <div className="flex flex-col gap-2">
             {prompts.map((prompt, i) => (
               <div
