@@ -208,34 +208,3 @@ export async function findRelevantNotes({
     })
     .filter((entry) => entry !== null);
 }
-
-function computeHistogram(scores: number[], binCount = 10): number[] {
-  // Initialize all bins to zero
-  const histogram = new Array<number>(binCount).fill(0);
-
-  // Fill each bin with the count of scores that fall into that range
-  for (const score of scores) {
-    // Determine the correct bin index based on the score
-    let index = Math.floor(score * binCount);
-    if (index === binCount) {
-      // Edge case: a score of exactly 1 goes into the last bin
-      index = binCount - 1;
-    }
-    histogram[index]++;
-  }
-
-  return histogram;
-}
-
-export async function calculateScoreDistribution(db: Orama<any>) {
-  const files = app.vault.getMarkdownFiles();
-  const scores = [];
-  for (const file of files) {
-    const similarityScoreMap = await calculateSimilarityScore({ db, filePath: file.path });
-    for (const score of similarityScoreMap.values()) {
-      scores.push(score);
-    }
-  }
-  const result = computeHistogram(scores);
-  console.log(result);
-}

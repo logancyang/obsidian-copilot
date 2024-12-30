@@ -70,7 +70,7 @@ function inSameFolder(path1: string, path2: string) {
 
 function SimilarityBadge({ score }: { score: number }) {
   let text = "🔴 Low Similarity";
-  if (score > 0.5) text = "🟠 Medium Similarity";
+  if (score > 0.55) text = "🟠 Medium Similarity";
   if (score > 0.7) text = "🟢 High Similarity";
   return (
     <Tooltip>

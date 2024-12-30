@@ -15,7 +15,7 @@ import { CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { encryptAllKeys } from "@/encryptionService";
 import { CustomError } from "@/error";
-import { calculateScoreDistribution, findRelevantNotes } from "@/search/findRelevantNotes";
+import { findRelevantNotes } from "@/search/findRelevantNotes";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import VectorStoreManager from "@/search/vectorStoreManager";
@@ -318,7 +318,6 @@ export default class CopilotPlugin extends Plugin {
         }
 
         const db = await this.vectorStoreManager.getDb();
-        await calculateScoreDistribution(db);
         const relevantNotes = await findRelevantNotes({
           db,
           filePath: activeFile.path,
