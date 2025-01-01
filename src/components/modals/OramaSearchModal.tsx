@@ -1,12 +1,10 @@
-import { App, Modal, Notice, Setting } from "obsidian";
-import CopilotPlugin from "../../main";
+import CopilotPlugin from "@/main";
+import { extractNoteTitles } from "@/utils";
+import { App, Modal, Notice, TFile } from "obsidian";
 
 export class OramaSearchModal extends Modal {
-  plugin: CopilotPlugin;
-  query = "";
-  textWeight = 0.5;
-  vectorWeight = 0.5;
-  salientTerms = "";
+  private plugin: CopilotPlugin;
+  private searchInput: HTMLTextAreaElement;
 
   constructor(app: App, plugin: CopilotPlugin) {
     super(app);
@@ -15,74 +13,71 @@ export class OramaSearchModal extends Modal {
 
   onOpen() {
     const { contentEl } = this;
-
-    contentEl.createEl("h2", { text: "CopilotDB Search" });
-
-    new Setting(contentEl).setName("Search query").addText((text) =>
-      text.onChange((value) => {
-        this.query = value;
-      })
-    );
-
-    new Setting(contentEl).setName("Text weight (0-1)").addText((text) =>
-      text.setValue("0.5").onChange((value) => {
-        this.textWeight = parseFloat(value);
-      })
-    );
-
-    new Setting(contentEl).setName("Salient terms (space-separated)").addText((text) =>
-      text.onChange((value) => {
-        this.salientTerms = value;
-      })
-    );
-
-    new Setting(contentEl).addButton((btn) =>
-      btn
-        .setButtonText("Search")
-        .setCta()
-        .onClick(() => this.performSearch())
-    );
-  }
-
-  async performSearch() {
-    if (!this.query || isNaN(this.textWeight) || isNaN(this.vectorWeight)) {
-      new Notice("Please enter valid search parameters.");
-      return;
-    }
-
-    const salientTerms = this.salientTerms.split(" ").map((term) => term.trim());
-
-    const results = await this.plugin.customSearchDB(this.query, salientTerms, this.textWeight);
-
-    this.close();
-    new SearchResultsModal(this.app, results).open();
-  }
-
-  onClose() {
-    const { contentEl } = this;
     contentEl.empty();
-  }
-}
 
-class SearchResultsModal extends Modal {
-  results: any[];
+    contentEl.createEl("h2", { text: "Inspect Copilot Index by Note Paths" });
 
-  constructor(app: App, results: any[]) {
-    super(app);
-    this.results = results;
-  }
+    // Create textarea instead of input for multiline support
+    this.searchInput = contentEl.createEl("textarea", {
+      attr: {
+        placeholder: "Enter note paths as markdown list:\n- [[Note 1]]\n- [[Note 2]]",
+        rows: "10",
+        style:
+          "width: 100%; min-height: 200px; margin: 10px 0; padding: 10px; font-family: monospace;",
+      },
+    });
 
-  onOpen() {
-    const { contentEl } = this;
+    const buttonContainer = contentEl.createEl("div", { cls: "search-button-container" });
 
-    contentEl.createEl("h2", { text: "Search Results" });
+    const searchButton = buttonContainer.createEl("button", {
+      text: "Show Index Data",
+      cls: "mod-cta",
+    });
 
-    const resultsList = contentEl.createEl("ul");
-    this.results.forEach((result) => {
-      const listItem = resultsList.createEl("li");
-      listItem.createEl("strong", { text: result.metadata.title });
-      listItem.createEl("p", { text: result.content });
-      listItem.createEl("p", { text: `Score: ${result.metadata.score}` });
+    searchButton.addEventListener("click", async () => {
+      const input = this.searchInput.value;
+      const notePaths = extractNoteTitles(input);
+
+      if (notePaths.length === 0) {
+        new Notice("No valid note paths found. Use format: - [[Note Name]]");
+        return;
+      }
+
+      try {
+        const dbOps = await this.plugin.vectorStoreManager.getDbOps();
+        const results = await dbOps.getDocsJsonByPaths(notePaths);
+
+        // Create or overwrite file with results
+        const fileName = `CopilotDB-Search-Results.md`;
+        const content = [
+          "## Searched Paths",
+          ...notePaths.map((path) => `- [[${path}]]`),
+          "",
+          "## Index Data",
+          "```json",
+          JSON.stringify(results, null, 2),
+          "```",
+        ].join("\n");
+
+        // Check if file exists and modify it, otherwise create new
+        const existingFile = this.app.vault.getAbstractFileByPath(fileName);
+        if (existingFile) {
+          await this.app.vault.modify(existingFile as TFile, content);
+        } else {
+          await this.app.vault.create(fileName, content);
+        }
+
+        // Open the file
+        const file = this.app.vault.getAbstractFileByPath(fileName);
+        if (file) {
+          await this.app.workspace.getLeaf().openFile(file as TFile);
+        }
+
+        this.close();
+      } catch (error) {
+        console.error("Error searching DB:", error);
+        new Notice("Error searching database. Check console for details.");
+      }
     });
   }
 

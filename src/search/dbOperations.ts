@@ -558,4 +558,44 @@ export class DBOperations {
     const docs = await DBOperations.getDocsByPath(this.oramaDb, notePath);
     return docs !== undefined && docs.length > 0;
   }
+
+  async hasEmbeddings(notePath: string): Promise<boolean> {
+    if (!this.oramaDb) {
+      return false;
+    }
+    const docs = await DBOperations.getDocsByPath(this.oramaDb, notePath);
+    if (!docs || docs.length === 0) {
+      return false;
+    }
+    // Check if any document for this path has embeddings
+    return docs.some((doc) => doc.document.embedding && doc.document.embedding.length > 0);
+  }
+
+  async getDocsJsonByPaths(paths: string[]): Promise<Record<string, any[]>> {
+    if (!this.oramaDb) {
+      throw new CustomError("Orama database not found.");
+    }
+
+    const result: Record<string, any[]> = {};
+
+    for (const path of paths) {
+      const docs = await DBOperations.getDocsByPath(this.oramaDb, path);
+      if (docs && docs.length > 0) {
+        result[path] = docs.map((hit) => ({
+          id: hit.document.id,
+          title: hit.document.title,
+          path: hit.document.path,
+          content: hit.document.content,
+          metadata: hit.document.metadata,
+          embedding: hit.document.embedding,
+          embeddingModel: hit.document.embeddingModel,
+          tags: hit.document.tags,
+          extension: hit.document.extension,
+          nchars: hit.document.nchars,
+        }));
+      }
+    }
+
+    return result;
+  }
 }
