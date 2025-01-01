@@ -327,8 +327,8 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "copilot-db-search",
-      name: "CopilotDB Search",
+      id: "copilot-inspect-index-by-note-paths",
+      name: "Inspect Copilot Index by Note Paths",
       callback: () => {
         new OramaSearchModal(this.app, this).open();
       },
