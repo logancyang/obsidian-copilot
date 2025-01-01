@@ -344,6 +344,10 @@ export default class CopilotPlugin extends Plugin {
           const allMarkdownFiles = this.app.vault.getMarkdownFiles();
           const emptyFiles = new Set<string>();
           const unindexedFiles = new Set<string>();
+          const filesWithoutEmbeddings = new Set<string>();
+
+          // Get dbOps for checking embeddings
+          const dbOps = await this.vectorStoreManager.getDbOps();
 
           // Categorize files
           for (const file of allMarkdownFiles) {
@@ -352,6 +356,12 @@ export default class CopilotPlugin extends Plugin {
               emptyFiles.add(file.path);
             } else if (!indexedFilePaths.has(file.path)) {
               unindexedFiles.add(file.path);
+            } else {
+              // Check if file has embeddings
+              const hasEmbeddings = await dbOps.hasEmbeddings(file.path);
+              if (!hasEmbeddings) {
+                filesWithoutEmbeddings.add(file.path);
+              }
             }
           }
 
@@ -364,11 +374,15 @@ export default class CopilotPlugin extends Plugin {
           const content = [
             "# Copilot Files Status",
             `- Indexed files: ${indexedFiles.length}`,
+            `	- Files missing embeddings: ${filesWithoutEmbeddings.size}`,
             `- Unindexed files: ${unindexedFiles.size}`,
             `- Empty files: ${emptyFiles.size}`,
             "",
             "## Indexed Files",
-            ...indexedFiles.map((file) => `- [[${file}]]`),
+            ...indexedFiles.map((file) => {
+              const noEmbedding = filesWithoutEmbeddings.has(file);
+              return `- [[${file}]]${noEmbedding ? " *(embedding missing)*" : ""}`;
+            }),
             "",
             "## Unindexed Files",
             ...(unindexedFiles.size > 0

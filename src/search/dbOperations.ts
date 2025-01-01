@@ -558,4 +558,16 @@ export class DBOperations {
     const docs = await DBOperations.getDocsByPath(this.oramaDb, notePath);
     return docs !== undefined && docs.length > 0;
   }
+
+  async hasEmbeddings(notePath: string): Promise<boolean> {
+    if (!this.oramaDb) {
+      return false;
+    }
+    const docs = await DBOperations.getDocsByPath(this.oramaDb, notePath);
+    if (!docs || docs.length === 0) {
+      return false;
+    }
+    // Check if any document for this path has embeddings
+    return docs.some((doc) => doc.document.embedding && doc.document.embedding.length > 0);
+  }
 }
