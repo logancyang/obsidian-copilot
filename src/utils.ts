@@ -87,9 +87,11 @@ export async function getTagsFromNote(file: TFile, vault: Vault): Promise<string
       try {
         const frontMatter = parseYaml(frontMatterContent) || {};
         const tags = frontMatter.tags || [];
-        // Strip any '#' from the frontmatter tags. Obsidian sometimes has '#' sometimes doesn't...
-        return tags
-          .map((tag: string) => tag.replace("#", ""))
+        // Handle both array and string formats of tags
+        const normalizedTags = Array.isArray(tags) ? tags : [tags];
+        // Strip any '#' from the frontmatter tags and convert to lowercase
+        return normalizedTags
+          .map((tag: string) => tag.toString().replace(/^#/, ""))
           .map((tag: string) => tag.toLowerCase());
       } catch (error) {
         console.error("Error parsing YAML frontmatter:", error);
@@ -109,8 +111,8 @@ export async function getNotesFromTags(
     return [];
   }
 
-  // Strip any '#' from the tags set from the user
-  tags = tags.map((tag) => tag.replace("#", ""));
+  // Strip any '#' from the tags and convert to lowercase for consistent comparison
+  tags = tags.map((tag) => tag.replace(/^#/, "").toLowerCase());
 
   const files = noteFiles && noteFiles.length > 0 ? noteFiles : await getNotesFromPath(vault, "/");
   const filesWithTag = [];
