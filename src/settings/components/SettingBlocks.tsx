@@ -3,6 +3,7 @@ import ChatModelManager from "@/LLMProviders/chatModelManager";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
 import { App, Notice } from "obsidian";
 import React, { useEffect, useState } from "react";
+import { getModelKeyFromModel } from "@/settings/model";
 
 type DropdownComponentProps = {
   name: string;
@@ -303,7 +304,7 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
   const [isAddModelOpen, setIsAddModelOpen] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
 
-  const getModelKey = (model: CustomModel) => `${model.name}|${model.provider}`;
+  const getModelKey = getModelKeyFromModel;
 
   const handleAddModel = () => {
     if (newModel.name && newModel.provider) {

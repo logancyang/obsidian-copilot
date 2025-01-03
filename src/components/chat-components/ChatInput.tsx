@@ -1,4 +1,4 @@
-import { CustomModel, useChainType, useModelKey } from "@/aiParams";
+import { useChainType, useModelKey } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { AddImageModal } from "@/components/modals/AddImageModal";
 import { ListPromptModal } from "@/components/modals/ListPromptModal";
@@ -7,7 +7,7 @@ import { ContextProcessor } from "@/contextProcessor";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
-import { useSettingsValue } from "@/settings/model";
+import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { getToolDescription } from "@/tools/toolManager";
 import { extractNoteTitles } from "@/utils";
@@ -39,8 +39,6 @@ interface ChatInputProps {
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
   chatHistory: ChatMessage[];
 }
-
-const getModelKey = (model: CustomModel) => `${model.name}|${model.provider}`;
 
 const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
   (
@@ -447,8 +445,9 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           <div className="chat-input-left">
             <DropdownMenu.Root open={isModelDropdownOpen} onOpenChange={setIsModelDropdownOpen}>
               <DropdownMenu.Trigger className="model-select-button">
-                {settings.activeModels.find((model) => getModelKey(model) === currentModelKey)
-                  ?.name || "Select Model"}
+                {settings.activeModels.find(
+                  (model) => getModelKeyFromModel(model) === currentModelKey
+                )?.name || "Select Model"}
                 <ChevronUp size={10} />
               </DropdownMenu.Trigger>
 
@@ -458,8 +457,8 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                     .filter((model) => model.enabled)
                     .map((model) => (
                       <DropdownMenu.Item
-                        key={getModelKey(model)}
-                        onSelect={() => setCurrentModelKey(getModelKey(model))}
+                        key={getModelKeyFromModel(model)}
+                        onSelect={() => setCurrentModelKey(getModelKeyFromModel(model))}
                       >
                         {model.name}
                       </DropdownMenu.Item>
