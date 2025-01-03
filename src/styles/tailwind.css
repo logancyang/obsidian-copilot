@@ -282,6 +282,8 @@ If your plugin does not need CSS, delete this file.
 .chat-input-textarea {
   width: 100%;
   min-height: 44px;
+  max-height: 440px;
+  overflow-y: auto;
   resize: none;
   padding: 2px 12px;
   background: var(--background-secondary-alt);
