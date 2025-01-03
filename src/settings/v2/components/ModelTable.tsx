@@ -71,7 +71,12 @@ export const ModelTable: React.FC<ModelTableProps> = ({
               <TableCell className="text-center">
                 <div className="flex justify-center gap-2">
                   {onEdit && (
-                    <Button variant="ghost" size="icon" onClick={() => onEdit(model)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onEdit(model)}
+                      className="shadow-sm hover:shadow-md transition-shadow"
+                    >
                       <Pencil className="h-4 w-4" />
                     </Button>
                   )}
@@ -79,6 +84,7 @@ export const ModelTable: React.FC<ModelTableProps> = ({
                     variant="ghost"
                     size="icon"
                     onClick={() => onDelete(getModelKeyFromModel(model))}
+                    className="shadow-sm hover:shadow-md transition-shadow"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>

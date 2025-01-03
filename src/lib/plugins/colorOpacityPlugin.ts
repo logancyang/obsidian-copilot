@@ -70,7 +70,9 @@ const processColorObject =
       Object.entries(colorValue).forEach(([key, value]) => {
         const nextBaseName = key === "DEFAULT" ? "" : key;
         const nextPath = nextBaseName ? currentPath : currentPath.slice(0, -1);
-        value && processColorObject(e, opacityUtilities)(value, nextBaseName, nextPath);
+        if (value) {
+          processColorObject(e, opacityUtilities)(value, nextBaseName, nextPath);
+        }
       });
     }
   };

@@ -33,7 +33,7 @@ export const TabItem: React.FC<TabItemProps> = ({ tab, isSelected, onClick, isFi
         "whitespace-nowrap",
         "text-sm",
         "border border-border border-solid",
-        "rounded-t-lg rounded-b-[2px]",
+        "rounded-t-md rounded-b-[2px]",
         "bg-primary",
         "transition-all duration-300 ease-in-out",
         "hover:border-interactive-accent hover:border-b-0",
@@ -46,15 +46,16 @@ export const TabItem: React.FC<TabItemProps> = ({ tab, isSelected, onClick, isFi
           "transition-all duration-300 ease-in-out",
           "delay-200",
         ],
-        "lg:max-w-12",
-        "md:max-w-12"
+        "lg:max-w-32",
+        "md:max-w-32"
       )}
     >
       <div
         className={cn(
           "flex items-center justify-center",
           "w-4 h-4",
-          "transition-transform duration-200 ease-in-out"
+          "transition-transform duration-200 ease-in-out",
+          isSelected ? "opacity-100 max-w-[16px] translate-x-0" : "opacity-0 max-w-0 -translate-x-4"
         )}
       >
         {tab.icon}
@@ -65,9 +66,7 @@ export const TabItem: React.FC<TabItemProps> = ({ tab, isSelected, onClick, isFi
           "font-medium",
           "transition-all duration-200 ease-in-out",
           "overflow-hidden whitespace-nowrap",
-          isSelected
-            ? "opacity-100 max-w-[100px] translate-x-0"
-            : "opacity-0 max-w-0 -translate-x-4"
+          "opacity-100 max-w-[100px] translate-x-0"
         )}
       >
         {tab.label}

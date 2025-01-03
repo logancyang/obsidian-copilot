@@ -72,6 +72,9 @@ module.exports = {
       overlay: {
         DEFAULT: "#000",
       },
+      toggle: {
+        thumb: "var(--toggle-thumb-color)",
+      },
     },
     borderColor: {
       inherit: colors.inherit,

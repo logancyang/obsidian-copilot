@@ -35,7 +35,7 @@ const SettingSwitch = React.forwardRef<HTMLDivElement, SettingSwitchProps>(
         className={cn(
           "relative inline-flex h-5.5 w-10 shrink-0 cursor-pointer items-center rounded-full transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-          checked ? "bg-interactive-accent" : "bg-interactive-accent/20",
+          checked ? "bg-interactive-accent" : "bg-[--background-modifier-border-hover]",
           disabled && "cursor-not-allowed opacity-50",
           className
         )}
@@ -45,7 +45,7 @@ const SettingSwitch = React.forwardRef<HTMLDivElement, SettingSwitchProps>(
       >
         <div
           className={cn(
-            "pointer-events-none block h-4 w-4 rounded-full bg-primary shadow-lg ring-0 transition-transform",
+            "pointer-events-none block h-4 w-4 rounded-full bg-toggle-thumb shadow-lg ring-0 transition-transform",
             checked ? "translate-x-5.5" : "translate-x-0.5"
           )}
         />

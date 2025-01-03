@@ -291,6 +291,11 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     host: "https://api.brevilabs.com/v1",
     keyManagementURL: "",
   },
+  [EmbeddingModelProviders.COPILOT_PLUS_JINA]: {
+    label: "Copilot Plus",
+    host: "https://api.brevilabs.com/v1",
+    keyManagementURL: "",
+  },
 };
 
 // Map provider to its settings key for API key

@@ -1,5 +1,5 @@
 import React from "react";
-import { Bot, Settings, Sliders } from "lucide-react";
+import { Cog, Cpu, Wrench } from "lucide-react";
 import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/ui/setting-tabs";
 import BasicSettings from "./components/BasicSettings";
 import ModelSettings from "./components/ModelSettings";
@@ -14,9 +14,9 @@ type TabId = (typeof TAB_IDS)[number];
 
 // 图标映射
 const icons: Record<TabId, JSX.Element> = {
-  basic: <Settings className="w-5 h-5" />,
-  model: <Bot className="w-5 h-5" />,
-  advanced: <Sliders className="w-5 h-5" />,
+  basic: <Cog className="w-5 h-5" />,
+  model: <Cpu className="w-5 h-5" />,
+  advanced: <Wrench className="w-5 h-5" />,
 };
 
 // 组件映射

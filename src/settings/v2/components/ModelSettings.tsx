@@ -1,12 +1,7 @@
 import React, { useState } from "react";
 import { SettingItem } from "@/components/ui/setting-item";
 import { setSettings, updateSetting, useSettingsValue } from "@/settings/model";
-import { ChainType } from "@/chainFactory";
-import { DEFAULT_OPEN_AREA } from "@/constants";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { CustomModel } from "@/aiParams";
-import { SettingSwitch } from "@/components/ui/setting-switch";
 import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
 import ChatModelManager from "@/LLMProviders/chatModelManager";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
@@ -22,14 +17,7 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ indexVaultToVectorStore }
   const settings = useSettingsValue();
   const [editingModel, setEditingModel] = useState<CustomModel | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
-  // const [editingEmbeddingModel, setEditingEmbeddingModel] = useState<CustomModel | null>(null);
   const [showAddEmbeddingDialog, setShowAddEmbeddingDialog] = useState(false);
-
-  const ChainType2Label: Record<ChainType, string> = {
-    [ChainType.LLM_CHAIN]: "Chat",
-    [ChainType.VAULT_QA_CHAIN]: "Vault QA (Basic)",
-    [ChainType.COPILOT_PLUS_CHAIN]: "Copilot Plus (Alpha)",
-  };
 
   const onDeleteModel = (modelKey: string) => {
     const [modelName, provider] = modelKey.split("|");
@@ -86,7 +74,7 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ indexVaultToVectorStore }
   return (
     <div className="space-y-4">
       <section>
-        <div className="text-2xl font-bold mb-3">Chat Model</div>
+        <div className="text-2xl font-bold mb-3">Chat Models</div>
         <ModelTable
           models={settings.activeModels}
           onEdit={setEditingModel}
@@ -116,118 +104,6 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ indexVaultToVectorStore }
         />
 
         <div className="space-y-4">
-          <SettingItem
-            type="select"
-            title="Default Mode"
-            description="Select the default chat mode"
-            value={settings.defaultChainType}
-            onChange={(value) => updateSetting("defaultChainType", value as ChainType)}
-            options={Object.entries(ChainType2Label).map(([key, value]) => ({
-              label: value,
-              value: key,
-            }))}
-          />
-
-          <SettingItem
-            type="text"
-            title="Default Conversation Folder Name"
-            description="The default folder name where chat conversations will be saved. Default is 'copilot-conversations'"
-            value={settings.defaultSaveFolder}
-            onChange={(value) => updateSetting("defaultSaveFolder", value)}
-            placeholder="copilot-conversations"
-          />
-
-          <SettingItem
-            type="text"
-            title="Default Conversation Tag"
-            description="The default tag to be used when saving a conversation. Default is 'copilot-conversations'"
-            value={settings.defaultConversationTag}
-            onChange={(value) => updateSetting("defaultConversationTag", value)}
-            placeholder="copilot-conversation"
-          />
-
-          <SettingItem
-            type="switch"
-            title="Autosave Chat"
-            description="Automatically save the chat when starting a new one or when the plugin reloads"
-            checked={settings.autosaveChat}
-            onCheckedChange={(checked) => updateSetting("autosaveChat", checked)}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Suggested Prompts"
-            description="Show suggested prompts in the chat view"
-            checked={settings.showSuggestedPrompts}
-            onCheckedChange={(checked) => updateSetting("showSuggestedPrompts", checked)}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Relevant Notes"
-            description="Show relevant notes in the chat view"
-            checked={settings.showRelevantNotes}
-            onCheckedChange={(checked) => updateSetting("showRelevantNotes", checked)}
-          />
-
-          <SettingItem
-            type="select"
-            title="Open Plugin In"
-            description="Choose where to open the plugin"
-            value={settings.defaultOpenArea}
-            onChange={(value) => updateSetting("defaultOpenArea", value as DEFAULT_OPEN_AREA)}
-            options={[
-              { label: "Sidebar View", value: DEFAULT_OPEN_AREA.VIEW },
-              { label: "Editor", value: DEFAULT_OPEN_AREA.EDITOR },
-            ]}
-          />
-
-          <SettingItem
-            type="text"
-            title="Custom Prompts Folder Name"
-            description="The default folder name where custom prompts will be saved. Default is 'copilot-custom-prompts'"
-            value={settings.customPromptsFolder}
-            onChange={(value) => updateSetting("customPromptsFolder", value)}
-            placeholder="copilot-custom-prompts"
-          />
-
-          <SettingItem
-            type="dialog"
-            title="Command Settings"
-            description="Configure chat commands"
-            dialogTitle="Command Settings"
-            dialogDescription="Enable or disable chat commands"
-            trigger={<Button variant="outline">Manage Commands</Button>}
-          >
-            <ScrollArea className="h-[50vh] sm:h-[400px] pr-4">
-              <div className="space-y-4">
-                {Object.entries(settings.enabledCommands).map(([command, commandInfo]) => (
-                  <div
-                    key={command}
-                    className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 py-2 sm:py-0.5"
-                  >
-                    <div className="space-y-0.5 flex-1">
-                      <div className="text-sm font-medium">{commandInfo.name}</div>
-                    </div>
-                    <SettingSwitch
-                      checked={commandInfo.enabled}
-                      onCheckedChange={(checked) => {
-                        const newEnabledCommands = {
-                          ...settings.enabledCommands,
-                          [command]: {
-                            ...commandInfo,
-                            enabled: checked,
-                          },
-                        };
-                        updateSetting("enabledCommands", newEnabledCommands);
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </SettingItem>
-
           <SettingItem
             type="textarea"
             title="User System Prompt"
@@ -283,7 +159,7 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ indexVaultToVectorStore }
       </section>
 
       <section>
-        <div className="text-2xl font-bold mb-3">Embedding Model</div>
+        <div className="text-2xl font-bold mb-3">Embedding Models</div>
         <ModelTable
           models={settings.activeEmbeddingModels}
           onDelete={onDeleteEmbeddingModel}
@@ -291,14 +167,6 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ indexVaultToVectorStore }
           onUpdateModel={handleEmbeddingModelUpdate}
           title="Embedding Model"
         />
-
-        {/* Embedding model edit dialog */}
-        {/*        <ModelEditDialog
-          open={!!editingEmbeddingModel}
-          onOpenChange={(open) => !open && setEditingEmbeddingModel(null)}
-          model={editingEmbeddingModel}
-          onUpdate={handleEmbeddingModelUpdate}
-        />*/}
 
         {/* Embedding model add dialog */}
         <ModelAddDialog

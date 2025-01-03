@@ -1,33 +1,22 @@
 import React, { useState } from "react";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { SettingItem } from "@/components/ui/setting-item";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, HelpCircle, Loader2 } from "lucide-react";
+import { ArrowRight, ExternalLink, HelpCircle, Key } from "lucide-react";
 import { useTab } from "@/contexts/TabContext";
-import {
-  ChatModelProviders,
-  DisplayKeyProviders,
-  EmbeddingModelProviders,
-  ProviderInfo,
-  ProviderMetadata,
-  ProviderSettingsKeyMap,
-  VAULT_VECTOR_STORE_STRATEGIES,
-} from "@/constants";
+import { DEFAULT_OPEN_AREA, VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
+import { ChainType } from "@/chainFactory";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { err2String, getProviderInfo, getProviderLabel, omit } from "@/utils";
-import { CustomModel } from "@/aiParams";
+import { getProviderLabel } from "@/utils";
 import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
-import { Notice } from "obsidian";
-import ChatModelManager from "@/LLMProviders/chatModelManager";
-import { PasswordInput } from "@/components/ui/password-input";
+import ApiKeyDialog from "./ApiKeyDialog";
+import { SettingSwitch } from "@/components/ui/setting-switch";
+
+const ChainType2Label: Record<ChainType, string> = {
+  [ChainType.LLM_CHAIN]: "Chat",
+  [ChainType.VAULT_QA_CHAIN]: "Vault QA (Basic)",
+  [ChainType.COPILOT_PLUS_CHAIN]: "Copilot Plus (Alpha)",
+};
 
 interface BasicSettingsProps {
   indexVaultToVectorStore(overwrite?: boolean): Promise<number>;
@@ -36,61 +25,8 @@ interface BasicSettingsProps {
 const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }) => {
   const { setSelectedTab, modalContainer } = useTab();
   const settings = useSettingsValue();
-  const [selectedProvider, setSelectedProvider] = useState<DisplayKeyProviders | undefined>();
-  const [apiKey, setApiKey] = useState<string>("");
-  const [isVerifying, setIsVerifying] = useState(false);
-
-  const getApiKeyByProvider = (provider: DisplayKeyProviders): string => {
-    const settingKey = ProviderSettingsKeyMap[provider];
-    return (settings[settingKey] ?? "") as string;
-  };
-
-  const handleProviderChange = (value: DisplayKeyProviders) => {
-    setSelectedProvider(value);
-    setApiKey(getApiKeyByProvider(value));
-  };
-
-  const verifyApiKey = async () => {
-    if (!selectedProvider || !apiKey) return;
-
-    setIsVerifying(true);
-    try {
-      if (settings.debug) console.log(`Verifying ${selectedProvider} API key:`, apiKey);
-      const defaultTestModel = getProviderInfo(selectedProvider).testModel;
-
-      if (!defaultTestModel) {
-        new Notice(
-          "API key verification failed: No default test model found for the selected provider."
-        );
-        return;
-      }
-
-      const customModel: CustomModel = {
-        name: defaultTestModel,
-        provider: selectedProvider,
-        apiKey,
-        enabled: true,
-      };
-      await ChatModelManager.getInstance().ping(customModel);
-      updateSetting(ProviderSettingsKeyMap[selectedProvider], apiKey);
-    } catch (error) {
-      console.error("API key verification failed:", error);
-      new Notice("API key verification failed: " + err2String(error));
-    } finally {
-      setIsVerifying(false);
-    }
-  };
-
-  const excludeProviders = [
-    ChatModelProviders.OPENAI_FORMAT,
-    ChatModelProviders.OLLAMA,
-    ChatModelProviders.LM_STUDIO,
-    ChatModelProviders.AZURE_OPENAI,
-    EmbeddingModelProviders.COPILOT_PLUS,
-  ];
-  const selectProvider: [string, ProviderMetadata][] = Object.entries(
-    omit(ProviderInfo, excludeProviders)
-  );
+  const [openPopoverIds, setOpenPopoverIds] = useState<Set<string>>(new Set());
+  const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
 
   const handleSetDefaultEmbeddingModel = async (modelKey: string) => {
     if (modelKey !== settings.embeddingModelKey) {
@@ -101,93 +37,79 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
     }
   };
 
+  const handlePopoverOpen = (id: string) => {
+    setOpenPopoverIds((prev) => new Set([...prev, id]));
+  };
+
+  const handlePopoverClose = (id: string) => {
+    setOpenPopoverIds((prev) => {
+      const newSet = new Set(prev);
+      newSet.delete(id);
+      return newSet;
+    });
+  };
+
   return (
     <div className="space-y-4">
-      {/* General Section */}
+      {/* Copilot Plus */}
       <section>
-        <div className="text-2xl font-bold mb-3">General</div>
+        <div className="text-2xl font-bold mb-3">Copilot Plus</div>
         <div className="space-y-4">
-          {/* API Key Section */}
-          <SettingItem
-            type="custom"
-            title="API Key"
-            description="Enter API key for selected provider"
-          >
-            <div className="flex items-center gap-1.5 w-[320px]">
-              <Select
-                value={selectedProvider}
-                onValueChange={handleProviderChange}
-                disabled={isVerifying}
-              >
-                <SelectTrigger className="w-[100px]">
-                  <SelectValue placeholder="Provider" />
-                </SelectTrigger>
-                <SelectContent container={modalContainer}>
-                  <SelectGroup>
-                    {selectProvider.map(([value, { label }]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-
-              <PasswordInput
-                className={`transition-all duration-200 flex-grow min-w-[80px] ${isVerifying ? "w-[80px]" : "w-[120px]"}`}
-                placeholder="API key"
-                value={apiKey}
-                onChange={(v) => setApiKey(v)}
-                disabled={isVerifying}
-              />
-
-              <Button
-                onClick={verifyApiKey}
-                disabled={!selectedProvider || !apiKey || isVerifying}
-                variant="outline"
-                size="sm"
-              >
-                {isVerifying ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Verify
-                  </>
-                ) : (
-                  "Verify"
-                )}
-              </Button>
-            </div>
-          </SettingItem>
           {/* copilot-plus */}
           <SettingItem
             type="password"
-            title="Copilot Plus License Key"
+            title="License Key"
             description={
               <div className="flex items-center gap-1.5">
-                <span className="leading-none">Enter your Copilot Plus license key</span>
-                <Popover>
+                <span className="leading-none">
+                  Copilot Plus brings powerful AI agent capabilities
+                </span>
+                <Popover
+                  open={openPopoverIds.has("license-help")}
+                  onOpenChange={(open) => {
+                    if (open) {
+                      handlePopoverOpen("license-help");
+                    } else {
+                      handlePopoverClose("license-help");
+                    }
+                  }}
+                >
                   <PopoverTrigger asChild>
-                    <HelpCircle className="h-5 w-5 sm:h-4 sm:w-4 cursor-pointer text-muted hover:text-accent translate-y-[1px]" />
+                    <HelpCircle
+                      className="h-5 w-5 sm:h-4 sm:w-4 cursor-pointer text-muted hover:text-accent translate-y-[1px]"
+                      onMouseEnter={() => handlePopoverOpen("license-help")}
+                      onMouseLeave={() => handlePopoverClose("license-help")}
+                    />
                   </PopoverTrigger>
                   <PopoverContent
                     container={modalContainer}
-                    className="w-[90vw] max-w-[400px] p-2 sm:p-3"
+                    className="w-[90vw] max-w-[400px] p-4 bg-primary border border-solid border-border shadow-sm"
                     side="bottom"
                     align="center"
-                    sideOffset={0}
+                    sideOffset={5}
+                    onMouseEnter={() => handlePopoverOpen("license-help")}
+                    onMouseLeave={() => handlePopoverClose("license-help")}
                   >
-                    <div className="space-y-2 sm:space-y-2.5">
-                      <p className="text-[11px] sm:text-xs">
-                        Copilot Plus brings powerful AI agent capabilities to Obsidian. Alpha access
-                        is limited to sponsors and early supporters. Learn more at{" "}
+                    <div className="space-y-2">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-normal">
+                          Copilot Plus brings powerful AI agent capabilities to Obsidian.
+                        </p>
+                        <p className="text-xs text-muted">
+                          Alpha access is limited to sponsors and early supporters.
+                        </p>
+                      </div>
+                      <div className="text-sm text-muted">
+                        Learn more at{" "}
                         <a
                           href="https://obsidiancopilot.com"
                           target="_blank"
                           rel="noopener noreferrer"
+                          className="text-accent hover:text-accent-hover"
                         >
-                          https://obsidiancopilot.com
+                          obsidiancopilot.com
                         </a>
-                      </p>
+                      </div>
                     </div>
                   </PopoverContent>
                 </Popover>
@@ -198,6 +120,16 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
               updateSetting("plusLicenseKey", value);
             }}
           />
+
+          <div className="flex justify-end -mt-2">
+            <Button
+              variant="outline"
+              onClick={() => window.open("https://obsidiancopilot.com", "_blank")}
+            >
+              Get Copilot Plus
+              <ExternalLink className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -205,6 +137,31 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
       <section>
         <div className="text-2xl font-bold mb-4">Chat</div>
         <div className="space-y-4">
+          {/* API Key Section */}
+          <SettingItem
+            type="custom"
+            title="API Keys"
+            description="Configure API keys for different AI providers"
+          >
+            <Button
+              onClick={() => setIsApiKeyDialogOpen(true)}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              Set Keys
+              <Key className="h-4 w-4" />
+            </Button>
+          </SettingItem>
+
+          {/* API Key Dialog */}
+          <ApiKeyDialog
+            open={isApiKeyDialogOpen}
+            onOpenChange={setIsApiKeyDialogOpen}
+            settings={settings}
+            updateSetting={updateSetting}
+            modalContainer={modalContainer}
+          />
+
           <SettingItem
             type="select"
             title="Chat Model"
@@ -233,7 +190,7 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
 
       {/* QA Settings Section */}
       <section>
-        <div className="text-2xl font-bold mb-4">QA Settings/Embeddings</div>
+        <div className="text-2xl font-bold mb-4">Embedding</div>
         <div className="space-y-4">
           <SettingItem
             type="select"
@@ -256,9 +213,22 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
             description={
               <div className="flex items-center gap-1.5">
                 <span className="leading-none">Decide when you want the vault to be indexed.</span>
-                <Popover>
+                <Popover
+                  open={openPopoverIds.has("index-help")}
+                  onOpenChange={(open) => {
+                    if (open) {
+                      handlePopoverOpen("index-help");
+                    } else {
+                      handlePopoverClose("index-help");
+                    }
+                  }}
+                >
                   <PopoverTrigger asChild>
-                    <HelpCircle className="h-5 w-5 sm:h-4 sm:w-4 cursor-pointer text-muted hover:text-accent translate-y-[1px]" />
+                    <HelpCircle
+                      className="h-5 w-5 sm:h-4 sm:w-4 cursor-pointer text-muted hover:text-accent translate-y-[1px]"
+                      onMouseEnter={() => handlePopoverOpen("index-help")}
+                      onMouseLeave={() => handlePopoverClose("index-help")}
+                    />
                   </PopoverTrigger>
                   <PopoverContent
                     container={modalContainer}
@@ -266,6 +236,8 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
                     side="bottom"
                     align="center"
                     sideOffset={0}
+                    onMouseEnter={() => handlePopoverOpen("index-help")}
+                    onMouseLeave={() => handlePopoverClose("index-help")}
                   >
                     <div className="space-y-2 sm:space-y-2.5">
                       {/* Warning Alert */}
@@ -304,10 +276,10 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
                       {/* Additional Notes */}
                       <div className="text-[10px] sm:text-[11px] text-muted space-y-0.5 sm:space-y-1 border-t pt-1.5 sm:pt-2">
                         <p>
-                          "Refreshed" updates the vault index incrementally. Use the commands
-                          "Clear" + "Force re-index" for full rebuild
+                          &#34;Refreshed&#34; updates the vault index incrementally. Use the
+                          commands &#34;Clear&#34; + &#34;Force re-index&#34; for full rebuild
                         </p>
-                        <p>Use "Count tokens" to check potential costs</p>
+                        <p>Use &#34;Count tokens&#34; command to check potential costs</p>
                       </div>
                     </div>
                   </PopoverContent>
@@ -324,6 +296,127 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
             }))}
             placeholder="Strategy"
           />
+        </div>
+      </section>
+
+      {/* General Section */}
+      <section>
+        <div className="text-2xl font-bold mb-3">General</div>
+        <div className="space-y-4">
+          {/* Basic Configuration Group */}
+          <SettingItem
+            type="select"
+            title="Default Mode"
+            description="Select the default chat mode"
+            value={settings.defaultChainType}
+            onChange={(value) => updateSetting("defaultChainType", value as ChainType)}
+            options={Object.entries(ChainType2Label).map(([key, value]) => ({
+              label: value,
+              value: key,
+            }))}
+          />
+
+          <SettingItem
+            type="select"
+            title="Open Plugin In"
+            description="Choose where to open the plugin"
+            value={settings.defaultOpenArea}
+            onChange={(value) => updateSetting("defaultOpenArea", value as DEFAULT_OPEN_AREA)}
+            options={[
+              { label: "Sidebar View", value: DEFAULT_OPEN_AREA.VIEW },
+              { label: "Editor", value: DEFAULT_OPEN_AREA.EDITOR },
+            ]}
+          />
+
+          <SettingItem
+            type="text"
+            title="Default Conversation Folder Name"
+            description="The default folder name where chat conversations will be saved. Default is 'copilot-conversations'"
+            value={settings.defaultSaveFolder}
+            onChange={(value) => updateSetting("defaultSaveFolder", value)}
+            placeholder="copilot-conversations"
+          />
+
+          <SettingItem
+            type="text"
+            title="Custom Prompts Folder Name"
+            description="The default folder name where custom prompts will be saved. Default is 'copilot-custom-prompts'"
+            value={settings.customPromptsFolder}
+            onChange={(value) => updateSetting("customPromptsFolder", value)}
+            placeholder="copilot-custom-prompts"
+          />
+
+          <SettingItem
+            type="text"
+            title="Default Conversation Tag"
+            description="The default tag to be used when saving a conversation. Default is 'ai-conversations'"
+            value={settings.defaultConversationTag}
+            onChange={(value) => updateSetting("defaultConversationTag", value)}
+            placeholder="ai-conversations"
+          />
+
+          {/* Feature Toggle Group */}
+          <SettingItem
+            type="switch"
+            title="Autosave Chat"
+            description="Automatically save the chat when starting a new one or when the plugin reloads"
+            checked={settings.autosaveChat}
+            onCheckedChange={(checked) => updateSetting("autosaveChat", checked)}
+          />
+
+          <SettingItem
+            type="switch"
+            title="Suggested Prompts"
+            description="Show suggested prompts in the chat view"
+            checked={settings.showSuggestedPrompts}
+            onCheckedChange={(checked) => updateSetting("showSuggestedPrompts", checked)}
+          />
+
+          <SettingItem
+            type="switch"
+            title="Relevant Notes"
+            description="Show relevant notes in the chat view"
+            checked={settings.showRelevantNotes}
+            onCheckedChange={(checked) => updateSetting("showRelevantNotes", checked)}
+          />
+
+          {/* Advanced Configuration Group */}
+          <SettingItem
+            type="dialog"
+            title="Command Settings"
+            description="Configure chat commands"
+            dialogTitle="Command Settings"
+            dialogDescription="Enable or disable chat commands"
+            trigger={<Button variant="outline">Manage Commands</Button>}
+          >
+            <div className="h-[50vh] sm:h-[400px] overflow-y-auto px-1 py-2">
+              <div className="space-y-4">
+                {Object.entries(settings.enabledCommands).map(([command, commandInfo]) => (
+                  <div
+                    key={command}
+                    className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 py-2 sm:py-0.5"
+                  >
+                    <div className="space-y-0.5 flex-1">
+                      <div className="text-sm font-medium">{commandInfo.name}</div>
+                    </div>
+                    <SettingSwitch
+                      checked={commandInfo.enabled}
+                      onCheckedChange={(checked) => {
+                        const newEnabledCommands = {
+                          ...settings.enabledCommands,
+                          [command]: {
+                            ...commandInfo,
+                            enabled: checked,
+                          },
+                        };
+                        updateSetting("enabledCommands", newEnabledCommands);
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </SettingItem>
         </div>
       </section>
     </div>
