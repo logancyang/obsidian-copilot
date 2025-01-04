@@ -129,6 +129,7 @@ export enum EmbeddingModelProviders {
   LM_STUDIO = "lm-studio",
   OPENAI_FORMAT = "3rd party (openai-format)",
   COPILOT_PLUS = "copilot-plus",
+  COPILOT_PLUS_JINA = "copilot-plus-jina",
   // HUGGINGFACE = "huggingface",
   // VOYAGEAI = "voyageai",
 }
@@ -141,12 +142,21 @@ export enum EmbeddingModels {
   COHEREAI_EMBED_MULTILINGUAL_LIGHT_V3_0 = "embed-multilingual-light-v3.0",
   GOOGLE_ENG = "text-embedding-004",
   COPILOT_PLUS_SMALL = "copilot-plus-small",
+  COPILOT_PLUS_MULTILINGUAL = "copilot-plus-multilingual",
 }
 
 export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
   {
     name: EmbeddingModels.COPILOT_PLUS_SMALL,
     provider: EmbeddingModelProviders.COPILOT_PLUS,
+    enabled: true,
+    isBuiltIn: true,
+    isEmbeddingModel: true,
+    core: true,
+  },
+  {
+    name: EmbeddingModels.COPILOT_PLUS_MULTILINGUAL,
+    provider: EmbeddingModelProviders.COPILOT_PLUS_JINA,
     enabled: true,
     isBuiltIn: true,
     isEmbeddingModel: true,

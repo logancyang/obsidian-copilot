@@ -11,11 +11,13 @@ import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { OllamaEmbeddings } from "@langchain/ollama";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { Notice } from "obsidian";
+import { CustomJinaEmbeddings } from "./CustomJinaEmbeddings";
 
 type EmbeddingConstructorType = new (config: any) => Embeddings;
 
 const EMBEDDING_PROVIDER_CONSTRUCTORS = {
   [EmbeddingModelProviders.COPILOT_PLUS]: OpenAIEmbeddings,
+  [EmbeddingModelProviders.COPILOT_PLUS_JINA]: CustomJinaEmbeddings,
   [EmbeddingModelProviders.OPENAI]: OpenAIEmbeddings,
   [EmbeddingModelProviders.COHEREAI]: CohereEmbeddings,
   [EmbeddingModelProviders.GOOGLE]: GoogleGenerativeAIEmbeddings,
@@ -42,6 +44,7 @@ export default class EmbeddingManager {
 
   private readonly providerApiKeyMap: Record<EmbeddingModelProviders, () => string> = {
     [EmbeddingModelProviders.COPILOT_PLUS]: () => getSettings().plusLicenseKey,
+    [EmbeddingModelProviders.COPILOT_PLUS_JINA]: () => getSettings().plusLicenseKey,
     [EmbeddingModelProviders.OPENAI]: () => getSettings().openAIApiKey,
     [EmbeddingModelProviders.COHEREAI]: () => getSettings().cohereApiKey,
     [EmbeddingModelProviders.GOOGLE]: () => getSettings().googleApiKey,
@@ -164,10 +167,23 @@ export default class EmbeddingManager {
       maxConcurrency: 3,
     };
 
+    // Define a type that includes additional configuration properties
+    type ExtendedConfig<T> = T & {
+      configuration?: {
+        baseURL?: string;
+        fetch?: (url: string, options: RequestInit) => Promise<Response>;
+        dangerouslyAllowBrowser?: boolean;
+      };
+      timeout?: number;
+      batchSize?: number;
+      dimensions?: number;
+    };
+
+    // Update the type definition to include the extended configuration
     const providerConfig: {
-      [K in keyof EmbeddingProviderConstructorMap]: ConstructorParameters<
-        EmbeddingProviderConstructorMap[K]
-      >[0] /*& Record<string, unknown>;*/;
+      [K in keyof EmbeddingProviderConstructorMap]: ExtendedConfig<
+        ConstructorParameters<EmbeddingProviderConstructorMap[K]>[0]
+      >;
     } = {
       [EmbeddingModelProviders.COPILOT_PLUS]: {
         modelName,
@@ -175,6 +191,17 @@ export default class EmbeddingManager {
         timeout: 10000,
         configuration: {
           baseURL: BREVILABS_API_BASE_URL,
+          fetch: customModel.enableCors ? safeFetch : undefined,
+        },
+      },
+      [EmbeddingModelProviders.COPILOT_PLUS_JINA]: {
+        model: modelName,
+        apiKey: getDecryptedKey(settings.plusLicenseKey),
+        timeout: 10000,
+        batchSize: 128,
+        dimensions: 512,
+        baseUrl: BREVILABS_API_BASE_URL + "/embeddings",
+        configuration: {
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
       },
