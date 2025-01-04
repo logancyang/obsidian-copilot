@@ -567,8 +567,14 @@ export class DBOperations {
     if (!docs || docs.length === 0) {
       return false;
     }
-    // Check if any document for this path has embeddings
-    return docs.some((doc) => doc.document.embedding && doc.document.embedding.length > 0);
+    // Check if ALL documents for this path have embeddings
+    return docs.every((doc) => {
+      return (
+        doc?.document?.embedding &&
+        Array.isArray(doc.document.embedding) &&
+        doc.document.embedding.length > 0
+      );
+    });
   }
 
   async getDocsJsonByPaths(paths: string[]): Promise<Record<string, any[]>> {
