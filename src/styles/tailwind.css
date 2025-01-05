@@ -464,33 +464,12 @@ If your plugin does not need CSS, delete this file.
   height: 12px;
 }
 
-.chat-message-container {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  margin-bottom: 8px;
-}
-
 .message {
   display: flex;
   padding: 0;
   border-radius: 4px;
   position: relative;
   margin-bottom: 0;
-}
-
-.message-icon {
-  width: 24px;
-  margin-right: 8px;
-  color: var(--inline-title-color);
-  flex-shrink: 0;
-}
-
-.message-content-wrapper {
-  display: flex;
-  flex-direction: column;
-  flex-grow: 1;
-  max-width: 100%;
 }
 
 .message-content {
@@ -634,21 +613,6 @@ If your plugin does not need CSS, delete this file.
 .chat-message-buttons button svg {
   width: 14px;
   height: 14px;
-}
-
-.user-message {
-  white-space: pre-wrap;
-  width: 95%;
-  color: var(--inline-title-color);
-  background-color: var(--background-primary-alt);
-  border-radius: 2px;
-  padding: 14px 10px 10px 10px;
-}
-
-.bot-message {
-  width: 95%;
-  border-radius: 2px;
-  padding: 14px 10px 10px 10px;
 }
 
 .copilot-command-modal {

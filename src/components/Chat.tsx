@@ -111,7 +111,15 @@ const Chat: React.FC<ChatProps> = ({
     );
   };
 
-  const handleSendMessage = async (toolCalls?: string[]) => {
+  const handleSendMessage = async ({
+    toolCalls,
+    urls,
+    contextNotes,
+  }: {
+    toolCalls?: string[];
+    urls?: string[];
+    contextNotes?: TFile[];
+  } = {}) => {
     if (!inputMessage && selectedImages.length === 0) return;
 
     const timestamp = formatDateTime(new Date());
@@ -146,10 +154,15 @@ const Chat: React.FC<ChatProps> = ({
       isVisible: true,
       timestamp: timestamp,
       content: content,
+      context: {
+        notes: contextNotes || [],
+        urls: urls || [],
+      },
     };
 
     // Clear input and images
     setInputMessage("");
+    setContextNotes([]);
     setSelectedImages([]);
 
     // Add messages to chat history

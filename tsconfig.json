@@ -20,5 +20,6 @@
     "types": ["jest"],
     "lib": ["DOM", "ES5", "ES6", "ES7", "ES2022"]
   },
-  "include": ["**/*.ts", "src", "typings/**/*.ts"]
+  "include": ["**/*.ts", "src", "typings/**/*.ts"],
+  "exclude": ["node_modules"]
 }
