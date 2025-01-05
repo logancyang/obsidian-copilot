@@ -75,6 +75,7 @@ export function setSettings(settings: Partial<CopilotSettings>) {
     settingsStore.set(settingsAtom, newSettings);
   } catch (error) {
     console.error("Validation error:", error);
+    alert(`Validation error: ${(error as Error).message}`);
     throw error;
   }
 }
@@ -90,6 +91,7 @@ export function updateSetting<K extends keyof CopilotSettings>(key: K, value: Co
     setSettings(newSettings);
   } catch (error) {
     console.error("Validation error:", error);
+    alert(`Validation error: ${(error as Error).message}`);
     throw error;
   }
 }
