@@ -1,10 +1,28 @@
 import { updateSetting, useSettingsValue } from "@/settings/model";
-import React from "react";
+import React, { useState } from "react";
 import ApiSetting from "./ApiSetting";
 import Collapsible from "./Collapsible";
 
 const ApiSettings: React.FC = () => {
   const settings = useSettingsValue();
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [invalidFields, setInvalidFields] = useState<string[]>([]);
+
+  const handleUpdateSetting = (key: string, value: string) => {
+    try {
+      updateSetting(key, value);
+      setValidationError(null);
+      setInvalidFields((prevFields) => prevFields.filter((field) => field !== key));
+    } catch (error) {
+      setValidationError((error as Error).message);
+      setInvalidFields((prevFields) => [...prevFields, key]);
+    }
+  };
+
+  const getFieldClassName = (field: string) => {
+    return invalidFields.includes(field) ? "invalid-field" : "";
+  };
+
   return (
     <div>
       <h1>API Settings</h1>
@@ -14,13 +32,15 @@ const ApiSettings: React.FC = () => {
         <br />
         If errors occur, please try resetting to default and re-enter the API key.
       </div>
+      {validationError && <div className="error-message">{validationError}</div>}
       <div>
         <div>
           <ApiSetting
             title="OpenAI API Key"
             value={settings.openAIApiKey}
-            setValue={(value) => updateSetting("openAIApiKey", value)}
+            setValue={(value) => handleUpdateSetting("openAIApiKey", value)}
             placeholder="Enter OpenAI API Key"
+            className={getFieldClassName("openAIApiKey")}
           />
           <p>
             You can find your API key at{" "}
@@ -35,8 +55,9 @@ const ApiSettings: React.FC = () => {
           <ApiSetting
             title="OpenAI Organization ID (optional)"
             value={settings.openAIOrgId}
-            setValue={(value) => updateSetting("openAIOrgId", value)}
+            setValue={(value) => handleUpdateSetting("openAIOrgId", value)}
             placeholder="Enter OpenAI Organization ID if applicable"
+            className={getFieldClassName("openAIOrgId")}
           />
         </div>
         <div className="warning-message">
@@ -57,8 +78,9 @@ const ApiSettings: React.FC = () => {
           <ApiSetting
             title="Google API Key"
             value={settings.googleApiKey}
-            setValue={(value) => updateSetting("googleApiKey", value)}
+            setValue={(value) => handleUpdateSetting("googleApiKey", value)}
             placeholder="Enter Google API Key"
+            className={getFieldClassName("googleApiKey")}
           />
           <p>
             If you have Google Cloud, you can get Gemini API key{" "}
@@ -81,8 +103,9 @@ const ApiSettings: React.FC = () => {
           <ApiSetting
             title="Anthropic API Key"
             value={settings.anthropicApiKey}
-            setValue={(value) => updateSetting("anthropicApiKey", value)}
+            setValue={(value) => handleUpdateSetting("anthropicApiKey", value)}
             placeholder="Enter Anthropic API Key"
+            className={getFieldClassName("anthropicApiKey")}
           />
           <p>
             If you have Anthropic API access, you can get the API key{" "}
@@ -106,8 +129,9 @@ const ApiSettings: React.FC = () => {
           <ApiSetting
             title="OpenRouter AI API Key"
             value={settings.openRouterAiApiKey}
-            setValue={(value) => updateSetting("openRouterAiApiKey", value)}
+            setValue={(value) => handleUpdateSetting("openRouterAiApiKey", value)}
             placeholder="Enter OpenRouter AI API Key"
+            className={getFieldClassName("openRouterAiApiKey")}
           />
           <p>
             You can get your OpenRouterAI key{" "}
@@ -130,38 +154,43 @@ const ApiSettings: React.FC = () => {
           <ApiSetting
             title="Azure OpenAI API Key"
             value={settings.azureOpenAIApiKey}
-            setValue={(value) => updateSetting("azureOpenAIApiKey", value)}
+            setValue={(value) => handleUpdateSetting("azureOpenAIApiKey", value)}
             placeholder="Enter Azure OpenAI API Key"
+            className={getFieldClassName("azureOpenAIApiKey")}
           />
           <ApiSetting
             title="Azure OpenAI API Instance Name"
             value={settings.azureOpenAIApiInstanceName}
-            setValue={(value) => updateSetting("azureOpenAIApiInstanceName", value)}
+            setValue={(value) => handleUpdateSetting("azureOpenAIApiInstanceName", value)}
             placeholder="Enter Azure OpenAI API Instance Name"
             type="text"
+            className={getFieldClassName("azureOpenAIApiInstanceName")}
           />
           <ApiSetting
             title="Azure OpenAI API Deployment Name"
             description="This is your actual model, no need to pass a model name separately."
             value={settings.azureOpenAIApiDeploymentName}
-            setValue={(value) => updateSetting("azureOpenAIApiDeploymentName", value)}
+            setValue={(value) => handleUpdateSetting("azureOpenAIApiDeploymentName", value)}
             placeholder="Enter Azure OpenAI API Deployment Name"
             type="text"
+            className={getFieldClassName("azureOpenAIApiDeploymentName")}
           />
           <ApiSetting
             title="Azure OpenAI API Version"
             value={settings.azureOpenAIApiVersion}
-            setValue={(value) => updateSetting("azureOpenAIApiVersion", value)}
+            setValue={(value) => handleUpdateSetting("azureOpenAIApiVersion", value)}
             placeholder="Enter Azure OpenAI API Version"
             type="text"
+            className={getFieldClassName("azureOpenAIApiVersion")}
           />
           <ApiSetting
             title="Azure OpenAI API Embedding Deployment Name"
             description="(Optional) For embedding provider Azure OpenAI"
             value={settings.azureOpenAIApiEmbeddingDeploymentName}
-            setValue={(value) => updateSetting("azureOpenAIApiEmbeddingDeploymentName", value)}
+            setValue={(value) => handleUpdateSetting("azureOpenAIApiEmbeddingDeploymentName", value)}
             placeholder="Enter Azure OpenAI API Embedding Deployment Name"
             type="text"
+            className={getFieldClassName("azureOpenAIApiEmbeddingDeploymentName")}
           />
         </div>
       </Collapsible>
@@ -171,8 +200,9 @@ const ApiSettings: React.FC = () => {
           <ApiSetting
             title="Groq API Key"
             value={settings.groqApiKey}
-            setValue={(value) => updateSetting("groqApiKey", value)}
+            setValue={(value) => handleUpdateSetting("groqApiKey", value)}
             placeholder="Enter Groq API Key"
+            className={getFieldClassName("groqApiKey")}
           />
           <p>
             If you have Groq API access, you can get the API key{" "}
@@ -190,8 +220,9 @@ const ApiSettings: React.FC = () => {
         <ApiSetting
           title="Cohere API Key"
           value={settings.cohereApiKey}
-          setValue={(value) => updateSetting("cohereApiKey", value)}
+          setValue={(value) => handleUpdateSetting("cohereApiKey", value)}
           placeholder="Enter Cohere API Key"
+          className={getFieldClassName("cohereApiKey")}
         />
         <p>
           Get your free Cohere API key{" "}

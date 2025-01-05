@@ -69,16 +69,29 @@ export const settingsAtom = atom<CopilotSettings>(DEFAULT_SETTINGS);
  * Sets the settings in the atom.
  */
 export function setSettings(settings: Partial<CopilotSettings>) {
-  const newSettings = mergeAllActiveModelsWithCoreModels({ ...getSettings(), ...settings });
-  settingsStore.set(settingsAtom, newSettings);
+  try {
+    const newSettings = mergeAllActiveModelsWithCoreModels({ ...getSettings(), ...settings });
+    validateSettings(newSettings);
+    settingsStore.set(settingsAtom, newSettings);
+  } catch (error) {
+    console.error("Validation error:", error);
+    throw error;
+  }
 }
 
 /**
  * Sets a single setting in the atom.
  */
 export function updateSetting<K extends keyof CopilotSettings>(key: K, value: CopilotSettings[K]) {
-  const settings = getSettings();
-  setSettings({ ...settings, [key]: value });
+  try {
+    const settings = getSettings();
+    const newSettings = { ...settings, [key]: value };
+    validateSettings(newSettings);
+    setSettings(newSettings);
+  } catch (error) {
+    console.error("Validation error:", error);
+    throw error;
+  }
 }
 
 /**
@@ -197,4 +210,116 @@ function mergeActiveModels(
   });
 
   return Array.from(modelMap.values());
+}
+
+function validateSettings(settings: CopilotSettings): void {
+  settings.activeModels.forEach((model) => {
+    validateModelConfig(model);
+  });
+}
+
+function validateModelConfig(model: CustomModel): void {
+  switch (model.provider) {
+    case "openai":
+      validateOpenAIConfig(model);
+      break;
+    case "azure openai":
+      validateAzureOpenAIConfig(model);
+      break;
+    case "anthropic":
+      validateAnthropicConfig(model);
+      break;
+    case "cohereai":
+      validateCohereAIConfig(model);
+      break;
+    case "google":
+      validateGoogleConfig(model);
+      break;
+    case "openrouterai":
+      validateOpenRouterAIConfig(model);
+      break;
+    case "groq":
+      validateGroqConfig(model);
+      break;
+    case "ollama":
+      validateOllamaConfig(model);
+      break;
+    case "lm-studio":
+      validateLMStudioConfig(model);
+      break;
+    case "3rd party (openai-format)":
+      validateOpenAIFormatConfig(model);
+      break;
+    default:
+      throw new Error(`Unknown provider: ${model.provider}`);
+  }
+}
+
+function validateOpenAIConfig(model: CustomModel): void {
+  if (!model.apiKey) {
+    throw new Error("OpenAI API key is required.");
+  }
+}
+
+function validateAzureOpenAIConfig(model: CustomModel): void {
+  if (!model.apiKey) {
+    throw new Error("Azure OpenAI API key is required.");
+  }
+  if (!model.azureOpenAIApiInstanceName) {
+    throw new Error("Azure OpenAI API instance name is required.");
+  }
+  if (!model.azureOpenAIApiDeploymentName) {
+    throw new Error("Azure OpenAI API deployment name is required.");
+  }
+  if (!model.azureOpenAIApiVersion) {
+    throw new Error("Azure OpenAI API version is required.");
+  }
+}
+
+function validateAnthropicConfig(model: CustomModel): void {
+  if (!model.apiKey) {
+    throw new Error("Anthropic API key is required.");
+  }
+}
+
+function validateCohereAIConfig(model: CustomModel): void {
+  if (!model.apiKey) {
+    throw new Error("Cohere AI API key is required.");
+  }
+}
+
+function validateGoogleConfig(model: CustomModel): void {
+  if (!model.apiKey) {
+    throw new Error("Google API key is required.");
+  }
+}
+
+function validateOpenRouterAIConfig(model: CustomModel): void {
+  if (!model.apiKey) {
+    throw new Error("OpenRouter AI API key is required.");
+  }
+}
+
+function validateGroqConfig(model: CustomModel): void {
+  if (!model.apiKey) {
+    throw new Error("Groq API key is required.");
+  }
+}
+
+function validateOllamaConfig(model: CustomModel): void {
+  if (!model.apiKey) {
+    throw new Error("Ollama API key is required.");
+  }
+}
+
+function validateLMStudioConfig(model: CustomModel): void {
+  if (!model.apiKey) {
+    throw new Error("LM Studio API key is required.");
+  }
+}
+
+function validateOpenAIFormatConfig(model: CustomModel): void {
+  if (!model.apiKey) {
+    throw new Error("OpenAI Format API key is required.");
+  }
 }
