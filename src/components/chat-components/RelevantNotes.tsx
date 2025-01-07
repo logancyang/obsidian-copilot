@@ -20,10 +20,11 @@ import React, { forwardRef, memo, useEffect, useState } from "react";
 import { Notice, TFile } from "obsidian";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useActiveFile } from "@/hooks/useActiveFile";
 
 function useRelevantNotes(refresher: number) {
   const [relevantNotes, setRelevantNotes] = useState<RelevantNoteEntry[]>([]);
-  const activeFile = app.workspace.getActiveFile();
+  const activeFile = useActiveFile();
 
   useEffect(() => {
     async function fetchNotes() {
@@ -198,7 +199,7 @@ export const RelevantNotes = memo(
     const [refresher, setRefresher] = useState(0);
     const [isOpen, setIsOpen] = useState(defaultOpen);
     const relevantNotes = useRelevantNotes(refresher);
-    const activeFile = app.workspace.getActiveFile();
+    const activeFile = useActiveFile();
     const hasIndex = useHasIndex(activeFile?.path ?? "", refresher);
     const navigateToNote = (notePath: string) => {
       const file = app.vault.getAbstractFileByPath(notePath);
