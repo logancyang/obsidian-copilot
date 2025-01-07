@@ -6,6 +6,7 @@ import { registerBuiltInCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import { AddPromptModal } from "@/components/modals/AddPromptModal";
 import { AdhocPromptModal } from "@/components/modals/AdhocPromptModal";
+import { DebugSearchModal } from "@/components/modals/DebugSearchModal";
 import { ListPromptModal } from "@/components/modals/ListPromptModal";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
@@ -328,15 +329,23 @@ export default class CopilotPlugin extends Plugin {
 
     this.addCommand({
       id: "copilot-inspect-index-by-note-paths",
-      name: "Inspect Copilot Index by Note Paths",
+      name: "Inspect Copilot Index by Note Paths (debug)",
       callback: () => {
         new OramaSearchModal(this.app, this).open();
       },
     });
 
     this.addCommand({
-      id: "list-indexed-files",
-      name: "List all indexed files",
+      id: "copilot-debug-search-oramadb",
+      name: "Search OramaDB (debug)",
+      callback: () => {
+        new DebugSearchModal(this.app, this).open();
+      },
+    });
+
+    this.addCommand({
+      id: "copilot-list-indexed-files",
+      name: "List all indexed files (debug)",
       callback: async () => {
         try {
           const indexedFiles = await this.vectorStoreManager.getIndexedFiles();
