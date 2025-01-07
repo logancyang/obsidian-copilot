@@ -27,7 +27,7 @@ async function getNoteEmbeddings(notePath: string, db: Orama<any>): Promise<numb
 
   const embeddings: number[][] = [];
   for (const hit of hits) {
-    if (!hit.document.embedding) {
+    if (!hit?.document?.embedding) {
       if (debug) {
         console.log("No embedding found for note:", notePath);
       }
