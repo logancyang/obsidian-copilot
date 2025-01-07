@@ -1,8 +1,13 @@
-import { EMPTY_INDEX_ERROR_MESSAGE, TEXT_WEIGHT } from "@/constants";
+import {
+  EMPTY_INDEX_ERROR_MESSAGE,
+  PLUS_MODE_DEFAULT_SOURCE_CHUNKS,
+  TEXT_WEIGHT,
+} from "@/constants";
 import { CustomError } from "@/error";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import VectorStoreManager from "@/search/vectorStoreManager";
+import { getSettings } from "@/settings/model";
 import { TimeInfo } from "@/tools/TimeTools";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
@@ -23,10 +28,14 @@ const localSearchTool = tool(
     }
 
     const returnAll = timeRange !== undefined;
+    const maxSourceChunks =
+      getSettings().maxSourceChunks < PLUS_MODE_DEFAULT_SOURCE_CHUNKS
+        ? PLUS_MODE_DEFAULT_SOURCE_CHUNKS
+        : getSettings().maxSourceChunks;
 
     const hybridRetriever = new HybridRetriever({
       minSimilarityScore: returnAll ? 0.0 : 0.1,
-      maxK: returnAll ? 100 : 15,
+      maxK: returnAll ? 100 : maxSourceChunks,
       salientTerms,
       timeRange: timeRange
         ? {

@@ -20,6 +20,7 @@ export const EMPTY_INDEX_ERROR_MESSAGE =
 export const CHUNK_SIZE = 4000;
 export const CONTEXT_SCORE_THRESHOLD = 0.4;
 export const TEXT_WEIGHT = 0.4;
+export const PLUS_MODE_DEFAULT_SOURCE_CHUNKS = 15;
 export const LOADING_MESSAGES = {
   DEFAULT: "",
   READING_FILES: "Reading files",
