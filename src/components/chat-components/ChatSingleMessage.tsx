@@ -54,11 +54,11 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       .replace(/\\\(\s*/g, "$")
       .replace(/\s*\\\)/g, "$");
 
-    // Process images. Wikilinks do not work with Obsidian's MarkdownRenderer for some reason.
+    // Process images
     const activeFile = app.workspace.getActiveFile();
     const sourcePath = activeFile ? activeFile.path : "";
 
-    return latexProcessed.replace(/!\[\[(.*?)\]\]/g, (match, imageName) => {
+    const imageProcessed = latexProcessed.replace(/!\[\[(.*?)\]\]/g, (match, imageName) => {
       const imageFile = app.metadataCache.getFirstLinkpathDest(imageName, sourcePath);
       if (imageFile) {
         const imageUrl = app.vault.getResourcePath(imageFile);
@@ -66,6 +66,15 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       }
       return match;
     });
+
+    // Process note links to obsidian:// URLs
+    const noteProcessed = imageProcessed.replace(/\[\[(.*?)\]\]/g, (match, noteName) => {
+      const encodedNoteName = encodeURIComponent(noteName);
+      const vaultName = app.vault.getName();
+      return `[${noteName}](obsidian://open?vault=${vaultName}&file=${encodedNoteName})`;
+    });
+
+    return noteProcessed;
   };
 
   useEffect(() => {
