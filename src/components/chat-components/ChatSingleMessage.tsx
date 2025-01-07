@@ -46,12 +46,26 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     });
   };
 
-  const preprocessLatex = (content: string): string => {
-    return content
+  const preprocess = (content: string): string => {
+    // Process LaTeX
+    const latexProcessed = content
       .replace(/\\\[\s*/g, "$$")
       .replace(/\s*\\\]/g, "$$")
       .replace(/\\\(\s*/g, "$")
       .replace(/\s*\\\)/g, "$");
+
+    // Process images. Wikilinks do not work with Obsidian's MarkdownRenderer for some reason.
+    const activeFile = app.workspace.getActiveFile();
+    const sourcePath = activeFile ? activeFile.path : "";
+
+    return latexProcessed.replace(/!\[\[(.*?)\]\]/g, (match, imageName) => {
+      const imageFile = app.metadataCache.getFirstLinkpathDest(imageName, sourcePath);
+      if (imageFile) {
+        const imageUrl = app.vault.getResourcePath(imageFile);
+        return `![](${imageUrl})`;
+      }
+      return match;
+    });
   };
 
   useEffect(() => {
@@ -64,7 +78,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         componentRef.current = new Component();
       }
 
-      const processedMessage = preprocessLatex(message.message);
+      const processedMessage = preprocess(message.message);
 
       // Use Obsidian's MarkdownRenderer to render the message
       MarkdownRenderer.renderMarkdown(
