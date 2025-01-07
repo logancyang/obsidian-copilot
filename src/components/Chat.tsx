@@ -33,7 +33,7 @@ import {
   tocPrompt,
 } from "@/utils";
 import { MarkdownView, Notice, TFile } from "obsidian";
-import React, { useContext, useEffect, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
 
 interface CreateEffectOptions {
   custom_temperature?: number;
@@ -568,7 +568,7 @@ ${chatContent}`;
     []
   );
 
-  const handleInsertAtCursor = async (message: string) => {
+  const handleInsertAtCursor = useCallback(async (message: string) => {
     let leaf = app.workspace.getMostRecentLeaf();
     if (!leaf) {
       new Notice("No active leaf found.");
@@ -589,7 +589,7 @@ ${chatContent}`;
     const cursor = editor.getCursor();
     editor.replaceRange(message, cursor);
     new Notice("Message inserted into the active note.");
-  };
+  }, []);
 
   // Expose handleSaveAsNote to parent
   useEffect(() => {
@@ -608,6 +608,10 @@ ${chatContent}`;
     await updateChatMemory(newChatHistory, chainManager.memoryManager);
   };
 
+  const handleInsertToChat = useCallback((prompt: string) => {
+    setInputMessage((prev) => `${prev} ${prompt} `);
+  }, []);
+
   return (
     <div className="chat-container">
       <ChatMessages
@@ -620,9 +624,7 @@ ${chatContent}`;
         onRegenerate={handleRegenerate}
         onEdit={handleEdit}
         onDelete={handleDelete}
-        onInsertToChat={(prompt) => {
-          setInputMessage((prev) => `${prev} ${prompt} `);
-        }}
+        onInsertToChat={handleInsertToChat}
         onReplaceChat={setInputMessage}
       />
       <div className="bottom-container">
