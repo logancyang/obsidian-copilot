@@ -444,6 +444,23 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.registerEvent(this.app.workspace.on("editor-menu", this.handleContextMenu));
+    this.registerEvent(
+      this.app.workspace.on("active-leaf-change", (leaf) => {
+        if (leaf && leaf.view instanceof MarkdownView) {
+          const file = leaf.view.file;
+          if (file) {
+            const activeCopilotView = this.app.workspace
+              .getLeavesOfType(CHAT_VIEWTYPE)
+              .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
+
+            if (activeCopilotView) {
+              const event = new CustomEvent(EVENT_NAMES.ACTIVE_LEAF_CHANGE);
+              activeCopilotView.eventTarget.dispatchEvent(event);
+            }
+          }
+        }
+      })
+    );
   }
 
   async onunload() {
@@ -490,7 +507,7 @@ export default class CopilotPlugin extends Plugin {
         .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
       if (activeCopilotView && (!checkSelectedText || selectedText)) {
         const event = new CustomEvent(eventType, { detail: { selectedText, eventSubtype } });
-        activeCopilotView.emitter.dispatchEvent(event);
+        activeCopilotView.eventTarget.dispatchEvent(event);
       }
     }, 0);
   }
@@ -506,7 +523,7 @@ export default class CopilotPlugin extends Plugin {
 
     if (activeCopilotView) {
       const event = new CustomEvent(EVENT_NAMES.CHAT_IS_VISIBLE);
-      activeCopilotView.emitter.dispatchEvent(event);
+      activeCopilotView.eventTarget.dispatchEvent(event);
     }
   }
 

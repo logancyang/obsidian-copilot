@@ -4,7 +4,7 @@ import { updateChatMemory } from "@/chatUtils";
 import ChatInput from "@/components/chat-components/ChatInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
 import { ABORT_REASON, AI_SENDER, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
-import { AppContext } from "@/context";
+import { AppContext, EventTargetContext } from "@/context";
 import { ContextProcessor } from "@/contextProcessor";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { getAIResponse } from "@/langchainStream";
@@ -44,7 +44,6 @@ interface CreateEffectOptions {
 interface ChatProps {
   sharedState: SharedState;
   chainManager: ChainManager;
-  emitter: EventTarget;
   onSaveChat: (saveAsNote: () => Promise<void>) => void;
   updateUserMessageHistory: (newMessage: string) => void;
   fileParserManager: FileParserManager;
@@ -54,13 +53,13 @@ interface ChatProps {
 const Chat: React.FC<ChatProps> = ({
   sharedState,
   chainManager,
-  emitter,
   onSaveChat,
   updateUserMessageHistory,
   fileParserManager,
   plugin,
 }) => {
   const settings = useSettingsValue();
+  const eventTarget = useContext(EventTargetContext);
   const [chatHistory, addMessage, clearMessages] = useSharedState(sharedState);
   const [currentModelKey] = useModelKey();
   const [currentChain] = useChainType();
@@ -85,13 +84,13 @@ const Chat: React.FC<ChatProps> = ({
         inputRef.current.focus();
       }
     };
-    emitter.addEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
+    eventTarget?.addEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
 
     // Cleanup function
     return () => {
-      emitter.removeEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
+      eventTarget?.removeEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
     };
-  }, [emitter]);
+  }, [eventTarget]);
 
   const appContext = useContext(AppContext);
   const app = plugin.app || appContext;
@@ -450,13 +449,13 @@ ${chatContent}`;
       addMessage(tokenCountMessage);
     }
 
-    emitter.addEventListener("countTokensSelection", handleSelection);
+    eventTarget?.addEventListener("countTokensSelection", handleSelection);
 
     // Cleanup function to remove the event listener when the component unmounts
     return () => {
-      emitter.removeEventListener("countTokensSelection", handleSelection);
+      eventTarget?.removeEventListener("countTokensSelection", handleSelection);
     };
-  }, [addMessage, chainManager.chatModelManager, emitter]);
+  }, [addMessage, chainManager.chatModelManager, eventTarget]);
 
   // Create an effect for each event type (Copilot command on selected text)
   const createEffect = (
@@ -501,11 +500,11 @@ ${chatContent}`;
         setLoading(false);
       };
 
-      emitter.addEventListener(eventType, handleSelection);
+      eventTarget?.addEventListener(eventType, handleSelection);
 
       // Cleanup function to remove the event listener when the component unmounts
       return () => {
-        emitter.removeEventListener(eventType, handleSelection);
+        eventTarget?.removeEventListener(eventType, handleSelection);
       };
     };
   };

@@ -357,6 +357,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
 
 export const EVENT_NAMES = {
   CHAT_IS_VISIBLE: "chat-is-visible",
+  ACTIVE_LEAF_CHANGE: "active-leaf-change",
 };
 
 export enum ABORT_REASON {
