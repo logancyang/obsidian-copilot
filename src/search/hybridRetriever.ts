@@ -24,7 +24,7 @@ export class HybridRetriever extends BaseRetriever {
       timeRange?: { startTime: number; endTime: number };
       textWeight?: number;
       returnAll?: boolean;
-      useRerankerThreshold?: number;
+      useRerankerThreshold?: number; // reranking API is only called with this set
     }
   ) {
     super();
@@ -57,16 +57,30 @@ export class HybridRetriever extends BaseRetriever {
     const combinedChunks = this.filterAndFormatChunks(oramaChunks, explicitChunks);
 
     let finalChunks = combinedChunks;
-    const maxOramaScore = combinedChunks.reduce(
-      (max, chunk) => Math.max(max, chunk.metadata.score ?? 0),
-      0
+
+    // Add check for empty array
+    if (combinedChunks.length === 0) {
+      if (getSettings().debug) {
+        console.log("No chunks found for query:", query);
+      }
+      return finalChunks;
+    }
+
+    const maxOramaScore = combinedChunks.reduce((max, chunk) => {
+      const score = chunk.metadata.score;
+      const isValidScore = typeof score === "number" && !isNaN(score);
+      return isValidScore ? Math.max(max, score) : max;
+    }, 0);
+
+    const allScoresAreNaN = combinedChunks.every(
+      (chunk) => typeof chunk.metadata.score !== "number" || isNaN(chunk.metadata.score)
     );
-    // Apply reranking if max score is below the threshold
-    if (
+
+    const shouldRerank =
       this.options.useRerankerThreshold &&
-      maxOramaScore < this.options.useRerankerThreshold &&
-      maxOramaScore > 0
-    ) {
+      (maxOramaScore < this.options.useRerankerThreshold || allScoresAreNaN);
+    // Apply reranking if max score is below the threshold or all scores are NaN
+    if (shouldRerank) {
       const rerankResponse = await BrevilabsClient.getInstance().rerank(
         query,
         // Limit the context length to 3000 characters to avoid overflowing the reranker
@@ -95,7 +109,7 @@ export class HybridRetriever extends BaseRetriever {
       console.log("Orama Chunks: ", oramaChunks);
       console.log("Combined Chunks: ", combinedChunks);
       console.log("Max Orama Score: ", maxOramaScore);
-      if (this.options.useRerankerThreshold && maxOramaScore < this.options.useRerankerThreshold) {
+      if (shouldRerank) {
         console.log("Reranked Chunks: ", finalChunks);
       } else {
         console.log("No reranking applied.");
