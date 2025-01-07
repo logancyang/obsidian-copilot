@@ -51,6 +51,12 @@ export default class CopilotView extends ItemView {
 
   async onOpen(): Promise<void> {
     const root = createRoot(this.containerEl.children[1]);
+    const handleSaveAsNote = (saveFunction: () => Promise<void>) => {
+      this.handleSaveAsNote = saveFunction;
+    };
+    const updateUserMessageHistory = (newMessage: string) => {
+      this.plugin.updateUserMessageHistory(newMessage);
+    };
     root.render(
       <AppContext.Provider value={this.app}>
         <React.StrictMode>
@@ -59,14 +65,10 @@ export default class CopilotView extends ItemView {
               sharedState={this.sharedState}
               chainManager={this.chainManager}
               emitter={this.emitter}
-              updateUserMessageHistory={(newMessage) => {
-                this.plugin.updateUserMessageHistory(newMessage);
-              }}
+              updateUserMessageHistory={updateUserMessageHistory}
               fileParserManager={this.fileParserManager}
               plugin={this.plugin}
-              onSaveChat={(saveFunction) => {
-                this.handleSaveAsNote = saveFunction;
-              }}
+              onSaveChat={handleSaveAsNote}
             />
           </Tooltip.Provider>
         </React.StrictMode>

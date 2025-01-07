@@ -361,7 +361,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
               updateCurrentAiMessage,
               debug
             );
-          } catch (error) {
+          } catch {
             return this.handleResponse(
               "An error occurred while transcribing the YouTube video. Right now only English videos with the auto transcript option turned on are supported. Please check the error message in the console for more details.",
               userMessage,
@@ -380,7 +380,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         // Use the original message for intent analysis
         const messageForAnalysis = userMessage.originalMessage || userMessage.message;
         toolCalls = await IntentAnalyzer.analyzeIntent(messageForAnalysis);
-      } catch (error) {
+      } catch {
         return this.handleResponse(
           "Copilot Plus message failed. Please provide a valid license key in your Copilot setting.",
           userMessage,

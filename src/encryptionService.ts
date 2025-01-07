@@ -9,7 +9,7 @@ function getSafeStorage() {
     return safeStorageInternal;
   }
   // Dynamically import electron to access safeStorage
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
   safeStorageInternal = require("electron")?.remote?.safeStorage;
   return safeStorageInternal;
 }

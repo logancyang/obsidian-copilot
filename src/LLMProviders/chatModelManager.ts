@@ -327,7 +327,7 @@ export default class ChatModelManager {
       // First try without CORS
       await tryPing(false);
       return true;
-    } catch (error) {
+    } catch {
       console.log("First ping attempt failed, trying with CORS...");
       try {
         // Second try with CORS

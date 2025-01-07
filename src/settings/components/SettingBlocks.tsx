@@ -479,8 +479,8 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
                   fontSize: "0.9em",
                 }}
               >
-                Verify the connection before adding the model to ensure it's properly configured and
-                accessible.
+                Verify the connection before adding the model to ensure it&apos;s properly
+                configured and accessible.
               </div>
               <div style={{ display: "flex", gap: "10px" }}>
                 <button
