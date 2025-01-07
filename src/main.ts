@@ -544,7 +544,11 @@ export default class CopilotPlugin extends Plugin {
 
   toggleView() {
     const leaves = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE);
-    leaves.length > 0 ? this.deactivateView() : this.activateView();
+    if (leaves.length > 0) {
+      this.deactivateView();
+    } else {
+      this.activateView();
+    }
   }
 
   async activateView(): Promise<void> {

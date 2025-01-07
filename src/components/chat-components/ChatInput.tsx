@@ -368,7 +368,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
       // Remove any URLs that are no longer present in the input
       setContextUrls((prev) => prev.filter((url) => currentUrls.includes(url)));
-    }, [inputMessage, includeActiveNote, currentActiveNote]);
+    }, [inputMessage, includeActiveNote, currentActiveNote, mention, setContextNotes]);
 
     // Update the current active note whenever it changes
     useEffect(() => {

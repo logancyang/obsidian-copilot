@@ -66,6 +66,7 @@ const ExplainerBadge = forwardRef<HTMLDivElement, { children: React.ReactNode }>
   }
 );
 
+ExplainerBadge.displayName = "ExplainerBadge";
 function inSameFolder(path1: string, path2: string) {
   const folder1 = path1.split("/").slice(0, -1).join("/");
   const folder2 = path2.split("/").slice(0, -1).join("/");
@@ -310,3 +311,5 @@ export const RelevantNotes = memo(
     );
   }
 );
+
+RelevantNotes.displayName = "RelevantNotes";
