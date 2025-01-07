@@ -452,6 +452,11 @@ export function extractChatHistory(memoryVariables: MemoryVariables): [string, s
   return chatHistory;
 }
 
+// TODO: Deprecate this. Note mentions should be an object with title and path (optional).
+// When user input `[[` the popup should show title and path for selection.
+// The selected item has path to avoid duplicate titles. If user manually types
+// the full title, path can still be missing. In that case title is used to retrieve
+// the note.
 export function extractNoteTitles(query: string): string[] {
   // Use a regular expression to extract note titles wrapped in [[]]
   const regex = /\[\[(.*?)\]\]/g;
