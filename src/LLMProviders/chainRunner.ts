@@ -1,4 +1,11 @@
-import { ABORT_REASON, AI_SENDER, EMPTY_INDEX_ERROR_MESSAGE, LOADING_MESSAGES } from "@/constants";
+import {
+  ABORT_REASON,
+  AI_SENDER,
+  EMPTY_INDEX_ERROR_MESSAGE,
+  LOADING_MESSAGES,
+  MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT,
+} from "@/constants";
+import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { getSystemPrompt } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { ToolManager } from "@/tools/toolManager";
@@ -11,7 +18,6 @@ import {
 import { Notice } from "obsidian";
 import ChainManager from "./chainManager";
 import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "./intentAnalyzer";
-import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 
 export interface ChainRunner {
   run(
@@ -421,7 +427,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
 
         if (debug) console.log("==== Step 4: Preparing context ====");
         const timeExpression = this.getTimeExpression(toolCalls);
-        const context = this.formatLocalSearchResult(documents, timeExpression);
+        const context = this.prepareLocalSearchResult(documents, timeExpression);
 
         const currentTimeOutputs = toolOutputs.filter((output) => output.tool === "getCurrentTime");
         const enhancedQuestion = this.prepareEnhancedUserMessage(
@@ -593,11 +599,27 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     return timeRangeCall ? timeRangeCall.args.timeExpression : "";
   }
 
-  private formatLocalSearchResult(documents: any[], timeExpression: string): string {
-    const formattedDocs = documents
-      .filter((doc) => doc.includeInContext)
+  private prepareLocalSearchResult(documents: any[], timeExpression: string): string {
+    // First filter documents with includeInContext
+    const includedDocs = documents.filter((doc) => doc.includeInContext);
+
+    // Calculate total content length
+    const totalLength = includedDocs.reduce((sum, doc) => sum + doc.content.length, 0);
+
+    // If total length exceeds threshold, calculate truncation ratio
+    let truncatedDocs = includedDocs;
+    if (totalLength > MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT) {
+      const truncationRatio = MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT / totalLength;
+      truncatedDocs = includedDocs.map((doc) => ({
+        ...doc,
+        content: doc.content.slice(0, Math.floor(doc.content.length * truncationRatio)),
+      }));
+    }
+
+    const formattedDocs = truncatedDocs
       .map((doc: any) => `Note in Vault: ${doc.content}`)
       .join("\n\n");
+
     return timeExpression
       ? `Local Search Result for ${timeExpression}:\n${formattedDocs}`
       : `Local Search Result:\n${formattedDocs}`;
