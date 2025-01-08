@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FormattedDateTime } from "./utils";
 
 export interface ChatMessage {
@@ -43,17 +43,20 @@ export function useSharedState(
   // *right after the initial render* (similar to componentDidMount in class components).
   useEffect(() => {
     setChatHistory(sharedState.getMessages());
-  }, []);
+  }, [sharedState]);
 
-  const addMessage = (message: ChatMessage) => {
-    sharedState.addMessage(message);
-    setChatHistory([...sharedState.getMessages()]);
-  };
+  const addMessage = useCallback(
+    (message: ChatMessage) => {
+      sharedState.addMessage(message);
+      setChatHistory([...sharedState.getMessages()]);
+    },
+    [sharedState]
+  );
 
-  const clearMessages = () => {
+  const clearMessages = useCallback(() => {
     sharedState.clearChatHistory();
     setChatHistory([]);
-  };
+  }, [sharedState]);
 
   return [chatHistory, addMessage, clearMessages];
 }

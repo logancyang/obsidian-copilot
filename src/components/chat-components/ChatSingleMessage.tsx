@@ -46,12 +46,35 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     });
   };
 
-  const preprocessLatex = (content: string): string => {
-    return content
+  const preprocess = (content: string): string => {
+    // Process LaTeX
+    const latexProcessed = content
       .replace(/\\\[\s*/g, "$$")
       .replace(/\s*\\\]/g, "$$")
       .replace(/\\\(\s*/g, "$")
       .replace(/\s*\\\)/g, "$");
+
+    // Process images
+    const activeFile = app.workspace.getActiveFile();
+    const sourcePath = activeFile ? activeFile.path : "";
+
+    const imageProcessed = latexProcessed.replace(/!\[\[(.*?)\]\]/g, (match, imageName) => {
+      const imageFile = app.metadataCache.getFirstLinkpathDest(imageName, sourcePath);
+      if (imageFile) {
+        const imageUrl = app.vault.getResourcePath(imageFile);
+        return `![](${imageUrl})`;
+      }
+      return match;
+    });
+
+    // Process note links to obsidian:// URLs
+    const noteProcessed = imageProcessed.replace(/\[\[(.*?)\]\]/g, (match, noteName) => {
+      const encodedNoteName = encodeURIComponent(noteName);
+      const vaultName = app.vault.getName();
+      return `[${noteName}](obsidian://open?vault=${vaultName}&file=${encodedNoteName})`;
+    });
+
+    return noteProcessed;
   };
 
   useEffect(() => {
@@ -64,7 +87,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         componentRef.current = new Component();
       }
 
-      const processedMessage = preprocessLatex(message.message);
+      const processedMessage = preprocess(message.message);
 
       // Use Obsidian's MarkdownRenderer to render the message
       MarkdownRenderer.renderMarkdown(

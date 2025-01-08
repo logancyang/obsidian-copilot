@@ -13,13 +13,16 @@ export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assist
   4. If the user mentions "@vault", it means the user wants you to search the Obsidian vault for information relevant to the query. The search results will be provided to you in the context. If there's no relevant information in the vault, just say so.
   5. If the user mentions any other tool with the @ symbol, check the context for their results. If nothing is found, just ignore the @ symbol in the query.
   6. Always use $'s instead of \\[ etc. for LaTeX equations.
-  7. Always respond in the language of the user's query.
+  7. When showing note titles, use [[title]] format and do not wrap them in \` \`.
+  8. When showing image links, use ![[link]] format and do not wrap them in \` \`.
+  9. Always respond in the language of the user's query.
   Do not mention the additional context provided if it's irrelevant to the user message.`;
 export const EMPTY_INDEX_ERROR_MESSAGE =
   "Copilot index does not exist. Please index your vault first!\n\n1. Set a working embedding model in QA settings. If it's not a local model, don't forget to set the API key. \n\n2. Click 'Refresh Index for Vault' and wait for indexing to complete. If you encounter the rate limiting error, please turn your request per second down in QA setting.";
 export const CHUNK_SIZE = 4000;
 export const CONTEXT_SCORE_THRESHOLD = 0.4;
 export const TEXT_WEIGHT = 0.4;
+export const PLUS_MODE_DEFAULT_SOURCE_CHUNKS = 15;
 export const LOADING_MESSAGES = {
   DEFAULT: "",
   READING_FILES: "Reading files",
@@ -357,6 +360,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
 
 export const EVENT_NAMES = {
   CHAT_IS_VISIBLE: "chat-is-visible",
+  ACTIVE_LEAF_CHANGE: "active-leaf-change",
 };
 
 export enum ABORT_REASON {

@@ -6,6 +6,7 @@ import { registerBuiltInCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import { AddPromptModal } from "@/components/modals/AddPromptModal";
 import { AdhocPromptModal } from "@/components/modals/AdhocPromptModal";
+import { DebugSearchModal } from "@/components/modals/DebugSearchModal";
 import { ListPromptModal } from "@/components/modals/ListPromptModal";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
@@ -328,15 +329,23 @@ export default class CopilotPlugin extends Plugin {
 
     this.addCommand({
       id: "copilot-inspect-index-by-note-paths",
-      name: "Inspect Copilot Index by Note Paths",
+      name: "Inspect Copilot Index by Note Paths (debug)",
       callback: () => {
         new OramaSearchModal(this.app, this).open();
       },
     });
 
     this.addCommand({
-      id: "list-indexed-files",
-      name: "List all indexed files",
+      id: "copilot-debug-search-oramadb",
+      name: "Search OramaDB (debug)",
+      callback: () => {
+        new DebugSearchModal(this.app, this).open();
+      },
+    });
+
+    this.addCommand({
+      id: "copilot-list-indexed-files",
+      name: "List all indexed files (debug)",
       callback: async () => {
         try {
           const indexedFiles = await this.vectorStoreManager.getIndexedFiles();
@@ -444,6 +453,23 @@ export default class CopilotPlugin extends Plugin {
     });
 
     this.registerEvent(this.app.workspace.on("editor-menu", this.handleContextMenu));
+    this.registerEvent(
+      this.app.workspace.on("active-leaf-change", (leaf) => {
+        if (leaf && leaf.view instanceof MarkdownView) {
+          const file = leaf.view.file;
+          if (file) {
+            const activeCopilotView = this.app.workspace
+              .getLeavesOfType(CHAT_VIEWTYPE)
+              .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
+
+            if (activeCopilotView) {
+              const event = new CustomEvent(EVENT_NAMES.ACTIVE_LEAF_CHANGE);
+              activeCopilotView.eventTarget.dispatchEvent(event);
+            }
+          }
+        }
+      })
+    );
   }
 
   async onunload() {
@@ -490,7 +516,7 @@ export default class CopilotPlugin extends Plugin {
         .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
       if (activeCopilotView && (!checkSelectedText || selectedText)) {
         const event = new CustomEvent(eventType, { detail: { selectedText, eventSubtype } });
-        activeCopilotView.emitter.dispatchEvent(event);
+        activeCopilotView.eventTarget.dispatchEvent(event);
       }
     }, 0);
   }
@@ -506,7 +532,7 @@ export default class CopilotPlugin extends Plugin {
 
     if (activeCopilotView) {
       const event = new CustomEvent(EVENT_NAMES.CHAT_IS_VISIBLE);
-      activeCopilotView.emitter.dispatchEvent(event);
+      activeCopilotView.eventTarget.dispatchEvent(event);
     }
   }
 
@@ -544,7 +570,11 @@ export default class CopilotPlugin extends Plugin {
 
   toggleView() {
     const leaves = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE);
-    leaves.length > 0 ? this.deactivateView() : this.activateView();
+    if (leaves.length > 0) {
+      this.deactivateView();
+    } else {
+      this.activateView();
+    }
   }
 
   async activateView(): Promise<void> {

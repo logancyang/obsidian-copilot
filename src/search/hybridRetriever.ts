@@ -1,4 +1,8 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
+import ChatModelManager from "@/LLMProviders/chatModelManager";
+import EmbeddingManager from "@/LLMProviders/embeddingManager";
+import VectorStoreManager from "@/search/vectorStoreManager";
+import { getSettings } from "@/settings/model";
 import { extractNoteTitles, getNoteFileFromTitle } from "@/utils";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
@@ -6,10 +10,6 @@ import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { search } from "@orama/orama";
 import { DBOperations } from "./dbOperations";
-import VectorStoreManager from "@/search/vectorStoreManager";
-import ChatModelManager from "@/LLMProviders/chatModelManager";
-import EmbeddingManager from "@/LLMProviders/embeddingManager";
-import { getSettings } from "@/settings/model";
 
 export class HybridRetriever extends BaseRetriever {
   public lc_namespace = ["hybrid_retriever"];
@@ -24,7 +24,7 @@ export class HybridRetriever extends BaseRetriever {
       timeRange?: { startTime: number; endTime: number };
       textWeight?: number;
       returnAll?: boolean;
-      useRerankerThreshold?: number;
+      useRerankerThreshold?: number; // reranking API is only called with this set
     }
   ) {
     super();
@@ -57,16 +57,30 @@ export class HybridRetriever extends BaseRetriever {
     const combinedChunks = this.filterAndFormatChunks(oramaChunks, explicitChunks);
 
     let finalChunks = combinedChunks;
-    const maxOramaScore = combinedChunks.reduce(
-      (max, chunk) => Math.max(max, chunk.metadata.score ?? 0),
-      0
+
+    // Add check for empty array
+    if (combinedChunks.length === 0) {
+      if (getSettings().debug) {
+        console.log("No chunks found for query:", query);
+      }
+      return finalChunks;
+    }
+
+    const maxOramaScore = combinedChunks.reduce((max, chunk) => {
+      const score = chunk.metadata.score;
+      const isValidScore = typeof score === "number" && !isNaN(score);
+      return isValidScore ? Math.max(max, score) : max;
+    }, 0);
+
+    const allScoresAreNaN = combinedChunks.every(
+      (chunk) => typeof chunk.metadata.score !== "number" || isNaN(chunk.metadata.score)
     );
-    // Apply reranking if max score is below the threshold
-    if (
+
+    const shouldRerank =
       this.options.useRerankerThreshold &&
-      maxOramaScore < this.options.useRerankerThreshold &&
-      maxOramaScore > 0
-    ) {
+      (maxOramaScore < this.options.useRerankerThreshold || allScoresAreNaN);
+    // Apply reranking if max score is below the threshold or all scores are NaN
+    if (shouldRerank) {
       const rerankResponse = await BrevilabsClient.getInstance().rerank(
         query,
         // Limit the context length to 3000 characters to avoid overflowing the reranker
@@ -95,7 +109,7 @@ export class HybridRetriever extends BaseRetriever {
       console.log("Orama Chunks: ", oramaChunks);
       console.log("Combined Chunks: ", combinedChunks);
       console.log("Max Orama Score: ", maxOramaScore);
-      if (this.options.useRerankerThreshold && maxOramaScore < this.options.useRerankerThreshold) {
+      if (shouldRerank) {
         console.log("Reranked Chunks: ", finalChunks);
       } else {
         console.log("No reranking applied.");
@@ -297,33 +311,46 @@ export class HybridRetriever extends BaseRetriever {
       return uniqueResults.filter((doc): doc is Document => doc !== undefined);
     }
 
+    if (getSettings().debug) {
+      console.log("==== Orama Search Params: ====\n", searchParams);
+    }
     const searchResults = await search(db, searchParams);
 
     // Convert Orama search results to Document objects
-    return searchResults.hits.map(
-      (hit) =>
-        new Document({
-          pageContent: hit.document.content,
-          metadata: {
-            ...hit.document.metadata,
-            score: hit.score,
-            path: hit.document.path,
-            mtime: hit.document.mtime,
-            ctime: hit.document.ctime,
-            title: hit.document.title,
-            id: hit.document.id,
-            embeddingModel: hit.document.embeddingModel,
-            tags: hit.document.tags,
-            extension: hit.document.extension,
-            created_at: hit.document.created_at,
-            nchars: hit.document.nchars,
-          },
-        })
-    );
+    return searchResults.hits.map((hit) => {
+      if (typeof hit.score !== "number" || isNaN(hit.score)) {
+        console.warn("NaN/invalid score detected:", {
+          score: hit.score,
+          path: hit.document.path,
+          title: hit.document.title,
+        });
+      }
+      return new Document({
+        pageContent: hit.document.content,
+        metadata: {
+          ...hit.document.metadata,
+          score: hit.score,
+          path: hit.document.path,
+          mtime: hit.document.mtime,
+          ctime: hit.document.ctime,
+          title: hit.document.title,
+          id: hit.document.id,
+          embeddingModel: hit.document.embeddingModel,
+          tags: hit.document.tags,
+          extension: hit.document.extension,
+          created_at: hit.document.created_at,
+          nchars: hit.document.nchars,
+        },
+      });
+    });
   }
 
   private async convertQueryToVector(query: string): Promise<number[]> {
-    return await EmbeddingManager.getInstance().getEmbeddingsAPI().embedQuery(query);
+    const vector = await EmbeddingManager.getInstance().getEmbeddingsAPI().embedQuery(query);
+    if (vector.length === 0) {
+      throw new Error("Query embedding returned an empty vector");
+    }
+    return vector;
   }
 
   private generateDateRange(startTime: number, endTime: number): string[] {
@@ -342,7 +369,14 @@ export class HybridRetriever extends BaseRetriever {
 
   private filterAndFormatChunks(oramaChunks: Document[], explicitChunks: Document[]): Document[] {
     const threshold = this.options.minSimilarityScore;
-    const filteredOramaChunks = oramaChunks.filter((chunk) => chunk.metadata.score >= threshold);
+    // Only filter out scores that are numbers and below threshold
+    const filteredOramaChunks = oramaChunks.filter((chunk) => {
+      const score = chunk.metadata.score;
+      if (typeof score !== "number" || isNaN(score)) {
+        return true; // Keep chunks with NaN scores for now until we find out why
+      }
+      return score >= threshold;
+    });
 
     // Combine explicit and filtered Orama chunks, removing duplicates while maintaining order
     const uniqueChunks = new Set<string>(explicitChunks.map((chunk) => chunk.pageContent));
@@ -361,7 +395,6 @@ export class HybridRetriever extends BaseRetriever {
       ...chunk,
       metadata: {
         ...chunk.metadata,
-        // TODO: Use this for reranker output
         includeInContext: true,
       },
     }));

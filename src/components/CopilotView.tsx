@@ -1,7 +1,7 @@
 import ChainManager from "@/LLMProviders/chainManager";
 import Chat from "@/components/Chat";
 import { CHAT_VIEWTYPE } from "@/constants";
-import { AppContext } from "@/context";
+import { AppContext, EventTargetContext } from "@/context";
 import CopilotPlugin from "@/main";
 import SharedState from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
@@ -16,7 +16,7 @@ export default class CopilotView extends ItemView {
   private root: Root | null = null;
   private handleSaveAsNote: (() => Promise<void>) | null = null;
   sharedState: SharedState;
-  emitter: EventTarget;
+  eventTarget: EventTarget;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -27,7 +27,7 @@ export default class CopilotView extends ItemView {
     this.app = plugin.app;
     this.chainManager = plugin.chainManager;
     this.fileParserManager = plugin.fileParserManager;
-    this.emitter = new EventTarget();
+    this.eventTarget = new EventTarget();
     this.plugin = plugin;
   }
 
@@ -51,25 +51,28 @@ export default class CopilotView extends ItemView {
 
   async onOpen(): Promise<void> {
     const root = createRoot(this.containerEl.children[1]);
+    const handleSaveAsNote = (saveFunction: () => Promise<void>) => {
+      this.handleSaveAsNote = saveFunction;
+    };
+    const updateUserMessageHistory = (newMessage: string) => {
+      this.plugin.updateUserMessageHistory(newMessage);
+    };
     root.render(
       <AppContext.Provider value={this.app}>
-        <React.StrictMode>
-          <Tooltip.Provider delayDuration={0}>
-            <Chat
-              sharedState={this.sharedState}
-              chainManager={this.chainManager}
-              emitter={this.emitter}
-              updateUserMessageHistory={(newMessage) => {
-                this.plugin.updateUserMessageHistory(newMessage);
-              }}
-              fileParserManager={this.fileParserManager}
-              plugin={this.plugin}
-              onSaveChat={(saveFunction) => {
-                this.handleSaveAsNote = saveFunction;
-              }}
-            />
-          </Tooltip.Provider>
-        </React.StrictMode>
+        <EventTargetContext.Provider value={this.eventTarget}>
+          <React.StrictMode>
+            <Tooltip.Provider delayDuration={0}>
+              <Chat
+                sharedState={this.sharedState}
+                chainManager={this.chainManager}
+                updateUserMessageHistory={updateUserMessageHistory}
+                fileParserManager={this.fileParserManager}
+                plugin={this.plugin}
+                onSaveChat={handleSaveAsNote}
+              />
+            </Tooltip.Provider>
+          </React.StrictMode>
+        </EventTargetContext.Provider>
       </AppContext.Provider>
     );
   }

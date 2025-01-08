@@ -93,7 +93,8 @@ const ApiSettings: React.FC = () => {
             </a>
             .
             <br />
-            Your API key is stored locally and is only used to make requests to Google's services.
+            Your API key is stored locally and is only used to make requests to Google&apos;s
+            services.
           </p>
         </div>
       </Collapsible>
@@ -118,7 +119,7 @@ const ApiSettings: React.FC = () => {
             </a>
             .
             <br />
-            Your API key is stored locally and is only used to make requests to Anthropic's
+            Your API key is stored locally and is only used to make requests to Anthropic&apos;s
             services.
           </p>
         </div>
@@ -211,7 +212,8 @@ const ApiSettings: React.FC = () => {
             </a>
             .
             <br />
-            Your API key is stored locally and is only used to make requests to Groq's services.
+            Your API key is stored locally and is only used to make requests to Groq&apos;s
+            services.
           </p>
         </div>
       </Collapsible>
