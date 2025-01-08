@@ -4,7 +4,7 @@ import { SettingItem } from "@/components/ui/setting-item";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, ExternalLink, HelpCircle, Key } from "lucide-react";
 import { useTab } from "@/contexts/TabContext";
-import { DEFAULT_OPEN_AREA, VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
+import { DEFAULT_OPEN_AREA } from "@/constants";
 import { ChainType } from "@/chainFactory";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { getProviderLabel } from "@/utils";
@@ -51,7 +51,6 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
 
   return (
     <div className="space-y-4">
-      {/* Copilot Plus */}
       <section>
         <div className="text-2xl font-bold mb-3">Copilot Plus</div>
         <div className="space-y-4">
@@ -133,20 +132,63 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
         </div>
       </section>
 
-      {/* Chat Section */}
+      {/* Keys Section */}
       <section>
-        <div className="text-2xl font-bold mb-4">Chat</div>
+        <div className="text-2xl font-bold mb-4">API Keys</div>
         <div className="space-y-4">
           {/* API Key Section */}
           <SettingItem
             type="custom"
             title="API Keys"
-            description="Configure API keys for different AI providers"
+            description={
+              <div className="flex items-center gap-1.5">
+                <span className="leading-none">Configure API keys for different AI providers</span>
+                <Popover
+                  open={openPopoverIds.has("api-keys-help")}
+                  onOpenChange={(open) => {
+                    if (open) {
+                      handlePopoverOpen("api-keys-help");
+                    } else {
+                      handlePopoverClose("api-keys-help");
+                    }
+                  }}
+                >
+                  <PopoverTrigger asChild>
+                    <HelpCircle
+                      className="h-5 w-5 sm:h-4 sm:w-4 cursor-pointer text-muted hover:text-accent translate-y-[1px]"
+                      onMouseEnter={() => handlePopoverOpen("api-keys-help")}
+                      onMouseLeave={() => handlePopoverClose("api-keys-help")}
+                    />
+                  </PopoverTrigger>
+                  <PopoverContent
+                    container={modalContainer}
+                    className="w-[90vw] max-w-[400px] p-4 bg-primary border border-solid border-border shadow-sm"
+                    side="bottom"
+                    align="center"
+                    sideOffset={5}
+                    onMouseEnter={() => handlePopoverOpen("api-keys-help")}
+                    onMouseLeave={() => handlePopoverClose("api-keys-help")}
+                  >
+                    <div className="space-y-2">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-accent">
+                          API key is required for chat and QA features
+                        </p>
+                        <p className="text-xs text-muted">
+                          You&#39;ll need to provide an API key from your chosen provider to use the
+                          chat and QA functionality.
+                        </p>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            }
           >
             <Button
               onClick={() => setIsApiKeyDialogOpen(true)}
               variant="outline"
-              className="flex items-center gap-2"
+              className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start"
             >
               Set Keys
               <Key className="h-4 w-4" />
@@ -161,10 +203,22 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
             updateSetting={updateSetting}
             modalContainer={modalContainer}
           />
+          <div className="flex justify-end -mt-2">
+            <Button onClick={() => setSelectedTab("model")} variant="outline">
+              More Model Settings
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </section>
 
+      {/* General Section */}
+      <section>
+        <div className="text-2xl font-bold mb-3">General</div>
+        <div className="space-y-4">
           <SettingItem
             type="select"
-            title="Chat Model"
+            title="Default Chat Model"
             description="Select the Chat model to use"
             value={settings.defaultModelKey}
             onChange={(value) => {
@@ -179,22 +233,9 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
             placeholder="Model"
           />
 
-          <div className="flex justify-end -mt-2">
-            <Button onClick={() => setSelectedTab("model")} variant="outline">
-              More Model Settings
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      {/* QA Settings Section */}
-      <section>
-        <div className="text-2xl font-bold mb-4">Embedding</div>
-        <div className="space-y-4">
           <SettingItem
             type="select"
-            title="Embedding Model"
+            title="Default Embedding Model"
             description="Select the Embedding model to use"
             value={settings.embeddingModelKey}
             onChange={handleSetDefaultEmbeddingModel}
@@ -207,102 +248,6 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
             placeholder="Model"
           />
 
-          <SettingItem
-            type="select"
-            title="Auto-Index Strategy"
-            description={
-              <div className="flex items-center gap-1.5">
-                <span className="leading-none">Decide when you want the vault to be indexed.</span>
-                <Popover
-                  open={openPopoverIds.has("index-help")}
-                  onOpenChange={(open) => {
-                    if (open) {
-                      handlePopoverOpen("index-help");
-                    } else {
-                      handlePopoverClose("index-help");
-                    }
-                  }}
-                >
-                  <PopoverTrigger asChild>
-                    <HelpCircle
-                      className="h-5 w-5 sm:h-4 sm:w-4 cursor-pointer text-muted hover:text-accent translate-y-[1px]"
-                      onMouseEnter={() => handlePopoverOpen("index-help")}
-                      onMouseLeave={() => handlePopoverClose("index-help")}
-                    />
-                  </PopoverTrigger>
-                  <PopoverContent
-                    container={modalContainer}
-                    className="w-[90vw] max-w-[400px] p-2 sm:p-3"
-                    side="bottom"
-                    align="center"
-                    sideOffset={0}
-                    onMouseEnter={() => handlePopoverOpen("index-help")}
-                    onMouseLeave={() => handlePopoverClose("index-help")}
-                  >
-                    <div className="space-y-2 sm:space-y-2.5">
-                      {/* Warning Alert */}
-                      <div className="rounded bg-callout-warning/10  p-1.5 sm:p-2 ring-ring">
-                        <p className="text-callout-warning text-xs sm:text-sm">
-                          Warning: Cost implications for large vaults with paid models
-                        </p>
-                      </div>
-
-                      {/* Main Description */}
-                      <div className="space-y-1 sm:space-y-1.5">
-                        <p className="text-muted text-[11px] sm:text-xs">
-                          Choose when to index your vault:
-                        </p>
-
-                        <ul className="space-y-1 pl-2 sm:pl-3 list-disc text-[11px] sm:text-xs">
-                          <li>
-                            <strong className="inline-block whitespace-nowrap">NEVER：</strong>
-                            <span>Manual indexing via command or refresh only</span>
-                          </li>
-
-                          <li>
-                            <strong className="inline-block whitespace-nowrap">ON STARTUP：</strong>
-                            <span>Index updates when plugin loads or reloads</span>
-                          </li>
-
-                          <li>
-                            <strong className="inline-block whitespace-nowrap">
-                              ON MODE SWITCH：
-                            </strong>
-                            <span>Updates when entering QA mode (Recommended)</span>
-                          </li>
-                        </ul>
-                      </div>
-
-                      {/* Additional Notes */}
-                      <div className="text-[10px] sm:text-[11px] text-muted space-y-0.5 sm:space-y-1 border-t pt-1.5 sm:pt-2">
-                        <p>
-                          &#34;Refreshed&#34; updates the vault index incrementally. Use the
-                          commands &#34;Clear&#34; + &#34;Force re-index&#34; for full rebuild
-                        </p>
-                        <p>Use &#34;Count tokens&#34; command to check potential costs</p>
-                      </div>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            }
-            value={settings.indexVaultToVectorStore}
-            onChange={(value) => {
-              updateSetting("indexVaultToVectorStore", value);
-            }}
-            options={VAULT_VECTOR_STORE_STRATEGIES.map((strategy) => ({
-              label: strategy,
-              value: strategy,
-            }))}
-            placeholder="Strategy"
-          />
-        </div>
-      </section>
-
-      {/* General Section */}
-      <section>
-        <div className="text-2xl font-bold mb-3">General</div>
-        <div className="space-y-4">
           {/* Basic Configuration Group */}
           <SettingItem
             type="select"

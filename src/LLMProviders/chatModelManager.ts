@@ -344,7 +344,6 @@ export default class ChatModelManager {
           err2String(firstError) +
           "\nwith CORS Error: " +
           err2String(error);
-        // console.error("Chat model ping failed:", error);
         throw new Error(msg);
       }
     }

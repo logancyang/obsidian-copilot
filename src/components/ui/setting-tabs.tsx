@@ -91,7 +91,6 @@ export const TabContent: React.FC<TabContentProps> = ({ id, children, isSelected
       aria-labelledby={`tab-${id}`}
       className={cn(
         "pt-4",
-        "bg-background",
         "transition-all duration-200 ease-in-out",
         isSelected ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
       )}

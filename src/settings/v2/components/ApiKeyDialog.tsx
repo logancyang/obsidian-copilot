@@ -47,10 +47,16 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({
   const [verifyingProviders, setVerifyingProviders] = useState<Set<DisplayKeyProviders>>(new Set());
   const [unverifiedKeys, setUnverifiedKeys] = useState<Set<DisplayKeyProviders>>(new Set());
 
-  // Get API key by provider
-  const getApiKeyByProvider = (provider: DisplayKeyProviders): string => {
-    const settingKey = ProviderSettingsKeyMap[provider];
-    return (settings[settingKey] ?? "") as string;
+  const handleOpenChange = (isOpen: boolean) => {
+    if (isOpen) {
+      setUnverifiedKeys(new Set());
+    } else {
+      unverifiedKeys.forEach((provider) => {
+        const settingKey = ProviderSettingsKeyMap[provider];
+        updateSetting(settingKey, "");
+      });
+    }
+    onOpenChange(isOpen);
   };
 
   // List of providers to exclude
@@ -62,6 +68,12 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({
     EmbeddingModelProviders.COPILOT_PLUS,
     EmbeddingModelProviders.COPILOT_PLUS_JINA,
   ];
+
+  // Get API key by provider
+  const getApiKeyByProvider = (provider: DisplayKeyProviders): string => {
+    const settingKey = ProviderSettingsKeyMap[provider];
+    return (settings[settingKey] ?? "") as string;
+  };
 
   const providers: ProviderKeyItem[] = Object.entries(ProviderInfo)
     .filter(([key]) => !excludeProviders.includes(key as Provider))
@@ -123,7 +135,7 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent container={modalContainer} className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>AI Provider Settings</DialogTitle>
@@ -135,8 +147,18 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({
           <div className="space-y-4">
             {providers.map((item: ProviderKeyItem) => (
               <div key={item.provider} className="flex items-center gap-2">
-                <div className="w-[120px] font-medium truncate">
-                  {getProviderLabel(item.provider)}
+                <div className="w-[120px] font-medium">
+                  <div className="truncate">{getProviderLabel(item.provider)}</div>
+                  {getProviderInfo(item.provider).keyManagementURL && (
+                    <a
+                      href={getProviderInfo(item.provider).keyManagementURL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-accent hover:text-accent-hover"
+                    >
+                      Get {getProviderLabel(item.provider)} Key
+                    </a>
+                  )}
                 </div>
                 <div className="flex-1 flex items-center gap-2">
                   <div className="flex-1 pr-2">
@@ -166,7 +188,7 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({
                         )}
                       </Button>
                     ) : (
-                      <span className="text-[#4CAF50] text-sm flex items-center justify-center h-9">
+                      <span className="text-success text-sm flex items-center justify-center h-9">
                         Verified
                       </span>
                     )}

@@ -1,18 +1,11 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useTab } from "@/contexts/TabContext";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Textarea } from "@/components/ui/textarea";
 import { SettingSwitch } from "@/components/ui/setting-switch";
+import { ChevronDown } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -166,25 +159,60 @@ export function SettingItem(props: SettingItemProps) {
         );
 
       case "select":
+        /*<Select
+          value={props.value?.toString()}
+          onValueChange={props.onChange}
+          disabled={disabled}
+        >
+          <SelectTrigger className="w-full sm:w-[200px]">
+            <SelectValue placeholder={props.placeholder} />
+          </SelectTrigger>
+          <SelectContent container={modalContainer}>
+            <SelectGroup>
+              {props.options.map((option) => (
+                <SelectItem key={option.value} value={option.value.toString()}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>*/
         return (
-          <Select
-            value={props.value?.toString()}
-            onValueChange={props.onChange}
-            disabled={disabled}
-          >
-            <SelectTrigger className="w-full sm:w-[200px]">
-              <SelectValue placeholder={props.placeholder} />
-            </SelectTrigger>
-            <SelectContent container={modalContainer}>
-              <SelectGroup>
-                {props.options.map((option) => (
-                  <SelectItem key={option.value} value={option.value.toString()}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          <div className="relative w-full sm:w-[200px] group">
+            <select
+              value={props.value?.toString()}
+              onChange={(e) => props.onChange?.(e.target.value)}
+              disabled={disabled}
+              className={cn(
+                "w-full appearance-none",
+                "flex h-9 rounded-md border border-solid border-border bg-dropdown px-3 py-1 pr-8",
+                "text-sm !shadow transition-colors",
+                "focus:outline-none focus:ring-1 focus:ring-ring",
+                "disabled:cursor-not-allowed disabled:opacity-50",
+                "hover:bg-interactive-accent hover:text-on-accent"
+              )}
+            >
+              {props.placeholder && (
+                <option value="" disabled>
+                  {props.placeholder}
+                </option>
+              )}
+              {props.options.map((option) => (
+                <option key={option.value} value={option.value.toString()}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <div
+              className={cn(
+                "pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2",
+                "transition-colors group-hover:[&>svg]:text-on-accent",
+                disabled && "opacity-50"
+              )}
+            >
+              <ChevronDown className="h-4 w-4" />
+            </div>
+          </div>
         );
 
       case "slider":

@@ -9,7 +9,15 @@ const AdvancedSettings: React.FC = () => {
     <div className="space-y-4">
       {/* Privacy Settings Section */}
       <section>
-        <h3 className="text-2xl font-bold mb-4">Privacy/Additional Settings</h3>
+        <SettingItem
+          type="textarea"
+          title="User System Prompt"
+          description="Customize the system prompt for all messages, may result in unexpected behavior!"
+          value={settings.userSystemPrompt}
+          onChange={(value) => updateSetting("userSystemPrompt", value)}
+          placeholder="Enter your system prompt here..."
+        />
+
         <div className="space-y-4">
           <SettingItem
             type="switch"
@@ -24,7 +32,7 @@ const AdvancedSettings: React.FC = () => {
           <SettingItem
             type="switch"
             title="Debug Mode"
-            description="Debug mode will log all API requests and prompts to the console."
+            description="Debug mode will log some debug message to the console."
             checked={settings.debug}
             onCheckedChange={(checked) => {
               updateSetting("debug", checked);

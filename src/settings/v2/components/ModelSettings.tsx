@@ -2,20 +2,14 @@ import React, { useState } from "react";
 import { SettingItem } from "@/components/ui/setting-item";
 import { setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import { CustomModel } from "@/aiParams";
-import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
 import ChatModelManager from "@/LLMProviders/chatModelManager";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
 import { ModelAddDialog } from "@/settings/v2/components/ModelAddDialog";
 import { ModelTable } from "@/settings/v2/components/ModelTable";
-import { ModelEditDialog } from "@/settings/v2/components/ModelEditDialog";
 
-interface ModelSettingsProps {
-  indexVaultToVectorStore(overwrite?: boolean): Promise<number>;
-}
-
-const ModelSettings: React.FC<ModelSettingsProps> = ({ indexVaultToVectorStore }) => {
+const ModelSettings: React.FC = () => {
   const settings = useSettingsValue();
-  const [editingModel, setEditingModel] = useState<CustomModel | null>(null);
+  // const [editingModel, setEditingModel] = useState<CustomModel | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showAddEmbeddingDialog, setShowAddEmbeddingDialog] = useState(false);
 
@@ -61,23 +55,13 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ indexVaultToVectorStore }
     updateSetting("activeEmbeddingModels", updatedModels);
   };
 
-  const handlePartitionsChange = (value: string) => {
-    const numValue = parseInt(value);
-    if (numValue !== settings.numPartitions) {
-      new RebuildIndexConfirmModal(app, async () => {
-        updateSetting("numPartitions", numValue);
-        await indexVaultToVectorStore(true);
-      }).open();
-    }
-  };
-
   return (
     <div className="space-y-4">
       <section>
         <div className="text-2xl font-bold mb-3">Chat Models</div>
         <ModelTable
           models={settings.activeModels}
-          onEdit={setEditingModel}
+          // onEdit={setEditingModel}
           onDelete={onDeleteModel}
           onAdd={() => setShowAddDialog(true)}
           onUpdateModel={handleModelUpdate}
@@ -85,12 +69,12 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ indexVaultToVectorStore }
         />
 
         {/* model edit dialog*/}
-        <ModelEditDialog
+        {/*        <ModelEditDialog
           open={!!editingModel}
           onOpenChange={(open) => !open && setEditingModel(null)}
           model={editingModel}
           onUpdate={handleModelUpdate}
-        />
+        />*/}
 
         {/* model add dialog */}
         <ModelAddDialog
@@ -104,15 +88,6 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ indexVaultToVectorStore }
         />
 
         <div className="space-y-4">
-          <SettingItem
-            type="textarea"
-            title="User System Prompt"
-            description="Set your default system prompt"
-            value={settings.userSystemPrompt}
-            onChange={(value) => updateSetting("userSystemPrompt", value)}
-            placeholder="Enter your system prompt here..."
-          />
-
           <SettingItem
             type="slider"
             title="Temperature"
@@ -179,76 +154,6 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ indexVaultToVectorStore }
           isEmbeddingModel={true}
           ping={(model) => EmbeddingManager.getInstance().ping(model)}
         />
-
-        <div className="space-y-4">
-          <SettingItem
-            type="slider"
-            title="Max Sources"
-            description="Copilot goes through your vault to find relevant blocks and passes the top N blocks to the LLM. Default for N is 3. Increase if you want more sources included in the answer generation step."
-            min={1}
-            max={10}
-            step={1}
-            value={settings.maxSourceChunks}
-            onChange={(value) => updateSetting("maxSourceChunks", value)}
-          />
-
-          <SettingItem
-            type="slider"
-            title="Requests per second"
-            description="Default is 10. Decrease if you are rate limited by your embedding provider."
-            min={1}
-            max={30}
-            step={1}
-            value={settings.embeddingRequestsPerSecond}
-            onChange={(value) => updateSetting("embeddingRequestsPerSecond", value)}
-          />
-
-          <SettingItem
-            type="select"
-            title="Number of Partitions"
-            description="Number of partitions for Copilot index. Default is 1. Increase if you have issues indexing large vaults. Warning: Changes require clearing and rebuilding the index!"
-            value={settings.numPartitions.toString()}
-            options={["1", "2", "3", "4", "5", "6", "7", "8"].map((it) => ({
-              label: it,
-              value: it,
-            }))}
-            onChange={handlePartitionsChange}
-          />
-
-          <SettingItem
-            type="textarea"
-            title="Exclusions"
-            description="Comma separated list of paths, tags, note titles or file extension, e.g. folder1, folder1/folder2, #tag1, #tag2, [[note1]], [[note2]], *.jpg, *.excallidraw.md etc, to be excluded from the indexing process. NOTE: Tags must be in the note properties, not the note content. Files which were previously indexed will remain in the index unless you force re-index."
-            value={settings.qaExclusions}
-            onChange={(value) => updateSetting("qaExclusions", value)}
-            placeholder="folder1, folder1/folder2, #tag1, #tag2, [[note1]], [[note2]], *.jpg, *.excallidraw.md"
-          />
-
-          <SettingItem
-            type="textarea"
-            title="Inclusions"
-            description="When specified, ONLY these paths, tags, or note titles will be indexed (comma separated). Takes precedence over exclusions. Files which were previously indexed will remain in the index unless you force re-index. Format: folder1, folder1/folder2, #tag1, #tag2, [[note1]], [[note2]]"
-            value={settings.qaInclusions}
-            onChange={(value) => updateSetting("qaInclusions", value)}
-            placeholder="folder1, #tag1, [[note1]]"
-          />
-
-          <SettingItem
-            type="switch"
-            title="Enable Obsidian Sync for Copilot index"
-            description="If enabled, the index will be stored in the .obsidian folder and synced with Obsidian Sync by default. If disabled, it will be stored in .copilot-index folder at vault root."
-            checked={settings.enableIndexSync}
-            onCheckedChange={(checked) => updateSetting("enableIndexSync", checked)}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Disable index loading on mobile"
-            description="When enabled, Copilot index won't be loaded on mobile devices to save resources. Only chat mode will be available. Any existing index from desktop sync will be preserved. Uncheck to enable QA modes on mobile."
-            checked={settings.disableIndexOnMobile}
-            onCheckedChange={(checked) => updateSetting("disableIndexOnMobile", checked)}
-          />
-        </div>
       </section>
     </div>
   );

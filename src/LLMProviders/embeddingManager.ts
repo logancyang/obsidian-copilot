@@ -292,7 +292,6 @@ export default class EmbeddingManager {
           err2String(firstError) +
           "\nwith CORS Error: " +
           err2String(error);
-        // console.error("Embedding model ping failed:", error);
         throw new Error(msg);
       }
     }

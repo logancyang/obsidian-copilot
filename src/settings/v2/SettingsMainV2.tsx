@@ -1,25 +1,28 @@
 import React from "react";
-import { Cog, Cpu, Wrench } from "lucide-react";
+import { Cog, Cpu, Database, Wrench } from "lucide-react";
 import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/ui/setting-tabs";
 import BasicSettings from "./components/BasicSettings";
 import ModelSettings from "./components/ModelSettings";
 import AdvancedSettings from "./components/AdvancedSettings";
+import QASettings from "./components/QASettings";
 import { TabProvider, useTab } from "@/contexts/TabContext";
 import { ResetSettingsConfirmModal } from "@/components/modals/ResetSettingsConfirmModal";
 import { resetSettings } from "@/settings/model";
 import CopilotPlugin from "@/main";
+import { Button } from "@/components/ui/button";
 
-const TAB_IDS = ["basic", "model", "advanced"] as const;
+const TAB_IDS = ["basic", "model", "QA", "advanced"] as const;
 type TabId = (typeof TAB_IDS)[number];
 
-// 图标映射
+// tab icons
 const icons: Record<TabId, JSX.Element> = {
   basic: <Cog className="w-5 h-5" />,
   model: <Cpu className="w-5 h-5" />,
+  QA: <Database className="w-5 h-5" />,
   advanced: <Wrench className="w-5 h-5" />,
 };
 
-// 组件映射
+// tab components
 const components = (plugin: CopilotPlugin): Record<TabId, React.FC> => ({
   basic: () => (
     <BasicSettings
@@ -28,8 +31,9 @@ const components = (plugin: CopilotPlugin): Record<TabId, React.FC> => ({
       )}
     />
   ),
-  model: () => (
-    <ModelSettings
+  model: () => <ModelSettings />,
+  QA: () => (
+    <QASettings
       indexVaultToVectorStore={plugin.vectorStoreManager.indexVaultToVectorStore.bind(
         plugin.vectorStoreManager
       )}
@@ -38,7 +42,7 @@ const components = (plugin: CopilotPlugin): Record<TabId, React.FC> => ({
   advanced: AdvancedSettings,
 });
 
-// tabs 配置
+// tabs
 const tabs: TabItemType[] = TAB_IDS.map((id) => ({
   id,
   icon: icons[id],
@@ -50,7 +54,7 @@ const SettingsContent: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
 
   return (
     <div className="flex flex-col">
-      <div className="inline-flex bg-primary rounded-lg">
+      <div className="inline-flex rounded-lg">
         {tabs.map((tab, index) => (
           <TabItem
             key={tab.id}
@@ -64,7 +68,7 @@ const SettingsContent: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
       </div>
       <div className="w-[100%] border border-solid" />
 
-      <div className="bg-background">
+      <div>
         {TAB_IDS.map((id) => {
           const Component = components(plugin)[id];
           return (
@@ -85,14 +89,20 @@ interface SettingsMainV2Props {
 const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => (
   <TabProvider>
     <div>
-      <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-        <h1 style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div className="flex flex-col gap-2">
+        <h1 className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
-            Copilot Settings <small>v{plugin.manifest.version}</small>
+            Copilot Settings <span className="text-xs">v{plugin.manifest.version}</span>
           </div>
-          <button onClick={() => new ResetSettingsConfirmModal(app, () => resetSettings()).open()}>
-            Reset to Default Settings
-          </button>
+          <div className="self-end sm:self-auto">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => new ResetSettingsConfirmModal(app, () => resetSettings()).open()}
+            >
+              Reset Settings
+            </Button>
+          </div>
         </h1>
       </div>
       <SettingsContent plugin={plugin} />
