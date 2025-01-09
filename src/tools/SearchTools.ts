@@ -35,7 +35,6 @@ const localSearchTool = tool(
 
     if (getSettings().debug) {
       console.log("returnAll:", returnAll);
-      console.log("maxSourceChunks:", maxSourceChunks);
     }
 
     const hybridRetriever = new HybridRetriever({
