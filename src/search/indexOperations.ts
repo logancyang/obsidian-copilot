@@ -9,7 +9,7 @@ import { App, Notice, TFile } from "obsidian";
 import { DBOperations } from "./dbOperations";
 import { extractAppIgnoreSettings, getFilePathsForQA } from "./searchUtils";
 
-const EMBEDDING_BATCH_SIZE = 64;
+const EMBEDDING_BATCH_SIZE = 16;
 const CHECKPOINT_INTERVAL = 8 * EMBEDDING_BATCH_SIZE;
 
 export interface IndexingState {
@@ -132,7 +132,20 @@ export class IndexOperations {
             console.log("Copilot index checkpoint save completed.");
           }
         } catch (err) {
-          this.handleIndexingError(err, batch[0].fileInfo.path, errors, rateLimitNoticeShown);
+          console.error("Batch processing error:", {
+            error: err,
+            batchSize: batch?.length || 0,
+            firstChunk: batch?.[0]
+              ? {
+                  path: batch[0].fileInfo?.path,
+                  contentLength: batch[0].content?.length,
+                  hasFileInfo: !!batch[0].fileInfo,
+                }
+              : "No chunks in batch",
+            errorType: err?.constructor?.name,
+            errorMessage: err?.message,
+          });
+          this.handleIndexingError(err, batch?.[0]?.fileInfo?.path, errors, rateLimitNoticeShown);
           if (this.isRateLimitError(err)) {
             rateLimitNoticeShown = true;
             break;
@@ -389,14 +402,14 @@ export class IndexOperations {
 
   private handleIndexingError(
     err: any,
-    file: TFile,
+    filePath: string,
     errors: string[],
     rateLimitNoticeShown: boolean
   ): void {
-    console.error(`Error indexing file ${file.path}:`, err);
-    errors.push(file.path);
+    console.error(`Error indexing file ${filePath || "unknown"}:`, err);
+    errors.push(filePath || "unknown");
     if (!rateLimitNoticeShown) {
-      new Notice(`Error indexing file ${file.path}. Check console for details.`);
+      new Notice(`Error indexing file ${filePath || "unknown"}. Check console for details.`);
     }
   }
 

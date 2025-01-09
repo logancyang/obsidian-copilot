@@ -33,9 +33,13 @@ const localSearchTool = tool(
         ? PLUS_MODE_DEFAULT_SOURCE_CHUNKS
         : getSettings().maxSourceChunks;
 
+    if (getSettings().debug) {
+      console.log("returnAll:", returnAll);
+    }
+
     const hybridRetriever = new HybridRetriever({
       minSimilarityScore: returnAll ? 0.0 : 0.1,
-      maxK: returnAll ? 100 : maxSourceChunks,
+      maxK: returnAll ? 1000 : maxSourceChunks,
       salientTerms,
       timeRange: timeRange
         ? {

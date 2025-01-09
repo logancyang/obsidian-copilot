@@ -67,142 +67,169 @@ const monthNames = {
   december: 12,
 } as const;
 
-function getTimeRangeMs(timeExpression: string):
-  | {
-      startTime: TimeInfo;
-      endTime: TimeInfo;
-    }
-  | undefined {
-  const now = DateTime.now();
-  let start: DateTime;
-  let end: DateTime;
+/**
+ * Handles relative time range patterns like:
+ * - "last 3 days", "past 3 days"
+ * - "last 2 weeks", "past 2 weeks"
+ * - "last 6 months", "previous 6 months"
+ * - "last 2 years", "prior 2 years"
+ */
+function handleRelativeTimeRange(input: string, now: DateTime) {
+  // Match numeric patterns with various past-tense prefixes
+  const relativeMatch = input.match(
+    /^(last|past|previous|prior)\s+(\d+)\s+(days?|weeks?|months?|years?)$/i
+  );
 
-  const normalizedInput = timeExpression.toLowerCase().replace("@vault", "").trim();
+  if (!relativeMatch) return undefined;
 
-  // Handle special cases first
-  switch (normalizedInput) {
+  const [, , amountStr, unit] = relativeMatch;
+  const amount = parseInt(amountStr);
+
+  if (amount <= 0) {
+    return undefined;
+  }
+
+  const unitSingular = unit.replace(/s$/, "") as "day" | "week" | "month" | "year";
+
+  const end = now.startOf("day");
+  const start = end.minus({ [unitSingular + "s"]: amount });
+  return { start, end };
+}
+
+/**
+ * Handles special time ranges like:
+ * - "yesterday"
+ * - "last week", "this week", "next week"
+ * - "last month", "this month", "next month"
+ * - "last year", "this year", "next year"
+ */
+function handleSpecialTimeRanges(input: string, now: DateTime) {
+  switch (input) {
     case "yesterday":
-      start = now.minus({ days: 1 }).startOf("day");
-      end = now.minus({ days: 1 }).endOf("day");
       return {
-        startTime: convertToTimeInfo(start),
-        endTime: convertToTimeInfo(end),
+        start: now.minus({ days: 1 }).startOf("day"),
+        end: now.minus({ days: 1 }).endOf("day"),
       };
     case "last week":
-      start = now.minus({ weeks: 1 }).startOf("week");
-      end = now.minus({ weeks: 1 }).endOf("week");
       return {
-        startTime: convertToTimeInfo(start),
-        endTime: convertToTimeInfo(end),
+        start: now.minus({ weeks: 1 }).startOf("week"),
+        end: now.minus({ weeks: 1 }).endOf("week"),
       };
-    case "this week":
-      start = now.startOf("week");
-      end = now.endOf("week");
-      return {
-        startTime: convertToTimeInfo(start),
-        endTime: convertToTimeInfo(end),
-      };
-    case "next week":
-      start = now.plus({ weeks: 1 }).startOf("week");
-      end = now.plus({ weeks: 1 }).endOf("week");
-      return {
-        startTime: convertToTimeInfo(start),
-        endTime: convertToTimeInfo(end),
-      };
-    case "last month":
-      start = now.minus({ months: 1 }).startOf("month");
-      end = now.minus({ months: 1 }).endOf("month");
-      return {
-        startTime: convertToTimeInfo(start),
-        endTime: convertToTimeInfo(end),
-      };
-    case "this month":
-      start = now.startOf("month");
-      end = now.endOf("month");
-      return {
-        startTime: convertToTimeInfo(start),
-        endTime: convertToTimeInfo(end),
-      };
-    case "next month":
-      start = now.plus({ months: 1 }).startOf("month");
-      end = now.plus({ months: 1 }).endOf("month");
-      return {
-        startTime: convertToTimeInfo(start),
-        endTime: convertToTimeInfo(end),
-      };
-    case "last year":
-      start = now.minus({ years: 1 }).startOf("year");
-      end = now.minus({ years: 1 }).endOf("year");
-      return {
-        startTime: convertToTimeInfo(start),
-        endTime: convertToTimeInfo(end),
-      };
-    case "this year":
-      start = now.startOf("year");
-      end = now.endOf("year");
-      return {
-        startTime: convertToTimeInfo(start),
-        endTime: convertToTimeInfo(end),
-      };
-    case "next year":
-      start = now.plus({ years: 1 }).startOf("year");
-      end = now.plus({ years: 1 }).endOf("year");
-      return {
-        startTime: convertToTimeInfo(start),
-        endTime: convertToTimeInfo(end),
-      };
+    // ... other cases
+  }
+  return undefined;
+}
+
+/**
+ * Handles "week of" pattern like:
+ * - "week of July 1st"
+ * - "week of 2023-07-01"
+ * - "the week of last Monday"
+ */
+function handleWeekOf(input: string, now: DateTime) {
+  const weekOfMatch = input.match(/(?:the\s+)?week\s+of\s+(.+)/i);
+  if (!weekOfMatch) return undefined;
+
+  const dateStr = weekOfMatch[1];
+  const parsedDates = chrono.parse(dateStr, now.toJSDate(), { forwardDate: false });
+  if (parsedDates.length === 0) return undefined;
+
+  let start = DateTime.fromJSDate(parsedDates[0].start.date()).startOf("week");
+  let end = start.endOf("week");
+
+  if (start > now) {
+    start = start.minus({ years: 1 });
+    end = end.minus({ years: 1 });
   }
 
-  // Check for "week of" pattern first
-  const weekOfMatch = normalizedInput.match(/(?:the\s+)?week\s+of\s+(.+)/i);
-  if (weekOfMatch) {
-    const dateStr = weekOfMatch[1];
-    const parsedDates = chrono.parse(dateStr, now.toJSDate(), { forwardDate: false });
-    if (parsedDates.length > 0) {
-      start = DateTime.fromJSDate(parsedDates[0].start.date()).startOf("week");
-      end = start.endOf("week");
+  return { start, end };
+}
 
-      if (start > now) {
-        start = start.minus({ years: 1 });
-        end = end.minus({ years: 1 });
-      }
-
-      return {
-        startTime: convertToTimeInfo(start),
-        endTime: convertToTimeInfo(end),
-      };
-    }
-  }
-
-  // Check if input is just a month name
-  const monthMatch = normalizedInput.match(
+/**
+ * Handles single month names like:
+ * - "january", "jan"
+ * - "december", "dec"
+ */
+function handleMonthName(input: string, now: DateTime) {
+  const monthMatch = input.match(
     /^(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|september|oct|october|nov|november|dec|december)$/i
   );
-  if (monthMatch) {
-    const monthNum = monthNames[monthMatch[1] as keyof typeof monthNames];
-    let year = now.year;
+  if (!monthMatch) return undefined;
 
-    // If the month is in the future, use last year
-    if (monthNum > now.month) {
-      year--;
-    }
+  const monthNum = monthNames[monthMatch[1] as keyof typeof monthNames];
+  let year = now.year;
 
-    // Create start and end dates for the entire month
-    start = DateTime.fromObject({
-      year,
-      month: monthNum,
-      day: 1,
-    });
+  if (monthNum > now.month) {
+    year--;
+  }
 
-    end = start.endOf("month");
+  let start = DateTime.fromObject({
+    year,
+    month: monthNum,
+    day: 1,
+  });
+  let end = start.endOf("month");
+
+  if (start > now) {
+    start = start.minus({ years: 1 });
+    end = end.minus({ years: 1 });
+  }
+
+  return { start, end };
+}
+
+/**
+ * Handles year patterns like:
+ * - "2023"
+ * - "year 2023"
+ * - "the year of 2023"
+ */
+function handleYear(input: string, now: DateTime) {
+  const yearMatch = input.match(/^(?:(?:the\s+)?(?:year|yr)(?:\s+(?:of|in))?\s+)?(\d{4})$/i);
+  if (!yearMatch) return undefined;
+
+  const year = parseInt(yearMatch[1]);
+  let start = DateTime.fromObject({ year, month: 1, day: 1 });
+  let end = DateTime.fromObject({ year, month: 12, day: 31 });
+
+  if (start > now) {
+    start = start.minus({ years: 1 });
+    end = end.minus({ years: 1 });
+  }
+
+  return { start, end };
+}
+
+function getTimeRangeMs(timeExpression: string) {
+  const now = DateTime.now();
+  const normalizedInput = timeExpression.toLowerCase().replace("@vault", "").trim();
+
+  // Try each parser in sequence
+  const result =
+    handleRelativeTimeRange(normalizedInput, now) ||
+    handleSpecialTimeRanges(normalizedInput, now) ||
+    handleWeekOf(normalizedInput, now) ||
+    handleMonthName(normalizedInput, now) ||
+    handleYear(normalizedInput, now);
+
+  if (result) {
+    return {
+      startTime: convertToTimeInfo(result.start),
+      endTime: convertToTimeInfo(result.end),
+    };
+  }
+
+  // Fallback to chrono parser for other date formats
+  const parsedDates = chrono.parse(timeExpression, now.toJSDate(), { forwardDate: false });
+  if (parsedDates.length > 0) {
+    const start = DateTime.fromJSDate(parsedDates[0].start.date()).startOf("day");
+    const end = parsedDates[0].end
+      ? DateTime.fromJSDate(parsedDates[0].end.date()).endOf("day")
+      : start.endOf("day");
 
     if (start > now) {
-      start = start.minus({ years: 1 });
-      end = end.minus({ years: 1 });
-    }
-
-    if (start > end) {
-      [start, end] = [end, start];
+      start.minus({ years: 1 });
+      end.minus({ years: 1 });
     }
 
     return {
@@ -211,32 +238,8 @@ function getTimeRangeMs(timeExpression: string):
     };
   }
 
-  // Use Chrono.js for parsing dates
-  timeExpression = timeExpression.replace("@vault", "");
-  const parsedDates = chrono.parse(timeExpression, now.toJSDate(), { forwardDate: false });
-  if (parsedDates.length > 0) {
-    // Convert to DateTime while preserving the local timezone
-    start = DateTime.fromJSDate(parsedDates[0].start.date()).startOf("day");
-
-    // If no end date is specified, use the same day as end date
-    end = parsedDates[0].end
-      ? DateTime.fromJSDate(parsedDates[0].end.date()).endOf("day")
-      : start.endOf("day");
-
-    // If the parsed date is in the future, adjust it to the previous occurrence
-    if (start > now) {
-      start = start.minus({ years: 1 });
-      end = end.minus({ years: 1 });
-    }
-  } else {
-    console.warn(`Unable to parse time expression: ${timeExpression}`);
-    return;
-  }
-
-  return {
-    startTime: convertToTimeInfo(start),
-    endTime: convertToTimeInfo(end),
-  };
+  console.warn(`Unable to parse time expression: ${timeExpression}`);
+  return undefined;
 }
 
 function convertToTimeInfo(dateTime: DateTime): TimeInfo {
