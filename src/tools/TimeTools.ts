@@ -211,6 +211,26 @@ function getTimeRangeMs(timeExpression: string):
     };
   }
 
+  // Check if input matches various year formats
+  const yearMatch = normalizedInput.match(
+    /^(?:(?:the\s+)?(?:year|yr)(?:\s+(?:of|in))?\s+)?(\d{4})$/i
+  );
+  if (yearMatch) {
+    const year = parseInt(yearMatch[1]);
+    start = DateTime.fromObject({ year, month: 1, day: 1 });
+    end = DateTime.fromObject({ year, month: 12, day: 31 });
+
+    if (start > now) {
+      start = start.minus({ years: 1 });
+      end = end.minus({ years: 1 });
+    }
+
+    return {
+      startTime: convertToTimeInfo(start),
+      endTime: convertToTimeInfo(end),
+    };
+  }
+
   // Use Chrono.js for parsing dates
   timeExpression = timeExpression.replace("@vault", "");
   const parsedDates = chrono.parse(timeExpression, now.toJSDate(), { forwardDate: false });
