@@ -94,7 +94,7 @@ export class BrevilabsClient {
       method,
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${getDecryptedKey(getSettings().plusLicenseKey)}`,
+        Authorization: `Bearer ${await getDecryptedKey(getSettings().plusLicenseKey)}`,
       },
       ...(method === "POST" && { body: JSON.stringify(body) }),
     });

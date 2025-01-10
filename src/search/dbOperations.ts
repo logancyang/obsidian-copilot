@@ -45,7 +45,7 @@ export class DBOperations {
         this.oramaDb = undefined;
       } else if (Platform.isMobile && !settings.disableIndexOnMobile && !this.oramaDb) {
         // Re-initialize DB if mobile setting is enabled
-        await this.initializeDB(EmbeddingsManager.getInstance().getEmbeddingsAPI());
+        await this.initializeDB(await EmbeddingsManager.getInstance().getEmbeddingsAPI());
       }
 
       // Handle index sync setting change
@@ -55,7 +55,7 @@ export class DBOperations {
         console.log("Path change detected, reinitializing database...");
         this.dbPath = newPath;
         await this.initializeChunkedStorage();
-        await this.initializeDB(EmbeddingsManager.getInstance().getEmbeddingsAPI());
+        await this.initializeDB(await EmbeddingsManager.getInstance().getEmbeddingsAPI());
         console.log("Database reinitialized with new path:", newPath);
       }
     });

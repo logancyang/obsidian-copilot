@@ -346,7 +346,8 @@ export class HybridRetriever extends BaseRetriever {
   }
 
   private async convertQueryToVector(query: string): Promise<number[]> {
-    const vector = await EmbeddingManager.getInstance().getEmbeddingsAPI().embedQuery(query);
+    const embeddingsAPI = await EmbeddingManager.getInstance().getEmbeddingsAPI();
+    const vector = await embeddingsAPI.embedQuery(query);
     if (vector.length === 0) {
       throw new Error("Query embedding returned an empty vector");
     }

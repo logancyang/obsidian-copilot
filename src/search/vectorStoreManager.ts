@@ -48,7 +48,7 @@ export default class VectorStoreManager {
         const oldPath = this.dbOps.getCurrentDbPath();
 
         if (oldPath !== newPath) {
-          await this.dbOps.initializeDB(this.embeddingsManager.getEmbeddingsAPI());
+          await this.dbOps.initializeDB(await this.embeddingsManager.getEmbeddingsAPI());
         }
       }
 
@@ -71,7 +71,7 @@ export default class VectorStoreManager {
       let retries = 3;
       while (retries > 0) {
         try {
-          await this.dbOps.initializeDB(this.embeddingsManager.getEmbeddingsAPI());
+          await this.dbOps.initializeDB(await this.embeddingsManager.getEmbeddingsAPI());
           break;
         } catch (error) {
           if (
@@ -84,6 +84,10 @@ export default class VectorStoreManager {
               continue;
             }
           }
+          new Notice(
+            "Failed to initialize vector store. Please make sure you have a valid API key " +
+              "for your embedding model and restart the plugin."
+          );
           console.error("Failed to initialize vector store:", error);
           break;
         }
@@ -109,7 +113,7 @@ export default class VectorStoreManager {
 
   public async clearIndex(): Promise<void> {
     await this.waitForInitialization();
-    await this.dbOps.clearIndex(this.embeddingsManager.getEmbeddingsAPI());
+    await this.dbOps.clearIndex(await this.embeddingsManager.getEmbeddingsAPI());
   }
 
   public async garbageCollectVectorStore(): Promise<number> {
