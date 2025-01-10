@@ -14,6 +14,10 @@ function getSafeStorage() {
   return safeStorageInternal;
 }
 
+// Add new prefixes to distinguish encryption methods
+const DESKTOP_PREFIX = "enc_desk_";
+const WEBCRYPTO_PREFIX = "enc_web_";
+// Keep old prefix for backward compatibility
 const ENCRYPTION_PREFIX = "enc_";
 const DECRYPTION_PREFIX = "dec_";
 
@@ -69,17 +73,17 @@ export async function getEncryptedKey(apiKey: string): Promise<string> {
     // Try desktop encryption first
     if (getSafeStorage()?.isEncryptionAvailable()) {
       const encryptedBuffer = getSafeStorage().encryptString(apiKey) as Buffer;
-      return ENCRYPTION_PREFIX + encryptedBuffer.toString("base64");
+      return DESKTOP_PREFIX + encryptedBuffer.toString("base64");
     }
 
     // Fallback to Web Crypto API
     const key = await getEncryptionKey();
     const encodedData = new TextEncoder().encode(apiKey);
     const encryptedData = await crypto.subtle.encrypt(ALGORITHM, key, encodedData);
-    return ENCRYPTION_PREFIX + arrayBufferToBase64(encryptedData);
+    return WEBCRYPTO_PREFIX + arrayBufferToBase64(encryptedData);
   } catch (error) {
     console.error("Encryption failed:", error);
-    return apiKey; // Return unencrypted on failure
+    return apiKey;
   }
 }
 
@@ -91,6 +95,22 @@ export async function getDecryptedKey(apiKey: string): Promise<string> {
     return apiKey.replace(DECRYPTION_PREFIX, "");
   }
 
+  // Handle different encryption methods
+  if (apiKey.startsWith(DESKTOP_PREFIX)) {
+    const base64Data = apiKey.replace(DESKTOP_PREFIX, "");
+    const buffer = Buffer.from(base64Data, "base64");
+    return getSafeStorage().decryptString(buffer) as string;
+  }
+
+  if (apiKey.startsWith(WEBCRYPTO_PREFIX)) {
+    const base64Data = apiKey.replace(WEBCRYPTO_PREFIX, "");
+    const key = await getEncryptionKey();
+    const encryptedData = base64ToArrayBuffer(base64Data);
+    const decryptedData = await crypto.subtle.decrypt(ALGORITHM, key, encryptedData);
+    return new TextDecoder().decode(decryptedData);
+  }
+
+  // Legacy support for old enc_ prefix
   const base64Data = apiKey.replace(ENCRYPTION_PREFIX, "");
   try {
     // Try desktop decryption first
@@ -99,7 +119,9 @@ export async function getDecryptedKey(apiKey: string): Promise<string> {
         const buffer = Buffer.from(base64Data, "base64");
         return getSafeStorage().decryptString(buffer) as string;
       } catch {
-        // If desktop decryption fails, try Web Crypto
+        // Silent catch is intentional - if desktop decryption fails,
+        // it means this key was likely encrypted with Web Crypto.
+        // We'll fall through to the Web Crypto decryption below.
       }
     }
 

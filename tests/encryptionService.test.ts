@@ -73,7 +73,7 @@ describe("EncryptionService", () => {
       const apiKey = "testApiKey";
       const encryptedKey = await getEncryptedKey(apiKey);
       // The key is base64 encoded, so we should expect that format
-      expect(encryptedKey).toMatch(/^enc_[A-Za-z0-9+/=]+$/);
+      expect(encryptedKey).toMatch(/^enc_(desk|web)_[A-Za-z0-9+/=]+$/);
       // Verify we can decrypt it back
       const decryptedKey = await getDecryptedKey(encryptedKey);
       expect(decryptedKey).toBe(apiKey);
@@ -111,8 +111,8 @@ describe("EncryptionService", () => {
       } as unknown as CopilotSettings;
 
       const newSettings = await encryptAllKeys(settings);
-      expect(newSettings.openAIApiKey).toMatch(/^enc_[A-Za-z0-9+/=]+$/);
-      expect(newSettings.cohereApiKey).toMatch(/^enc_[A-Za-z0-9+/=]+$/);
+      expect(newSettings.openAIApiKey).toMatch(/^enc_(desk|web)_[A-Za-z0-9+/=]+$/);
+      expect(newSettings.cohereApiKey).toMatch(/^enc_(desk|web)_[A-Za-z0-9+/=]+$/);
       expect(newSettings.userSystemPrompt).toBe("shouldBeIgnored");
 
       // Verify we can decrypt the keys back
@@ -158,7 +158,7 @@ describe("Cross-platform compatibility", () => {
 
     const originalKey = "testApiKey";
     const encryptedKey = await getEncryptedKey(originalKey);
-    expect(encryptedKey).toMatch(/^enc_[A-Za-z0-9+/=]+$/);
+    expect(encryptedKey).toMatch(/^enc_(desk|web)_[A-Za-z0-9+/=]+$/);
 
     // Reset the mock counts before decryption
     mockSubtle.encrypt.mockClear();
@@ -177,7 +177,7 @@ describe("Cross-platform compatibility", () => {
 
     const originalKey = "testApiKey";
     const mobileEncryptedKey = await getEncryptedKey(originalKey);
-    expect(mobileEncryptedKey).toMatch(/^enc_[A-Za-z0-9+/=]+$/);
+    expect(mobileEncryptedKey).toMatch(/^enc_(desk|web)_[A-Za-z0-9+/=]+$/);
     expect(mockSubtle.encrypt).toHaveBeenCalled();
 
     // Reset the mock counts before desktop decryption
