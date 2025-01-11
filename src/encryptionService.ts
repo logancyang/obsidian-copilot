@@ -14,10 +14,27 @@ function getSafeStorage() {
   return safeStorageInternal;
 }
 
+// Add new prefixes to distinguish encryption methods
+const DESKTOP_PREFIX = "enc_desk_";
+const WEBCRYPTO_PREFIX = "enc_web_";
+// Keep old prefix for backward compatibility
 const ENCRYPTION_PREFIX = "enc_";
 const DECRYPTION_PREFIX = "dec_";
 
-export function encryptAllKeys(settings: Readonly<CopilotSettings>): Readonly<CopilotSettings> {
+// Add these constants for the Web Crypto implementation
+const ENCRYPTION_KEY = new TextEncoder().encode("obsidian-copilot-v1");
+const ALGORITHM = { name: "AES-GCM", iv: new Uint8Array(12) };
+
+async function getEncryptionKey(): Promise<CryptoKey> {
+  return await crypto.subtle.importKey("raw", ENCRYPTION_KEY, ALGORITHM.name, false, [
+    "encrypt",
+    "decrypt",
+  ]);
+}
+
+export async function encryptAllKeys(
+  settings: Readonly<CopilotSettings>
+): Promise<Readonly<CopilotSettings>> {
   if (!settings.enableEncryption) {
     return settings;
   }
@@ -28,20 +45,22 @@ export function encryptAllKeys(settings: Readonly<CopilotSettings>): Readonly<Co
 
   for (const key of keysToEncrypt) {
     const apiKey = settings[key as keyof CopilotSettings] as string;
-    (newSettings[key as keyof CopilotSettings] as any) = getEncryptedKey(apiKey);
+    (newSettings[key as keyof CopilotSettings] as any) = await getEncryptedKey(apiKey);
   }
 
   if (Array.isArray(settings.activeModels)) {
-    newSettings.activeModels = settings.activeModels.map((model) => ({
-      ...model,
-      apiKey: getEncryptedKey(model.apiKey || ""),
-    }));
+    newSettings.activeModels = await Promise.all(
+      settings.activeModels.map(async (model) => ({
+        ...model,
+        apiKey: await getEncryptedKey(model.apiKey || ""),
+      }))
+    );
   }
 
   return newSettings;
 }
 
-export function getEncryptedKey(apiKey: string): string {
+export async function getEncryptedKey(apiKey: string): Promise<string> {
   if (!apiKey || apiKey.startsWith(ENCRYPTION_PREFIX)) {
     return apiKey;
   }
@@ -50,20 +69,25 @@ export function getEncryptedKey(apiKey: string): string {
     apiKey = apiKey.replace(DECRYPTION_PREFIX, "");
   }
 
-  if (getSafeStorage() && getSafeStorage().isEncryptionAvailable()) {
-    // Convert the encrypted buffer to a Base64 string and prepend the prefix
-    const encryptedBuffer = getSafeStorage().encryptString(apiKey) as Buffer;
-    // Convert the encrypted buffer to a Base64 string and prepend the prefix
-    return ENCRYPTION_PREFIX + encryptedBuffer.toString("base64");
-  } else {
-    // Simple fallback for mobile (just for demonstration)
-    const encoder = new TextEncoder();
-    const data = encoder.encode(apiKey);
-    return ENCRYPTION_PREFIX + arrayBufferToBase64(data);
+  try {
+    // Try desktop encryption first
+    if (getSafeStorage()?.isEncryptionAvailable()) {
+      const encryptedBuffer = getSafeStorage().encryptString(apiKey) as Buffer;
+      return DESKTOP_PREFIX + encryptedBuffer.toString("base64");
+    }
+
+    // Fallback to Web Crypto API
+    const key = await getEncryptionKey();
+    const encodedData = new TextEncoder().encode(apiKey);
+    const encryptedData = await crypto.subtle.encrypt(ALGORITHM, key, encodedData);
+    return WEBCRYPTO_PREFIX + arrayBufferToBase64(encryptedData);
+  } catch (error) {
+    console.error("Encryption failed:", error);
+    return apiKey;
   }
 }
 
-export function getDecryptedKey(apiKey: string): string {
+export async function getDecryptedKey(apiKey: string): Promise<string> {
   if (!apiKey || isPlainText(apiKey)) {
     return apiKey;
   }
@@ -71,17 +95,41 @@ export function getDecryptedKey(apiKey: string): string {
     return apiKey.replace(DECRYPTION_PREFIX, "");
   }
 
+  // Handle different encryption methods
+  if (apiKey.startsWith(DESKTOP_PREFIX)) {
+    const base64Data = apiKey.replace(DESKTOP_PREFIX, "");
+    const buffer = Buffer.from(base64Data, "base64");
+    return getSafeStorage().decryptString(buffer) as string;
+  }
+
+  if (apiKey.startsWith(WEBCRYPTO_PREFIX)) {
+    const base64Data = apiKey.replace(WEBCRYPTO_PREFIX, "");
+    const key = await getEncryptionKey();
+    const encryptedData = base64ToArrayBuffer(base64Data);
+    const decryptedData = await crypto.subtle.decrypt(ALGORITHM, key, encryptedData);
+    return new TextDecoder().decode(decryptedData);
+  }
+
+  // Legacy support for old enc_ prefix
   const base64Data = apiKey.replace(ENCRYPTION_PREFIX, "");
   try {
-    if (getSafeStorage() && getSafeStorage().isEncryptionAvailable()) {
-      const buffer = Buffer.from(base64Data, "base64");
-      return getSafeStorage().decryptString(buffer) as string;
-    } else {
-      // Simple fallback for mobile (just for demonstration)
-      const data = base64ToArrayBuffer(base64Data);
-      const decoder = new TextDecoder();
-      return decoder.decode(data);
+    // Try desktop decryption first
+    if (getSafeStorage()?.isEncryptionAvailable()) {
+      try {
+        const buffer = Buffer.from(base64Data, "base64");
+        return getSafeStorage().decryptString(buffer) as string;
+      } catch {
+        // Silent catch is intentional - if desktop decryption fails,
+        // it means this key was likely encrypted with Web Crypto.
+        // We'll fall through to the Web Crypto decryption below.
+      }
     }
+
+    // Fallback to Web Crypto API
+    const key = await getEncryptionKey();
+    const encryptedData = base64ToArrayBuffer(base64Data);
+    const decryptedData = await crypto.subtle.decrypt(ALGORITHM, key, encryptedData);
+    return new TextDecoder().decode(decryptedData);
   } catch (err) {
     console.error("Decryption failed:", err);
     return "Copilot failed to decrypt API keys!";

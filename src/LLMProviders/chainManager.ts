@@ -53,8 +53,12 @@ export default class ChainManager {
     this.memoryManager = MemoryManager.getInstance();
     this.chatModelManager = ChatModelManager.getInstance();
     this.promptManager = PromptManager.getInstance();
-    this.createChainWithNewModel();
-    subscribeToModelKeyChange(() => this.createChainWithNewModel());
+
+    // Initialize async operations
+    this.initialize();
+
+    // Set up subscriptions
+    subscribeToModelKeyChange(async () => await this.createChainWithNewModel());
     subscribeToChainTypeChange(() =>
       this.setChain(getChainType(), {
         refreshIndex:
@@ -63,7 +67,11 @@ export default class ChainManager {
             getChainType() === ChainType.COPILOT_PLUS_CHAIN),
       })
     );
-    subscribeToSettingsChange(() => this.createChainWithNewModel());
+    subscribeToSettingsChange(async () => await this.createChainWithNewModel());
+  }
+
+  private async initialize() {
+    await this.createChainWithNewModel();
   }
 
   static getChain(): RunnableSequence {
@@ -102,7 +110,7 @@ export default class ChainManager {
    * Update the active model and create a new chain with the specified model
    * name.
    */
-  createChainWithNewModel(): void {
+  async createChainWithNewModel(): Promise<void> {
     let newModelKey = getModelKey();
     try {
       let customModel = findCustomModel(newModelKey, getSettings().activeModels);
@@ -112,7 +120,7 @@ export default class ChainManager {
         customModel = BUILTIN_CHAT_MODELS[0];
         newModelKey = customModel.name + "|" + customModel.provider;
       }
-      this.chatModelManager.setChatModel(customModel);
+      await this.chatModelManager.setChatModel(customModel);
       // Must update the chatModel for chain because ChainFactory always
       // retrieves the old chain without the chatModel change if it exists!
       // Create a new chain with the new chatModel

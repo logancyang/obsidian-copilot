@@ -131,7 +131,7 @@ export default class EmbeddingManager {
     })[0];
   }
 
-  getEmbeddingsAPI(): Embeddings {
+  async getEmbeddingsAPI(): Promise<Embeddings> {
     const { embeddingModelKey } = getSettings();
 
     if (!EmbeddingManager.modelMap.hasOwnProperty(embeddingModelKey)) {
@@ -146,7 +146,7 @@ export default class EmbeddingManager {
     }
 
     const customModel = this.getCustomModel(embeddingModelKey);
-    const config = this.getEmbeddingConfig(customModel);
+    const config = await this.getEmbeddingConfig(customModel);
 
     try {
       EmbeddingManager.embeddingModel = new selectedModel.EmbeddingConstructor(config);
@@ -158,7 +158,7 @@ export default class EmbeddingManager {
     }
   }
 
-  private getEmbeddingConfig(customModel: CustomModel): any {
+  private async getEmbeddingConfig(customModel: CustomModel): Promise<any> {
     const settings = getSettings();
     const modelName = customModel.name;
 
@@ -187,7 +187,7 @@ export default class EmbeddingManager {
     } = {
       [EmbeddingModelProviders.COPILOT_PLUS]: {
         modelName,
-        apiKey: getDecryptedKey(settings.plusLicenseKey),
+        apiKey: await getDecryptedKey(settings.plusLicenseKey),
         timeout: 10000,
         configuration: {
           baseURL: BREVILABS_API_BASE_URL,
@@ -196,7 +196,7 @@ export default class EmbeddingManager {
       },
       [EmbeddingModelProviders.COPILOT_PLUS_JINA]: {
         model: modelName,
-        apiKey: getDecryptedKey(settings.plusLicenseKey),
+        apiKey: await getDecryptedKey(settings.plusLicenseKey),
         timeout: 10000,
         batchSize: 128,
         dimensions: 512,
@@ -207,7 +207,7 @@ export default class EmbeddingManager {
       },
       [EmbeddingModelProviders.OPENAI]: {
         modelName,
-        openAIApiKey: getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
+        openAIApiKey: await getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
         timeout: 10000,
         configuration: {
           baseURL: customModel.baseUrl,
@@ -216,14 +216,14 @@ export default class EmbeddingManager {
       },
       [EmbeddingModelProviders.COHEREAI]: {
         model: modelName,
-        apiKey: getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
+        apiKey: await getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
       },
       [EmbeddingModelProviders.GOOGLE]: {
         modelName: modelName,
-        apiKey: getDecryptedKey(settings.googleApiKey),
+        apiKey: await getDecryptedKey(settings.googleApiKey),
       },
       [EmbeddingModelProviders.AZURE_OPENAI]: {
-        azureOpenAIApiKey: getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
+        azureOpenAIApiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
         azureOpenAIApiInstanceName: settings.azureOpenAIApiInstanceName,
         azureOpenAIApiDeploymentName: settings.azureOpenAIApiEmbeddingDeploymentName,
         azureOpenAIApiVersion: settings.azureOpenAIApiVersion,
@@ -239,7 +239,7 @@ export default class EmbeddingManager {
       },
       [EmbeddingModelProviders.LM_STUDIO]: {
         modelName,
-        openAIApiKey: getDecryptedKey(customModel.apiKey || "default-key"),
+        openAIApiKey: await getDecryptedKey(customModel.apiKey || "default-key"),
         configuration: {
           baseURL: customModel.baseUrl || "http://localhost:1234/v1",
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -247,7 +247,7 @@ export default class EmbeddingManager {
       },
       [EmbeddingModelProviders.OPENAI_FORMAT]: {
         modelName,
-        openAIApiKey: getDecryptedKey(customModel.apiKey || ""),
+        openAIApiKey: await getDecryptedKey(customModel.apiKey || ""),
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -265,7 +265,7 @@ export default class EmbeddingManager {
   async ping(model: CustomModel): Promise<boolean> {
     const tryPing = async (enableCors: boolean) => {
       const modelToTest = { ...model, enableCors };
-      const config = this.getEmbeddingConfig(modelToTest);
+      const config = await this.getEmbeddingConfig(modelToTest);
       const testModel = new (this.getProviderConstructor(modelToTest))(config);
       await testModel.embedQuery("test");
     };

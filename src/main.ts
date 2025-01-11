@@ -54,12 +54,12 @@ export default class CopilotPlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
-    this.settingsUnsubscriber = subscribeToSettingsChange(() => {
+    this.settingsUnsubscriber = subscribeToSettingsChange(async () => {
       const settings = getSettings();
       if (settings.enableEncryption) {
-        this.saveData(encryptAllKeys(settings));
+        await this.saveData(await encryptAllKeys(settings));
       } else {
-        this.saveData(settings);
+        await this.saveData(settings);
       }
       registerBuiltInCommands(this);
     });

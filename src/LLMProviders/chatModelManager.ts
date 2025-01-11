@@ -70,7 +70,7 @@ export default class ChatModelManager {
     return ChatModelManager.instance;
   }
 
-  private getModelConfig(customModel: CustomModel): ModelConfig {
+  private async getModelConfig(customModel: CustomModel): Promise<ModelConfig> {
     const settings = getSettings();
 
     // Check if the model starts with "o1"
@@ -90,7 +90,7 @@ export default class ChatModelManager {
     } = {
       [ChatModelProviders.OPENAI]: {
         modelName: modelName,
-        openAIApiKey: getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
+        openAIApiKey: await getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -100,7 +100,7 @@ export default class ChatModelManager {
         ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
       },
       [ChatModelProviders.ANTHROPIC]: {
-        anthropicApiKey: getDecryptedKey(customModel.apiKey || settings.anthropicApiKey),
+        anthropicApiKey: await getDecryptedKey(customModel.apiKey || settings.anthropicApiKey),
         modelName: modelName,
         anthropicApiUrl: customModel.baseUrl,
         clientOptions: {
@@ -110,7 +110,7 @@ export default class ChatModelManager {
         },
       },
       [ChatModelProviders.AZURE_OPENAI]: {
-        azureOpenAIApiKey: getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
+        azureOpenAIApiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
         azureOpenAIApiInstanceName: settings.azureOpenAIApiInstanceName,
         azureOpenAIApiDeploymentName: settings.azureOpenAIApiDeploymentName,
         azureOpenAIApiVersion: settings.azureOpenAIApiVersion,
@@ -121,11 +121,11 @@ export default class ChatModelManager {
         ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
       },
       [ChatModelProviders.COHEREAI]: {
-        apiKey: getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
+        apiKey: await getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
         model: modelName,
       },
       [ChatModelProviders.GOOGLE]: {
-        apiKey: getDecryptedKey(customModel.apiKey || settings.googleApiKey),
+        apiKey: await getDecryptedKey(customModel.apiKey || settings.googleApiKey),
         modelName: modelName,
         safetySettings: [
           {
@@ -149,14 +149,14 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.OPENROUTERAI]: {
         modelName: modelName,
-        openAIApiKey: getDecryptedKey(customModel.apiKey || settings.openRouterAiApiKey),
+        openAIApiKey: await getDecryptedKey(customModel.apiKey || settings.openRouterAiApiKey),
         configuration: {
           baseURL: customModel.baseUrl || "https://openrouter.ai/api/v1",
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
       },
       [ChatModelProviders.GROQ]: {
-        apiKey: getDecryptedKey(customModel.apiKey || settings.groqApiKey),
+        apiKey: await getDecryptedKey(customModel.apiKey || settings.groqApiKey),
         modelName: modelName,
       },
       [ChatModelProviders.OLLAMA]: {
@@ -177,7 +177,7 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.OPENAI_FORMAT]: {
         modelName: modelName,
-        openAIApiKey: getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
+        openAIApiKey: await getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -251,7 +251,7 @@ export default class ChatModelManager {
     return ChatModelManager.chatModel;
   }
 
-  setChatModel(model: CustomModel): void {
+  async setChatModel(model: CustomModel): Promise<void> {
     const modelKey = `${model.name}|${model.provider}`;
     if (!ChatModelManager.modelMap.hasOwnProperty(modelKey)) {
       throw new Error(`No model found for: ${modelKey}`);
@@ -266,7 +266,7 @@ export default class ChatModelManager {
       throw new Error(errorMessage);
     }
 
-    const modelConfig = this.getModelConfig(model);
+    const modelConfig = await this.getModelConfig(model);
 
     setModelKey(`${model.name}|${model.provider}`);
     try {
@@ -312,7 +312,7 @@ export default class ChatModelManager {
   async ping(model: CustomModel): Promise<boolean> {
     const tryPing = async (enableCors: boolean) => {
       const modelToTest = { ...model, enableCors };
-      const modelConfig = this.getModelConfig(modelToTest);
+      const modelConfig = await this.getModelConfig(modelToTest);
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { streaming, temperature, ...pingConfig } = modelConfig;
       pingConfig.maxTokens = 10;

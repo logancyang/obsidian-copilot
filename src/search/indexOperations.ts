@@ -52,7 +52,7 @@ export class IndexOperations {
     let rateLimitNoticeShown = false;
 
     try {
-      const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
+      const embeddingInstance = await this.embeddingsManager.getEmbeddingsAPI();
       if (!embeddingInstance) {
         console.error("Embedding instance not found.");
         return 0;
@@ -169,7 +169,7 @@ export class IndexOperations {
       fileInfo: any;
     }>
   > {
-    const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
+    const embeddingInstance = await this.embeddingsManager.getEmbeddingsAPI();
     if (!embeddingInstance) {
       console.error("Embedding instance not found.");
       return [];
@@ -444,7 +444,7 @@ export class IndexOperations {
 
   public async reindexFile(file: TFile): Promise<void> {
     try {
-      const embeddingInstance = this.embeddingsManager.getEmbeddingsAPI();
+      const embeddingInstance = await this.embeddingsManager.getEmbeddingsAPI();
       if (!embeddingInstance) {
         return;
       }
