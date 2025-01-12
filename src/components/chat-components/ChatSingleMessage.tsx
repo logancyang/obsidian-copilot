@@ -259,7 +259,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       >
         <div className="w-6 shrink-0">{message.sender === USER_SENDER ? <User /> : <Bot />}</div>
         <div className="flex flex-col flex-grow max-w-full gap-2">
-          <MessageContext context={message.context} />
+          {!isEditing && <MessageContext context={message.context} />}
           <div className="message-content">{renderMessageContent()}</div>
 
           {!isStreaming && (

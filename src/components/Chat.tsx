@@ -147,6 +147,12 @@ const Chat: React.FC<ChatProps> = ({
       });
     }
 
+    const notes = contextNotes || [];
+    const activeNote = app.workspace.getActiveFile();
+    if (includeActiveNote && activeNote) {
+      notes.push(activeNote);
+    }
+
     const userMessage: ChatMessage = {
       message: inputMessage || "Image message",
       originalMessage: inputMessage,
@@ -155,14 +161,13 @@ const Chat: React.FC<ChatProps> = ({
       timestamp: timestamp,
       content: content,
       context: {
-        notes: contextNotes || [],
+        notes,
         urls: urls || [],
       },
     };
 
     // Clear input and images
     setInputMessage("");
-    setContextNotes([]);
     setSelectedImages([]);
 
     // Add messages to chat history
@@ -429,6 +434,7 @@ ${chatContent}`;
         if (newChatHistory[i].originalMessage === oldMessage) {
           newChatHistory[i].message = newMessage;
           newChatHistory[i].originalMessage = newMessage;
+          newChatHistory[i].context = { notes: [], urls: [] };
         }
       }
 

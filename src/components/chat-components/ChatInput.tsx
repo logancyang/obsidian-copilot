@@ -96,7 +96,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
       handleSendMessage({
         toolCalls: includeVault ? ["@vault"] : [],
-        contextNotes: contextNotes,
+        contextNotes,
         urls: contextUrls,
       });
     };
