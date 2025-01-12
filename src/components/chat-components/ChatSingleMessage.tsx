@@ -4,7 +4,7 @@ import { USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/sharedState";
 import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer } from "obsidian";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 interface ChatSingleMessageProps {
   message: ChatMessage;
@@ -46,36 +46,39 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     });
   };
 
-  const preprocess = (content: string): string => {
-    // Process LaTeX
-    const latexProcessed = content
-      .replace(/\\\[\s*/g, "$$")
-      .replace(/\s*\\\]/g, "$$")
-      .replace(/\\\(\s*/g, "$")
-      .replace(/\s*\\\)/g, "$");
+  const preprocess = useCallback(
+    (content: string): string => {
+      // Process LaTeX
+      const latexProcessed = content
+        .replace(/\\\[\s*/g, "$$")
+        .replace(/\s*\\\]/g, "$$")
+        .replace(/\\\(\s*/g, "$")
+        .replace(/\s*\\\)/g, "$");
 
-    // Process images
-    const activeFile = app.workspace.getActiveFile();
-    const sourcePath = activeFile ? activeFile.path : "";
+      // Process images
+      const activeFile = app.workspace.getActiveFile();
+      const sourcePath = activeFile ? activeFile.path : "";
 
-    const imageProcessed = latexProcessed.replace(/!\[\[(.*?)\]\]/g, (match, imageName) => {
-      const imageFile = app.metadataCache.getFirstLinkpathDest(imageName, sourcePath);
-      if (imageFile) {
-        const imageUrl = app.vault.getResourcePath(imageFile);
-        return `![](${imageUrl})`;
-      }
-      return match;
-    });
+      const imageProcessed = latexProcessed.replace(/!\[\[(.*?)\]\]/g, (match, imageName) => {
+        const imageFile = app.metadataCache.getFirstLinkpathDest(imageName, sourcePath);
+        if (imageFile) {
+          const imageUrl = app.vault.getResourcePath(imageFile);
+          return `![](${imageUrl})`;
+        }
+        return match;
+      });
 
-    // Process note links to obsidian:// URLs
-    const noteProcessed = imageProcessed.replace(/\[\[(.*?)\]\]/g, (match, noteName) => {
-      const encodedNoteName = encodeURIComponent(noteName);
-      const vaultName = app.vault.getName();
-      return `[${noteName}](obsidian://open?vault=${vaultName}&file=${encodedNoteName})`;
-    });
+      // Process note links to obsidian:// URLs
+      const noteProcessed = imageProcessed.replace(/\[\[(.*?)\]\]/g, (match, noteName) => {
+        const encodedNoteName = encodeURIComponent(noteName);
+        const vaultName = app.vault.getName();
+        return `[${noteName}](obsidian://open?vault=${vaultName}&file=${encodedNoteName})`;
+      });
 
-    return noteProcessed;
-  };
+      return noteProcessed;
+    },
+    [app]
+  );
 
   useEffect(() => {
     if (contentRef.current && message.sender !== USER_SENDER) {
@@ -105,7 +108,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         componentRef.current = null;
       }
     };
-  }, [message, app, componentRef, isStreaming]);
+  }, [message, app, componentRef, isStreaming, preprocess]);
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
