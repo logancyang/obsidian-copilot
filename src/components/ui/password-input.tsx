@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Eye, EyeOff } from "lucide-react";
@@ -18,9 +18,30 @@ export function PasswordInput({
   className?: string;
 }) {
   const [showPassword, setShowPassword] = useState(false);
+  const [displayValue, setDisplayValue] = useState<string | number>("");
+  const isFirstLoad = useRef(true);
 
-  // 获取要显示的值
-  const displayValue = typeof value === "string" && value ? getDecryptedKey(value) : value;
+  // Handle all value transformations in a single effect
+  useEffect(() => {
+    const processValue = async () => {
+      // Decrypt the value only on first load if it's an encrypted string
+      if (isFirstLoad.current && typeof value === "string" && value) {
+        try {
+          const decrypted = await getDecryptedKey(value);
+          setDisplayValue(decrypted);
+        } catch (error) {
+          console.error("Failed to decrypt value:", error);
+          setDisplayValue(value);
+        }
+        isFirstLoad.current = false;
+      } else {
+        // For subsequent updates or non-encrypted values, use the value directly
+        setDisplayValue(value || "");
+      }
+    };
+
+    processValue();
+  }, [value]);
 
   return (
     <div className={cn("relative", className)}>
