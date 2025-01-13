@@ -392,7 +392,7 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.PRESS_RELEASE]: "Rewrite selection to a press release",
   [COMMAND_IDS.REMOVE_FILES_FROM_COPILOT_INDEX]: "Remove files from Copilot index (debug)",
   [COMMAND_IDS.REMOVE_URLS]: "Remove URLs from selection",
-  [COMMAND_IDS.REWRITE_TWEET]: "Rewrite selection to a tweet thread",
+  [COMMAND_IDS.REWRITE_TWEET]: "Rewrite selection to a tweet",
   [COMMAND_IDS.REWRITE_TWEET_THREAD]: "Rewrite selection to a tweet thread",
   [COMMAND_IDS.SEARCH_ORAMA_DB]: "Search OramaDB (debug)",
   [COMMAND_IDS.SIMPLIFY]: "Simplify selection",

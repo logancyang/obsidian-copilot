@@ -1,7 +1,6 @@
 import { COMMAND_NAMES, CommandId } from "@/constants";
-import { getAIResponse } from "@/langchainStream";
 import ChainManager from "@/LLMProviders/chainManager";
-import { getSettings } from "@/settings/model";
+import ChatModelManager from "@/LLMProviders/chatModelManager";
 import { ChatMessage } from "@/sharedState";
 import { insertIntoEditor } from "@/utils";
 import { Copy, PenLine } from "lucide-react";
@@ -31,7 +30,6 @@ function InlineEditModalContent({
 }: InlineEditModalContentProps) {
   const [aiCurrentMessage, setAiCurrentMessage] = useState<string | null>(null);
   const [processedMessage, setProcessedMessage] = useState<string | null>(null);
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   const commandName = COMMAND_NAMES[commandId];
   const handleAddMessage = useCallback((message: ChatMessage) => {
@@ -39,25 +37,25 @@ function InlineEditModalContent({
   }, []);
 
   useEffect(() => {
+    const abortController = new AbortController();
+    async function stream() {
+      let fullAIResponse = "";
+      const chatStream = await ChatModelManager.getInstance()
+        .getChatModel()
+        .stream(promptMessage.message);
+      for await (const chunk of chatStream) {
+        if (abortController?.signal.aborted) break;
+        fullAIResponse += chunk.content;
+        setAiCurrentMessage(fullAIResponse);
+      }
+      if (!abortController?.signal.aborted) {
+        setProcessedMessage(fullAIResponse);
+      }
+    }
+    stream();
     return () => {
-      if (abortController) {
-        abortController.abort();
-      }
+      abortController.abort();
     };
-  }, [abortController]);
-
-  useEffect(() => {
-    getAIResponse(
-      promptMessage,
-      chainManager,
-      handleAddMessage,
-      setAiCurrentMessage,
-      setAbortController,
-      {
-        debug: getSettings().debug,
-        ignoreSystemMessage: true,
-      }
-    );
   }, [promptMessage, chainManager, handleAddMessage]);
 
   return (

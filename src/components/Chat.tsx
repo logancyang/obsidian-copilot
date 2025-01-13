@@ -3,7 +3,7 @@ import { ChainType } from "@/chainFactory";
 import { updateChatMemory } from "@/chatUtils";
 import ChatInput from "@/components/chat-components/ChatInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
-import { ABORT_REASON, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
+import { ABORT_REASON, COMMAND_IDS, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
 import { ContextProcessor } from "@/contextProcessor";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
@@ -11,7 +11,7 @@ import { getAIResponse } from "@/langchainStream";
 import ChainManager from "@/LLMProviders/chainManager";
 import CopilotPlugin from "@/main";
 import { Mention } from "@/mentions/Mention";
-import { useSettingsValue } from "@/settings/model";
+import { getSettings, useSettingsValue } from "@/settings/model";
 import SharedState, { ChatMessage, useSharedState } from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { formatDateTime } from "@/utils";
@@ -413,44 +413,82 @@ ${chatContent}`;
     [addMessage, chainManager.memoryManager, chatHistory, clearMessages, handleRegenerate]
   );
 
-  // const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
+  const createEffect = (
+    eventType: string,
+    promptFn: (selectedText: string, eventSubtype?: string) => string | Promise<string>
+  ) => {
+    return () => {
+      const debug = getSettings().debug;
+      const handleSelection = async (event: CustomEvent) => {
+        const messageWithPrompt = await promptFn(
+          event.detail.selectedText,
+          event.detail.eventSubtype
+        );
+        // Create a user message with the selected text
+        const promptMessage: ChatMessage = {
+          message: messageWithPrompt,
+          sender: USER_SENDER,
+          isVisible: debug,
+          timestamp: formatDateTime(new Date()),
+        };
+
+        if (debug) {
+          addMessage(promptMessage);
+        }
+
+        setLoading(true);
+        await getAIResponse(
+          promptMessage,
+          chainManager,
+          addMessage,
+          setCurrentAiMessage,
+          setAbortController,
+          {
+            debug,
+            ignoreSystemMessage: true,
+          }
+        );
+        setLoading(false);
+      };
+
+      eventTarget?.addEventListener(eventType, handleSelection);
+
+      // Cleanup function to remove the event listener when the component unmounts
+      return () => {
+        eventTarget?.removeEventListener(eventType, handleSelection);
+      };
+    };
+  };
+
+  const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  // TODO: Fix them
-  // useEffect(
-  //   createEffect(
-  //     COMMAND_IDS.APPLY_CUSTOM_PROMPT,
-  //     async (selectedText, customPrompt) => {
-  //       if (!customPrompt) {
-  //         return selectedText;
-  //       }
-  //       return await customPromptProcessor.processCustomPrompt(
-  //         customPrompt,
-  //         selectedText,
-  //         app.workspace.getActiveFile() as TFile | undefined
-  //       );
-  //     },
-  //     { isVisible: settings.debug, ignoreSystemMessage: true, custom_temperature: 0.1 }
-  //   ),
-  //   []
-  // );
-  // // eslint-disable-next-line react-hooks/exhaustive-deps
-  // useEffect(
-  //   createEffect(
-  //     COMMAND_IDS.APPLY_ADHOC_PROMPT,
-  //     async (selectedText, customPrompt) => {
-  //       if (!customPrompt) {
-  //         return selectedText;
-  //       }
-  //       return await customPromptProcessor.processCustomPrompt(
-  //         customPrompt,
-  //         selectedText,
-  //         app.workspace.getActiveFile() as TFile | undefined
-  //       );
-  //     },
-  //     { isVisible: settings.debug, ignoreSystemMessage: true, custom_temperature: 0.1 }
-  //   ),
-  //   []
-  // );
+  useEffect(
+    createEffect(COMMAND_IDS.APPLY_CUSTOM_PROMPT, async (selectedText, customPrompt) => {
+      if (!customPrompt) {
+        return selectedText;
+      }
+      return await customPromptProcessor.processCustomPrompt(
+        customPrompt,
+        selectedText,
+        app.workspace.getActiveFile() ?? undefined
+      );
+    }),
+    []
+  );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(
+    createEffect(COMMAND_IDS.APPLY_ADHOC_PROMPT, async (selectedText, customPrompt) => {
+      if (!customPrompt) {
+        return selectedText;
+      }
+      return await customPromptProcessor.processCustomPrompt(
+        customPrompt,
+        selectedText,
+        app.workspace.getActiveFile() as TFile | undefined
+      );
+    }),
+    []
+  );
 
   // Expose handleSaveAsNote to parent
   useEffect(() => {

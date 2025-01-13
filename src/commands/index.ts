@@ -23,6 +23,7 @@ import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
 import { DebugSearchModal } from "@/components/modals/DebugSearchModal";
 import { RemoveFromIndexModal } from "@/components/modals/RemoveFromIndexModal";
 import { COMMAND_PROMPT_MAP } from "@/commands/promptUtils";
+import { getAllQAMarkdownContent } from "@/search/searchUtils";
 
 /**
  * Check if a command is enabled.
@@ -197,13 +198,21 @@ export function registerBuiltInCommands(plugin: CopilotPlugin) {
   });
 
   addEditorCommand(plugin, COMMAND_IDS.COUNT_WORD_AND_TOKENS_SELECTION, async (editor: Editor) => {
-    const { wordCount, tokenCount } = await plugin.countSelectionWordsAndTokens(editor);
+    const selectedText = await editor.getSelection();
+    const wordCount = selectedText.split(" ").length;
+    const tokenCount = await plugin.chainManager.chatModelManager.countTokens(selectedText);
     new Notice(`Selected text contains ${wordCount} words and ${tokenCount} tokens.`);
   });
 
   addCommand(plugin, COMMAND_IDS.COUNT_TOTAL_VAULT_TOKENS, async () => {
-    const totalTokens = await plugin.countTotalTokens();
-    new Notice(`Total tokens in your vault: ${totalTokens}`);
+    try {
+      const allContent = await getAllQAMarkdownContent(plugin.app);
+      const totalTokens = await plugin.chainManager.chatModelManager.countTokens(allContent);
+      new Notice(`Total tokens in your vault: ${totalTokens}`);
+    } catch (error) {
+      console.error("Error counting tokens: ", error);
+      new Notice("An error occurred while counting tokens.");
+    }
   });
 
   addCommand(plugin, COMMAND_IDS.TOGGLE_COPILOT_CHAT_WINDOW, () => {
@@ -240,7 +249,7 @@ export function registerBuiltInCommands(plugin: CopilotPlugin) {
           new Notice(`No prompt found with the title "${promptTitle}".`);
           return;
         }
-        plugin.processCustomPrompt("applyCustomPrompt", prompt.content);
+        plugin.processCustomPrompt(COMMAND_IDS.APPLY_CUSTOM_PROMPT, prompt.content);
       } catch (err) {
         console.error(err);
         new Notice("An error occurred.");
@@ -251,7 +260,7 @@ export function registerBuiltInCommands(plugin: CopilotPlugin) {
   addCommand(plugin, COMMAND_IDS.APPLY_ADHOC_PROMPT, async () => {
     const modal = new AdhocPromptModal(plugin.app, async (adhocPrompt: string) => {
       try {
-        plugin.processCustomPrompt("applyAdhocPrompt", adhocPrompt);
+        plugin.processCustomPrompt(COMMAND_IDS.APPLY_ADHOC_PROMPT, adhocPrompt);
       } catch (err) {
         console.error(err);
         new Notice("An error occurred.");

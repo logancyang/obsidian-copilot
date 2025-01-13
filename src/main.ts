@@ -9,7 +9,6 @@ import { CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { registerContextMenu } from "@/contextMenu";
 import { encryptAllKeys } from "@/encryptionService";
 import { HybridRetriever } from "@/search/hybridRetriever";
-import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
 import {
@@ -266,24 +265,6 @@ export default class CopilotPlugin extends Plugin {
     });
 
     return Array.from(modelMap.values());
-  }
-
-  async countTotalTokens(): Promise<number> {
-    try {
-      const allContent = await getAllQAMarkdownContent(this.app);
-      const totalTokens = await this.chainManager.chatModelManager.countTokens(allContent);
-      return totalTokens;
-    } catch (error) {
-      console.error("Error counting tokens: ", error);
-      return 0;
-    }
-  }
-
-  async countSelectionWordsAndTokens(editor: Editor) {
-    const selectedText = await editor.getSelection();
-    const wordCount = selectedText.split(" ").length;
-    const tokenCount = await this.chainManager.chatModelManager.countTokens(selectedText);
-    return { wordCount, tokenCount };
   }
 
   handleContextMenu = (menu: Menu, editor: Editor): void => {
