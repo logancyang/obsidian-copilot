@@ -2,6 +2,7 @@ import { ChatButtons } from "@/components/chat-components/ChatButtons";
 import { SourcesModal } from "@/components/modals/SourcesModal";
 import { USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/sharedState";
+import { insertIntoEditor } from "@/utils";
 import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -10,7 +11,6 @@ interface ChatSingleMessageProps {
   message: ChatMessage;
   app: App;
   isStreaming: boolean;
-  onInsertAtCursor?: () => void;
   onRegenerate?: () => void;
   onEdit?: (newMessage: string) => void;
   onDelete: () => void;
@@ -20,7 +20,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   message,
   app,
   isStreaming,
-  onInsertAtCursor,
   onRegenerate,
   onEdit,
   onDelete,
@@ -229,7 +228,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                 message={message}
                 onCopy={copyToClipboard}
                 isCopied={isCopied}
-                onInsertAtCursor={onInsertAtCursor}
+                onInsertIntoEditor={() => insertIntoEditor(message.message)}
                 onRegenerate={onRegenerate}
                 onEdit={handleEdit}
                 onDelete={onDelete}

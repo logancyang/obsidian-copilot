@@ -7,7 +7,7 @@ export function registerContextMenu(menu: Menu, editor: Editor, plugin: CopilotP
   CONTEXT_MENU_COMMANDS.filter((commandId) => isCommandEnabled(commandId)).forEach((commandId) => {
     menu.addItem((item) => {
       item.setTitle(`Copilot: ${COMMAND_NAMES[commandId]}`).onClick(async (e) => {
-        plugin.processSelection(editor, commandId);
+        (plugin.app as any).commands.executeCommandById(`copilot:${commandId}`);
       });
     });
   });

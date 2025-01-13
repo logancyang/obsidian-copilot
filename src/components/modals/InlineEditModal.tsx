@@ -3,8 +3,9 @@ import { getAIResponse } from "@/langchainStream";
 import ChainManager from "@/LLMProviders/chainManager";
 import { getSettings } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
-import { PenLine } from "lucide-react";
-import { App, Modal } from "obsidian";
+import { insertIntoEditor } from "@/utils";
+import { Copy, PenLine } from "lucide-react";
+import { App, Modal, Notice } from "obsidian";
 import React, { useCallback, useEffect, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
 
@@ -13,6 +14,7 @@ interface InlineEditModalContentProps {
   promptMessage: ChatMessage;
   chainManager: ChainManager;
   commandId: CommandId;
+  customTemperature?: number;
   onInsert: (message: string) => void;
   onReplace: (message: string) => void;
   onClose: () => void;
@@ -67,12 +69,25 @@ function InlineEditModalContent({
           {commandName}
         </div>
       )}
-      <textarea
-        className="w-full h-60 text-text"
-        value={processedMessage ?? aiCurrentMessage ?? "loading..."}
-        disabled={processedMessage == null}
-        onChange={(e) => setProcessedMessage(e.target.value)}
-      />
+      <div className="relative group">
+        <textarea
+          className="w-full h-60 text-text peer"
+          value={processedMessage ?? aiCurrentMessage ?? "loading..."}
+          disabled={processedMessage == null}
+          onChange={(e) => setProcessedMessage(e.target.value)}
+        />
+        {processedMessage && (
+          <button
+            className="absolute top-2 right-2 opacity-0 peer-focus-visible:!opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={() => {
+              navigator.clipboard.writeText(processedMessage);
+              new Notice("Copied to clipboard");
+            }}
+          >
+            <Copy className="w-4 h-4 text-muted-foreground hover:text-accent" />
+          </button>
+        )}
+      </div>
       <div className="flex justify-end gap-2">
         <button onClick={onClose}>Close</button>
         <button
@@ -104,8 +119,6 @@ export class InlineEditModal extends Modal {
       commandId: CommandId;
       promptMessage: ChatMessage;
       chainManager: ChainManager;
-      onInsert: (message: string) => void;
-      onReplace: (message: string) => void;
     }
   ) {
     super(app);
@@ -114,16 +127,15 @@ export class InlineEditModal extends Modal {
   onOpen() {
     const { contentEl } = this;
     this.root = createRoot(contentEl);
-    const { selectedText, commandId, promptMessage, chainManager, onInsert, onReplace } =
-      this.configs;
+    const { selectedText, commandId, promptMessage, chainManager } = this.configs;
 
     const handleInsert = (message: string) => {
-      onInsert(message);
+      insertIntoEditor(message);
       this.close();
     };
 
     const handleReplace = (message: string) => {
-      onReplace(message);
+      insertIntoEditor(message, true);
       this.close();
     };
 

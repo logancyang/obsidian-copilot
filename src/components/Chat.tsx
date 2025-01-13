@@ -3,15 +3,7 @@ import { ChainType } from "@/chainFactory";
 import { updateChatMemory } from "@/chatUtils";
 import ChatInput from "@/components/chat-components/ChatInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
-import { InlineEditModal } from "@/components/modals/InlineEditModal";
-import {
-  ABORT_REASON,
-  COMMAND_IDS,
-  CommandId,
-  EVENT_NAMES,
-  LOADING_MESSAGES,
-  USER_SENDER,
-} from "@/constants";
+import { ABORT_REASON, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
 import { ContextProcessor } from "@/contextProcessor";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
@@ -22,32 +14,9 @@ import { Mention } from "@/mentions/Mention";
 import { useSettingsValue } from "@/settings/model";
 import SharedState, { ChatMessage, useSharedState } from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
-import {
-  createChangeToneSelectionPrompt,
-  createTranslateSelectionPrompt,
-  eli5SelectionPrompt,
-  emojifyPrompt,
-  fixGrammarSpellingSelectionPrompt,
-  formatDateTime,
-  glossaryPrompt,
-  removeUrlsFromSelectionPrompt,
-  rewriteLongerSelectionPrompt,
-  rewritePressReleaseSelectionPrompt,
-  rewriteShorterSelectionPrompt,
-  rewriteTweetSelectionPrompt,
-  rewriteTweetThreadSelectionPrompt,
-  simplifyPrompt,
-  summarizePrompt,
-  tocPrompt,
-} from "@/utils";
-import { MarkdownView, Notice, TFile } from "obsidian";
+import { formatDateTime } from "@/utils";
+import { Notice, TFile } from "obsidian";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
-
-interface CreateEffectOptions {
-  custom_temperature?: number;
-  isVisible?: boolean;
-  ignoreSystemMessage?: boolean;
-}
 
 interface ChatProps {
   sharedState: SharedState;
@@ -444,173 +413,44 @@ ${chatContent}`;
     [addMessage, chainManager.memoryManager, chatHistory, clearMessages, handleRegenerate]
   );
 
-  // Create an effect for each event type (Copilot command on selected text)
-  const createEffect = (
-    commandId: CommandId,
-    promptFn: (selectedText: string, eventSubtype?: string) => string | Promise<string>,
-    options: CreateEffectOptions = {}
-  ) => {
-    return () => {
-      const handleSelection = async (event: CustomEvent) => {
-        const messageWithPrompt = await promptFn(
-          event.detail.selectedText,
-          event.detail.eventSubtype
-        );
-
-        // Create a user message with the selected text
-        const promptMessage: ChatMessage = {
-          message: messageWithPrompt,
-          sender: USER_SENDER,
-          isVisible: false,
-          timestamp: formatDateTime(new Date()),
-        };
-
-        const selectedText = event.detail.selectedText.trim();
-
-        if (selectedText) {
-          new InlineEditModal(app, {
-            selectedText,
-            commandId,
-            promptMessage,
-            chainManager,
-            onInsert: (message: string) => {
-              handleInsertAtCursor(message);
-            },
-            onReplace: (message: string) => {
-              handleInsertAtCursor(message, true);
-            },
-          }).open();
-        }
-      };
-
-      eventTarget?.addEventListener(commandId, handleSelection);
-
-      // Cleanup function to remove the event listener when the component unmounts
-      return () => {
-        eventTarget?.removeEventListener(commandId, handleSelection);
-      };
-    };
-  };
-
+  // const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect(COMMAND_IDS.FIX_GRAMMAR, fixGrammarSpellingSelectionPrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect(COMMAND_IDS.SUMMARIZE, summarizePrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect(COMMAND_IDS.GENERATE_TOC, tocPrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect(COMMAND_IDS.GENERATE_GLOSSARY, glossaryPrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect(COMMAND_IDS.SIMPLIFY, simplifyPrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect(COMMAND_IDS.EMOJIFY, emojifyPrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect(COMMAND_IDS.REMOVE_URLS, removeUrlsFromSelectionPrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(
-    createEffect(COMMAND_IDS.REWRITE_TWEET, rewriteTweetSelectionPrompt, {
-      custom_temperature: 0.2,
-    }),
-    []
-  );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(
-    createEffect(COMMAND_IDS.REWRITE_TWEET_THREAD, rewriteTweetThreadSelectionPrompt, {
-      custom_temperature: 0.2,
-    }),
-    []
-  );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect(COMMAND_IDS.MAKE_SHORTER, rewriteShorterSelectionPrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect(COMMAND_IDS.MAKE_LONGER, rewriteLongerSelectionPrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect(COMMAND_IDS.ELI5, eli5SelectionPrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect(COMMAND_IDS.PRESS_RELEASE, rewritePressReleaseSelectionPrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(
-    createEffect(COMMAND_IDS.TRANSLATE, (selectedText, language) =>
-      createTranslateSelectionPrompt(language)(selectedText)
-    ),
-    []
-  );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(
-    createEffect(COMMAND_IDS.CHANGE_TONE, (selectedText, tone) =>
-      createChangeToneSelectionPrompt(tone)(selectedText)
-    ),
-    []
-  );
-
-  const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(
-    createEffect(
-      COMMAND_IDS.APPLY_CUSTOM_PROMPT,
-      async (selectedText, customPrompt) => {
-        if (!customPrompt) {
-          return selectedText;
-        }
-        return await customPromptProcessor.processCustomPrompt(
-          customPrompt,
-          selectedText,
-          app.workspace.getActiveFile() as TFile | undefined
-        );
-      },
-      { isVisible: settings.debug, ignoreSystemMessage: true, custom_temperature: 0.1 }
-    ),
-    []
-  );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(
-    createEffect(
-      COMMAND_IDS.APPLY_ADHOC_PROMPT,
-      async (selectedText, customPrompt) => {
-        if (!customPrompt) {
-          return selectedText;
-        }
-        return await customPromptProcessor.processCustomPrompt(
-          customPrompt,
-          selectedText,
-          app.workspace.getActiveFile() as TFile | undefined
-        );
-      },
-      { isVisible: settings.debug, ignoreSystemMessage: true, custom_temperature: 0.1 }
-    ),
-    []
-  );
-
-  const handleInsertAtCursor = useCallback(
-    async (message: string, replace: boolean = false) => {
-      let leaf = app.workspace.getMostRecentLeaf();
-      if (!leaf) {
-        new Notice("No active leaf found.");
-        return;
-      }
-
-      if (!(leaf.view instanceof MarkdownView)) {
-        leaf = app.workspace.getLeaf(false);
-        await leaf.setViewState({ type: "markdown", state: leaf.view.getState() });
-      }
-
-      if (!(leaf.view instanceof MarkdownView)) {
-        new Notice("Failed to open a markdown view.");
-        return;
-      }
-
-      const editor = leaf.view.editor;
-      const cursorFrom = editor.getCursor("from");
-      const cursorTo = editor.getCursor("to");
-      if (replace) {
-        editor.replaceRange(message, cursorFrom, cursorTo);
-      } else {
-        editor.replaceRange(message, cursorTo);
-      }
-      new Notice("Message inserted into the active note.");
-    },
-    [app.workspace]
-  );
+  // TODO: Fix them
+  // useEffect(
+  //   createEffect(
+  //     COMMAND_IDS.APPLY_CUSTOM_PROMPT,
+  //     async (selectedText, customPrompt) => {
+  //       if (!customPrompt) {
+  //         return selectedText;
+  //       }
+  //       return await customPromptProcessor.processCustomPrompt(
+  //         customPrompt,
+  //         selectedText,
+  //         app.workspace.getActiveFile() as TFile | undefined
+  //       );
+  //     },
+  //     { isVisible: settings.debug, ignoreSystemMessage: true, custom_temperature: 0.1 }
+  //   ),
+  //   []
+  // );
+  // // eslint-disable-next-line react-hooks/exhaustive-deps
+  // useEffect(
+  //   createEffect(
+  //     COMMAND_IDS.APPLY_ADHOC_PROMPT,
+  //     async (selectedText, customPrompt) => {
+  //       if (!customPrompt) {
+  //         return selectedText;
+  //       }
+  //       return await customPromptProcessor.processCustomPrompt(
+  //         customPrompt,
+  //         selectedText,
+  //         app.workspace.getActiveFile() as TFile | undefined
+  //       );
+  //     },
+  //     { isVisible: settings.debug, ignoreSystemMessage: true, custom_temperature: 0.1 }
+  //   ),
+  //   []
+  // );
 
   // Expose handleSaveAsNote to parent
   useEffect(() => {
@@ -644,7 +484,6 @@ ${chatContent}`;
         loading={loading}
         loadingMessage={loadingMessage}
         app={app}
-        onInsertAtCursor={handleInsertAtCursor}
         onRegenerate={handleRegenerate}
         onEdit={handleEdit}
         onDelete={handleDelete}
