@@ -235,7 +235,7 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
 
           <SettingItem
             type="select"
-            title="Default Embedding Model"
+            title="Embedding Model"
             description="Select the Embedding model to use"
             value={settings.embeddingModelKey}
             onChange={handleSetDefaultEmbeddingModel}
