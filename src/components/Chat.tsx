@@ -3,7 +3,15 @@ import { ChainType } from "@/chainFactory";
 import { updateChatMemory } from "@/chatUtils";
 import ChatInput from "@/components/chat-components/ChatInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
-import { ABORT_REASON, AI_SENDER, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
+import { InlineEditModal } from "@/components/modals/InlineEditModal";
+import {
+  ABORT_REASON,
+  COMMAND_IDS,
+  CommandId,
+  EVENT_NAMES,
+  LOADING_MESSAGES,
+  USER_SENDER,
+} from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
 import { ContextProcessor } from "@/contextProcessor";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
@@ -436,123 +444,100 @@ ${chatContent}`;
     [addMessage, chainManager.memoryManager, chatHistory, clearMessages, handleRegenerate]
   );
 
-  useEffect(() => {
-    async function handleSelection(event: CustomEvent) {
-      const wordCount = event.detail.selectedText.split(" ").length;
-      const tokenCount = await chainManager.chatModelManager.countTokens(event.detail.selectedText);
-      const tokenCountMessage: ChatMessage = {
-        sender: AI_SENDER,
-        message: `The selected text contains ${wordCount} words and ${tokenCount} tokens.`,
-        isVisible: true,
-        timestamp: formatDateTime(new Date()),
-      };
-      addMessage(tokenCountMessage);
-    }
-
-    eventTarget?.addEventListener("countTokensSelection", handleSelection);
-
-    // Cleanup function to remove the event listener when the component unmounts
-    return () => {
-      eventTarget?.removeEventListener("countTokensSelection", handleSelection);
-    };
-  }, [addMessage, chainManager.chatModelManager, eventTarget]);
-
   // Create an effect for each event type (Copilot command on selected text)
   const createEffect = (
-    eventType: string,
+    commandId: CommandId,
     promptFn: (selectedText: string, eventSubtype?: string) => string | Promise<string>,
     options: CreateEffectOptions = {}
   ) => {
     return () => {
-      const {
-        isVisible = false,
-        ignoreSystemMessage = true, // Ignore system message by default for commands
-      } = options;
       const handleSelection = async (event: CustomEvent) => {
         const messageWithPrompt = await promptFn(
           event.detail.selectedText,
           event.detail.eventSubtype
         );
+
         // Create a user message with the selected text
         const promptMessage: ChatMessage = {
           message: messageWithPrompt,
           sender: USER_SENDER,
-          isVisible: isVisible,
+          isVisible: false,
           timestamp: formatDateTime(new Date()),
         };
 
-        if (isVisible) {
-          addMessage(promptMessage);
-        }
+        const selectedText = event.detail.selectedText.trim();
 
-        setLoading(true);
-        await getAIResponse(
-          promptMessage,
-          chainManager,
-          addMessage,
-          setCurrentAiMessage,
-          setAbortController,
-          {
-            debug: settings.debug,
-            ignoreSystemMessage,
-          }
-        );
-        setLoading(false);
+        if (selectedText) {
+          new InlineEditModal(app, {
+            selectedText,
+            commandId,
+            promptMessage,
+            chainManager,
+            onInsert: (message: string) => {
+              handleInsertAtCursor(message);
+            },
+            onReplace: (message: string) => {
+              handleInsertAtCursor(message, true);
+            },
+          }).open();
+        }
       };
 
-      eventTarget?.addEventListener(eventType, handleSelection);
+      eventTarget?.addEventListener(commandId, handleSelection);
 
       // Cleanup function to remove the event listener when the component unmounts
       return () => {
-        eventTarget?.removeEventListener(eventType, handleSelection);
+        eventTarget?.removeEventListener(commandId, handleSelection);
       };
     };
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("fixGrammarSpellingSelection", fixGrammarSpellingSelectionPrompt), []);
+  useEffect(createEffect(COMMAND_IDS.FIX_GRAMMAR, fixGrammarSpellingSelectionPrompt), []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("summarizeSelection", summarizePrompt), []);
+  useEffect(createEffect(COMMAND_IDS.SUMMARIZE, summarizePrompt), []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("tocSelection", tocPrompt), []);
+  useEffect(createEffect(COMMAND_IDS.GENERATE_TOC, tocPrompt), []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("glossarySelection", glossaryPrompt), []);
+  useEffect(createEffect(COMMAND_IDS.GENERATE_GLOSSARY, glossaryPrompt), []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("simplifySelection", simplifyPrompt), []);
+  useEffect(createEffect(COMMAND_IDS.SIMPLIFY, simplifyPrompt), []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("emojifySelection", emojifyPrompt), []);
+  useEffect(createEffect(COMMAND_IDS.EMOJIFY, emojifyPrompt), []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("removeUrlsFromSelection", removeUrlsFromSelectionPrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(
-    createEffect("rewriteTweetSelection", rewriteTweetSelectionPrompt, { custom_temperature: 0.2 }),
-    []
-  );
+  useEffect(createEffect(COMMAND_IDS.REMOVE_URLS, removeUrlsFromSelectionPrompt), []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(
-    createEffect("rewriteTweetThreadSelection", rewriteTweetThreadSelectionPrompt, {
+    createEffect(COMMAND_IDS.REWRITE_TWEET, rewriteTweetSelectionPrompt, {
       custom_temperature: 0.2,
     }),
     []
   );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("rewriteShorterSelection", rewriteShorterSelectionPrompt), []);
+  useEffect(
+    createEffect(COMMAND_IDS.REWRITE_TWEET_THREAD, rewriteTweetThreadSelectionPrompt, {
+      custom_temperature: 0.2,
+    }),
+    []
+  );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("rewriteLongerSelection", rewriteLongerSelectionPrompt), []);
+  useEffect(createEffect(COMMAND_IDS.MAKE_SHORTER, rewriteShorterSelectionPrompt), []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("eli5Selection", eli5SelectionPrompt), []);
+  useEffect(createEffect(COMMAND_IDS.MAKE_LONGER, rewriteLongerSelectionPrompt), []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("rewritePressReleaseSelection", rewritePressReleaseSelectionPrompt), []);
+  useEffect(createEffect(COMMAND_IDS.ELI5, eli5SelectionPrompt), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(createEffect(COMMAND_IDS.PRESS_RELEASE, rewritePressReleaseSelectionPrompt), []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(
-    createEffect("translateSelection", (selectedText, language) =>
+    createEffect(COMMAND_IDS.TRANSLATE, (selectedText, language) =>
       createTranslateSelectionPrompt(language)(selectedText)
     ),
     []
   );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(
-    createEffect("changeToneSelection", (selectedText, tone) =>
+    createEffect(COMMAND_IDS.CHANGE_TONE, (selectedText, tone) =>
       createChangeToneSelectionPrompt(tone)(selectedText)
     ),
     []
@@ -562,7 +547,7 @@ ${chatContent}`;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(
     createEffect(
-      "applyCustomPrompt",
+      COMMAND_IDS.APPLY_CUSTOM_PROMPT,
       async (selectedText, customPrompt) => {
         if (!customPrompt) {
           return selectedText;
@@ -580,7 +565,7 @@ ${chatContent}`;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(
     createEffect(
-      "applyAdhocPrompt",
+      COMMAND_IDS.APPLY_ADHOC_PROMPT,
       async (selectedText, customPrompt) => {
         if (!customPrompt) {
           return selectedText;
@@ -597,7 +582,7 @@ ${chatContent}`;
   );
 
   const handleInsertAtCursor = useCallback(
-    async (message: string) => {
+    async (message: string, replace: boolean = false) => {
       let leaf = app.workspace.getMostRecentLeaf();
       if (!leaf) {
         new Notice("No active leaf found.");
@@ -615,8 +600,13 @@ ${chatContent}`;
       }
 
       const editor = leaf.view.editor;
-      const cursor = editor.getCursor();
-      editor.replaceRange(message, cursor);
+      const cursorFrom = editor.getCursor("from");
+      const cursorTo = editor.getCursor("to");
+      if (replace) {
+        editor.replaceRange(message, cursorFrom, cursorTo);
+      } else {
+        editor.replaceRange(message, cursorTo);
+      }
       new Notice("Message inserted into the active note.");
     },
     [app.workspace]

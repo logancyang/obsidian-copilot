@@ -2,114 +2,140 @@ import { LanguageModal } from "@/components/modals/LanguageModal";
 import { ToneModal } from "@/components/modals/ToneModal";
 import CopilotPlugin from "@/main";
 import { Editor, Notice } from "obsidian";
-import { COMMAND_IDS } from "./constants";
+import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "./constants";
 import { getSettings } from "@/settings/model";
+import { DISABLEABLE_COMMANDS } from "./constants";
+
+export function isCommandEnabled(id: CommandId) {
+  const commandSettings = getSettings().enabledCommands[id];
+  return commandSettings?.enabled !== false;
+}
+
+export function addCommand(plugin: CopilotPlugin, id: CommandId, callback: () => void) {
+  if (isCommandEnabled(id)) {
+    plugin.addCommand({
+      id,
+      name: COMMAND_NAMES[id],
+      callback,
+    });
+  }
+}
+
+function addEditorCommand(
+  plugin: CopilotPlugin,
+  id: CommandId,
+  callback: (editor: Editor) => void
+) {
+  if (isCommandEnabled(id)) {
+    plugin.addCommand({
+      id,
+      name: COMMAND_NAMES[id],
+      editorCallback: callback,
+    });
+  }
+}
+
+export function addCheckCommand(
+  plugin: CopilotPlugin,
+  id: CommandId,
+  callback: (checking: boolean) => boolean | void
+) {
+  if (isCommandEnabled(id)) {
+    plugin.addCommand({
+      id,
+      name: COMMAND_NAMES[id],
+      checkCallback: callback,
+    });
+  }
+}
 
 export function registerBuiltInCommands(plugin: CopilotPlugin) {
   // Remove all built in commands first
-  Object.values(COMMAND_IDS).forEach((id) => {
+  DISABLEABLE_COMMANDS.forEach((id) => {
     // removeCommand is not available in TypeScript for some reasons
     // https://docs.obsidian.md/Reference/TypeScript+API/Plugin/removeCommand
     (plugin as any).removeCommand(id);
   });
 
-  const addCommandIfEnabled = (id: string, callback: (editor: Editor) => void) => {
-    const commandSettings = getSettings().enabledCommands[id];
-    if (commandSettings && commandSettings.enabled) {
-      plugin.addCommand({
-        id,
-        name: commandSettings.name,
-        editorCallback: callback,
-      });
-    }
-  };
-
-  addCommandIfEnabled(COMMAND_IDS.FIX_GRAMMAR, (editor) => {
-    plugin.processSelection(editor, "fixGrammarSpellingSelection");
+  addEditorCommand(plugin, COMMAND_IDS.FIX_GRAMMAR, (editor) => {
+    plugin.processSelection(editor, COMMAND_IDS.FIX_GRAMMAR);
   });
 
-  addCommandIfEnabled(COMMAND_IDS.SUMMARIZE, (editor) => {
-    plugin.processSelection(editor, "summarizeSelection");
+  addEditorCommand(plugin, COMMAND_IDS.SUMMARIZE, (editor) => {
+    plugin.processSelection(editor, COMMAND_IDS.SUMMARIZE);
   });
 
-  addCommandIfEnabled(COMMAND_IDS.GENERATE_TOC, (editor) => {
-    plugin.processSelection(editor, "tocSelection");
+  addEditorCommand(plugin, COMMAND_IDS.GENERATE_TOC, (editor) => {
+    plugin.processSelection(editor, COMMAND_IDS.GENERATE_TOC);
   });
 
-  addCommandIfEnabled(COMMAND_IDS.GENERATE_GLOSSARY, (editor) => {
-    plugin.processSelection(editor, "glossarySelection");
+  addEditorCommand(plugin, COMMAND_IDS.GENERATE_GLOSSARY, (editor) => {
+    plugin.processSelection(editor, COMMAND_IDS.GENERATE_GLOSSARY);
   });
 
-  addCommandIfEnabled(COMMAND_IDS.SIMPLIFY, (editor) => {
-    plugin.processSelection(editor, "simplifySelection");
+  addEditorCommand(plugin, COMMAND_IDS.SIMPLIFY, (editor) => {
+    plugin.processSelection(editor, COMMAND_IDS.SIMPLIFY);
   });
 
-  addCommandIfEnabled(COMMAND_IDS.EMOJIFY, (editor) => {
-    plugin.processSelection(editor, "emojifySelection");
+  addEditorCommand(plugin, COMMAND_IDS.EMOJIFY, (editor) => {
+    plugin.processSelection(editor, COMMAND_IDS.EMOJIFY);
   });
 
-  addCommandIfEnabled(COMMAND_IDS.REMOVE_URLS, (editor) => {
-    plugin.processSelection(editor, "removeUrlsFromSelection");
+  addEditorCommand(plugin, COMMAND_IDS.REMOVE_URLS, (editor) => {
+    plugin.processSelection(editor, COMMAND_IDS.REMOVE_URLS);
   });
 
-  addCommandIfEnabled(COMMAND_IDS.REWRITE_TWEET, (editor) => {
-    plugin.processSelection(editor, "rewriteTweetSelection");
+  addEditorCommand(plugin, COMMAND_IDS.REWRITE_TWEET, (editor) => {
+    plugin.processSelection(editor, COMMAND_IDS.REWRITE_TWEET);
   });
 
-  addCommandIfEnabled(COMMAND_IDS.REWRITE_TWEET_THREAD, (editor) => {
-    plugin.processSelection(editor, "rewriteTweetThreadSelection");
+  addEditorCommand(plugin, COMMAND_IDS.REWRITE_TWEET_THREAD, (editor) => {
+    plugin.processSelection(editor, COMMAND_IDS.REWRITE_TWEET_THREAD);
   });
 
-  addCommandIfEnabled(COMMAND_IDS.MAKE_SHORTER, (editor) => {
-    plugin.processSelection(editor, "rewriteShorterSelection");
+  addEditorCommand(plugin, COMMAND_IDS.MAKE_SHORTER, (editor) => {
+    plugin.processSelection(editor, COMMAND_IDS.MAKE_SHORTER);
   });
 
-  addCommandIfEnabled(COMMAND_IDS.MAKE_LONGER, (editor) => {
-    plugin.processSelection(editor, "rewriteLongerSelection");
+  addEditorCommand(plugin, COMMAND_IDS.MAKE_LONGER, (editor) => {
+    plugin.processSelection(editor, COMMAND_IDS.MAKE_LONGER);
   });
 
-  addCommandIfEnabled(COMMAND_IDS.ELI5, (editor) => {
-    plugin.processSelection(editor, "eli5Selection");
+  addEditorCommand(plugin, COMMAND_IDS.ELI5, (editor) => {
+    plugin.processSelection(editor, COMMAND_IDS.ELI5);
   });
 
-  addCommandIfEnabled(COMMAND_IDS.PRESS_RELEASE, (editor) => {
-    plugin.processSelection(editor, "rewritePressReleaseSelection");
+  addEditorCommand(plugin, COMMAND_IDS.PRESS_RELEASE, (editor) => {
+    plugin.processSelection(editor, COMMAND_IDS.PRESS_RELEASE);
   });
 
-  addCommandIfEnabled(COMMAND_IDS.TRANSLATE, (editor) => {
+  addEditorCommand(plugin, COMMAND_IDS.TRANSLATE, (editor) => {
     new LanguageModal(plugin.app, (language) => {
       if (!language) {
         new Notice("Please select a language.");
         return;
       }
-      plugin.processSelection(editor, "translateSelection", language);
+      plugin.processSelection(editor, COMMAND_IDS.TRANSLATE, language);
     }).open();
   });
 
-  addCommandIfEnabled(COMMAND_IDS.CHANGE_TONE, (editor) => {
+  addEditorCommand(plugin, COMMAND_IDS.CHANGE_TONE, (editor) => {
     new ToneModal(plugin.app, (tone) => {
       if (!tone) {
         new Notice("Please select a tone.");
         return;
       }
-      plugin.processSelection(editor, "changeToneSelection", tone);
+      plugin.processSelection(editor, COMMAND_IDS.CHANGE_TONE, tone);
     }).open();
   });
 
-  plugin.addCommand({
-    id: COMMAND_IDS.COUNT_TOKENS,
-    name: "Count words and tokens in selection",
-    editorCallback: (editor: Editor) => {
-      plugin.processSelection(editor, "countTokensSelection");
-    },
+  addEditorCommand(plugin, COMMAND_IDS.COUNT_WORD_AND_TOKENS_SELECTION, async (editor: Editor) => {
+    const { wordCount, tokenCount } = await plugin.countSelectionWordsAndTokens(editor);
+    new Notice(`Selected text contains ${wordCount} words and ${tokenCount} tokens.`);
   });
 
-  plugin.addCommand({
-    id: COMMAND_IDS.COUNT_TOTAL_VAULT_TOKENS,
-    name: "Count total tokens in your vault",
-    callback: async () => {
-      const totalTokens = await plugin.countTotalTokens();
-      new Notice(`Total tokens in your vault: ${totalTokens}`);
-    },
+  addCommand(plugin, COMMAND_IDS.COUNT_TOTAL_VAULT_TOKENS, async () => {
+    const totalTokens = await plugin.countTotalTokens();
+    new Notice(`Total tokens in your vault: ${totalTokens}`);
   });
 }
