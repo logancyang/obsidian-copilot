@@ -11,6 +11,7 @@ import { getSystemPrompt } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { ToolManager } from "@/tools/toolManager";
 import {
+  err2String,
   extractChatHistory,
   extractUniqueTitlesFromDocs,
   extractYoutubeUrl,
@@ -94,9 +95,10 @@ abstract class BaseChainRunner implements ChainRunner {
     addMessage?: (message: ChatMessage) => void,
     updateCurrentAiMessage?: (message: string) => void
   ) {
-    if (debug) console.error("Error during LLM invocation:", error);
-    const errorData = error?.response?.data?.error || error;
-    const errorCode = errorData?.code || error;
+    const msg = err2String(error);
+    if (debug) console.error("Error during LLM invocation:", msg);
+    const errorData = error?.response?.data?.error || msg;
+    const errorCode = errorData?.code || msg;
     let errorMessage = "";
 
     // Check for specific error messages
@@ -113,8 +115,23 @@ abstract class BaseChainRunner implements ChainRunner {
 
     if (addMessage && updateCurrentAiMessage) {
       updateCurrentAiMessage("");
+
+      // remove langchain troubleshooting URL from error message
+      const ignoreEndIndex = errorMessage.search("Troubleshooting URL");
+      errorMessage = ignoreEndIndex !== -1 ? errorMessage.slice(0, ignoreEndIndex) : errorMessage;
+
+      // add more user guide for invalid API key
+      if (msg.search(/401|invalid|not valid/gi) !== -1) {
+        errorMessage =
+          "Something went wrong. Please check if you have set your API key." +
+          "\nPath: Settings > copilot plugin > Basic Tab > Set Keys" +
+          "\nError Details: " +
+          errorMessage;
+      }
+
       addMessage({
         message: errorMessage,
+        isErrorMessage: true,
         sender: AI_SENDER,
         isVisible: true,
         timestamp: formatDateTime(new Date()),

@@ -14,6 +14,7 @@ export interface ChatMessage {
     notes: TFile[];
     urls: string[];
   };
+  isErrorMessage?: boolean;
 }
 
 class SharedState {

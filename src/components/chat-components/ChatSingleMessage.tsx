@@ -207,7 +207,10 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                       {message.message}
                     </div>
                   ) : (
-                    <div ref={contentRef}></div>
+                    <div
+                      ref={contentRef}
+                      className={message.isErrorMessage ? "text-error" : ""}
+                    ></div>
                   )}
                 </div>
               );
@@ -244,7 +247,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         {message.message}
       </div>
     ) : (
-      <div ref={contentRef}></div>
+      <div ref={contentRef} className={message.isErrorMessage ? "text-error" : ""}></div>
     );
   };
 
