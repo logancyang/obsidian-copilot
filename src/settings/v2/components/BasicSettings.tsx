@@ -4,13 +4,14 @@ import { SettingItem } from "@/components/ui/setting-item";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, ExternalLink, HelpCircle, Key } from "lucide-react";
 import { useTab } from "@/contexts/TabContext";
-import { DEFAULT_OPEN_AREA } from "@/constants";
+import { COMMAND_NAMES, DEFAULT_OPEN_AREA, DISABLEABLE_COMMANDS } from "@/constants";
 import { ChainType } from "@/chainFactory";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { getProviderLabel } from "@/utils";
 import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
 import ApiKeyDialog from "./ApiKeyDialog";
 import { SettingSwitch } from "@/components/ui/setting-switch";
+import { isCommandEnabled } from "@/commands";
 
 const ChainType2Label: Record<ChainType, string> = {
   [ChainType.LLM_CHAIN]: "Chat",
@@ -336,21 +337,20 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
           >
             <div className="h-[50vh] sm:h-[400px] overflow-y-auto px-1 py-2">
               <div className="space-y-4">
-                {Object.entries(settings.enabledCommands).map(([command, commandInfo]) => (
+                {DISABLEABLE_COMMANDS.map((command) => (
                   <div
                     key={command}
                     className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 py-2 sm:py-0.5"
                   >
                     <div className="space-y-0.5 flex-1">
-                      <div className="text-sm font-medium">{commandInfo.name}</div>
+                      <div className="text-sm font-medium">{COMMAND_NAMES[command]}</div>
                     </div>
                     <SettingSwitch
-                      checked={commandInfo.enabled}
+                      checked={isCommandEnabled(command)}
                       onCheckedChange={(checked) => {
                         const newEnabledCommands = {
                           ...settings.enabledCommands,
                           [command]: {
-                            ...commandInfo,
                             enabled: checked,
                           },
                         };
