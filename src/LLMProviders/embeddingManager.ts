@@ -3,8 +3,8 @@ import { CustomModel } from "@/aiParams";
 import { BREVILABS_API_BASE_URL, EmbeddingModelProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { CustomError } from "@/error";
-import { getSettings, subscribeToSettingsChange } from "@/settings/model";
-import { safeFetch } from "@/utils";
+import { err2String, safeFetch } from "@/utils";
+import { getSettings, subscribeToSettingsChange, getModelKeyFromModel } from "@/settings/model";
 import { CohereEmbeddings } from "@langchain/cohere";
 import { Embeddings } from "@langchain/core/embeddings";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
@@ -100,7 +100,7 @@ export default class EmbeddingManager {
         const apiKey =
           model.apiKey || this.providerApiKeyMap[model.provider as EmbeddingModelProviders]();
 
-        const modelKey = `${model.name}|${model.provider}`;
+        const modelKey = getModelKeyFromModel(model);
         modelMap[modelKey] = {
           hasApiKey: Boolean(apiKey),
           EmbeddingConstructor: constructor,
@@ -126,7 +126,7 @@ export default class EmbeddingManager {
   // Get the custom model that matches the name and provider from the model key
   private getCustomModel(modelKey: string): CustomModel {
     return this.activeEmbeddingModels.filter((model) => {
-      const key = `${model.name}|${model.provider}`;
+      const key = getModelKeyFromModel(model);
       return modelKey === key;
     })[0];
   }
@@ -224,9 +224,12 @@ export default class EmbeddingManager {
       },
       [EmbeddingModelProviders.AZURE_OPENAI]: {
         azureOpenAIApiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
-        azureOpenAIApiInstanceName: settings.azureOpenAIApiInstanceName,
-        azureOpenAIApiDeploymentName: settings.azureOpenAIApiEmbeddingDeploymentName,
-        azureOpenAIApiVersion: settings.azureOpenAIApiVersion,
+        azureOpenAIApiInstanceName:
+          customModel.azureOpenAIApiInstanceName || settings.azureOpenAIApiInstanceName,
+        azureOpenAIApiDeploymentName:
+          customModel.azureOpenAIApiEmbeddingDeploymentName ||
+          settings.azureOpenAIApiEmbeddingDeploymentName,
+        azureOpenAIApiVersion: customModel.azureOpenAIApiVersion || settings.azureOpenAIApiVersion,
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -274,7 +277,7 @@ export default class EmbeddingManager {
       // First try without CORS
       await tryPing(false);
       return true;
-    } catch {
+    } catch (firstError) {
       console.log("First ping attempt failed, trying with CORS...");
       try {
         // Second try with CORS
@@ -284,8 +287,12 @@ export default class EmbeddingManager {
         );
         return true;
       } catch (error) {
-        console.error("Embedding model ping failed:", error);
-        throw error;
+        const msg =
+          "\nwithout CORS Error: " +
+          err2String(firstError) +
+          "\nwith CORS Error: " +
+          err2String(error);
+        throw new Error(msg);
       }
     }
   }

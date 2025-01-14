@@ -1,11 +1,17 @@
 import { ChainType, Document } from "@/chainFactory";
-import { NOMIC_EMBED_TEXT, USER_SENDER } from "@/constants";
+import {
+  NOMIC_EMBED_TEXT,
+  Provider,
+  ProviderInfo,
+  ProviderMetadata,
+  USER_SENDER,
+} from "@/constants";
 import { ChatMessage } from "@/sharedState";
 import { MemoryVariables } from "@langchain/core/memory";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { BaseChain, RetrievalQAChain } from "langchain/chains";
 import moment from "moment";
-import { TFile, Vault, parseYaml, requestUrl } from "obsidian";
+import { parseYaml, requestUrl, TFile, Vault } from "obsidian";
 import { CustomModel } from "./aiParams";
 
 export const getModelNameFromKey = (modelKey: string): string => {
@@ -642,4 +648,24 @@ export function findCustomModel(modelKey: string, activeModels: CustomModel[]): 
     throw new Error(`No model configuration found for: ${modelKey}`);
   }
   return model;
+}
+
+export function getProviderInfo(provider: string): ProviderMetadata {
+  const info = ProviderInfo[provider as Provider];
+  return {
+    ...info,
+    label: info.label || provider,
+  };
+}
+
+export function getProviderLabel(provider: string): string {
+  return ProviderInfo[provider as Provider]?.label || provider;
+}
+
+export function getProviderHost(provider: string): string {
+  return ProviderInfo[provider as Provider]?.host || "";
+}
+
+export function getProviderKeyManagementURL(provider: string): string {
+  return ProviderInfo[provider as Provider]?.keyManagementURL || "";
 }
