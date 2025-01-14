@@ -147,9 +147,9 @@ const Chat: React.FC<ChatProps> = ({
       });
     }
 
-    const notes = contextNotes || [];
+    const notes = [...(contextNotes || [])];
     const activeNote = app.workspace.getActiveFile();
-    if (includeActiveNote && activeNote) {
+    if (includeActiveNote && activeNote && !notes.some((note) => note.path === activeNote.path)) {
       notes.push(activeNote);
     }
 
