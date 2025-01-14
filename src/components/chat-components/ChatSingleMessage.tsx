@@ -5,6 +5,40 @@ import { ChatMessage } from "@/sharedState";
 import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+
+function MessageContext({ context }: { context: ChatMessage["context"] }) {
+  if (!context || (context.notes.length === 0 && context.urls.length === 0)) {
+    return null;
+  }
+
+  return (
+    <div className="flex gap-2 flex-wrap">
+      {context.notes.map((note) => (
+        <Tooltip key={note.path}>
+          <TooltipTrigger asChild>
+            <Badge variant="secondary">
+              <span className="max-w-40 truncate">{note.basename}</span>
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>{note.path}</TooltipContent>
+        </Tooltip>
+      ))}
+      {context.urls.map((url) => (
+        <Tooltip key={url}>
+          <TooltipTrigger asChild>
+            <Badge variant="secondary">
+              <span className="max-w-40 truncate">{url}</span>
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>{url}</TooltipContent>
+        </Tooltip>
+      ))}
+    </div>
+  );
+}
 
 interface ChatSingleMessageProps {
   message: ChatMessage;
@@ -216,10 +250,16 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   };
 
   return (
-    <div className="chat-message-container">
-      <div className={`message ${message.sender === USER_SENDER ? "user-message" : "bot-message"}`}>
-        <div className="message-icon">{message.sender === USER_SENDER ? <User /> : <Bot />}</div>
-        <div className="message-content-wrapper">
+    <div className="flex flex-col w-full mb-1">
+      <div
+        className={cn(
+          "flex rounded-md p-2 mx-2 gap-2",
+          message.sender === USER_SENDER && "bg-primary-alt"
+        )}
+      >
+        <div className="w-6 shrink-0">{message.sender === USER_SENDER ? <User /> : <Bot />}</div>
+        <div className="flex flex-col flex-grow max-w-full gap-2">
+          {!isEditing && <MessageContext context={message.context} />}
           <div className="message-content">{renderMessageContent()}</div>
 
           {!isStreaming && (

@@ -111,7 +111,15 @@ const Chat: React.FC<ChatProps> = ({
     );
   };
 
-  const handleSendMessage = async (toolCalls?: string[]) => {
+  const handleSendMessage = async ({
+    toolCalls,
+    urls,
+    contextNotes,
+  }: {
+    toolCalls?: string[];
+    urls?: string[];
+    contextNotes?: TFile[];
+  } = {}) => {
     if (!inputMessage && selectedImages.length === 0) return;
 
     const timestamp = formatDateTime(new Date());
@@ -139,6 +147,12 @@ const Chat: React.FC<ChatProps> = ({
       });
     }
 
+    const notes = [...(contextNotes || [])];
+    const activeNote = app.workspace.getActiveFile();
+    if (includeActiveNote && activeNote && !notes.some((note) => note.path === activeNote.path)) {
+      notes.push(activeNote);
+    }
+
     const userMessage: ChatMessage = {
       message: inputMessage || "Image message",
       originalMessage: inputMessage,
@@ -146,6 +160,10 @@ const Chat: React.FC<ChatProps> = ({
       isVisible: true,
       timestamp: timestamp,
       content: content,
+      context: {
+        notes,
+        urls: urls || [],
+      },
     };
 
     // Clear input and images
@@ -416,6 +434,7 @@ ${chatContent}`;
         if (newChatHistory[i].originalMessage === oldMessage) {
           newChatHistory[i].message = newMessage;
           newChatHistory[i].originalMessage = newMessage;
+          newChatHistory[i].context = { notes: [], urls: [] };
         }
       }
 
