@@ -12,7 +12,6 @@ interface ChatMessagesProps {
   loading?: boolean;
   loadingMessage?: string;
   app: App;
-  onInsertAtCursor: (message: string) => void;
   onRegenerate: (messageIndex: number) => void;
   onEdit: (messageIndex: number, newMessage: string) => void;
   onDelete: (messageIndex: number) => void;
@@ -27,7 +26,6 @@ const ChatMessages = memo(
     loading,
     loadingMessage,
     app,
-    onInsertAtCursor,
     onRegenerate,
     onEdit,
     onDelete,
@@ -103,9 +101,6 @@ const ChatMessages = memo(
                   message={message}
                   app={app}
                   isStreaming={false}
-                  onInsertAtCursor={() => {
-                    onInsertAtCursor(message.message);
-                  }}
                   onRegenerate={() => onRegenerate(index)}
                   onEdit={(newMessage) => onEdit(index, newMessage)}
                   onDelete={() => onDelete(index)}

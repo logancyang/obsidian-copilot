@@ -15,7 +15,7 @@ interface ChatButtonsProps {
   message: ChatMessage;
   onCopy: () => void;
   isCopied: boolean;
-  onInsertAtCursor?: () => void;
+  onInsertIntoEditor?: () => void;
   onRegenerate?: () => void;
   onEdit?: () => void;
   onDelete: () => void;
@@ -27,7 +27,7 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
   message,
   onCopy,
   isCopied,
-  onInsertAtCursor,
+  onInsertIntoEditor,
   onRegenerate,
   onEdit,
   onDelete,
@@ -56,7 +56,7 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
             </button>
           )}
           <button
-            onClick={onInsertAtCursor}
+            onClick={onInsertIntoEditor}
             className="clickable-icon"
             title="Insert to note at cursor"
           >

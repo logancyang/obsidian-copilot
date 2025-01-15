@@ -327,24 +327,130 @@ export enum DEFAULT_OPEN_AREA {
 }
 
 export const COMMAND_IDS = {
-  FIX_GRAMMAR: "fix-grammar-prompt",
-  SUMMARIZE: "summarize-prompt",
-  GENERATE_TOC: "generate-toc-prompt",
-  GENERATE_GLOSSARY: "generate-glossary-prompt",
-  SIMPLIFY: "simplify-prompt",
+  ADD_CUSTOM_PROMPT: "add-custom-prompt",
+  APPLY_ADHOC_PROMPT: "apply-adhoc-prompt",
+  APPLY_CUSTOM_PROMPT: "apply-custom-prompt",
+  CHANGE_TONE: "change-tone-prompt",
+  CLEAR_LOCAL_COPILOT_INDEX: "clear-local-copilot-index",
+  COUNT_WORD_AND_TOKENS_SELECTION: "count-word-and-tokens-selection",
+  COUNT_TOTAL_VAULT_TOKENS: "count-total-vault-tokens",
+  DELETE_CUSTOM_PROMPT: "delete-custom-prompt",
+  EDIT_CUSTOM_PROMPT: "edit-custom-prompt",
+  ELI5: "eli5-prompt",
   EMOJIFY: "emojify-prompt",
+  FIND_RELEVANT_NOTES: "find-relevant-notes",
+  FIX_GRAMMAR: "fix-grammar-prompt",
+  FORCE_REINDEX_VAULT_TO_COPILOT_INDEX: "force-reindex-vault-to-copilot-index",
+  GARBAGE_COLLECT_COPILOT_INDEX: "garbage-collect-copilot-index",
+  GENERATE_GLOSSARY: "generate-glossary-prompt",
+  GENERATE_TOC: "generate-toc-prompt",
+  INDEX_VAULT_TO_COPILOT_INDEX: "index-vault-to-copilot-index",
+  INSPECT_COPILOT_INDEX_BY_NOTE_PATHS: "copilot-inspect-index-by-note-paths",
+  LIST_INDEXED_FILES: "copilot-list-indexed-files",
+  LOAD_COPILOT_CHAT_CONVERSATION: "load-copilot-chat-conversation",
+  MAKE_LONGER: "make-longer-prompt",
+  MAKE_SHORTER: "make-shorter-prompt",
+  OPEN_COPILOT_CHAT_WINDOW: "chat-open-window",
+  PRESS_RELEASE: "press-release-prompt",
+  REMOVE_FILES_FROM_COPILOT_INDEX: "remove-files-from-copilot-index",
   REMOVE_URLS: "remove-urls-prompt",
   REWRITE_TWEET: "rewrite-tweet-prompt",
   REWRITE_TWEET_THREAD: "rewrite-tweet-thread-prompt",
-  MAKE_SHORTER: "make-shorter-prompt",
-  MAKE_LONGER: "make-longer-prompt",
-  ELI5: "eli5-prompt",
-  PRESS_RELEASE: "press-release-prompt",
+  SEARCH_ORAMA_DB: "copilot-search-orama-db",
+  SIMPLIFY: "simplify-prompt",
+  SUMMARIZE: "summarize-prompt",
+  TOGGLE_COPILOT_CHAT_WINDOW: "chat-toggle-window",
   TRANSLATE: "translate-selection-prompt",
-  CHANGE_TONE: "change-tone-prompt",
-  COUNT_TOKENS: "count-tokens",
-  COUNT_TOTAL_VAULT_TOKENS: "count-total-vault-tokens",
+} as const;
+
+export const COMMAND_NAMES: Record<CommandId, string> = {
+  [COMMAND_IDS.ADD_CUSTOM_PROMPT]: "Add custom prompt",
+  [COMMAND_IDS.APPLY_ADHOC_PROMPT]: "Apply ad-hoc custom prompt",
+  [COMMAND_IDS.APPLY_CUSTOM_PROMPT]: "Apply custom prompt",
+  [COMMAND_IDS.CHANGE_TONE]: "Change tone of selection",
+  [COMMAND_IDS.CLEAR_LOCAL_COPILOT_INDEX]: "Clear local Copilot index",
+  [COMMAND_IDS.COUNT_TOTAL_VAULT_TOKENS]: "Count total tokens in your vault",
+  [COMMAND_IDS.COUNT_WORD_AND_TOKENS_SELECTION]: "Count words and tokens in selection",
+  [COMMAND_IDS.DELETE_CUSTOM_PROMPT]: "Delete custom prompt",
+  [COMMAND_IDS.EDIT_CUSTOM_PROMPT]: "Edit custom prompt",
+  [COMMAND_IDS.ELI5]: "Explain selection like I'm 5",
+  [COMMAND_IDS.EMOJIFY]: "Emojify selection",
+  [COMMAND_IDS.FIND_RELEVANT_NOTES]: "Find relevant notes",
+  [COMMAND_IDS.FIX_GRAMMAR]: "Fix grammar and spelling of selection",
+  [COMMAND_IDS.FORCE_REINDEX_VAULT_TO_COPILOT_INDEX]: "Force reindex vault",
+  [COMMAND_IDS.GARBAGE_COLLECT_COPILOT_INDEX]:
+    "Garbage collect Copilot index (remove files that no longer exist in vault)",
+  [COMMAND_IDS.GENERATE_GLOSSARY]: "Generate glossary for selection",
+  [COMMAND_IDS.GENERATE_TOC]: "Generate table of contents for selection",
+  [COMMAND_IDS.INDEX_VAULT_TO_COPILOT_INDEX]: "Index (refresh) vault",
+  [COMMAND_IDS.INSPECT_COPILOT_INDEX_BY_NOTE_PATHS]: "Inspect Copilot index by note paths (debug)",
+  [COMMAND_IDS.LIST_INDEXED_FILES]: "List all indexed files (debug)",
+  [COMMAND_IDS.LOAD_COPILOT_CHAT_CONVERSATION]: "Load Copilot chat conversation",
+  [COMMAND_IDS.MAKE_LONGER]: "Make selection longer",
+  [COMMAND_IDS.MAKE_SHORTER]: "Make selection shorter",
+  [COMMAND_IDS.OPEN_COPILOT_CHAT_WINDOW]: "Open Copilot Chat Window",
+  [COMMAND_IDS.PRESS_RELEASE]: "Rewrite selection to a press release",
+  [COMMAND_IDS.REMOVE_FILES_FROM_COPILOT_INDEX]: "Remove files from Copilot index (debug)",
+  [COMMAND_IDS.REMOVE_URLS]: "Remove URLs from selection",
+  [COMMAND_IDS.REWRITE_TWEET]: "Rewrite selection to a tweet",
+  [COMMAND_IDS.REWRITE_TWEET_THREAD]: "Rewrite selection to a tweet thread",
+  [COMMAND_IDS.SEARCH_ORAMA_DB]: "Search OramaDB (debug)",
+  [COMMAND_IDS.SIMPLIFY]: "Simplify selection",
+  [COMMAND_IDS.SUMMARIZE]: "Summarize selection",
+  [COMMAND_IDS.TOGGLE_COPILOT_CHAT_WINDOW]: "Toggle Copilot Chat Window",
+  [COMMAND_IDS.TRANSLATE]: "Translate selection",
 };
+
+export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];
+
+// Commands that can be disabled by the user in settings.
+export const DISABLEABLE_COMMANDS = [
+  COMMAND_IDS.FIX_GRAMMAR,
+  COMMAND_IDS.SUMMARIZE,
+  COMMAND_IDS.GENERATE_TOC,
+  COMMAND_IDS.GENERATE_GLOSSARY,
+  COMMAND_IDS.SIMPLIFY,
+  COMMAND_IDS.EMOJIFY,
+  COMMAND_IDS.REMOVE_URLS,
+  COMMAND_IDS.REWRITE_TWEET,
+  COMMAND_IDS.REWRITE_TWEET_THREAD,
+  COMMAND_IDS.MAKE_SHORTER,
+  COMMAND_IDS.MAKE_LONGER,
+  COMMAND_IDS.ELI5,
+  COMMAND_IDS.PRESS_RELEASE,
+  COMMAND_IDS.TRANSLATE,
+  COMMAND_IDS.CHANGE_TONE,
+];
+
+// Commands to show in the context menu
+export const CONTEXT_MENU_COMMANDS = [
+  COMMAND_IDS.SUMMARIZE,
+  COMMAND_IDS.FIX_GRAMMAR,
+  COMMAND_IDS.SIMPLIFY,
+  COMMAND_IDS.EMOJIFY,
+  COMMAND_IDS.MAKE_LONGER,
+  COMMAND_IDS.MAKE_SHORTER,
+  COMMAND_IDS.TRANSLATE,
+];
+
+// Commands that process the selection
+export const PROCESS_SELECTION_COMMANDS = [
+  COMMAND_IDS.FIX_GRAMMAR,
+  COMMAND_IDS.SUMMARIZE,
+  COMMAND_IDS.GENERATE_TOC,
+  COMMAND_IDS.GENERATE_GLOSSARY,
+  COMMAND_IDS.SIMPLIFY,
+  COMMAND_IDS.EMOJIFY,
+  COMMAND_IDS.REMOVE_URLS,
+  COMMAND_IDS.REWRITE_TWEET,
+  COMMAND_IDS.REWRITE_TWEET_THREAD,
+  COMMAND_IDS.MAKE_SHORTER,
+  COMMAND_IDS.MAKE_LONGER,
+  COMMAND_IDS.ELI5,
+  COMMAND_IDS.PRESS_RELEASE,
+  COMMAND_IDS.TRANSLATE,
+  COMMAND_IDS.CHANGE_TONE,
+];
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
   plusLicenseKey: "",
@@ -393,68 +499,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   showSuggestedPrompts: true,
   showRelevantNotes: true,
   numPartitions: 1,
-  enabledCommands: {
-    [COMMAND_IDS.FIX_GRAMMAR]: {
-      enabled: true,
-      name: "Fix grammar and spelling of selection",
-    },
-    [COMMAND_IDS.SUMMARIZE]: {
-      enabled: true,
-      name: "Summarize selection",
-    },
-    [COMMAND_IDS.GENERATE_TOC]: {
-      enabled: true,
-      name: "Generate table of contents for selection",
-    },
-    [COMMAND_IDS.GENERATE_GLOSSARY]: {
-      enabled: true,
-      name: "Generate glossary for selection",
-    },
-    [COMMAND_IDS.SIMPLIFY]: {
-      enabled: true,
-      name: "Simplify selection",
-    },
-    [COMMAND_IDS.EMOJIFY]: {
-      enabled: true,
-      name: "Emojify selection",
-    },
-    [COMMAND_IDS.REMOVE_URLS]: {
-      enabled: true,
-      name: "Remove URLs from selection",
-    },
-    [COMMAND_IDS.REWRITE_TWEET]: {
-      enabled: true,
-      name: "Rewrite selection to a tweet",
-    },
-    [COMMAND_IDS.REWRITE_TWEET_THREAD]: {
-      enabled: true,
-      name: "Rewrite selection to a tweet thread",
-    },
-    [COMMAND_IDS.MAKE_SHORTER]: {
-      enabled: true,
-      name: "Make selection shorter",
-    },
-    [COMMAND_IDS.MAKE_LONGER]: {
-      enabled: true,
-      name: "Make selection longer",
-    },
-    [COMMAND_IDS.ELI5]: {
-      enabled: true,
-      name: "Explain selection like I'm 5",
-    },
-    [COMMAND_IDS.PRESS_RELEASE]: {
-      enabled: true,
-      name: "Rewrite selection to a press release",
-    },
-    [COMMAND_IDS.TRANSLATE]: {
-      enabled: true,
-      name: "Translate selection",
-    },
-    [COMMAND_IDS.CHANGE_TONE]: {
-      enabled: true,
-      name: "Change tone of selection",
-    },
-  },
+  enabledCommands: {},
   promptUsageTimestamps: {},
 };
 
