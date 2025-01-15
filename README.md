@@ -176,3 +176,59 @@ If you share my vision, please consider [sponsoring this project](https://github
 Please also help spread the word by sharing about the Copilot for Obsidian Plugin on Twitter/X, Reddit, or any other social media platform you use.
 
 You can find me on Twitter/X [@logancyang](https://twitter.com/logancyang).
+
+## Troubleshooting
+
+### Common Validation Errors and Solutions
+
+#### Error: "OpenAI API key is required."
+
+**Solution:** Ensure that you have provided a valid OpenAI API key in the settings.
+
+#### Error: "Azure OpenAI API key is required."
+
+**Solution:** Ensure that you have provided a valid Azure OpenAI API key in the settings.
+
+#### Error: "Azure OpenAI API instance name is required."
+
+**Solution:** Ensure that you have provided a valid Azure OpenAI API instance name in the settings.
+
+#### Error: "Azure OpenAI API deployment name is required."
+
+**Solution:** Ensure that you have provided a valid Azure OpenAI API deployment name in the settings.
+
+#### Error: "Azure OpenAI API version is required."
+
+**Solution:** Ensure that you have provided a valid Azure OpenAI API version in the settings.
+
+#### Error: "Anthropic API key is required."
+
+**Solution:** Ensure that you have provided a valid Anthropic API key in the settings.
+
+#### Error: "Cohere AI API key is required."
+
+**Solution:** Ensure that you have provided a valid Cohere AI API key in the settings.
+
+#### Error: "Google API key is required."
+
+**Solution:** Ensure that you have provided a valid Google API key in the settings.
+
+#### Error: "OpenRouter AI API key is required."
+
+**Solution:** Ensure that you have provided a valid OpenRouter AI API key in the settings.
+
+#### Error: "Groq API key is required."
+
+**Solution:** Ensure that you have provided a valid Groq API key in the settings.
+
+#### Error: "Ollama API key is required."
+
+**Solution:** Ensure that you have provided a valid Ollama API key in the settings.
+
+#### Error: "LM Studio API key is required."
+
+**Solution:** Ensure that you have provided a valid LM Studio API key in the settings.
+
+#### Error: "OpenAI Format API key is required."
+
+**Solution:** Ensure that you have provided a valid OpenAI Format API key in the settings.
