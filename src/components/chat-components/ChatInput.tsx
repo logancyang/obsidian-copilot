@@ -17,6 +17,9 @@ import { App, Platform, TFile } from "obsidian";
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import ChatControls from "./ChatControls";
 import { TooltipActionButton } from "./TooltipActionButton";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -80,6 +83,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const [currentActiveNote, setCurrentActiveNote] = useState<TFile | null>(
       app.workspace.getActiveFile()
     );
+    const [enableEnter, setEnableEnter] = useState(true);
     const settings = useSettingsValue();
 
     useImperativeHandle(ref, () => ({
@@ -218,8 +222,9 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       const lines = value.split("\n");
       const currentLineIndex = value.substring(0, selectionStart).split("\n").length - 1;
 
+      const cmdOrCtrl = Platform.isMacOS ? e.metaKey : e.ctrlKey;
       // Check for Cmd+Shift+Enter (Mac) or Ctrl+Shift+Enter (Windows)
-      if (e.key === "Enter" && e.shiftKey && (Platform.isMacOS ? e.metaKey : e.ctrlKey)) {
+      if (enableEnter && e.key === "Enter" && e.shiftKey && cmdOrCtrl) {
         e.preventDefault();
         e.stopPropagation();
 
@@ -229,7 +234,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         return;
       }
 
-      if (e.key === "Enter" && !e.shiftKey) {
+      if (enableEnter && e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         onSendMessage(false);
         setHistoryIndex(-1);
@@ -352,7 +357,11 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     }, [app.workspace]);
 
     return (
-      <div className="chat-input-container" ref={containerRef}>
+      <div
+        className="flex flex-col w-full bg-primary p-1 gap-0.5 border border-solid border-border rounded-md shadow-sm focus-within:border-border-focus focus-within:shadow-md transition-[box-shadow,border-color] duration-100 ease-in-out"
+        ref={containerRef}
+        onClick={() => textAreaRef.current?.focus()}
+      >
         <ChatControls
           onNewChat={onNewChat}
           onSaveAsNote={onSaveAsNote}
@@ -369,16 +378,16 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         />
 
         {selectedImages.length > 0 && (
-          <div className="selected-images">
+          <div className="flex flex-wrap gap-2 p-2 bg-secondary rounded mb-2">
             {selectedImages.map((file, index) => (
-              <div key={index} className="image-preview-container">
+              <div key={index} className="relative w-20 h-20">
                 <img
                   src={URL.createObjectURL(file)}
                   alt={file.name}
-                  className="selected-image-preview"
+                  className="w-full h-full object-cover rounded border border-solid border-border"
                 />
                 <button
-                  className="remove-image-button"
+                  className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-modifier-error text-white border-none cursor-pointer flex items-center justify-center text-sm p-0 leading-none hover:bg-modifier-error-hover"
                   onClick={() => setSelectedImages((prev) => prev.filter((_, i) => i !== index))}
                   title="Remove image"
                 >
@@ -389,9 +398,9 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           </div>
         )}
 
-        <textarea
+        <Textarea
           ref={textAreaRef}
-          className="chat-input-textarea"
+          className="w-full max-h-[440px] resize-none overflow-y-auto px-3 py-0.5 rounded border-none shadow-none text-normal text-sm focus:outline-none focus:ring-0 focus-visible:ring-0 focus:ring-offset-0 focus-visible:ring-offset-0 placeholder:text-muted placeholder:opacity-50"
           placeholder={
             "Ask anything. [[ for notes. / for custom prompts. " +
             (currentChain === ChainType.COPILOT_PLUS_CHAIN ? "@ for tools." : "")
@@ -433,9 +442,9 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                   new AddImageModal(app, onAddImage).open();
                 }}
                 Icon={
-                  <div className="button-content">
-                    <span>image</span>
-                    <Image className="icon-scaler" />
+                  <div className="flex items-center">
+                    <span className="text-[10px]">image</span>
+                    <Image className="w-[18px] h-[18px]" />
                   </div>
                 }
               >
@@ -457,25 +466,31 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
             {currentChain === "copilot_plus" && (
               <button onClick={() => onSendMessage(true)} className="submit-button vault">
-                <div className="button-content">
-                  {Platform.isMacOS ? (
-                    <>
+                <div className="flex items-center">
+                  <>
+                    {Platform.isMacOS ? (
                       <Command size={12} />
-                      <ArrowBigUp size={16} />
-                      <CornerDownLeft size={16} />
-                    </>
-                  ) : (
-                    <>
-                      <span>Ctrl</span>
-                      <ArrowBigUp size={16} />
-                      <CornerDownLeft size={16} />
-                    </>
-                  )}
-                  <span>vault</span>
+                    ) : (
+                      <span className="text-[10px]">Ctrl</span>
+                    )}
+                    <ArrowBigUp size={16} />
+                    <CornerDownLeft size={16} />
+                  </>
+                  <span className="text-[10px]">vault</span>
                 </div>
               </button>
             )}
           </div>
+        </div>
+        <div className="flex items-center justify-end">
+          <Label className="flex items-center gap-1">
+            <Checkbox
+              className="border-border"
+              checked={enableEnter}
+              onCheckedChange={(checked: boolean) => setEnableEnter(checked)}
+            />
+            <span className="text-muted text-[10px]">Enter to Send</span>
+          </Label>
         </div>
       </div>
     );
