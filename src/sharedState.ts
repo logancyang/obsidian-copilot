@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { FormattedDateTime } from "./utils";
+import { TFile } from "obsidian";
 
 export interface ChatMessage {
   message: string;
@@ -9,6 +10,10 @@ export interface ChatMessage {
   isVisible: boolean;
   sources?: { title: string; score: number }[];
   content?: any[];
+  context?: {
+    notes: TFile[];
+    urls: string[];
+  };
 }
 
 class SharedState {

@@ -3,7 +3,7 @@ import { ChainType } from "@/chainFactory";
 import { updateChatMemory } from "@/chatUtils";
 import ChatInput from "@/components/chat-components/ChatInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
-import { ABORT_REASON, AI_SENDER, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
+import { ABORT_REASON, COMMAND_IDS, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
 import { ContextProcessor } from "@/contextProcessor";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
@@ -11,35 +11,12 @@ import { getAIResponse } from "@/langchainStream";
 import ChainManager from "@/LLMProviders/chainManager";
 import CopilotPlugin from "@/main";
 import { Mention } from "@/mentions/Mention";
-import { useSettingsValue } from "@/settings/model";
+import { getSettings, useSettingsValue } from "@/settings/model";
 import SharedState, { ChatMessage, useSharedState } from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
-import {
-  createChangeToneSelectionPrompt,
-  createTranslateSelectionPrompt,
-  eli5SelectionPrompt,
-  emojifyPrompt,
-  fixGrammarSpellingSelectionPrompt,
-  formatDateTime,
-  glossaryPrompt,
-  removeUrlsFromSelectionPrompt,
-  rewriteLongerSelectionPrompt,
-  rewritePressReleaseSelectionPrompt,
-  rewriteShorterSelectionPrompt,
-  rewriteTweetSelectionPrompt,
-  rewriteTweetThreadSelectionPrompt,
-  simplifyPrompt,
-  summarizePrompt,
-  tocPrompt,
-} from "@/utils";
-import { MarkdownView, Notice, TFile } from "obsidian";
+import { formatDateTime } from "@/utils";
+import { Notice, TFile } from "obsidian";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
-
-interface CreateEffectOptions {
-  custom_temperature?: number;
-  isVisible?: boolean;
-  ignoreSystemMessage?: boolean;
-}
 
 interface ChatProps {
   sharedState: SharedState;
@@ -111,7 +88,15 @@ const Chat: React.FC<ChatProps> = ({
     );
   };
 
-  const handleSendMessage = async (toolCalls?: string[]) => {
+  const handleSendMessage = async ({
+    toolCalls,
+    urls,
+    contextNotes,
+  }: {
+    toolCalls?: string[];
+    urls?: string[];
+    contextNotes?: TFile[];
+  } = {}) => {
     if (!inputMessage && selectedImages.length === 0) return;
 
     const timestamp = formatDateTime(new Date());
@@ -139,6 +124,12 @@ const Chat: React.FC<ChatProps> = ({
       });
     }
 
+    const notes = [...(contextNotes || [])];
+    const activeNote = app.workspace.getActiveFile();
+    if (includeActiveNote && activeNote && !notes.some((note) => note.path === activeNote.path)) {
+      notes.push(activeNote);
+    }
+
     const userMessage: ChatMessage = {
       message: inputMessage || "Image message",
       originalMessage: inputMessage,
@@ -146,6 +137,10 @@ const Chat: React.FC<ChatProps> = ({
       isVisible: true,
       timestamp: timestamp,
       content: content,
+      context: {
+        notes,
+        urls: urls || [],
+      },
     };
 
     // Clear input and images
@@ -416,6 +411,7 @@ ${chatContent}`;
         if (newChatHistory[i].originalMessage === oldMessage) {
           newChatHistory[i].message = newMessage;
           newChatHistory[i].originalMessage = newMessage;
+          newChatHistory[i].context = { notes: [], urls: [] };
         }
       }
 
@@ -436,38 +432,12 @@ ${chatContent}`;
     [addMessage, chainManager.memoryManager, chatHistory, clearMessages, handleRegenerate]
   );
 
-  useEffect(() => {
-    async function handleSelection(event: CustomEvent) {
-      const wordCount = event.detail.selectedText.split(" ").length;
-      const tokenCount = await chainManager.chatModelManager.countTokens(event.detail.selectedText);
-      const tokenCountMessage: ChatMessage = {
-        sender: AI_SENDER,
-        message: `The selected text contains ${wordCount} words and ${tokenCount} tokens.`,
-        isVisible: true,
-        timestamp: formatDateTime(new Date()),
-      };
-      addMessage(tokenCountMessage);
-    }
-
-    eventTarget?.addEventListener("countTokensSelection", handleSelection);
-
-    // Cleanup function to remove the event listener when the component unmounts
-    return () => {
-      eventTarget?.removeEventListener("countTokensSelection", handleSelection);
-    };
-  }, [addMessage, chainManager.chatModelManager, eventTarget]);
-
-  // Create an effect for each event type (Copilot command on selected text)
   const createEffect = (
     eventType: string,
-    promptFn: (selectedText: string, eventSubtype?: string) => string | Promise<string>,
-    options: CreateEffectOptions = {}
+    promptFn: (selectedText: string, eventSubtype?: string) => string | Promise<string>
   ) => {
     return () => {
-      const {
-        isVisible = false,
-        ignoreSystemMessage = true, // Ignore system message by default for commands
-      } = options;
+      const debug = getSettings().debug;
       const handleSelection = async (event: CustomEvent) => {
         const messageWithPrompt = await promptFn(
           event.detail.selectedText,
@@ -477,11 +447,11 @@ ${chatContent}`;
         const promptMessage: ChatMessage = {
           message: messageWithPrompt,
           sender: USER_SENDER,
-          isVisible: isVisible,
+          isVisible: debug,
           timestamp: formatDateTime(new Date()),
         };
 
-        if (isVisible) {
+        if (debug) {
           addMessage(promptMessage);
         }
 
@@ -493,8 +463,8 @@ ${chatContent}`;
           setCurrentAiMessage,
           setAbortController,
           {
-            debug: settings.debug,
-            ignoreSystemMessage,
+            debug,
+            ignoreSystemMessage: true,
           }
         );
         setLoading(false);
@@ -509,117 +479,34 @@ ${chatContent}`;
     };
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("fixGrammarSpellingSelection", fixGrammarSpellingSelectionPrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("summarizeSelection", summarizePrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("tocSelection", tocPrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("glossarySelection", glossaryPrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("simplifySelection", simplifyPrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("emojifySelection", emojifyPrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("removeUrlsFromSelection", removeUrlsFromSelectionPrompt), []);
+  const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(
-    createEffect("rewriteTweetSelection", rewriteTweetSelectionPrompt, { custom_temperature: 0.2 }),
-    []
-  );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(
-    createEffect("rewriteTweetThreadSelection", rewriteTweetThreadSelectionPrompt, {
-      custom_temperature: 0.2,
+    createEffect(COMMAND_IDS.APPLY_CUSTOM_PROMPT, async (selectedText, customPrompt) => {
+      if (!customPrompt) {
+        return selectedText;
+      }
+      return await customPromptProcessor.processCustomPrompt(
+        customPrompt,
+        selectedText,
+        app.workspace.getActiveFile() ?? undefined
+      );
     }),
     []
   );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("rewriteShorterSelection", rewriteShorterSelectionPrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("rewriteLongerSelection", rewriteLongerSelectionPrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("eli5Selection", eli5SelectionPrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(createEffect("rewritePressReleaseSelection", rewritePressReleaseSelectionPrompt), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(
-    createEffect("translateSelection", (selectedText, language) =>
-      createTranslateSelectionPrompt(language)(selectedText)
-    ),
-    []
-  );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(
-    createEffect("changeToneSelection", (selectedText, tone) =>
-      createChangeToneSelectionPrompt(tone)(selectedText)
-    ),
-    []
-  );
-
-  const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(
-    createEffect(
-      "applyCustomPrompt",
-      async (selectedText, customPrompt) => {
-        if (!customPrompt) {
-          return selectedText;
-        }
-        return await customPromptProcessor.processCustomPrompt(
-          customPrompt,
-          selectedText,
-          app.workspace.getActiveFile() as TFile | undefined
-        );
-      },
-      { isVisible: settings.debug, ignoreSystemMessage: true, custom_temperature: 0.1 }
-    ),
-    []
-  );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(
-    createEffect(
-      "applyAdhocPrompt",
-      async (selectedText, customPrompt) => {
-        if (!customPrompt) {
-          return selectedText;
-        }
-        return await customPromptProcessor.processCustomPrompt(
-          customPrompt,
-          selectedText,
-          app.workspace.getActiveFile() as TFile | undefined
-        );
-      },
-      { isVisible: settings.debug, ignoreSystemMessage: true, custom_temperature: 0.1 }
-    ),
-    []
-  );
-
-  const handleInsertAtCursor = useCallback(
-    async (message: string) => {
-      let leaf = app.workspace.getMostRecentLeaf();
-      if (!leaf) {
-        new Notice("No active leaf found.");
-        return;
+    createEffect(COMMAND_IDS.APPLY_ADHOC_PROMPT, async (selectedText, customPrompt) => {
+      if (!customPrompt) {
+        return selectedText;
       }
-
-      if (!(leaf.view instanceof MarkdownView)) {
-        leaf = app.workspace.getLeaf(false);
-        await leaf.setViewState({ type: "markdown", state: leaf.view.getState() });
-      }
-
-      if (!(leaf.view instanceof MarkdownView)) {
-        new Notice("Failed to open a markdown view.");
-        return;
-      }
-
-      const editor = leaf.view.editor;
-      const cursor = editor.getCursor();
-      editor.replaceRange(message, cursor);
-      new Notice("Message inserted into the active note.");
-    },
-    [app.workspace]
+      return await customPromptProcessor.processCustomPrompt(
+        customPrompt,
+        selectedText,
+        app.workspace.getActiveFile() as TFile | undefined
+      );
+    }),
+    []
   );
 
   // Expose handleSaveAsNote to parent
@@ -654,7 +541,6 @@ ${chatContent}`;
         loading={loading}
         loadingMessage={loadingMessage}
         app={app}
-        onInsertAtCursor={handleInsertAtCursor}
         onRegenerate={handleRegenerate}
         onEdit={handleEdit}
         onDelete={handleDelete}

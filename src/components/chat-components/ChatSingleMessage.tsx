@@ -2,15 +2,49 @@ import { ChatButtons } from "@/components/chat-components/ChatButtons";
 import { SourcesModal } from "@/components/modals/SourcesModal";
 import { USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/sharedState";
+import { insertIntoEditor } from "@/utils";
 import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer } from "obsidian";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+
+function MessageContext({ context }: { context: ChatMessage["context"] }) {
+  if (!context || (context.notes.length === 0 && context.urls.length === 0)) {
+    return null;
+  }
+
+  return (
+    <div className="flex gap-2 flex-wrap">
+      {context.notes.map((note) => (
+        <Tooltip key={note.path}>
+          <TooltipTrigger asChild>
+            <Badge variant="secondary">
+              <span className="max-w-40 truncate">{note.basename}</span>
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>{note.path}</TooltipContent>
+        </Tooltip>
+      ))}
+      {context.urls.map((url) => (
+        <Tooltip key={url}>
+          <TooltipTrigger asChild>
+            <Badge variant="secondary">
+              <span className="max-w-40 truncate">{url}</span>
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>{url}</TooltipContent>
+        </Tooltip>
+      ))}
+    </div>
+  );
+}
 
 interface ChatSingleMessageProps {
   message: ChatMessage;
   app: App;
   isStreaming: boolean;
-  onInsertAtCursor?: () => void;
   onRegenerate?: () => void;
   onEdit?: (newMessage: string) => void;
   onDelete: () => void;
@@ -20,7 +54,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   message,
   app,
   isStreaming,
-  onInsertAtCursor,
   onRegenerate,
   onEdit,
   onDelete,
@@ -46,36 +79,39 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     });
   };
 
-  const preprocess = (content: string): string => {
-    // Process LaTeX
-    const latexProcessed = content
-      .replace(/\\\[\s*/g, "$$")
-      .replace(/\s*\\\]/g, "$$")
-      .replace(/\\\(\s*/g, "$")
-      .replace(/\s*\\\)/g, "$");
+  const preprocess = useCallback(
+    (content: string): string => {
+      // Process LaTeX
+      const latexProcessed = content
+        .replace(/\\\[\s*/g, "$$")
+        .replace(/\s*\\\]/g, "$$")
+        .replace(/\\\(\s*/g, "$")
+        .replace(/\s*\\\)/g, "$");
 
-    // Process images
-    const activeFile = app.workspace.getActiveFile();
-    const sourcePath = activeFile ? activeFile.path : "";
+      // Process images
+      const activeFile = app.workspace.getActiveFile();
+      const sourcePath = activeFile ? activeFile.path : "";
 
-    const imageProcessed = latexProcessed.replace(/!\[\[(.*?)\]\]/g, (match, imageName) => {
-      const imageFile = app.metadataCache.getFirstLinkpathDest(imageName, sourcePath);
-      if (imageFile) {
-        const imageUrl = app.vault.getResourcePath(imageFile);
-        return `![](${imageUrl})`;
-      }
-      return match;
-    });
+      const imageProcessed = latexProcessed.replace(/!\[\[(.*?)\]\]/g, (match, imageName) => {
+        const imageFile = app.metadataCache.getFirstLinkpathDest(imageName, sourcePath);
+        if (imageFile) {
+          const imageUrl = app.vault.getResourcePath(imageFile);
+          return `![](${imageUrl})`;
+        }
+        return match;
+      });
 
-    // Process note links to obsidian:// URLs
-    const noteProcessed = imageProcessed.replace(/\[\[(.*?)\]\]/g, (match, noteName) => {
-      const encodedNoteName = encodeURIComponent(noteName);
-      const vaultName = app.vault.getName();
-      return `[${noteName}](obsidian://open?vault=${vaultName}&file=${encodedNoteName})`;
-    });
+      // Process note links to obsidian:// URLs
+      const noteProcessed = imageProcessed.replace(/\[\[(.*?)\]\]/g, (match, noteName) => {
+        const encodedNoteName = encodeURIComponent(noteName);
+        const vaultName = app.vault.getName();
+        return `[${noteName}](obsidian://open?vault=${vaultName}&file=${encodedNoteName})`;
+      });
 
-    return noteProcessed;
-  };
+      return noteProcessed;
+    },
+    [app]
+  );
 
   useEffect(() => {
     if (contentRef.current && message.sender !== USER_SENDER) {
@@ -105,7 +141,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         componentRef.current = null;
       }
     };
-  }, [message, app, componentRef, isStreaming]);
+  }, [message, app, componentRef, isStreaming, preprocess]);
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
@@ -213,10 +249,16 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   };
 
   return (
-    <div className="chat-message-container">
-      <div className={`message ${message.sender === USER_SENDER ? "user-message" : "bot-message"}`}>
-        <div className="message-icon">{message.sender === USER_SENDER ? <User /> : <Bot />}</div>
-        <div className="message-content-wrapper">
+    <div className="flex flex-col w-full mb-1">
+      <div
+        className={cn(
+          "flex rounded-md p-2 mx-2 gap-2",
+          message.sender === USER_SENDER && "bg-primary-alt"
+        )}
+      >
+        <div className="w-6 shrink-0">{message.sender === USER_SENDER ? <User /> : <Bot />}</div>
+        <div className="flex flex-col flex-grow max-w-full gap-2">
+          {!isEditing && <MessageContext context={message.context} />}
           <div className="message-content">{renderMessageContent()}</div>
 
           {!isStreaming && (
@@ -226,7 +268,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                 message={message}
                 onCopy={copyToClipboard}
                 isCopied={isCopied}
-                onInsertAtCursor={onInsertAtCursor}
+                onInsertIntoEditor={() => insertIntoEditor(message.message)}
                 onRegenerate={onRegenerate}
                 onEdit={handleEdit}
                 onDelete={onDelete}

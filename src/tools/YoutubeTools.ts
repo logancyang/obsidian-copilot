@@ -3,9 +3,9 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
 const simpleYoutubeTranscriptionTool = tool(
-  async ({ url, brevilabsClient }: { url: string; brevilabsClient: BrevilabsClient }) => {
+  async ({ url }: { url: string }) => {
     try {
-      const response = await brevilabsClient.youtube4llm(url);
+      const response = await BrevilabsClient.getInstance().youtube4llm(url);
 
       // Check if transcript is empty
       if (!response.response.transcript) {

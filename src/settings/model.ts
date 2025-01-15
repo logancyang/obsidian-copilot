@@ -50,7 +50,7 @@ export interface CopilotSettings {
   qaExclusions: string;
   qaInclusions: string;
   groqApiKey: string;
-  enabledCommands: Record<string, { enabled: boolean; name: string }>;
+  enabledCommands: Record<string, { enabled: boolean }>;
   activeModels: Array<CustomModel>;
   activeEmbeddingModels: Array<CustomModel>;
   promptUsageTimestamps: Record<string, number>;
@@ -180,6 +180,14 @@ function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotS
   return settings;
 }
 
+/**
+ * Get a unique model key from a CustomModel instance
+ * Format: modelName|provider
+ */
+export function getModelKeyFromModel(model: CustomModel): string {
+  return `${model.name}|${model.provider}`;
+}
+
 function mergeActiveModels(
   existingActiveModels: CustomModel[],
   builtInModels: CustomModel[]
@@ -187,18 +195,17 @@ function mergeActiveModels(
   const modelMap = new Map<string, CustomModel>();
 
   // Create a unique key for each model, it's model (name + provider)
-  const getModelKey = (model: CustomModel) => `${model.name}|${model.provider}`;
 
   // Add core models to the map
   builtInModels
     .filter((model) => model.core)
     .forEach((model) => {
-      modelMap.set(getModelKey(model), { ...model, core: true });
+      modelMap.set(getModelKeyFromModel(model), { ...model, core: true });
     });
 
   // Add or update existing models in the map
   existingActiveModels.forEach((model) => {
-    const key = getModelKey(model);
+    const key = getModelKeyFromModel(model);
     const existingModel = modelMap.get(key);
     if (existingModel) {
       // If it's a built-in model, preserve the built-in status

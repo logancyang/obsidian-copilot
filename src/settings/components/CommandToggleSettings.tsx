@@ -1,9 +1,11 @@
 import React, { useState } from "react";
 import { ToggleComponent } from "./SettingBlocks";
+import { COMMAND_NAMES, DISABLEABLE_COMMANDS } from "@/constants";
+import { isCommandEnabled } from "@/commands";
 
 interface CommandToggleSettingsProps {
-  enabledCommands: Record<string, { enabled: boolean; name: string }>;
-  setEnabledCommands: (enabledCommands: Record<string, { enabled: boolean; name: string }>) => void;
+  enabledCommands: Record<string, { enabled: boolean }>;
+  setEnabledCommands: (enabledCommands: Record<string, { enabled: boolean }>) => void;
 }
 
 const CommandToggleSettings: React.FC<CommandToggleSettingsProps> = ({
@@ -26,11 +28,12 @@ const CommandToggleSettings: React.FC<CommandToggleSettingsProps> = ({
       </h2>
       {isExpanded && (
         <div>
-          {Object.entries(enabledCommands).map(([commandId, { enabled, name }]) => (
+          {DISABLEABLE_COMMANDS.map((commandId) => (
             <ToggleComponent
               key={commandId}
-              name={`${name}`}
-              value={enabled}
+              name={COMMAND_NAMES[commandId]}
+              // Default to true if the command is not in the enabledCommands object
+              value={isCommandEnabled(commandId)}
               onChange={(value) => toggleCommand(commandId, value)}
             />
           ))}

@@ -1,11 +1,17 @@
 import { ChainType, Document } from "@/chainFactory";
-import { NOMIC_EMBED_TEXT, USER_SENDER } from "@/constants";
+import {
+  NOMIC_EMBED_TEXT,
+  Provider,
+  ProviderInfo,
+  ProviderMetadata,
+  USER_SENDER,
+} from "@/constants";
 import { ChatMessage } from "@/sharedState";
 import { MemoryVariables } from "@langchain/core/memory";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { BaseChain, RetrievalQAChain } from "langchain/chains";
 import moment from "moment";
-import { TFile, Vault, parseYaml, requestUrl } from "obsidian";
+import { MarkdownView, Notice, TFile, Vault, parseYaml, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
 
 export const getModelNameFromKey = (modelKey: string): string => {
@@ -329,116 +335,6 @@ export function getSendChatContextNotesPrompt(
   );
 }
 
-export function fixGrammarSpellingSelectionPrompt(selectedText: string): string {
-  return (
-    `Please fix the grammar and spelling of the following text and return it without any other changes:\n\n` +
-    `${selectedText}`
-  );
-}
-
-export function summarizePrompt(selectedText: string): string {
-  return (
-    `Summarize the following text into bullet points and return it without any other changes. Identify the input language, and return the summary in the same language. If the input is English, return the summary in English. Otherwise, return in the same language as the input. Return ONLY the summary, DO NOT return the name of the language:\n\n` +
-    `${selectedText}`
-  );
-}
-
-export function tocPrompt(selectedText: string): string {
-  return (
-    `Please generate a table of contents for the following text and return it without any other changes. Output in the same language as the source, do not output English if it is not English:\n\n` +
-    `${selectedText}`
-  );
-}
-
-export function glossaryPrompt(selectedText: string): string {
-  return (
-    `Please generate a glossary for the following text and return it without any other changes. Output in the same language as the source, do not output English if it is not English:\n\n` +
-    `${selectedText}`
-  );
-}
-
-export function simplifyPrompt(selectedText: string): string {
-  return (
-    `Please simplify the following text so that a 6th-grader can understand. Output in the same language as the source, do not output English if it is not English:\n\n` +
-    `${selectedText}`
-  );
-}
-
-export function emojifyPrompt(selectedText: string): string {
-  return (
-    `Please insert emojis to the following content without changing the text.` +
-    `Insert at as many places as possible, but don't have any 2 emojis together. The original text must be returned.\n` +
-    `Content: ${selectedText}`
-  );
-}
-
-export function removeUrlsFromSelectionPrompt(selectedText: string): string {
-  return (
-    `Please remove all URLs from the following text and return it without any other changes:\n\n` +
-    `${selectedText}`
-  );
-}
-
-export function rewriteTweetSelectionPrompt(selectedText: string): string {
-  return `Please rewrite the following content to under 280 characters using simple sentences. Output in the same language as the source, do not output English if it is not English. Please follow the instruction strictly. Content:\n
-    + ${selectedText}`;
-}
-
-export function rewriteTweetThreadSelectionPrompt(selectedText: string): string {
-  return (
-    `Please follow the instructions closely step by step and rewrite the content to a thread. ` +
-    `1. Each paragraph must be under 240 characters. ` +
-    `2. The starting line is \`THREAD START\n\`, and the ending line is \`\nTHREAD END\`. ` +
-    `3. You must use \`\n\n---\n\n\` to separate each paragraph! Then return it without any other changes. ` +
-    `4. Make it as engaging as possible.` +
-    `5. Output in the same language as the source, do not output English if it is not English.\n The original content:\n\n` +
-    `${selectedText}`
-  );
-}
-
-export function rewriteShorterSelectionPrompt(selectedText: string): string {
-  return (
-    `Please rewrite the following text to make it half as long while keeping the meaning as much as possible. Output in the same language as the source, do not output English if it is not English:\n` +
-    `${selectedText}`
-  );
-}
-
-export function rewriteLongerSelectionPrompt(selectedText: string): string {
-  return (
-    `Please rewrite the following text to make it twice as long while keeping the meaning as much as possible. Output in the same language as the source, do not output English if it is not English:\n` +
-    `${selectedText}`
-  );
-}
-
-export function eli5SelectionPrompt(selectedText: string): string {
-  return (
-    `Please explain the following text like I'm 5 years old. Output in the same language as the source, do not output English if it is not English:\n\n` +
-    `${selectedText}`
-  );
-}
-
-export function rewritePressReleaseSelectionPrompt(selectedText: string): string {
-  return (
-    `Please rewrite the following text to make it sound like a press release. Output in the same language as the source, do not output English if it is not English:\n\n` +
-    `${selectedText}`
-  );
-}
-
-export function createTranslateSelectionPrompt(language?: string) {
-  return (selectedText: string): string => {
-    return `Please translate the following text to ${language}:\n\n` + `${selectedText}`;
-  };
-}
-
-export function createChangeToneSelectionPrompt(tone?: string) {
-  return (selectedText: string): string => {
-    return (
-      `Please change the tone of the following text to ${tone}. Identify the language first, then Output in the same language as the source, do not output English if it is not English:\n\n` +
-      `${selectedText}`
-    );
-  };
-}
-
 export function extractChatHistory(memoryVariables: MemoryVariables): [string, string][] {
   const chatHistory: [string, string][] = [];
   const { history } = memoryVariables;
@@ -642,4 +538,52 @@ export function findCustomModel(modelKey: string, activeModels: CustomModel[]): 
     throw new Error(`No model configuration found for: ${modelKey}`);
   }
   return model;
+}
+
+export function getProviderInfo(provider: string): ProviderMetadata {
+  const info = ProviderInfo[provider as Provider];
+  return {
+    ...info,
+    label: info.label || provider,
+  };
+}
+
+export function getProviderLabel(provider: string): string {
+  return ProviderInfo[provider as Provider]?.label || provider;
+}
+
+export function getProviderHost(provider: string): string {
+  return ProviderInfo[provider as Provider]?.host || "";
+}
+
+export function getProviderKeyManagementURL(provider: string): string {
+  return ProviderInfo[provider as Provider]?.keyManagementURL || "";
+}
+
+export async function insertIntoEditor(message: string, replace: boolean = false) {
+  let leaf = app.workspace.getMostRecentLeaf();
+  if (!leaf) {
+    new Notice("No active leaf found.");
+    return;
+  }
+
+  if (!(leaf.view instanceof MarkdownView)) {
+    leaf = app.workspace.getLeaf(false);
+    await leaf.setViewState({ type: "markdown", state: leaf.view.getState() });
+  }
+
+  if (!(leaf.view instanceof MarkdownView)) {
+    new Notice("Failed to open a markdown view.");
+    return;
+  }
+
+  const editor = leaf.view.editor;
+  const cursorFrom = editor.getCursor("from");
+  const cursorTo = editor.getCursor("to");
+  if (replace) {
+    editor.replaceRange(message, cursorFrom, cursorTo);
+  } else {
+    editor.replaceRange(message, cursorTo);
+  }
+  new Notice("Message inserted into the active note.");
 }

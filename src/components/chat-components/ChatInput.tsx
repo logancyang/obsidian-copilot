@@ -1,4 +1,4 @@
-import { CustomModel, useChainType, useModelKey } from "@/aiParams";
+import { useChainType, useModelKey } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { AddImageModal } from "@/components/modals/AddImageModal";
 import { ListPromptModal } from "@/components/modals/ListPromptModal";
@@ -7,7 +7,7 @@ import { ContextProcessor } from "@/contextProcessor";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
-import { useSettingsValue } from "@/settings/model";
+import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { getToolDescription } from "@/tools/toolManager";
 import { extractNoteTitles } from "@/utils";
@@ -21,7 +21,11 @@ import { TooltipActionButton } from "./TooltipActionButton";
 interface ChatInputProps {
   inputMessage: string;
   setInputMessage: (message: string) => void;
-  handleSendMessage: (toolCalls?: string[]) => void;
+  handleSendMessage: (metadata?: {
+    toolCalls?: string[];
+    urls?: string[];
+    contextNotes?: TFile[];
+  }) => void;
   isGenerating: boolean;
   onStopGenerating: () => void;
   app: App;
@@ -39,8 +43,6 @@ interface ChatInputProps {
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
   chatHistory: ChatMessage[];
 }
-
-const getModelKey = (model: CustomModel) => `${model.name}|${model.provider}`;
 
 const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
   (
@@ -86,52 +88,18 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       },
     }));
 
-    const debounce = <T extends (...args: any[]) => any>(
-      fn: T,
-      delay: number
-    ): ((...args: Parameters<T>) => void) => {
-      let timeoutId: NodeJS.Timeout;
-      return (...args: Parameters<T>) => {
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => fn(...args), delay);
-      };
+    const onSendMessage = (includeVault: boolean) => {
+      if (currentChain !== ChainType.COPILOT_PLUS_CHAIN) {
+        handleSendMessage();
+        return;
+      }
+
+      handleSendMessage({
+        toolCalls: includeVault ? ["@vault"] : [],
+        contextNotes,
+        urls: contextUrls,
+      });
     };
-
-    // Debounce the context update to prevent excessive re-renders
-    const debouncedUpdateContext = debounce(
-      async (
-        inputValue: string,
-        setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>,
-        currentContextNotes: TFile[],
-        app: App
-      ) => {
-        const noteTitles = extractNoteTitles(inputValue);
-
-        const notesToAdd = await Promise.all(
-          noteTitles.map(async (title) => {
-            const files = app.vault.getMarkdownFiles();
-            const file = files.find((file) => file.basename === title);
-            if (file) {
-              return Object.assign(file, { wasAddedViaReference: true }) as TFile & {
-                wasAddedViaReference: boolean;
-              };
-            }
-            return undefined;
-          })
-        );
-
-        const validNotes = notesToAdd.filter(
-          (note): note is TFile & { wasAddedViaReference: boolean } =>
-            note !== undefined &&
-            !currentContextNotes.some((existing) => existing.path === note.path)
-        );
-
-        if (validNotes.length > 0) {
-          setContextNotes((prev) => [...prev, ...validNotes]);
-        }
-      },
-      50
-    );
 
     const handleInputChange = async (event: React.ChangeEvent<HTMLTextAreaElement>) => {
       const inputValue = event.target.value;
@@ -149,9 +117,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         // Use Set to ensure uniqueness
         setContextUrls((prev) => Array.from(new Set([...prev, ...newUrls])));
       }
-
-      // Update context with debouncing
-      debouncedUpdateContext(inputValue, setContextNotes, contextNotes, app);
 
       // Handle other input triggers
       if (cursorPos >= 2 && inputValue.slice(cursorPos - 2, cursorPos) === "[[") {
@@ -184,9 +149,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           const after = inputMessage.slice(cursorPos - 1);
           const newInputMessage = `${before}[[${noteTitle}]]${after}`;
           setInputMessage(newInputMessage);
-
-          // Manually invoke debouncedUpdateContext
-          debouncedUpdateContext(newInputMessage, setContextNotes, contextNotes, app);
 
           const activeNote = app.workspace.getActiveFile();
           const noteFile = app.vault.getMarkdownFiles().find((file) => file.basename === noteTitle);
@@ -261,11 +223,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         e.preventDefault();
         e.stopPropagation();
 
-        if (currentChain === ChainType.COPILOT_PLUS_CHAIN) {
-          handleSendMessage(["@vault"]);
-        } else {
-          handleSendMessage();
-        }
+        onSendMessage(true);
         setHistoryIndex(-1);
         setTempInput("");
         return;
@@ -273,7 +231,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        handleSendMessage();
+        onSendMessage(false);
         setHistoryIndex(-1);
         setTempInput("");
       } else if (e.key === "ArrowUp") {
@@ -447,8 +405,9 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           <div className="chat-input-left">
             <DropdownMenu.Root open={isModelDropdownOpen} onOpenChange={setIsModelDropdownOpen}>
               <DropdownMenu.Trigger className="model-select-button">
-                {settings.activeModels.find((model) => getModelKey(model) === currentModelKey)
-                  ?.name || "Select Model"}
+                {settings.activeModels.find(
+                  (model) => getModelKeyFromModel(model) === currentModelKey
+                )?.name || "Select Model"}
                 <ChevronUp size={10} />
               </DropdownMenu.Trigger>
 
@@ -458,8 +417,8 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                     .filter((model) => model.enabled)
                     .map((model) => (
                       <DropdownMenu.Item
-                        key={getModelKey(model)}
-                        onSelect={() => setCurrentModelKey(getModelKey(model))}
+                        key={getModelKeyFromModel(model)}
+                        onSelect={() => setCurrentModelKey(getModelKeyFromModel(model))}
                       >
                         {model.name}
                       </DropdownMenu.Item>
@@ -491,13 +450,13 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                 <StopCircle />
               </button>
             )}
-            <button onClick={() => handleSendMessage()} className="submit-button">
+            <button onClick={() => onSendMessage(false)} className="submit-button">
               <CornerDownLeft size={16} />
               <span>chat</span>
             </button>
 
             {currentChain === "copilot_plus" && (
-              <button onClick={() => handleSendMessage(["@vault"])} className="submit-button vault">
+              <button onClick={() => onSendMessage(true)} className="submit-button vault">
                 <div className="button-content">
                   {Platform.isMacOS ? (
                     <>

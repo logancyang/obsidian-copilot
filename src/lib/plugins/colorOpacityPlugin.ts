@@ -55,14 +55,23 @@ const generateOpacityClasses =
 
 const processColorObject =
   (e: any, opacityUtilities: Record<string, any>) =>
-  (colorValue: string | ColorValue, baseName: string) => {
-    if (typeof colorValue === "string" && colorValue.startsWith("var(--")) {
-      generateOpacityClasses(e, opacityUtilities)(colorValue, baseName);
-    } else if (typeof colorValue === "object") {
-      Object.entries(colorValue).forEach(([variantKey, variantValue]) => {
-        if (typeof variantValue === "string" && variantValue.startsWith("var(--")) {
-          const fullColorName = variantKey === "DEFAULT" ? baseName : `${baseName}-${variantKey}`;
-          generateOpacityClasses(e, opacityUtilities)(variantValue, fullColorName);
+  (colorValue: string | ColorValue, baseName: string, parentPath: string[] = []) => {
+    const currentPath = [...parentPath, baseName];
+
+    if (typeof colorValue === "string") {
+      if (colorValue.startsWith("var(--")) {
+        if (colorValue.includes("-rgb")) {
+          return;
+        }
+        const colorName = currentPath.join("-");
+        generateOpacityClasses(e, opacityUtilities)(colorValue, colorName);
+      }
+    } else if (typeof colorValue === "object" && colorValue !== null) {
+      Object.entries(colorValue).forEach(([key, value]) => {
+        const nextBaseName = key === "DEFAULT" ? "" : key;
+        const nextPath = nextBaseName ? currentPath : currentPath.slice(0, -1);
+        if (value) {
+          processColorObject(e, opacityUtilities)(value, nextBaseName, nextPath);
         }
       });
     }
@@ -70,18 +79,30 @@ const processColorObject =
 
 /**
  * Tailwind plugin for adding color opacity support using color-mix
- * Supports nested color objects with variants like foreground
+ * Supports deeply nested color objects and variants
  *
- * eg: bg-primary/20 -> .bg-primary\/20 { background-color: color-mix(in srgb, var(--interactive-accent) 20%, transparent); }
+ * Examples:
+ * bg-primary/20 -> .bg-primary\/20 { background-color: color-mix(in srgb, var(--interactive-accent) 20%, transparent); }
+ * bg-modifier-error/50
+ * text-background-modifier-success/30
  */
 export const colorOpacityPlugin = plugin(function ({ addUtilities, theme, e }) {
   const opacityUtilities: Record<string, any> = {};
-  const colors = theme("colors") as Record<string, string | ColorValue>;
 
-  // Process all colors
-  Object.entries(colors).forEach(([colorName, colorValue]) => {
-    processColorObject(e, opacityUtilities)(colorValue, colorName);
-  });
+  // 处理所有颜色相关的主题配置
+  const processThemeColors = (themeKey: string, prefix?: string) => {
+    const colors = theme(themeKey) as Record<string, string | ColorValue>;
+    Object.entries(colors).forEach(([colorName, colorValue]) => {
+      const baseName = prefix ? `${prefix}-${colorName}` : colorName;
+      processColorObject(e, opacityUtilities)(colorValue, baseName);
+    });
+  };
+
+  // 处理所有颜色配置
+  processThemeColors("textColor", "");
+  processThemeColors("backgroundColor", "");
+  processThemeColors("borderColor", "");
+  processThemeColors("colors");
 
   addUtilities(opacityUtilities);
 });
