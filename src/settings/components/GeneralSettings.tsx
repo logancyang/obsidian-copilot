@@ -75,7 +75,7 @@ const GeneralSettings: React.FC = () => {
           >
             <option value={ChainType.LLM_CHAIN}>Chat</option>
             <option value={ChainType.VAULT_QA_CHAIN}>Vault QA (Basic)</option>
-            <option value={ChainType.COPILOT_PLUS_CHAIN}>Copilot Plus (Alpha)</option>
+            <option value={ChainType.COPILOT_PLUS_CHAIN}>Copilot Plus</option>
           </select>
         </div>
       </div>

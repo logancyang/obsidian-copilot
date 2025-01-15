@@ -1,22 +1,22 @@
-import React, { useState } from "react";
-import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
-import { SettingItem } from "@/components/ui/setting-item";
-import { Button } from "@/components/ui/button";
-import { ArrowRight, ExternalLink, HelpCircle, Key } from "lucide-react";
-import { useTab } from "@/contexts/TabContext";
-import { COMMAND_NAMES, DEFAULT_OPEN_AREA, DISABLEABLE_COMMANDS } from "@/constants";
 import { ChainType } from "@/chainFactory";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { getProviderLabel } from "@/utils";
-import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
-import ApiKeyDialog from "./ApiKeyDialog";
-import { SettingSwitch } from "@/components/ui/setting-switch";
 import { isCommandEnabled } from "@/commands";
+import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { SettingItem } from "@/components/ui/setting-item";
+import { SettingSwitch } from "@/components/ui/setting-switch";
+import { COMMAND_NAMES, DEFAULT_OPEN_AREA, DISABLEABLE_COMMANDS } from "@/constants";
+import { useTab } from "@/contexts/TabContext";
+import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
+import { getProviderLabel } from "@/utils";
+import { ArrowRight, ExternalLink, HelpCircle, Key } from "lucide-react";
+import React, { useState } from "react";
+import ApiKeyDialog from "./ApiKeyDialog";
 
 const ChainType2Label: Record<ChainType, string> = {
   [ChainType.LLM_CHAIN]: "Chat",
   [ChainType.VAULT_QA_CHAIN]: "Vault QA (Basic)",
-  [ChainType.COPILOT_PLUS_CHAIN]: "Copilot Plus (Alpha)",
+  [ChainType.COPILOT_PLUS_CHAIN]: "Copilot Plus",
 };
 
 interface BasicSettingsProps {
@@ -96,7 +96,8 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
                           Copilot Plus brings powerful AI agent capabilities to Obsidian.
                         </p>
                         <p className="text-xs text-muted">
-                          Alpha access is limited to sponsors and early supporters.
+                          Alpha access is limited to sponsors and early supporters at the moment.
+                          Officially launching in Jan 2025!
                         </p>
                       </div>
                       <div className="text-sm text-muted">
@@ -253,7 +254,67 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
           <SettingItem
             type="select"
             title="Default Mode"
-            description="Select the default chat mode"
+            description={
+              <div className="flex items-center gap-1.5">
+                <span className="leading-none">Select the default chat mode</span>
+                <Popover
+                  open={openPopoverIds.has("default-mode-help")}
+                  onOpenChange={(open) => {
+                    if (open) {
+                      handlePopoverOpen("default-mode-help");
+                    } else {
+                      handlePopoverClose("default-mode-help");
+                    }
+                  }}
+                >
+                  <PopoverTrigger asChild>
+                    <HelpCircle
+                      className="h-5 w-5 sm:h-4 sm:w-4 cursor-pointer text-muted hover:text-accent translate-y-[1px]"
+                      onMouseEnter={() => handlePopoverOpen("default-mode-help")}
+                      onMouseLeave={() => handlePopoverClose("default-mode-help")}
+                    />
+                  </PopoverTrigger>
+                  <PopoverContent
+                    container={modalContainer}
+                    className="w-[90vw] max-w-[400px] p-4 bg-primary border border-solid border-border shadow-sm"
+                    side="bottom"
+                    align="center"
+                    sideOffset={5}
+                    onMouseEnter={() => handlePopoverOpen("default-mode-help")}
+                    onMouseLeave={() => handlePopoverClose("default-mode-help")}
+                  >
+                    <div className="space-y-2">
+                      <div className="space-y-1">
+                        <ul className="space-y-2 text-xs text-muted">
+                          <li>
+                            <strong>Chat:</strong> Regular chat mode for general conversations and
+                            tasks. <i>Free to use with your own API key.</i>
+                          </li>
+                          <li>
+                            <strong>Vault QA (Basic):</strong> Ask questions about your vault
+                            content with semantic search. <i>Free to use with your own API key.</i>
+                          </li>
+                          <li>
+                            <strong>Copilot Plus:</strong> Covers all features of the 2 free modes,
+                            plus advanced paid features including chat context menu, advanced
+                            search, AI agents, and more. Check out{" "}
+                            <a
+                              href="https://obsidiancopilot.com"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-accent hover:text-accent-hover"
+                            >
+                              obsidiancopilot.com
+                            </a>{" "}
+                            for more details.
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            }
             value={settings.defaultChainType}
             onChange={(value) => updateSetting("defaultChainType", value as ChainType)}
             options={Object.entries(ChainType2Label).map(([key, value]) => ({
@@ -330,7 +391,7 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
           <SettingItem
             type="dialog"
             title="Command Settings"
-            description="Configure chat commands"
+            description="Enable or disable builtin Copilot commands"
             dialogTitle="Command Settings"
             dialogDescription="Enable or disable chat commands"
             trigger={<Button variant="outline">Manage Commands</Button>}
