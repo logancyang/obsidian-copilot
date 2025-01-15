@@ -1,13 +1,13 @@
+import { updateSetting, useSettingsValue } from "@/settings/model";
 import React from "react";
 import ApiSetting from "./ApiSetting";
-import { updateSetting, useSettingsValue } from "@/settings/model";
 
 const CopilotPlusSettings: React.FC = () => {
   const settings = useSettingsValue();
 
   return (
     <div>
-      <h2>Copilot Plus (Alpha)</h2>
+      <h2>Copilot Plus</h2>
       <p>
         Copilot Plus brings powerful AI agent capabilities to Obsidian. Alpha access is limited to
         sponsors and early supporters. Learn more at{" "}
