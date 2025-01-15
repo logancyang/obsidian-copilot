@@ -9,12 +9,11 @@ import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
 import { RemoveFromIndexModal } from "@/components/modals/RemoveFromIndexModal";
 import { ToneModal } from "@/components/modals/ToneModal";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
-import { CustomError } from "@/error";
 import CopilotPlugin from "@/main";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { getSettings } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
-import { formatDateTime } from "@/utils";
+import { formatDateTime, err2String } from "@/utils";
 import { Editor, Notice, TFile } from "obsidian";
 import {
   COMMAND_IDS,
@@ -229,8 +228,9 @@ export function registerBuiltInCommands(plugin: CopilotPlugin) {
         await promptProcessor.savePrompt(title, prompt);
         new Notice("Custom prompt saved successfully.");
       } catch (e) {
-        new Notice("Error saving custom prompt. Please check if the title already exists.");
-        console.error(e);
+        const msg = "An error occurred while saving the custom prompt: " + err2String(e);
+        console.error(msg);
+        throw new Error(msg);
       }
     }).open();
   });
@@ -318,12 +318,10 @@ export function registerBuiltInCommands(plugin: CopilotPlugin) {
                   await promptProcessor.updatePrompt(promptTitle, title, newPrompt);
                   new Notice(`Prompt "${title}" has been updated.`);
                 } catch (err) {
-                  console.error(err);
-                  if (err instanceof CustomError) {
-                    new Notice(err.message);
-                  } else {
-                    new Notice("An error occurred.");
-                  }
+                  const msg =
+                    "An error occurred while updating the custom prompt: " + err2String(err);
+                  console.error(msg);
+                  throw new Error(msg);
                 }
               },
               prompt.title,
