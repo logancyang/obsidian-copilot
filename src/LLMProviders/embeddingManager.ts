@@ -3,8 +3,8 @@ import { CustomModel } from "@/aiParams";
 import { BREVILABS_API_BASE_URL, EmbeddingModelProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { CustomError } from "@/error";
+import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { err2String, safeFetch } from "@/utils";
-import { getSettings, subscribeToSettingsChange, getModelKeyFromModel } from "@/settings/model";
 import { CohereEmbeddings } from "@langchain/cohere";
 import { Embeddings } from "@langchain/core/embeddings";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
@@ -199,7 +199,7 @@ export default class EmbeddingManager {
         apiKey: await getDecryptedKey(settings.plusLicenseKey),
         timeout: 10000,
         batchSize: 128,
-        dimensions: 512,
+        dimensions: 256,
         baseUrl: BREVILABS_API_BASE_URL + "/embeddings",
         configuration: {
           fetch: customModel.enableCors ? safeFetch : undefined,
