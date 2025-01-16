@@ -138,7 +138,7 @@ const ChatControls: React.FC<ChatControlsProps> = ({
               <DropdownMenu.Trigger className="chain-select-button">
                 {selectedChain === ChainType.LLM_CHAIN && "chat"}
                 {selectedChain === ChainType.VAULT_QA_CHAIN && "vault QA (basic)"}
-                {selectedChain === ChainType.COPILOT_PLUS_CHAIN && "copilot plus"}
+                {selectedChain === ChainType.COPILOT_PLUS_CHAIN && "copilot plus (beta)"}
                 <ChevronDown size={10} />
               </DropdownMenu.Trigger>
 
@@ -157,7 +157,7 @@ const ChatControls: React.FC<ChatControlsProps> = ({
                   <DropdownMenu.Item
                     onSelect={() => handleChainChange({ value: ChainType.COPILOT_PLUS_CHAIN })}
                   >
-                    copilot plus
+                    copilot plus (beta)
                   </DropdownMenu.Item>
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>

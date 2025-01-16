@@ -245,7 +245,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   };
 
   return (
-    <div className="flex flex-col w-full mb-1">
+    <div className="flex flex-col w-full my-1">
       <div
         className={cn(
           "flex rounded-md p-2 mx-2 gap-2",
