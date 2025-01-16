@@ -60,6 +60,7 @@ export interface CopilotSettings {
   showSuggestedPrompts: boolean;
   showRelevantNotes: boolean;
   numPartitions: number;
+  defaultConversationNoteName: string;
 }
 
 export const settingsStore = createStore();

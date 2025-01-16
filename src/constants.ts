@@ -502,6 +502,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   numPartitions: 1,
   enabledCommands: {},
   promptUsageTimestamps: {},
+  defaultConversationNoteName: "{$date}_{$time}__{$topic}",
 };
 
 export const EVENT_NAMES = {

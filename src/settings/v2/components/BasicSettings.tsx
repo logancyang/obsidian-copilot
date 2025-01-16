@@ -8,10 +8,12 @@ import { SettingSwitch } from "@/components/ui/setting-switch";
 import { COMMAND_NAMES, DEFAULT_OPEN_AREA, DISABLEABLE_COMMANDS } from "@/constants";
 import { useTab } from "@/contexts/TabContext";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
-import { getProviderLabel } from "@/utils";
-import { ArrowRight, ExternalLink, HelpCircle, Key } from "lucide-react";
+import { formatDateTime, getProviderLabel } from "@/utils";
+import { ArrowRight, ExternalLink, HelpCircle, Key, Loader2 } from "lucide-react";
 import React, { useState } from "react";
 import ApiKeyDialog from "./ApiKeyDialog";
+import { Input } from "@/components/ui/input";
+import { Notice } from "obsidian";
 
 const ChainType2Label: Record<ChainType, string> = {
   [ChainType.LLM_CHAIN]: "Chat",
@@ -28,6 +30,10 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
   const settings = useSettingsValue();
   const [openPopoverIds, setOpenPopoverIds] = useState<Set<string>>(new Set());
   const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
+  const [isChecking, setIsChecking] = useState(false);
+  const [conversationNoteName, setConversationNoteName] = useState(
+    settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}"
+  );
 
   const handleSetDefaultEmbeddingModel = async (modelKey: string) => {
     if (modelKey !== settings.embeddingModelKey) {
@@ -48,6 +54,53 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
       newSet.delete(id);
       return newSet;
     });
+  };
+
+  const applyCustomNoteFormat = () => {
+    setIsChecking(true);
+
+    try {
+      // Check required variables
+      const format = conversationNoteName || "{$date}_{$time}__{$topic}";
+      const requiredVars = ["{$date}", "{$time}", "{$topic}"];
+      const missingVars = requiredVars.filter((v) => !format.includes(v));
+
+      if (missingVars.length > 0) {
+        new Notice(`Error: Missing required variables: ${missingVars.join(", ")}`, 4000);
+        return;
+      }
+
+      // Check illegal characters (excluding variable placeholders)
+      const illegalChars = /[\\/:*?"<>|]/;
+      const formatWithoutVars = format
+        .replace(/\{\$date}/g, "")
+        .replace(/\{\$time}/g, "")
+        .replace(/\{\$topic}/g, "");
+
+      if (illegalChars.test(formatWithoutVars)) {
+        new Notice(`Error: Format contains illegal characters (\\/:*?"<>|)`, 4000);
+        return;
+      }
+
+      // Generate example filename
+      const { fileName: timestampFileName } = formatDateTime(new Date());
+      const firstTenWords = "test topic name";
+
+      // Create example filename
+      const customFileName = format
+        .replace("{$topic}", firstTenWords.slice(0, 100).replace(/\s+/g, "_"))
+        .replace("{$date}", timestampFileName.split("_")[0])
+        .replace("{$time}", timestampFileName.split("_")[1]);
+
+      // Save settings
+      updateSetting("defaultConversationNoteName", format);
+      setConversationNoteName(format);
+      new Notice(`Format applied successfully! Example: ${customFileName}`, 4000);
+    } catch (error) {
+      new Notice(`Error applying format: ${error.message}`, 4000);
+    } finally {
+      setIsChecking(false);
+    }
   };
 
   return (
@@ -361,6 +414,96 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
             onChange={(value) => updateSetting("defaultConversationTag", value)}
             placeholder="ai-conversations"
           />
+
+          <SettingItem
+            type="custom"
+            title="Conversation Filename Template"
+            description={
+              <div className="flex items-start gap-1.5 ">
+                <span className="leading-none">
+                  Customize the format of saved conversation note names.
+                </span>
+                <Popover
+                  open={openPopoverIds.has("note-format-help")}
+                  onOpenChange={(open) => {
+                    if (open) {
+                      handlePopoverOpen("note-format-help");
+                    } else {
+                      handlePopoverClose("note-format-help");
+                    }
+                  }}
+                >
+                  <PopoverTrigger asChild>
+                    <HelpCircle
+                      className="h-5 w-5 sm:h-4 sm:w-4 cursor-pointer text-muted hover:text-accent"
+                      onMouseEnter={() => handlePopoverOpen("note-format-help")}
+                      onMouseLeave={() => handlePopoverClose("note-format-help")}
+                    />
+                  </PopoverTrigger>
+                  <PopoverContent
+                    container={modalContainer}
+                    className="w-[90vw] max-w-[400px] p-4 bg-primary border border-solid border-border shadow-sm"
+                    side="bottom"
+                    align="center"
+                    sideOffset={5}
+                    onMouseEnter={() => handlePopoverOpen("note-format-help")}
+                    onMouseLeave={() => handlePopoverClose("note-format-help")}
+                  >
+                    <div className="space-y-2">
+                      <div className="text-[10px] font-medium text-warning p-2 rounded-md">
+                        Note: All the following variables must be included in the template.
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-sm font-medium">Available variables:</div>
+                        <ul className="space-y-2 text-xs text-muted">
+                          <li>
+                            <strong>{"{$date}"}</strong>: Date in YYYYMMDD format
+                          </li>
+                          <li>
+                            <strong>{"{$time}"}</strong>: Time in HHMMSS format
+                          </li>
+                          <li>
+                            <strong>{"{$topic}"}</strong>: Chat conversation topic
+                          </li>
+                        </ul>
+                        <i className="text-[10px] mt-2">
+                          Example: {"{$date}_{$time}__{$topic}"} →
+                          20250114_153232__polish_this_article_[[Readme]]
+                        </i>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            }
+          >
+            <div className="flex items-center gap-1.5 w-[320px]">
+              <Input
+                type="text"
+                className={`transition-all duration-200 flex-grow min-w-[80px] ${isChecking ? "w-[80px]" : "w-[120px]"}`}
+                placeholder="{$date}_{$time}__{$topic}"
+                value={conversationNoteName}
+                onChange={(e) => setConversationNoteName(e.target.value)}
+                disabled={isChecking}
+              />
+
+              <Button
+                onClick={() => applyCustomNoteFormat()}
+                disabled={isChecking}
+                variant="outline"
+                size="sm"
+              >
+                {isChecking ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Apply
+                  </>
+                ) : (
+                  "Apply"
+                )}
+              </Button>
+            </div>
+          </SettingItem>
 
           {/* Feature Toggle Group */}
           <SettingItem
