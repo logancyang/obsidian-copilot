@@ -1,12 +1,5 @@
-import {
-  CustomModel,
-  isO1PreviewModel,
-  getModelKey,
-  ModelConfig,
-  setModelKey,
-  validateO1PreviewModel,
-} from "@/aiParams";
-import { BUILTIN_CHAT_MODELS, ChatModelProviders, O1_PREVIEW } from "@/constants";
+import { CustomModel, isO1PreviewModel, getModelKey, ModelConfig, setModelKey } from "@/aiParams";
+import { BUILTIN_CHAT_MODELS, ChatModelProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { err2String, safeFetch } from "@/utils";
@@ -35,19 +28,17 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.OPENAI_FORMAT]: ChatOpenAI,
 } as const;
 
-type ChatProviderConstructMap = typeof CHAT_PROVIDER_CONSTRUCTORS;
-
 export default class ChatModelManager {
   private static instance: ChatModelManager;
-  private static chatModel: BaseChatModel | null;
-  private static modelMap: Record<
+  private chatModel: BaseChatModel | null = null;
+  private modelMap: Record<
     string,
     {
       hasApiKey: boolean;
       AIConstructor: ChatConstructorType;
       vendor: string;
     }
-  >;
+  > = {};
 
   private readonly providerApiKeyMap: Record<ChatModelProviders, () => string> = {
     [ChatModelProviders.OPENAI]: () => getSettings().openAIApiKey,
@@ -82,22 +73,23 @@ export default class ChatModelManager {
     const isO1Model = isO1PreviewModel(customModel.modelName);
 
     if (isO1Model) {
-      await validateO1PreviewModel(customModel);
+      await this.validateO1PreviewModel(customModel);
     }
 
     const baseConfig: ModelConfig = {
-      modelName: customModel.name,
+      modelName: customModel.modelName,
       temperature: isO1Model
-        ? O1_PREVIEW.TEMPERATURE
+        ? settings.temperature // Use settings.temperature for o1-preview models
         : (customModel.temperature ?? settings.temperature),
-      streaming: isO1Model ? O1_PREVIEW.STREAM : (customModel.stream ?? true),
+      streaming: isO1Model ? false : (customModel.stream ?? true),
       maxRetries: 3,
       maxConcurrency: 3,
       isO1Preview: isO1Model,
       ...(isO1Model
         ? {
             maxCompletionTokens: settings.maxTokens,
-            azureOpenAIApiVersion: O1_PREVIEW.API_VERSION,
+            azureOpenAIApiVersion:
+              customModel.azureOpenAIApiVersion || settings.azureOpenAIApiVersion,
           }
         : {
             maxTokens: settings.maxTokens,
@@ -105,27 +97,17 @@ export default class ChatModelManager {
     };
 
     const providerConfig: {
-      [K in keyof ChatProviderConstructMap]: ConstructorParameters<ChatProviderConstructMap[K]>[0];
+      [K in ChatModelProviders]?: any;
     } = {
       [ChatModelProviders.OPENAI]: {
-        modelName: customModel.name,
+        modelName: customModel.modelName,
         openAIApiKey: await getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
-        // @ts-ignore
-        openAIOrgId: getDecryptedKey(customModel.openAIOrgId || settings.openAIOrgId),
-        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
-      },
-      [ChatModelProviders.ANTHROPIC]: {
-        anthropicApiKey: await getDecryptedKey(customModel.apiKey || settings.anthropicApiKey),
-        modelName: customModel.name,
-        anthropicApiUrl: customModel.baseUrl,
-        clientOptions: {
-          defaultHeaders: { "anthropic-dangerous-direct-browser-access": "true" },
-          fetch: customModel.enableCors ? safeFetch : undefined,
-        },
+        openAIOrgId: await getDecryptedKey(customModel.openAIOrgId || settings.openAIOrgId),
+        streaming: customModel.stream ?? true,
       },
       [ChatModelProviders.AZURE_OPENAI]: {
         azureOpenAIApiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
@@ -138,15 +120,26 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
-        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
+        streaming: isO1Model ? false : (customModel.stream ?? true),
+      },
+      [ChatModelProviders.ANTHROPIC]: {
+        anthropicApiKey: await getDecryptedKey(customModel.apiKey || settings.anthropicApiKey),
+        modelName: customModel.modelName,
+        anthropicApiUrl: customModel.baseUrl,
+        clientOptions: {
+          defaultHeaders: { "anthropic-dangerous-direct-browser-access": "true" },
+          fetch: customModel.enableCors ? safeFetch : undefined,
+        },
+        streaming: customModel.stream ?? true,
       },
       [ChatModelProviders.COHEREAI]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
-        model: customModel.name,
+        model: customModel.modelName,
+        streaming: customModel.stream ?? true,
       },
       [ChatModelProviders.GOOGLE]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.googleApiKey),
-        modelName: customModel.name,
+        modelName: customModel.modelName,
         safetySettings: [
           {
             category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
@@ -166,73 +159,63 @@ export default class ChatModelManager {
           },
         ],
         baseUrl: customModel.baseUrl,
+        streaming: customModel.stream ?? true,
       },
       [ChatModelProviders.OPENROUTERAI]: {
-        modelName: customModel.name,
+        modelName: customModel.modelName,
         openAIApiKey: await getDecryptedKey(customModel.apiKey || settings.openRouterAiApiKey),
         configuration: {
           baseURL: customModel.baseUrl || "https://openrouter.ai/api/v1",
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
+        streaming: customModel.stream ?? true,
       },
       [ChatModelProviders.GROQ]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.groqApiKey),
-        modelName: customModel.name,
+        modelName: customModel.modelName,
+        streaming: customModel.stream ?? true,
       },
       [ChatModelProviders.OLLAMA]: {
-        model: customModel.name,
-        // @ts-ignore
+        model: customModel.modelName,
         apiKey: customModel.apiKey || "default-key",
         baseUrl: customModel.baseUrl || "http://localhost:11434",
+        streaming: customModel.stream ?? true,
       },
       [ChatModelProviders.LM_STUDIO]: {
-        modelName: customModel.name,
+        modelName: customModel.modelName,
         openAIApiKey: customModel.apiKey || "default-key",
         configuration: {
           baseURL: customModel.baseUrl || "http://localhost:1234/v1",
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
+        streaming: customModel.stream ?? true,
       },
       [ChatModelProviders.OPENAI_FORMAT]: {
-        modelName: customModel.name,
+        modelName: customModel.modelName,
         openAIApiKey: await getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
           dangerouslyAllowBrowser: true,
         },
-        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
+        streaming: customModel.stream ?? true,
       },
     };
 
-    const selectedProviderConfig =
-      providerConfig[customModel.provider as keyof typeof providerConfig] || {};
+    const selectedProviderConfig = providerConfig[customModel.provider as ChatModelProviders] || {};
     return { ...baseConfig, ...selectedProviderConfig };
   }
 
-  private handleOpenAIExtraArgs(isO1Model: boolean, maxTokens: number, temperature: number) {
-    return isO1Model
-      ? {
-          maxCompletionTokens: maxTokens,
-          temperature: 1,
-        }
-      : {
-          maxTokens: maxTokens,
-          temperature: temperature,
-        };
-  }
-
-  // Build a map of modelKey to model config
-  public buildModelMap() {
+  private buildModelMap() {
     const activeModels = getSettings().activeModels;
-    ChatModelManager.modelMap = {};
-    const modelMap = ChatModelManager.modelMap;
+    this.modelMap = {};
+    const modelMap = this.modelMap;
 
     const allModels = activeModels ?? BUILTIN_CHAT_MODELS;
 
     allModels.forEach((model) => {
       if (model.enabled) {
-        if (!Object.values(ChatModelProviders).contains(model.provider as ChatModelProviders)) {
+        if (!Object.values(ChatModelProviders).includes(model.provider as ChatModelProviders)) {
           console.warn(`Unknown provider: ${model.provider} for model: ${model.name}`);
           return;
         }
@@ -262,24 +245,24 @@ export default class ChatModelManager {
   }
 
   getChatModel(): BaseChatModel {
-    if (!ChatModelManager.chatModel) {
+    if (!this.chatModel) {
       throw new Error("No valid chat model available. Please check your API key settings.");
     }
-    return ChatModelManager.chatModel;
+    return this.chatModel;
   }
 
   async setChatModel(model: CustomModel): Promise<void> {
     const modelKey = getModelKeyFromModel(model);
-    if (!ChatModelManager.modelMap.hasOwnProperty(modelKey)) {
+    if (!this.modelMap.hasOwnProperty(modelKey)) {
       throw new Error(`No model found for: ${modelKey}`);
     }
 
     // Create and return the appropriate model
-    const selectedModel = ChatModelManager.modelMap[modelKey];
+    const selectedModel = this.modelMap[modelKey];
     if (!selectedModel.hasApiKey) {
       const errorMessage = `API key is not provided for the model: ${modelKey}. Model switch failed.`;
       new Notice(errorMessage);
-      // Stop execution and deliberate fail the model switch
+      // Stop execution and deliberately fail the model switch
       throw new Error(errorMessage);
     }
 
@@ -291,7 +274,7 @@ export default class ChatModelManager {
         ...modelConfig,
       });
       // Set the new model
-      ChatModelManager.chatModel = newModelInstance;
+      this.chatModel = newModelInstance;
     } catch (error) {
       console.error(error);
       new Notice(`Error creating model: ${modelKey}`);
@@ -306,27 +289,29 @@ export default class ChatModelManager {
   }
 
   async countTokens(inputStr: string): Promise<number> {
-    return ChatModelManager.chatModel?.getNumTokens(inputStr) ?? 0;
+    return this.chatModel?.getNumTokens(inputStr) ?? 0;
   }
 
   private validateCurrentModel(): void {
-    if (!ChatModelManager.chatModel) return;
+    if (!this.chatModel) return;
 
     const currentModelKey = getModelKey();
     if (!currentModelKey) return;
 
     // Get the model configuration
-    const selectedModel = ChatModelManager.modelMap[currentModelKey];
+    const selectedModel = this.modelMap[currentModelKey];
 
     // If API key is missing or model doesn't exist in map
     if (!selectedModel?.hasApiKey) {
       // Clear the current chat model
-      ChatModelManager.chatModel = null;
+      this.chatModel = null;
       console.log("Failed to reinitialize model due to missing API key");
     }
   }
 
   async validateO1PreviewModel(customModel: CustomModel): Promise<void> {
+    if (!isO1PreviewModel(customModel.modelName)) return;
+
     const settings = getSettings();
     const apiKey = customModel.apiKey || settings.azureOpenAIApiKey;
     const instanceName =
@@ -351,20 +336,20 @@ export default class ChatModelManager {
   async ping(model: CustomModel): Promise<boolean> {
     const tryPing = async (enableCors: boolean) => {
       const modelToTest = { ...model, enableCors };
-      const isO1Preview = isO1PreviewModel(modelToTest.name);
+      const isO1Preview = isO1PreviewModel(modelToTest.modelName);
 
       // Force O1 preview settings if needed
       if (isO1Preview) {
-        validateO1PreviewModel(modelToTest);
-        modelToTest.temperature = O1_PREVIEW.TEMPERATURE;
-        modelToTest.stream = O1_PREVIEW.STREAM;
-        modelToTest.azureOpenAIApiVersion = O1_PREVIEW.API_VERSION;
+        await this.validateO1PreviewModel(modelToTest);
+        modelToTest.temperature = getSettings().temperature;
+        modelToTest.stream = false;
+        modelToTest.azureOpenAIApiVersion = getSettings().azureOpenAIApiVersion;
       }
 
       const modelConfig = await this.getModelConfig(modelToTest);
 
       // Remove unnecessary config for ping test
-      const { ...pingConfig } = modelConfig;
+      const pingConfig = { ...modelConfig };
 
       // Set appropriate token limit based on model type
       if (isO1Preview) {
