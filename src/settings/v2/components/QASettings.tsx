@@ -1,11 +1,11 @@
-import React from "react";
-import { SettingItem } from "@/components/ui/setting-item";
-import { updateSetting, useSettingsValue } from "@/settings/model";
-import { VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
 import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
-import { HelpCircle } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { SettingItem } from "@/components/ui/setting-item";
+import { VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
 import { useTab } from "@/contexts/TabContext";
+import { updateSetting, useSettingsValue } from "@/settings/model";
+import { HelpCircle } from "lucide-react";
+import React from "react";
 
 interface QASettingsProps {
   indexVaultToVectorStore(overwrite?: boolean): Promise<number>;
@@ -124,7 +124,7 @@ const QASettings: React.FC<QASettingsProps> = ({ indexVaultToVectorStore }) => {
             title="Max Sources"
             description="Copilot goes through your vault to find relevant blocks and passes the top N blocks to the LLM. Default for N is 3. Increase if you want more sources included in the answer generation step."
             min={1}
-            max={30}
+            max={128}
             step={1}
             value={settings.maxSourceChunks}
             onChange={(value) => updateSetting("maxSourceChunks", value)}
