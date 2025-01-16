@@ -1,4 +1,5 @@
 import { AI_SENDER } from "@/constants";
+import { isO1PreviewModel } from "@/aiParams";
 import ChainManager from "@/LLMProviders/chainManager";
 import { ChatMessage } from "@/types/chat";
 import { formatDateTime } from "./utils";
@@ -23,7 +24,7 @@ export const getAIResponse = async (
   try {
     const chatModel = chainManager.chatModelManager.getChatModel();
     const modelName = (chatModel as any).modelName || (chatModel as any).model || "";
-    const isO1Model = modelName.startsWith("o1");
+    const isO1Model = isO1PreviewModel(modelName);
 
     if (isO1Model) {
       options.ignoreSystemMessage = true;

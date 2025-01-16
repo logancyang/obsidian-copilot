@@ -1,4 +1,5 @@
 import { BaseLanguageModel } from "@langchain/core/language_models/base";
+import { isO1PreviewModel } from "@/aiParams";
 import { StringOutputParser } from "@langchain/core/output_parsers";
 import { ChatPromptTemplate, PromptTemplate } from "@langchain/core/prompts";
 import { BaseRetriever } from "@langchain/core/retrievers";
@@ -75,7 +76,7 @@ class ChainFactory {
   public static createNewLLMChain(args: LLMChainInput): RunnableSequence {
     const { llm, memory, prompt, abortController } = args;
 
-    const isO1Model = (llm as any).modelName?.startsWith("o1-preview");
+    const isO1Model = isO1PreviewModel((llm as any).modelName);
     const model = llm.bind({
       signal: abortController?.signal,
       ...(isO1Model
@@ -169,9 +170,7 @@ class ChainFactory {
     const CONDENSE_QUESTION_PROMPT = PromptTemplate.fromTemplate(condenseQuestionTemplate);
 
     const answerTemplate = isO1Preview
-      ? `Assistant: {system_message}
-
-Based on the following context, I will answer the question.
+      ? `Based on the following context, I will answer the question.
 Context:
 {context}
 

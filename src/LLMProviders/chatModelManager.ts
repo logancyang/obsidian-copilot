@@ -79,10 +79,10 @@ export default class ChatModelManager {
 
   private async getModelConfig(customModel: CustomModel): Promise<ModelConfig> {
     const settings = getSettings();
-    const isO1Model = isO1PreviewModel(customModel.name);
+    const isO1Model = isO1PreviewModel(customModel.modelName);
 
     if (isO1Model) {
-      validateO1PreviewModel(customModel);
+      await validateO1PreviewModel(customModel);
     }
 
     const baseConfig: ModelConfig = {

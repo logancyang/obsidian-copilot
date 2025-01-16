@@ -14,6 +14,7 @@ import {
   getChainType,
   getModelKey,
   SetChainOptions,
+  isO1PreviewModel,
   setChainType,
   subscribeToChainTypeChange,
   subscribeToModelKeyChange,
@@ -119,9 +120,7 @@ export default class ChainManager {
       }
 
       // Validate and test the selected model if it is o1-preview
-      if (
-        customModel.modelName === "azureml://registries/azure-openai/models/o1-preview/versions/1"
-      ) {
+      if (isO1PreviewModel(customModel.modelName)) {
         await this.chatModelManager.validateO1PreviewModel(customModel);
       }
 
@@ -155,8 +154,7 @@ export default class ChainManager {
     const chatPrompt = this.promptManager.getChatPrompt();
 
     const modelName = (chatModel as any).modelName || (chatModel as any).model;
-    const isO1Preview =
-      modelName === "azureml://registries/azure-openai/models/o1-preview/versions/1";
+    const isO1Preview = isO1PreviewModel(modelName);
 
     // Use default prompt if none provided
     const defaultPrompt = this.createBasePrompt(isO1Preview);
@@ -324,9 +322,8 @@ export default class ChainManager {
     const systemMsg = getSystemPrompt() || "";
 
     if (isO1Preview) {
-      // For O1-preview, prepend system message as an Assistant message
+      // For o1-preview, exclude system message
       return ChatPromptTemplate.fromMessages([
-        new AIMessage(systemMsg),
         new MessagesPlaceholder("history"),
         HumanMessagePromptTemplate.fromTemplate("{input}"),
       ]);

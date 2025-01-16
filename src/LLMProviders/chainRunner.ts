@@ -5,6 +5,7 @@ import {
   LOADING_MESSAGES,
   MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT,
 } from "@/constants";
+import { isO1PreviewModel } from "@/aiParams";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { getSystemPrompt } from "@/settings/model";
 import { ChatMessage } from "@/types/chat";
@@ -516,15 +517,27 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       .map(([human, ai]) => `Human: ${human}\nAssistant: ${ai}`)
       .join("\n");
 
-    const response = await this.chainManager.chatModelManager.getChatModel().invoke([
-      { role: "system", content: condenseQuestionTemplate },
+    const isO1Model = isO1PreviewModel(
+      (this.chainManager.chatModelManager.getChatModel() as any).modelName
+    );
+
+    const messages = [
       {
         role: "user",
         content: condenseQuestionTemplate
           .replace("{chat_history}", formattedChatHistory)
           .replace("{question}", question),
       },
-    ]);
+    ];
+
+    if (!isO1Model) {
+      messages.unshift({
+        role: "system",
+        content: condenseQuestionTemplate,
+      });
+    }
+
+    const response = await this.chainManager.chatModelManager.getChatModel().invoke(messages);
 
     return response.content as string;
   }

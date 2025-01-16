@@ -129,7 +129,7 @@ export function useChainType() {
 
 // Export utility functions
 export function isO1PreviewModel(modelName: string): boolean {
-  return modelName.startsWith("o1-preview");
+  return modelName === "azureml://registries/azure-openai/models/o1-preview/versions/1";
 }
 
 export function validateO1PreviewModel(model: CustomModel): void {
