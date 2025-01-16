@@ -386,9 +386,13 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         // Use the original message for intent analysis
         const messageForAnalysis = userMessage.originalMessage || userMessage.message;
         toolCalls = await IntentAnalyzer.analyzeIntent(messageForAnalysis);
-      } catch {
+      } catch (error: any) {
+        const errorMessage = error?.message?.includes("status 403")
+          ? "Please provide a valid license key in your Copilot Plus settings."
+          : "An error occurred while processing your message. Please check the console for more details.";
+
         return this.handleResponse(
-          "Copilot Plus message failed. Please provide a valid license key in your Copilot setting.",
+          errorMessage,
           userMessage,
           abortController,
           addMessage,
