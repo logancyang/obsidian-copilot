@@ -63,6 +63,7 @@ export enum ChatModelProviders {
 export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.GPT_4o,
+    modelName: ChatModels.GPT_4o,
     provider: ChatModelProviders.OPENAI,
     enabled: true,
     isBuiltIn: true,
@@ -70,6 +71,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   },
   {
     name: ChatModels.GPT_4o_mini,
+    modelName: ChatModels.GPT_4o_mini,
     provider: ChatModelProviders.OPENAI,
     enabled: true,
     isBuiltIn: true,
@@ -77,12 +79,14 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   },
   {
     name: ChatModels.GPT_4_TURBO,
+    modelName: ChatModels.GPT_4_TURBO,
     provider: ChatModelProviders.OPENAI,
     enabled: true,
     isBuiltIn: true,
   },
   {
     name: ChatModels.CLAUDE_3_5_SONNET,
+    modelName: ChatModels.CLAUDE_3_5_SONNET,
     provider: ChatModelProviders.ANTHROPIC,
     enabled: true,
     isBuiltIn: true,
@@ -90,36 +94,42 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   },
   {
     name: ChatModels.CLAUDE_3_5_HAIKU,
+    modelName: ChatModels.CLAUDE_3_5_HAIKU,
     provider: ChatModelProviders.ANTHROPIC,
     enabled: true,
     isBuiltIn: true,
   },
   {
     name: ChatModels.COMMAND_R,
+    modelName: ChatModels.COMMAND_R,
     provider: ChatModelProviders.COHEREAI,
     enabled: true,
     isBuiltIn: true,
   },
   {
     name: ChatModels.COMMAND_R_PLUS,
+    modelName: ChatModels.COMMAND_R_PLUS,
     provider: ChatModelProviders.COHEREAI,
     enabled: true,
     isBuiltIn: true,
   },
   {
     name: ChatModels.GEMINI_PRO,
+    modelName: ChatModels.GEMINI_PRO,
     provider: ChatModelProviders.GOOGLE,
     enabled: true,
     isBuiltIn: true,
   },
   {
     name: ChatModels.GEMINI_FLASH,
+    modelName: ChatModels.GEMINI_FLASH,
     provider: ChatModelProviders.GOOGLE,
     enabled: true,
     isBuiltIn: true,
   },
   {
     name: ChatModels.AZURE_OPENAI,
+    modelName: ChatModels.AZURE_OPENAI,
     provider: ChatModelProviders.AZURE_OPENAI,
     enabled: true,
     isBuiltIn: true,
@@ -155,6 +165,7 @@ export enum EmbeddingModels {
 export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
   {
     name: EmbeddingModels.COPILOT_PLUS_SMALL,
+    modelName: EmbeddingModels.COPILOT_PLUS_SMALL,
     provider: EmbeddingModelProviders.COPILOT_PLUS,
     enabled: true,
     isBuiltIn: true,
@@ -163,6 +174,7 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
   },
   {
     name: EmbeddingModels.COPILOT_PLUS_MULTILINGUAL,
+    modelName: EmbeddingModels.COPILOT_PLUS_MULTILINGUAL,
     provider: EmbeddingModelProviders.COPILOT_PLUS_JINA,
     enabled: true,
     isBuiltIn: true,
@@ -171,6 +183,7 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
   },
   {
     name: EmbeddingModels.OPENAI_EMBEDDING_SMALL,
+    modelName: EmbeddingModels.OPENAI_EMBEDDING_SMALL,
     provider: EmbeddingModelProviders.OPENAI,
     enabled: true,
     isBuiltIn: true,
@@ -179,6 +192,7 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
   },
   {
     name: EmbeddingModels.OPENAI_EMBEDDING_LARGE,
+    modelName: EmbeddingModels.OPENAI_EMBEDDING_LARGE,
     provider: EmbeddingModelProviders.OPENAI,
     enabled: true,
     isBuiltIn: true,
@@ -186,6 +200,7 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
   },
   {
     name: EmbeddingModels.COHEREAI_EMBED_MULTILINGUAL_LIGHT_V3_0,
+    modelName: EmbeddingModels.COHEREAI_EMBED_MULTILINGUAL_LIGHT_V3_0,
     provider: EmbeddingModelProviders.COHEREAI,
     enabled: true,
     isBuiltIn: true,
@@ -193,6 +208,7 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
   },
   {
     name: EmbeddingModels.GOOGLE_ENG,
+    modelName: EmbeddingModels.GOOGLE_ENG,
     provider: EmbeddingModelProviders.GOOGLE,
     enabled: true,
     isBuiltIn: true,
@@ -200,6 +216,7 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
   },
   {
     name: EmbeddingModels.AZURE_OPENAI,
+    modelName: EmbeddingModels.AZURE_OPENAI,
     provider: EmbeddingModelProviders.AZURE_OPENAI,
     enabled: true,
     isBuiltIn: true,

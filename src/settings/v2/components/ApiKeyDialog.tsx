@@ -110,6 +110,7 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({
 
       const customModel: CustomModel = {
         name: defaultTestModel,
+        modelName: defaultTestModel,
         provider: provider,
         apiKey,
         enabled: true,

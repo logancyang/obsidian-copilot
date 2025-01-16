@@ -116,5 +116,8 @@
     "sse": "github:mpetazzoni/sse.js",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7"
+  },
+  "directories": {
+    "test": "tests"
   }
 }

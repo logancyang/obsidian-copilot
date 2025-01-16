@@ -48,7 +48,7 @@ export interface ModelConfig {
   azureOpenAIApiKey?: string;
   azureOpenAIApiInstanceName?: string;
   azureOpenAIApiDeploymentName?: string;
-  azureOpenAIApiVersion?: string;
+  azureOpenAIApiVersion?: string; // Added for o1-preview models
   // Google and TogetherAI API key share this property
   apiKey?: string;
   openAIProxyBaseUrl?: string;
@@ -67,6 +67,7 @@ export interface SetChainOptions {
 
 export interface CustomModel {
   name: string;
+  modelName: string;
   provider: string;
   baseUrl?: string;
   apiKey?: string;

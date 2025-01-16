@@ -11,6 +11,7 @@ export interface LLMChainInput {
   memory: BaseChatMemory;
   prompt: ChatPromptTemplate;
   abortController?: AbortController;
+  streaming?: boolean;
 }
 
 export interface RetrievalChainParams {
@@ -24,7 +25,7 @@ export interface RetrievalChainParams {
 export interface ConversationalRetrievalChainParams {
   llm: BaseLanguageModel;
   retriever: BaseRetriever;
-  systemMessage: string;
+  systemMessage?: string;
   options?: {
     returnSourceDocuments?: boolean;
     questionGeneratorTemplate?: string;

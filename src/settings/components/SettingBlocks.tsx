@@ -292,6 +292,7 @@ const ModelSettingsComponent: React.FC<ModelSettingsComponentProps> = ({
 }) => {
   const emptyModel: CustomModel = {
     name: "",
+    modelName: "",
     provider: providers.length > 0 ? providers[0] : "",
     baseUrl: "",
     apiKey: "",

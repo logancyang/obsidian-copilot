@@ -122,7 +122,9 @@ export default class ChainManager {
       }
 
       // Validate and test the selected model if it is o1-preview
-      if (customModel.modelName === 'azureml://registries/azure-openai/models/o1-preview/versions/1') {
+      if (
+        customModel.modelName === "azureml://registries/azure-openai/models/o1-preview/versions/1"
+      ) {
         await this.chatModelManager.validateO1PreviewModel(customModel);
       }
 
@@ -151,7 +153,9 @@ export default class ChainManager {
     const memory = this.memoryManager.getMemory();
     const chatPrompt = this.promptManager.getChatPrompt();
 
-    const isO1Preview = chatModel.modelName === 'azureml://registries/azure-openai/models/o1-preview/versions/1';
+    const modelName = (chatModel as any).modelName || (chatModel as any).model;
+    const isO1Preview =
+      modelName === "azureml://registries/azure-openai/models/o1-preview/versions/1";
 
     switch (chainType) {
       case ChainType.LLM_CHAIN: {

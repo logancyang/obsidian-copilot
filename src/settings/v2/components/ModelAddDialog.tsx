@@ -117,6 +117,32 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     });
   };
 
+  const getDefaultApiKey = (provider: Provider): string => {
+    return (settings[ProviderSettingsKeyMap[provider as DisplayKeyProviders]] as string) || "";
+  };
+
+  const getInitialModel = (provider = defaultProvider): CustomModel => {
+    const baseModel: CustomModel = {
+      name: "",
+      modelName: "",
+      provider,
+      enabled: true,
+      isBuiltIn: false,
+      baseUrl: "",
+      apiKey: getDefaultApiKey(provider),
+      isEmbeddingModel,
+      temperature: settings.temperature,
+      context: settings.maxTokens,
+      stream: true,
+    };
+    return baseModel;
+  };
+
+  const [model, setModel] = useState<CustomModel>(getInitialModel());
+  const [providerInfo, setProviderInfo] = useState<ProviderMetadata>(
+    getProviderInfo(defaultProvider)
+  );
+
   const validateFields = (): boolean => {
     let isValid = true;
     const newErrors = { ...errors };
@@ -129,6 +155,14 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     if (model.provider === ChatModelProviders.AZURE_OPENAI) {
       newErrors.instanceName = !model.azureOpenAIApiInstanceName;
       newErrors.apiVersion = !model.azureOpenAIApiVersion;
+
+      // Additional validation for O1 Preview models
+      if (model.name.startsWith("o1-preview")) {
+        if (model.name !== "azureml://registries/azure-openai/models/o1-preview/versions/1") {
+          new Notice("Invalid O1 Preview model ID");
+          isValid = false;
+        }
+      }
 
       if (isEmbeddingModel) {
         newErrors.embeddingDeploymentName = !model.azureOpenAIApiEmbeddingDeploymentName;
@@ -147,38 +181,6 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     return isValid;
   };
 
-  const getDefaultApiKey = (provider: Provider): string => {
-    return (settings[ProviderSettingsKeyMap[provider as DisplayKeyProviders]] as string) || "";
-  };
-
-  const getInitialModel = (provider = defaultProvider): CustomModel => {
-    const baseModel = {
-      name: "",
-      provider,
-      enabled: true,
-      isBuiltIn: false,
-      baseUrl: "",
-      apiKey: getDefaultApiKey(provider),
-      isEmbeddingModel,
-    };
-
-    if (!isEmbeddingModel) {
-      return {
-        ...baseModel,
-        temperature: 0.1,
-        context: 1000,
-        stream: true,
-      };
-    }
-
-    return baseModel;
-  };
-
-  const [model, setModel] = useState<CustomModel>(getInitialModel());
-  const [providerInfo, setProviderInfo] = useState<ProviderMetadata>(
-    getProviderInfo(defaultProvider)
-  );
-
   // Check if the form has required fields filled
   const isFormValid = (): boolean => {
     return Boolean(model.name && model.provider);
@@ -195,7 +197,17 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
       return;
     }
 
-    onAdd(model);
+    // Ensure model has all required fields
+    const isO1PreviewModel = model.name.startsWith("o1-preview");
+    const modelToAdd: CustomModel = {
+      ...model,
+      modelName: model.name,
+      temperature: isO1PreviewModel ? 1 : (model.temperature ?? settings.temperature),
+      stream: isO1PreviewModel ? false : (model.stream ?? true),
+      context: model.context ?? settings.maxTokens,
+    };
+
+    onAdd(modelToAdd);
     onOpenChange(false);
     setModel(getInitialModel());
     clearErrors();
@@ -206,20 +218,22 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     setModel({
       ...model,
       provider,
+      modelName: model.name, // Ensure modelName matches name
       apiKey: getDefaultApiKey(provider),
       ...(provider === ChatModelProviders.AZURE_OPENAI
         ? { openAIOrgId: settings.openAIOrgId }
         : {}),
       ...(provider === ChatModelProviders.AZURE_OPENAI
         ? {
-            azureInstanceName: settings.azureOpenAIApiInstanceName,
-            azureDeploymentName: settings.azureOpenAIApiDeploymentName,
-            azureApiVersion: settings.azureOpenAIApiVersion,
+            azureOpenAIApiInstanceName: settings.azureOpenAIApiInstanceName,
+            azureOpenAIApiDeploymentName: settings.azureOpenAIApiDeploymentName,
+            azureOpenAIApiVersion: settings.azureOpenAIApiVersion,
             azureOpenAIApiEmbeddingDeploymentName: settings.azureOpenAIApiEmbeddingDeploymentName,
           }
         : {}),
     });
   };
+
   const handleOpenChange = (open: boolean) => {
     if (!open) {
       setModel(getInitialModel());
@@ -352,7 +366,12 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
                     placeholder="azureml://registries/azure-openai/models/o1-preview/versions/1"
                     value={model.name}
                     onChange={(e) => {
-                      setModel({ ...model, name: e.target.value });
+                      const newName = e.target.value;
+                      setModel({
+                        ...model,
+                        name: newName,
+                        modelName: newName, // Keep modelName in sync
+                      });
                       setError("name", false);
                     }}
                   />
@@ -431,7 +450,12 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
               })`}
               value={model.name}
               onChange={(e) => {
-                setModel({ ...model, name: e.target.value });
+                const newName = e.target.value;
+                setModel({
+                  ...model,
+                  name: newName,
+                  modelName: newName, // Keep modelName in sync with name
+                });
                 setError("name", false);
               }}
             />
