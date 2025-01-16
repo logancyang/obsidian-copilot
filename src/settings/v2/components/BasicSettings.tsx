@@ -16,7 +16,7 @@ import ApiKeyDialog from "./ApiKeyDialog";
 const ChainType2Label: Record<ChainType, string> = {
   [ChainType.LLM_CHAIN]: "Chat",
   [ChainType.VAULT_QA_CHAIN]: "Vault QA (Basic)",
-  [ChainType.COPILOT_PLUS_CHAIN]: "Copilot Plus",
+  [ChainType.COPILOT_PLUS_CHAIN]: "Copilot Plus (beta)",
 };
 
 interface BasicSettingsProps {
@@ -53,7 +53,7 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
   return (
     <div className="space-y-4">
       <section>
-        <div className="text-2xl font-bold mb-3">Copilot Plus</div>
+        <div className="text-2xl font-bold mb-3">Copilot Plus (beta)</div>
         <div className="space-y-4">
           {/* copilot-plus */}
           <SettingItem
