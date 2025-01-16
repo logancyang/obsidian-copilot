@@ -346,6 +346,8 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       // Check if this is a YouTube-only message
       if (this.isYoutubeOnlyMessage(userMessage.message)) {
         const url = extractYoutubeUrl(userMessage.message);
+        const failMessage =
+          "Transcript not available. Only videos with the auto transcript option turned on are supported at the moment.";
         if (url) {
           try {
             const response = await BrevilabsClient.getInstance().youtube4llm(url);
@@ -360,16 +362,17 @@ class CopilotPlusChainRunner extends BaseChainRunner {
               );
             }
             return this.handleResponse(
-              "Transcript not available. Only English videos with the auto transcript option turned on are supported at the moment.",
+              failMessage,
               userMessage,
               abortController,
               addMessage,
               updateCurrentAiMessage,
               debug
             );
-          } catch {
+          } catch (error) {
+            console.error("Error processing YouTube video:", error);
             return this.handleResponse(
-              "An error occurred while transcribing the YouTube video. Right now only English videos with the auto transcript option turned on are supported. Please check the error message in the console for more details.",
+              failMessage,
               userMessage,
               abortController,
               addMessage,
