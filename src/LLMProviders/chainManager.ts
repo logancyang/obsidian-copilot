@@ -120,6 +120,12 @@ export default class ChainManager {
         customModel = BUILTIN_CHAT_MODELS[0];
         newModelKey = customModel.name + "|" + customModel.provider;
       }
+
+      // Validate and test the selected model if it is o1-preview
+      if (customModel.modelName === 'azureml://registries/azure-openai/models/o1-preview/versions/1') {
+        await this.chatModelManager.validateO1PreviewModel(customModel);
+      }
+
       await this.chatModelManager.setChatModel(customModel);
       // Must update the chatModel for chain because ChainFactory always
       // retrieves the old chain without the chatModel change if it exists!
@@ -145,6 +151,8 @@ export default class ChainManager {
     const memory = this.memoryManager.getMemory();
     const chatPrompt = this.promptManager.getChatPrompt();
 
+    const isO1Preview = chatModel.modelName === 'azureml://registries/azure-openai/models/o1-preview/versions/1';
+
     switch (chainType) {
       case ChainType.LLM_CHAIN: {
         ChainManager.chain = ChainFactory.createNewLLMChain({
@@ -152,6 +160,7 @@ export default class ChainManager {
           memory: memory,
           prompt: options.prompt || chatPrompt,
           abortController: options.abortController,
+          streaming: !isO1Preview, // Disable streaming for o1-preview models
         }) as RunnableSequence;
 
         setChainType(ChainType.LLM_CHAIN);
@@ -172,7 +181,7 @@ export default class ChainManager {
           {
             llm: chatModel,
             retriever: retriever,
-            systemMessage: getSystemPrompt(),
+            systemMessage: isO1Preview ? undefined : getSystemPrompt(), // Exclude system messages for o1-preview models
           },
           ChainManager.storeRetrieverDocuments.bind(ChainManager),
           getSettings().debug
@@ -194,6 +203,7 @@ export default class ChainManager {
           memory: memory,
           prompt: options.prompt || chatPrompt,
           abortController: options.abortController,
+          streaming: !isO1Preview, // Disable streaming for o1-preview models
         }) as RunnableSequence;
 
         setChainType(ChainType.COPILOT_PLUS_CHAIN);

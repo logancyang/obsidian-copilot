@@ -21,6 +21,14 @@ export const getAIResponse = async (
   const abortController = new AbortController();
   updateShouldAbort(abortController);
   try {
+    const chatModel = chainManager.chatModelManager.getChatModel();
+    const modelName = (chatModel as any).modelName || (chatModel as any).model || "";
+    const isO1Model = modelName.startsWith("o1");
+
+    if (isO1Model) {
+      options.ignoreSystemMessage = true;
+    }
+
     await chainManager.runChain(
       userMessage,
       abortController,

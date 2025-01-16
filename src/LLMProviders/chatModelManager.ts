@@ -78,11 +78,13 @@ export default class ChatModelManager {
     const isO1Model = modelName.startsWith("o1");
     const baseConfig: ModelConfig = {
       modelName: modelName,
-      temperature: customModel.temperature ?? settings.temperature,
-      streaming: customModel.stream ?? true,
+      temperature: isO1Model ? 1 : customModel.temperature ?? settings.temperature,
+      streaming: isO1Model ? false : customModel.stream ?? true,
       maxRetries: 3,
       maxConcurrency: 3,
       enableCors: customModel.enableCors,
+      maxCompletionTokens: isO1Model ? settings.maxTokens : undefined,
+      azureOpenAIApiVersion: isO1Model ? "2024-12-01-preview" : customModel.azureOpenAIApiVersion,
     };
 
     const providerConfig: {

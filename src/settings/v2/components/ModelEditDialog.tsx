@@ -43,6 +43,8 @@ export const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
     onUpdate(updatedModel);
   };
 
+  const isO1PreviewModel = localModel.name.startsWith("o1-preview");
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]" container={modalContainer}>
@@ -60,11 +62,12 @@ export const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
               </div>
             </div>
             <SettingSlider
-              value={localModel.temperature ?? 0.1}
+              value={isO1PreviewModel ? 1 : localModel.temperature ?? 0.1}
               onChange={(value) => handleUpdate("temperature", value)}
               max={2}
               min={0}
               step={0.1}
+              disabled={isO1PreviewModel}
             />
           </div>
 
@@ -88,8 +91,9 @@ export const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">Stream output</div>
               <SettingSwitch
-                checked={localModel.stream ?? true}
+                checked={isO1PreviewModel ? false : localModel.stream ?? true}
                 onCheckedChange={(checked) => handleUpdate("stream", checked)}
+                disabled={isO1PreviewModel}
               />
             </div>
           </div>

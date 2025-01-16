@@ -40,6 +40,7 @@ export interface ModelConfig {
   maxRetries: number;
   maxConcurrency: number;
   maxTokens?: number;
+  maxCompletionTokens?: number; // Added for o1-preview models
   openAIApiKey?: string;
   openAIOrgId?: string;
   anthropicApiKey?: string;
@@ -53,6 +54,7 @@ export interface ModelConfig {
   openAIProxyBaseUrl?: string;
   groqApiKey?: string;
   enableCors?: boolean;
+  isO1PreviewModel?: boolean; // Added to identify o1-preview models
 }
 
 export interface SetChainOptions {

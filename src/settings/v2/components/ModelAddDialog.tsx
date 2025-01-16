@@ -338,6 +338,26 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
                   }}
                 />
               </FormField>
+
+              {model.name.startsWith("o1-preview") && (
+                <FormField
+                  label="Model ID"
+                  required
+                  error={errors.name}
+                  errorMessage="Model ID is required"
+                  description="Enter the model ID for o1-preview models."
+                >
+                  <Input
+                    type="text"
+                    placeholder="azureml://registries/azure-openai/models/o1-preview/versions/1"
+                    value={model.name}
+                    onChange={(e) => {
+                      setModel({ ...model, name: e.target.value });
+                      setError("name", false);
+                    }}
+                  />
+                </FormField>
+              )}
             </>
           );
         default:
