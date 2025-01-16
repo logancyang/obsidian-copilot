@@ -1,14 +1,14 @@
 import { ChatButtons } from "@/components/chat-components/ChatButtons";
 import { SourcesModal } from "@/components/modals/SourcesModal";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { USER_SENDER } from "@/constants";
+import { cn } from "@/lib/utils";
 import { ChatMessage } from "@/sharedState";
 import { insertIntoEditor } from "@/utils";
 import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
   if (!context || (context.notes.length === 0 && context.urls.length === 0)) {
@@ -88,27 +88,23 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         .replace(/\\\(\s*/g, "$")
         .replace(/\s*\\\)/g, "$");
 
-      // Process images
+      // Process only Obsidian internal images (starting with ![[)
       const activeFile = app.workspace.getActiveFile();
       const sourcePath = activeFile ? activeFile.path : "";
 
-      const imageProcessed = latexProcessed.replace(/!\[\[(.*?)\]\]/g, (match, imageName) => {
-        const imageFile = app.metadataCache.getFirstLinkpathDest(imageName, sourcePath);
-        if (imageFile) {
-          const imageUrl = app.vault.getResourcePath(imageFile);
-          return `![](${imageUrl})`;
+      const noteImageProcessed = latexProcessed.replace(
+        /!\[\[(.*?)\]\]/g,
+        (match: string, imageName: string) => {
+          const imageFile = app.metadataCache.getFirstLinkpathDest(imageName, sourcePath);
+          if (imageFile) {
+            const imageUrl = app.vault.getResourcePath(imageFile);
+            return `![](${imageUrl})`;
+          }
+          return match;
         }
-        return match;
-      });
+      );
 
-      // Process note links to obsidian:// URLs
-      const noteProcessed = imageProcessed.replace(/\[\[(.*?)\]\]/g, (match, noteName) => {
-        const encodedNoteName = encodeURIComponent(noteName);
-        const vaultName = app.vault.getName();
-        return `[${noteName}](obsidian://open?vault=${vaultName}&file=${encodedNoteName})`;
-      });
-
-      return noteProcessed;
+      return noteImageProcessed;
     },
     [app]
   );
