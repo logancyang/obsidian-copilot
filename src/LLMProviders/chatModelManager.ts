@@ -1,5 +1,12 @@
-import { CustomModel, getModelKey, ModelConfig, setModelKey } from "@/aiParams";
-import { BUILTIN_CHAT_MODELS, ChatModelProviders } from "@/constants";
+import {
+  CustomModel,
+  isO1PreviewModel,
+  getModelKey,
+  ModelConfig,
+  setModelKey,
+  validateO1PreviewModel,
+} from "@/aiParams";
+import { BUILTIN_CHAT_MODELS, ChatModelProviders, O1_PREVIEW } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { err2String, safeFetch } from "@/utils";
@@ -72,21 +79,25 @@ export default class ChatModelManager {
 
   private async getModelConfig(customModel: CustomModel): Promise<ModelConfig> {
     const settings = getSettings();
+    const isO1Model = isO1PreviewModel(customModel.name);
 
-    // Check if the model is an O1-preview model
-    const isO1Model = customModel.name.startsWith("o1-preview");
+    if (isO1Model) {
+      validateO1PreviewModel(customModel);
+    }
 
     const baseConfig: ModelConfig = {
       modelName: customModel.name,
-      temperature: isO1Model ? 1 : (customModel.temperature ?? settings.temperature),
-      streaming: isO1Model ? false : (customModel.stream ?? true),
+      temperature: isO1Model
+        ? O1_PREVIEW.TEMPERATURE
+        : (customModel.temperature ?? settings.temperature),
+      streaming: isO1Model ? O1_PREVIEW.STREAM : (customModel.stream ?? true),
       maxRetries: 3,
       maxConcurrency: 3,
-      enableCors: customModel.enableCors,
+      isO1Preview: isO1Model,
       ...(isO1Model
         ? {
             maxCompletionTokens: settings.maxTokens,
-            azureOpenAIApiVersion: "2024-12-01-preview",
+            azureOpenAIApiVersion: O1_PREVIEW.API_VERSION,
           }
         : {
             maxTokens: settings.maxTokens,
@@ -340,10 +351,29 @@ export default class ChatModelManager {
   async ping(model: CustomModel): Promise<boolean> {
     const tryPing = async (enableCors: boolean) => {
       const modelToTest = { ...model, enableCors };
+      const isO1Preview = isO1PreviewModel(modelToTest.name);
+
+      // Force O1 preview settings if needed
+      if (isO1Preview) {
+        validateO1PreviewModel(modelToTest);
+        modelToTest.temperature = O1_PREVIEW.TEMPERATURE;
+        modelToTest.stream = O1_PREVIEW.STREAM;
+        modelToTest.azureOpenAIApiVersion = O1_PREVIEW.API_VERSION;
+      }
+
       const modelConfig = await this.getModelConfig(modelToTest);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { streaming, temperature, ...pingConfig } = modelConfig;
-      pingConfig.maxTokens = 10;
+
+      // Remove unnecessary config for ping test
+      const { ...pingConfig } = modelConfig;
+
+      // Set appropriate token limit based on model type
+      if (isO1Preview) {
+        pingConfig.maxCompletionTokens = 10;
+        delete pingConfig.maxTokens;
+      } else {
+        pingConfig.maxTokens = 10;
+        delete pingConfig.maxCompletionTokens;
+      }
 
       const testModel = new (this.getProviderConstructor(modelToTest))(pingConfig);
       await testModel.invoke([{ role: "user", content: "hello" }], {

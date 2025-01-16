@@ -7,7 +7,7 @@ import {
 } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { getSystemPrompt } from "@/settings/model";
-import { ChatMessage } from "@/sharedState";
+import { ChatMessage } from "@/types/chat";
 import { ToolManager } from "@/tools/toolManager";
 import {
   extractChatHistory,

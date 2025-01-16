@@ -1,22 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { FormattedDateTime } from "./utils";
-import { TFile } from "obsidian";
+import { ChatMessage, SharedStateType } from "./types/chat";
 
-export interface ChatMessage {
-  message: string;
-  originalMessage?: string;
-  sender: string;
-  timestamp: FormattedDateTime | null;
-  isVisible: boolean;
-  sources?: { title: string; score: number }[];
-  content?: any[];
-  context?: {
-    notes: TFile[];
-    urls: string[];
-  };
-}
-
-class SharedState {
+class SharedState implements SharedStateType {
   chatHistory: ChatMessage[] = [];
 
   addMessage(message: ChatMessage): void {

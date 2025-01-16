@@ -6,12 +6,19 @@ import { RunnablePassthrough, RunnableSequence } from "@langchain/core/runnables
 import { BaseChatMemory } from "langchain/memory";
 import { formatDocumentsAsString } from "langchain/util/document";
 
+// Add interface extension for BaseLanguageModel
+interface ModelWithName extends BaseLanguageModel {
+  modelName?: string;
+}
+
 export interface LLMChainInput {
   llm: BaseLanguageModel;
   memory: BaseChatMemory;
   prompt: ChatPromptTemplate;
   abortController?: AbortController;
   streaming?: boolean;
+  maxTokens?: number;
+  maxCompletionTokens?: number; // Added for o1-preview models
 }
 
 export interface RetrievalChainParams {
@@ -23,7 +30,7 @@ export interface RetrievalChainParams {
 }
 
 export interface ConversationalRetrievalChainParams {
-  llm: BaseLanguageModel;
+  llm: ModelWithName; // Changed from BaseLanguageModel
   retriever: BaseRetriever;
   systemMessage?: string;
   options?: {
@@ -68,7 +75,17 @@ class ChainFactory {
   public static createNewLLMChain(args: LLMChainInput): RunnableSequence {
     const { llm, memory, prompt, abortController } = args;
 
-    const model = llm.bind({ signal: abortController?.signal });
+    const isO1Model = (llm as any).modelName?.startsWith("o1-preview");
+    const model = llm.bind({
+      signal: abortController?.signal,
+      ...(isO1Model
+        ? {
+            maxCompletionTokens: args.maxCompletionTokens,
+          }
+        : {
+            maxTokens: args.maxTokens,
+          }),
+    });
     const instance = RunnableSequence.from([
       {
         input: (initialInput) => initialInput.input,
@@ -126,11 +143,16 @@ class ChainFactory {
    * @return {RunnableSequence} a new conversational retrieval chain
    */
   public static createConversationalRetrievalChain(
-    args: ConversationalRetrievalChainParams,
+    args: {
+      llm: ModelWithName; // Changed from BaseLanguageModel
+      retriever: BaseRetriever;
+      systemMessage?: string;
+    },
     onDocumentsRetrieved: (documents: Document[]) => void,
     debug?: boolean
   ): RunnableSequence {
     const { llm, retriever, systemMessage } = args;
+    const isO1Preview = llm.modelName?.startsWith("o1-preview");
 
     // NOTE: This is a tricky part of the Conversational RAG. Weaker models may fail this instruction
     // and lose the follow up question altogether.
@@ -146,7 +168,16 @@ class ChainFactory {
     Standalone question:`;
     const CONDENSE_QUESTION_PROMPT = PromptTemplate.fromTemplate(condenseQuestionTemplate);
 
-    const answerTemplate = `{system_message}
+    const answerTemplate = isO1Preview
+      ? `Assistant: {system_message}
+
+Based on the following context, I will answer the question.
+Context:
+{context}
+
+Question: {question}
+`
+      : `{system_message}
 
 Answer the question with as detailed as possible based only on the following context:
 {context}
@@ -193,7 +224,7 @@ Question: {question}
       {
         context: retriever.pipe(formatDocumentsAsStringAndStore),
         question: new RunnablePassthrough(),
-        system_message: () => systemMessage,
+        system_message: () => systemMessage || "",
       },
       ANSWER_PROMPT,
       llm,

@@ -11,7 +11,7 @@ import {
 } from "../constants";
 import { getSettings } from "@/settings/model";
 import { DISABLEABLE_COMMANDS } from "../constants";
-import { ChatMessage } from "@/sharedState";
+import { ChatMessage } from "@/types/chat";
 import { formatDateTime } from "@/utils";
 import { InlineEditModal } from "@/components/modals/InlineEditModal";
 import { AddPromptModal } from "@/components/modals/AddPromptModal";

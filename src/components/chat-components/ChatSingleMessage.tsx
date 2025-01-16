@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
-import { ChatMessage } from "@/sharedState";
+import { ChatMessage } from "@/types/chat";
 import { insertIntoEditor } from "@/utils";
 import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer } from "obsidian";

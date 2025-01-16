@@ -11,7 +11,7 @@ import { ChevronDown, Download, MessageCirclePlus, Puzzle } from "lucide-react";
 
 import { NewChatConfirmModal } from "@/components/modals/NewChatConfirmModal";
 import { useSettingsValue } from "@/settings/model";
-import { ChatMessage } from "@/sharedState";
+import { ChatMessage } from "@/types/chat";
 import { TFile } from "obsidian";
 import { ChatContextMenu } from "./ChatContextMenu";
 

@@ -1,3 +1,15 @@
+import { AIMessage } from "@langchain/core/messages";
+import {
+  SystemMessagePromptTemplate,
+  ChatPromptTemplate,
+  MessagesPlaceholder,
+  HumanMessagePromptTemplate,
+} from "@langchain/core/prompts";
+import { RunnableSequence } from "@langchain/core/runnables";
+import { App, Notice } from "obsidian";
+import ChatModelManager from "./chatModelManager";
+import MemoryManager from "./memoryManager";
+import PromptManager from "./promptManager";
 import {
   getChainType,
   getModelKey,
@@ -7,12 +19,7 @@ import {
   subscribeToModelKeyChange,
 } from "@/aiParams";
 import ChainFactory, { ChainType, Document } from "@/chainFactory";
-import {
-  AI_SENDER,
-  BUILTIN_CHAT_MODELS,
-  USER_SENDER,
-  VAULT_VECTOR_STORE_STRATEGY,
-} from "@/constants";
+import { BUILTIN_CHAT_MODELS, USER_SENDER, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import {
   ChainRunner,
   CopilotPlusChainRunner,
@@ -22,18 +29,8 @@ import {
 import { HybridRetriever } from "@/search/hybridRetriever";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings, getSystemPrompt, subscribeToSettingsChange } from "@/settings/model";
-import { ChatMessage } from "@/sharedState";
 import { findCustomModel, isSupportedChain } from "@/utils";
-import {
-  ChatPromptTemplate,
-  HumanMessagePromptTemplate,
-  MessagesPlaceholder,
-} from "@langchain/core/prompts";
-import { RunnableSequence } from "@langchain/core/runnables";
-import { App, Notice } from "obsidian";
-import ChatModelManager from "./chatModelManager";
-import MemoryManager from "./memoryManager";
-import PromptManager from "./promptManager";
+import { ChatMessage } from "@/types/chat";
 
 export default class ChainManager {
   private static chain: RunnableSequence;
@@ -140,7 +137,11 @@ export default class ChainManager {
     }
   }
 
-  async setChain(chainType: ChainType, options: SetChainOptions = {}): Promise<void> {
+  async setChain(
+    chainType: ChainType,
+    options: SetChainOptions = {},
+    ignoreSystemMessage = false
+  ): Promise<void> {
     if (!this.chatModelManager.validateChatModel(this.chatModelManager.getChatModel())) {
       console.error("setChain failed: No chat model set.");
       return;
@@ -157,15 +158,24 @@ export default class ChainManager {
     const isO1Preview =
       modelName === "azureml://registries/azure-openai/models/o1-preview/versions/1";
 
+    // Use default prompt if none provided
+    const defaultPrompt = this.createBasePrompt(isO1Preview);
+    const prompt = options.prompt || defaultPrompt;
+
+    // Create appropriate chain config based on model type
+    const chainConfig = {
+      llm: chatModel,
+      memory: memory,
+      prompt: ignoreSystemMessage ? prompt : defaultPrompt,
+      abortController: options.abortController,
+      streaming: !isO1Preview && getSettings().stream, // Disable streaming for o1-preview models
+      maxTokens: isO1Preview ? undefined : getSettings().maxTokens, // Don't set maxTokens for o1-preview
+      maxCompletionTokens: isO1Preview ? getSettings().maxTokens : undefined, // Use maxCompletionTokens instead
+    };
+
     switch (chainType) {
       case ChainType.LLM_CHAIN: {
-        ChainManager.chain = ChainFactory.createNewLLMChain({
-          llm: chatModel,
-          memory: memory,
-          prompt: options.prompt || chatPrompt,
-          abortController: options.abortController,
-          streaming: !isO1Preview, // Disable streaming for o1-preview models
-        }) as RunnableSequence;
+        ChainManager.chain = ChainFactory.createNewLLMChain(chainConfig) as RunnableSequence;
 
         setChainType(ChainType.LLM_CHAIN);
         break;
@@ -263,21 +273,15 @@ export default class ChainManager {
     const modelName = (chatModel as any).modelName || (chatModel as any).model || "";
     const isO1Model = modelName.startsWith("o1");
 
-    // Handle ignoreSystemMessage
+    // Handle system messages for O1 preview models
     if (ignoreSystemMessage || isO1Model) {
-      let effectivePrompt = ChatPromptTemplate.fromMessages([
+      const systemPrompt = getSystemPrompt() || "";
+      const effectivePrompt = ChatPromptTemplate.fromMessages([
+        // For O1 models, convert system message to AI message
+        ...(isO1Model ? [new AIMessage(systemPrompt)] : []),
         new MessagesPlaceholder("history"),
         HumanMessagePromptTemplate.fromTemplate("{input}"),
       ]);
-
-      // TODO: hack for o1 models, to be removed when they support system prompt
-      if (isO1Model) {
-        //  Temporary fix：for o1-xx model need to covert systemMessage to aiMessage
-        effectivePrompt = ChatPromptTemplate.fromMessages([
-          [AI_SENDER, getSystemPrompt() || ""],
-          effectivePrompt,
-        ]);
-      }
 
       this.setChain(getChainType(), {
         prompt: effectivePrompt,
@@ -295,15 +299,43 @@ export default class ChainManager {
   }
 
   async updateMemoryWithLoadedMessages(messages: ChatMessage[]) {
+    if (!messages?.length) return;
+
     await this.memoryManager.clearChatMemory();
-    for (let i = 0; i < messages.length; i += 2) {
+
+    // Process message pairs
+    for (let i = 0; i < messages.length - 1; i += 2) {
       const userMsg = messages[i];
       const aiMsg = messages[i + 1];
-      if (userMsg && aiMsg && userMsg.sender === USER_SENDER) {
-        await this.memoryManager
-          .getMemory()
-          .saveContext({ input: userMsg.message }, { output: aiMsg.message });
+
+      // Validate message pair
+      if (!userMsg?.message || !aiMsg?.message || userMsg.sender !== USER_SENDER) {
+        continue;
       }
+
+      // Save to memory
+      await this.memoryManager
+        .getMemory()
+        .saveContext({ input: userMsg.message }, { output: aiMsg.message });
     }
+  }
+
+  private createBasePrompt(isO1Preview: boolean = false) {
+    const systemMsg = getSystemPrompt() || "";
+
+    if (isO1Preview) {
+      // For O1-preview, prepend system message as an Assistant message
+      return ChatPromptTemplate.fromMessages([
+        new AIMessage(systemMsg),
+        new MessagesPlaceholder("history"),
+        HumanMessagePromptTemplate.fromTemplate("{input}"),
+      ]);
+    }
+
+    return ChatPromptTemplate.fromMessages([
+      SystemMessagePromptTemplate.fromTemplate(systemMsg),
+      new MessagesPlaceholder("history"),
+      HumanMessagePromptTemplate.fromTemplate("{input}"),
+    ]);
   }
 }

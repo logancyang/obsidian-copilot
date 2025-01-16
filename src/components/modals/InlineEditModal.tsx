@@ -1,7 +1,7 @@
 import { COMMAND_NAMES, CommandId } from "@/constants";
 import ChainManager from "@/LLMProviders/chainManager";
 import ChatModelManager from "@/LLMProviders/chatModelManager";
-import { ChatMessage } from "@/sharedState";
+import { ChatMessage } from "@/types/chat";
 import { insertIntoEditor } from "@/utils";
 import { Copy, PenLine } from "lucide-react";
 import { App, Modal, Notice } from "obsidian";

@@ -1,5 +1,5 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
-import { ChatMessage } from "@/sharedState";
+import { ChatMessage } from "@/types/chat";
 import { stringToFormattedDateTime } from "@/utils";
 import MemoryManager from "./LLMProviders/memoryManager";
 

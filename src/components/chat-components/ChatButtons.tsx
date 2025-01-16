@@ -1,5 +1,5 @@
 import { USER_SENDER } from "@/constants";
-import { ChatMessage } from "@/sharedState";
+import { ChatMessage } from "@/types/chat";
 import {
   Check,
   Copy,

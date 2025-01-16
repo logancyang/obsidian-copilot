@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/select";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { O1_PREVIEW } from "@/constants";
 
 interface FormFieldProps {
   label: string;
@@ -151,18 +152,23 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     newErrors.name = !model.name;
     if (!model.name) isValid = false;
 
+    // Validate O1 preview model
+    if (model.name.startsWith("o1-preview")) {
+      if (model.name !== O1_PREVIEW.MODEL_ID) {
+        new Notice("Invalid O1 Preview model ID");
+        isValid = false;
+      }
+
+      // Force O1 preview settings
+      model.temperature = O1_PREVIEW.TEMPERATURE;
+      model.stream = O1_PREVIEW.STREAM;
+      model.azureOpenAIApiVersion = O1_PREVIEW.API_VERSION;
+    }
+
     // Validate Azure OpenAI specific fields
     if (model.provider === ChatModelProviders.AZURE_OPENAI) {
       newErrors.instanceName = !model.azureOpenAIApiInstanceName;
       newErrors.apiVersion = !model.azureOpenAIApiVersion;
-
-      // Additional validation for O1 Preview models
-      if (model.name.startsWith("o1-preview")) {
-        if (model.name !== "azureml://registries/azure-openai/models/o1-preview/versions/1") {
-          new Notice("Invalid O1 Preview model ID");
-          isValid = false;
-        }
-      }
 
       if (isEmbeddingModel) {
         newErrors.embeddingDeploymentName = !model.azureOpenAIApiEmbeddingDeploymentName;
@@ -197,14 +203,15 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
       return;
     }
 
-    // Ensure model has all required fields
     const isO1PreviewModel = model.name.startsWith("o1-preview");
     const modelToAdd: CustomModel = {
       ...model,
       modelName: model.name,
-      temperature: isO1PreviewModel ? 1 : (model.temperature ?? settings.temperature),
-      stream: isO1PreviewModel ? false : (model.stream ?? true),
-      context: model.context ?? settings.maxTokens,
+      temperature: isO1PreviewModel
+        ? O1_PREVIEW.TEMPERATURE
+        : (model.temperature ?? settings.temperature),
+      stream: isO1PreviewModel ? O1_PREVIEW.STREAM : (model.stream ?? true),
+      context: model.context || settings.maxTokens,
     };
 
     onAdd(modelToAdd);
@@ -309,7 +316,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
                 >
                   <Input
                     type="text"
-                    placeholder="Enter Azure OpenAI API Deployment Name"
+                    placeholder="Enter Azure OpenAIApi Deployment Name"
                     value={model.azureOpenAIApiDeploymentName || ""}
                     onChange={(e) => {
                       setModel({ ...model, azureOpenAIApiDeploymentName: e.target.value });
@@ -326,7 +333,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
                 >
                   <Input
                     type="text"
-                    placeholder="Enter Azure OpenAI API Embedding Deployment Name"
+                    placeholder="Enter Azure OpenAIApi Embedding Deployment Name"
                     value={model.azureOpenAIApiEmbeddingDeploymentName || ""}
                     onChange={(e) => {
                       setModel({ ...model, azureOpenAIApiEmbeddingDeploymentName: e.target.value });
@@ -344,7 +351,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
               >
                 <Input
                   type="text"
-                  placeholder="Enter Azure OpenAI API Version"
+                  placeholder="Enter Azure OpenAIApi Version"
                   value={model.azureOpenAIApiVersion || ""}
                   onChange={(e) => {
                     setModel({ ...model, azureOpenAIApiVersion: e.target.value });

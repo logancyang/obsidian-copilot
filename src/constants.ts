@@ -31,6 +31,13 @@ export const LOADING_MESSAGES = {
   SEARCHING_WEB: "Searching the web",
 };
 
+export const O1_PREVIEW = {
+  MODEL_ID: "azureml://registries/azure-openai/models/o1-preview/versions/1",
+  API_VERSION: "2024-12-01-preview",
+  TEMPERATURE: 1,
+  STREAM: false,
+} as const;
+
 export enum ChatModels {
   GPT_4o = "gpt-4o",
   GPT_4o_mini = "gpt-4o-mini",

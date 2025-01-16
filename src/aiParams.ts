@@ -1,9 +1,9 @@
 import { ChainType } from "@/chainFactory";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
-
 import { atom, useAtom } from "jotai";
 import { settingsAtom, settingsStore } from "@/settings/model";
+import { O1_PREVIEW } from "@/constants";
 
 const userModelKeyAtom = atom<string | null>(null);
 const modelKeyAtom = atom(
@@ -55,6 +55,7 @@ export interface ModelConfig {
   groqApiKey?: string;
   enableCors?: boolean;
   isO1PreviewModel?: boolean; // Added to identify o1-preview models
+  isO1Preview?: boolean;
 }
 
 export interface SetChainOptions {
@@ -87,6 +88,7 @@ export interface CustomModel {
   azureOpenAIApiDeploymentName?: string;
   azureOpenAIApiVersion?: string;
   azureOpenAIApiEmbeddingDeploymentName?: string;
+  isO1Preview?: boolean;
 }
 
 export function setModelKey(modelKey: string) {
@@ -123,4 +125,23 @@ export function useChainType() {
   return useAtom(chainTypeAtom, {
     store: settingsStore,
   });
+}
+
+// Export utility functions
+export function isO1PreviewModel(modelName: string): boolean {
+  return modelName.startsWith("o1-preview");
+}
+
+export function validateO1PreviewModel(model: CustomModel): void {
+  if (!isO1PreviewModel(model.name)) return;
+
+  if (model.name !== O1_PREVIEW.MODEL_ID) {
+    throw new Error(`Invalid O1-preview model ID. Expected: ${O1_PREVIEW.MODEL_ID}`);
+  }
+
+  // Force O1-preview settings
+  model.temperature = O1_PREVIEW.TEMPERATURE;
+  model.stream = O1_PREVIEW.STREAM;
+  model.azureOpenAIApiVersion = O1_PREVIEW.API_VERSION;
+  model.isO1Preview = true;
 }
