@@ -115,7 +115,46 @@ function handleSpecialTimeRanges(input: string, now: DateTime) {
         start: now.minus({ weeks: 1 }).startOf("week"),
         end: now.minus({ weeks: 1 }).endOf("week"),
       };
-    // ... other cases
+    case "this week":
+      return {
+        start: now.startOf("week"),
+        end: now.endOf("week"),
+      };
+    case "next week":
+      return {
+        start: now.plus({ weeks: 1 }).startOf("week"),
+        end: now.plus({ weeks: 1 }).endOf("week"),
+      };
+    case "last month":
+      return {
+        start: now.minus({ months: 1 }).startOf("month"),
+        end: now.minus({ months: 1 }).endOf("month"),
+      };
+    case "this month":
+      return {
+        start: now.startOf("month"),
+        end: now.endOf("month"),
+      };
+    case "next month":
+      return {
+        start: now.plus({ months: 1 }).startOf("month"),
+        end: now.plus({ months: 1 }).endOf("month"),
+      };
+    case "last year":
+      return {
+        start: now.minus({ years: 1 }).startOf("year"),
+        end: now.minus({ years: 1 }).endOf("year"),
+      };
+    case "this year":
+      return {
+        start: now.startOf("year"),
+        end: now.endOf("year"),
+      };
+    case "next year":
+      return {
+        start: now.plus({ years: 1 }).startOf("year"),
+        end: now.plus({ years: 1 }).endOf("year"),
+      };
   }
   return undefined;
 }
