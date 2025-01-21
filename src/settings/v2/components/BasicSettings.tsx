@@ -238,11 +238,59 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
           <SettingItem
             type="select"
             title="Embedding Model"
-            description="Select the Embedding model to use"
+            description={
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="leading-none font-medium text-accent">
+                    Core Feature: Powers Semantic Search & QA
+                  </span>
+                  <Popover
+                    open={openPopoverIds.has("embedding-model-help")}
+                    onOpenChange={(open) => {
+                      if (open) {
+                        handlePopoverOpen("embedding-model-help");
+                      } else {
+                        handlePopoverClose("embedding-model-help");
+                      }
+                    }}
+                  >
+                    <PopoverTrigger asChild>
+                      <HelpCircle
+                        className="h-5 w-5 sm:h-4 sm:w-4 cursor-pointer text-muted hover:text-accent translate-y-[1px]"
+                        onMouseEnter={() => handlePopoverOpen("embedding-model-help")}
+                        onMouseLeave={() => handlePopoverClose("embedding-model-help")}
+                      />
+                    </PopoverTrigger>
+                    <PopoverContent
+                      container={modalContainer}
+                      className="w-[90vw] max-w-[400px] p-4 bg-primary border border-solid border-border shadow-sm"
+                      side="bottom"
+                      align="center"
+                      sideOffset={5}
+                      onMouseEnter={() => handlePopoverOpen("embedding-model-help")}
+                      onMouseLeave={() => handlePopoverClose("embedding-model-help")}
+                    >
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted mb-3">
+                          This model converts text into vector representations, essential for
+                          semantic search and QA functionality.
+                        </p>
+                        <p className="text-sm font-medium">Changing the embedding model will:</p>
+                        <ul className="text-xs text-muted list-disc pl-4 space-y-1">
+                          <li>Require rebuilding your vault&#39;s vector index</li>
+                          <li>Affect semantic search quality</li>
+                          <li>Impact QA feature performance</li>
+                        </ul>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+            }
             value={settings.embeddingModelKey}
             onChange={handleSetDefaultEmbeddingModel}
             options={settings.activeEmbeddingModels
-              .filter((m) => m.enabled)
+              // .filter((m) => m.enabled)
               .map((model) => ({
                 label: `${model.name} (${getProviderLabel(model.provider)})`,
                 value: getModelKeyFromModel(model),

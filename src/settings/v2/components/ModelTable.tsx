@@ -68,7 +68,7 @@ const ModelCard: React.FC<{
                 <Pencil className="h-4 w-4" />
               </Button>
             )}
-            {onDelete && (
+            {onDelete && !model.core && (
               <Button
                 variant="ghost"
                 size="icon"
@@ -91,15 +91,17 @@ const ModelCard: React.FC<{
       >
         <CardContent className="p-3 pt-0">
           <div className="flex justify-around">
-            <div className="flex items-center gap-2">
-              <span className="text-sm">Enabled</span>
-              <Checkbox
-                checked={model.enabled}
-                onCheckedChange={(checked: boolean) =>
-                  onUpdateModel({ ...model, enabled: checked })
-                }
-              />
-            </div>
+            {!model.isEmbeddingModel && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm">Enabled</span>
+                <Checkbox
+                  checked={model.enabled}
+                  onCheckedChange={(checked: boolean) =>
+                    onUpdateModel({ ...model, enabled: checked })
+                  }
+                />
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <span className="text-sm">CORS</span>
               <Checkbox
@@ -124,6 +126,8 @@ export const ModelTable: React.FC<ModelTableProps> = ({
   onUpdateModel,
   title,
 }) => {
+  const isEmbeddingModel = models.length > 0 && models[0].isEmbeddingModel;
+
   return (
     <div className="mb-4">
       {/* Desktop View */}
@@ -133,7 +137,7 @@ export const ModelTable: React.FC<ModelTableProps> = ({
             <TableRow>
               <TableHead>Model</TableHead>
               <TableHead>Provider</TableHead>
-              <TableHead className="text-center">Enable</TableHead>
+              {!isEmbeddingModel && <TableHead className="text-center">Enable</TableHead>}
               <TableHead className="text-center">CORS</TableHead>
               <TableHead className="w-[100px] text-center">Actions</TableHead>
             </TableRow>
@@ -146,16 +150,18 @@ export const ModelTable: React.FC<ModelTableProps> = ({
               >
                 <TableCell>{model.name}</TableCell>
                 <TableCell>{getProviderLabel(model.provider)}</TableCell>
-                <TableCell className="text-center">
-                  <Checkbox
-                    id={`${getModelKeyFromModel(model)}-enabled`}
-                    checked={model.enabled}
-                    onCheckedChange={(checked: boolean) =>
-                      onUpdateModel({ ...model, enabled: checked })
-                    }
-                    className="mx-auto"
-                  />
-                </TableCell>
+                {!isEmbeddingModel && (
+                  <TableCell className="text-center">
+                    <Checkbox
+                      id={`${getModelKeyFromModel(model)}-enabled`}
+                      checked={model.enabled}
+                      onCheckedChange={(checked: boolean) =>
+                        onUpdateModel({ ...model, enabled: checked })
+                      }
+                      className="mx-auto"
+                    />
+                  </TableCell>
+                )}
                 <TableCell className="text-center">
                   <Checkbox
                     id={`${getModelKeyFromModel(model)}-enableCors`}
@@ -178,14 +184,16 @@ export const ModelTable: React.FC<ModelTableProps> = ({
                         <Pencil className="h-4 w-4" />
                       </Button>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => onDelete(getModelKeyFromModel(model))}
-                      className="shadow-sm hover:shadow-md transition-shadow"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {!model.core && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onDelete(getModelKeyFromModel(model))}
+                        className="shadow-sm hover:shadow-md transition-shadow"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>
