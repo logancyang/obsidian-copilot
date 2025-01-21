@@ -101,6 +101,7 @@ function handleRelativeTimeRange(input: string, now: DateTime) {
  * - "yesterday"
  * - "last week", "this week", "next week"
  * - "last month", "this month", "next month"
+ * - "last quarter", "this quarter", "next quarter"
  * - "last year", "this year", "next year"
  */
 function handleSpecialTimeRanges(input: string, now: DateTime) {
@@ -115,7 +116,61 @@ function handleSpecialTimeRanges(input: string, now: DateTime) {
         start: now.minus({ weeks: 1 }).startOf("week"),
         end: now.minus({ weeks: 1 }).endOf("week"),
       };
-    // ... other cases
+    case "this week":
+      return {
+        start: now.startOf("week"),
+        end: now.endOf("week"),
+      };
+    case "next week":
+      return {
+        start: now.plus({ weeks: 1 }).startOf("week"),
+        end: now.plus({ weeks: 1 }).endOf("week"),
+      };
+    case "last month":
+      return {
+        start: now.minus({ months: 1 }).startOf("month"),
+        end: now.minus({ months: 1 }).endOf("month"),
+      };
+    case "this month":
+      return {
+        start: now.startOf("month"),
+        end: now.endOf("month"),
+      };
+    case "next month":
+      return {
+        start: now.plus({ months: 1 }).startOf("month"),
+        end: now.plus({ months: 1 }).endOf("month"),
+      };
+    case "last year":
+      return {
+        start: now.minus({ years: 1 }).startOf("year"),
+        end: now.minus({ years: 1 }).endOf("year"),
+      };
+    case "this year":
+      return {
+        start: now.startOf("year"),
+        end: now.endOf("year"),
+      };
+    case "next year":
+      return {
+        start: now.plus({ years: 1 }).startOf("year"),
+        end: now.plus({ years: 1 }).endOf("year"),
+      };
+    case "last quarter":
+      return {
+        start: now.minus({ quarters: 1 }).startOf("quarter"),
+        end: now.minus({ quarters: 1 }).endOf("quarter"),
+      };
+    case "this quarter":
+      return {
+        start: now.startOf("quarter"),
+        end: now.endOf("quarter"),
+      };
+    case "next quarter":
+      return {
+        start: now.plus({ quarters: 1 }).startOf("quarter"),
+        end: now.plus({ quarters: 1 }).endOf("quarter"),
+      };
   }
   return undefined;
 }
@@ -200,6 +255,42 @@ function handleYear(input: string, now: DateTime) {
   return { start, end };
 }
 
+/**
+ * Handles quarter patterns like:
+ * - "Q1 2024", "2024 Q1"
+ * - "q2 2023", "2023 q2"
+ */
+function handleQuarter(input: string, now: DateTime) {
+  const quarterMatch = input.match(/^(?:(?:q|Q)(\d{1})\s+(\d{4})|(\d{4})\s+(?:q|Q)(\d{1}))$/);
+  if (!quarterMatch) return undefined;
+
+  // Extract quarter and year whether it's "Q1 2024" or "2024 Q1" format
+  const quarter = parseInt(quarterMatch[1] || quarterMatch[4]);
+  const year = parseInt(quarterMatch[2] || quarterMatch[3]);
+
+  // Validate quarter number
+  if (quarter < 1 || quarter > 4) return undefined;
+
+  // Calculate start and end months for the quarter
+  const startMonth = (quarter - 1) * 3 + 1; // Q1=1, Q2=4, Q3=7, Q4=10
+
+  let start = DateTime.fromObject({
+    year,
+    month: startMonth,
+    day: 1,
+  }).startOf("day");
+
+  let end = start.plus({ months: 3 }).minus({ days: 1 }).endOf("day");
+
+  // Adjust if dates are in the future
+  if (start > now) {
+    start = start.minus({ years: 1 });
+    end = end.minus({ years: 1 });
+  }
+
+  return { start, end };
+}
+
 function getTimeRangeMs(timeExpression: string) {
   const now = DateTime.now();
   const normalizedInput = timeExpression.toLowerCase().replace("@vault", "").trim();
@@ -210,6 +301,7 @@ function getTimeRangeMs(timeExpression: string) {
     handleSpecialTimeRanges(normalizedInput, now) ||
     handleWeekOf(normalizedInput, now) ||
     handleMonthName(normalizedInput, now) ||
+    handleQuarter(normalizedInput, now) ||
     handleYear(normalizedInput, now);
 
   if (result) {
