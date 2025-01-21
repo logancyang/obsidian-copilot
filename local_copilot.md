@@ -43,11 +43,29 @@ Look for this parameter `llama_new_context_with_model: n_ctx` in your server log
 
 #### Start Ollama server for Obsidian
 
+<details>
+<summary>CLI</summary>
+
 Now, **start the local server with `OLLAMA_ORIGINS=app://obsidian.md* ollama serve`, this will allow the Obsidian app to access the local server without CORS issues**.
 
 > **NOTE**: If using `fish`, quote the env value: `OLLAMA_ORIGINS="app://obsidian.md*" ollama serve`
 
 Again, `OLLAMA_ORIGINS=app://obsidian.md*` is required!
+
+</details>
+
+<details>
+<summary>macOS</summary>
+
+The macOS Ollama application is managed by `launchctl`. Update the env for `OLLAMA_ORIGINS` with the following command:
+
+```sh
+launchctl setenv OLLAMA_ORIGINS "app://obsidian.md*"
+```
+
+Then, restart the Ollama application.
+
+</details>
 
 <img src="./images/ollama-serve.png" alt="Ollama">
 
