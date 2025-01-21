@@ -101,6 +101,7 @@ function handleRelativeTimeRange(input: string, now: DateTime) {
  * - "yesterday"
  * - "last week", "this week", "next week"
  * - "last month", "this month", "next month"
+ * - "last quarter", "this quarter", "next quarter"
  * - "last year", "this year", "next year"
  */
 function handleSpecialTimeRanges(input: string, now: DateTime) {
@@ -154,6 +155,21 @@ function handleSpecialTimeRanges(input: string, now: DateTime) {
       return {
         start: now.plus({ years: 1 }).startOf("year"),
         end: now.plus({ years: 1 }).endOf("year"),
+      };
+    case "last quarter":
+      return {
+        start: now.minus({ quarters: 1 }).startOf("quarter"),
+        end: now.minus({ quarters: 1 }).endOf("quarter"),
+      };
+    case "this quarter":
+      return {
+        start: now.startOf("quarter"),
+        end: now.endOf("quarter"),
+      };
+    case "next quarter":
+      return {
+        start: now.plus({ quarters: 1 }).startOf("quarter"),
+        end: now.plus({ quarters: 1 }).endOf("quarter"),
       };
   }
   return undefined;
