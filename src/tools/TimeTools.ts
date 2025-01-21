@@ -239,6 +239,42 @@ function handleYear(input: string, now: DateTime) {
   return { start, end };
 }
 
+/**
+ * Handles quarter patterns like:
+ * - "Q1 2024", "2024 Q1"
+ * - "q2 2023", "2023 q2"
+ */
+function handleQuarter(input: string, now: DateTime) {
+  const quarterMatch = input.match(/^(?:(?:q|Q)(\d{1})\s+(\d{4})|(\d{4})\s+(?:q|Q)(\d{1}))$/);
+  if (!quarterMatch) return undefined;
+
+  // Extract quarter and year whether it's "Q1 2024" or "2024 Q1" format
+  const quarter = parseInt(quarterMatch[1] || quarterMatch[4]);
+  const year = parseInt(quarterMatch[2] || quarterMatch[3]);
+
+  // Validate quarter number
+  if (quarter < 1 || quarter > 4) return undefined;
+
+  // Calculate start and end months for the quarter
+  const startMonth = (quarter - 1) * 3 + 1; // Q1=1, Q2=4, Q3=7, Q4=10
+
+  let start = DateTime.fromObject({
+    year,
+    month: startMonth,
+    day: 1,
+  }).startOf("day");
+
+  let end = start.plus({ months: 3 }).minus({ days: 1 }).endOf("day");
+
+  // Adjust if dates are in the future
+  if (start > now) {
+    start = start.minus({ years: 1 });
+    end = end.minus({ years: 1 });
+  }
+
+  return { start, end };
+}
+
 function getTimeRangeMs(timeExpression: string) {
   const now = DateTime.now();
   const normalizedInput = timeExpression.toLowerCase().replace("@vault", "").trim();
@@ -249,6 +285,7 @@ function getTimeRangeMs(timeExpression: string) {
     handleSpecialTimeRanges(normalizedInput, now) ||
     handleWeekOf(normalizedInput, now) ||
     handleMonthName(normalizedInput, now) ||
+    handleQuarter(normalizedInput, now) ||
     handleYear(normalizedInput, now);
 
   if (result) {
