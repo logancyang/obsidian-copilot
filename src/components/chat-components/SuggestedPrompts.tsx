@@ -1,5 +1,6 @@
 import { useChainType } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
+import { Button } from "@/components/ui/button";
 import { Card, CardTitle, CardContent, CardHeader } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
@@ -99,7 +100,7 @@ export const SuggestedPrompts: React.FC<SuggestedPromptsProps> = ({ onClick }) =
         <CardHeader className="px-2">
           <CardTitle>Suggested Prompts</CardTitle>
         </CardHeader>
-        <CardContent className="p-2 px-2 pt-0">
+        <CardContent className="p-2 pt-0">
           <div className="flex flex-col gap-2">
             {prompts.map((prompt, i) => (
               <div
@@ -110,17 +111,21 @@ export const SuggestedPrompts: React.FC<SuggestedPromptsProps> = ({ onClick }) =
                   <div className="text-muted">{prompt.title}</div>
                   <div>{prompt.text}</div>
                 </div>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      className="size-6 p-0 !bg-transparent border-none !shadow-none hover:!bg-interactive-hover"
-                      onClick={() => onClick(prompt.text)}
-                    >
-                      <PlusCircle className="size-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>Add to Chat</TooltipContent>
-                </Tooltip>
+                <div className="flex items-start h-full">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost2"
+                        size="fit"
+                        className="text-muted"
+                        onClick={() => onClick(prompt.text)}
+                      >
+                        <PlusCircle className="size-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Add to Chat</TooltipContent>
+                  </Tooltip>
+                </div>
               </div>
             ))}
           </div>

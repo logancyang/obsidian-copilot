@@ -8,15 +8,27 @@ import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
-import { ChatMessage } from "@/sharedState";
 import { getToolDescription } from "@/tools/toolManager";
 import { extractNoteTitles } from "@/utils";
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ArrowBigUp, ChevronUp, Command, CornerDownLeft, Image, StopCircle } from "lucide-react";
+import {
+  ArrowBigUp,
+  ChevronDown,
+  Command,
+  CornerDownLeft,
+  Image,
+  StopCircle,
+  X,
+} from "lucide-react";
 import { App, Platform, TFile } from "obsidian";
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import ChatControls from "./ChatControls";
-import { TooltipActionButton } from "./TooltipActionButton";
+import ContextControl from "./ContextControl";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -30,9 +42,6 @@ interface ChatInputProps {
   onStopGenerating: () => void;
   app: App;
   navigateHistory: (direction: "up" | "down") => string;
-  onNewChat: (openNote: boolean) => void;
-  onSaveAsNote: () => void;
-  onRefreshVaultContext: () => void;
   contextNotes: TFile[];
   setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
   includeActiveNote: boolean;
@@ -41,7 +50,6 @@ interface ChatInputProps {
   selectedImages: File[];
   onAddImage: (files: File[]) => void;
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
-  chatHistory: ChatMessage[];
 }
 
 const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
@@ -54,9 +62,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       onStopGenerating,
       app,
       navigateHistory,
-      onNewChat,
-      onSaveAsNote,
-      onRefreshVaultContext,
       contextNotes,
       setContextNotes,
       includeActiveNote,
@@ -65,7 +70,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       selectedImages,
       onAddImage,
       setSelectedImages,
-      chatHistory,
     },
     ref
   ) => {
@@ -352,11 +356,11 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     }, [app.workspace]);
 
     return (
-      <div className="chat-input-container" ref={containerRef}>
-        <ChatControls
-          onNewChat={onNewChat}
-          onSaveAsNote={onSaveAsNote}
-          onRefreshVaultContext={onRefreshVaultContext}
+      <div
+        className="flex flex-col gap-0.5 w-full border border-border border-solid rounded-md pt-2 pb-1 px-1"
+        ref={containerRef}
+      >
+        <ContextControl
           app={app}
           contextNotes={contextNotes}
           setContextNotes={setContextNotes}
@@ -365,7 +369,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           activeNote={currentActiveNote}
           contextUrls={contextUrls}
           onRemoveUrl={(url: string) => setContextUrls((prev) => prev.filter((u) => u !== url))}
-          chatHistory={chatHistory}
         />
 
         {selectedImages.length > 0 && (
@@ -382,7 +385,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                   onClick={() => setSelectedImages((prev) => prev.filter((_, i) => i !== index))}
                   title="Remove image"
                 >
-                  ×
+                  <X className="size-4" />
                 </button>
               </div>
             ))}
@@ -391,7 +394,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
         <textarea
           ref={textAreaRef}
-          className="chat-input-textarea"
+          className="w-full bg-transparent focus-visible:ring-0 border-none min-h-10 max-h-40 overflow-y-auto resize-none px-2 rounded-md text-sm text-normal"
           placeholder={
             "Ask anything. [[ for notes. / for custom prompts. " +
             (currentChain === ChainType.COPILOT_PLUS_CHAIN ? "@ for tools." : "")
@@ -401,79 +404,93 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           onKeyDown={handleKeyDown}
         />
 
-        <div className="chat-input-controls">
-          <div className="chat-input-left">
-            <DropdownMenu.Root open={isModelDropdownOpen} onOpenChange={setIsModelDropdownOpen}>
-              <DropdownMenu.Trigger className="model-select-button">
-                {settings.activeModels.find(
-                  (model) => getModelKeyFromModel(model) === currentModelKey
-                )?.name || "Select Model"}
-                <ChevronUp size={10} />
-              </DropdownMenu.Trigger>
+        <div className="flex gap-1 justify-between px-1">
+          <div className="flex items-center gap-1">
+            <DropdownMenu open={isModelDropdownOpen} onOpenChange={setIsModelDropdownOpen}>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost2" size="fit">
+                  {settings.activeModels.find(
+                    (model) => getModelKeyFromModel(model) === currentModelKey
+                  )?.name || "Select Model"}
+                  <ChevronDown className="size-5 mt-0.5" />
+                </Button>
+              </DropdownMenuTrigger>
 
-              <DropdownMenu.Portal container={activeDocument.body}>
-                <DropdownMenu.Content className="model-select-content" align="start">
-                  {settings.activeModels
-                    .filter((model) => model.enabled)
-                    .map((model) => (
-                      <DropdownMenu.Item
-                        key={getModelKeyFromModel(model)}
-                        onSelect={() => setCurrentModelKey(getModelKeyFromModel(model))}
-                      >
-                        {model.name}
-                      </DropdownMenu.Item>
-                    ))}
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
+              <DropdownMenuContent align="start">
+                {settings.activeModels
+                  .filter((model) => model.enabled)
+                  .map((model) => (
+                    <DropdownMenuItem
+                      key={getModelKeyFromModel(model)}
+                      onSelect={() => setCurrentModelKey(getModelKeyFromModel(model))}
+                    >
+                      {model.name}
+                    </DropdownMenuItem>
+                  ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             {currentChain === ChainType.COPILOT_PLUS_CHAIN && (
-              <TooltipActionButton
+              <Button
+                variant="ghost2"
+                size="fit"
                 onClick={() => {
                   new AddImageModal(app, onAddImage).open();
                 }}
-                Icon={
-                  <div className="button-content">
-                    <span>image</span>
-                    <Image className="icon-scaler" />
-                  </div>
-                }
               >
-                Add Image
-              </TooltipActionButton>
+                <div className="flex items-center gap-1">
+                  <span>image</span>
+                  <Image className="!size-3" />
+                </div>
+              </Button>
             )}
           </div>
 
-          <div className="chat-input-buttons">
+          <div className="flex items-center gap-1">
             {isGenerating && (
-              <button onClick={() => onStopGenerating()} className="submit-button cancel">
-                <StopCircle />
-              </button>
+              <Button
+                variant="ghost2"
+                size="fit"
+                className="text-muted"
+                onClick={() => onStopGenerating()}
+              >
+                <StopCircle className="size-4" />
+              </Button>
             )}
-            <button onClick={() => onSendMessage(false)} className="submit-button">
-              <CornerDownLeft size={16} />
+            <Button
+              variant="ghost2"
+              size="fit"
+              className="text-muted"
+              onClick={() => onSendMessage(false)}
+            >
+              <CornerDownLeft className="!size-3" />
               <span>chat</span>
-            </button>
+            </Button>
 
             {currentChain === "copilot_plus" && (
-              <button onClick={() => onSendMessage(true)} className="submit-button vault">
-                <div className="button-content">
+              <Button
+                variant="ghost2"
+                size="fit"
+                className="text-muted"
+                onClick={() => onSendMessage(true)}
+              >
+                <div className="flex items-center gap-1">
                   {Platform.isMacOS ? (
-                    <>
-                      <Command size={12} />
-                      <ArrowBigUp size={16} />
-                      <CornerDownLeft size={16} />
-                    </>
+                    <div className="flex items-center">
+                      <Command className="!size-3" />
+                      <ArrowBigUp className="!size-3" />
+                      <CornerDownLeft className="!size-3" />
+                    </div>
                   ) : (
-                    <>
+                    <div className="flex items-center">
                       <span>Ctrl</span>
-                      <ArrowBigUp size={16} />
-                      <CornerDownLeft size={16} />
-                    </>
+                      <ArrowBigUp className="size-4" />
+                      <CornerDownLeft className="!size-3" />
+                    </div>
                   )}
                   <span>vault</span>
                 </div>
-              </button>
+              </Button>
             )}
           </div>
         </div>

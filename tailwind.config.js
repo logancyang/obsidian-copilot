@@ -65,6 +65,8 @@ module.exports = {
       },
       dropdown: {
         DEFAULT: "var(--dropdown-background)",
+        blend: "var(--dropdown-background-blend-mode)",
+        hover: "var(--dropdown-background-hover)",
       },
       callout: {
         warning: "rgba(var(--callout-warning),<alpha-value>)",
