@@ -136,7 +136,7 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
 
       {/* Keys Section */}
       <section>
-        <div className="text-2xl font-bold mb-4">API Keys</div>
+        <div className="text-2xl font-bold mb-4">API Keys (Required)</div>
         <div className="space-y-4">
           {/* API Key Section */}
           <SettingItem
@@ -289,12 +289,10 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
             }
             value={settings.embeddingModelKey}
             onChange={handleSetDefaultEmbeddingModel}
-            options={settings.activeEmbeddingModels
-              // .filter((m) => m.enabled)
-              .map((model) => ({
-                label: `${model.name} (${getProviderLabel(model.provider)})`,
-                value: getModelKeyFromModel(model),
-              }))}
+            options={settings.activeEmbeddingModels.map((model) => ({
+              label: `${model.name} (${getProviderLabel(model.provider)})`,
+              value: getModelKeyFromModel(model),
+            }))}
             placeholder="Model"
           />
 
