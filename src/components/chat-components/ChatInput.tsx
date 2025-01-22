@@ -29,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { useDropzone } from "react-dropzone";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -355,6 +356,18 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       };
     }, [app.workspace]);
 
+    // Add dropzone configuration
+    const { getRootProps, getInputProps, isDragActive } = useDropzone({
+      accept: {
+        "image/*": [".png", ".gif", ".jpeg", ".jpg", ".webp"],
+      },
+      onDrop: (acceptedFiles) => {
+        onAddImage(acceptedFiles);
+      },
+      noClick: true, // Prevents clicking on textarea from opening file dialog
+      noDragEventsBubbling: true,
+    });
+
     return (
       <div
         className="flex flex-col gap-0.5 w-full border border-border border-solid rounded-md pt-2 pb-1 px-1"
@@ -392,17 +405,27 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           </div>
         )}
 
-        <textarea
-          ref={textAreaRef}
-          className="w-full bg-transparent focus-visible:ring-0 border-none min-h-10 max-h-40 overflow-y-auto resize-none px-2 rounded-md text-sm text-normal"
-          placeholder={
-            "Ask anything. [[ for notes. / for custom prompts. " +
-            (currentChain === ChainType.COPILOT_PLUS_CHAIN ? "@ for tools." : "")
-          }
-          value={inputMessage}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-        />
+        <div className="relative" {...getRootProps()}>
+          <textarea
+            ref={textAreaRef}
+            className="w-full bg-transparent focus-visible:ring-0 border-none min-h-10 max-h-40 overflow-y-auto resize-none px-2 rounded-md text-sm text-normal"
+            placeholder={
+              "Ask anything. [[ for notes. / for custom prompts. " +
+              (currentChain === ChainType.COPILOT_PLUS_CHAIN ? "@ for tools." : "")
+            }
+            value={inputMessage}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+          />
+          <input {...getInputProps()} />
+
+          {/* Overlay that appears when dragging */}
+          {isDragActive && (
+            <div className="absolute inset-0 bg-primary border border-dashed border-primary rounded-md flex items-center justify-center">
+              <span className="text-primary">Drop images here...</span>
+            </div>
+          )}
+        </div>
 
         <div className="flex gap-1 justify-between px-1">
           <div className="flex items-center gap-1">
