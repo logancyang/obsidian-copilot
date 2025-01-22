@@ -29,7 +29,14 @@ export class LoadChatHistoryModal extends FuzzySuggestModal<TFile> {
   }
 
   getItemText(file: TFile): string {
-    const [title] = file.basename.split("@");
+    // Remove {$date} and {$time} parts from the filename
+    const title = file.basename
+      .replace(/\{\$date}|\d{8}/g, "") // Remove {$date} or date in format YYYYMMDD
+      .replace(/\{\$time}|\d{6}/g, "") // Remove {$time} or time in format HHMMSS
+      .replace(/[@_]/g, " ") // Replace @ and _ with spaces
+      .replace(/\s+/g, " ") // Replace multiple spaces with single space
+      .trim();
+
     let formattedDateTime: FormattedDateTime;
 
     // Read the file's front matter
@@ -42,7 +49,7 @@ export class LoadChatHistoryModal extends FuzzySuggestModal<TFile> {
       formattedDateTime = formatDateTime(new Date(file.stat.ctime));
     }
 
-    return `${title.replace(/_/g, " ").trim()} - ${formattedDateTime.display}`;
+    return `${title} - ${formattedDateTime.display}`;
   }
 
   onChooseItem(file: TFile, evt: MouseEvent | KeyboardEvent) {

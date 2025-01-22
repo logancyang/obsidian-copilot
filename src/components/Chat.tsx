@@ -15,7 +15,7 @@ import { Mention } from "@/mentions/Mention";
 import { getSettings, useSettingsValue } from "@/settings/model";
 import SharedState, { ChatMessage, useSharedState } from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
-import { formatDateTime } from "@/utils";
+import { err2String, formatDateTime } from "@/utils";
 import { Notice, TFile } from "obsidian";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
 
@@ -269,11 +269,17 @@ const Chat: React.FC<ChatProps> = ({
               .trim()
           : "Untitled Chat";
 
+        // Parse the custom format and replace variables
+        let customFileName = settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}";
+
         // Create the file name (limit to 100 characters to avoid excessively long names)
-        const sanitizedFileName = `${firstTenWords.slice(0, 100)}@${timestampFileName}`.replace(
-          /\s+/g,
-          "_"
-        );
+        customFileName = customFileName
+          .replace("{$topic}", firstTenWords.slice(0, 100).replace(/\s+/g, "_"))
+          .replace("{$date}", timestampFileName.split("_")[0])
+          .replace("{$time}", timestampFileName.split("_")[1]);
+
+        // Sanitize the final filename
+        const sanitizedFileName = customFileName.replace(/[\\/:*?"<>|]/g, "_");
         const noteFileName = `${settings.defaultSaveFolder}/${sanitizedFileName}.md`;
 
         // Add the timestamp and model properties to the note content
@@ -306,11 +312,18 @@ ${chatContent}`;
           }
         }
       } catch (error) {
-        console.error("Error saving chat as note:", error);
+        console.error("Error saving chat as note:", err2String(error));
         new Notice("Failed to save chat as note. Check console for details.");
       }
     },
-    [app, chatHistory, currentModelKey, settings.defaultConversationTag, settings.defaultSaveFolder]
+    [
+      app,
+      chatHistory,
+      currentModelKey,
+      settings.defaultConversationTag,
+      settings.defaultSaveFolder,
+      settings.defaultConversationNoteName,
+    ]
   );
 
   const handleStopGenerating = useCallback(
