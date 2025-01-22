@@ -100,14 +100,6 @@ If your plugin does not need CSS, delete this file.
   box-sizing: border-box;
 }
 
-.chat-icons-container {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  padding: 0 0 8px;
-  gap: 4px;
-}
-
 .chat-context-menu {
   display: flex;
   align-items: center;
@@ -115,37 +107,6 @@ If your plugin does not need CSS, delete this file.
   padding: 0;
   border-bottom: none;
   flex: 1; /* Take up available space */
-}
-
-.context-notes {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-  flex: 1;
-}
-
-.context-note {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
-  background: var(--background-secondary-alt);
-  border-radius: 4px;
-  font-size: 10px;
-  height: 20px;
-  line-height: 1;
-}
-
-.context-note.active {
-  background: var(--background-modifier-hover);
-  color: var(--text-normal);
-  border-left: 2px solid var(--interactive-accent);
-}
-
-.context-note.with-hover {
-  /* Use the same background as active note but without border */
-  background: var(--background-modifier-hover);
-  color: var(--text-normal);
 }
 
 .note-badge {
@@ -269,54 +230,6 @@ If your plugin does not need CSS, delete this file.
   opacity: 1;
 }
 
-.chat-input-container {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  background: var(--background-secondary-alt);
-  border-radius: 4px;
-  padding: 4px;
-  gap: 2px;
-}
-
-.chat-input-textarea {
-  width: 100%;
-  min-height: 44px;
-  max-height: 440px;
-  overflow-y: auto;
-  resize: none;
-  padding: 2px 12px;
-  background: var(--background-secondary-alt);
-  border: none;
-  border-radius: 4px;
-  color: var(--text-normal);
-  font-size: 13px;
-}
-
-.chat-input-textarea::placeholder {
-  color: var(--text-muted);
-  opacity: 0.5;
-}
-
-.chat-input-textarea:focus {
-  outline: none;
-  border: none;
-  box-shadow: none;
-}
-
-.chat-input-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 4px;
-}
-
-.chat-input-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
 .selected-images {
   display: flex;
   flex-wrap: wrap;
@@ -377,11 +290,6 @@ If your plugin does not need CSS, delete this file.
 .button-content .icon-scaler {
   width: 18px;
   height: 18px;
-}
-
-.chat-input-buttons {
-  display: flex;
-  gap: 12px;
 }
 
 .model-select-content {
@@ -565,54 +473,6 @@ If your plugin does not need CSS, delete this file.
   object-fit: contain;
   border-radius: 8px;
   border: 1px solid var(--background-modifier-border);
-}
-
-.message-buttons-wrapper {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 4px;
-}
-
-.message-timestamp {
-  font-size: 0.7em;
-  color: var(--text-faint, #bbb);
-  opacity: 0.7;
-  font-style: italic;
-}
-
-.chat-message-buttons {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  height: 20px;
-  margin-left: auto;
-}
-
-.chat-message-buttons button {
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  font-size: 12px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background-color: transparent;
-  opacity: 0.5;
-  border: none;
-  cursor: pointer;
-  color: var(--text-muted);
-  transition: color 0.2s ease;
-}
-
-.chat-message-buttons button:hover {
-  color: var(--text-normal);
-  opacity: 1;
-}
-
-.chat-message-buttons button svg {
-  width: 14px;
-  height: 14px;
 }
 
 .copilot-command-modal {

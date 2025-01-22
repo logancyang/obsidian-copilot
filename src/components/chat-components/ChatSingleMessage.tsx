@@ -248,8 +248,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     <div className="flex flex-col w-full my-1">
       <div
         className={cn(
-          "flex rounded-md p-2 mx-2 gap-2",
-          message.sender === USER_SENDER && "bg-primary-alt"
+          "flex rounded-md p-2 mx-2 gap-2 group",
+          message.sender === USER_SENDER && "border border-border border-solid"
         )}
       >
         <div className="w-6 shrink-0">{message.sender === USER_SENDER ? <User /> : <Bot />}</div>
@@ -258,8 +258,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           <div className="message-content">{renderMessageContent()}</div>
 
           {!isStreaming && (
-            <div className="message-buttons-wrapper">
-              <div className="message-timestamp">{message.timestamp?.display}</div>
+            <div className="flex justify-between items-center">
+              <div className="text-faint text-xs">{message.timestamp?.display}</div>
               <ChatButtons
                 message={message}
                 onCopy={copyToClipboard}

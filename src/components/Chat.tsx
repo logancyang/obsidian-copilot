@@ -1,6 +1,7 @@
 import { useChainType, useModelKey } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { updateChatMemory } from "@/chatUtils";
+import { ChatControls } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
 import { ABORT_REASON, COMMAND_IDS, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
@@ -312,25 +313,6 @@ ${chatContent}`;
     [app, chatHistory, currentModelKey, settings.defaultConversationTag, settings.defaultSaveFolder]
   );
 
-  const refreshVaultContext = useCallback(async () => {
-    if (!app) {
-      console.error("App instance is not available.");
-      return;
-    }
-
-    try {
-      await plugin.vectorStoreManager.indexVaultToVectorStore();
-      new Notice("Vault index refreshed.");
-    } catch (error) {
-      console.error("Error refreshing vault index:", error);
-      new Notice("Failed to refresh vault index. Check console for details.");
-    }
-  }, [app, plugin.vectorStoreManager]);
-
-  const clearCurrentAiMessage = useCallback(() => {
-    setCurrentAiMessage("");
-  }, []);
-
   const handleStopGenerating = useCallback(
     (reason?: ABORT_REASON) => {
       if (abortController) {
@@ -533,6 +515,25 @@ ${chatContent}`;
     setInputMessage((prev) => `${prev} ${prompt} `);
   }, []);
 
+  const handleNewChat = useCallback(async () => {
+    handleStopGenerating(ABORT_REASON.NEW_CHAT);
+    if (settings.autosaveChat && chatHistory.length > 0) {
+      await handleSaveAsNote(true);
+    }
+    clearMessages();
+    chainManager.memoryManager.clearChatMemory();
+    setCurrentAiMessage("");
+    setContextNotes([]);
+    setIncludeActiveNote(false);
+  }, [
+    handleStopGenerating,
+    settings.autosaveChat,
+    chatHistory.length,
+    clearMessages,
+    chainManager.memoryManager,
+    handleSaveAsNote,
+  ]);
+
   return (
     <div className="chat-container">
       <ChatMessages
@@ -548,6 +549,7 @@ ${chatContent}`;
         onReplaceChat={setInputMessage}
       />
       <div className="bottom-container">
+        <ChatControls onNewChat={handleNewChat} onSaveAsNote={() => handleSaveAsNote(true)} />
         <ChatInput
           ref={inputRef}
           inputMessage={inputMessage}
@@ -557,19 +559,6 @@ ${chatContent}`;
           onStopGenerating={() => handleStopGenerating(ABORT_REASON.USER_STOPPED)}
           app={app}
           navigateHistory={navigateHistory}
-          onNewChat={async (openNote: boolean) => {
-            handleStopGenerating(ABORT_REASON.NEW_CHAT);
-            if (settings.autosaveChat && chatHistory.length > 0) {
-              await handleSaveAsNote(openNote);
-            }
-            clearMessages();
-            chainManager.memoryManager.clearChatMemory();
-            clearCurrentAiMessage();
-            setContextNotes([]);
-            setIncludeActiveNote(false);
-          }}
-          onSaveAsNote={() => handleSaveAsNote(true)}
-          onRefreshVaultContext={refreshVaultContext}
           contextNotes={contextNotes}
           setContextNotes={setContextNotes}
           includeActiveNote={includeActiveNote}
@@ -578,7 +567,6 @@ ${chatContent}`;
           selectedImages={selectedImages}
           onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
           setSelectedImages={setSelectedImages}
-          chatHistory={chatHistory}
         />
       </div>
     </div>

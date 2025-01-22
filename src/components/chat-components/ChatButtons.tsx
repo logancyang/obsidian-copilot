@@ -1,4 +1,8 @@
+import { Button } from "@/components/ui/button";
+import { Platform } from "obsidian";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { USER_SENDER } from "@/constants";
+import { cn } from "@/lib/utils";
 import { ChatMessage } from "@/sharedState";
 import {
   Check,
@@ -35,39 +39,79 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
   hasSources,
 }) => {
   return (
-    <div className="chat-message-buttons">
-      <button onClick={onCopy} className="clickable-icon" title="Copy">
-        {isCopied ? <Check /> : <Copy />}
-      </button>
+    <div
+      className={cn("flex", {
+        "group-hover:opacity-100 opacity-0": !Platform.isMobile,
+      })}
+    >
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost2" size="fit" onClick={onCopy} title="Copy">
+            {isCopied ? <Check className="size-4" /> : <Copy className="size-4" />}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Copy</TooltipContent>
+      </Tooltip>
       {message.sender === USER_SENDER ? (
         <>
-          <button onClick={onEdit} className="clickable-icon" title="Edit">
-            <PenSquare />
-          </button>
-          <button onClick={onDelete} className="clickable-icon" title="Delete">
-            <Trash2 />
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={onEdit} variant="ghost2" size="fit" title="Edit">
+                <PenSquare className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Edit</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={onDelete} variant="ghost2" size="fit" title="Delete">
+                <Trash2 className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Delete</TooltipContent>
+          </Tooltip>
         </>
       ) : (
         <>
           {hasSources && (
-            <button onClick={onShowSources} className="clickable-icon" title="Show Sources">
-              <LibraryBig />
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button onClick={onShowSources} variant="ghost2" size="fit" title="Show Sources">
+                  <LibraryBig className="size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Show Sources</TooltipContent>
+            </Tooltip>
           )}
-          <button
-            onClick={onInsertIntoEditor}
-            className="clickable-icon"
-            title="Insert to note at cursor"
-          >
-            <TextCursorInput />
-          </button>
-          <button onClick={onRegenerate} className="clickable-icon" title="Regenerate">
-            <RotateCw />
-          </button>
-          <button onClick={onDelete} className="clickable-icon" title="Delete">
-            <Trash2 />
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={onInsertIntoEditor}
+                variant="ghost2"
+                size="fit"
+                title="Insert to note at cursor"
+              >
+                <TextCursorInput className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Insert to note at cursor</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={onRegenerate} variant="ghost2" size="fit" title="Regenerate">
+                <RotateCw className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Regenerate</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={onDelete} variant="ghost2" size="fit" title="Delete">
+                <Trash2 className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Delete</TooltipContent>
+          </Tooltip>
         </>
       )}
     </div>

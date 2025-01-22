@@ -21,6 +21,7 @@ import { Notice, TFile } from "obsidian";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useActiveFile } from "@/hooks/useActiveFile";
+import { Button } from "@/components/ui/button";
 
 function useRelevantNotes(refresher: number) {
   const [relevantNotes, setRelevantNotes] = useState<RelevantNoteEntry[]>([]);
@@ -135,12 +136,9 @@ function RelevantNote({
       <div className="flex gap-2">
         <Tooltip>
           <TooltipTrigger asChild>
-            <button
-              className="size-6 p-0 !bg-transparent border-none !shadow-none hover:!bg-interactive-hover"
-              onClick={onAddToChat}
-            >
+            <Button variant="ghost2" size="icon" onClick={onAddToChat}>
               <PlusCircle className="size-4" />
-            </button>
+            </Button>
           </TooltipTrigger>
           <TooltipContent>Add to Chat</TooltipContent>
         </Tooltip>
@@ -225,7 +223,7 @@ export const RelevantNotes = memo(
         )}
       >
         <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-          <div className="flex justify-between items-center px-2 pb-2">
+          <div className="flex justify-between items-center pl-1 pb-2">
             <div className="flex gap-2 items-center flex-1">
               <span className="font-semibold text-normal">Relevant Notes</span>
               <Tooltip>
@@ -246,34 +244,31 @@ export const RelevantNotes = memo(
                 </Tooltip>
               )}
             </div>
-            <div className="flex gap-2 items-center">
+            <div className="flex items-center">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button
-                    className="size-6 p-0 !bg-transparent border-none !shadow-none hover:!bg-interactive-hover"
-                    onClick={refreshIndex}
-                  >
+                  <Button variant="ghost2" size="icon" onClick={refreshIndex}>
                     <RefreshCcw className="size-4" />
-                  </button>
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">Reindex Current Note</TooltipContent>
               </Tooltip>
               {relevantNotes.length > 0 && (
                 <CollapsibleTrigger asChild>
-                  <button className="size-6 p-0 !bg-transparent border-none !shadow-none hover:!bg-interactive-hover">
-                    {isOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-                  </button>
+                  <Button variant="ghost2" size="icon">
+                    {isOpen ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
+                  </Button>
                 </CollapsibleTrigger>
               )}
             </div>
           </div>
           {relevantNotes.length === 0 && (
-            <div className="flex flex-wrap gap-x-2 gap-y-1 max-h-12 overflow-y-hidden px-2">
+            <div className="flex flex-wrap gap-x-2 gap-y-1 max-h-12 overflow-y-hidden px-1">
               <span className="text-xs text-muted">No relevant notes found</span>
             </div>
           )}
           {!isOpen && relevantNotes.length > 0 && (
-            <div className="flex flex-wrap gap-x-2 gap-y-1 max-h-6 overflow-y-hidden px-2">
+            <div className="flex flex-wrap gap-x-2 gap-y-1 max-h-6 overflow-y-hidden px-1">
               {relevantNotes.map((note) => (
                 <RelevantNotePopover
                   key={note.document.path}
@@ -295,7 +290,7 @@ export const RelevantNotes = memo(
             </div>
           )}
           <CollapsibleContent>
-            <div className="p-2 max-h-96 overflow-y-auto flex flex-col gap-2 @2xl:grid @2xl:grid-cols-2 @4xl:grid-cols-3">
+            <div className="px-1 py-2 max-h-96 overflow-y-auto flex flex-col gap-2 @2xl:grid @2xl:grid-cols-2 @4xl:grid-cols-3">
               {relevantNotes.map((note) => (
                 <RelevantNote
                   showPath={!inSameFolder(activeFile?.path ?? "", note.document.path)}
