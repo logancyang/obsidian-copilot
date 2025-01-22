@@ -6,19 +6,18 @@ import {
   COMMAND_IDS,
   COMMAND_NAMES,
   CommandId,
+  DISABLEABLE_COMMANDS,
   PROCESS_SELECTION_COMMANDS,
   USER_SENDER,
-} from "../constants";
+} from "@/constants";
 import { getSettings } from "@/settings/model";
-import { DISABLEABLE_COMMANDS } from "../constants";
 import { ChatMessage } from "@/sharedState";
-import { formatDateTime } from "@/utils";
+import { err2String, formatDateTime } from "@/utils";
 import { InlineEditModal } from "@/components/modals/InlineEditModal";
 import { AddPromptModal } from "@/components/modals/AddPromptModal";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { ListPromptModal } from "@/components/modals/ListPromptModal";
 import { AdhocPromptModal } from "@/components/modals/AdhocPromptModal";
-import { CustomError } from "@/error";
 import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
 import { DebugSearchModal } from "@/components/modals/DebugSearchModal";
 import { RemoveFromIndexModal } from "@/components/modals/RemoveFromIndexModal";
@@ -229,8 +228,9 @@ export function registerBuiltInCommands(plugin: CopilotPlugin) {
         await promptProcessor.savePrompt(title, prompt);
         new Notice("Custom prompt saved successfully.");
       } catch (e) {
-        new Notice("Error saving custom prompt. Please check if the title already exists.");
-        console.error(e);
+        const msg = "An error occurred while saving the custom prompt: " + err2String(e);
+        console.error(msg);
+        throw new Error(msg);
       }
     }).open();
   });
@@ -316,12 +316,10 @@ export function registerBuiltInCommands(plugin: CopilotPlugin) {
                     await promptProcessor.updatePrompt(promptTitle, title, newPrompt);
                     new Notice(`Prompt "${title}" has been updated.`);
                   } catch (err) {
-                    console.error(err);
-                    if (err instanceof CustomError) {
-                      new Notice(err.message);
-                    } else {
-                      new Notice("An error occurred.");
-                    }
+                    const msg =
+                      "An error occurred while updating the custom prompt: " + err2String(err);
+                    console.error(msg);
+                    throw new Error(msg);
                   }
                 },
                 prompt.title,
