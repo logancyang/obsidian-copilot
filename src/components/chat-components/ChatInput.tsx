@@ -86,6 +86,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       app.workspace.getActiveFile()
     );
     const settings = useSettingsValue();
+    const isCopilotPlus = currentChain === ChainType.COPILOT_PLUS_CHAIN;
 
     useImperativeHandle(ref, () => ({
       focus: () => {
@@ -405,7 +406,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           </div>
         )}
 
-        <div className="relative" {...getRootProps()}>
+        <div className="relative" {...(isCopilotPlus ? getRootProps() : {})}>
           <textarea
             ref={textAreaRef}
             className="w-full bg-transparent focus-visible:ring-0 border-none min-h-10 max-h-40 overflow-y-auto resize-none px-2 rounded-md text-sm text-normal"
@@ -417,13 +418,16 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
           />
-          <input {...getInputProps()} />
-
-          {/* Overlay that appears when dragging */}
-          {isDragActive && (
-            <div className="absolute inset-0 bg-primary border border-dashed border-primary rounded-md flex items-center justify-center">
-              <span className="text-primary">Drop images here...</span>
-            </div>
+          {isCopilotPlus && (
+            <>
+              <input {...getInputProps()} />
+              {/* Overlay that appears when dragging */}
+              {isDragActive && (
+                <div className="absolute inset-0 bg-primary border border-dashed border-primary rounded-md flex items-center justify-center">
+                  <span className="text-primary">Drop images here...</span>
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -453,7 +457,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {currentChain === ChainType.COPILOT_PLUS_CHAIN && (
+            {isCopilotPlus && (
               <Button
                 variant="ghost2"
                 size="fit"
