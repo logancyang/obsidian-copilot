@@ -1,29 +1,29 @@
+import { COMMAND_PROMPT_MAP } from "@/commands/promptUtils";
+import { AddPromptModal } from "@/components/modals/AddPromptModal";
+import { AdhocPromptModal } from "@/components/modals/AdhocPromptModal";
+import { DebugSearchModal } from "@/components/modals/DebugSearchModal";
+import { InlineEditModal } from "@/components/modals/InlineEditModal";
 import { LanguageModal } from "@/components/modals/LanguageModal";
+import { ListPromptModal } from "@/components/modals/ListPromptModal";
+import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
+import { RemoveFromIndexModal } from "@/components/modals/RemoveFromIndexModal";
 import { ToneModal } from "@/components/modals/ToneModal";
+import { CustomPromptProcessor } from "@/customPromptProcessor";
+import { CustomError } from "@/error";
 import CopilotPlugin from "@/main";
+import { getAllQAMarkdownContent } from "@/search/searchUtils";
+import { getSettings } from "@/settings/model";
+import { ChatMessage } from "@/sharedState";
+import { formatDateTime } from "@/utils";
 import { Editor, Notice, TFile } from "obsidian";
 import {
   COMMAND_IDS,
   COMMAND_NAMES,
   CommandId,
+  DISABLEABLE_COMMANDS,
   PROCESS_SELECTION_COMMANDS,
   USER_SENDER,
 } from "../constants";
-import { getSettings } from "@/settings/model";
-import { DISABLEABLE_COMMANDS } from "../constants";
-import { ChatMessage } from "@/sharedState";
-import { formatDateTime } from "@/utils";
-import { InlineEditModal } from "@/components/modals/InlineEditModal";
-import { AddPromptModal } from "@/components/modals/AddPromptModal";
-import { CustomPromptProcessor } from "@/customPromptProcessor";
-import { ListPromptModal } from "@/components/modals/ListPromptModal";
-import { AdhocPromptModal } from "@/components/modals/AdhocPromptModal";
-import { CustomError } from "@/error";
-import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
-import { DebugSearchModal } from "@/components/modals/DebugSearchModal";
-import { RemoveFromIndexModal } from "@/components/modals/RemoveFromIndexModal";
-import { COMMAND_PROMPT_MAP } from "@/commands/promptUtils";
-import { getAllQAMarkdownContent } from "@/search/searchUtils";
 
 /**
  * Check if a command is enabled.
@@ -292,55 +292,53 @@ export function registerBuiltInCommands(plugin: CopilotPlugin) {
         }
       }).open();
     });
+    return true;
+  });
 
-    addCheckCommand(plugin, COMMAND_IDS.EDIT_CUSTOM_PROMPT, (checking: boolean) => {
-      if (checking) {
-        return true;
-      }
-
-      promptProcessor.getAllPrompts().then((prompts) => {
-        const promptTitles = prompts.map((p) => p.title);
-        new ListPromptModal(plugin.app, promptTitles, async (promptTitle: string) => {
-          if (!promptTitle) {
-            new Notice("Please select a prompt title.");
-            return;
-          }
-
-          try {
-            const prompt = await promptProcessor.getPrompt(promptTitle);
-            if (prompt) {
-              new AddPromptModal(
-                plugin.app,
-                async (title: string, newPrompt: string) => {
-                  try {
-                    await promptProcessor.updatePrompt(promptTitle, title, newPrompt);
-                    new Notice(`Prompt "${title}" has been updated.`);
-                  } catch (err) {
-                    console.error(err);
-                    if (err instanceof CustomError) {
-                      new Notice(err.message);
-                    } else {
-                      new Notice("An error occurred.");
-                    }
-                  }
-                },
-                prompt.title,
-                prompt.content,
-                false
-              ).open();
-            } else {
-              new Notice(`No prompt found with the title "${promptTitle}".`);
-            }
-          } catch (err) {
-            console.error(err);
-            new Notice("An error occurred.");
-          }
-        }).open();
-      });
-
+  addCheckCommand(plugin, COMMAND_IDS.EDIT_CUSTOM_PROMPT, (checking: boolean) => {
+    if (checking) {
       return true;
-    });
+    }
 
+    promptProcessor.getAllPrompts().then((prompts) => {
+      const promptTitles = prompts.map((p) => p.title);
+      new ListPromptModal(plugin.app, promptTitles, async (promptTitle: string) => {
+        if (!promptTitle) {
+          new Notice("Please select a prompt title.");
+          return;
+        }
+
+        try {
+          const prompt = await promptProcessor.getPrompt(promptTitle);
+          if (prompt) {
+            new AddPromptModal(
+              plugin.app,
+              async (title: string, newPrompt: string) => {
+                try {
+                  await promptProcessor.updatePrompt(promptTitle, title, newPrompt);
+                  new Notice(`Prompt "${title}" has been updated.`);
+                } catch (err) {
+                  console.error(err);
+                  if (err instanceof CustomError) {
+                    new Notice(err.message);
+                  } else {
+                    new Notice("An error occurred.");
+                  }
+                }
+              },
+              prompt.title,
+              prompt.content,
+              false
+            ).open();
+          } else {
+            new Notice(`No prompt found with the title "${promptTitle}".`);
+          }
+        } catch (err) {
+          console.error(err);
+          new Notice("An error occurred.");
+        }
+      }).open();
+    });
     return true;
   });
 

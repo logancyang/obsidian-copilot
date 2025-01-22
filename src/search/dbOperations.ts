@@ -114,10 +114,22 @@ export class DBOperations {
       return;
     }
 
-    try {
-      if (!this.oramaDb || !this.chunkedStorage) {
-        throw new CustomError("Orama database not found.");
+    if (!this.oramaDb || !this.chunkedStorage) {
+      // Instead of throwing immediately, try to initialize.
+      // Crucial for new user onboarding.
+      try {
+        await this.initializeDB(await EmbeddingsManager.getInstance().getEmbeddingsAPI());
+        // If still not initialized after attempt, then throw
+        if (!this.oramaDb || !this.chunkedStorage) {
+          throw new CustomError("Orama database not found.");
+        }
+      } catch (error) {
+        console.error("Failed to initialize database during save:", error);
+        throw new CustomError("Failed to initialize and save database.");
       }
+    }
+
+    try {
       await this.chunkedStorage.saveDatabase(this.oramaDb);
       this.hasUnsavedChanges = false;
 
@@ -132,6 +144,11 @@ export class DBOperations {
 
   async clearIndex(embeddingInstance: Embeddings | undefined): Promise<void> {
     try {
+      // Ensure database is initialized first
+      if (!this.oramaDb) {
+        await this.initializeDB(embeddingInstance);
+      }
+
       // Clear existing storage first
       await this.chunkedStorage?.clearStorage();
 
