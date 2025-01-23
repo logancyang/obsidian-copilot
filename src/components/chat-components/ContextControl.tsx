@@ -9,6 +9,7 @@ import { ChatContextMenu } from "./ChatContextMenu";
 
 interface ChatControlsProps {
   app: App;
+  excludeNotePaths: string[];
   contextNotes: TFile[];
   setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
   includeActiveNote: boolean;
@@ -20,6 +21,7 @@ interface ChatControlsProps {
 
 const ContextControl: React.FC<ChatControlsProps> = ({
   app,
+  excludeNotePaths,
   contextNotes,
   setContextNotes,
   includeActiveNote,
@@ -31,11 +33,6 @@ const ContextControl: React.FC<ChatControlsProps> = ({
   const [selectedChain] = useChainType();
 
   const handleAddContext = () => {
-    const excludeNotes = [
-      ...contextNotes.map((note) => note.path),
-      ...(includeActiveNote && activeNote ? [activeNote.path] : []),
-    ].filter(Boolean) as string[];
-
     new AddContextNoteModal({
       app,
       onNoteSelect: (note) => {
@@ -48,7 +45,7 @@ const ContextControl: React.FC<ChatControlsProps> = ({
           setContextNotes((prev) => [...prev, Object.assign(note, { wasAddedManually: true })]);
         }
       },
-      excludeNotes,
+      excludeNotePaths,
     }).open();
   };
 

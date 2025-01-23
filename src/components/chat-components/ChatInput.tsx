@@ -2,7 +2,6 @@ import { useChainType, useModelKey } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { AddImageModal } from "@/components/modals/AddImageModal";
 import { ListPromptModal } from "@/components/modals/ListPromptModal";
-import { NoteTitleModal } from "@/components/modals/NoteTitleModal";
 import { ContextProcessor } from "@/contextProcessor";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
@@ -20,7 +19,14 @@ import {
   X,
 } from "lucide-react";
 import { App, Platform, TFile } from "obsidian";
-import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import React, {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import ContextControl from "./ContextControl";
 import {
   DropdownMenu,
@@ -30,6 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { useDropzone } from "react-dropzone";
+import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -95,7 +102,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     }));
 
     const onSendMessage = (includeVault: boolean) => {
-      if (currentChain !== ChainType.COPILOT_PLUS_CHAIN) {
+      if (!isCopilotPlus) {
         handleSendMessage();
         return;
       }
@@ -129,7 +136,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         showNoteTitleModal(cursorPos);
       } else if (inputValue === "/") {
         showCustomPromptModal();
-      } else if (inputValue.slice(-1) === "@" && currentChain === ChainType.COPILOT_PLUS_CHAIN) {
+      } else if (inputValue.slice(-1) === "@" && isCopilotPlus) {
         showCopilotPlusOptionsModal();
       }
     };
@@ -147,36 +154,37 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
     const showNoteTitleModal = (cursorPos: number) => {
       const fetchNoteTitles = async () => {
-        const noteTitles = app.vault.getMarkdownFiles().map((file: TFile) => file.basename);
         const contextProcessor = ContextProcessor.getInstance();
 
-        new NoteTitleModal(app, noteTitles, async (noteTitle: string) => {
-          const before = inputMessage.slice(0, cursorPos - 2);
-          const after = inputMessage.slice(cursorPos - 1);
-          const newInputMessage = `${before}[[${noteTitle}]]${after}`;
-          setInputMessage(newInputMessage);
+        new AddContextNoteModal({
+          app,
+          onNoteSelect: async (note: TFile) => {
+            const before = inputMessage.slice(0, cursorPos - 2);
+            const after = inputMessage.slice(cursorPos - 1);
+            const newInputMessage = `${before}[[${note.basename}]]${after}`;
+            setInputMessage(newInputMessage);
 
-          const activeNote = app.workspace.getActiveFile();
-          const noteFile = app.vault.getMarkdownFiles().find((file) => file.basename === noteTitle);
-
-          if (noteFile) {
-            await contextProcessor.addNoteToContext(
-              noteFile,
-              app.vault,
-              contextNotes,
-              activeNote,
-              setContextNotes,
-              setIncludeActiveNote
-            );
-          }
-
-          // Add a delay to ensure the cursor is set after inputMessage is updated
-          setTimeout(() => {
-            if (textAreaRef.current) {
-              const newCursorPos = cursorPos + noteTitle.length + 2;
-              textAreaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+            const activeNote = app.workspace.getActiveFile();
+            if (note) {
+              await contextProcessor.addNoteToContext(
+                note,
+                app.vault,
+                contextNotes,
+                activeNote,
+                setContextNotes,
+                setIncludeActiveNote
+              );
             }
-          }, 0);
+
+            // Add a delay to ensure the cursor is set after inputMessage is updated
+            setTimeout(() => {
+              if (textAreaRef.current) {
+                const newCursorPos = cursorPos + note.basename.length + 2;
+                textAreaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+              }
+            }, 0);
+          },
+          excludeNotePaths,
         }).open();
       };
       fetchNoteTitles();
@@ -369,6 +377,15 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       noDragEventsBubbling: true,
     });
 
+    const excludeNotePaths = useMemo(
+      () =>
+        [
+          ...contextNotes.map((note) => note.path),
+          ...(includeActiveNote && currentActiveNote ? [currentActiveNote.path] : []),
+        ].filter((note) => note != null),
+      [contextNotes, includeActiveNote, currentActiveNote]
+    );
+
     return (
       <div
         className="flex flex-col gap-0.5 w-full border border-border border-solid rounded-md pt-2 pb-1 px-1"
@@ -376,6 +393,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       >
         <ContextControl
           app={app}
+          excludeNotePaths={excludeNotePaths}
           contextNotes={contextNotes}
           setContextNotes={setContextNotes}
           includeActiveNote={includeActiveNote}
@@ -412,7 +430,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
             className="w-full bg-transparent focus-visible:ring-0 border-none min-h-10 max-h-40 overflow-y-auto resize-none px-2 rounded-md text-sm text-normal"
             placeholder={
               "Ask anything. [[ for notes. / for custom prompts. " +
-              (currentChain === ChainType.COPILOT_PLUS_CHAIN ? "@ for tools." : "")
+              (isCopilotPlus ? "@ for tools." : "")
             }
             value={inputMessage}
             onChange={handleInputChange}

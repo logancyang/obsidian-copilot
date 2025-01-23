@@ -1,4 +1,4 @@
-import { App, FuzzySuggestModal, TFile } from "obsidian";
+import { App, FuzzySuggestModal, TFile, FuzzyMatch } from "obsidian";
 
 export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
   protected activeNote: TFile | null;
@@ -9,7 +9,7 @@ export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
     this.activeNote = app.workspace.getActiveFile();
   }
 
-  protected getOrderedNotes(excludeNotes: string[] = []): TFile[] {
+  protected getOrderedNotes(excludeNotePaths: string[] = []): TFile[] {
     // Get recently opened files first
     const recentFiles = this.app.workspace
       .getLastOpenFiles()
@@ -18,7 +18,7 @@ export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
         (file): file is TFile =>
           file instanceof TFile &&
           (file.extension === "md" || file.extension === "pdf") &&
-          !excludeNotes.includes(file.path) &&
+          !excludeNotePaths.includes(file.path) &&
           file.path !== this.activeNote?.path
       );
 
@@ -30,7 +30,7 @@ export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
     const otherFiles = allFiles.filter(
       (file) =>
         !recentFiles.some((recent) => recent.path === file.path) &&
-        !excludeNotes.includes(file.path) &&
+        !excludeNotePaths.includes(file.path) &&
         file.path !== this.activeNote?.path
     );
 
@@ -47,5 +47,19 @@ export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
       title += " (PDF)";
     }
     return title;
+  }
+
+  renderSuggestion(match: FuzzyMatch<T>, el: HTMLElement) {
+    const suggestionEl = el.createDiv({ cls: "suggestion-item pointer-events-none" });
+    const titleEl = suggestionEl.createDiv({ cls: "suggestion-title" });
+    const pathEl = suggestionEl.createDiv({ cls: "suggestion-path mt-1 text-muted text-xs" });
+
+    if (match.item instanceof TFile) {
+      const file = match.item;
+      titleEl.setText(
+        this.formatNoteTitle(file.basename, file === this.activeNote, file.extension)
+      );
+      pathEl.setText(file.path);
+    }
   }
 }

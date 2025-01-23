@@ -4,18 +4,16 @@ import { BaseNoteModal } from "./BaseNoteModal";
 interface AddContextNoteModalProps {
   app: App;
   onNoteSelect: (note: TFile) => void;
-  excludeNotes: string[];
+  excludeNotePaths: string[];
 }
 
 export class AddContextNoteModal extends BaseNoteModal<TFile> {
   private onNoteSelect: (note: TFile) => void;
-  private excludeNotes: string[];
 
-  constructor({ app, onNoteSelect, excludeNotes }: AddContextNoteModalProps) {
+  constructor({ app, onNoteSelect, excludeNotePaths }: AddContextNoteModalProps) {
     super(app);
     this.onNoteSelect = onNoteSelect;
-    this.excludeNotes = excludeNotes;
-    this.availableNotes = this.getOrderedNotes(excludeNotes);
+    this.availableNotes = this.getOrderedNotes(excludeNotePaths);
   }
 
   getItems(): TFile[] {
