@@ -291,6 +291,36 @@ function handleQuarter(input: string, now: DateTime) {
   return { start, end };
 }
 
+/**
+ * Handles month-year combinations like:
+ * - "jan 2024", "january 2024"
+ * - "dec 2023", "december 2023"
+ */
+function handleMonthYear(input: string, now: DateTime) {
+  const monthYearMatch = input.match(
+    /^(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|september|oct|october|nov|november|dec|december)\s+(\d{4})$/i
+  );
+  if (!monthYearMatch) return undefined;
+
+  const monthNum = monthNames[monthYearMatch[1].toLowerCase() as keyof typeof monthNames];
+  const year = parseInt(monthYearMatch[2]);
+
+  let start = DateTime.fromObject({
+    year,
+    month: monthNum,
+    day: 1,
+  }).startOf("day");
+
+  let end = start.endOf("month");
+
+  if (start > now) {
+    start = start.minus({ years: 1 });
+    end = end.minus({ years: 1 });
+  }
+
+  return { start, end };
+}
+
 function getTimeRangeMs(timeExpression: string) {
   const now = DateTime.now();
   const normalizedInput = timeExpression.toLowerCase().replace("@vault", "").trim();
@@ -301,6 +331,7 @@ function getTimeRangeMs(timeExpression: string) {
     handleSpecialTimeRanges(normalizedInput, now) ||
     handleWeekOf(normalizedInput, now) ||
     handleMonthName(normalizedInput, now) ||
+    handleMonthYear(normalizedInput, now) ||
     handleQuarter(normalizedInput, now) ||
     handleYear(normalizedInput, now);
 

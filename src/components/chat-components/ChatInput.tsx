@@ -26,6 +26,7 @@ import React, {
   useMemo,
   useRef,
   useState,
+  useCallback,
 } from "react";
 import ContextControl from "./ContextControl";
 import {
@@ -292,6 +293,33 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       }
     };
 
+    const handlePaste = useCallback(
+      async (e: React.ClipboardEvent) => {
+        const items = e.clipboardData?.items;
+        if (!items || !isCopilotPlus) return;
+
+        const imageItems = Array.from(items).filter((item) => item.type.indexOf("image") !== -1);
+
+        if (imageItems.length > 0) {
+          e.preventDefault();
+
+          const files = await Promise.all(
+            imageItems.map((item) => {
+              const file = item.getAsFile();
+              if (!file) return null;
+              return file;
+            })
+          );
+
+          const validFiles = files.filter((file) => file !== null);
+          if (validFiles.length > 0) {
+            onAddImage(validFiles);
+          }
+        }
+      },
+      [onAddImage, isCopilotPlus]
+    );
+
     useEffect(() => {
       // Get all note titles that are referenced using [[note]] syntax in the input
       const currentTitles = new Set(extractNoteTitles(inputMessage));
@@ -435,6 +463,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
             value={inputMessage}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
           />
           {isCopilotPlus && (
             <>

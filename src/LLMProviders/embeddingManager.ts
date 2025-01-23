@@ -199,7 +199,7 @@ export default class EmbeddingManager {
         apiKey: await getDecryptedKey(settings.plusLicenseKey),
         timeout: 10000,
         batchSize: 128,
-        dimensions: 256,
+        dimensions: 512, // Don't change this, it's the default for Copilot Plus Jina
         baseUrl: BREVILABS_API_BASE_URL + "/embeddings",
         configuration: {
           fetch: customModel.enableCors ? safeFetch : undefined,
