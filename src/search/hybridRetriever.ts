@@ -316,33 +316,47 @@ export class HybridRetriever extends BaseRetriever {
     }
     const searchResults = await search(db, searchParams);
 
+    // Add null check and validation for search results
+    if (!searchResults || !searchResults.hits) {
+      console.warn("Search results or hits are undefined");
+      return [];
+    }
+
     // Convert Orama search results to Document objects
-    return searchResults.hits.map((hit) => {
-      if (typeof hit.score !== "number" || isNaN(hit.score)) {
-        console.warn("NaN/invalid score detected:", {
-          score: hit.score,
-          path: hit.document.path,
-          title: hit.document.title,
+    return searchResults.hits
+      .map((hit) => {
+        if (!hit || !hit.document) {
+          console.warn("Invalid hit or document in search results");
+          return null;
+        }
+
+        if (typeof hit.score !== "number" || isNaN(hit.score)) {
+          console.warn("NaN/invalid score detected:", {
+            score: hit.score,
+            path: hit.document.path,
+            title: hit.document.title,
+          });
+        }
+
+        return new Document({
+          pageContent: hit.document.content || "", // Add fallback for content
+          metadata: {
+            ...(hit.document.metadata || {}), // Add fallback for metadata
+            score: hit.score,
+            path: hit.document.path || "",
+            mtime: hit.document.mtime,
+            ctime: hit.document.ctime,
+            title: hit.document.title || "",
+            id: hit.document.id,
+            embeddingModel: hit.document.embeddingModel,
+            tags: hit.document.tags || [],
+            extension: hit.document.extension,
+            created_at: hit.document.created_at,
+            nchars: hit.document.nchars,
+          },
         });
-      }
-      return new Document({
-        pageContent: hit.document.content,
-        metadata: {
-          ...hit.document.metadata,
-          score: hit.score,
-          path: hit.document.path,
-          mtime: hit.document.mtime,
-          ctime: hit.document.ctime,
-          title: hit.document.title,
-          id: hit.document.id,
-          embeddingModel: hit.document.embeddingModel,
-          tags: hit.document.tags,
-          extension: hit.document.extension,
-          created_at: hit.document.created_at,
-          nchars: hit.document.nchars,
-        },
-      });
-    });
+      })
+      .filter((doc): doc is Document => doc !== null); // Filter out null documents
   }
 
   private async convertQueryToVector(query: string): Promise<number[]> {
