@@ -4,107 +4,143 @@ import { PROCESS_SELECTION_COMMANDS } from "@/constants";
 
 function fixGrammarSpellingSelectionPrompt(selectedText: string): string {
   return (
-    `Please fix the grammar and spelling of the following text and return it without any other changes:\n\n` +
-    `${selectedText}`
+    `<instruction>Fix the grammar and spelling of the text below. Preserve all formatting, line breaks, and special characters. Do not add or remove any content. Return only the corrected text.</instruction>\n\n` +
+    `<text>${selectedText}</text>`
   );
 }
 
 function summarizePrompt(selectedText: string): string {
   return (
-    `Summarize the following text into bullet points and return it without any other changes. Identify the input language, and return the summary in the same language. If the input is English, return the summary in English. Otherwise, return in the same language as the input. Return ONLY the summary, DO NOT return the name of the language:\n\n` +
-    `${selectedText}`
+    `<instruction>Create a bullet-point summary of the text below. Identify the input language and respond in the same language. Each bullet point should capture a key point. Return only the bullet-point summary.</instruction>\n\n` +
+    `<text>${selectedText}</text>`
   );
 }
 
 function tocPrompt(selectedText: string): string {
   return (
-    `Please generate a table of contents for the following text and return it without any other changes. Output in the same language as the source, do not output English if it is not English:\n\n` +
-    `${selectedText}`
+    `<instruction>Generate a hierarchical table of contents for the text below. Use appropriate heading levels (H1, H2, H3, etc.). Include page numbers if present. Maintain the original language. Return only the table of contents.</instruction>\n\n` +
+    `<text>${selectedText}</text>`
   );
 }
 
 function glossaryPrompt(selectedText: string): string {
   return (
-    `Please generate a glossary for the following text and return it without any other changes. Output in the same language as the source, do not output English if it is not English:\n\n` +
-    `${selectedText}`
+    `<instruction>Create a glossary of important terms, concepts, and phrases from the text below. Format each entry as "Term: Definition". Sort entries alphabetically. Maintain the original language. Return only the glossary.</instruction>\n\n` +
+    `<text>${selectedText}</text>`
   );
 }
 
 function simplifyPrompt(selectedText: string): string {
   return (
-    `Please simplify the following text so that a 6th-grader can understand. Output in the same language as the source, do not output English if it is not English:\n\n` +
-    `${selectedText}`
+    `<instruction>Simplify the text below to a 6th-grade reading level (ages 11-12). Use simple sentences, common words, and clear explanations. Maintain the original language and key concepts. Return only the simplified text.</instruction>\n\n` +
+    `<text>${selectedText}</text>`
   );
 }
 
 function emojifyPrompt(selectedText: string): string {
   return (
-    `Please insert emojis to the following content without changing the text.` +
-    `Insert at as many places as possible, but don't have any 2 emojis together. The original text must be returned.\n` +
-    `Content: ${selectedText}`
+    `<instruction>Add relevant emojis to enhance the text below. Follow these rules:
+    1. Insert emojis at natural breaks in the text
+    2. Never place two emojis next to each other
+    3. Keep all original text unchanged
+    4. Choose emojis that match the context and tone
+    Return only the emojified text.</instruction>\n\n` + `<text>${selectedText}</text>`
   );
 }
 
 function removeUrlsFromSelectionPrompt(selectedText: string): string {
   return (
-    `Please remove all URLs from the following text and return it without any other changes:\n\n` +
-    `${selectedText}`
+    `<instruction>Remove all URLs from the text below. Preserve all other content and formatting. URLs may be in various formats (http, https, www). Return only the text with URLs removed.</instruction>\n\n` +
+    `<text>${selectedText}</text>`
   );
 }
 
 function rewriteTweetSelectionPrompt(selectedText: string): string {
-  return `Please rewrite the following content to under 280 characters using simple sentences. Output in the same language as the source, do not output English if it is not English. Please follow the instruction strictly. Content:\n
-    + ${selectedText}`;
+  return (
+    `<instruction>Rewrite the text below as a single tweet with these requirements:
+    1. Maximum 280 characters
+    2. Use concise, impactful language
+    3. Maintain the core message
+    4. Keep the original language
+    Return only the tweet text.</instruction>\n\n` + `<text>${selectedText}</text>`
+  );
 }
 
 function rewriteTweetThreadSelectionPrompt(selectedText: string): string {
   return (
-    `Please follow the instructions closely step by step and rewrite the content to a thread. ` +
-    `1. Each paragraph must be under 240 characters. ` +
-    `2. The starting line is \`THREAD START\n\`, and the ending line is \`\nTHREAD END\`. ` +
-    `3. You must use \`\n\n---\n\n\` to separate each paragraph! Then return it without any other changes. ` +
-    `4. Make it as engaging as possible.` +
-    `5. Output in the same language as the source, do not output English if it is not English.\n The original content:\n\n` +
-    `${selectedText}`
+    `<instruction>Convert the text below into a Twitter thread following these rules:
+    1. Each tweet must be under 240 characters
+    2. Start with "THREAD START" on its own line
+    3. Separate tweets with "\n\n---\n\n"
+    4. End with "THREAD END" on its own line
+    5. Make content engaging and clear
+    6. Maintain the original language
+    Return only the formatted thread.</instruction>\n\n` + `<text>${selectedText}</text>`
   );
 }
 
 function rewriteShorterSelectionPrompt(selectedText: string): string {
   return (
-    `Please rewrite the following text to make it half as long while keeping the meaning as much as possible. Output in the same language as the source, do not output English if it is not English:\n` +
-    `${selectedText}`
+    `<instruction>Reduce the text below to half its length while preserving these elements:
+    1. Main ideas and key points
+    2. Essential details
+    3. Original tone and style
+    4. Original language
+    Return only the shortened text.</instruction>\n\n` + `<text>${selectedText}</text>`
   );
 }
 
 function rewriteLongerSelectionPrompt(selectedText: string): string {
   return (
-    `Please rewrite the following text to make it twice as long while keeping the meaning as much as possible. Output in the same language as the source, do not output English if it is not English:\n` +
-    `${selectedText}`
+    `<instruction>Expand the text below to twice its length by:
+    1. Adding relevant details and examples
+    2. Elaborating on key points
+    3. Maintaining the original tone and style
+    4. Keeping the original language
+    Return only the expanded text.</instruction>\n\n` + `<text>${selectedText}</text>`
   );
 }
 
 function eli5SelectionPrompt(selectedText: string): string {
   return (
-    `Please explain the following text like I'm 5 years old. Output in the same language as the source, do not output English if it is not English:\n\n` +
-    `${selectedText}`
+    `<instruction>Explain the text below in simple terms that a 5-year-old would understand:
+    1. Use basic vocabulary
+    2. Include simple analogies
+    3. Break down complex concepts
+    4. Keep the original language
+    Return only the simplified explanation.</instruction>\n\n` + `<text>${selectedText}</text>`
   );
 }
 
 function rewritePressReleaseSelectionPrompt(selectedText: string): string {
   return (
-    `Please rewrite the following text to make it sound like a press release. Output in the same language as the source, do not output English if it is not English:\n\n` +
-    `${selectedText}`
+    `<instruction>Transform the text below into a professional press release:
+    1. Use formal, journalistic style
+    2. Include headline and dateline
+    3. Follow inverted pyramid structure
+    4. Maintain the original language
+    Return only the press release format.</instruction>\n\n` + `<text>${selectedText}</text>`
   );
 }
 
 function translateSelectionPrompt(selectedText: string, language?: string) {
-  return `Please translate the following text to ${language}:\n\n` + `${selectedText}`;
+  return (
+    `<instruction>Translate the text below into ${language}:
+    1. Preserve the meaning and tone
+    2. Maintain appropriate cultural context
+    3. Keep formatting and structure
+    Return only the translated text.</instruction>\n\n` + `<text>${selectedText}</text>`
+  );
 }
 
 function changeToneSelectionPrompt(selectedText: string, tone?: string) {
   return (
-    `Please change the tone of the following text to ${tone}. Identify the language first, then Output in the same language as the source, do not output English if it is not English:\n\n` +
-    `${selectedText}`
+    `<instruction>Rewrite the text below in a ${tone} tone while:
+    1. Keeping the original meaning
+    2. Maintaining the original language
+    3. Adjusting word choice and phrasing
+    4. Preserving key information
+    Return only the rewritten text.</instruction>\n\n` + `<text>${selectedText}</text>`
   );
 }
 
