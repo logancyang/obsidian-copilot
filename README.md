@@ -34,7 +34,7 @@ We've introduced **Relevant Notes in Copilot Chat** in the previous release. You
 
 ## 🤖 v2.7.0 Copilot Plus (alpha) demo video - AI Agent for Obsidian! 🚀
 
-Copilot Plus is a brand new mode that brings powerful agentic capabilities to Obsidian. Think of it as Cursor inside Obsidian but optimized for PKM use cases instead of coding. It is still in limited alpha and only available to alpha testers. If you are interested in joining the alpha, please consider sponsoring the project on Github (please have your email info in your github profile or I won't be able to reach you) or buy me coffees!
+Copilot Plus is a brand new mode that brings powerful agentic capabilities to Obsidian. Think of it as Cursor inside Obsidian but optimized for PKM use cases instead of coding.
 
 Check out the demo video below for the first sneak peak of what Copilot Plus can do. It is under active development so expect more features to come very soon!
 
@@ -56,7 +56,7 @@ Check out the demo video below for the first sneak peak of what Copilot Plus can
 - All QA modes leverage retrieval augmentation with a **local index**, ensuring your data isn't sent to a cloud-based vector search service.
 - **Copilot Plus (beta)**: supercharge your second brain with a **powerful AI agent** right inside your Obsidian vault. [Learn more here](https://obsidiancopilot.com).
 
-Chat and Vault QA modes are completely free to use. Copilot Plus is currently in limited alpha and free to use for alpha testers.
+Chat and Vault QA modes are completely free to use. Copilot Plus is currently in beta, buy now to lock in the lowest price!
 
 ## Model Providers
 
