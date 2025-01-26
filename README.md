@@ -54,7 +54,7 @@ Check out the demo video below for the first sneak peak of what Copilot Plus can
 - Take advantage of powerful **User Custom Prompts**! You can _add, apply, edit, and delete_ your custom prompts, all stored locally in your Obsidian vault as markdown. Trigger any custom prompt with a simple `/` in the chat input!
 - **Interact with your entire vault** using "Vault QA" mode. Ask questions and receive **cited responses**!
 - All QA modes leverage retrieval augmentation with a **local index**, ensuring your data isn't sent to a cloud-based vector search service.
-- **Copilot Plus (in limited Alpha)**: supercharge your second brain with a **powerful AI agent** right inside your Obsidian vault. More powerful than anything else out there. [Learn more here](https://obsidiancopilot.com).
+- **Copilot Plus (beta)**: supercharge your second brain with a **powerful AI agent** right inside your Obsidian vault. [Learn more here](https://obsidiancopilot.com).
 
 Chat and Vault QA modes are completely free to use. Copilot Plus is currently in limited alpha and free to use for alpha testers.
 
