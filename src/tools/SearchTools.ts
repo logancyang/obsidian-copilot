@@ -119,9 +119,16 @@ const webSearchTool = tool(
   async ({ query }: { query: string }) => {
     try {
       const response = await BrevilabsClient.getInstance().webSearch(query);
+      const citations = response.response.citations || [];
+      const citationsList =
+        citations.length > 0
+          ? "\n\nSources:\n" + citations.map((url, index) => `[${index + 1}] ${url}`).join("\n")
+          : "";
+
       return (
         "\n\nWeb search results below, don't forget to list the sources at the end of your answer:\n" +
-        response.response
+        response.response.choices[0].message.content +
+        citationsList
       );
     } catch (error) {
       console.error(`Error processing web search query ${query}:`, error);
