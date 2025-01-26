@@ -331,7 +331,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
 
     // Add debug logging for final request
     if (debug) {
-      console.log("==== Final Request to AI ====\n", JSON.stringify(messages, null, 2));
+      console.log("==== Final Request to AI ====\n", messages);
     }
 
     let fullAIResponse = "";
