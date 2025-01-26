@@ -115,12 +115,6 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 - Download `main.js`, `manifest.json`, `styles.css` and put them under `.obsidian/plugins/obsidian-copilot/` in your vault
 - Open your Obsidian settings > Community plugins, and turn on `Copilot`.
 
-## 🔔 Note
-
-- The chat history is not saved by default. Please check "**Autosave Chat**" in the setting if you would like to enable it. The note will have a title `<first-chat-message>@YYMMDD_HHMMSS`, you can change its name as needed.
-- "**New Chat**" clears all previous chat history. Again, please use "**Save as Note**" if you would like to save the chat.
-- You can set a very long context in the setting "**Conversation turns in context**" if needed.
-
 #### 📣 Again, please always be mindful of the API cost if you use expensive models with a long context!
 
 ## 🤔 FAQ (please read before submitting an issue)
@@ -168,6 +162,17 @@ Now you can see the chat icon in your leftside ribbon, clicking on it will open 
 </details>
 
 When opening an issue, please follow the issue template and include relevant console logs. You can go to Copilot's settings and turn on "Debug mode" at the bottom for more console messages. On Mac, you can open the console by pressing `Cmd+Opt+I`. On Windows, you can open the console by pressing `Ctrl+Shift+I`.
+
+## Copilot Plus Disclosure
+
+Copilot Plus is a premium product of Brevilabs LLC and it is not affiliated with Obsidian. It offers a powerful agentic AI integration into Obsidian. Please check out our website [obsidiancopilot.com](https://obsidiancopilot.com) for more details!
+
+- An account and payment are required for full access.
+- Copilot Plus requires network use to faciliate the AI agent.
+- Copilot Plus does not access your files without your consent.
+- Copilot Plus collect server-side telemetry to improve the product. Please see the [privacy policy](/privacy) for more details.
+- The frontend code of Copilot plugin is fully open-source. However, the backend code facilitating the AI agents is close-sourced and proprietary.
+- We offer a full refund if you are not satisfied with the product within 14 days of your purchase, no questions asked.
 
 ## 🙏 Thank You
 
