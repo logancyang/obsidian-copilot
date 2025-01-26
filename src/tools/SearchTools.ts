@@ -126,7 +126,7 @@ const webSearchTool = tool(
           : "";
 
       return (
-        "\n\nWeb search results below, don't forget to list the sources at the end of your answer:\n" +
+        "Here are the web search results. Please provide a response based on this information and include source citations listed at the end of your response under the heading '#### Sources' as a list of markdown links. For each URL, create a descriptive title based on the domain and path and return it in the markdown format '- [title](url)':\n\n" +
         response.response.choices[0].message.content +
         citationsList
       );
