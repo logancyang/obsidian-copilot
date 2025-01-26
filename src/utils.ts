@@ -440,14 +440,110 @@ export function extractYoutubeUrl(text: string): string | null {
   return match ? match[0] : null;
 }
 
-export async function imageToBase64(imageUrl: string, vault: Vault): Promise<string> {
-  // If it's already a data URL, return it as is
-  if (imageUrl.startsWith("data:")) {
-    return imageUrl;
+export interface ImageContent {
+  type: "image_url";
+  image_url: {
+    url: string;
+  };
+}
+
+export interface TextContent {
+  type: "text";
+  text: string;
+}
+
+export type MessageContent = ImageContent | TextContent;
+
+export class ImageProcessor {
+  private static readonly IMAGE_EXTENSIONS = [
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".webp",
+    ".bmp",
+    ".svg",
+  ];
+
+  static async isImageUrl(url: string): Promise<boolean> {
+    try {
+      const urlObj = new URL(url);
+
+      // First check: URL path ends with image extension
+      if (this.IMAGE_EXTENSIONS.some((ext) => urlObj.pathname.toLowerCase().endsWith(ext))) {
+        return true;
+      }
+
+      // Second check: Try HEAD request to check content-type
+      try {
+        const response = await safeFetch(url, {
+          method: "HEAD",
+          headers: {}, // Explicitly set empty headers
+        });
+
+        const contentType = response.headers.get("content-type");
+        if (contentType?.startsWith("image/")) {
+          return true;
+        }
+      } catch (error) {
+        console.debug("Error checking content-type:", error);
+      }
+
+      // Final check: Analyze URL patterns that commonly indicate image content
+      const searchParams = urlObj.searchParams;
+      const imageIndicators = [
+        // Image dimensions
+        searchParams.has("w") || searchParams.has("width"),
+        searchParams.has("h") || searchParams.has("height"),
+        // Image processing
+        searchParams.has("format"),
+        searchParams.has("fit"),
+        // Image quality
+        searchParams.has("q") || searchParams.has("quality"),
+        // Common CDN image path patterns
+        urlObj.pathname.includes("/image/"),
+        urlObj.pathname.includes("/images/"),
+        urlObj.pathname.includes("/img/"),
+        // Common image processing parameters
+        searchParams.has("auto"),
+        searchParams.has("crop"),
+      ];
+
+      // If multiple image-related indicators are present, likely an image URL
+      const imageIndicatorCount = imageIndicators.filter(Boolean).length;
+      return imageIndicatorCount >= 2; // Require at least 2 indicators to consider it an image URL
+    } catch (error) {
+      console.error("Error checking if URL is image:", error);
+      return false;
+    }
   }
 
-  // Check if it's a local vault image
-  if (imageUrl.startsWith("app://")) {
+  static async convertToBase64(imageUrl: string, vault: Vault): Promise<ImageContent> {
+    const base64Url = await this.imageToBase64(imageUrl, vault);
+    return {
+      type: "image_url",
+      image_url: {
+        url: base64Url,
+      },
+    };
+  }
+
+  private static async imageToBase64(imageUrl: string, vault: Vault): Promise<string> {
+    // If it's already a data URL, return it as is
+    if (imageUrl.startsWith("data:")) {
+      return imageUrl;
+    }
+
+    // Check if it's a local vault image
+    if (imageUrl.startsWith("app://")) {
+      return await this.handleLocalImage(imageUrl, vault);
+    }
+
+    // Handle web images
+    return await this.handleWebImage(imageUrl);
+  }
+
+  private static async handleLocalImage(imageUrl: string, vault: Vault): Promise<string> {
     const localPath = decodeURIComponent(imageUrl.replace("app://", ""));
     const file = vault.getAbstractFileByPath(localPath);
     if (!file || !(file instanceof TFile)) {
@@ -464,79 +560,101 @@ export async function imageToBase64(imageUrl: string, vault: Vault): Promise<str
     return `data:${mimeType};base64,${base64}`;
   }
 
-  // Handle web images
-  try {
-    const response = await safeFetch(imageUrl, {
-      method: "GET",
-      headers: {},
-    });
+  private static async handleWebImage(imageUrl: string): Promise<string> {
+    try {
+      const response = await safeFetch(imageUrl, {
+        method: "GET",
+        headers: {},
+      });
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.statusText}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.statusText}`);
+      }
+
+      // Try to get content type from response headers
+      const contentType = response.headers.get("content-type");
+      if (!contentType?.startsWith("image/")) {
+        throw new Error(`Invalid content type: ${contentType}`);
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const base64 = buffer.toString("base64");
+      return `data:${contentType};base64,${base64}`;
+    } catch (error) {
+      console.error("Error converting image to base64:", error);
+      throw error;
     }
-
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const base64 = buffer.toString("base64");
-    const mimeType = response.headers.get("content-type") || "image/jpeg";
-    return `data:${mimeType};base64,${base64}`;
-  } catch (error) {
-    console.error("Error converting image to base64:", error);
-    throw error;
   }
 }
 
 /** Proxy function to use in place of fetch() to bypass CORS restrictions.
  * It currently doesn't support streaming until this is implemented
  * https://forum.obsidian.md/t/support-streaming-the-request-and-requesturl-response-body/87381 */
-export async function safeFetch(url: string, options: RequestInit): Promise<Response> {
-  // Necessary to remove 'content-length' in order to make headers compatible with requestUrl()
-  delete (options.headers as Record<string, string>)["content-length"];
+export async function safeFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  // Initialize headers if not provided
+  const headers = options.headers ? { ...options.headers } : {};
+
+  // Remove content-length if it exists
+  delete (headers as Record<string, string>)["content-length"];
 
   if (typeof options.body === "string") {
     const newBody = JSON.parse(options.body ?? {});
-    // frequency_penalty: default 0, but perplexity.ai requires 1 by default.
-    // so, delete this argument for now
     delete newBody["frequency_penalty"];
     options.body = JSON.stringify(newBody);
   }
 
   const method = options.method?.toLowerCase() || "post";
   const methodsWithBody = ["post", "put", "patch"];
-  const response = await requestUrl({
-    url,
-    contentType: "application/json",
-    headers: options.headers as Record<string, string>,
-    method: method,
-    ...(methodsWithBody.includes(method) && { body: options.body?.toString() }),
-  });
 
-  return {
-    ok: response.status >= 200 && response.status < 300,
-    status: response.status,
-    statusText: response.status.toString(),
-    headers: new Headers(response.headers),
-    url: url,
-    type: "basic",
-    redirected: false,
-    bytes: () => Promise.resolve(new Uint8Array(0)),
-    body: createReadableStreamFromString(response.text),
-    bodyUsed: true,
-    json: () => response.json,
-    text: async () => response.text,
-    clone: () => {
-      throw new Error("not implemented");
-    },
-    arrayBuffer: () => {
-      throw new Error("not implemented");
-    },
-    blob: () => {
-      throw new Error("not implemented");
-    },
-    formData: () => {
-      throw new Error("not implemented");
-    },
-  };
+  try {
+    const response = await requestUrl({
+      url,
+      contentType: "application/json",
+      headers: headers as Record<string, string>,
+      method: method,
+      ...(methodsWithBody.includes(method) && { body: options.body?.toString() }),
+    });
+
+    return {
+      ok: response.status >= 200 && response.status < 300,
+      status: response.status,
+      statusText: response.status.toString(),
+      headers: new Headers(response.headers),
+      url: url,
+      type: "basic",
+      redirected: false,
+      bytes: () => Promise.resolve(new Uint8Array(0)),
+      body: createReadableStreamFromString(response.text),
+      bodyUsed: true,
+      json: () => response.json,
+      text: async () => response.text,
+      arrayBuffer: async () => {
+        if (response.arrayBuffer) {
+          return response.arrayBuffer;
+        }
+        const base64 = response.text.replace(/^data:.*;base64,/, "");
+        const binaryString = atob(base64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes.buffer;
+      },
+      blob: () => {
+        throw new Error("not implemented");
+      },
+      formData: () => {
+        throw new Error("not implemented");
+      },
+      clone: () => {
+        throw new Error("not implemented");
+      },
+    };
+  } catch (error) {
+    console.error("safeFetch error:", error);
+    throw error;
+  }
 }
 
 function createReadableStreamFromString(input: string) {
