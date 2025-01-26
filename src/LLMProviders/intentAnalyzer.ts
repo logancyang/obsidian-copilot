@@ -8,8 +8,9 @@ import {
 } from "@/tools/TimeTools";
 import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools";
 import { ToolManager } from "@/tools/toolManager";
-import { extractYoutubeUrl } from "@/utils";
+import { extractChatHistory, extractYoutubeUrl } from "@/utils";
 import { BrevilabsClient } from "./brevilabsClient";
+import MemoryManager from "./memoryManager";
 
 // TODO: Add @index with explicit pdf files in chat context menu
 export const COPILOT_TOOL_NAMES = ["@vault", "@web", "@youtube", "@pomodoro"];
@@ -102,10 +103,15 @@ export class IntentAnalyzer {
     // Handle @web command
     if (message.includes("@web")) {
       const cleanQuery = this.removeAtCommands(originalMessage);
+      const memory = MemoryManager.getInstance().getMemory();
+      const memoryVariables = await memory.loadMemoryVariables({});
+      const chatHistory = extractChatHistory(memoryVariables);
+
       processedToolCalls.push({
         tool: webSearchTool,
         args: {
           query: cleanQuery,
+          chatHistory,
         },
       });
     }

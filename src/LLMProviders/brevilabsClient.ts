@@ -49,7 +49,16 @@ export interface Pdf4llmResponse {
 }
 
 export interface WebSearchResponse {
-  response: any;
+  response: {
+    choices: [
+      {
+        message: {
+          content: string;
+        };
+      },
+    ];
+    citations: string[];
+  };
   elapsed_time_ms: number;
 }
 
@@ -137,7 +146,7 @@ export class BrevilabsClient {
   }
 
   async webSearch(query: string): Promise<WebSearchResponse> {
-    return this.makeRequest<WebSearchResponse>("/websearch", { q: query }, "GET");
+    return this.makeRequest<WebSearchResponse>("/websearch", { query });
   }
 
   async youtube4llm(url: string): Promise<Youtube4llmResponse> {

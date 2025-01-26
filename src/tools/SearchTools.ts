@@ -1,3 +1,4 @@
+import { getStandaloneQuestion } from "@/chainUtils";
 import {
   EMPTY_INDEX_ERROR_MESSAGE,
   PLUS_MODE_DEFAULT_SOURCE_CHUNKS,
@@ -116,12 +117,22 @@ const indexTool = tool(
 
 // Add new web search tool
 const webSearchTool = tool(
-  async ({ query }: { query: string }) => {
+  async ({ query, chatHistory }: { query: string; chatHistory: [string, string][] }) => {
     try {
-      const response = await BrevilabsClient.getInstance().webSearch(query);
+      // Get standalone question considering chat history
+      const standaloneQuestion = await getStandaloneQuestion(query, chatHistory);
+
+      const response = await BrevilabsClient.getInstance().webSearch(standaloneQuestion);
+      const citations = response.response.citations || [];
+      const citationsList =
+        citations.length > 0
+          ? "\n\nSources:\n" + citations.map((url, index) => `[${index + 1}] ${url}`).join("\n")
+          : "";
+
       return (
-        "\n\nWeb search results below, don't forget to list the sources at the end of your answer:\n" +
-        response.response
+        "Here are the web search results. Please provide a response based on this information and include source citations listed at the end of your response under the heading '#### Sources' as a list of markdown links. For each URL, create a descriptive title based on the domain and path and return it in the markdown format '- [title](url)':\n\n" +
+        response.response.choices[0].message.content +
+        citationsList
       );
     } catch (error) {
       console.error(`Error processing web search query ${query}:`, error);
@@ -133,6 +144,9 @@ const webSearchTool = tool(
     description: "Search the web for information",
     schema: z.object({
       query: z.string().describe("The search query"),
+      chatHistory: z
+        .array(z.tuple([z.string(), z.string()]))
+        .describe("Previous conversation turns"),
     }),
   }
 );
