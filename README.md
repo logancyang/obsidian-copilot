@@ -66,19 +66,15 @@ Chat and Vault QA modes are completely free to use. Copilot Plus is currently in
 
 ## 🤗 New to Copilot? Quick Guide for Beginners
 
-The simplest way to get started is to get an OpenAI API key (with payment method set up with OpenAI) and set it in the Copilot settings. Then simply pick `gpt-4o` or `gpt-4o-mini` in the model dropdown to start chatting. Please check out the [documentation](https://obsidiancopilot.com/en/docs) for more details.
+The simplest way to get started is to get an OpenAI API key (with payment method set up with OpenAI) and set it in the Copilot settings. Then simply pick `gpt-4o` or `gpt-4o-mini` in the model dropdown to start chatting. Make sure to set your **default chat and embedding model** in the first tab of Copilot settings.
+
+For plus users, you can keep the embedding model as is `copilot-plus-small` (it's a smaller but better model than the OpenAI large, and it's covered by your subscription). For free users, you can set the embedding model to `text-embedding-3-small` as the starting point, and explore other embedding models once you get a sense of how this works.
+
+Please check out the [documentation](https://obsidiancopilot.com/en/docs) for more details.
 
 Try going through all the Copilot commands in the command palette, and see what they do. You can also checkout my [youtube channel](https://youtube.com/@loganhallucinates?sub_confirmation=1) for previous demos.
 
-#### 🔧 Copilot Settings
-
-Explore the "General Settings" to select your default chat model and customize parameters such as temperature, max tokens, and conversation context to fit your needs.
-
-<img src="./images/settings.png" alt="Settings" width="700">
-
-Enter your API keys in "API settings" for existing providers.
-
-<img src="./images/api-settings.png" alt="API Settings" width="700">
+#### 🔧 Adding Models
 
 Add model using the "Custom Model" form.
 
