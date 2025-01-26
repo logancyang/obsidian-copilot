@@ -203,7 +203,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                       className="edit-textarea"
                     />
                   ) : message.sender === USER_SENDER ? (
-                    <span>{message.message}</span>
+                    <div className="whitespace-pre-wrap break-words font-normal text-[calc(var(--font-text-size)_-_2px)]">
+                      {message.message}
+                    </div>
                   ) : (
                     <div ref={contentRef}></div>
                   )}
@@ -238,7 +240,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         className="edit-textarea"
       />
     ) : message.sender === USER_SENDER ? (
-      <span>{message.message}</span>
+      <div className="whitespace-pre-wrap break-words font-normal text-[calc(var(--font-text-size)_-_2px)]">
+        {message.message}
+      </div>
     ) : (
       <div ref={contentRef}></div>
     );
