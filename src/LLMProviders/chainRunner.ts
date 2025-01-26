@@ -617,6 +617,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     let truncatedDocs = includedDocs;
     if (totalLength > MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT) {
       const truncationRatio = MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT / totalLength;
+      console.log("Truncating documents to fit context length. Truncation ratio:", truncationRatio);
       truncatedDocs = includedDocs.map((doc) => ({
         ...doc,
         content: doc.content.slice(0, Math.floor(doc.content.length * truncationRatio)),

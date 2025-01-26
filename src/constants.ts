@@ -17,14 +17,14 @@ export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assist
   8. When showing **Obsidian internal** image links, use ![[link]] format and do not wrap them in \` \`.
   9. When showing **web** image links, use ![link](url) format and do not wrap them in \` \`.
   10. Always respond in the language of the user's query.
-  11. Do not mention the additional context provided if it's irrelevant to the user message.`;
+  11. Do NOT mention the additional context provided such as getCurrentTime and getTimeRangeMs if it's irrelevant to the user message.`;
 export const EMPTY_INDEX_ERROR_MESSAGE =
   "Copilot index does not exist. Please index your vault first!\n\n1. Set a working embedding model in QA settings. If it's not a local model, don't forget to set the API key. \n\n2. Click 'Refresh Index for Vault' and wait for indexing to complete. If you encounter the rate limiting error, please turn your request per second down in QA setting.";
 export const CHUNK_SIZE = 4000;
 export const CONTEXT_SCORE_THRESHOLD = 0.4;
 export const TEXT_WEIGHT = 0.4;
 export const PLUS_MODE_DEFAULT_SOURCE_CHUNKS = 15;
-export const MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT = 512000;
+export const MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT = 448000;
 export const LOADING_MESSAGES = {
   DEFAULT: "",
   READING_FILES: "Reading files",
