@@ -15,7 +15,9 @@ import {
   extractUniqueTitlesFromDocs,
   extractYoutubeUrl,
   formatDateTime,
-  imageToBase64,
+  ImageContent,
+  ImageProcessor,
+  MessageContent,
 } from "@/utils";
 import { Notice } from "obsidian";
 import ChainManager from "./chainManager";
@@ -251,6 +253,72 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     return hasYoutubeCommand && youtubeUrl !== null && words.length === 1;
   }
 
+  private async processImageUrls(urls: string[]): Promise<ImageContent[]> {
+    try {
+      const imageUrls = await Promise.all(
+        urls.map(async (url) => {
+          if (await ImageProcessor.isImageUrl(url)) {
+            return await ImageProcessor.convertToBase64(url, this.chainManager.app.vault);
+          }
+          return null;
+        })
+      );
+
+      // Filter out null values and return valid image URLs
+      return imageUrls.filter((item): item is ImageContent => item !== null);
+    } catch (error) {
+      console.error("Error processing image URLs:", error);
+      return [];
+    }
+  }
+
+  private async processExistingImages(content: MessageContent[]): Promise<ImageContent[]> {
+    try {
+      const imageContent = await Promise.all(
+        content
+          .filter(
+            (item): item is ImageContent => item.type === "image_url" && !!item.image_url?.url
+          )
+          .map(async (item) => {
+            return await ImageProcessor.convertToBase64(
+              item.image_url.url,
+              this.chainManager.app.vault
+            );
+          })
+      );
+      return imageContent;
+    } catch (error) {
+      console.error("Error processing images:", error);
+      throw error;
+    }
+  }
+
+  private async buildMessageContent(
+    textContent: string,
+    userMessage: ChatMessage
+  ): Promise<MessageContent[]> {
+    const content: MessageContent[] = [
+      {
+        type: "text",
+        text: textContent,
+      },
+    ];
+
+    // Process URLs in the message to identify images
+    if (userMessage.context?.urls && userMessage.context.urls.length > 0) {
+      const imageContents = await this.processImageUrls(userMessage.context.urls);
+      content.push(...imageContents);
+    }
+
+    // Add existing image content if present
+    if (userMessage.content && userMessage.content.length > 0) {
+      const imageContents = await this.processExistingImages(userMessage.content);
+      content.push(...imageContents);
+    }
+
+    return content;
+  }
+
   private async streamMultimodalResponse(
     textContent: string,
     userMessage: ChatMessage,
@@ -289,39 +357,8 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       messages.push({ role: "assistant", content: ai });
     }
 
-    // Create content array for current message
-    const content: Array<{ type: string } & ({ text: string } | { image_url: { url: string } })> = [
-      {
-        type: "text",
-        text: textContent,
-      },
-    ];
-
-    // Add image content if present
-    if (userMessage.content && userMessage.content.length > 0) {
-      try {
-        const imageContent = await Promise.all(
-          userMessage.content
-            .filter((item) => item.type === "image_url" && item.image_url?.url)
-            .map(async (item) => {
-              const base64Image = await imageToBase64(
-                item.image_url.url,
-                this.chainManager.app.vault
-              );
-              return {
-                type: "image_url",
-                image_url: {
-                  url: base64Image,
-                },
-              };
-            })
-        );
-        content.push(...imageContent);
-      } catch (error) {
-        console.error("Error processing images:", error);
-        throw error;
-      }
-    }
+    // Build message content with text and images
+    const content = await this.buildMessageContent(textContent, userMessage);
 
     // Add current user message
     messages.push({

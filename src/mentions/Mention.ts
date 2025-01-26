@@ -1,5 +1,5 @@
 import { BrevilabsClient, Url4llmResponse } from "@/LLMProviders/brevilabsClient";
-import { isYoutubeUrl } from "@/utils";
+import { ImageProcessor, isYoutubeUrl } from "@/utils";
 
 export interface MentionData {
   type: string;
@@ -50,17 +50,24 @@ export class Mention {
   }
 
   // For non-youtube URLs
-  async processUrls(text: string): Promise<string> {
+  async processUrls(text: string): Promise<{ urlContext: string; imageUrls: string[] }> {
     const urls = this.extractUrls(text);
     let urlContext = "";
+    const imageUrls: string[] = [];
 
     // Return empty string if no URLs to process
     if (urls.length === 0) {
-      return "";
+      return { urlContext: "", imageUrls: [] };
     }
 
     // Process all URLs concurrently
     const processPromises = urls.map(async (url) => {
+      // Check if it's an image URL
+      if (await ImageProcessor.isImageUrl(url)) {
+        imageUrls.push(url);
+        return null;
+      }
+
       if (!this.mentions.has(url)) {
         const processed = await this.processUrl(url);
         this.mentions.set(url, {
@@ -81,7 +88,7 @@ export class Mention {
       }
     });
 
-    return urlContext;
+    return { urlContext, imageUrls };
   }
 
   getMentions(): Map<string, MentionData> {

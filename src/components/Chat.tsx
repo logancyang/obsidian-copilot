@@ -165,13 +165,14 @@ const Chat: React.FC<ChatProps> = ({
     const urlContextAddition =
       currentChain === ChainType.COPILOT_PLUS_CHAIN
         ? await mention.processUrls(inputMessage || "")
-        : "";
+        : { urlContext: "", imageUrls: [] };
 
     // Add context notes
     const noteContextAddition = await processContextNotes(customPromptProcessor, fileParserManager);
 
     // Combine everything
-    processedUserMessage = processedUserMessage + urlContextAddition + noteContextAddition;
+    processedUserMessage =
+      processedUserMessage + urlContextAddition.urlContext + noteContextAddition;
 
     let messageWithToolCalls = inputMessage;
     // Add tool calls last
@@ -186,6 +187,13 @@ const Chat: React.FC<ChatProps> = ({
       isVisible: false,
       timestamp: timestamp,
       content: content,
+      context: {
+        notes,
+        urls:
+          currentChain === ChainType.COPILOT_PLUS_CHAIN
+            ? [...(urls || []), ...urlContextAddition.imageUrls]
+            : urls || [],
+      },
     };
 
     // Add hidden user message to chat history
