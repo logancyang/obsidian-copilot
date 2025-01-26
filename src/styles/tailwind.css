@@ -419,6 +419,9 @@ If your plugin does not need CSS, delete this file.
   color: var(--code-normal);
   line-height: 1.5 !important;
   display: block;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 /* Style for the copy button in code blocks */
