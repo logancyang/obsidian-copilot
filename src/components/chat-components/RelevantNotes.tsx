@@ -1,12 +1,16 @@
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useActiveFile } from "@/hooks/useActiveFile";
+import { cn } from "@/lib/utils";
 import {
   findRelevantNotes,
   getSimilarityCategory,
   RelevantNoteEntry,
 } from "@/search/findRelevantNotes";
 import VectorStoreManager from "@/search/vectorStoreManager";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   ArrowRight,
   ChevronDown,
@@ -16,12 +20,8 @@ import {
   RefreshCcw,
   TriangleAlert,
 } from "lucide-react";
-import React, { forwardRef, memo, useEffect, useState } from "react";
 import { Notice, TFile } from "obsidian";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
-import { useActiveFile } from "@/hooks/useActiveFile";
-import { Button } from "@/components/ui/button";
+import React, { forwardRef, memo, useEffect, useState } from "react";
 
 function useRelevantNotes(refresher: number) {
   const [relevantNotes, setRelevantNotes] = useState<RelevantNoteEntry[]>([]);
@@ -290,7 +290,7 @@ export const RelevantNotes = memo(
             </div>
           )}
           <CollapsibleContent>
-            <div className="px-1 py-2 max-h-96 overflow-y-auto flex flex-col gap-2 @2xl:grid @2xl:grid-cols-2 @4xl:grid-cols-3">
+            <div className="px-1 py-2 max-h-screen overflow-y-auto flex flex-col gap-2 @2xl:grid @2xl:grid-cols-2 @4xl:grid-cols-3">
               {relevantNotes.map((note) => (
                 <RelevantNote
                   showPath={!inSameFolder(activeFile?.path ?? "", note.document.path)}
