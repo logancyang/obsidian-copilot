@@ -440,6 +440,52 @@ export function extractYoutubeUrl(text: string): string | null {
   return match ? match[0] : null;
 }
 
+export async function imageToBase64(imageUrl: string, vault: Vault): Promise<string> {
+  // If it's already a data URL, return it as is
+  if (imageUrl.startsWith("data:")) {
+    return imageUrl;
+  }
+
+  // Check if it's a local vault image
+  if (imageUrl.startsWith("app://")) {
+    const localPath = decodeURIComponent(imageUrl.replace("app://", ""));
+    const file = vault.getAbstractFileByPath(localPath);
+    if (!file || !(file instanceof TFile)) {
+      throw new Error(`Local image not found: ${localPath}`);
+    }
+
+    // Read the file as array buffer
+    const arrayBuffer = await vault.readBinary(file);
+    const buffer = Buffer.from(arrayBuffer);
+    const base64 = buffer.toString("base64");
+
+    // Get mime type from file extension
+    const mimeType = `image/${file.extension}`;
+    return `data:${mimeType};base64,${base64}`;
+  }
+
+  // Handle web images
+  try {
+    const response = await safeFetch(imageUrl, {
+      method: "GET",
+      headers: {},
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.statusText}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const base64 = buffer.toString("base64");
+    const mimeType = response.headers.get("content-type") || "image/jpeg";
+    return `data:${mimeType};base64,${base64}`;
+  } catch (error) {
+    console.error("Error converting image to base64:", error);
+    throw error;
+  }
+}
+
 /** Proxy function to use in place of fetch() to bypass CORS restrictions.
  * It currently doesn't support streaming until this is implemented
  * https://forum.obsidian.md/t/support-streaming-the-request-and-requesturl-response-body/87381 */
