@@ -137,7 +137,7 @@ export class BrevilabsClient {
   }
 
   async webSearch(query: string): Promise<WebSearchResponse> {
-    return this.makeRequest<WebSearchResponse>("/websearch", { q: query }, "GET");
+    return this.makeRequest<WebSearchResponse>("/websearch", { query });
   }
 
   async youtube4llm(url: string): Promise<Youtube4llmResponse> {
