@@ -1,3 +1,4 @@
+import { getStandaloneQuestion } from "@/chainUtils";
 import {
   EMPTY_INDEX_ERROR_MESSAGE,
   PLUS_MODE_DEFAULT_SOURCE_CHUNKS,
@@ -116,9 +117,12 @@ const indexTool = tool(
 
 // Add new web search tool
 const webSearchTool = tool(
-  async ({ query }: { query: string }) => {
+  async ({ query, chatHistory }: { query: string; chatHistory: [string, string][] }) => {
     try {
-      const response = await BrevilabsClient.getInstance().webSearch(query);
+      // Get standalone question considering chat history
+      const standaloneQuestion = await getStandaloneQuestion(query, chatHistory);
+
+      const response = await BrevilabsClient.getInstance().webSearch(standaloneQuestion);
       const citations = response.response.citations || [];
       const citationsList =
         citations.length > 0
@@ -140,6 +144,9 @@ const webSearchTool = tool(
     description: "Search the web for information",
     schema: z.object({
       query: z.string().describe("The search query"),
+      chatHistory: z
+        .array(z.tuple([z.string(), z.string()]))
+        .describe("Previous conversation turns"),
     }),
   }
 );
