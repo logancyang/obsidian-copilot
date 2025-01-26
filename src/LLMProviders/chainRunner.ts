@@ -15,6 +15,7 @@ import {
   extractUniqueTitlesFromDocs,
   extractYoutubeUrl,
   formatDateTime,
+  imageToBase64,
 } from "@/utils";
 import { Notice } from "obsidian";
 import ChainManager from "./chainManager";
@@ -289,7 +290,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     }
 
     // Create content array for current message
-    const content = [
+    const content: Array<{ type: string } & ({ text: string } | { image_url: { url: string } })> = [
       {
         type: "text",
         text: textContent,
@@ -298,10 +299,28 @@ class CopilotPlusChainRunner extends BaseChainRunner {
 
     // Add image content if present
     if (userMessage.content && userMessage.content.length > 0) {
-      const imageContent = userMessage.content.filter(
-        (item) => item.type === "image_url" && item.image_url?.url
-      );
-      content.push(...imageContent);
+      try {
+        const imageContent = await Promise.all(
+          userMessage.content
+            .filter((item) => item.type === "image_url" && item.image_url?.url)
+            .map(async (item) => {
+              const base64Image = await imageToBase64(
+                item.image_url.url,
+                this.chainManager.app.vault
+              );
+              return {
+                type: "image_url",
+                image_url: {
+                  url: base64Image,
+                },
+              };
+            })
+        );
+        content.push(...imageContent);
+      } catch (error) {
+        console.error("Error processing images:", error);
+        throw error;
+      }
     }
 
     // Add current user message
