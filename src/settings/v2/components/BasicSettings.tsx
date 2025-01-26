@@ -2,6 +2,7 @@ import { ChainType } from "@/chainFactory";
 import { isCommandEnabled } from "@/commands";
 import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SettingItem } from "@/components/ui/setting-item";
 import { SettingSwitch } from "@/components/ui/setting-switch";
@@ -10,10 +11,9 @@ import { useTab } from "@/contexts/TabContext";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
 import { formatDateTime, getProviderLabel } from "@/utils";
 import { ArrowRight, ExternalLink, HelpCircle, Key, Loader2 } from "lucide-react";
+import { Notice } from "obsidian";
 import React, { useState } from "react";
 import ApiKeyDialog from "./ApiKeyDialog";
-import { Input } from "@/components/ui/input";
-import { Notice } from "obsidian";
 
 const ChainType2Label: Record<ChainType, string> = {
   [ChainType.LLM_CHAIN]: "Chat",
@@ -149,8 +149,9 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
                           Copilot Plus brings powerful AI agent capabilities to Obsidian.
                         </p>
                         <p className="text-xs text-muted">
-                          Alpha access is limited to sponsors and early supporters at the moment.
-                          Officially launching in Jan 2025!
+                          Copilot Plus is currently in beta. We are actively working on improving
+                          the product and adding more features! Join now to lock in the lowest
+                          price!
                         </p>
                       </div>
                       <div className="text-sm text-muted">
