@@ -170,7 +170,7 @@ Copilot Plus is a premium product of Brevilabs LLC and it is not affiliated with
 - An account and payment are required for full access.
 - Copilot Plus requires network use to faciliate the AI agent.
 - Copilot Plus does not access your files without your consent.
-- Copilot Plus collect server-side telemetry to improve the product. Please see the [privacy policy](/privacy) for more details.
+- Copilot Plus collect server-side telemetry to improve the product. Please see the privacy policy on the website for more details.
 - The frontend code of Copilot plugin is fully open-source. However, the backend code facilitating the AI agents is close-sourced and proprietary.
 - We offer a full refund if you are not satisfied with the product within 14 days of your purchase, no questions asked.
 
