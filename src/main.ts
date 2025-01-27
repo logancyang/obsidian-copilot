@@ -62,6 +62,7 @@ export default class CopilotPlugin extends Plugin {
 
     // Initialize BrevilabsClient
     this.brevilabsClient = BrevilabsClient.getInstance();
+    this.brevilabsClient.setPluginVersion(this.manifest.version);
 
     this.chainManager = new ChainManager(this.app, this.vectorStoreManager);
 

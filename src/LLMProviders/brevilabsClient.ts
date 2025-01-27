@@ -71,6 +71,7 @@ export interface Youtube4llmResponse {
 
 export class BrevilabsClient {
   private static instance: BrevilabsClient;
+  private pluginVersion: string = "Unknown";
 
   static getInstance(): BrevilabsClient {
     if (!BrevilabsClient.instance) {
@@ -88,6 +89,10 @@ export class BrevilabsClient {
     }
   }
 
+  setPluginVersion(pluginVersion: string) {
+    this.pluginVersion = pluginVersion;
+  }
+
   private async makeRequest<T>(endpoint: string, body: any, method = "POST"): Promise<T> {
     this.checkLicenseKey();
 
@@ -99,12 +104,15 @@ export class BrevilabsClient {
       });
     }
 
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${await getDecryptedKey(getSettings().plusLicenseKey)}`,
+      "X-Client-Version": this.pluginVersion,
+    };
+
     const response = await safeFetch(url.toString(), {
       method,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${await getDecryptedKey(getSettings().plusLicenseKey)}`,
-      },
+      headers,
       ...(method === "POST" && { body: JSON.stringify(body) }),
     });
 
