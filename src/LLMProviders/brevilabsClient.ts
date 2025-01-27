@@ -104,18 +104,15 @@ export class BrevilabsClient {
       });
     }
 
-    const headers = {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${await getDecryptedKey(getSettings().plusLicenseKey)}`,
-      "X-Client-Version": this.pluginVersion,
-    };
-
     const response = await safeFetch(url.toString(), {
       method,
-      headers,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${await getDecryptedKey(getSettings().plusLicenseKey)}`,
+        "X-Client-Version": this.pluginVersion,
+      },
       ...(method === "POST" && { body: JSON.stringify(body) }),
     });
-
     const data = await response.json();
     if (getSettings().debug) {
       console.log(`==== ${endpoint} request ====:`, data);
