@@ -71,6 +71,7 @@ export interface Youtube4llmResponse {
 
 export class BrevilabsClient {
   private static instance: BrevilabsClient;
+  private pluginVersion: string = "Unknown";
 
   static getInstance(): BrevilabsClient {
     if (!BrevilabsClient.instance) {
@@ -86,6 +87,10 @@ export class BrevilabsClient {
       );
       throw new Error("License key not initialized");
     }
+  }
+
+  setPluginVersion(pluginVersion: string) {
+    this.pluginVersion = pluginVersion;
   }
 
   private async makeRequest<T>(endpoint: string, body: any, method = "POST"): Promise<T> {
@@ -104,10 +109,10 @@ export class BrevilabsClient {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${await getDecryptedKey(getSettings().plusLicenseKey)}`,
+        "X-Client-Version": this.pluginVersion,
       },
       ...(method === "POST" && { body: JSON.stringify(body) }),
     });
-
     const data = await response.json();
     if (getSettings().debug) {
       console.log(`==== ${endpoint} request ====:`, data);
