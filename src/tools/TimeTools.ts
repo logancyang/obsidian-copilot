@@ -259,14 +259,28 @@ function handleYear(input: string, now: DateTime) {
  * Handles quarter patterns like:
  * - "Q1 2024", "2024 Q1"
  * - "q2 2023", "2023 q2"
+ * - Q1, q1 (current year)
  */
 function handleQuarter(input: string, now: DateTime) {
-  const quarterMatch = input.match(/^(?:(?:q|Q)(\d{1})\s+(\d{4})|(\d{4})\s+(?:q|Q)(\d{1}))$/);
-  if (!quarterMatch) return undefined;
+  // First try matching full quarter with year pattern
+  const quarterYearMatch = input.match(/^(?:(?:q|Q)(\d{1})\s+(\d{4})|(\d{4})\s+(?:q|Q)(\d{1}))$/);
 
-  // Extract quarter and year whether it's "Q1 2024" or "2024 Q1" format
-  const quarter = parseInt(quarterMatch[1] || quarterMatch[4]);
-  const year = parseInt(quarterMatch[2] || quarterMatch[3]);
+  // Then try matching just the quarter pattern
+  const quarterOnlyMatch = input.match(/^(?:q|Q)(\d{1})$/);
+
+  let quarter: number;
+  let year: number;
+
+  if (quarterYearMatch) {
+    // Extract quarter and year whether it's "Q1 2024" or "2024 Q1" format
+    quarter = parseInt(quarterYearMatch[1] || quarterYearMatch[4]);
+    year = parseInt(quarterYearMatch[2] || quarterYearMatch[3]);
+  } else if (quarterOnlyMatch) {
+    quarter = parseInt(quarterOnlyMatch[1]);
+    year = now.year;
+  } else {
+    return undefined;
+  }
 
   // Validate quarter number
   if (quarter < 1 || quarter > 4) return undefined;
