@@ -7,6 +7,7 @@ import {
   RefreshCw,
   MessageCirclePlus,
   ChevronDown,
+  SquareArrowOutUpRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
@@ -18,6 +19,8 @@ import { useChainType } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { Notice } from "obsidian";
 import VectorStoreManager from "@/search/vectorStoreManager";
+import { navigateToPlusPage, useIsPlusUser } from "@/plusUtils";
+import { PLUS_UTM_MEDIUMS } from "@/constants";
 
 export async function refreshVaultIndex() {
   try {
@@ -37,6 +40,8 @@ interface ChatControlsProps {
 export function ChatControls({ onNewChat, onSaveAsNote }: ChatControlsProps) {
   const settings = useSettingsValue();
   const [selectedChain, setSelectedChain] = useChainType();
+  const isPlusUser = useIsPlusUser();
+
   return (
     <div className="w-full py-1 flex justify-between items-center px-1">
       <div className="flex-1">
@@ -44,8 +49,13 @@ export function ChatControls({ onNewChat, onSaveAsNote }: ChatControlsProps) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost2" size="fit" className="ml-1">
               {selectedChain === ChainType.LLM_CHAIN && "chat"}
-              {selectedChain === ChainType.VAULT_QA_CHAIN && "vault QA (basic)"}
-              {selectedChain === ChainType.COPILOT_PLUS_CHAIN && "copilot plus (beta)"}
+              {selectedChain === ChainType.VAULT_QA_CHAIN && "vault QA"}
+              {selectedChain === ChainType.COPILOT_PLUS_CHAIN && (
+                <div className="flex items-center gap-1">
+                  <Sparkles className="size-4" />
+                  copilot plus (beta)
+                </div>
+              )}
               <ChevronDown className="size-5 mt-0.5" />
             </Button>
           </DropdownMenuTrigger>
@@ -54,11 +64,25 @@ export function ChatControls({ onNewChat, onSaveAsNote }: ChatControlsProps) {
               chat
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setSelectedChain(ChainType.VAULT_QA_CHAIN)}>
-              vault QA (basic)
+              vault QA
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setSelectedChain(ChainType.COPILOT_PLUS_CHAIN)}>
-              copilot plus (beta)
-            </DropdownMenuItem>
+            {isPlusUser ? (
+              <DropdownMenuItem onSelect={() => setSelectedChain(ChainType.COPILOT_PLUS_CHAIN)}>
+                <div className="flex items-center gap-1">
+                  <Sparkles className="size-4" />
+                  copilot plus (beta)
+                </div>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem
+                onSelect={() => {
+                  navigateToPlusPage(PLUS_UTM_MEDIUMS.CHAT_MODE_SELECT);
+                }}
+              >
+                copilot plus (beta)
+                <SquareArrowOutUpRight className="size-3" />
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

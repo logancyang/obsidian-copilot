@@ -1,8 +1,10 @@
 import { BREVILABS_API_BASE_URL } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
+import { logInfo } from "@/logger";
 import { getSettings } from "@/settings/model";
-import { safeFetch } from "@/utils";
+import { extractErrorDetail, safeFetch } from "@/utils";
 import { Notice } from "obsidian";
+import { turnOnPlus, turnOffPlus } from "@/plusUtils";
 
 export interface BrocaResponse {
   response: {
@@ -93,7 +95,12 @@ export class BrevilabsClient {
     this.pluginVersion = pluginVersion;
   }
 
-  private async makeRequest<T>(endpoint: string, body: any, method = "POST"): Promise<T> {
+  private async makeRequest<T>(
+    endpoint: string,
+    body: any,
+    method = "POST",
+    excludeAuthHeader = false
+  ): Promise<T> {
     this.checkLicenseKey();
 
     const url = new URL(`${BREVILABS_API_BASE_URL}${endpoint}`);
@@ -103,12 +110,13 @@ export class BrevilabsClient {
         url.searchParams.append(key, value as string);
       });
     }
-
     const response = await safeFetch(url.toString(), {
       method,
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${await getDecryptedKey(getSettings().plusLicenseKey)}`,
+        ...(!excludeAuthHeader && {
+          Authorization: `Bearer ${await getDecryptedKey(getSettings().plusLicenseKey)}`,
+        }),
         "X-Client-Version": this.pluginVersion,
       },
       ...(method === "POST" && { body: JSON.stringify(body) }),
@@ -152,6 +160,37 @@ export class BrevilabsClient {
     }
 
     return data;
+  }
+
+  /**
+   * Validate the license key and update the isPlusUser setting.
+   * @returns true if the license key is valid, false if the license key is invalid, and undefined if
+   * unknown error.
+   */
+  async validateLicenseKey(): Promise<boolean | undefined> {
+    try {
+      logInfo("settings value", getSettings().plusLicenseKey);
+      const response = await this.makeRequest(
+        "/license",
+        {
+          license_key: await getDecryptedKey(getSettings().plusLicenseKey),
+        },
+        "POST",
+        true
+      );
+      logInfo("validateLicenseKey: true", response);
+      turnOnPlus();
+      return true;
+    } catch (error) {
+      if (extractErrorDetail(error).reason === "Invalid license key") {
+        logInfo("validateLicenseKey: false");
+        turnOffPlus();
+        return false;
+      }
+      return;
+
+      // Do nothing if the error is not about the invalid license key
+    }
   }
 
   async broca(userMessage: string): Promise<BrocaResponse> {

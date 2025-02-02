@@ -58,7 +58,7 @@ const ModelSettings: React.FC = () => {
   return (
     <div className="space-y-4">
       <section>
-        <div className="text-2xl font-bold mb-3">Chat Models</div>
+        <div className="text-xl font-bold mb-3">Chat Models</div>
         <ModelTable
           models={settings.activeModels}
           // onEdit={setEditingModel}
@@ -134,7 +134,7 @@ const ModelSettings: React.FC = () => {
       </section>
 
       <section>
-        <div className="text-2xl font-bold mb-3">Embedding Models</div>
+        <div className="text-xl font-bold mb-3">Embedding Models</div>
         <ModelTable
           models={settings.activeEmbeddingModels}
           onDelete={onDeleteEmbeddingModel}
