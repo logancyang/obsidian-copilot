@@ -92,17 +92,19 @@ export function stripHash(tag: string): string {
 
 /**
  * @param file - The note file to get tags from.
- * @param vault - The vault to get tags from.
+ * @param frontmatterOnly - Whether to only get tags from frontmatter.
  * @returns An array of lowercase tags without the hash symbol.
  */
-export function getTagsFromNote(file: TFile): string[] {
+export function getTagsFromNote(file: TFile, frontmatterOnly = true): string[] {
   const metadata = app.metadataCache.getFileCache(file);
-  const inlineTags = metadata?.tags?.map((tag) => tag.tag);
   const frontmatterTags = metadata?.frontmatter?.tags;
   const allTags = new Set<string>();
 
-  if (inlineTags) {
-    inlineTags.forEach((tag) => allTags.add(stripHash(tag)));
+  if (!frontmatterOnly) {
+    const inlineTags = metadata?.tags?.map((tag) => tag.tag);
+    if (inlineTags) {
+      inlineTags.forEach((tag) => allTags.add(stripHash(tag)));
+    }
   }
 
   // Add frontmatter tags
