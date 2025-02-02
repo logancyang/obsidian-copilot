@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+import ChatModelManager from "@/LLMProviders/chatModelManager";
+import { CustomModel } from "@/aiParams";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -6,10 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
 import { PasswordInput } from "@/components/ui/password-input";
-import { err2String, getProviderInfo, getProviderLabel } from "@/utils";
 import {
   ChatModelProviders,
   DisplayKeyProviders,
@@ -18,10 +17,11 @@ import {
   ProviderInfo,
   ProviderSettingsKeyMap,
 } from "@/constants";
-import { Notice } from "obsidian";
-import ChatModelManager from "@/LLMProviders/chatModelManager";
-import { CustomModel } from "@/aiParams";
 import { CopilotSettings } from "@/settings/model";
+import { err2String, getProviderInfo, getProviderLabel } from "@/utils";
+import { Loader2 } from "lucide-react";
+import { Notice } from "obsidian";
+import React, { useState } from "react";
 
 interface ApiKeyDialogProps {
   open: boolean;
@@ -103,7 +103,8 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({
 
       if (!defaultTestModel) {
         new Notice(
-          "API key verification failed: No default test model found for the selected provider."
+          "API key verification failed: No default test model found for the selected provider.",
+          10000
         );
         return;
       }
@@ -124,7 +125,7 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({
       });
     } catch (error) {
       console.error("API key verification failed:", error);
-      new Notice("API key verification failed: " + err2String(error));
+      new Notice("API key verification failed: " + err2String(error), 10000);
     } finally {
       setVerifyingProviders((prev) => {
         const next = new Set(prev);

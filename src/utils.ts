@@ -14,6 +14,56 @@ import moment from "moment";
 import { MarkdownView, Notice, TFile, Vault, parseYaml, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
 
+// Add custom error type at the top of the file
+interface APIError extends Error {
+  json?: any;
+}
+
+// Error message constants
+export const ERROR_MESSAGES = {
+  INVALID_LICENSE_KEY_USER:
+    "Invalid Copilot Plus license key. Please check your license key in settings.",
+  UNKNOWN_ERROR: "An unknown error occurred",
+  REQUEST_FAILED: (status: number) => `Request failed, status ${status}`,
+} as const;
+
+// Error handling utilities
+export interface ErrorDetail {
+  status?: number;
+  message?: string;
+  reason?: string;
+}
+
+export function extractErrorDetail(error: any): ErrorDetail {
+  const errorJson = error?.json?.detail || error?.json || {};
+  return {
+    status: errorJson.status,
+    message: errorJson.message || error?.message,
+    reason: errorJson.reason,
+  };
+}
+
+export function isLicenseKeyError(error: any): boolean {
+  const errorDetail = extractErrorDetail(error);
+  return (
+    errorDetail.reason === "Invalid license key" ||
+    error?.message === "Invalid license key" ||
+    error?.message?.includes("status 403") ||
+    errorDetail.status === 403
+  );
+}
+
+export function getApiErrorMessage(error: any): string {
+  const errorDetail = extractErrorDetail(error);
+  if (isLicenseKeyError(error)) {
+    return ERROR_MESSAGES.INVALID_LICENSE_KEY_USER;
+  }
+  return (
+    errorDetail.message ||
+    (errorDetail.reason ? `Error: ${errorDetail.reason}` : ERROR_MESSAGES.UNKNOWN_ERROR)
+  );
+}
+
 export const getModelNameFromKey = (modelKey: string): string => {
   return modelKey.split("|")[0];
 };
@@ -607,54 +657,84 @@ export async function safeFetch(url: string, options: RequestInit = {}): Promise
   const method = options.method?.toLowerCase() || "post";
   const methodsWithBody = ["post", "put", "patch"];
 
-  try {
-    const response = await requestUrl({
-      url,
-      contentType: "application/json",
-      headers: headers as Record<string, string>,
-      method: method,
-      ...(methodsWithBody.includes(method) && { body: options.body?.toString() }),
-    });
+  const response = await requestUrl({
+    url,
+    contentType: "application/json",
+    headers: headers as Record<string, string>,
+    method: method,
+    ...(methodsWithBody.includes(method) && { body: options.body?.toString() }),
+    throw: false, // Don't throw so we can get the response body
+  });
 
-    return {
-      ok: response.status >= 200 && response.status < 300,
-      status: response.status,
-      statusText: response.status.toString(),
-      headers: new Headers(response.headers),
-      url: url,
-      type: "basic",
-      redirected: false,
-      bytes: () => Promise.resolve(new Uint8Array(0)),
-      body: createReadableStreamFromString(response.text),
-      bodyUsed: true,
-      json: () => response.json,
-      text: async () => response.text,
-      arrayBuffer: async () => {
-        if (response.arrayBuffer) {
-          return response.arrayBuffer;
-        }
-        const base64 = response.text.replace(/^data:.*;base64,/, "");
-        const binaryString = atob(base64);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        return bytes.buffer;
-      },
-      blob: () => {
-        throw new Error("not implemented");
-      },
-      formData: () => {
-        throw new Error("not implemented");
-      },
-      clone: () => {
-        throw new Error("not implemented");
-      },
-    };
-  } catch (error) {
-    console.error("safeFetch error:", error);
+  // Check if response is error status
+  if (response.status >= 400) {
+    let errorJson;
+    try {
+      errorJson = typeof response.json === "string" ? JSON.parse(response.json) : response.json;
+    } catch {
+      try {
+        errorJson = typeof response.text === "string" ? JSON.parse(response.text) : response.text;
+      } catch {
+        errorJson = null;
+      }
+    }
+
+    // Create error with proper structure
+    const error = new Error(ERROR_MESSAGES.REQUEST_FAILED(response.status)) as APIError;
+    error.json = errorJson;
+
+    // Handle nested error structure
+    if (
+      errorJson?.detail?.reason === "Invalid license key" ||
+      errorJson?.reason === "Invalid license key"
+    ) {
+      error.message = "Invalid license key";
+    } else if (errorJson?.detail?.message || errorJson?.message) {
+      const message = errorJson?.detail?.message || errorJson?.message;
+      const reason = errorJson?.detail?.reason || errorJson?.reason;
+      error.message = reason ? `${message}: ${reason}` : message;
+    } else if (errorJson?.detail) {
+      error.message = JSON.stringify(errorJson.detail);
+    }
+
     throw error;
   }
+
+  return {
+    ok: response.status >= 200 && response.status < 300,
+    status: response.status,
+    statusText: response.status.toString(),
+    headers: new Headers(response.headers),
+    url: url,
+    type: "basic" as ResponseType,
+    redirected: false,
+    bytes: () => Promise.resolve(new Uint8Array(0)),
+    body: createReadableStreamFromString(response.text),
+    bodyUsed: true,
+    json: () => response.json,
+    text: async () => response.text,
+    arrayBuffer: async () => {
+      if (response.arrayBuffer) {
+        return response.arrayBuffer;
+      }
+      const base64 = response.text.replace(/^data:.*;base64,/, "");
+      const binaryString = atob(base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      return bytes.buffer;
+    },
+    blob: () => {
+      throw new Error("not implemented");
+    },
+    formData: () => {
+      throw new Error("not implemented");
+    },
+    clone: () => {
+      throw new Error("not implemented");
+    },
+  };
 }
 
 function createReadableStreamFromString(input: string) {
