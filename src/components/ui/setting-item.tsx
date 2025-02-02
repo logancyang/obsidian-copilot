@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { useTab } from "@/contexts/TabContext";
@@ -107,9 +107,29 @@ type SettingItemProps =
   | SliderSettingItemProps
   | DialogSettingItemProps;
 
+function debounce<T extends (...args: any[]) => void>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout;
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+}
+
 export function SettingItem(props: SettingItemProps) {
   const { title, description, className, disabled } = props;
   const { modalContainer } = useTab();
+
+  const onChange: ((value: string | number) => void) | undefined =
+    "onChange" in props ? props.onChange : undefined;
+  const debouncedOnChange = useMemo(() => {
+    if (!onChange) return;
+    return debounce((value: string | number) => {
+      onChange(value);
+    }, 1000);
+  }, [onChange]);
 
   const renderControl = () => {
     switch (props.type) {
@@ -118,8 +138,10 @@ export function SettingItem(props: SettingItemProps) {
         return (
           <Input
             type={props.type}
-            value={props.value}
-            onChange={(e) => props.onChange?.(e.target.value)}
+            defaultValue={props.value}
+            onChange={(e) => {
+              debouncedOnChange?.(e.target.value);
+            }}
             placeholder={props.placeholder}
             disabled={disabled}
             className="w-full sm:w-[200px]"
@@ -130,7 +152,9 @@ export function SettingItem(props: SettingItemProps) {
         return (
           <PasswordInput
             value={props.value}
-            onChange={props.onChange}
+            onChange={(value) => {
+              debouncedOnChange?.(value);
+            }}
             placeholder={props.placeholder}
             disabled={disabled}
             className="w-full sm:w-[200px]"
@@ -140,8 +164,10 @@ export function SettingItem(props: SettingItemProps) {
       case "textarea":
         return (
           <Textarea
-            value={props.value}
-            onChange={(e) => props.onChange?.(e.target.value)}
+            defaultValue={props.value}
+            onChange={(e) => {
+              debouncedOnChange?.(e.target.value);
+            }}
             placeholder={props.placeholder}
             rows={props.rows || 3}
             disabled={disabled}
@@ -159,24 +185,6 @@ export function SettingItem(props: SettingItemProps) {
         );
 
       case "select":
-        /*<Select
-          value={props.value?.toString()}
-          onValueChange={props.onChange}
-          disabled={disabled}
-        >
-          <SelectTrigger className="w-full sm:w-[200px]">
-            <SelectValue placeholder={props.placeholder} />
-          </SelectTrigger>
-          <SelectContent container={modalContainer}>
-            <SelectGroup>
-              {props.options.map((option) => (
-                <SelectItem key={option.value} value={option.value.toString()}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>*/
         return (
           <div className="relative w-full sm:w-[200px] group">
             <select
