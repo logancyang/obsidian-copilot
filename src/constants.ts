@@ -32,6 +32,7 @@ export const LOADING_MESSAGES = {
 };
 
 export enum ChatModels {
+  COPILOT_PLUS_FLASH = "copilot-plus-flash",
   GPT_4o = "gpt-4o",
   GPT_4o_mini = "gpt-4o-mini",
   GPT_4_TURBO = "gpt-4-turbo",
@@ -58,9 +59,17 @@ export enum ChatModelProviders {
   OLLAMA = "ollama",
   LM_STUDIO = "lm-studio",
   OPENAI_FORMAT = "3rd party (openai-format)",
+  COPILOT_PLUS = "copilot-plus",
 }
 
 export const BUILTIN_CHAT_MODELS: CustomModel[] = [
+  {
+    name: ChatModels.COPILOT_PLUS_FLASH,
+    provider: ChatModelProviders.COPILOT_PLUS,
+    enabled: true,
+    isBuiltIn: true,
+    core: true,
+  },
   {
     name: ChatModels.GPT_4o,
     provider: ChatModelProviders.OPENAI,
@@ -317,6 +326,7 @@ export const ProviderSettingsKeyMap: Record<DisplayKeyProviders, keyof CopilotSe
   groq: "groqApiKey",
   openrouterai: "openRouterAiApiKey",
   cohereai: "cohereApiKey",
+  "copilot-plus": "plusLicenseKey",
 };
 
 export enum VAULT_VECTOR_STORE_STRATEGY {

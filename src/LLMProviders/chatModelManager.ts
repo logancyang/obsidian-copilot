@@ -1,5 +1,5 @@
 import { CustomModel, getModelKey, ModelConfig, setModelKey } from "@/aiParams";
-import { BUILTIN_CHAT_MODELS, ChatModelProviders } from "@/constants";
+import { BREVILABS_API_BASE_URL, BUILTIN_CHAT_MODELS, ChatModelProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { err2String, safeFetch } from "@/utils";
@@ -26,6 +26,7 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.LM_STUDIO]: ChatOpenAI,
   [ChatModelProviders.GROQ]: ChatGroq,
   [ChatModelProviders.OPENAI_FORMAT]: ChatOpenAI,
+  [ChatModelProviders.COPILOT_PLUS]: ChatOpenAI,
 } as const;
 
 type ChatProviderConstructMap = typeof CHAT_PROVIDER_CONSTRUCTORS;
@@ -53,6 +54,7 @@ export default class ChatModelManager {
     [ChatModelProviders.OLLAMA]: () => "default-key",
     [ChatModelProviders.LM_STUDIO]: () => "default-key",
     [ChatModelProviders.OPENAI_FORMAT]: () => "default-key",
+    [ChatModelProviders.COPILOT_PLUS]: () => getSettings().plusLicenseKey,
   } as const;
 
   private constructor() {
@@ -186,6 +188,14 @@ export default class ChatModelManager {
           dangerouslyAllowBrowser: true,
         },
         ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
+      },
+      [ChatModelProviders.COPILOT_PLUS]: {
+        modelName: modelName,
+        openAIApiKey: await getDecryptedKey(settings.plusLicenseKey),
+        configuration: {
+          baseURL: BREVILABS_API_BASE_URL,
+          fetch: customModel.enableCors ? safeFetch : undefined,
+        },
       },
     };
 
