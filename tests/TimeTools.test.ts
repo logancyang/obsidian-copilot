@@ -116,15 +116,144 @@ describe("Time Expression Tests", () => {
 
   describe("Month Patterns", () => {
     test.each([
+      // Full month names
       {
-        expression: "january",
+        expression: "January",
         expected: { startDate: "2024-01-01", endDate: "2024-01-31" },
       },
       {
-        expression: "december 2023",
+        expression: "Jan",
+        expected: { startDate: "2024-01-01", endDate: "2024-01-31" },
+      },
+      // Adjust the year to 2023 for months after the current month
+      {
+        expression: "February",
+        expected: { startDate: "2023-02-01", endDate: "2023-02-28" },
+      },
+      {
+        expression: "Feb",
+        expected: { startDate: "2023-02-01", endDate: "2023-02-28" },
+      },
+      {
+        expression: "March",
+        expected: { startDate: "2023-03-01", endDate: "2023-03-31" },
+      },
+      {
+        expression: "Mar",
+        expected: { startDate: "2023-03-01", endDate: "2023-03-31" },
+      },
+      {
+        expression: "april",
+        expected: { startDate: "2023-04-01", endDate: "2023-04-30" },
+      },
+      {
+        expression: "apr",
+        expected: { startDate: "2023-04-01", endDate: "2023-04-30" },
+      },
+      {
+        expression: "may",
+        expected: { startDate: "2023-05-01", endDate: "2023-05-31" },
+      },
+      {
+        expression: "june",
+        expected: { startDate: "2023-06-01", endDate: "2023-06-30" },
+      },
+      {
+        expression: "jun",
+        expected: { startDate: "2023-06-01", endDate: "2023-06-30" },
+      },
+      {
+        expression: "july",
+        expected: { startDate: "2023-07-01", endDate: "2023-07-31" },
+      },
+      {
+        expression: "jul",
+        expected: { startDate: "2023-07-01", endDate: "2023-07-31" },
+      },
+      {
+        expression: "august",
+        expected: { startDate: "2023-08-01", endDate: "2023-08-31" },
+      },
+      {
+        expression: "aug",
+        expected: { startDate: "2023-08-01", endDate: "2023-08-31" },
+      },
+      {
+        expression: "september",
+        expected: { startDate: "2023-09-01", endDate: "2023-09-30" },
+      },
+      {
+        expression: "sep",
+        expected: { startDate: "2023-09-01", endDate: "2023-09-30" },
+      },
+      {
+        expression: "october",
+        expected: { startDate: "2023-10-01", endDate: "2023-10-31" },
+      },
+      {
+        expression: "oct",
+        expected: { startDate: "2023-10-01", endDate: "2023-10-31" },
+      },
+      {
+        expression: "november",
+        expected: { startDate: "2023-11-01", endDate: "2023-11-30" },
+      },
+      {
+        expression: "nov",
+        expected: { startDate: "2023-11-01", endDate: "2023-11-30" },
+      },
+      {
+        expression: "december",
+        expected: { startDate: "2023-12-01", endDate: "2023-12-31" },
+      },
+      {
+        expression: "dec",
         expected: { startDate: "2023-12-01", endDate: "2023-12-31" },
       },
     ])("$expression", async ({ expression, expected }) => {
+      await verifyDateRange(expression, expected);
+    });
+  });
+
+  describe("Month Year Patterns", () => {
+    const months = [
+      { name: "january", abbr: "jan", days: { 2022: 31, 2023: 31 } },
+      { name: "february", abbr: "feb", days: { 2022: 28, 2023: 28 } },
+      { name: "march", abbr: "mar", days: { 2022: 31, 2023: 31 } },
+      { name: "april", abbr: "apr", days: { 2022: 30, 2023: 30 } },
+      { name: "may", abbr: "may", days: { 2022: 31, 2023: 31 } },
+      { name: "june", abbr: "jun", days: { 2022: 30, 2023: 30 } },
+      { name: "july", abbr: "jul", days: { 2022: 31, 2023: 31 } },
+      { name: "august", abbr: "aug", days: { 2022: 31, 2023: 31 } },
+      { name: "september", abbr: "sep", days: { 2022: 30, 2023: 30 } },
+      { name: "october", abbr: "oct", days: { 2022: 31, 2023: 31 } },
+      { name: "november", abbr: "nov", days: { 2022: 30, 2023: 30 } },
+      { name: "december", abbr: "dec", days: { 2022: 31, 2023: 31 } },
+    ] as const;
+
+    const years = [2022, 2023] as const;
+    type Year = (typeof years)[number];
+
+    const historicalCases = months.flatMap((month) =>
+      years.flatMap((year: Year) => [
+        {
+          expression: `${month.name} ${year}`,
+          expected: {
+            startDate: `${year}-${String(months.indexOf(month) + 1).padStart(2, "0")}-01`,
+            endDate: `${year}-${String(months.indexOf(month) + 1).padStart(2, "0")}-${month.days[year]}`,
+          },
+        },
+        {
+          expression: `${month.abbr} ${year}`,
+          expected: {
+            startDate: `${year}-${String(months.indexOf(month) + 1).padStart(2, "0")}-01`,
+            endDate: `${year}-${String(months.indexOf(month) + 1).padStart(2, "0")}-${month.days[year]}`,
+          },
+        },
+      ])
+    );
+
+    test.each(historicalCases)("$expression", async ({ expression, expected }) => {
       await verifyDateRange(expression, expected);
     });
   });
@@ -134,6 +263,11 @@ describe("Time Expression Tests", () => {
       {
         expression: "Q1",
         expected: { startDate: "2024-01-01", endDate: "2024-03-31" },
+      },
+      // Adjust the year to 2023 for quarters after the current quarter
+      {
+        expression: "Q3",
+        expected: { startDate: "2023-07-01", endDate: "2023-09-30" },
       },
       {
         expression: "Q4 2023",

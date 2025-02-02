@@ -278,6 +278,12 @@ function handleQuarter(input: string, now: DateTime) {
   } else if (quarterOnlyMatch) {
     quarter = parseInt(quarterOnlyMatch[1]);
     year = now.year;
+
+    // Adjust year if the quarter is in the future
+    const currentQuarter = Math.floor((now.month - 1) / 3) + 1;
+    if (quarter > currentQuarter) {
+      year--;
+    }
   } else {
     return undefined;
   }
