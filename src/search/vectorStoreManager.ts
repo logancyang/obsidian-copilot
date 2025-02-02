@@ -51,14 +51,6 @@ export default class VectorStoreManager {
           await this.dbOps.initializeDB(await this.embeddingsManager.getEmbeddingsAPI());
         }
       }
-
-      // Handle inclusion/exclusion changes
-      if (
-        settings.qaExclusions !== prevSettings?.qaExclusions ||
-        settings.qaInclusions !== prevSettings?.qaInclusions
-      ) {
-        await this.eventHandler.updateExcludedFiles();
-      }
     };
 
     subscribeToSettingsChange(() => {
@@ -92,7 +84,6 @@ export default class VectorStoreManager {
           break;
         }
       }
-      this.eventHandler.initializeEventListeners();
     } catch (error) {
       console.error("Failed to initialize vector store:", error);
     }

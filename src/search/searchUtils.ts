@@ -1,9 +1,9 @@
 import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { getSettings } from "@/settings/model";
-import { getFilePathsFromPatterns } from "@/utils";
+import { getTagsFromNote, isPathInList, stripHash } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
-import { App } from "obsidian";
+import { App, TFile } from "obsidian";
 
 export async function getVectorLength(embeddingInstance: Embeddings | undefined): Promise<number> {
   if (!embeddingInstance) {
@@ -32,14 +32,10 @@ export async function getVectorLength(embeddingInstance: Embeddings | undefined)
 export async function getAllQAMarkdownContent(app: App): Promise<string> {
   let allContent = "";
 
-  const includedFiles = await getFilePathsForQA("inclusions", app);
-  const excludedFiles = await getFilePathsForQA("exclusions", app);
+  const { inclusions, exclusions } = getMatchingPatterns();
 
   const filteredFiles = app.vault.getMarkdownFiles().filter((file) => {
-    if (includedFiles.size > 0) {
-      return includedFiles.has(file.path);
-    }
-    return !excludedFiles.has(file.path);
+    return shouldIndexFile(file, inclusions, exclusions);
   });
 
   await Promise.all(filteredFiles.map((file) => app.vault.cachedRead(file))).then((contents) =>
@@ -49,35 +45,114 @@ export async function getAllQAMarkdownContent(app: App): Promise<string> {
   return allContent;
 }
 
-export async function getFilePathsForQA(
-  filterType: "exclusions" | "inclusions",
-  app: App
-): Promise<Set<string>> {
-  const targetFiles = new Set<string>();
+/**
+ * Get the exclusion patterns the exclusion settings string.
+ * @returns An array of exclusion patterns.
+ */
+function getExclusionPatterns(): string[] {
+  if (!getSettings().qaExclusions) {
+    return [];
+  }
+  const exclusions: string[] = [];
+  exclusions.push(...extractAppIgnoreSettings(app));
 
-  if (filterType === "exclusions") {
-    const exclusions: string[] = [];
-    exclusions.push(...extractAppIgnoreSettings(app));
-
-    if (getSettings().qaExclusions) {
-      exclusions.push(
-        ...getSettings()
-          .qaExclusions.split(",")
-          .map((item) => item.trim())
-      );
-    }
-
-    const excludedFilePaths = await getFilePathsFromPatterns(exclusions, app.vault);
-    excludedFilePaths.forEach((filePath) => targetFiles.add(filePath));
-  } else if (filterType === "inclusions" && getSettings().qaInclusions) {
-    const inclusions = getSettings()
-      .qaInclusions.split(",")
-      .map((item) => item.trim());
-    const includedFilePaths = await getFilePathsFromPatterns(inclusions, app.vault);
-    includedFilePaths.forEach((filePath) => targetFiles.add(filePath));
+  if (getSettings().qaExclusions) {
+    exclusions.push(
+      ...getSettings()
+        .qaExclusions.split(",")
+        .map((item) => item.trim())
+    );
   }
 
-  return targetFiles;
+  return exclusions;
+}
+
+/**
+ * Get the inclusion patterns from the inclusion settings string.
+ * @returns An array of inclusion patterns.
+ */
+function getInclusionPatterns(): string[] {
+  if (!getSettings().qaInclusions) {
+    return [];
+  }
+  const inclusions: string[] = [];
+  inclusions.push(
+    ...getSettings()
+      .qaInclusions.split(",")
+      .map((item) => item.trim())
+  );
+
+  return inclusions;
+}
+
+/**
+ * Get the inclusion and exclusion patterns from the settings.
+ * @returns An object containing the inclusions and exclusions patterns strings.
+ */
+export function getMatchingPatterns(): { inclusions: string[]; exclusions: string[] } {
+  const inclusions = getInclusionPatterns();
+  const exclusions = getExclusionPatterns();
+  return { inclusions, exclusions };
+}
+
+export function shouldIndexFile(file: TFile, inclusions: string[], exclusions: string[]): boolean {
+  if (exclusions.length > 0 && matchFilePathWithPatterns(file.path, exclusions)) {
+    return false;
+  }
+  if (inclusions.length > 0 && !matchFilePathWithPatterns(file.path, inclusions)) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Match the file path with the patterns.
+ * @param filePath - The file path to match.
+ * @param patterns - The patterns to match the file path with.
+ * @returns True if the file path matches the patterns, false otherwise.
+ */
+function matchFilePathWithPatterns(filePath: string, patterns: string[]): boolean {
+  if (!patterns || patterns.length === 0) return false;
+
+  // Group patterns by type for more efficient processing
+  const tagPatterns: string[] = [];
+  const extensionPatterns: string[] = [];
+  const pathPatterns: string[] = [];
+
+  patterns.forEach((pattern) => {
+    if (pattern.startsWith("#")) {
+      tagPatterns.push(stripHash(pattern));
+    } else if (pattern.startsWith("*")) {
+      extensionPatterns.push(pattern.slice(1).toLowerCase());
+    } else {
+      pathPatterns.push(pattern);
+    }
+  });
+
+  // Check extension patterns
+  if (extensionPatterns.length > 0) {
+    const fileExt = filePath.toLowerCase();
+    if (extensionPatterns.some((ext) => fileExt.endsWith(ext))) {
+      return true;
+    }
+  }
+
+  // Check path patterns
+  if (pathPatterns.length > 0) {
+    if (pathPatterns.some((pattern) => isPathInList(filePath, pattern))) {
+      return true;
+    }
+  }
+
+  const file = app.vault.getAbstractFileByPath(filePath);
+  if (file instanceof TFile) {
+    const tags = getTagsFromNote(file);
+    if (tagPatterns.some((pattern) => tags.includes(pattern))) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export function extractAppIgnoreSettings(app: App): string[] {
