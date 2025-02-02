@@ -1,12 +1,28 @@
 import { DateTime } from "luxon";
 import { getTimeRangeMsTool } from "../src/tools/TimeTools";
 
-// Extract the function from the tool
+// Helper function to extract the tool function
 const getTimeRangeMs = async (timeExpression: string) => {
   return await getTimeRangeMsTool.func({ timeExpression });
 };
 
-// Mock the current date to ensure consistent test results
+// Helper to verify date ranges
+interface DateRange {
+  startDate: string;
+  endDate: string;
+}
+
+const verifyDateRange = async (expression: string, expected: DateRange) => {
+  const result = await getTimeRangeMs(expression);
+  expect(result).toBeDefined();
+  const startDate = DateTime.fromMillis(result!.startTime.epoch);
+  const endDate = DateTime.fromMillis(result!.endTime.epoch);
+
+  expect(startDate.toISODate()).toBe(expected.startDate);
+  expect(endDate.toISODate()).toBe(expected.endDate);
+};
+
+// Mock the current date
 const mockNow = DateTime.fromObject({
   year: 2024,
   month: 1,
@@ -16,7 +32,6 @@ const mockNow = DateTime.fromObject({
 
 describe("Time Expression Tests", () => {
   beforeAll(() => {
-    // Mock DateTime.now()
     jest.spyOn(DateTime, "now").mockImplementation(() => mockNow);
   });
 
@@ -25,255 +40,323 @@ describe("Time Expression Tests", () => {
   });
 
   describe("Relative Time Ranges", () => {
-    test("last X days", async () => {
-      const result = await getTimeRangeMs("last 3 days");
-      expect(result).toBeDefined();
-      const startDate = DateTime.fromMillis(result!.startTime.epoch);
-      const endDate = DateTime.fromMillis(result!.endTime.epoch);
+    test.each([
+      // Last X units
+      {
+        expression: "last week",
+        expected: { startDate: "2024-01-08", endDate: "2024-01-14" },
+      },
+      {
+        expression: "last month",
+        expected: { startDate: "2023-12-01", endDate: "2023-12-31" },
+      },
+      {
+        expression: "last year",
+        expected: { startDate: "2023-01-01", endDate: "2023-12-31" },
+      },
+      {
+        expression: "last 3 days",
+        expected: { startDate: "2024-01-12", endDate: "2024-01-15" },
+      },
+      {
+        expression: "last 2 weeks",
+        expected: { startDate: "2024-01-01", endDate: "2024-01-15" },
+      },
+      {
+        expression: "last 6 months",
+        expected: { startDate: "2023-07-15", endDate: "2024-01-15" },
+      },
 
-      expect(startDate.toISODate()).toBe("2024-01-12");
-      expect(endDate.toISODate()).toBe("2024-01-15");
-    });
+      // This units
+      {
+        expression: "this week",
+        expected: { startDate: "2024-01-15", endDate: "2024-01-21" },
+      },
+      {
+        expression: "this month",
+        expected: { startDate: "2024-01-01", endDate: "2024-01-31" },
+      },
+      {
+        expression: "this year",
+        expected: { startDate: "2024-01-01", endDate: "2024-12-31" },
+      },
 
-    test("past X weeks", async () => {
-      const result = await getTimeRangeMs("past 2 weeks");
-      expect(result).toBeDefined();
-      const startDate = DateTime.fromMillis(result!.startTime.epoch);
-      const endDate = DateTime.fromMillis(result!.endTime.epoch);
-
-      expect(startDate.toISODate()).toBe("2024-01-01");
-      expect(endDate.toISODate()).toBe("2024-01-15");
-    });
-  });
-
-  describe("Special Time Ranges", () => {
-    test("yesterday", async () => {
-      const result = await getTimeRangeMs("yesterday");
-      expect(result).toBeDefined();
-      const startDate = DateTime.fromMillis(result!.startTime.epoch);
-      const endDate = DateTime.fromMillis(result!.endTime.epoch);
-
-      expect(startDate.toISODate()).toBe("2024-01-14");
-      expect(endDate.toISODate()).toBe("2024-01-14");
-    });
-
-    test("last week", async () => {
-      const result = await getTimeRangeMs("last week");
-      expect(result).toBeDefined();
-      const startDate = DateTime.fromMillis(result!.startTime.epoch);
-      const endDate = DateTime.fromMillis(result!.endTime.epoch);
-
-      expect(startDate.weekday).toBe(1); // Monday
-      expect(endDate.weekday).toBe(7); // Sunday
-      expect(startDate.weekNumber).toBe(endDate.weekNumber);
-    });
-
-    test("this month", async () => {
-      const result = await getTimeRangeMs("this month");
-      expect(result).toBeDefined();
-      const startDate = DateTime.fromMillis(result!.startTime.epoch);
-      const endDate = DateTime.fromMillis(result!.endTime.epoch);
-
-      expect(startDate.toISODate()).toBe("2024-01-01");
-      expect(endDate.toISODate()).toBe("2024-01-31");
-    });
-  });
-
-  describe("Week of Expressions", () => {
-    test("week of specific date", async () => {
-      const result = await getTimeRangeMs("week of July 1st");
-      expect(result).toBeDefined();
-      const startDate = DateTime.fromMillis(result!.startTime.epoch);
-      const endDate = DateTime.fromMillis(result!.endTime.epoch);
-
-      // A full week is 7 days when including both start and end dates
-      expect(Math.round(endDate.diff(startDate, "days").days)).toBe(7); // 8 days total (inclusive)
-      expect(startDate.hour).toBe(0); // Start of day
-      expect(endDate.hour).toBe(23); // End of day
-
-      // Verify it's in July
-      expect(startDate.month).toBe(7); // July
+      // Next X units
+      {
+        expression: "next week",
+        expected: { startDate: "2024-01-22", endDate: "2024-01-28" },
+      },
+      {
+        expression: "next month",
+        expected: { startDate: "2024-02-01", endDate: "2024-02-29" },
+      },
+    ])("$expression", async ({ expression, expected }) => {
+      await verifyDateRange(expression, expected);
     });
   });
 
-  describe("Month Names", () => {
-    const monthTests = [
-      { full: "january", abbr: "jan", num: 1, days: 31 },
-      { full: "february", abbr: "feb", num: 2, days: 28 }, // Not leap year for 2023
-      { full: "march", abbr: "mar", num: 3, days: 31 },
-      { full: "april", abbr: "apr", num: 4, days: 30 },
-      { full: "may", abbr: "may", num: 5, days: 31 },
-      { full: "june", abbr: "jun", num: 6, days: 30 },
-      { full: "july", abbr: "jul", num: 7, days: 31 },
-      { full: "august", abbr: "aug", num: 8, days: 31 },
-      { full: "september", abbr: "sep", num: 9, days: 30 },
-      { full: "october", abbr: "oct", num: 10, days: 31 },
-      { full: "november", abbr: "nov", num: 11, days: 30 },
-      { full: "december", abbr: "dec", num: 12, days: 31 },
-    ];
-
-    describe("full month names", () => {
-      monthTests.forEach(({ full, num, days }) => {
-        test(`full month name: ${full}`, async () => {
-          const result = await getTimeRangeMs(full);
-          expect(result).toBeDefined();
-          const startDate = DateTime.fromMillis(result!.startTime.epoch);
-          const endDate = DateTime.fromMillis(result!.endTime.epoch);
-
-          // If month is after current month (Jan), it should be in previous year
-          const expectedYear = num > mockNow.month ? mockNow.year - 1 : mockNow.year;
-          expect(startDate.toISODate()).toBe(
-            `${expectedYear}-${num.toString().padStart(2, "0")}-01`
-          );
-          expect(endDate.toISODate()).toBe(
-            `${expectedYear}-${num.toString().padStart(2, "0")}-${days}`
-          );
-        });
-      });
-    });
-
-    describe("abbreviated month names", () => {
-      monthTests.forEach(({ abbr, num, days }) => {
-        test(`abbreviated month name: ${abbr}`, async () => {
-          const result = await getTimeRangeMs(abbr);
-          expect(result).toBeDefined();
-          const startDate = DateTime.fromMillis(result!.startTime.epoch);
-          const endDate = DateTime.fromMillis(result!.endTime.epoch);
-
-          // If month is after current month (Jan), it should be in previous year
-          const expectedYear = num > mockNow.month ? mockNow.year - 1 : mockNow.year;
-          expect(startDate.toISODate()).toBe(
-            `${expectedYear}-${num.toString().padStart(2, "0")}-01`
-          );
-          expect(endDate.toISODate()).toBe(
-            `${expectedYear}-${num.toString().padStart(2, "0")}-${days}`
-          );
-        });
-      });
+  describe("Week Patterns", () => {
+    test.each([
+      {
+        expression: "week of 2024-01-10",
+        expected: { startDate: "2024-01-08", endDate: "2024-01-14" },
+      },
+      {
+        expression: "week of last monday",
+        expected: { startDate: "2024-01-08", endDate: "2024-01-14" },
+      },
+      {
+        expression: "week of january 10",
+        expected: { startDate: "2024-01-08", endDate: "2024-01-14" },
+      },
+    ])("$expression", async ({ expression, expected }) => {
+      await verifyDateRange(expression, expected);
     });
   });
 
-  describe("Month-Year Combinations", () => {
-    const years = [2022, 2023]; // Only test past years since future years are adjusted
-    const monthTests = [
-      { full: "january", abbr: "jan", num: 1, days: 31 },
-      { full: "february", abbr: "feb", num: 2, days: [28, 29] }, // Handle leap years
-      { full: "march", abbr: "mar", num: 3, days: 31 },
-      { full: "april", abbr: "apr", num: 4, days: 30 },
-      { full: "may", abbr: "may", num: 5, days: 31 },
-      { full: "june", abbr: "jun", num: 6, days: 30 },
-      { full: "july", abbr: "jul", num: 7, days: 31 },
-      { full: "august", abbr: "aug", num: 8, days: 31 },
-      { full: "september", abbr: "sep", num: 9, days: 30 },
-      { full: "october", abbr: "oct", num: 10, days: 31 },
-      { full: "november", abbr: "nov", num: 11, days: 30 },
-      { full: "december", abbr: "dec", num: 12, days: 31 },
-    ];
-
-    describe("full month names with year", () => {
-      years.forEach((year) => {
-        monthTests.forEach(({ full, num, days }) => {
-          test(`full month and year: ${full} ${year}`, async () => {
-            const result = await getTimeRangeMs(`${full} ${year}`);
-            expect(result).toBeDefined();
-            const startDate = DateTime.fromMillis(result!.startTime.epoch);
-            const endDate = DateTime.fromMillis(result!.endTime.epoch);
-
-            const lastDay = Array.isArray(days)
-              ? DateTime.fromObject({ year }).isInLeapYear
-                ? days[1]
-                : days[0] // Proper leap year check
-              : days;
-
-            // When a year is specified, it should be used regardless of whether it's in the future
-            expect(startDate.toISODate()).toBe(`${year}-${num.toString().padStart(2, "0")}-01`);
-            expect(endDate.toISODate()).toBe(
-              `${year}-${num.toString().padStart(2, "0")}-${lastDay}`
-            );
-          });
-        });
-      });
-    });
-
-    describe("abbreviated month names with year", () => {
-      years.forEach((year) => {
-        monthTests.forEach(({ abbr, num, days }) => {
-          test(`abbreviated month and year: ${abbr} ${year}`, async () => {
-            const result = await getTimeRangeMs(`${abbr} ${year}`);
-            expect(result).toBeDefined();
-            const startDate = DateTime.fromMillis(result!.startTime.epoch);
-            const endDate = DateTime.fromMillis(result!.endTime.epoch);
-
-            const lastDay = Array.isArray(days)
-              ? DateTime.fromObject({ year }).isInLeapYear
-                ? days[1]
-                : days[0] // Proper leap year check
-              : days;
-
-            // When a year is specified, it should be used regardless of whether it's in the future
-            expect(startDate.toISODate()).toBe(`${year}-${num.toString().padStart(2, "0")}-01`);
-            expect(endDate.toISODate()).toBe(
-              `${year}-${num.toString().padStart(2, "0")}-${lastDay}`
-            );
-          });
-        });
-      });
+  describe("Month Patterns", () => {
+    test.each([
+      // Full month names
+      {
+        expression: "January",
+        expected: { startDate: "2024-01-01", endDate: "2024-01-31" },
+      },
+      {
+        expression: "Jan",
+        expected: { startDate: "2024-01-01", endDate: "2024-01-31" },
+      },
+      // Adjust the year to 2023 for months after the current month
+      {
+        expression: "February",
+        expected: { startDate: "2023-02-01", endDate: "2023-02-28" },
+      },
+      {
+        expression: "Feb",
+        expected: { startDate: "2023-02-01", endDate: "2023-02-28" },
+      },
+      {
+        expression: "March",
+        expected: { startDate: "2023-03-01", endDate: "2023-03-31" },
+      },
+      {
+        expression: "Mar",
+        expected: { startDate: "2023-03-01", endDate: "2023-03-31" },
+      },
+      {
+        expression: "april",
+        expected: { startDate: "2023-04-01", endDate: "2023-04-30" },
+      },
+      {
+        expression: "apr",
+        expected: { startDate: "2023-04-01", endDate: "2023-04-30" },
+      },
+      {
+        expression: "may",
+        expected: { startDate: "2023-05-01", endDate: "2023-05-31" },
+      },
+      {
+        expression: "june",
+        expected: { startDate: "2023-06-01", endDate: "2023-06-30" },
+      },
+      {
+        expression: "jun",
+        expected: { startDate: "2023-06-01", endDate: "2023-06-30" },
+      },
+      {
+        expression: "july",
+        expected: { startDate: "2023-07-01", endDate: "2023-07-31" },
+      },
+      {
+        expression: "jul",
+        expected: { startDate: "2023-07-01", endDate: "2023-07-31" },
+      },
+      {
+        expression: "august",
+        expected: { startDate: "2023-08-01", endDate: "2023-08-31" },
+      },
+      {
+        expression: "aug",
+        expected: { startDate: "2023-08-01", endDate: "2023-08-31" },
+      },
+      {
+        expression: "september",
+        expected: { startDate: "2023-09-01", endDate: "2023-09-30" },
+      },
+      {
+        expression: "sep",
+        expected: { startDate: "2023-09-01", endDate: "2023-09-30" },
+      },
+      {
+        expression: "october",
+        expected: { startDate: "2023-10-01", endDate: "2023-10-31" },
+      },
+      {
+        expression: "oct",
+        expected: { startDate: "2023-10-01", endDate: "2023-10-31" },
+      },
+      {
+        expression: "november",
+        expected: { startDate: "2023-11-01", endDate: "2023-11-30" },
+      },
+      {
+        expression: "nov",
+        expected: { startDate: "2023-11-01", endDate: "2023-11-30" },
+      },
+      {
+        expression: "december",
+        expected: { startDate: "2023-12-01", endDate: "2023-12-31" },
+      },
+      {
+        expression: "dec",
+        expected: { startDate: "2023-12-01", endDate: "2023-12-31" },
+      },
+    ])("$expression", async ({ expression, expected }) => {
+      await verifyDateRange(expression, expected);
     });
   });
 
-  describe("Quarter Expressions", () => {
-    test("specific quarter", async () => {
-      const result = await getTimeRangeMs("Q1 2024");
-      expect(result).toBeDefined();
-      const startDate = DateTime.fromMillis(result!.startTime.epoch);
-      const endDate = DateTime.fromMillis(result!.endTime.epoch);
+  describe("Month Year Patterns", () => {
+    const months = [
+      { name: "january", abbr: "jan", days: { 2022: 31, 2023: 31 } },
+      { name: "february", abbr: "feb", days: { 2022: 28, 2023: 28 } },
+      { name: "march", abbr: "mar", days: { 2022: 31, 2023: 31 } },
+      { name: "april", abbr: "apr", days: { 2022: 30, 2023: 30 } },
+      { name: "may", abbr: "may", days: { 2022: 31, 2023: 31 } },
+      { name: "june", abbr: "jun", days: { 2022: 30, 2023: 30 } },
+      { name: "july", abbr: "jul", days: { 2022: 31, 2023: 31 } },
+      { name: "august", abbr: "aug", days: { 2022: 31, 2023: 31 } },
+      { name: "september", abbr: "sep", days: { 2022: 30, 2023: 30 } },
+      { name: "october", abbr: "oct", days: { 2022: 31, 2023: 31 } },
+      { name: "november", abbr: "nov", days: { 2022: 30, 2023: 30 } },
+      { name: "december", abbr: "dec", days: { 2022: 31, 2023: 31 } },
+    ] as const;
 
-      expect(startDate.toISODate()).toBe("2024-01-01");
-      expect(endDate.toISODate()).toBe("2024-03-31");
-    });
+    const years = [2022, 2023] as const;
+    type Year = (typeof years)[number];
 
-    test("quarter with year first", async () => {
-      const result = await getTimeRangeMs("2023 Q4");
-      expect(result).toBeDefined();
-      const startDate = DateTime.fromMillis(result!.startTime.epoch);
-      const endDate = DateTime.fromMillis(result!.endTime.epoch);
+    const historicalCases = months.flatMap((month) =>
+      years.flatMap((year: Year) => [
+        {
+          expression: `${month.name} ${year}`,
+          expected: {
+            startDate: `${year}-${String(months.indexOf(month) + 1).padStart(2, "0")}-01`,
+            endDate: `${year}-${String(months.indexOf(month) + 1).padStart(2, "0")}-${month.days[year]}`,
+          },
+        },
+        {
+          expression: `${month.abbr} ${year}`,
+          expected: {
+            startDate: `${year}-${String(months.indexOf(month) + 1).padStart(2, "0")}-01`,
+            endDate: `${year}-${String(months.indexOf(month) + 1).padStart(2, "0")}-${month.days[year]}`,
+          },
+        },
+      ])
+    );
 
-      expect(startDate.toISODate()).toBe("2023-10-01");
-      expect(endDate.toISODate()).toBe("2023-12-31");
+    test.each(historicalCases)("$expression", async ({ expression, expected }) => {
+      await verifyDateRange(expression, expected);
     });
   });
 
-  describe("Year Expressions", () => {
-    test("year only", async () => {
-      const result = await getTimeRangeMs("2023");
-      expect(result).toBeDefined();
-      const startDate = DateTime.fromMillis(result!.startTime.epoch);
-      const endDate = DateTime.fromMillis(result!.endTime.epoch);
-
-      expect(startDate.toISODate()).toBe("2023-01-01");
-      expect(endDate.toISODate()).toBe("2023-12-31");
+  describe("Quarter Patterns", () => {
+    test.each([
+      {
+        expression: "Q1",
+        expected: { startDate: "2024-01-01", endDate: "2024-03-31" },
+      },
+      // Adjust the year to 2023 for quarters after the current quarter
+      {
+        expression: "Q3",
+        expected: { startDate: "2023-07-01", endDate: "2023-09-30" },
+      },
+      {
+        expression: "Q4 2023",
+        expected: { startDate: "2023-10-01", endDate: "2023-12-31" },
+      },
+    ])("$expression", async ({ expression, expected }) => {
+      await verifyDateRange(expression, expected);
     });
+  });
 
-    test("year with prefix", async () => {
-      const result = await getTimeRangeMs("year 2023");
-      expect(result).toBeDefined();
-      const startDate = DateTime.fromMillis(result!.startTime.epoch);
-      const endDate = DateTime.fromMillis(result!.endTime.epoch);
+  describe("Year Patterns", () => {
+    test.each([
+      {
+        expression: "2023",
+        expected: { startDate: "2023-01-01", endDate: "2023-12-31" },
+      },
+    ])("$expression", async ({ expression, expected }) => {
+      await verifyDateRange(expression, expected);
+    });
+  });
 
-      expect(startDate.toISODate()).toBe("2023-01-01");
-      expect(endDate.toISODate()).toBe("2023-12-31");
+  describe("Specific Date Patterns", () => {
+    test.each([
+      {
+        expression: "2024-01-10",
+        expected: { startDate: "2024-01-10", endDate: "2024-01-10" },
+      },
+      {
+        expression: "January 10",
+        expected: { startDate: "2024-01-10", endDate: "2024-01-10" },
+      },
+    ])("$expression", async ({ expression, expected }) => {
+      await verifyDateRange(expression, expected);
+    });
+  });
+
+  describe("Relative Date Patterns", () => {
+    test.each([
+      {
+        expression: "last monday",
+        expected: { startDate: "2024-01-08", endDate: "2024-01-08" },
+      },
+      {
+        expression: "next friday",
+        expected: { startDate: "2024-01-26", endDate: "2024-01-26" },
+      },
+      {
+        expression: "today",
+        expected: { startDate: "2024-01-15", endDate: "2024-01-15" },
+      },
+      {
+        expression: "yesterday",
+        expected: { startDate: "2024-01-14", endDate: "2024-01-14" },
+      },
+      {
+        expression: "tomorrow",
+        expected: { startDate: "2024-01-16", endDate: "2024-01-16" },
+      },
+    ])("$expression", async ({ expression, expected }) => {
+      await verifyDateRange(expression, expected);
+    });
+  });
+
+  describe("Date Range Patterns", () => {
+    test.each([
+      {
+        expression: "from 2024-01-01 to 2024-01-15",
+        expected: { startDate: "2024-01-01", endDate: "2024-01-15" },
+      },
+      {
+        expression: "from january 1 to january 15",
+        expected: { startDate: "2024-01-01", endDate: "2024-01-15" },
+      },
+      {
+        expression: "from 2024-01-01 to now",
+        expected: { startDate: "2024-01-01", endDate: "2024-01-15" },
+      },
+    ])("$expression", async ({ expression, expected }) => {
+      await verifyDateRange(expression, expected);
     });
   });
 
   describe("Invalid Expressions", () => {
-    test("invalid time expression", async () => {
-      const result = await getTimeRangeMs("invalid time");
-      expect(result).toBeUndefined();
-    });
-
-    test("empty string", async () => {
-      const result = await getTimeRangeMs("");
-      expect(result).toBeUndefined();
-    });
+    test.each(["invalid time", "", "random text", "week of invalid"])(
+      "invalid expression: %s",
+      async (expression) => {
+        const result = await getTimeRangeMs(expression);
+        expect(result).toBeUndefined();
+      }
+    );
   });
 });
