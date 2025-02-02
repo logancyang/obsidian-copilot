@@ -15,6 +15,7 @@ import {
   extractUniqueTitlesFromDocs,
   extractYoutubeUrl,
   formatDateTime,
+  getApiErrorMessage,
   ImageContent,
   ImageProcessor,
   MessageContent,
@@ -98,7 +99,10 @@ abstract class BaseChainRunner implements ChainRunner {
     const errorCode = errorData?.code || error;
     let errorMessage = "";
 
-    if (errorCode === "model_not_found") {
+    // Check for specific error messages
+    if (error?.message?.includes("Invalid license key")) {
+      errorMessage = "Invalid Copilot Plus license key. Please check your license key in settings.";
+    } else if (errorCode === "model_not_found") {
       errorMessage =
         "You do not have access to this model or the model does not exist, please check with your API provider.";
     } else {
@@ -447,12 +451,8 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         const messageForAnalysis = userMessage.originalMessage || userMessage.message;
         toolCalls = await IntentAnalyzer.analyzeIntent(messageForAnalysis);
       } catch (error: any) {
-        const errorMessage = error?.message?.includes("status 403")
-          ? "Please provide a valid license key in your Copilot Plus settings."
-          : "An error occurred while processing your message. Please check the console for more details.";
-
         return this.handleResponse(
-          errorMessage,
+          getApiErrorMessage(error),
           userMessage,
           abortController,
           addMessage,
