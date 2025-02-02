@@ -18,25 +18,21 @@ export function PasswordInput({
   className?: string;
 }) {
   const [showPassword, setShowPassword] = useState(false);
-  const [displayValue, setDisplayValue] = useState<string | number>("");
+  const inputRef = useRef<HTMLInputElement>(null);
   const isFirstLoad = useRef(true);
 
-  // Handle all value transformations in a single effect
+  // Initialize the input value on first load
   useEffect(() => {
     const processValue = async () => {
-      // Decrypt the value only on first load if it's an encrypted string
-      if (isFirstLoad.current && typeof value === "string" && value) {
+      if (isFirstLoad.current && typeof value === "string" && value && inputRef.current) {
         try {
           const decrypted = await getDecryptedKey(value);
-          setDisplayValue(decrypted);
+          inputRef.current.value = decrypted;
         } catch (error) {
           console.error("Failed to decrypt value:", error);
-          setDisplayValue(value);
+          inputRef.current.value = value;
         }
         isFirstLoad.current = false;
-      } else {
-        // For subsequent updates or non-encrypted values, use the value directly
-        setDisplayValue(value || "");
       }
     };
 
@@ -46,8 +42,8 @@ export function PasswordInput({
   return (
     <div className={cn("relative", className)}>
       <Input
+        ref={inputRef}
         type={showPassword ? "text" : "password"}
-        value={displayValue}
         onChange={(e) => onChange?.(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
@@ -56,7 +52,7 @@ export function PasswordInput({
       <div
         onClick={() => !disabled && setShowPassword(!showPassword)}
         className={cn(
-          "absolute right-2 top-1/2 -translate-y-1/2",
+          "absolute right-2 top-0 bottom-0 flex items-center justify-center",
           "cursor-pointer",
           disabled && "opacity-50 cursor-not-allowed"
         )}
