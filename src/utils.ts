@@ -11,7 +11,7 @@ import { MemoryVariables } from "@langchain/core/memory";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { BaseChain, RetrievalQAChain } from "langchain/chains";
 import moment from "moment";
-import { MarkdownView, Notice, TFile, Vault, parseYaml, requestUrl } from "obsidian";
+import { MarkdownView, Notice, TFile, Vault, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
 
 // Add custom error type at the top of the file
@@ -97,7 +97,7 @@ export async function getNoteFileFromTitle(vault: Vault, noteTitle: string): Pro
 }
 
 /** TODO: Rewrite with app.vault.getAbstractFileByPath() */
-export const getNotesFromPath = async (vault: Vault, path: string): Promise<TFile[]> => {
+export const getNotesFromPath = (vault: Vault, path: string): TFile[] => {
   const files = vault.getMarkdownFiles();
 
   // Special handling for the root path '/'
@@ -132,49 +132,62 @@ export const getNotesFromPath = async (vault: Vault, path: string): Promise<TFil
   });
 };
 
-export async function getTagsFromNote(file: TFile, vault: Vault): Promise<string[]> {
-  const fileContent = await vault.cachedRead(file);
-  // Check if the file starts with frontmatter delimiter
-  if (fileContent.startsWith("---")) {
-    const frontMatterBlock = fileContent.split("---", 3);
-    // Ensure there's a closing delimiter for frontmatter
-    if (frontMatterBlock.length >= 3) {
-      const frontMatterContent = frontMatterBlock[1];
-      try {
-        const frontMatter = parseYaml(frontMatterContent) || {};
-        const tags = frontMatter.tags || [];
-        // Handle both array and string formats of tags
-        const normalizedTags = Array.isArray(tags) ? tags : [tags];
-        // Strip any '#' from the frontmatter tags and convert to lowercase
-        return normalizedTags
-          .map((tag: string) => tag.toString().replace(/^#/, ""))
-          .map((tag: string) => tag.toLowerCase());
-      } catch (error) {
-        console.error("Error parsing YAML frontmatter:", error);
-        return [];
-      }
-    }
-  }
-  return [];
+/**
+ * @param tag - The tag to strip the hash symbol from.
+ * @returns The tag without the hash symbol in lowercase.
+ */
+export function stripHash(tag: string): string {
+  return tag.replace(/^#/, "").trim().toLowerCase();
 }
 
-export async function getNotesFromTags(
-  vault: Vault,
-  tags: string[],
-  noteFiles?: TFile[]
-): Promise<TFile[]> {
+/**
+ * @param file - The note file to get tags from.
+ * @param frontmatterOnly - Whether to only get tags from frontmatter.
+ * @returns An array of lowercase tags without the hash symbol.
+ */
+export function getTagsFromNote(file: TFile, frontmatterOnly = true): string[] {
+  const metadata = app.metadataCache.getFileCache(file);
+  const frontmatterTags = metadata?.frontmatter?.tags;
+  const allTags = new Set<string>();
+
+  if (!frontmatterOnly) {
+    const inlineTags = metadata?.tags?.map((tag) => tag.tag);
+    if (inlineTags) {
+      inlineTags.forEach((tag) => allTags.add(stripHash(tag)));
+    }
+  }
+
+  // Add frontmatter tags
+  if (frontmatterTags) {
+    if (Array.isArray(frontmatterTags)) {
+      frontmatterTags.forEach((tag) => allTags.add(stripHash(tag)));
+    } else if (typeof frontmatterTags === "string") {
+      allTags.add(stripHash(frontmatterTags));
+    }
+  }
+
+  return Array.from(allTags);
+}
+
+/**
+ * Get notes from tags.
+ * @param vault - The vault to get notes from.
+ * @param tags - The tags to get notes from. Tags should be with the hash symbol.
+ * @param noteFiles - The notes to get notes from.
+ * @returns An array of note files.
+ */
+export function getNotesFromTags(vault: Vault, tags: string[], noteFiles?: TFile[]): TFile[] {
   if (tags.length === 0) {
     return [];
   }
 
-  // Strip any '#' from the tags and convert to lowercase for consistent comparison
-  tags = tags.map((tag) => tag.replace(/^#/, "").toLowerCase());
+  tags = tags.map((tag) => stripHash(tag));
 
-  const files = noteFiles && noteFiles.length > 0 ? noteFiles : await getNotesFromPath(vault, "/");
+  const files = noteFiles && noteFiles.length > 0 ? noteFiles : getNotesFromPath(vault, "/");
   const filesWithTag = [];
 
   for (const file of files) {
-    const noteTags = await getTagsFromNote(file, vault);
+    const noteTags = getTagsFromNote(file);
     if (tags.some((tag) => noteTags.includes(tag))) {
       filesWithTag.push(file);
     }
@@ -438,38 +451,6 @@ export function extractUniqueTitlesFromDocs(docs: Document[]): string[] {
   });
 
   return Array.from(titlesSet);
-}
-
-export async function getFilePathsFromPatterns(
-  patterns: string[],
-  vault: Vault
-): Promise<string[]> {
-  const filePaths = new Set<string>();
-
-  for (const pattern of patterns) {
-    if (pattern.startsWith("#")) {
-      // Tag-based pattern
-      const taggedFiles = await getNotesFromTags(vault, [pattern]);
-      taggedFiles.forEach((file) => filePaths.add(file.path));
-    } else if (pattern.startsWith("*")) {
-      // File-extension-based pattern
-      const extensionName = pattern.slice(1);
-      vault.getFiles().forEach((file) => {
-        if (file.name.toLowerCase().endsWith(extensionName.toLowerCase())) {
-          filePaths.add(file.path);
-        }
-      });
-    } else {
-      // Path-based pattern
-      vault.getFiles().forEach((file) => {
-        if (isPathInList(file.path, pattern)) {
-          filePaths.add(file.path);
-        }
-      });
-    }
-  }
-
-  return Array.from(filePaths);
 }
 
 export function extractJsonFromCodeBlock(content: string): any {

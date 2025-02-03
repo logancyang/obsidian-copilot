@@ -7,7 +7,7 @@ import { MD5 } from "crypto-js";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { App, Notice, TFile } from "obsidian";
 import { DBOperations } from "./dbOperations";
-import { extractAppIgnoreSettings, getFilePathsForQA } from "./searchUtils";
+import { extractAppIgnoreSettings, getMatchingPatterns, shouldIndexFile } from "./searchUtils";
 
 const EMBEDDING_BATCH_SIZE = 16;
 const CHECKPOINT_INTERVAL = 8 * EMBEDDING_BATCH_SIZE;
@@ -228,22 +228,13 @@ export class IndexOperations {
   }
 
   private async getFilesToIndex(overwrite?: boolean): Promise<TFile[]> {
+    const { inclusions, exclusions } = getMatchingPatterns();
+    const allMarkdownFiles = this.app.vault.getMarkdownFiles();
+
     // If overwrite is true, return all markdown files that match current filters
     if (overwrite) {
-      const allMarkdownFiles = this.app.vault.getMarkdownFiles();
-      const includedFiles = await getFilePathsForQA("inclusions", this.app);
-      const excludedFiles = await getFilePathsForQA("exclusions", this.app);
-
       return allMarkdownFiles.filter((file) => {
-        // Always respect exclusions, even with inclusion filters
-        if (excludedFiles.has(file.path)) {
-          return false;
-        }
-        // If there are inclusion filters, file must match one
-        if (includedFiles.size > 0) {
-          return includedFiles.has(file.path);
-        }
-        return true;
+        return shouldIndexFile(file, inclusions, exclusions);
       });
     }
 
@@ -251,18 +242,12 @@ export class IndexOperations {
     const indexedFilePaths = new Set(await this.dbOps.getIndexedFiles());
     const latestMtime = await this.dbOps.getLatestFileMtime();
 
-    // Get current inclusion/exclusion rules
-    const includedFiles = await getFilePathsForQA("inclusions", this.app);
-    const excludedFiles = await getFilePathsForQA("exclusions", this.app);
-
     // Get all markdown files that should be indexed under current rules
-    const allMarkdownFiles = this.app.vault.getMarkdownFiles();
     const filesToIndex = new Set<TFile>();
     const emptyFiles = new Set<string>();
 
     for (const file of allMarkdownFiles) {
-      // Skip excluded files
-      if (excludedFiles.has(file.path)) {
+      if (!shouldIndexFile(file, inclusions, exclusions)) {
         continue;
       }
 
@@ -273,10 +258,9 @@ export class IndexOperations {
         continue;
       }
 
-      const shouldBeIndexed = includedFiles.size === 0 || includedFiles.has(file.path);
       const isIndexed = indexedFilePaths.has(file.path);
 
-      if (shouldBeIndexed && (!isIndexed || file.stat.mtime > latestMtime)) {
+      if (!isIndexed || file.stat.mtime > latestMtime) {
         filesToIndex.add(file);
       }
     }

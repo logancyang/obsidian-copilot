@@ -4,22 +4,22 @@ import { getSettings } from "@/settings/model";
 import { App, Platform, TAbstractFile, TFile } from "obsidian";
 import { DBOperations } from "./dbOperations";
 import { IndexOperations } from "./indexOperations";
-import { getFilePathsForQA } from "./searchUtils";
+import { getMatchingPatterns, shouldIndexFile } from "./searchUtils";
+
+const DEBOUNCE_DELAY = 10000; // 10 seconds
 
 export class IndexEventHandler {
   private debounceTimer: number | null = null;
-  private readonly debounceDelay = 10000; // 10 seconds
-  private excludedFiles: Set<string> = new Set();
 
   constructor(
     private app: App,
     private indexOps: IndexOperations,
     private dbOps: DBOperations
   ) {
-    this.updateExcludedFiles();
+    this.initializeEventListeners();
   }
 
-  public initializeEventListeners() {
+  private initializeEventListeners() {
     if (getSettings().debug) {
       console.log("Copilot Plus: Initializing event listeners");
     }
@@ -27,15 +27,10 @@ export class IndexEventHandler {
     this.app.vault.on("delete", this.handleFileDelete);
   }
 
-  public async updateExcludedFiles() {
-    this.excludedFiles = await getFilePathsForQA("exclusions", this.app);
-  }
-
   private handleFileModify = async (file: TAbstractFile) => {
     if (Platform.isMobile && getSettings().disableIndexOnMobile) {
       return;
     }
-    await this.updateExcludedFiles();
     const currentChainType = getChainType();
 
     if (
@@ -43,10 +38,8 @@ export class IndexEventHandler {
       file.extension === "md" &&
       currentChainType === ChainType.COPILOT_PLUS_CHAIN
     ) {
-      const includedFiles = await getFilePathsForQA("inclusions", this.app);
-
-      const shouldProcess =
-        includedFiles.size > 0 ? includedFiles.has(file.path) : !this.excludedFiles.has(file.path);
+      const { inclusions, exclusions } = getMatchingPatterns();
+      const shouldProcess = shouldIndexFile(file, inclusions, exclusions);
 
       if (shouldProcess) {
         this.debouncedReindexFile(file);
@@ -65,7 +58,7 @@ export class IndexEventHandler {
       }
       this.indexOps.reindexFile(file);
       this.debounceTimer = null;
-    }, this.debounceDelay);
+    }, DEBOUNCE_DELAY);
   };
 
   private handleFileDelete = async (file: TAbstractFile) => {
