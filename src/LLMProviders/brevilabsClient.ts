@@ -121,6 +121,39 @@ export class BrevilabsClient {
     return data;
   }
 
+  private async makeRequestWithCustomBaseUrl<T>(
+    baseUrl: string,
+    endpoint: string,
+    body: any,
+    method = "POST"
+  ): Promise<T> {
+    this.checkLicenseKey();
+
+    const url = new URL(`${baseUrl}${endpoint}`);
+    if (method === "GET") {
+      // Add query parameters for GET requests
+      Object.entries(body).forEach(([key, value]) => {
+        url.searchParams.append(key, value as string);
+      });
+    }
+
+    const response = await safeFetch(url.toString(), {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${await getDecryptedKey(getSettings().plusLicenseKey)}`,
+        "X-Client-Version": this.pluginVersion,
+      },
+      ...(method === "POST" && { body: JSON.stringify(body) }),
+    });
+    const data = await response.json();
+    if (getSettings().debug) {
+      console.log(`==== ${endpoint} request ====:`, data);
+    }
+
+    return data;
+  }
+
   async broca(userMessage: string): Promise<BrocaResponse> {
     const brocaResponse = await this.makeRequest<BrocaResponse>("/broca", {
       message: userMessage,
@@ -155,6 +188,23 @@ export class BrevilabsClient {
   }
 
   async youtube4llm(url: string): Promise<Youtube4llmResponse> {
-    return this.makeRequest<Youtube4llmResponse>("/youtube4llm", { url });
+    try {
+      // First try with production URL
+      return await this.makeRequest<Youtube4llmResponse>("/youtube4llm", { url });
+    } catch (error) {
+      // Only retry if the error indicates missing transcript or service failure
+      const response = error instanceof Response ? await error.json() : null;
+      if (!response?.response?.transcript) {
+        // If production fails, try with staging URL
+        const stagingUrl = "https://brevilabs-api-staging.up.railway.app/v1";
+        return await this.makeRequestWithCustomBaseUrl<Youtube4llmResponse>(
+          stagingUrl,
+          "/youtube4llm",
+          { url }
+        );
+      }
+      // If we get here, rethrow the original error
+      throw error;
+    }
   }
 }
