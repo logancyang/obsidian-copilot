@@ -1,4 +1,4 @@
-import { CHUNK_SIZE } from "@/constants";
+import { CHUNK_SIZE, EMBEDDING_BATCH_SIZE } from "@/constants";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { RateLimiter } from "@/rateLimiter";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
@@ -9,7 +9,6 @@ import { App, Notice, TFile } from "obsidian";
 import { DBOperations } from "./dbOperations";
 import { extractAppIgnoreSettings, getMatchingPatterns, shouldIndexFile } from "./searchUtils";
 
-const EMBEDDING_BATCH_SIZE = 16;
 const CHECKPOINT_INTERVAL = 8 * EMBEDDING_BATCH_SIZE;
 
 export interface IndexingState {

@@ -21,6 +21,7 @@ export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assist
 export const EMPTY_INDEX_ERROR_MESSAGE =
   "Copilot index does not exist. Please index your vault first!\n\n1. Set a working embedding model in QA settings. If it's not a local model, don't forget to set the API key. \n\n2. Click 'Refresh Index for Vault' and wait for indexing to complete. If you encounter the rate limiting error, please turn your request per second down in QA setting.";
 export const CHUNK_SIZE = 4000;
+export const EMBEDDING_BATCH_SIZE = 16;
 export const CONTEXT_SCORE_THRESHOLD = 0.4;
 export const TEXT_WEIGHT = 0.4;
 export const PLUS_MODE_DEFAULT_SOURCE_CHUNKS = 15;
@@ -359,6 +360,7 @@ export const COMMAND_IDS = {
   APPLY_CUSTOM_PROMPT: "apply-custom-prompt",
   CHANGE_TONE: "change-tone-prompt",
   CLEAR_LOCAL_COPILOT_INDEX: "clear-local-copilot-index",
+  CLEAR_COPILOT_CACHE: "clear-copilot-cache",
   COUNT_WORD_AND_TOKENS_SELECTION: "count-word-and-tokens-selection",
   COUNT_TOTAL_VAULT_TOKENS: "count-total-vault-tokens",
   DELETE_CUSTOM_PROMPT: "delete-custom-prompt",
@@ -396,6 +398,7 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.APPLY_CUSTOM_PROMPT]: "Apply custom prompt",
   [COMMAND_IDS.CHANGE_TONE]: "Change tone of selection",
   [COMMAND_IDS.CLEAR_LOCAL_COPILOT_INDEX]: "Clear local Copilot index",
+  [COMMAND_IDS.CLEAR_COPILOT_CACHE]: "Clear Copilot cache",
   [COMMAND_IDS.COUNT_TOTAL_VAULT_TOKENS]: "Count total tokens in your vault",
   [COMMAND_IDS.COUNT_WORD_AND_TOKENS_SELECTION]: "Count words and tokens in selection",
   [COMMAND_IDS.DELETE_CUSTOM_PROMPT]: "Delete custom prompt",

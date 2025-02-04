@@ -1,10 +1,10 @@
 import { BREVILABS_API_BASE_URL } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { logInfo } from "@/logger";
+import { turnOffPlus, turnOnPlus } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { extractErrorDetail, safeFetch } from "@/utils";
 import { Notice } from "obsidian";
-import { turnOnPlus, turnOffPlus } from "@/plusUtils";
 
 export interface BrocaResponse {
   response: {
@@ -170,7 +170,7 @@ export class BrevilabsClient {
   async validateLicenseKey(): Promise<boolean | undefined> {
     try {
       logInfo("settings value", getSettings().plusLicenseKey);
-      const response = await this.makeRequest(
+      await this.makeRequest(
         "/license",
         {
           license_key: await getDecryptedKey(getSettings().plusLicenseKey),
@@ -178,7 +178,6 @@ export class BrevilabsClient {
         "POST",
         true
       );
-      logInfo("validateLicenseKey: true", response);
       turnOnPlus();
       return true;
     } catch (error) {

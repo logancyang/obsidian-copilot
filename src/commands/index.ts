@@ -490,4 +490,15 @@ export function registerBuiltInCommands(plugin: CopilotPlugin) {
       }
     }).open();
   });
+
+  // Add clear Copilot cache command
+  addCommand(plugin, COMMAND_IDS.CLEAR_COPILOT_CACHE, async () => {
+    try {
+      await plugin.fileParserManager.clearPDFCache();
+      new Notice("Copilot cache cleared successfully");
+    } catch (error) {
+      console.error("Error clearing Copilot cache:", error);
+      new Notice("Failed to clear Copilot cache");
+    }
+  });
 }
