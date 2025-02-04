@@ -48,6 +48,11 @@ export class PDFParser implements FileParser {
       return `[Error: Could not extract content from PDF ${file.basename}]`;
     }
   }
+
+  async clearCache(): Promise<void> {
+    logInfo("Clearing PDF cache");
+    await this.pdfCache.clear();
+  }
 }
 
 // Future parsers can be added like this:
@@ -86,5 +91,12 @@ export class FileParserManager {
 
   supportsExtension(extension: string): boolean {
     return this.parsers.has(extension);
+  }
+
+  async clearPDFCache(): Promise<void> {
+    const pdfParser = this.parsers.get("pdf");
+    if (pdfParser instanceof PDFParser) {
+      await pdfParser.clearCache();
+    }
   }
 }
