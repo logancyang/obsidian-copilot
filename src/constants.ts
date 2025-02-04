@@ -480,7 +480,7 @@ export const PROCESS_SELECTION_COMMANDS = [
 ];
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
-  isPlusUser: undefined,
+  isPlusUser: false,
   plusLicenseKey: "",
   openAIApiKey: "",
   openAIOrgId: "",
