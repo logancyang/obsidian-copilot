@@ -12,6 +12,20 @@ import { getSettings, setSettings, updateSetting, useSettingsValue } from "@/set
 import { setChainType, setModelKey } from "@/aiParams";
 import { CopilotPlusWelcomeModal } from "@/components/modals/CopilotPlusWelcomeModal";
 import { CopilotPlusExpiredModal } from "@/components/modals/CopilotPlusExpiredModal";
+import VectorStoreManager from "@/search/vectorStoreManager";
+
+export const DEFAULT_COPILOT_PLUS_CHAT_MODEL = ChatModels.COPILOT_PLUS_FLASH;
+export const DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY =
+  DEFAULT_COPILOT_PLUS_CHAT_MODEL + "|" + ChatModelProviders.COPILOT_PLUS;
+export const DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL = EmbeddingModels.COPILOT_PLUS_SMALL;
+export const DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY =
+  DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL + "|" + EmbeddingModelProviders.COPILOT_PLUS;
+
+/** Check if the model key is a Copilot Plus model. */
+export function isPlusModel(modelKey: string): boolean {
+  return modelKey.split("|")[1] === EmbeddingModelProviders.COPILOT_PLUS;
+}
+
 /** Hook to get the isPlusUser setting. */
 export function useIsPlusUser(): boolean | undefined {
   const settings = useSettingsValue();
@@ -28,15 +42,23 @@ export async function checkIsPlusUser(): Promise<boolean | undefined> {
   return await brevilabsClient.validateLicenseKey();
 }
 
+/**
+ * Switch to the Copilot Plus chat and embedding models.
+ * WARNING! If the embedding model is changed, the vault will be indexed. Use it
+ * with caution.
+ */
 export function switchToPlusModels(): void {
-  const defaultModelKey = ChatModels.COPILOT_PLUS_FLASH + "|" + ChatModelProviders.COPILOT_PLUS;
-  const embeddingModelKey =
-    EmbeddingModels.COPILOT_PLUS_SMALL + "|" + EmbeddingModelProviders.COPILOT_PLUS;
+  const defaultModelKey = DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY;
+  const embeddingModelKey = DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY;
+  const previousEmbeddingModelKey = getSettings().embeddingModelKey;
   setModelKey(defaultModelKey);
   setSettings({
     defaultModelKey,
     embeddingModelKey,
   });
+  if (previousEmbeddingModelKey !== embeddingModelKey) {
+    VectorStoreManager.getInstance().indexVaultToVectorStore(true);
+  }
 }
 
 export function createPlusPageUrl(medium: PlusUtmMedium): string {
@@ -58,10 +80,6 @@ export function updatePlusUserSettings(isPlusUser: boolean): void {
   } else {
     setModelKey(DEFAULT_SETTINGS.defaultModelKey);
     setChainType(DEFAULT_SETTINGS.defaultChainType);
-    setSettings({
-      defaultChainType: DEFAULT_SETTINGS.defaultChainType,
-      defaultModelKey: DEFAULT_SETTINGS.defaultModelKey,
-    });
   }
 }
 

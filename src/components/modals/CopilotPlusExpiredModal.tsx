@@ -3,17 +3,30 @@ import { App, Modal } from "obsidian";
 import { createRoot } from "react-dom/client";
 import { Root } from "react-dom/client";
 import { Button } from "@/components/ui/button";
-import { navigateToPlusPage } from "@/plusUtils";
+import { isPlusModel, navigateToPlusPage } from "@/plusUtils";
 import { PLUS_UTM_MEDIUMS } from "@/constants";
 import { ExternalLink } from "lucide-react";
+import { getSettings } from "@/settings/model";
 
 function CopilotPlusExpiredModalContent({ onCancel }: { onCancel: () => void }) {
+  const settings = getSettings();
+  const isUsingPlusModels =
+    isPlusModel(settings.defaultModelKey) && isPlusModel(settings.embeddingModelKey);
+
   return (
     <div className="flex flex-col gap-4">
-      <p>
-        Your Copilot Plus license key is no longer valid. Please renew your subscription to continue
-        using Copilot Plus.
-      </p>
+      <div className="flex flex-col gap-2">
+        <div>
+          Your Copilot Plus license key is no longer valid. Please renew your subscription to
+          continue using Copilot Plus.
+        </div>
+        {isUsingPlusModels && (
+          <div className="text-sm text-warning">
+            The Copilot Plus exclusive models will stop working. You can switch to the default
+            models in the Settings.
+          </div>
+        )}
+      </div>
       <div className="flex gap-2 justify-end w-full">
         <Button variant="ghost" onClick={onCancel}>
           Close
