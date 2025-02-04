@@ -78,7 +78,6 @@ export function updatePlusUserSettings(isPlusUser: boolean): void {
     });
     // Do not set models here because it needs user confirmation.
   } else {
-    setModelKey(DEFAULT_SETTINGS.defaultModelKey);
     setChainType(DEFAULT_SETTINGS.defaultChainType);
   }
 }
@@ -86,9 +85,7 @@ export function updatePlusUserSettings(isPlusUser: boolean): void {
 export function turnOnPlus(): void {
   const isPlusUser = getSettings().isPlusUser;
   updatePlusUserSettings(true);
-  // Do not show the welcome modal if the user is already a plus user before
-  // 2024/02/04 (isPlusUser === undefined)
-  if (isPlusUser === false) {
+  if (!isPlusUser) {
     new CopilotPlusWelcomeModal(app).open();
   }
 }
