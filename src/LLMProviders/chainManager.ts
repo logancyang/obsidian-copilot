@@ -34,6 +34,7 @@ import { App, Notice } from "obsidian";
 import ChatModelManager from "./chatModelManager";
 import MemoryManager from "./memoryManager";
 import PromptManager from "./promptManager";
+import { logError, logInfo } from "@/logger";
 
 export default class ChainManager {
   private static chain: RunnableSequence;
@@ -125,10 +126,10 @@ export default class ChainManager {
       // retrieves the old chain without the chatModel change if it exists!
       // Create a new chain with the new chatModel
       this.setChain(getChainType());
-      console.log(`Setting model to ${newModelKey}`);
+      logInfo(`Setting model to ${newModelKey}`);
     } catch (error) {
-      console.error("createChainWithNewModel failed: ", error);
-      console.log("modelKey:", newModelKey);
+      logError(`createChainWithNewModel failed: ${error}`);
+      logInfo(`modelKey: ${newModelKey}`);
     }
   }
 

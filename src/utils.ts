@@ -812,3 +812,14 @@ export async function insertIntoEditor(message: string, replace: boolean = false
   }
   new Notice("Message inserted into the active note.");
 }
+
+export function debounce<T extends (...args: any[]) => void>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout;
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+}

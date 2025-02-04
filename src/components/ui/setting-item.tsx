@@ -15,6 +15,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { SettingSlider } from "@/components/ui/setting-slider";
+import { debounce } from "@/utils";
 
 // 定义输入控件的类型
 type InputType =
@@ -106,17 +107,6 @@ type SettingItemProps =
   | CustomSettingItemProps
   | SliderSettingItemProps
   | DialogSettingItemProps;
-
-function debounce<T extends (...args: any[]) => void>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout;
-  return (...args: Parameters<T>) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
-}
 
 export function SettingItem(props: SettingItemProps) {
   const { title, description, className, disabled } = props;

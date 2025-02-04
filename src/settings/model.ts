@@ -61,6 +61,8 @@ export interface CopilotSettings {
   showRelevantNotes: boolean;
   numPartitions: number;
   defaultConversationNoteName: string;
+  // undefined means never checked
+  isPlusUser: boolean | undefined;
 }
 
 export const settingsStore = createStore();

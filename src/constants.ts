@@ -30,6 +30,13 @@ export const LOADING_MESSAGES = {
   READING_FILES: "Reading files",
   SEARCHING_WEB: "Searching the web",
 };
+export const PLUS_UTM_MEDIUMS = {
+  SETTINGS: "settings",
+  EXPIRED_MODAL: "expired_modal",
+  CHAT_MODE_SELECT: "chat_mode_select",
+  MODE_SELECT_TOOLTIP: "mode_select_tooltip",
+};
+export type PlusUtmMedium = (typeof PLUS_UTM_MEDIUMS)[keyof typeof PLUS_UTM_MEDIUMS];
 
 export enum ChatModels {
   COPILOT_PLUS_FLASH = "copilot-plus-flash",
@@ -473,6 +480,7 @@ export const PROCESS_SELECTION_COMMANDS = [
 ];
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
+  isPlusUser: false,
   plusLicenseKey: "",
   openAIApiKey: "",
   openAIOrgId: "",
@@ -488,8 +496,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   openRouterAiApiKey: "",
   defaultChainType: ChainType.LLM_CHAIN,
   defaultModelKey: ChatModels.GPT_4o + "|" + ChatModelProviders.OPENAI,
-  embeddingModelKey:
-    EmbeddingModels.COPILOT_PLUS_SMALL + "|" + EmbeddingModelProviders.COPILOT_PLUS,
+  embeddingModelKey: EmbeddingModels.OPENAI_EMBEDDING_SMALL + "|" + EmbeddingModelProviders.OPENAI,
   temperature: 0.1,
   maxTokens: 1000,
   contextTurns: 15,

@@ -8,6 +8,7 @@ import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 import { CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { registerContextMenu } from "@/contextMenu";
 import { encryptAllKeys } from "@/encryptionService";
+import { checkIsPlusUser } from "@/plusUtils";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
@@ -63,6 +64,7 @@ export default class CopilotPlugin extends Plugin {
     // Initialize BrevilabsClient
     this.brevilabsClient = BrevilabsClient.getInstance();
     this.brevilabsClient.setPluginVersion(this.manifest.version);
+    await checkIsPlusUser();
 
     this.chainManager = new ChainManager(this.app, this.vectorStoreManager);
 

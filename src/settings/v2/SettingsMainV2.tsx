@@ -86,28 +86,39 @@ interface SettingsMainV2Props {
   plugin: CopilotPlugin;
 }
 
-const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => (
-  <TabProvider>
-    <div>
-      <div className="flex flex-col gap-2">
-        <h1 className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div>
-            Copilot Settings <span className="text-xs">v{plugin.manifest.version}</span>
-          </div>
-          <div className="self-end sm:self-auto">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => new ResetSettingsConfirmModal(app, () => resetSettings()).open()}
-            >
-              Reset Settings
-            </Button>
-          </div>
-        </h1>
+const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
+  // Add a key state that we'll change when resetting
+  const [resetKey, setResetKey] = React.useState(0);
+
+  const handleReset = async () => {
+    const modal = new ResetSettingsConfirmModal(app, async () => {
+      resetSettings();
+      // Increment the key to force re-render of all components
+      setResetKey((prev) => prev + 1);
+    });
+    modal.open();
+  };
+
+  return (
+    <TabProvider>
+      <div>
+        <div className="flex flex-col gap-2">
+          <h1 className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              Copilot Settings <span className="text-xs">v{plugin.manifest.version}</span>
+            </div>
+            <div className="self-end sm:self-auto">
+              <Button variant="outline" size="sm" onClick={handleReset}>
+                Reset Settings
+              </Button>
+            </div>
+          </h1>
+        </div>
+        {/* Add the key prop to force re-render */}
+        <SettingsContent key={resetKey} plugin={plugin} />
       </div>
-      <SettingsContent plugin={plugin} />
-    </div>
-  </TabProvider>
-);
+    </TabProvider>
+  );
+};
 
 export default SettingsMainV2;

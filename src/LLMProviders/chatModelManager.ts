@@ -265,6 +265,7 @@ export default class ChatModelManager {
 
   async setChatModel(model: CustomModel): Promise<void> {
     const modelKey = getModelKeyFromModel(model);
+    setModelKey(modelKey);
     if (!ChatModelManager.modelMap.hasOwnProperty(modelKey)) {
       throw new Error(`No model found for: ${modelKey}`);
     }
@@ -280,7 +281,6 @@ export default class ChatModelManager {
 
     const modelConfig = await this.getModelConfig(model);
 
-    setModelKey(modelKey);
     try {
       const newModelInstance = new selectedModel.AIConstructor({
         ...modelConfig,
