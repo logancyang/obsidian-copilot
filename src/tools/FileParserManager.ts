@@ -1,7 +1,7 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import { Vault } from "obsidian";
-
-import { TFile } from "obsidian";
+import { PDFCache } from "@/cache/pdfCache";
+import { logError, logInfo } from "@/logger";
+import { TFile, Vault } from "obsidian";
 
 interface FileParser {
   supportedExtensions: string[];
@@ -19,18 +19,32 @@ export class MarkdownParser implements FileParser {
 export class PDFParser implements FileParser {
   supportedExtensions = ["pdf"];
   private brevilabsClient: BrevilabsClient;
+  private pdfCache: PDFCache;
 
   constructor(brevilabsClient: BrevilabsClient) {
     this.brevilabsClient = brevilabsClient;
+    this.pdfCache = PDFCache.getInstance();
   }
 
   async parseFile(file: TFile, vault: Vault): Promise<string> {
     try {
+      logInfo("Parsing PDF file:", file.path);
+
+      // Try to get from cache first
+      const cachedResponse = await this.pdfCache.get(file);
+      if (cachedResponse) {
+        logInfo("Using cached PDF content for:", file.path);
+        return cachedResponse.response;
+      }
+
+      // If not in cache, read the file and call the API
       const binaryContent = await vault.readBinary(file);
+      logInfo("Calling pdf4llm API for:", file.path);
       const pdf4llmResponse = await this.brevilabsClient.pdf4llm(binaryContent);
+      await this.pdfCache.set(file, pdf4llmResponse);
       return pdf4llmResponse.response;
     } catch (error) {
-      console.error(`Error extracting content from PDF ${file.path}:`, error);
+      logError(`Error extracting content from PDF ${file.path}:`, error);
       return `[Error: Could not extract content from PDF ${file.basename}]`;
     }
   }
