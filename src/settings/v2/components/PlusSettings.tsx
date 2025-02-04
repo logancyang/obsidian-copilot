@@ -1,3 +1,4 @@
+import { CopilotPlusWelcomeModal } from "@/components/modals/CopilotPlusWelcomeModal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -5,13 +6,17 @@ import { PLUS_UTM_MEDIUMS } from "@/constants";
 import { checkIsPlusUser, navigateToPlusPage, useIsPlusUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ExternalLink, Loader2 } from "lucide-react";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 export function PlusSettings() {
   const settings = useSettingsValue();
   const [error, setError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const isPlusUser = useIsPlusUser();
+  const [localLicenseKey, setLocalLicenseKey] = useState(settings.plusLicenseKey);
+  useEffect(() => {
+    setLocalLicenseKey(settings.plusLicenseKey);
+  }, [settings.plusLicenseKey]);
 
   return (
     <section className="flex flex-col gap-4 bg-secondary p-4 rounded-lg">
@@ -38,14 +43,15 @@ export function PlusSettings() {
         <PasswordInput
           className="w-full"
           placeholder="Enter your license key"
-          value={settings.plusLicenseKey}
+          value={localLicenseKey}
           onChange={(value) => {
-            updateSetting("plusLicenseKey", value);
+            setLocalLicenseKey(value);
           }}
         />
         <Button
-          disabled={isChecking || !settings.plusLicenseKey}
+          disabled={isChecking}
           onClick={async () => {
+            updateSetting("plusLicenseKey", localLicenseKey);
             setIsChecking(true);
             const result = await checkIsPlusUser();
             setIsChecking(false);
@@ -53,11 +59,12 @@ export function PlusSettings() {
               setError("Invalid license key");
             } else {
               setError(null);
+              new CopilotPlusWelcomeModal(app).open();
             }
           }}
           className="min-w-20"
         >
-          {isChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Check"}
+          {isChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply"}
         </Button>
         <Button variant="default" onClick={() => navigateToPlusPage(PLUS_UTM_MEDIUMS.SETTINGS)}>
           Join Now <ExternalLink className="size-4" />

@@ -2,7 +2,6 @@ import { ChainType } from "@/chainFactory";
 import {
   ChatModelProviders,
   ChatModels,
-  DEFAULT_SETTINGS,
   EmbeddingModelProviders,
   EmbeddingModels,
   PlusUtmMedium,
@@ -10,7 +9,6 @@ import {
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { getSettings, setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import { setChainType, setModelKey } from "@/aiParams";
-import { CopilotPlusWelcomeModal } from "@/components/modals/CopilotPlusWelcomeModal";
 import { CopilotPlusExpiredModal } from "@/components/modals/CopilotPlusExpiredModal";
 import VectorStoreManager from "@/search/vectorStoreManager";
 
@@ -43,18 +41,20 @@ export async function checkIsPlusUser(): Promise<boolean | undefined> {
 }
 
 /**
- * Switch to the Copilot Plus chat and embedding models.
+ * Apply the Copilot Plus settings.
  * WARNING! If the embedding model is changed, the vault will be indexed. Use it
  * with caution.
  */
-export function switchToPlusModels(): void {
+export function applyPlusSettings(): void {
   const defaultModelKey = DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY;
   const embeddingModelKey = DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY;
   const previousEmbeddingModelKey = getSettings().embeddingModelKey;
   setModelKey(defaultModelKey);
+  setChainType(ChainType.COPILOT_PLUS_CHAIN);
   setSettings({
     defaultModelKey,
     embeddingModelKey,
+    defaultChainType: ChainType.COPILOT_PLUS_CHAIN,
   });
   if (previousEmbeddingModelKey !== embeddingModelKey) {
     VectorStoreManager.getInstance().indexVaultToVectorStore(true);
@@ -69,31 +69,14 @@ export function navigateToPlusPage(medium: PlusUtmMedium): void {
   window.open(createPlusPageUrl(medium), "_blank");
 }
 
-export function updatePlusUserSettings(isPlusUser: boolean): void {
-  updateSetting("isPlusUser", isPlusUser);
-  if (isPlusUser) {
-    setChainType(ChainType.COPILOT_PLUS_CHAIN);
-    setSettings({
-      defaultChainType: ChainType.COPILOT_PLUS_CHAIN,
-    });
-    // Do not set models here because it needs user confirmation.
-  } else {
-    setChainType(DEFAULT_SETTINGS.defaultChainType);
-  }
-}
-
 export function turnOnPlus(): void {
-  const isPlusUser = getSettings().isPlusUser;
-  updatePlusUserSettings(true);
-  if (!isPlusUser) {
-    new CopilotPlusWelcomeModal(app).open();
-  }
+  updateSetting("isPlusUser", true);
 }
 
 export function turnOffPlus(): void {
-  const isPlusUser = getSettings().isPlusUser;
-  updatePlusUserSettings(false);
-  if (isPlusUser) {
+  const previousIsPlusUser = getSettings().isPlusUser;
+  updateSetting("isPlusUser", false);
+  if (previousIsPlusUser) {
     new CopilotPlusExpiredModal(app).open();
   }
 }

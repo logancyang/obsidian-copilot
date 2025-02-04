@@ -7,9 +7,10 @@ import {
   DEFAULT_COPILOT_PLUS_CHAT_MODEL,
   DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL,
   DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY,
-  switchToPlusModels,
+  applyPlusSettings,
 } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
+import { TriangleAlert } from "lucide-react";
 
 function CopilotPlusWelcomeModalContent({
   onConfirm,
@@ -28,10 +29,13 @@ function CopilotPlusWelcomeModalContent({
           much more!
         </p>
         <p>
-          Would you like to switch to the exclusive models now? You can always change this later in
+          Would you like to apply the Copilot Plus settings now? You can always change this later in
           Settings.
         </p>
         <ul className="pl-4">
+          <li>
+            Default mode: <b className="text-accent">Copilot Plus</b>
+          </li>
           <li>
             Chat model: <b className="text-accent">{DEFAULT_COPILOT_PLUS_CHAT_MODEL}</b>
           </li>
@@ -40,8 +44,9 @@ function CopilotPlusWelcomeModalContent({
               Embedding model: <b className="text-accent">{DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL}</b>
             </div>
             {settings.embeddingModelKey !== DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY && (
-              <div className="text-sm text-warning">
-                It will rebuild your embeddings for the entire vault
+              <div className="text-sm text-warning flex items-center gap-1">
+                <TriangleAlert className="size-4" /> It will rebuild your embeddings for the entire
+                vault
               </div>
             )}
           </li>
@@ -49,10 +54,10 @@ function CopilotPlusWelcomeModalContent({
       </div>
       <div className="flex gap-2 justify-end w-full">
         <Button variant="ghost" onClick={onCancel}>
-          Switch Later
+          Apply Later
         </Button>
         <Button variant="default" onClick={onConfirm}>
-          Switch Now
+          Apply Now
         </Button>
       </div>
     </div>
@@ -74,7 +79,7 @@ export class CopilotPlusWelcomeModal extends Modal {
     this.root = createRoot(contentEl);
 
     const handleConfirm = () => {
-      switchToPlusModels();
+      applyPlusSettings();
       this.close();
     };
 
