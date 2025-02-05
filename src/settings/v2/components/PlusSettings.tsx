@@ -1,3 +1,4 @@
+import { CopilotPlusWelcomeModal } from "@/components/modals/CopilotPlusWelcomeModal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -58,8 +59,7 @@ export function PlusSettings() {
               setError("Invalid license key");
             } else {
               setError(null);
-              // TODO: Reenable after fixing the server issue.
-              // new CopilotPlusWelcomeModal(app).open();
+              new CopilotPlusWelcomeModal(app).open();
             }
           }}
           className="min-w-20"

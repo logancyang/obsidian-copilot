@@ -57,7 +57,7 @@ export function applyPlusSettings(): void {
     defaultChainType: ChainType.COPILOT_PLUS_CHAIN,
   });
   if (previousEmbeddingModelKey !== embeddingModelKey) {
-    VectorStoreManager.getInstance().indexVaultToVectorStore(true);
+    VectorStoreManager.getInstance().indexVaultToVectorStore();
   }
 }
 
