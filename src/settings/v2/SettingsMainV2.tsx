@@ -1,15 +1,16 @@
-import React from "react";
-import { Cog, Cpu, Database, Wrench } from "lucide-react";
+import { ResetSettingsConfirmModal } from "@/components/modals/ResetSettingsConfirmModal";
+import { Button } from "@/components/ui/button";
 import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/ui/setting-tabs";
+import { TabProvider, useTab } from "@/contexts/TabContext";
+import CopilotPlugin from "@/main";
+import { resetSettings } from "@/settings/model";
+import { Cog, Cpu, Database, Wrench } from "lucide-react";
+import { requestUrl } from "obsidian";
+import React, { useEffect, useState } from "react";
+import AdvancedSettings from "./components/AdvancedSettings";
 import BasicSettings from "./components/BasicSettings";
 import ModelSettings from "./components/ModelSettings";
-import AdvancedSettings from "./components/AdvancedSettings";
 import QASettings from "./components/QASettings";
-import { TabProvider, useTab } from "@/contexts/TabContext";
-import { ResetSettingsConfirmModal } from "@/components/modals/ResetSettingsConfirmModal";
-import { resetSettings } from "@/settings/model";
-import CopilotPlugin from "@/main";
-import { Button } from "@/components/ui/button";
 
 const TAB_IDS = ["basic", "model", "QA", "advanced"] as const;
 type TabId = (typeof TAB_IDS)[number];
@@ -89,6 +90,23 @@ interface SettingsMainV2Props {
 const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
   // Add a key state that we'll change when resetting
   const [resetKey, setResetKey] = React.useState(0);
+  const [latestVersion, setLatestVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checkForUpdates = async () => {
+      try {
+        const response = await requestUrl({
+          url: "https://api.github.com/repos/logancyang/obsidian-copilot/releases/latest",
+          method: "GET",
+        });
+        const version = response.json.tag_name.replace("v", "");
+        setLatestVersion(version);
+      } catch (error) {
+        console.error("Failed to check for updates:", error);
+      }
+    };
+    checkForUpdates();
+  }, []);
 
   const handleReset = async () => {
     const modal = new ResetSettingsConfirmModal(app, async () => {
@@ -99,13 +117,38 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
     modal.open();
   };
 
+  const isNewerVersionAvailable =
+    latestVersion &&
+    (() => {
+      const latestParts = latestVersion.split(".").map(Number);
+      const currentParts = plugin.manifest.version.split(".").map(Number);
+
+      for (let i = 0; i < 3; i++) {
+        if (latestParts[i] > currentParts[i]) return true;
+        if (latestParts[i] < currentParts[i]) return false;
+      }
+      return false;
+    })();
+
   return (
     <TabProvider>
       <div>
         <div className="flex flex-col gap-2">
           <h1 className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <div>
-              Copilot Settings <span className="text-xs">v{plugin.manifest.version}</span>
+            <div className="flex items-center gap-2">
+              <span>Copilot Settings</span>
+              <span className="text-xs text-muted">
+                v{plugin.manifest.version}
+                {latestVersion && (
+                  <>
+                    {isNewerVersionAvailable ? (
+                      <span className="text-accent"> (latest: v{latestVersion})</span>
+                    ) : (
+                      <span className="text-success"> (up to date)</span>
+                    )}
+                  </>
+                )}
+              </span>
             </div>
             <div className="self-end sm:self-auto">
               <Button variant="outline" size="sm" onClick={handleReset}>
