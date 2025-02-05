@@ -4,8 +4,8 @@ import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/u
 import { TabProvider, useTab } from "@/contexts/TabContext";
 import CopilotPlugin from "@/main";
 import { resetSettings } from "@/settings/model";
+import { checkLatestVersion, isNewerVersion } from "@/utils";
 import { Cog, Cpu, Database, Wrench } from "lucide-react";
-import { requestUrl } from "obsidian";
 import React, { useEffect, useState } from "react";
 import AdvancedSettings from "./components/AdvancedSettings";
 import BasicSettings from "./components/BasicSettings";
@@ -91,22 +91,23 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
   // Add a key state that we'll change when resetting
   const [resetKey, setResetKey] = React.useState(0);
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Check version when settings tab is opened
     const checkForUpdates = async () => {
-      try {
-        const response = await requestUrl({
-          url: "https://api.github.com/repos/logancyang/obsidian-copilot/releases/latest",
-          method: "GET",
-        });
-        const version = response.json.tag_name.replace("v", "");
+      const { version, error } = await checkLatestVersion();
+      if (error) {
+        console.error("Version check failed:", error);
+        setUpdateError(error);
+      } else if (version) {
         setLatestVersion(version);
-      } catch (error) {
-        console.error("Failed to check for updates:", error);
+        setUpdateError(null);
       }
     };
+
     checkForUpdates();
-  }, []);
+  }, [plugin.manifest.version]); // Only re-run if plugin version changes
 
   const handleReset = async () => {
     const modal = new ResetSettingsConfirmModal(app, async () => {
@@ -118,17 +119,7 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
   };
 
   const isNewerVersionAvailable =
-    latestVersion &&
-    (() => {
-      const latestParts = latestVersion.split(".").map(Number);
-      const currentParts = plugin.manifest.version.split(".").map(Number);
-
-      for (let i = 0; i < 3; i++) {
-        if (latestParts[i] > currentParts[i]) return true;
-        if (latestParts[i] < currentParts[i]) return false;
-      }
-      return false;
-    })();
+    latestVersion && isNewerVersion(latestVersion, plugin.manifest.version);
 
   return (
     <TabProvider>
@@ -139,14 +130,24 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
               <span>Copilot Settings</span>
               <span className="text-xs text-muted">
                 v{plugin.manifest.version}
-                {latestVersion && (
-                  <>
-                    {isNewerVersionAvailable ? (
-                      <span className="text-accent"> (latest: v{latestVersion})</span>
-                    ) : (
-                      <span className="text-success"> (up to date)</span>
-                    )}
-                  </>
+                {updateError ? (
+                  <span className="text-error" title={updateError}>
+                    {" "}
+                    (update check failed)
+                  </span>
+                ) : (
+                  latestVersion && (
+                    <>
+                      {isNewerVersionAvailable ? (
+                        <span className="text-accent" title="A new version is available">
+                          {" "}
+                          (latest: v{latestVersion})
+                        </span>
+                      ) : (
+                        <span className="text-accent"> (up to date)</span>
+                      )}
+                    </>
+                  )
                 )}
               </span>
             </div>
