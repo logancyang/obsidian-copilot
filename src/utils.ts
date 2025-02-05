@@ -823,3 +823,39 @@ export function debounce<T extends (...args: any[]) => void>(
     timeout = setTimeout(() => func(...args), wait);
   };
 }
+
+/**
+ * Compare two semantic version strings.
+ * @returns true if latest version is newer than current version
+ */
+export function isNewerVersion(latest: string, current: string): boolean {
+  const latestParts = latest.split(".").map(Number);
+  const currentParts = current.split(".").map(Number);
+
+  for (let i = 0; i < 3; i++) {
+    if (latestParts[i] > currentParts[i]) return true;
+    if (latestParts[i] < currentParts[i]) return false;
+  }
+  return false;
+}
+
+/**
+ * Check for latest version from GitHub releases.
+ * @returns latest version string or error message
+ */
+export async function checkLatestVersion(): Promise<{
+  version: string | null;
+  error: string | null;
+}> {
+  try {
+    const response = await requestUrl({
+      url: "https://api.github.com/repos/logancyang/obsidian-copilot/releases/latest",
+      method: "GET",
+    });
+    const version = response.json.tag_name.replace("v", "");
+    return { version, error: null };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Failed to check for updates";
+    return { version: null, error: errorMessage };
+  }
+}
