@@ -147,22 +147,47 @@ export function stripHash(tag: string): string {
  */
 export function getTagsFromNote(file: TFile, frontmatterOnly = true): string[] {
   const metadata = app.metadataCache.getFileCache(file);
+  console.log("File metadata for", file.path, ":", metadata);
   const frontmatterTags = metadata?.frontmatter?.tags;
+  console.log("Frontmatter tags:", frontmatterTags);
   const allTags = new Set<string>();
 
   if (!frontmatterOnly) {
-    const inlineTags = metadata?.tags?.map((tag) => tag.tag);
+    const inlineTags = metadata?.tags;
+    console.log("Inline tags before mapping:", inlineTags);
     if (inlineTags) {
-      inlineTags.forEach((tag) => allTags.add(stripHash(tag)));
+      try {
+        inlineTags.forEach((tagObj) => {
+          console.log("Processing tag object:", tagObj);
+          if (typeof tagObj === "object" && tagObj.tag) {
+            allTags.add(stripHash(tagObj.tag));
+          } else if (typeof tagObj === "string") {
+            allTags.add(stripHash(tagObj));
+          } else {
+            console.warn("Unexpected tag format:", tagObj);
+          }
+        });
+      } catch (error) {
+        console.error("Error processing tags:", error, "for file:", file.path);
+        console.error("Tag object that caused error:", inlineTags);
+      }
     }
   }
 
   // Add frontmatter tags
   if (frontmatterTags) {
     if (Array.isArray(frontmatterTags)) {
-      frontmatterTags.forEach((tag) => allTags.add(stripHash(tag)));
+      frontmatterTags.forEach((tag) => {
+        if (typeof tag === "string") {
+          allTags.add(stripHash(tag));
+        } else {
+          console.warn("Unexpected frontmatter tag format:", tag);
+        }
+      });
     } else if (typeof frontmatterTags === "string") {
       allTags.add(stripHash(frontmatterTags));
+    } else {
+      console.warn("Unexpected frontmatter tags format:", frontmatterTags);
     }
   }
 
