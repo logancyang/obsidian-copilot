@@ -160,7 +160,11 @@ export function getTagsFromNote(file: TFile, frontmatterOnly = true): string[] {
   // Add frontmatter tags
   if (frontmatterTags) {
     if (Array.isArray(frontmatterTags)) {
-      frontmatterTags.forEach((tag) => allTags.add(stripHash(tag)));
+      frontmatterTags.forEach((tag) => {
+        if (typeof tag === "string") {
+          allTags.add(stripHash(tag));
+        }
+      });
     } else if (typeof frontmatterTags === "string") {
       allTags.add(stripHash(frontmatterTags));
     }
