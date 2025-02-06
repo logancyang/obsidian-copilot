@@ -2,8 +2,8 @@ import { ChainType } from "@/chainFactory";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 
-import { atom, useAtom } from "jotai";
 import { settingsAtom, settingsStore } from "@/settings/model";
+import { atom, useAtom } from "jotai";
 
 const userModelKeyAtom = atom<string | null>(null);
 const modelKeyAtom = atom(
@@ -76,6 +76,7 @@ export interface CustomModel {
   stream?: boolean;
   temperature?: number;
   context?: number;
+  believerExclusive?: boolean;
   // OpenAI specific fields
   openAIOrgId?: string;
 
