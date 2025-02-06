@@ -8,7 +8,8 @@ import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { getToolDescription } from "@/tools/toolManager";
-import { extractNoteTitles } from "@/utils";
+import { err2String, extractNoteTitles } from "@/utils";
+import { DisplayKeyProviders, ProviderSettingsKeyMap } from "@/constants";
 import {
   ArrowBigUp,
   ChevronDown,
@@ -38,6 +39,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useDropzone } from "react-dropzone";
 import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
+import { Notice } from "obsidian";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -89,6 +91,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [currentModelKey, setCurrentModelKey] = useModelKey();
+    const [modelError, setModelError] = useState<string | null>(null);
     const [currentChain] = useChainType();
     const [currentActiveNote, setCurrentActiveNote] = useState<TFile | null>(
       app.workspace.getActiveFile()
@@ -455,7 +458,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         <div className="relative" {...(isCopilotPlus ? getRootProps() : {})}>
           <textarea
             ref={textAreaRef}
-            className="w-full bg-transparent focus-visible:ring-0 border-none min-h-10 max-h-40 overflow-y-auto resize-none px-2 rounded-md text-sm text-normal"
+            className="w-full bg-transparent focus-visible:ring-0 border-none min-h-[60px] max-h-40 overflow-y-auto resize-none px-2 rounded-md text-sm text-normal"
             placeholder={
               "Ask anything. [[ for notes. / for custom prompts. " +
               (isCopilotPlus ? "@ for tools." : "")
@@ -483,9 +486,13 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
             <DropdownMenu open={isModelDropdownOpen} onOpenChange={setIsModelDropdownOpen}>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost2" size="fit">
-                  {settings.activeModels.find(
-                    (model) => getModelKeyFromModel(model) === currentModelKey
-                  )?.name || "Select Model"}
+                  {modelError ? (
+                    <span className="text-error">Model Load Failed</span>
+                  ) : (
+                    settings.activeModels.find(
+                      (model) => model.enabled && getModelKeyFromModel(model) === currentModelKey
+                    )?.name || "Select Model"
+                  )}
                   <ChevronDown className="size-5 mt-0.5" />
                 </Button>
               </DropdownMenuTrigger>
@@ -493,14 +500,45 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
               <DropdownMenuContent align="start">
                 {settings.activeModels
                   .filter((model) => model.enabled)
-                  .map((model) => (
-                    <DropdownMenuItem
-                      key={getModelKeyFromModel(model)}
-                      onSelect={() => setCurrentModelKey(getModelKeyFromModel(model))}
-                    >
-                      {model.name}
-                    </DropdownMenuItem>
-                  ))}
+                  .map((model) => {
+                    const providerKeyName =
+                      ProviderSettingsKeyMap[model.provider as DisplayKeyProviders];
+                    const hasNoApiKey = !model.apiKey && !settings[providerKeyName];
+                    return (
+                      <DropdownMenuItem
+                        key={getModelKeyFromModel(model)}
+                        onSelect={async (event) => {
+                          if (hasNoApiKey) {
+                            event.preventDefault();
+                            const notice =
+                              `Please configure API Key for ${model.name} in settings first.` +
+                              "\nPath: Settings > copilot plugin > Basic Tab > Set Keys";
+                            new Notice(notice);
+                            return;
+                          }
+
+                          try {
+                            setModelError(null);
+                            setCurrentModelKey(getModelKeyFromModel(model));
+                          } catch (error) {
+                            const msg = `Model switch failed: ` + err2String(error);
+                            setModelError(msg);
+                            new Notice(msg);
+                            // Restore to the last valid model
+                            const lastValidModel = settings.activeModels.find(
+                              (m) => getModelKeyFromModel(m) === currentModelKey
+                            );
+                            if (lastValidModel) {
+                              setCurrentModelKey(getModelKeyFromModel(lastValidModel));
+                            }
+                          }
+                        }}
+                        className={hasNoApiKey ? "opacity-50 cursor-not-allowed" : ""}
+                      >
+                        {model.name}
+                      </DropdownMenuItem>
+                    );
+                  })}
               </DropdownMenuContent>
             </DropdownMenu>
 

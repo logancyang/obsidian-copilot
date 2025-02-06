@@ -9,7 +9,9 @@ import {
   COMMAND_NAMES,
   DEFAULT_OPEN_AREA,
   DISABLEABLE_COMMANDS,
+  DisplayKeyProviders,
   PLUS_UTM_MEDIUMS,
+  ProviderSettingsKeyMap,
 } from "@/constants";
 import { useTab } from "@/contexts/TabContext";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
@@ -158,6 +160,21 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
             description="Select the Chat model to use"
             value={settings.defaultModelKey}
             onChange={(value) => {
+              const selectedModel = settings.activeModels.find(
+                (m) => m.enabled && getModelKeyFromModel(m) === value
+              );
+              if (selectedModel) {
+                const providerKeyName =
+                  ProviderSettingsKeyMap[selectedModel.provider as DisplayKeyProviders];
+                const hasNoApiKey = !selectedModel.apiKey && !settings[providerKeyName];
+                if (hasNoApiKey) {
+                  const notice =
+                    `Please configure API Key for ${selectedModel.name} in settings first.` +
+                    "\nPath: Settings > copilot plugin > Basic Tab > Set Keys";
+                  new Notice(notice);
+                  return;
+                }
+              }
               updateSetting("defaultModelKey", value);
             }}
             options={settings.activeModels
