@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { ChatMessage } from "@/sharedState";
 import { insertIntoEditor } from "@/utils";
 import { Bot, User } from "lucide-react";
-import { App, Component, MarkdownRenderer } from "obsidian";
+import { App, Component, MarkdownRenderer, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
@@ -81,6 +81,15 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
   const preprocess = useCallback(
     (content: string): string => {
+      const activeFile = app.workspace.getActiveFile();
+      const sourcePath = activeFile ? activeFile.path : "";
+
+      const replaceLinks = (text: string, regex: RegExp, template: (file: TFile) => string) =>
+        text.replace(regex, (match: string, selection: string) => {
+          const file = app.metadataCache.getFirstLinkpathDest(selection, sourcePath);
+          return file ? template(file) : match;
+        });
+
       // Process LaTeX
       const latexProcessed = content
         .replace(/\\\[\s*/g, "$$")
@@ -89,22 +98,28 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         .replace(/\s*\\\)/g, "$");
 
       // Process only Obsidian internal images (starting with ![[)
-      const activeFile = app.workspace.getActiveFile();
-      const sourcePath = activeFile ? activeFile.path : "";
-
-      const noteImageProcessed = latexProcessed.replace(
-        /!\[\[(.*?)\]\]/g,
-        (match: string, imageName: string) => {
-          const imageFile = app.metadataCache.getFirstLinkpathDest(imageName, sourcePath);
-          if (imageFile) {
-            const imageUrl = app.vault.getResourcePath(imageFile);
-            return `![](${imageUrl})`;
-          }
-          return match;
-        }
+      const noteImageProcessed = replaceLinks(
+        latexProcessed,
+        /!\[\[(.*?)]]/g,
+        (file) => `![](${app.vault.getResourcePath(file)})`
       );
 
-      return noteImageProcessed;
+      const clickable = (file: TFile) =>
+        `[${file.name}](obsidian://open?vault=${encodeURIComponent(app.vault.getName())}&file=${encodeURIComponent(file.path)})`;
+      // Transform [[link]] format but exclude ![[]] image links
+      const noteLinksProcessed = replaceLinks(
+        noteImageProcessed,
+        /(?<!!)\[\[([^\]]+)]]/g,
+        clickable
+      );
+      // Transform [title](app://obsidian.md/note) format but exclude ![[]] image links
+      const appNoteLinks = replaceLinks(
+        noteLinksProcessed,
+        /(?<!!)\[([^\]]+)]\(app:\/\/obsidian\.md\/([^)]+)\)/g,
+        clickable
+      );
+
+      return appNoteLinks;
     },
     [app]
   );
