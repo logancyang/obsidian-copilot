@@ -1,5 +1,7 @@
 import { CustomModel } from "@/aiParams";
-import React from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -8,13 +10,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import { getModelKeyFromModel } from "@/settings/model";
 import { getProviderLabel } from "@/utils";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import React from "react";
 
 interface ModelTableProps {
   models: CustomModel[];
@@ -50,9 +50,12 @@ const ModelCard: React.FC<{
             </div>
             <div>
               <div className="font-medium">{model.name}</div>
-              <span className="text-sm text-muted bg-secondary">
-                {getProviderLabel(model.provider)}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted bg-secondary">
+                  {getProviderLabel(model.provider, model)}
+                </span>
+                {model.believerExclusive && <span className="text-sm text-accent">(Believer)</span>}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -149,7 +152,7 @@ export const ModelTable: React.FC<ModelTableProps> = ({
                 className="hover:bg-interactive-accent/10"
               >
                 <TableCell>{model.name}</TableCell>
-                <TableCell>{getProviderLabel(model.provider)}</TableCell>
+                <TableCell>{getProviderLabel(model.provider, model)}</TableCell>
                 {!isEmbeddingModel && (
                   <TableCell className="text-center">
                     <Checkbox

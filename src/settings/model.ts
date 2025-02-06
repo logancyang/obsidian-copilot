@@ -182,13 +182,11 @@ function mergeActiveModels(
 ): CustomModel[] {
   const modelMap = new Map<string, CustomModel>();
 
-  // Create a unique key for each model, it's model (name + provider)
-
-  // Add core models to the map
+  // Add core models to the map first
   builtInModels
     .filter((model) => model.core)
     .forEach((model) => {
-      modelMap.set(getModelKeyFromModel(model), { ...model, core: true });
+      modelMap.set(getModelKeyFromModel(model), { ...model });
     });
 
   // Add or update existing models in the map
@@ -196,11 +194,23 @@ function mergeActiveModels(
     const key = getModelKeyFromModel(model);
     const existingModel = modelMap.get(key);
     if (existingModel) {
-      // If it's a built-in model, preserve the built-in status
-      modelMap.set(key, {
-        ...model,
-        isBuiltIn: existingModel.isBuiltIn || model.isBuiltIn,
-      });
+      // If it's a built-in model, preserve all built-in properties
+      const builtInModel = builtInModels.find(
+        (m) => m.name === model.name && m.provider === model.provider
+      );
+      if (builtInModel) {
+        modelMap.set(key, {
+          ...builtInModel,
+          ...model,
+          isBuiltIn: true,
+          believerExclusive: builtInModel.believerExclusive,
+        });
+      } else {
+        modelMap.set(key, {
+          ...model,
+          isBuiltIn: existingModel.isBuiltIn,
+        });
+      }
     } else {
       modelMap.set(key, model);
     }

@@ -777,8 +777,12 @@ export function getProviderInfo(provider: string): ProviderMetadata {
   };
 }
 
-export function getProviderLabel(provider: string): string {
-  return ProviderInfo[provider as Provider]?.label || provider;
+export function getProviderLabel(provider: string, model?: CustomModel): string {
+  const baseLabel = ProviderInfo[provider as Provider]?.label || provider;
+  if (model?.believerExclusive && baseLabel === "Copilot Plus") {
+    return "Believer";
+  }
+  return baseLabel;
 }
 
 export function getProviderHost(provider: string): string {

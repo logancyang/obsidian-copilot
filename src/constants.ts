@@ -186,6 +186,7 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
     isBuiltIn: true,
     isEmbeddingModel: true,
     core: true,
+    believerExclusive: true,
   },
   {
     name: EmbeddingModels.COPILOT_PLUS_MULTILINGUAL,

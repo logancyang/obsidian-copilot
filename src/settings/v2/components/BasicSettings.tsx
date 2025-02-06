@@ -163,7 +163,7 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
             options={settings.activeModels
               .filter((m) => m.enabled)
               .map((model) => ({
-                label: `${model.name} (${getProviderLabel(model.provider)})`,
+                label: `${model.name} (${getProviderLabel(model.provider, model)})`,
                 value: getModelKeyFromModel(model),
               }))}
             placeholder="Model"
@@ -202,7 +202,7 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
             value={settings.embeddingModelKey}
             onChange={handleSetDefaultEmbeddingModel}
             options={settings.activeEmbeddingModels.map((model) => ({
-              label: `${model.name} (${getProviderLabel(model.provider)})`,
+              label: `${model.name} (${getProviderLabel(model.provider, model)})`,
               value: getModelKeyFromModel(model),
             }))}
             placeholder="Model"
