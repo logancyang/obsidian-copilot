@@ -17,7 +17,7 @@ const buttonVariants = cva(
         ghost: "clickable-icon bg-transparent hover:bg-interactive-accent hover:text-on-accent",
         link: "text-accent underline-offset-4 hover:underline",
         ghost2:
-          "text-faint clickable-icon bg-transparent hover:bg-opacity-100 hover:text-normal hover:bg-transparent outline-none focus-visible:outline-none focus-visible:text-on-accent focus-visible:ring-0",
+          "text-faint clickable-icon bg-transparent hover:bg-opacity-100 hover:text-normal hover:bg-transparent outline-none focus-visible:outline-none focus-visible:text-normal focus-visible:ring-0",
       },
       size: {
         default: "h-9 px-4 py-2",
