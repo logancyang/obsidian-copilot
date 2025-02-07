@@ -146,6 +146,13 @@ export default class ChainManager {
     const memory = this.memoryManager.getMemory();
     const chatPrompt = this.promptManager.getChatPrompt();
 
+    const modelName = (chatModel as any).modelName || (chatModel as any).model || "";
+    const isO1Model = modelName.startsWith("o1");
+
+    if (isO1Model) {
+      options.streaming = false;
+    }
+
     switch (chainType) {
       case ChainType.LLM_CHAIN: {
         ChainManager.chain = ChainFactory.createNewLLMChain({

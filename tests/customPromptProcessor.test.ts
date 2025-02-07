@@ -360,4 +360,16 @@ describe("CustomPromptProcessor", () => {
     expect(result).toContain("selectedText:\n\n This is the selected text");
     expect(result).not.toContain("Content of the active note");
   });
+
+  it("should include reasoning_effort parameter in model configuration", async () => {
+    const customModel = {
+      name: "o1-test",
+      provider: "azure",
+      reasoning_effort: 2,
+    };
+
+    const modelConfig = await processor.getModelConfig(customModel);
+
+    expect(modelConfig.reasoning_effort).toBe(2);
+  });
 });

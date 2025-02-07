@@ -78,13 +78,15 @@ export default class ChatModelManager {
     // Check if the model starts with "o1"
     const modelName = customModel.name;
     const isO1Model = modelName.startsWith("o1");
+    const isDeepSeekR1Model = modelName.startsWith("DeepSeek R1");
     const baseConfig: ModelConfig = {
       modelName: modelName,
-      temperature: customModel.temperature ?? settings.temperature,
-      streaming: customModel.stream ?? true,
+      temperature: isO1Model ? 1 : customModel.temperature ?? settings.temperature,
+      streaming: isO1Model ? false : customModel.stream ?? true,
       maxRetries: 3,
       maxConcurrency: 3,
       enableCors: customModel.enableCors,
+      reasoning_effort: customModel.reasoning_effort,
     };
 
     const providerConfig: {
