@@ -17,6 +17,7 @@ import {
   extractYoutubeUrl,
   formatDateTime,
   getApiErrorMessage,
+  getMessageRole,
   ImageContent,
   ImageProcessor,
   MessageContent,
@@ -357,10 +358,13 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         "\n\nThe following is the relevant conversation history. Use this context to maintain consistency in your responses:";
     }
 
-    // Add the combined system message
+    // Get chat model for role determination for O-series models
+    const chatModel = this.chainManager.chatModelManager.getChatModel();
+
+    // Add the combined system message with appropriate role
     if (fullSystemMessage) {
       messages.push({
-        role: "system",
+        role: getMessageRole(chatModel),
         content: `${fullSystemMessage}\nIMPORTANT: Maintain consistency with previous responses in the conversation. If you've provided information about a person or topic before, use that same information in follow-up questions.`,
       });
     }

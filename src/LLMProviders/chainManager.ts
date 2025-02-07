@@ -7,23 +7,19 @@ import {
   subscribeToModelKeyChange,
 } from "@/aiParams";
 import ChainFactory, { ChainType, Document } from "@/chainFactory";
-import {
-  AI_SENDER,
-  BUILTIN_CHAT_MODELS,
-  USER_SENDER,
-  VAULT_VECTOR_STORE_STRATEGY,
-} from "@/constants";
+import { BUILTIN_CHAT_MODELS, USER_SENDER, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import {
   ChainRunner,
   CopilotPlusChainRunner,
   LLMChainRunner,
   VaultQAChainRunner,
 } from "@/LLMProviders/chainRunner";
+import { logError, logInfo } from "@/logger";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings, getSystemPrompt, subscribeToSettingsChange } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
-import { findCustomModel, isSupportedChain } from "@/utils";
+import { findCustomModel, isOSeriesModel, isSupportedChain } from "@/utils";
 import {
   ChatPromptTemplate,
   HumanMessagePromptTemplate,
@@ -34,7 +30,6 @@ import { App, Notice } from "obsidian";
 import ChatModelManager from "./chatModelManager";
 import MemoryManager from "./memoryManager";
 import PromptManager from "./promptManager";
-import { logError, logInfo } from "@/logger";
 
 export default class ChainManager {
   private static chain: RunnableSequence;
@@ -247,21 +242,19 @@ export default class ChainManager {
     this.validateChainInitialization();
 
     const chatModel = this.chatModelManager.getChatModel();
-    const modelName = (chatModel as any).modelName || (chatModel as any).model || "";
-    const isO1Model = modelName.startsWith("o1");
 
     // Handle ignoreSystemMessage
-    if (ignoreSystemMessage || isO1Model) {
+    if (ignoreSystemMessage || isOSeriesModel(chatModel)) {
       let effectivePrompt = ChatPromptTemplate.fromMessages([
         new MessagesPlaceholder("history"),
         HumanMessagePromptTemplate.fromTemplate("{input}"),
       ]);
 
-      // TODO: hack for o1 models, to be removed when they support system prompt
-      if (isO1Model) {
-        //  Temporary fix：for o1-xx model need to covert systemMessage to aiMessage
+      // TODO: hack for o-series models, to be removed when langchainjs supports system prompt
+      // https://github.com/langchain-ai/langchain/issues/28895
+      if (isOSeriesModel(chatModel)) {
         effectivePrompt = ChatPromptTemplate.fromMessages([
-          [AI_SENDER, getSystemPrompt() || ""],
+          [USER_SENDER, getSystemPrompt() || ""],
           effectivePrompt,
         ]);
       }
