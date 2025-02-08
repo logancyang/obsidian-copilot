@@ -6,10 +6,11 @@ import ChatModelManager from "@/LLMProviders/chatModelManager";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
 import { ModelAddDialog } from "@/settings/v2/components/ModelAddDialog";
 import { ModelTable } from "@/settings/v2/components/ModelTable";
+import { ModelEditDialog } from "@/settings/v2/components/ModelEditDialog";
 
 const ModelSettings: React.FC = () => {
   const settings = useSettingsValue();
-  // const [editingModel, setEditingModel] = useState<CustomModel | null>(null);
+  const [editingModel, setEditingModel] = useState<CustomModel | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showAddEmbeddingDialog, setShowAddEmbeddingDialog] = useState(false);
 
@@ -40,6 +41,10 @@ const ModelSettings: React.FC = () => {
     updateSetting("activeModels", updatedModels);
   };
 
+  const handleModelReorder = (newModels: CustomModel[]) => {
+    updateSetting("activeModels", newModels);
+  };
+
   const onDeleteEmbeddingModel = (modelKey: string) => {
     const [modelName, provider] = modelKey.split("|");
     const updatedModels = settings.activeEmbeddingModels.filter(
@@ -55,26 +60,31 @@ const ModelSettings: React.FC = () => {
     updateSetting("activeEmbeddingModels", updatedModels);
   };
 
+  const handleEmbeddingModelReorder = (newModels: CustomModel[]) => {
+    updateSetting("activeEmbeddingModels", newModels);
+  };
+
   return (
     <div className="space-y-4">
       <section>
         <div className="text-xl font-bold mb-3">Chat Models</div>
         <ModelTable
           models={settings.activeModels}
-          // onEdit={setEditingModel}
+          onEdit={setEditingModel}
           onDelete={onDeleteModel}
           onAdd={() => setShowAddDialog(true)}
           onUpdateModel={handleModelUpdate}
+          onReorderModels={handleModelReorder}
           title="Chat Model"
         />
 
         {/* model edit dialog*/}
-        {/*        <ModelEditDialog
+        <ModelEditDialog
           open={!!editingModel}
           onOpenChange={(open) => !open && setEditingModel(null)}
           model={editingModel}
           onUpdate={handleModelUpdate}
-        />*/}
+        />
 
         {/* model add dialog */}
         <ModelAddDialog
@@ -140,6 +150,7 @@ const ModelSettings: React.FC = () => {
           onDelete={onDeleteEmbeddingModel}
           onAdd={() => setShowAddEmbeddingDialog(true)}
           onUpdateModel={handleEmbeddingModelUpdate}
+          onReorderModels={handleEmbeddingModelReorder}
           title="Embedding Model"
         />
 

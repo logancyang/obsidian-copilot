@@ -9,13 +9,11 @@ import {
   COMMAND_NAMES,
   DEFAULT_OPEN_AREA,
   DISABLEABLE_COMMANDS,
-  DisplayKeyProviders,
   PLUS_UTM_MEDIUMS,
-  ProviderSettingsKeyMap,
 } from "@/constants";
 import { useTab } from "@/contexts/TabContext";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
-import { formatDateTime, getProviderLabel } from "@/utils";
+import { formatDateTime, checkModelApiKey } from "@/utils";
 import { HelpCircle, Key, Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useState } from "react";
@@ -23,6 +21,8 @@ import ApiKeyDialog from "./ApiKeyDialog";
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { createPlusPageUrl } from "@/plusUtils";
+import { getModelDisplayWithIcons } from "@/components/ui/model-display";
+
 const ChainType2Label: Record<ChainType, string> = {
   [ChainType.LLM_CHAIN]: "Chat",
   [ChainType.VAULT_QA_CHAIN]: "Vault QA (Basic)",
@@ -163,24 +163,19 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
               const selectedModel = settings.activeModels.find(
                 (m) => m.enabled && getModelKeyFromModel(m) === value
               );
-              if (selectedModel) {
-                const providerKeyName =
-                  ProviderSettingsKeyMap[selectedModel.provider as DisplayKeyProviders];
-                const hasNoApiKey = !selectedModel.apiKey && !settings[providerKeyName];
-                if (hasNoApiKey) {
-                  const notice =
-                    `Please configure API Key for ${selectedModel.name} in settings first.` +
-                    "\nPath: Settings > copilot plugin > Basic Tab > Set Keys";
-                  new Notice(notice);
-                  return;
-                }
+              if (!selectedModel) return;
+
+              const { hasApiKey, errorNotice } = checkModelApiKey(selectedModel, settings);
+              if (!hasApiKey && errorNotice) {
+                new Notice(errorNotice);
+                return;
               }
               updateSetting("defaultModelKey", value);
             }}
             options={settings.activeModels
               .filter((m) => m.enabled)
               .map((model) => ({
-                label: `${model.name} (${getProviderLabel(model.provider, model)})`,
+                label: getModelDisplayWithIcons(model),
                 value: getModelKeyFromModel(model),
               }))}
             placeholder="Model"
@@ -219,7 +214,7 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
             value={settings.embeddingModelKey}
             onChange={handleSetDefaultEmbeddingModel}
             options={settings.activeEmbeddingModels.map((model) => ({
-              label: `${model.name} (${getProviderLabel(model.provider, model)})`,
+              label: getModelDisplayWithIcons(model),
               value: getModelKeyFromModel(model),
             }))}
             placeholder="Model"

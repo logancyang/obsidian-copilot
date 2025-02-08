@@ -1,4 +1,3 @@
-import { ModelCapability } from "@/aiParams";
 import { getStandaloneQuestion } from "@/chainUtils";
 import {
   ABORT_REASON,
@@ -6,6 +5,7 @@ import {
   EMPTY_INDEX_ERROR_MESSAGE,
   LOADING_MESSAGES,
   MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT,
+  ModelCapability,
 } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { getSystemPrompt } from "@/settings/model";

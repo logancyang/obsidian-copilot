@@ -34,6 +34,10 @@ module.exports = {
       callout: {
         warning: "rgba(var(--callout-warning),<alpha-value>)",
       },
+      "model-capabilities": {
+        green: "var(--color-green)",
+        blue: "var(--color-blue)",
+      },
     },
     backgroundColor: {
       inherit: colors.inherit,

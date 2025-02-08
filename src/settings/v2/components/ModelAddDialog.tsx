@@ -1,7 +1,24 @@
+import React, { useState } from "react";
+import { useTab } from "@/contexts/TabContext";
+import { getSettings } from "@/settings/model";
+import {
+  ChatModelProviders,
+  DisplayKeyProviders,
+  EmbeddingModelProviders,
+  MODEL_CAPABILITIES,
+  ModelCapability,
+  Provider,
+  ProviderMetadata,
+  ProviderSettingsKeyMap,
+} from "@/constants";
 import { CustomModel } from "@/aiParams";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { err2String, getProviderInfo, getProviderLabel, omit } from "@/utils";
+import { Notice } from "obsidian";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Button } from "@/components/ui/button";
+import { ChevronDown, Loader2, HelpCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -9,9 +26,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { PasswordInput } from "@/components/ui/password-input";
 import {
   Select,
   SelectContent,
@@ -19,49 +33,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  ChatModelProviders,
-  DisplayKeyProviders,
-  EmbeddingModelProviders,
-  Provider,
-  ProviderMetadata,
-  ProviderSettingsKeyMap,
-} from "@/constants";
-import { useTab } from "@/contexts/TabContext";
-import { getSettings } from "@/settings/model";
-import { err2String, getProviderInfo, getProviderLabel, omit } from "@/utils";
-import { ChevronDown, Loader2 } from "lucide-react";
-import { Notice } from "obsidian";
-import React, { useState } from "react";
-
-interface FormFieldProps {
-  label: string;
-  required?: boolean;
-  error?: boolean;
-  description?: string;
-  errorMessage?: string;
-  children: React.ReactNode;
-}
-
-const FormField: React.FC<FormFieldProps> = ({
-  label,
-  required = false,
-  error = false,
-  description,
-  errorMessage = "This field is required",
-  children,
-}) => {
-  return (
-    <div className="space-y-2">
-      <Label className={error ? "text-error" : ""}>
-        {label} {required && <span className="text-error">*</span>}
-      </Label>
-      {children}
-      {error && <p className="text-xs text-error">{errorMessage}</p>}
-      {description && <p className="text-sm text-muted">{description}</p>}
-    </div>
-  );
-};
+import { PasswordInput } from "@/components/ui/password-input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { FormField } from "@/components/ui/form-field";
 
 interface FormErrors {
   name: boolean;
@@ -69,6 +44,7 @@ interface FormErrors {
   deploymentName: boolean;
   embeddingDeploymentName: boolean;
   apiVersion: boolean;
+  displayName: boolean;
 }
 
 interface ModelAddDialogProps {
@@ -101,6 +77,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     deploymentName: false,
     embeddingDeploymentName: false,
     apiVersion: false,
+    displayName: false,
   });
 
   const setError = (field: keyof FormErrors, value: boolean) => {
@@ -114,6 +91,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
       deploymentName: false,
       embeddingDeploymentName: false,
       apiVersion: false,
+      displayName: false,
     });
   };
 
@@ -160,6 +138,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
       baseUrl: "",
       apiKey: getDefaultApiKey(provider),
       isEmbeddingModel,
+      capabilities: [],
     };
 
     if (!isEmbeddingModel) {
@@ -175,6 +154,23 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
   };
 
   const [model, setModel] = useState<CustomModel>(getInitialModel());
+
+  // Clean up model data by trimming whitespace
+  const getCleanedModel = (modelData: CustomModel): CustomModel => {
+    return {
+      ...modelData,
+      name: modelData.name?.trim(),
+      baseUrl: modelData.baseUrl?.trim(),
+      apiKey: modelData.apiKey?.trim(),
+      openAIOrgId: modelData.openAIOrgId?.trim(),
+      azureOpenAIApiInstanceName: modelData.azureOpenAIApiInstanceName?.trim(),
+      azureOpenAIApiDeploymentName: modelData.azureOpenAIApiDeploymentName?.trim(),
+      azureOpenAIApiEmbeddingDeploymentName:
+        modelData.azureOpenAIApiEmbeddingDeploymentName?.trim(),
+      azureOpenAIApiVersion: modelData.azureOpenAIApiVersion?.trim(),
+    };
+  };
+
   const [providerInfo, setProviderInfo] = useState<ProviderMetadata>(
     getProviderInfo(defaultProvider)
   );
@@ -195,7 +191,8 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
       return;
     }
 
-    onAdd(model);
+    const cleanedModel = getCleanedModel(model);
+    onAdd(cleanedModel);
     onOpenChange(false);
     setModel(getInitialModel());
     clearErrors();
@@ -237,7 +234,8 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
 
     setIsVerifying(true);
     try {
-      await ping(model);
+      const cleanedModel = getCleanedModel(model);
+      await ping(cleanedModel);
       new Notice("Model verification successful!");
     } catch (err) {
       console.error(err);
@@ -385,6 +383,12 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     return `https://${instanceName}.openai.azure.com/openai/deployments/${deploymentName}/${endpoint}?api-version=${apiVersion}`;
   };
 
+  const capabilityOptions = Object.entries(MODEL_CAPABILITIES).map(([id, description]) => ({
+    id,
+    label: id.charAt(0).toUpperCase() + id.slice(1),
+    description,
+  })) as Array<{ id: ModelCapability; label: string; description: string }>;
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
@@ -397,7 +401,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
           <DialogDescription>Add a new model to your collection.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-3">
           <FormField
             label="Model Name"
             required
@@ -413,6 +417,42 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
               onChange={(e) => {
                 setModel({ ...model, name: e.target.value });
                 setError("name", false);
+              }}
+            />
+          </FormField>
+
+          <FormField
+            label={
+              <div className="flex items-center gap-1.5">
+                <span className="leading-none">Display Name</span>
+                <TooltipProvider delayDuration={0}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="size-4" />
+                    </TooltipTrigger>
+                    <TooltipContent align="start" className="max-w-96" side="bottom">
+                      <div className="text-sm text-muted flex flex-col gap-0.5">
+                        <div className="text-[12px] font-bold">Suggested format:</div>
+                        <div className="text-accent">[Source]-[Payment]:[Pretty Model Name]</div>
+                        <div className="text-[12px]">
+                          Example:
+                          <li>Direct-Paid:Ds-r1</li>
+                          <li>OpenRouter-Paid:Ds-r1</li>
+                          <li>Perplexity-Paid:lg</li>
+                        </div>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            }
+          >
+            <Input
+              type="text"
+              placeholder="Custom display name (optional)"
+              value={model.displayName || ""}
+              onChange={(e) => {
+                setModel({ ...model, displayName: e.target.value });
               }}
             />
           </FormField>
@@ -458,6 +498,38 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
                 </a>
               </p>
             )}
+          </FormField>
+
+          <FormField label="Model Capabilities">
+            <div className="flex gap-4 items-center">
+              {capabilityOptions.map(({ id, label, description }) => (
+                <div key={id} className="flex items-center gap-2">
+                  <Checkbox
+                    id={id}
+                    checked={model.capabilities?.includes(id)}
+                    onCheckedChange={(checked) => {
+                      const newCapabilities = model.capabilities || [];
+                      setModel({
+                        ...model,
+                        capabilities: checked
+                          ? [...newCapabilities, id]
+                          : newCapabilities.filter((cap) => cap !== id),
+                      });
+                    }}
+                  />
+                  <Label htmlFor={id} className="text-sm">
+                    <TooltipProvider delayDuration={0}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>{label}</span>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">{description}</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </Label>
+                </div>
+              ))}
+            </div>
           </FormField>
 
           {renderProviderSpecificFields()}

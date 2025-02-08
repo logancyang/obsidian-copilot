@@ -1,4 +1,4 @@
-import { CustomModel, ModelCapability } from "@/aiParams";
+import { CustomModel } from "@/aiParams";
 import { type CopilotSettings } from "@/settings/model";
 import { ChainType } from "./chainFactory";
 
@@ -70,6 +70,18 @@ export enum ChatModelProviders {
   COPILOT_PLUS = "copilot-plus",
 }
 
+export enum ModelCapability {
+  REASONING = "reasoning",
+  VISION = "vision",
+  WEB_SEARCH = "websearch",
+}
+
+export const MODEL_CAPABILITIES: Record<ModelCapability, string> = {
+  reasoning: "This model supports general reasoning tasks.",
+  vision: "This model supports image inputs.",
+  websearch: "This model can access the internet.",
+};
+
 export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.COPILOT_PLUS_FLASH,
@@ -93,6 +105,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     core: true,
+    capabilities: [ModelCapability.VISION],
   },
   {
     name: ChatModels.O1_mini,
