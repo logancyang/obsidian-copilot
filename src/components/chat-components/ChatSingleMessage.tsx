@@ -105,7 +105,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       );
 
       const clickable = (file: TFile) =>
-        `[${file.name}](obsidian://open?vault=${encodeURIComponent(app.vault.getName())}&file=${encodeURIComponent(file.path)})`;
+        `<a href="obsidian://open?file=${encodeURIComponent(file.path)}">${file.basename}</a>`;
       // Transform [[link]] format but exclude ![[]] image links
       const noteLinksProcessed = replaceLinks(
         noteImageProcessed,
