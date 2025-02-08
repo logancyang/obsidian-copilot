@@ -251,7 +251,7 @@ class VaultQAChainRunner extends BaseChainRunner {
                 (title) => `<li>[[${title}]]</li>`
             )
             .join("\n");
-        response += "***\n<details><summary>Sources</summary>\n<ul>\n" + htmlLinks + "\n</ul>\n</details>";
+        response += "\n---\n<details><summary>Sources</summary>\n<ul>\n" + htmlLinks + "\n</ul>\n</details>";
     }
     return response;
   }
