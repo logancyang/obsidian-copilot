@@ -130,12 +130,19 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
   // fix: Maintain consistency between EmbeddingModelProviders.AZURE_OPENAI and ChatModelProviders.AZURE_OPENAI,
   // where it was 'azure_openai' before EmbeddingModelProviders.AZURE_OPENAI.
-  settingsToSanitize.activeEmbeddingModels = settingsToSanitize.activeEmbeddingModels.map((m) => {
-    return {
-      ...m,
-      provider: m.provider === "azure_openai" ? EmbeddingModelProviders.AZURE_OPENAI : m.provider,
-    };
-  });
+  if (!settingsToSanitize.activeEmbeddingModels) {
+    settingsToSanitize.activeEmbeddingModels = BUILTIN_EMBEDDING_MODELS.map((model) => ({
+      ...model,
+      enabled: true,
+    }));
+  } else {
+    settingsToSanitize.activeEmbeddingModels = settingsToSanitize.activeEmbeddingModels.map((m) => {
+      return {
+        ...m,
+        provider: m.provider === "azure_openai" ? EmbeddingModelProviders.AZURE_OPENAI : m.provider,
+      };
+    });
+  }
 
   const sanitizedSettings: CopilotSettings = { ...settingsToSanitize };
 
