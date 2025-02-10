@@ -104,25 +104,45 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         (file) => `![](${app.vault.getResourcePath(file)})`
       );
 
-      const clickable = (file: TFile) =>
-        `<a href="obsidian://open?file=${encodeURIComponent(file.path)}">${file.basename}</a>`;
-      // Transform [[link]] format but exclude ![[]] image links
+      // Transform markdown sources section into HTML structure
+      const sourcesSectionProcessed = processSourcesSection(noteImageProcessed);
+
+      // Transform [[link]] to clickable format but exclude ![[]] image links
       const noteLinksProcessed = replaceLinks(
-        noteImageProcessed,
+        sourcesSectionProcessed,
         /(?<!!)\[\[([^\]]+)]]/g,
-        clickable
-      );
-      // Transform [title](app://obsidian.md/note) format but exclude ![[]] image links
-      const appNoteLinks = replaceLinks(
-        noteLinksProcessed,
-        /(?<!!)\[([^\]]+)]\(app:\/\/obsidian\.md\/([^)]+)\)/g,
-        clickable
+        (file: TFile) =>
+          `<a href="obsidian://open?file=${encodeURIComponent(file.path)}">${file.basename}</a>`
       );
 
-      return appNoteLinks;
+      return noteLinksProcessed;
     },
     [app]
   );
+
+  const processSourcesSection = (content: string): string => {
+    const sections = content.split("\n\n#### Sources:\n\n");
+    if (sections.length !== 2) return content;
+
+    const [mainContent, sources] = sections;
+    const sourceLinks = sources
+      .split("\n")
+      .map((line) => {
+        const match = line.match(/- \[\[(.*?)\]\]/);
+        if (match) {
+          return `<li>[[${match[1]}]]</li>`;
+        }
+        return line;
+      })
+      .join("\n");
+
+    return (
+      mainContent +
+      "\n___\n<details><summary>Sources</summary>\n<ul>\n" +
+      sourceLinks +
+      "\n</ul>\n</details>"
+    );
+  };
 
   useEffect(() => {
     if (contentRef.current && message.sender !== USER_SENDER) {
