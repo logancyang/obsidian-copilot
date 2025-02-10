@@ -75,6 +75,7 @@ export interface CustomModel {
   core?: boolean;
   stream?: boolean;
   temperature?: number;
+  maxTokens?: number;
   context?: number;
   believerExclusive?: boolean;
   // OpenAI specific fields
