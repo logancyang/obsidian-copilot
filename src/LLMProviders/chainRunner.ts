@@ -246,9 +246,8 @@ class VaultQAChainRunner extends BaseChainRunner {
   private addSourcestoResponse(response: string): string {
     const docTitles = extractUniqueTitlesFromDocs(ChainManager.retrievedDocuments);
     if (docTitles.length > 0) {
-      const htmlLinks = docTitles.map((title) => `<li>[[${title}]]</li>`).join("\n");
-      response +=
-        "\n___\n<details><summary>Sources</summary>\n<ul>\n" + htmlLinks + "\n</ul>\n</details>";
+      const links = docTitles.map((title) => `- [[${title}]]`).join("\n");
+      response += "\n\n#### Sources:\n\n" + links;
     }
     return response;
   }
