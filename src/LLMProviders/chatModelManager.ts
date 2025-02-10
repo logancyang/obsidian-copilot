@@ -81,6 +81,7 @@ export default class ChatModelManager {
     const baseConfig: ModelConfig = {
       modelName: modelName,
       temperature: customModel.temperature ?? settings.temperature,
+      maxTokens: customModel.maxTokens ?? settings.maxTokens,
       streaming: customModel.stream ?? true,
       maxRetries: 3,
       maxConcurrency: 3,
