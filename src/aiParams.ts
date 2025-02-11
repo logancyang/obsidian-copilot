@@ -78,6 +78,8 @@ export interface CustomModel {
   maxTokens?: number;
   context?: number;
   believerExclusive?: boolean;
+  // Embedding models only (Jina at the moment)
+  dimensions?: number;
   // OpenAI specific fields
   openAIOrgId?: string;
 
