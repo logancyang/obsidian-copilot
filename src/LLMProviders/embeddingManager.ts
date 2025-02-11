@@ -208,7 +208,7 @@ export default class EmbeddingManager {
       },
       [EmbeddingModelProviders.OPENAI]: {
         modelName,
-        openAIApiKey: await getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
+        apiKey: await getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
         timeout: 10000,
         configuration: {
           baseURL: customModel.baseUrl,
@@ -224,15 +224,15 @@ export default class EmbeddingManager {
         apiKey: await getDecryptedKey(settings.googleApiKey),
       },
       [EmbeddingModelProviders.AZURE_OPENAI]: {
-        azureOpenAIApiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
-        azureOpenAIApiInstanceName:
-          customModel.azureOpenAIApiInstanceName || settings.azureOpenAIApiInstanceName,
-        azureOpenAIApiDeploymentName:
-          customModel.azureOpenAIApiEmbeddingDeploymentName ||
-          settings.azureOpenAIApiEmbeddingDeploymentName,
-        azureOpenAIApiVersion: customModel.azureOpenAIApiVersion || settings.azureOpenAIApiVersion,
+        modelName,
+        openAIApiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
         configuration: {
-          baseURL: customModel.baseUrl,
+          baseURL:
+            customModel.baseUrl ||
+            `https://${customModel.azureOpenAIApiInstanceName || settings.azureOpenAIApiInstanceName}.openai.azure.com/openai/deployments/${customModel.azureOpenAIApiEmbeddingDeploymentName || settings.azureOpenAIApiEmbeddingDeploymentName}`,
+          defaultQuery: {
+            "api-version": customModel.azureOpenAIApiVersion || settings.azureOpenAIApiVersion,
+          },
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
       },

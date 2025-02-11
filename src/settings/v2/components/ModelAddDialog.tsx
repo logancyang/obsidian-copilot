@@ -1,6 +1,24 @@
-import React, { useState } from "react";
-import { useTab } from "@/contexts/TabContext";
-import { getSettings } from "@/settings/model";
+import { CustomModel } from "@/aiParams";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/password-input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   ChatModelProviders,
   DisplayKeyProviders,
@@ -9,30 +27,12 @@ import {
   ProviderMetadata,
   ProviderSettingsKeyMap,
 } from "@/constants";
-import { CustomModel } from "@/aiParams";
+import { useTab } from "@/contexts/TabContext";
+import { getSettings } from "@/settings/model";
 import { err2String, getProviderInfo, getProviderLabel, omit } from "@/utils";
-import { Notice } from "obsidian";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Button } from "@/components/ui/button";
 import { ChevronDown, Loader2 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { PasswordInput } from "@/components/ui/password-input";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Notice } from "obsidian";
+import React, { useState } from "react";
 
 interface FormFieldProps {
   label: string;
@@ -426,7 +426,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
                 {Object.values(
                   isEmbeddingModel
                     ? omit(EmbeddingModelProviders, ["COPILOT_PLUS", "COPILOT_PLUS_JINA"])
-                    : ChatModelProviders
+                    : omit(ChatModelProviders, ["COPILOT_PLUS"])
                 ).map((provider) => (
                   <SelectItem key={provider} value={provider}>
                     {getProviderLabel(provider)}

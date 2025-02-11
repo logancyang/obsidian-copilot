@@ -7,6 +7,7 @@ import {
   USER_SENDER,
 } from "@/constants";
 import { ChatMessage } from "@/sharedState";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { MemoryVariables } from "@langchain/core/memory";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { BaseChain, RetrievalQAChain } from "langchain/chains";
@@ -866,4 +867,21 @@ export async function checkLatestVersion(): Promise<{
     const errorMessage = error instanceof Error ? error.message : "Failed to check for updates";
     return { version: null, error: errorMessage };
   }
+}
+
+export function isOSeriesModel(model: BaseChatModel | string): boolean {
+  if (typeof model === "string") {
+    return model.startsWith("o1") || model.startsWith("o3");
+  }
+
+  // For BaseChatModel instances
+  const modelName = (model as any).modelName || (model as any).model || "";
+  return modelName.startsWith("o1") || modelName.startsWith("o3");
+}
+
+export function getMessageRole(
+  model: BaseChatModel | string,
+  defaultRole: "system" | "human" = "system"
+): "system" | "human" {
+  return isOSeriesModel(model) ? "human" : defaultRole;
 }

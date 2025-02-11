@@ -43,7 +43,8 @@ export enum ChatModels {
   COPILOT_PLUS_FLASH = "copilot-plus-flash",
   GPT_4o = "gpt-4o",
   GPT_4o_mini = "gpt-4o-mini",
-  GPT_4_TURBO = "gpt-4-turbo",
+  O1_mini = "o1-mini",
+  O3_mini = "o3-mini",
   GEMINI_PRO = "gemini-1.5-pro",
   GEMINI_FLASH = "gemini-1.5-flash",
   AZURE_OPENAI = "azure-openai",
@@ -93,7 +94,13 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     core: true,
   },
   {
-    name: ChatModels.GPT_4_TURBO,
+    name: ChatModels.O1_mini,
+    provider: ChatModelProviders.OPENAI,
+    enabled: true,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.O3_mini,
     provider: ChatModelProviders.OPENAI,
     enabled: true,
     isBuiltIn: true,
@@ -147,15 +154,12 @@ export enum EmbeddingModelProviders {
   OPENAI = "openai",
   COHEREAI = "cohereai",
   GOOGLE = "google",
-  // AZURE_OPENAI = "azure_openai",
   AZURE_OPENAI = "azure openai",
   OLLAMA = "ollama",
   LM_STUDIO = "lm-studio",
   OPENAI_FORMAT = "3rd party (openai-format)",
   COPILOT_PLUS = "copilot-plus",
   COPILOT_PLUS_JINA = "copilot-plus-jina",
-  // HUGGINGFACE = "huggingface",
-  // VOYAGEAI = "voyageai",
 }
 
 export enum EmbeddingModels {
