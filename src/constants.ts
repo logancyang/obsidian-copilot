@@ -181,12 +181,13 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
   },
   {
     name: EmbeddingModels.COPILOT_PLUS_LARGE,
-    provider: EmbeddingModelProviders.COPILOT_PLUS,
+    provider: EmbeddingModelProviders.COPILOT_PLUS_JINA,
     enabled: true,
     isBuiltIn: true,
     isEmbeddingModel: true,
     core: true,
     believerExclusive: true,
+    dimensions: 1024,
   },
   {
     name: EmbeddingModels.COPILOT_PLUS_MULTILINGUAL,
@@ -195,6 +196,7 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
     isBuiltIn: true,
     isEmbeddingModel: true,
     core: true,
+    dimensions: 512,
   },
   {
     name: EmbeddingModels.OPENAI_EMBEDDING_SMALL,
