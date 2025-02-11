@@ -53,6 +53,7 @@ export interface ModelConfig {
   apiKey?: string;
   openAIProxyBaseUrl?: string;
   groqApiKey?: string;
+  mistralApiKey?: string;
   enableCors?: boolean;
 }
 

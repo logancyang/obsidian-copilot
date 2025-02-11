@@ -11,6 +11,7 @@ import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatGroq } from "@langchain/groq";
 import { ChatOllama } from "@langchain/ollama";
 import { ChatOpenAI } from "@langchain/openai";
+import { ChatMistralAI } from "@langchain/mistralai";
 import { Notice } from "obsidian";
 
 type ChatConstructorType = new (config: any) => BaseChatModel;
@@ -27,6 +28,7 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.GROQ]: ChatGroq,
   [ChatModelProviders.OPENAI_FORMAT]: ChatOpenAI,
   [ChatModelProviders.COPILOT_PLUS]: ChatOpenAI,
+  [ChatModelProviders.MISTRAL]: ChatMistralAI,
 } as const;
 
 type ChatProviderConstructMap = typeof CHAT_PROVIDER_CONSTRUCTORS;
@@ -55,6 +57,7 @@ export default class ChatModelManager {
     [ChatModelProviders.LM_STUDIO]: () => "default-key",
     [ChatModelProviders.OPENAI_FORMAT]: () => "default-key",
     [ChatModelProviders.COPILOT_PLUS]: () => getSettings().plusLicenseKey,
+    [ChatModelProviders.MISTRAL]: () => getSettings().mistralApiKey,
   } as const;
 
   private constructor() {
@@ -195,6 +198,11 @@ export default class ChatModelManager {
           baseURL: BREVILABS_API_BASE_URL,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
+      },
+      [ChatModelProviders.MISTRAL]: {
+        model: modelName,
+        apiKey: await getDecryptedKey(customModel.apiKey || settings.mistralApiKey),
+        serverURL: customModel.baseUrl,
       },
     };
 
