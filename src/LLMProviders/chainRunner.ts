@@ -246,15 +246,8 @@ class VaultQAChainRunner extends BaseChainRunner {
   private addSourcestoResponse(response: string): string {
     const docTitles = extractUniqueTitlesFromDocs(ChainManager.retrievedDocuments);
     if (docTitles.length > 0) {
-      const markdownLinks = docTitles
-        .map(
-          (title) =>
-            `- [${title}](obsidian://open?vault=${encodeURIComponent(this.chainManager.app.vault.getName())}&file=${encodeURIComponent(
-              title
-            )})`
-        )
-        .join("\n");
-      response += "\n\n#### Sources:\n" + markdownLinks;
+      const links = docTitles.map((title) => `- [[${title}]]`).join("\n");
+      response += "\n\n#### Sources:\n\n" + links;
     }
     return response;
   }
