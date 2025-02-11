@@ -2,7 +2,7 @@ import { CustomModel, getModelKey, ModelConfig, setModelKey } from "@/aiParams";
 import { BREVILABS_API_BASE_URL, BUILTIN_CHAT_MODELS, ChatModelProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
-import { err2String, safeFetch } from "@/utils";
+import { err2String, isOSeriesModel, safeFetch } from "@/utils";
 import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatCohere } from "@langchain/cohere";
@@ -75,10 +75,9 @@ export default class ChatModelManager {
   private async getModelConfig(customModel: CustomModel): Promise<ModelConfig> {
     const settings = getSettings();
 
-    // Check if the model starts with "o1"
     const modelName = customModel.name;
-    const isO1Model = modelName.startsWith("o1");
-    const baseConfig: ModelConfig = {
+    const isOSeries = isOSeriesModel(modelName);
+    const baseConfig: Omit<ModelConfig, "maxTokens" | "maxCompletionTokens"> = {
       modelName: modelName,
       temperature: customModel.temperature ?? settings.temperature,
       streaming: customModel.stream ?? true,
@@ -96,10 +95,9 @@ export default class ChatModelManager {
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
+          organization: await getDecryptedKey(customModel.openAIOrgId || settings.openAIOrgId),
         },
-        // @ts-ignore
-        openAIOrgId: getDecryptedKey(customModel.openAIOrgId || settings.openAIOrgId),
-        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
+        ...this.handleOpenAIExtraArgs(isOSeries, settings.maxTokens, settings.temperature),
       },
       [ChatModelProviders.ANTHROPIC]: {
         anthropicApiKey: await getDecryptedKey(customModel.apiKey || settings.anthropicApiKey),
@@ -112,17 +110,18 @@ export default class ChatModelManager {
         },
       },
       [ChatModelProviders.AZURE_OPENAI]: {
-        azureOpenAIApiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
-        azureOpenAIApiInstanceName:
-          customModel.azureOpenAIApiInstanceName || settings.azureOpenAIApiInstanceName,
-        azureOpenAIApiDeploymentName:
-          customModel.azureOpenAIApiDeploymentName || settings.azureOpenAIApiDeploymentName,
-        azureOpenAIApiVersion: customModel.azureOpenAIApiVersion || settings.azureOpenAIApiVersion,
+        modelName: modelName,
+        openAIApiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
         configuration: {
-          baseURL: customModel.baseUrl,
+          baseURL:
+            customModel.baseUrl ||
+            `https://${customModel.azureOpenAIApiInstanceName || settings.azureOpenAIApiInstanceName}.openai.azure.com/openai/deployments/${customModel.azureOpenAIApiDeploymentName || settings.azureOpenAIApiDeploymentName}`,
+          defaultQuery: {
+            "api-version": customModel.azureOpenAIApiVersion || settings.azureOpenAIApiVersion,
+          },
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
-        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
+        ...this.handleOpenAIExtraArgs(isOSeries, settings.maxTokens, settings.temperature),
       },
       [ChatModelProviders.COHEREAI]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
@@ -185,9 +184,9 @@ export default class ChatModelManager {
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
-          dangerouslyAllowBrowser: true,
+          defaultHeaders: { "dangerously-allow-browser": "true" },
         },
-        ...this.handleOpenAIExtraArgs(isO1Model, settings.maxTokens, settings.temperature),
+        ...this.handleOpenAIExtraArgs(isOSeries, settings.maxTokens, settings.temperature),
       },
       [ChatModelProviders.COPILOT_PLUS]: {
         modelName: modelName,
@@ -202,11 +201,22 @@ export default class ChatModelManager {
     const selectedProviderConfig =
       providerConfig[customModel.provider as keyof typeof providerConfig] || {};
 
-    return { ...baseConfig, ...selectedProviderConfig };
+    // Add token configuration separately to ensure they don't conflict
+    const tokenConfig = this.handleOpenAIExtraArgs(
+      isOSeries,
+      customModel.maxTokens ?? settings.maxTokens,
+      customModel.temperature ?? settings.temperature
+    );
+
+    return {
+      ...baseConfig,
+      ...selectedProviderConfig,
+      ...tokenConfig,
+    };
   }
 
-  private handleOpenAIExtraArgs(isO1Model: boolean, maxTokens: number, temperature: number) {
-    return isO1Model
+  private handleOpenAIExtraArgs(isOSeriesModel: boolean, maxTokens: number, temperature: number) {
+    const config = isOSeriesModel
       ? {
           maxCompletionTokens: maxTokens,
           temperature: 1,
@@ -215,6 +225,7 @@ export default class ChatModelManager {
           maxTokens: maxTokens,
           temperature: temperature,
         };
+    return config;
   }
 
   // Build a map of modelKey to model config
@@ -326,10 +337,14 @@ export default class ChatModelManager {
       const modelToTest = { ...model, enableCors };
       const modelConfig = await this.getModelConfig(modelToTest);
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { streaming, temperature, ...pingConfig } = modelConfig;
-      pingConfig.maxTokens = 10;
+      const { streaming, maxTokens, maxCompletionTokens, ...pingConfig } = modelConfig;
+      const isOSeries = isOSeriesModel(modelToTest.name);
+      const tokenConfig = this.handleOpenAIExtraArgs(isOSeries, 10, modelConfig.temperature);
 
-      const testModel = new (this.getProviderConstructor(modelToTest))(pingConfig);
+      const testModel = new (this.getProviderConstructor(modelToTest))({
+        ...pingConfig,
+        ...tokenConfig,
+      });
       await testModel.invoke([{ role: "user", content: "hello" }], {
         timeout: 3000,
       });

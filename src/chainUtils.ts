@@ -23,7 +23,6 @@ export async function getStandaloneQuestion(
   const response = await ChatModelManager.getInstance()
     .getChatModel()
     .invoke([
-      { role: "system", content: condenseQuestionTemplate },
       {
         role: "user",
         content: condenseQuestionTemplate

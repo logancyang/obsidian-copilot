@@ -40,6 +40,7 @@ export interface ModelConfig {
   maxRetries: number;
   maxConcurrency: number;
   maxTokens?: number;
+  maxCompletionTokens?: number;
   openAIApiKey?: string;
   openAIOrgId?: string;
   anthropicApiKey?: string;
@@ -75,8 +76,11 @@ export interface CustomModel {
   core?: boolean;
   stream?: boolean;
   temperature?: number;
+  maxTokens?: number;
   context?: number;
   believerExclusive?: boolean;
+  // Embedding models only (Jina at the moment)
+  dimensions?: number;
   // OpenAI specific fields
   openAIOrgId?: string;
 

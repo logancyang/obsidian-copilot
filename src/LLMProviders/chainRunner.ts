@@ -17,6 +17,7 @@ import {
   extractYoutubeUrl,
   formatDateTime,
   getApiErrorMessage,
+  getMessageRole,
   ImageContent,
   ImageProcessor,
   MessageContent,
@@ -246,15 +247,8 @@ class VaultQAChainRunner extends BaseChainRunner {
   private addSourcestoResponse(response: string): string {
     const docTitles = extractUniqueTitlesFromDocs(ChainManager.retrievedDocuments);
     if (docTitles.length > 0) {
-      const markdownLinks = docTitles
-        .map(
-          (title) =>
-            `- [${title}](obsidian://open?vault=${encodeURIComponent(this.chainManager.app.vault.getName())}&file=${encodeURIComponent(
-              title
-            )})`
-        )
-        .join("\n");
-      response += "\n\n#### Sources:\n" + markdownLinks;
+      const links = docTitles.map((title) => `- [[${title}]]`).join("\n");
+      response += "\n\n#### Sources:\n\n" + links;
     }
     return response;
   }
@@ -364,10 +358,13 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         "\n\nThe following is the relevant conversation history. Use this context to maintain consistency in your responses:";
     }
 
-    // Add the combined system message
+    // Get chat model for role determination for O-series models
+    const chatModel = this.chainManager.chatModelManager.getChatModel();
+
+    // Add the combined system message with appropriate role
     if (fullSystemMessage) {
       messages.push({
-        role: "system",
+        role: getMessageRole(chatModel),
         content: `${fullSystemMessage}\nIMPORTANT: Maintain consistency with previous responses in the conversation. If you've provided information about a person or topic before, use that same information in follow-up questions.`,
       });
     }
