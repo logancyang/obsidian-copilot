@@ -138,7 +138,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
     return (
       mainContent +
-      "\n<br/>\n<details><summary>Sources</summary>\n<ul>\n" +
+      "\n\n<br/>\n<details><summary>Sources</summary>\n<ul>\n" +
       sourceLinks +
       "\n</ul>\n</details>"
     );
