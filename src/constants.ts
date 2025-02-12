@@ -1,4 +1,4 @@
-import { CustomModel } from "@/aiParams";
+import { CustomModel, ModelCapability } from "@/aiParams";
 import { type CopilotSettings } from "@/settings/model";
 import { ChainType } from "./chainFactory";
 
@@ -78,6 +78,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     core: true,
+    capabilities: [ModelCapability.VISION],
   },
   {
     name: ChatModels.GPT_4o,
@@ -85,6 +86,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     core: true,
+    capabilities: [ModelCapability.VISION],
   },
   {
     name: ChatModels.GPT_4o_mini,
@@ -98,12 +100,14 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.OPENAI,
     enabled: true,
     isBuiltIn: true,
+    capabilities: [ModelCapability.REASONING],
   },
   {
     name: ChatModels.O3_mini,
     provider: ChatModelProviders.OPENAI,
     enabled: true,
     isBuiltIn: true,
+    capabilities: [ModelCapability.REASONING],
   },
   {
     name: ChatModels.CLAUDE_3_5_SONNET,
@@ -111,6 +115,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     core: true,
+    capabilities: [ModelCapability.VISION],
   },
   {
     name: ChatModels.CLAUDE_3_5_HAIKU,
@@ -135,12 +140,14 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.GOOGLE,
     enabled: true,
     isBuiltIn: true,
+    capabilities: [ModelCapability.VISION],
   },
   {
     name: ChatModels.GEMINI_FLASH,
     provider: ChatModelProviders.GOOGLE,
     enabled: true,
     isBuiltIn: true,
+    capabilities: [ModelCapability.VISION],
   },
   {
     name: ChatModels.AZURE_OPENAI,
