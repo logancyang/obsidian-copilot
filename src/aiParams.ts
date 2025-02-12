@@ -4,6 +4,7 @@ import { ChatPromptTemplate } from "@langchain/core/prompts";
 
 import { settingsAtom, settingsStore } from "@/settings/model";
 import { atom, useAtom } from "jotai";
+import { ModelCapability } from "@/constants";
 
 const userModelKeyAtom = atom<string | null>(null);
 const modelKeyAtom = atom(
@@ -65,12 +66,6 @@ export interface SetChainOptions {
   refreshIndex?: boolean;
 }
 
-export enum ModelCapability {
-  REASONING = "reasoning",
-  VISION = "vision",
-  WEB_SEARCH = "websearch",
-}
-
 export interface CustomModel {
   name: string;
   provider: string;
@@ -87,6 +82,8 @@ export interface CustomModel {
   context?: number;
   believerExclusive?: boolean;
   capabilities?: ModelCapability[];
+  displayName?: string;
+
   // Embedding models only (Jina at the moment)
   dimensions?: number;
   // OpenAI specific fields

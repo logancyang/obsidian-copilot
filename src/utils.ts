@@ -5,6 +5,8 @@ import {
   ProviderInfo,
   ProviderMetadata,
   USER_SENDER,
+  DisplayKeyProviders,
+  ProviderSettingsKeyMap,
 } from "@/constants";
 import { ChatMessage } from "@/sharedState";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
@@ -14,6 +16,7 @@ import { BaseChain, RetrievalQAChain } from "langchain/chains";
 import moment from "moment";
 import { MarkdownView, Notice, TFile, Vault, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
+import { CopilotSettings } from "@/settings/model";
 
 // Add custom error type at the top of the file
 interface APIError extends Error {
@@ -780,10 +783,7 @@ export function getProviderInfo(provider: string): ProviderMetadata {
 
 export function getProviderLabel(provider: string, model?: CustomModel): string {
   const baseLabel = ProviderInfo[provider as Provider]?.label || provider;
-  if (model?.believerExclusive && baseLabel === "Copilot Plus") {
-    return "Believer";
-  }
-  return baseLabel;
+  return baseLabel + (model?.believerExclusive && baseLabel === "Copilot Plus" ? "(Believer)" : "");
 }
 
 export function getProviderHost(provider: string): string {
@@ -884,4 +884,29 @@ export function getMessageRole(
   defaultRole: "system" | "human" = "system"
 ): "system" | "human" {
   return isOSeriesModel(model) ? "human" : defaultRole;
+}
+
+export function checkModelApiKey(
+  model: CustomModel,
+  settings: Readonly<CopilotSettings>
+): {
+  hasApiKey: boolean;
+  errorNotice?: string;
+} {
+  const providerKeyName = ProviderSettingsKeyMap[model.provider as DisplayKeyProviders];
+  const hasNoApiKey = !model.apiKey && !settings[providerKeyName];
+
+  if (hasNoApiKey) {
+    const notice =
+      `Please configure API Key for ${model.name} in settings first.` +
+      "\nPath: Settings > copilot plugin > Basic Tab > Set Keys";
+    return {
+      hasApiKey: false,
+      errorNotice: notice,
+    };
+  }
+
+  return {
+    hasApiKey: true,
+  };
 }

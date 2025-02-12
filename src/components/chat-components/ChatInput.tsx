@@ -8,8 +8,7 @@ import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { getToolDescription } from "@/tools/toolManager";
-import { err2String, extractNoteTitles } from "@/utils";
-import { DisplayKeyProviders, ProviderSettingsKeyMap } from "@/constants";
+import { err2String, extractNoteTitles, checkModelApiKey } from "@/utils";
 import {
   ArrowBigUp,
   ChevronDown,
@@ -39,6 +38,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useDropzone } from "react-dropzone";
 import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
+import { ModelDisplay } from "@/components/ui/model-display";
 import { Notice } from "obsidian";
 
 interface ChatInputProps {
@@ -488,10 +488,20 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                 <Button variant="ghost2" size="fit">
                   {modelError ? (
                     <span className="text-error">Model Load Failed</span>
-                  ) : (
-                    settings.activeModels.find(
+                  ) : settings.activeModels.find(
                       (model) => model.enabled && getModelKeyFromModel(model) === currentModelKey
-                    )?.name || "Select Model"
+                    ) ? (
+                    <ModelDisplay
+                      model={
+                        settings.activeModels.find(
+                          (model) =>
+                            model.enabled && getModelKeyFromModel(model) === currentModelKey
+                        )!
+                      }
+                      iconSize={8}
+                    />
+                  ) : (
+                    "Select Model"
                   )}
                   <ChevronDown className="size-5 mt-0.5" />
                 </Button>
@@ -501,19 +511,14 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                 {settings.activeModels
                   .filter((model) => model.enabled)
                   .map((model) => {
-                    const providerKeyName =
-                      ProviderSettingsKeyMap[model.provider as DisplayKeyProviders];
-                    const hasNoApiKey = !model.apiKey && !settings[providerKeyName];
+                    const { hasApiKey, errorNotice } = checkModelApiKey(model, settings);
                     return (
                       <DropdownMenuItem
                         key={getModelKeyFromModel(model)}
                         onSelect={async (event) => {
-                          if (hasNoApiKey) {
+                          if (!hasApiKey && errorNotice) {
                             event.preventDefault();
-                            const notice =
-                              `Please configure API Key for ${model.name} in settings first.` +
-                              "\nPath: Settings > copilot plugin > Basic Tab > Set Keys";
-                            new Notice(notice);
+                            new Notice(errorNotice);
                             return;
                           }
 
@@ -526,16 +531,16 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                             new Notice(msg);
                             // Restore to the last valid model
                             const lastValidModel = settings.activeModels.find(
-                              (m) => getModelKeyFromModel(m) === currentModelKey
+                              (m) => m.enabled && getModelKeyFromModel(m) === currentModelKey
                             );
                             if (lastValidModel) {
                               setCurrentModelKey(getModelKeyFromModel(lastValidModel));
                             }
                           }
                         }}
-                        className={hasNoApiKey ? "opacity-50 cursor-not-allowed" : ""}
+                        className={!hasApiKey ? "opacity-50 cursor-not-allowed" : ""}
                       >
-                        {model.name}
+                        <ModelDisplay model={model} iconSize={12} />
                       </DropdownMenuItem>
                     );
                   })}
