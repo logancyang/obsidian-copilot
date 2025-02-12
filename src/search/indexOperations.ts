@@ -39,14 +39,14 @@ export class IndexOperations {
     private embeddingsManager: EmbeddingsManager
   ) {
     const settings = getSettings();
-    this.rateLimiter = new RateLimiter(settings.embeddingRequestsPerSecond);
+    this.rateLimiter = new RateLimiter(settings.embeddingRequestsPerMin);
     this.embeddingBatchSize = settings.embeddingBatchSize;
     this.checkpointInterval = 8 * this.embeddingBatchSize;
 
     // Subscribe to settings changes
     subscribeToSettingsChange(async () => {
       const settings = getSettings();
-      this.rateLimiter = new RateLimiter(settings.embeddingRequestsPerSecond);
+      this.rateLimiter = new RateLimiter(settings.embeddingRequestsPerMin);
       this.embeddingBatchSize = settings.embeddingBatchSize;
       this.checkpointInterval = 8 * this.embeddingBatchSize;
     });

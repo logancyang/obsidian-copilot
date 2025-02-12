@@ -1,51 +1,28 @@
 export class RateLimiter {
-  private queue: (() => void)[] = [];
   private lastRequestTime = 0;
-  private processing = false;
-  private requestsPerSecond: number;
+  private requestsPerMin: number;
 
-  constructor(requestsPerSecond: number) {
-    this.requestsPerSecond = requestsPerSecond;
+  constructor(requestsPerMin: number) {
+    this.requestsPerMin = requestsPerMin;
   }
 
-  setRequestsPerSecond(requestsPerSecond: number) {
-    this.requestsPerSecond = requestsPerSecond;
+  setRequestsPerMin(requestsPerMin: number) {
+    this.requestsPerMin = requestsPerMin;
   }
 
-  getRequestsPerSecond(): number {
-    return this.requestsPerSecond;
+  getRequestsPerMin(): number {
+    return this.requestsPerMin;
   }
 
   async wait(): Promise<void> {
-    return new Promise<void>((resolve) => {
-      this.queue.push(resolve);
-      this.process();
-    });
-  }
+    const now = Date.now();
+    const timeSinceLastRequest = now - this.lastRequestTime;
+    const timeToWait = Math.max(0, 60000 / this.requestsPerMin - timeSinceLastRequest);
 
-  private async process(): Promise<void> {
-    // Use an atomic compare-and-swap operation
-    if (this.processing) return;
-    this.processing = true;
-
-    try {
-      while (this.queue.length > 0) {
-        const now = Date.now();
-        // Calculate the time to wait until the next request can be made
-        const timeToWait = Math.max(0, this.lastRequestTime + 1000 / this.requestsPerSecond - now);
-
-        if (timeToWait > 0) {
-          await new Promise((resolve) => setTimeout(resolve, timeToWait));
-        }
-
-        const resolve = this.queue.shift();
-        if (resolve) {
-          this.lastRequestTime = Date.now();
-          resolve();
-        }
-      }
-    } finally {
-      this.processing = false;
+    if (timeToWait > 0) {
+      await new Promise((resolve) => setTimeout(resolve, timeToWait));
     }
+
+    this.lastRequestTime = Date.now();
   }
 }
