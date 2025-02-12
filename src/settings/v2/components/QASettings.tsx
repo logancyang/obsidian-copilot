@@ -142,6 +142,18 @@ const QASettings: React.FC<QASettingsProps> = ({ indexVaultToVectorStore }) => {
             onChange={(value) => updateSetting("embeddingRequestsPerSecond", value)}
           />
 
+          {/* Embedding batch size */}
+          <SettingItem
+            type="slider"
+            title="Embedding batch size"
+            description="Default is 16. Increase if you are rate limited by your embedding provider."
+            min={1}
+            max={128}
+            step={1}
+            value={settings.embeddingBatchSize}
+            onChange={(value) => updateSetting("embeddingBatchSize", value)}
+          />
+
           {/* Number of Partitions */}
           <SettingItem
             type="select"

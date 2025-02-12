@@ -1,4 +1,4 @@
-import { CHUNK_SIZE, EMBEDDING_BATCH_SIZE } from "@/constants";
+import { CHUNK_SIZE } from "@/constants";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { RateLimiter } from "@/rateLimiter";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
@@ -8,8 +8,6 @@ import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { App, Notice, TFile } from "obsidian";
 import { DBOperations } from "./dbOperations";
 import { extractAppIgnoreSettings, getMatchingPatterns, shouldIndexFile } from "./searchUtils";
-
-const CHECKPOINT_INTERVAL = 8 * EMBEDDING_BATCH_SIZE;
 
 export interface IndexingState {
   isIndexingPaused: boolean;
@@ -23,6 +21,8 @@ export interface IndexingState {
 
 export class IndexOperations {
   private rateLimiter: RateLimiter;
+  private checkpointInterval: number;
+  private embeddingBatchSize: number;
   private state: IndexingState = {
     isIndexingPaused: false,
     isIndexingCancelled: false,
@@ -38,12 +38,17 @@ export class IndexOperations {
     private dbOps: DBOperations,
     private embeddingsManager: EmbeddingsManager
   ) {
-    this.rateLimiter = new RateLimiter(getSettings().embeddingRequestsPerSecond);
+    const settings = getSettings();
+    this.rateLimiter = new RateLimiter(settings.embeddingRequestsPerSecond);
+    this.embeddingBatchSize = settings.embeddingBatchSize;
+    this.checkpointInterval = 8 * this.embeddingBatchSize;
 
     // Subscribe to settings changes
     subscribeToSettingsChange(async () => {
       const settings = getSettings();
       this.rateLimiter = new RateLimiter(settings.embeddingRequestsPerSecond);
+      this.embeddingBatchSize = settings.embeddingBatchSize;
+      this.checkpointInterval = 8 * this.embeddingBatchSize;
     });
   }
 
@@ -90,11 +95,11 @@ export class IndexOperations {
 
       // Process chunks in batches
       const errors: string[] = [];
-      for (let i = 0; i < allChunks.length; i += EMBEDDING_BATCH_SIZE) {
+      for (let i = 0; i < allChunks.length; i += this.embeddingBatchSize) {
         if (this.state.isIndexingCancelled) break;
         await this.handlePause();
 
-        const batch = allChunks.slice(i, i + EMBEDDING_BATCH_SIZE);
+        const batch = allChunks.slice(i, i + this.embeddingBatchSize);
         try {
           await this.rateLimiter.wait();
           const embeddings = await embeddingInstance.embedDocuments(
@@ -122,9 +127,9 @@ export class IndexOperations {
 
           // Calculate if we've crossed a checkpoint threshold
           const previousCheckpoint = Math.floor(
-            (this.state.indexedCount - batch.length) / CHECKPOINT_INTERVAL
+            (this.state.indexedCount - batch.length) / this.checkpointInterval
           );
-          const currentCheckpoint = Math.floor(this.state.indexedCount / CHECKPOINT_INTERVAL);
+          const currentCheckpoint = Math.floor(this.state.indexedCount / this.checkpointInterval);
 
           if (currentCheckpoint > previousCheckpoint) {
             await this.dbOps.saveDB();

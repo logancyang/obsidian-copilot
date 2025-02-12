@@ -55,6 +55,7 @@ export interface CopilotSettings {
   activeEmbeddingModels: Array<CustomModel>;
   promptUsageTimestamps: Record<string, number>;
   embeddingRequestsPerSecond: number;
+  embeddingBatchSize: number;
   defaultOpenArea: DEFAULT_OPEN_AREA;
   disableIndexOnMobile: boolean;
   showSuggestedPrompts: boolean;
@@ -157,6 +158,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   sanitizedSettings.contextTurns = isNaN(contextTurns)
     ? DEFAULT_SETTINGS.contextTurns
     : contextTurns;
+
+  const embeddingBatchSize = Number(settingsToSanitize.embeddingBatchSize);
+  sanitizedSettings.embeddingBatchSize = isNaN(embeddingBatchSize)
+    ? DEFAULT_SETTINGS.embeddingBatchSize
+    : embeddingBatchSize;
 
   return sanitizedSettings;
 }

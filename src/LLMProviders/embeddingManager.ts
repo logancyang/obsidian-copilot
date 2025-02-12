@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { CustomModel } from "@/aiParams";
-import { BREVILABS_API_BASE_URL, EMBEDDING_BATCH_SIZE, EmbeddingModelProviders } from "@/constants";
+import { BREVILABS_API_BASE_URL, EmbeddingModelProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { CustomError } from "@/error";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
@@ -189,7 +189,7 @@ export default class EmbeddingManager {
         modelName,
         apiKey: await getDecryptedKey(settings.plusLicenseKey),
         timeout: 10000,
-        batchSize: EMBEDDING_BATCH_SIZE,
+        batchSize: getSettings().embeddingBatchSize,
         configuration: {
           baseURL: BREVILABS_API_BASE_URL,
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -199,7 +199,7 @@ export default class EmbeddingManager {
         model: modelName,
         apiKey: await getDecryptedKey(settings.plusLicenseKey),
         timeout: 10000,
-        batchSize: 128,
+        batchSize: getSettings().embeddingBatchSize,
         dimensions: customModel.dimensions,
         baseUrl: BREVILABS_API_BASE_URL + "/embeddings",
         configuration: {
