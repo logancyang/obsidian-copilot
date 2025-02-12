@@ -30,6 +30,7 @@ export const LOADING_MESSAGES = {
   DEFAULT: "",
   READING_FILES: "Reading files",
   SEARCHING_WEB: "Searching the web",
+  READING_FILE_TREE: "Reading file tree",
 };
 export const PLUS_UTM_MEDIUMS = {
   SETTINGS: "settings",

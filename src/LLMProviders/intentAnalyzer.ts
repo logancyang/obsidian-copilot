@@ -6,11 +6,13 @@ import {
   pomodoroTool,
   TimeInfo,
 } from "@/tools/TimeTools";
+import { createGetFileTreeTool } from "@/tools/FileTreeTools";
 import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools";
 import { ToolManager } from "@/tools/toolManager";
 import { extractChatHistory, extractYoutubeUrl } from "@/utils";
 import { BrevilabsClient } from "./brevilabsClient";
 import MemoryManager from "./memoryManager";
+import { Vault } from "obsidian";
 
 // TODO: Add @index with explicit pdf files in chat context menu
 export const COPILOT_TOOL_NAMES = ["@vault", "@web", "@youtube", "@pomodoro"];
@@ -21,16 +23,23 @@ type ToolCall = {
 };
 
 export class IntentAnalyzer {
-  private static tools = [
-    getCurrentTimeTool,
-    getTimeInfoByEpochTool,
-    getTimeRangeMsTool,
-    localSearchTool,
-    indexTool,
-    pomodoroTool,
-    webSearchTool,
-    simpleYoutubeTranscriptionTool,
-  ];
+  private static tools: any[] = [];
+
+  static initTools(vault: Vault) {
+    if (this.tools.length === 0) {
+      this.tools = [
+        getCurrentTimeTool,
+        getTimeInfoByEpochTool,
+        getTimeRangeMsTool,
+        localSearchTool,
+        indexTool,
+        pomodoroTool,
+        webSearchTool,
+        simpleYoutubeTranscriptionTool,
+        createGetFileTreeTool(vault),
+      ];
+    }
+  }
 
   static async analyzeIntent(originalMessage: string): Promise<ToolCall[]> {
     try {

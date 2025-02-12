@@ -31,6 +31,7 @@ import {
   TFolder,
   WorkspaceLeaf,
 } from "obsidian";
+import { IntentAnalyzer } from "./LLMProviders/intentAnalyzer";
 
 export default class CopilotPlugin extends Plugin {
   // A chat history that stores the messages sent and received
@@ -79,6 +80,8 @@ export default class CopilotPlugin extends Plugin {
     });
 
     registerBuiltInCommands(this);
+
+    IntentAnalyzer.initTools(this.app.vault);
 
     this.registerEvent(
       this.app.workspace.on("editor-menu", (menu: Menu, editor: Editor) => {
