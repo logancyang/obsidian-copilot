@@ -373,4 +373,9 @@ export default class ChatModelManager {
       }
     }
   }
+
+  findModelByName(modelName: string): CustomModel | undefined {
+    const settings = getSettings();
+    return settings.activeModels.find((model) => model.name === modelName);
+  }
 }

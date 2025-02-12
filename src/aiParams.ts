@@ -64,6 +64,12 @@ export interface SetChainOptions {
   refreshIndex?: boolean;
 }
 
+export enum ModelCapability {
+  REASONING = "reasoning",
+  VISION = "vision",
+  WEB_SEARCH = "websearch",
+}
+
 export interface CustomModel {
   name: string;
   provider: string;
@@ -79,6 +85,7 @@ export interface CustomModel {
   maxTokens?: number;
   context?: number;
   believerExclusive?: boolean;
+  capabilities?: ModelCapability[];
   // Embedding models only (Jina at the moment)
   dimensions?: number;
   // OpenAI specific fields

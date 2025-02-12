@@ -1,3 +1,4 @@
+import { ModelCapability } from "@/aiParams";
 import { getStandaloneQuestion } from "@/chainUtils";
 import {
   ABORT_REASON,
@@ -22,6 +23,7 @@ import {
   ImageProcessor,
   MessageContent,
 } from "@/utils";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { Notice } from "obsidian";
 import ChainManager from "./chainManager";
 import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "./intentAnalyzer";
@@ -334,6 +336,16 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     return content;
   }
 
+  private hasCapability(model: BaseChatModel, capability: ModelCapability): boolean {
+    const modelName = (model as any).modelName || (model as any).model || "";
+    const customModel = this.chainManager.chatModelManager.findModelByName(modelName);
+    return customModel?.capabilities?.includes(capability) ?? false;
+  }
+
+  private isMultimodalModel(model: BaseChatModel): boolean {
+    return this.hasCapability(model, ModelCapability.VISION);
+  }
+
   private async streamMultimodalResponse(
     textContent: string,
     userMessage: ChatMessage,
@@ -375,8 +387,14 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       messages.push({ role: "assistant", content: ai });
     }
 
-    // Build message content with text and images
-    const content = await this.buildMessageContent(textContent, userMessage);
+    // Get the current chat model
+    const chatModelCurrent = this.chainManager.chatModelManager.getChatModel();
+    const isMultimodalCurrent = this.isMultimodalModel(chatModelCurrent);
+
+    // Build message content with text and images for multimodal models, or just text for text-only models
+    const content = isMultimodalCurrent
+      ? await this.buildMessageContent(textContent, userMessage)
+      : textContent;
 
     // Add current user message
     messages.push({
