@@ -130,16 +130,28 @@ const QASettings: React.FC<QASettingsProps> = ({ indexVaultToVectorStore }) => {
             onChange={(value) => updateSetting("maxSourceChunks", value)}
           />
 
-          {/* Requests per second */}
+          {/* Requests per Minute */}
           <SettingItem
             type="slider"
-            title="Requests per second"
-            description="Default is 10. Decrease if you are rate limited by your embedding provider."
+            title="Requests per Minute"
+            description="Default is 90. Decrease if you are rate limited by your embedding provider."
+            min={10}
+            max={300}
+            step={10}
+            value={settings.embeddingRequestsPerMin}
+            onChange={(value) => updateSetting("embeddingRequestsPerMin", value)}
+          />
+
+          {/* Embedding batch size */}
+          <SettingItem
+            type="slider"
+            title="Embedding Batch Size"
+            description="Default is 16. Increase if you are rate limited by your embedding provider."
             min={1}
-            max={30}
+            max={128}
             step={1}
-            value={settings.embeddingRequestsPerSecond}
-            onChange={(value) => updateSetting("embeddingRequestsPerSecond", value)}
+            value={settings.embeddingBatchSize}
+            onChange={(value) => updateSetting("embeddingBatchSize", value)}
           />
 
           {/* Number of Partitions */}
