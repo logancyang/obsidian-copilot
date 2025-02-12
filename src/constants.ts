@@ -53,6 +53,7 @@ export enum ChatModels {
   COMMAND_R_PLUS = "command-r-plus",
   OPENROUTER_GPT_4o = "openai/chatgpt-4o-latest",
   GROQ_LLAMA_8b = "llama3-8b-8192",
+  MISTRAL_TINY = "mistral-tiny-latest",
 }
 
 // Model Providers
@@ -68,6 +69,7 @@ export enum ChatModelProviders {
   LM_STUDIO = "lm-studio",
   OPENAI_FORMAT = "3rd party (openai-format)",
   COPILOT_PLUS = "copilot-plus",
+  MISTRAL = "mistralai",
 }
 
 export const BUILTIN_CHAT_MODELS: CustomModel[] = [
@@ -326,6 +328,12 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     host: "https://api.example.com/v1",
     keyManagementURL: "",
   },
+  [ChatModelProviders.MISTRAL]: {
+    label: "Mistral",
+    host: "https://api.mistral.ai/v1",
+    keyManagementURL: "https://console.mistral.ai/api-keys",
+    testModel: ChatModels.MISTRAL_TINY,
+  },
   [EmbeddingModelProviders.COPILOT_PLUS]: {
     label: "Copilot Plus",
     host: "https://api.brevilabs.com/v1",
@@ -348,6 +356,7 @@ export const ProviderSettingsKeyMap: Record<DisplayKeyProviders, keyof CopilotSe
   openrouterai: "openRouterAiApiKey",
   cohereai: "cohereApiKey",
   "copilot-plus": "plusLicenseKey",
+  mistralai: "mistralApiKey",
 };
 
 export enum VAULT_VECTOR_STORE_STRATEGY {
@@ -535,6 +544,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableEncryption: false,
   maxSourceChunks: 3,
   groqApiKey: "",
+  mistralApiKey: "",
   activeModels: BUILTIN_CHAT_MODELS,
   activeEmbeddingModels: BUILTIN_EMBEDDING_MODELS,
   embeddingRequestsPerMin: 90,
