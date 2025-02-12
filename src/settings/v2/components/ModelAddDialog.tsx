@@ -165,8 +165,6 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     if (!isEmbeddingModel) {
       return {
         ...baseModel,
-        temperature: 0.1,
-        context: 1000,
         stream: true,
       };
     }
