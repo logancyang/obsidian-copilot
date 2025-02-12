@@ -207,14 +207,12 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
       ...model,
       provider,
       apiKey: getDefaultApiKey(provider),
-      ...(provider === ChatModelProviders.AZURE_OPENAI
-        ? { openAIOrgId: settings.openAIOrgId }
-        : {}),
+      ...(provider === ChatModelProviders.OPENAI ? { openAIOrgId: settings.openAIOrgId } : {}),
       ...(provider === ChatModelProviders.AZURE_OPENAI
         ? {
-            azureInstanceName: settings.azureOpenAIApiInstanceName,
-            azureDeploymentName: settings.azureOpenAIApiDeploymentName,
-            azureApiVersion: settings.azureOpenAIApiVersion,
+            azureOpenAIApiInstanceName: settings.azureOpenAIApiInstanceName,
+            azureOpenAIApiDeploymentName: settings.azureOpenAIApiDeploymentName,
+            azureOpenAIApiVersion: settings.azureOpenAIApiVersion,
             azureOpenAIApiEmbeddingDeploymentName: settings.azureOpenAIApiEmbeddingDeploymentName,
           }
         : {}),

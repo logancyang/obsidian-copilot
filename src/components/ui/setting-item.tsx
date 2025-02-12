@@ -141,7 +141,7 @@ export function SettingItem(props: SettingItemProps) {
       case "password":
         return (
           <PasswordInput
-            value={props.value}
+            value={props.value !== undefined ? String(props.value) : undefined}
             onChange={(value) => {
               debouncedOnChange?.(value);
             }}

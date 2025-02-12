@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Eye, EyeOff } from "lucide-react";
 import { getDecryptedKey } from "@/encryptionService";
+import { logError } from "@/logger";
+import { err2String } from "@/utils";
 
 export function PasswordInput({
   value,
@@ -11,7 +13,7 @@ export function PasswordInput({
   disabled,
   className,
 }: {
-  value?: string | number;
+  value?: string;
   onChange?: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
@@ -24,15 +26,18 @@ export function PasswordInput({
   // Initialize the input value on first load
   useEffect(() => {
     const processValue = async () => {
-      if (isFirstLoad.current && typeof value === "string" && value && inputRef.current) {
+      if (isFirstLoad.current && value && inputRef.current) {
         try {
-          const decrypted = await getDecryptedKey(value);
-          inputRef.current.value = decrypted;
+          inputRef.current.value = await getDecryptedKey(value);
         } catch (error) {
-          console.error("Failed to decrypt value:", error);
+          logError("Failed to decrypt value:" + err2String(error));
           inputRef.current.value = value;
         }
         isFirstLoad.current = false;
+      } else {
+        if (inputRef.current) {
+          inputRef.current.value = value || "";
+        }
       }
     };
 
