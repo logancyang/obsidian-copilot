@@ -1,5 +1,6 @@
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { CustomError } from "@/error";
+import { logError, logInfo } from "@/logger";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { areEmbeddingModelsSame } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
@@ -52,11 +53,11 @@ export class DBOperations {
       const newPath = await this.getDbPath();
 
       if (this.dbPath && newPath !== this.dbPath) {
-        console.log("Path change detected, reinitializing database...");
+        logInfo("Path change detected, reinitializing database...");
         this.dbPath = newPath;
         await this.initializeChunkedStorage();
         await this.initializeDB(await EmbeddingsManager.getInstance().getEmbeddingsAPI());
-        console.log("Database reinitialized with new path:", newPath);
+        logInfo("Database reinitialized with new path:", newPath);
       }
     });
   }
@@ -90,12 +91,12 @@ export class DBOperations {
       try {
         if (await this.chunkedStorage.exists()) {
           this.oramaDb = await this.chunkedStorage.loadDatabase();
-          console.log("Loaded existing chunked Orama database from disk.");
+          logInfo("Loaded existing chunked Orama database from disk.");
           return this.oramaDb;
         }
       } catch (error) {
         // If loading fails, we'll create a new database
-        console.log("Failed to load existing database, creating new one:", error);
+        logError("Failed to load existing database, creating new one:", error);
       }
 
       // Create new database if none exists or loading failed
@@ -103,7 +104,7 @@ export class DBOperations {
       this.oramaDb = newDb;
       return newDb;
     } catch (error) {
-      console.error(`Error initializing Orama database:`, error);
+      logError(`Error initializing Orama database:`, error);
       new Notice("Failed to initialize Copilot database. Some features may be limited.");
       return undefined;
     }
@@ -124,7 +125,7 @@ export class DBOperations {
           throw new CustomError("Orama database not found.");
         }
       } catch (error) {
-        console.error("Failed to initialize database during save:", error);
+        logError("Failed to initialize database during save:", error);
         throw new CustomError("Failed to initialize and save database.");
       }
     }
@@ -134,10 +135,10 @@ export class DBOperations {
       this.hasUnsavedChanges = false;
 
       if (getSettings().debug) {
-        console.log("Orama database saved successfully at:", this.dbPath);
+        logInfo("Orama database saved successfully at:", this.dbPath);
       }
     } catch (error) {
-      console.error(`Error saving Orama database:`, error);
+      logError(`Error saving Orama database:`, error);
       throw error;
     }
   }
@@ -162,9 +163,9 @@ export class DBOperations {
       await this.saveDB();
 
       new Notice("Local Copilot index cleared successfully.");
-      console.log("Local Copilot index cleared successfully, new instance created.");
+      logInfo("Local Copilot index cleared successfully, new instance created.");
     } catch (err) {
-      console.error("Error clearing the local Copilot index:", err);
+      logError("Error clearing the local Copilot index:", err);
       new Notice("An error occurred while clearing the local Copilot index.");
       throw err;
     }
@@ -186,12 +187,12 @@ export class DBOperations {
           500
         );
         if (getSettings().debug) {
-          console.log(`Deleted document from local Copilot index: ${filePath}`);
+          logInfo(`Deleted document from local Copilot index: ${filePath}`);
         }
       }
       this.markUnsavedChanges();
     } catch (err) {
-      console.error("Error deleting document from local Copilotindex:", err);
+      logError("Error deleting document from local Copilotindex:", err);
     }
   }
 
@@ -237,7 +238,7 @@ export class DBOperations {
       // Ensure the directory exists
       if (!(await this.app.vault.adapter.exists(baseDir))) {
         await this.app.vault.adapter.mkdir(baseDir);
-        console.log("Created directory:", baseDir);
+        logInfo("Created directory:", baseDir);
       }
     }
 
@@ -276,7 +277,7 @@ export class DBOperations {
         },
       },
     });
-    console.log(
+    logInfo(
       `Created new Orama database for ${this.dbPath}. ` +
         `Embedding model: ${EmbeddingsManager.getModelName(embeddingInstance)} with vector length ${vectorLength}.`
     );
@@ -334,7 +335,7 @@ export class DBOperations {
 
       return 0; // Return 0 if no documents found
     } catch (err) {
-      console.error("Error getting latest file mtime from VectorDB:", err);
+      logError("Error getting latest file mtime from VectorDB:", err);
       return 0;
     }
   }
@@ -380,14 +381,14 @@ export class DBOperations {
       try {
         await insert(this.oramaDb, docToSave);
         if (getSettings().debug) {
-          console.log(
+          logInfo(
             `${existingDoc.hits.length > 0 ? "Updated" : "Inserted"} document ${docToSave.id} in partition ${partition}`
           );
         }
         this.markUnsavedChanges();
         return docToSave;
       } catch (insertErr) {
-        console.error(
+        logError(
           `Failed to ${existingDoc.hits.length > 0 ? "update" : "insert"} document ${docToSave.id}:`,
           insertErr
         );
@@ -397,13 +398,13 @@ export class DBOperations {
           try {
             await insert(this.oramaDb, existingDoc.hits[0].document);
           } catch (restoreErr) {
-            console.error("Failed to restore previous document version:", restoreErr);
+            logError("Failed to restore previous document version:", restoreErr);
           }
         }
         return undefined;
       }
     } catch (err) {
-      console.error(`Error upserting document ${docToSave.id}:`, err);
+      logError(`Error upserting document ${docToSave.id}:`, err);
       return undefined;
     }
   }
@@ -428,18 +429,27 @@ export class DBOperations {
 
       return 0; // Return 0 if no documents found
     } catch (err) {
-      console.error("Error getting latest file mtime from VectorDB:", err);
+      logError("Error getting latest file mtime from VectorDB:", err);
       return 0;
     }
   }
 
   async checkAndHandleEmbeddingModelChange(embeddingInstance: Embeddings): Promise<boolean> {
     if (!this.oramaDb) {
-      console.error(
-        "Orama database not found. Please make sure you have a working embedding model."
+      logInfo(
+        "Embedding model change detected. Orama database not found. Initializing new database..."
       );
-      return false;
+      try {
+        await this.initializeDB(embeddingInstance);
+        return true;
+      } catch (error) {
+        logError("Failed to initialize database:", error);
+        throw new CustomError(
+          "Failed to initialize Orama database. Please check your embedding model settings."
+        );
+      }
     }
+
     const singleDoc = await search(this.oramaDb, {
       term: "",
       limit: 1,
@@ -465,7 +475,7 @@ export class DBOperations {
       if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
         // Model has changed, notify user and rebuild DB
         new Notice("New embedding model detected. Rebuilding Copilot index from scratch.");
-        console.log("Detected change in embedding model. Rebuilding Copilot index from scratch.");
+        logInfo("Detected change in embedding model. Rebuilding Copilot index from scratch.");
 
         // Create new DB with new model
         this.oramaDb = await this.createNewDb(embeddingInstance);
@@ -473,7 +483,7 @@ export class DBOperations {
         return true;
       }
     } else {
-      console.log("No previous embedding model found in the database.");
+      logInfo("No previous embedding model found in the database.");
     }
 
     return false;
@@ -490,8 +500,24 @@ export class DBOperations {
 
   public async garbageCollect(): Promise<number> {
     if (!this.oramaDb) {
-      throw new CustomError("Orama database not found.");
+      logInfo("Orama database not found during garbage collection. Attempting to initialize...");
+      try {
+        const embeddingInstance = await EmbeddingsManager.getInstance().getEmbeddingsAPI();
+        if (!embeddingInstance) {
+          throw new CustomError("No embedding model available.");
+        }
+        await this.initializeDB(embeddingInstance);
+        if (!this.oramaDb) {
+          throw new CustomError("Failed to initialize database after attempt.");
+        }
+      } catch (error) {
+        logError("Failed to initialize database during garbage collection:", error);
+        throw new CustomError(
+          "Failed to initialize database. Please check your embedding model settings."
+        );
+      }
     }
+
     try {
       const files = this.app.vault.getMarkdownFiles();
       const filePaths = new Set(files.map((file) => file.path));
@@ -505,7 +531,7 @@ export class DBOperations {
         return 0;
       }
 
-      console.log(
+      logInfo(
         "Copilot index: Docs to remove during garbage collection:",
         Array.from(new Set(docsToRemove.map((doc) => doc.path))).join(", ")
       );
@@ -523,7 +549,7 @@ export class DBOperations {
       await this.saveDB();
       return docsToRemove.length;
     } catch (err) {
-      console.error("Error garbage collecting the Copilot index:", err);
+      logError("Error garbage collecting the Copilot index:", err);
       throw new CustomError("Failed to garbage collect the Copilot index.");
     }
   }
@@ -546,7 +572,7 @@ export class DBOperations {
       // Convert Set to sorted array
       return Array.from(uniquePaths).sort();
     } catch (err) {
-      console.error("Error getting indexed files:", err);
+      logError("Error getting indexed files:", err);
       throw new CustomError("Failed to retrieve indexed files.");
     }
   }
@@ -563,7 +589,7 @@ export class DBOperations {
       });
       return result.hits.length === 0;
     } catch (err) {
-      console.error("Error checking if database is empty:", err);
+      logError("Error checking if database is empty:", err);
       throw new CustomError("Failed to check if database is empty.");
     }
   }

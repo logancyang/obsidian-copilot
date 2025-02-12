@@ -210,6 +210,7 @@ export default class EmbeddingManager {
         modelName,
         apiKey: await getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
         timeout: 10000,
+        batchSize: getSettings().embeddingBatchSize,
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -252,6 +253,7 @@ export default class EmbeddingManager {
       [EmbeddingModelProviders.OPENAI_FORMAT]: {
         modelName,
         openAIApiKey: await getDecryptedKey(customModel.apiKey || ""),
+        batchSize: getSettings().embeddingBatchSize,
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
