@@ -41,7 +41,9 @@ const context = await esbuild.context({
   plugins: [svgPlugin(), wasmPlugin],
   define: {
     global: "window",
+    "process.env.NODE_ENV": prod ? '"production"' : '"development"',
   },
+  minify: prod,
 });
 
 if (prod) {
