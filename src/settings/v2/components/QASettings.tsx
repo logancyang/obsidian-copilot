@@ -136,7 +136,7 @@ const QASettings: React.FC<QASettingsProps> = ({ indexVaultToVectorStore }) => {
             title="Requests per second"
             description="Default is 10. Decrease if you are rate limited by your embedding provider."
             min={1}
-            max={30}
+            max={10}
             step={1}
             value={settings.embeddingRequestsPerSecond}
             onChange={(value) => updateSetting("embeddingRequestsPerSecond", value)}
