@@ -56,6 +56,7 @@ export interface ModelConfig {
   groqApiKey?: string;
   mistralApiKey?: string;
   enableCors?: boolean;
+  reasoning_effort?: number; // Pa168
 }
 
 export interface SetChainOptions {

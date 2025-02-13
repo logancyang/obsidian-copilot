@@ -5,6 +5,7 @@ import {
   MessagesPlaceholder,
   SystemMessagePromptTemplate,
 } from "@langchain/core/prompts";
+import { isOSeriesModel } from "@/utils";
 
 export default class PromptManager {
   private static instance: PromptManager;
@@ -77,5 +78,15 @@ Question: {question}
       system_message: systemMessage,
     });
     return promptResult;
+  }
+
+  getEffectiveChatPrompt(chatModel: any): ChatPromptTemplate {
+    if (isOSeriesModel(chatModel)) {
+      return ChatPromptTemplate.fromMessages([
+        new MessagesPlaceholder("history"),
+        HumanMessagePromptTemplate.fromTemplate("{input}"),
+      ]);
+    }
+    return this.getChatPrompt();
   }
 }
