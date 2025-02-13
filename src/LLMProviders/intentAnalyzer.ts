@@ -36,7 +36,7 @@ export class IntentAnalyzer {
         pomodoroTool,
         webSearchTool,
         simpleYoutubeTranscriptionTool,
-        createGetFileTreeTool(vault),
+        createGetFileTreeTool(vault.getRoot()),
       ];
     }
   }

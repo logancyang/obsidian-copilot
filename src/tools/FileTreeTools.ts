@@ -1,62 +1,58 @@
 import { tool } from "@langchain/core/tools";
-import { TFile, TFolder, Vault } from "obsidian";
+import { TFile, TFolder } from "obsidian";
 import { z } from "zod";
 
 interface FileTreeNode {
-  name: string;
   type: "file" | "folder";
   path: string;
   children?: FileTreeNode[];
 }
 
+function isTFolder(item: any): item is TFolder {
+  return "children" in item && "path" in item;
+}
+
+function isTFile(item: any): item is TFile {
+  return "path" in item && !("children" in item);
+}
+
 function buildFileTree(folder: TFolder): FileTreeNode {
-  const children: FileTreeNode[] = [];
+  const node: FileTreeNode = {
+    type: "folder",
+    path: folder.path,
+    children: [],
+  };
 
   // Add folders first
   for (const child of folder.children) {
-    if (child instanceof TFolder) {
-      children.push(buildFileTree(child));
+    if (isTFolder(child)) {
+      node.children?.push(buildFileTree(child));
     }
   }
 
   // Then add files
   for (const child of folder.children) {
-    if (child instanceof TFile) {
-      children.push({
-        name: child.name,
+    if (isTFile(child)) {
+      node.children?.push({
         type: "file",
         path: child.path,
       });
     }
   }
 
-  return {
-    name: folder.name,
-    type: "folder",
-    path: folder.path,
-    children: children,
-  };
+  return node;
 }
 
-function getVaultFileTree(vault: Vault): FileTreeNode {
-  return buildFileTree(vault.getRoot());
-}
-
-const createGetFileTreeTool = (vault: Vault) =>
+const createGetFileTreeTool = (root: TFolder) =>
   tool(
     async () => {
-      const fileTree = getVaultFileTree(vault);
-      return {
-        fileTree,
-        message: "Successfully retrieved vault file tree structure",
-      };
+      return JSON.stringify(buildFileTree(root));
     },
     {
       name: "getFileTree",
-      description: "Get the complete file tree structure of the vault",
+      description: "Get the complete file tree structure of the folder as JSON",
       schema: z.object({}),
     }
   );
 
-export { createGetFileTreeTool };
-export type { FileTreeNode };
+export { createGetFileTreeTool, type FileTreeNode };
