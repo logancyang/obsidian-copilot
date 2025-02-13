@@ -3,7 +3,6 @@ import { TFile, TFolder } from "obsidian";
 import { z } from "zod";
 
 interface FileTreeNode {
-  type: "file" | "folder";
   path: string;
   children?: FileTreeNode[];
 }
@@ -18,7 +17,6 @@ function isTFile(item: any): item is TFile {
 
 function buildFileTree(folder: TFolder): FileTreeNode {
   const node: FileTreeNode = {
-    type: "folder",
     path: folder.path,
     children: [],
   };
@@ -34,7 +32,6 @@ function buildFileTree(folder: TFolder): FileTreeNode {
   for (const child of folder.children) {
     if (isTFile(child)) {
       node.children?.push({
-        type: "file",
         path: child.path,
       });
     }
@@ -46,7 +43,7 @@ function buildFileTree(folder: TFolder): FileTreeNode {
 const createGetFileTreeTool = (root: TFolder) =>
   tool(
     async () => {
-      return JSON.stringify(buildFileTree(root));
+      return JSON.stringify(buildFileTree(root), null, 0);
     },
     {
       name: "getFileTree",

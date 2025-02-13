@@ -79,30 +79,23 @@ describe("FileTreeTools", () => {
     const parsedResult = JSON.parse(result);
 
     const expected = {
-      type: "folder",
       path: "",
       children: [
         {
-          type: "folder",
           path: "docs",
           children: [
             {
-              type: "folder",
               path: "docs/projects",
               children: [
-                { type: "file", path: "docs/projects/project1.md" },
-                { type: "file", path: "docs/projects/project2.md" },
+                { path: "docs/projects/project1.md" },
+                { path: "docs/projects/project2.md" },
               ],
             },
             {
-              type: "folder",
               path: "docs/notes",
-              children: [
-                { type: "file", path: "docs/notes/note1.md" },
-                { type: "file", path: "docs/notes/note2.md" },
-              ],
+              children: [{ path: "docs/notes/note1.md" }, { path: "docs/notes/note2.md" }],
             },
-            { type: "file", path: "docs/readme.md" },
+            { path: "docs/readme.md" },
           ],
         },
       ],
@@ -118,7 +111,6 @@ describe("FileTreeTools", () => {
     const parsedResult = JSON.parse(result);
 
     const expected = {
-      type: "folder",
       path: "",
       children: [],
     };
