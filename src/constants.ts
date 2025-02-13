@@ -269,7 +269,7 @@ export const NOMIC_EMBED_TEXT = "nomic-embed-text";
 
 export type Provider = ChatModelProviders | EmbeddingModelProviders;
 
-export type DisplayKeyProviders = Exclude<
+export type SettingKeyProviders = Exclude<
   ChatModelProviders,
   ChatModelProviders.OPENAI_FORMAT | ChatModelProviders.LM_STUDIO | ChatModelProviders.OLLAMA
 >;
@@ -360,7 +360,7 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
 };
 
 // Map provider to its settings key for API key
-export const ProviderSettingsKeyMap: Record<DisplayKeyProviders, keyof CopilotSettings> = {
+export const ProviderSettingsKeyMap: Record<SettingKeyProviders, keyof CopilotSettings> = {
   anthropic: "anthropicApiKey",
   openai: "openAIApiKey",
   "azure openai": "azureOpenAIApiKey",

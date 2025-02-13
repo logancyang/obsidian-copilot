@@ -5,8 +5,10 @@ import {
   ProviderInfo,
   ProviderMetadata,
   USER_SENDER,
-  DisplayKeyProviders,
+  SettingKeyProviders,
   ProviderSettingsKeyMap,
+  ChatModelProviders,
+  EmbeddingModelProviders,
 } from "@/constants";
 import { ChatMessage } from "@/sharedState";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
@@ -886,6 +888,22 @@ export function getMessageRole(
   return isOSeriesModel(model) ? "human" : defaultRole;
 }
 
+export function getNeedSetKeyProvider() {
+  // List of providers to exclude
+  const excludeProviders: Provider[] = [
+    ChatModelProviders.OPENAI_FORMAT,
+    ChatModelProviders.OLLAMA,
+    ChatModelProviders.LM_STUDIO,
+    ChatModelProviders.AZURE_OPENAI,
+    EmbeddingModelProviders.COPILOT_PLUS,
+    EmbeddingModelProviders.COPILOT_PLUS_JINA,
+  ];
+
+  return Object.entries(ProviderInfo)
+    .filter(([key]) => !excludeProviders.includes(key as Provider))
+    .map(([key]) => key as Provider);
+}
+
 export function checkModelApiKey(
   model: CustomModel,
   settings: Readonly<CopilotSettings>
@@ -893,10 +911,11 @@ export function checkModelApiKey(
   hasApiKey: boolean;
   errorNotice?: string;
 } {
-  const providerKeyName = ProviderSettingsKeyMap[model.provider as DisplayKeyProviders];
+  const needSetKeyPath = !!getNeedSetKeyProvider().find((provider) => provider === model.provider);
+  const providerKeyName = ProviderSettingsKeyMap[model.provider as SettingKeyProviders];
   const hasNoApiKey = !model.apiKey && !settings[providerKeyName];
 
-  if (hasNoApiKey) {
+  if (needSetKeyPath && hasNoApiKey) {
     const notice =
       `Please configure API Key for ${model.name} in settings first.` +
       "\nPath: Settings > copilot plugin > Basic Tab > Set Keys";
