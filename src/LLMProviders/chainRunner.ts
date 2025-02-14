@@ -632,6 +632,8 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         updateLoadingMessage?.(LOADING_MESSAGES.READING_FILES);
       } else if (toolCall.tool.name === "webSearch") {
         updateLoadingMessage?.(LOADING_MESSAGES.SEARCHING_WEB);
+      } else if (toolCall.tool.name === "getFileTree") {
+        updateLoadingMessage?.(LOADING_MESSAGES.READING_FILE_TREE);
       }
       const output = await ToolManager.callTool(toolCall.tool, toolCall.args);
       toolOutputs.push({ tool: toolCall.tool.name, output });
