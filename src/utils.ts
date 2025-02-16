@@ -17,6 +17,7 @@ import moment from "moment";
 import { MarkdownView, Notice, TFile, Vault, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
 import { CopilotSettings } from "@/settings/model";
+import { logInfo } from "@/logger";
 
 // Add custom error type at the top of the file
 interface APIError extends Error {
@@ -643,8 +644,10 @@ export async function safeFetch(url: string, options: RequestInit = {}): Promise
     options.body = JSON.stringify(newBody);
   }
 
-  const method = options.method?.toLowerCase() || "post";
-  const methodsWithBody = ["post", "put", "patch"];
+  logInfo("==== safeFetch method request ====");
+
+  const method = options.method?.toUpperCase() || "POST";
+  const methodsWithBody = ["POST", "PUT", "PATCH"];
 
   const response = await requestUrl({
     url,

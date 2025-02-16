@@ -3,7 +3,7 @@ import { getDecryptedKey } from "@/encryptionService";
 import { logInfo } from "@/logger";
 import { turnOffPlus, turnOnPlus } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
-import { extractErrorDetail, safeFetch } from "@/utils";
+import { extractErrorDetail } from "@/utils";
 import { Notice } from "obsidian";
 
 export interface BrocaResponse {
@@ -110,7 +110,8 @@ export class BrevilabsClient {
         url.searchParams.append(key, value as string);
       });
     }
-    const response = await safeFetch(url.toString(), {
+
+    const response = await fetch(url.toString(), {
       method,
       headers: {
         "Content-Type": "application/json",
@@ -122,9 +123,7 @@ export class BrevilabsClient {
       ...(method === "POST" && { body: JSON.stringify(body) }),
     });
     const data = await response.json();
-    if (getSettings().debug) {
-      console.log(`==== ${endpoint} request ====:`, data);
-    }
+    logInfo(`==== ${endpoint} request ====:`, data);
 
     return data;
   }
