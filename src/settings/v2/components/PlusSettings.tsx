@@ -66,7 +66,7 @@ export function PlusSettings() {
         >
           {isChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply"}
         </Button>
-        <Button variant="default" onClick={() => navigateToPlusPage(PLUS_UTM_MEDIUMS.SETTINGS)}>
+        <Button variant="secondary" onClick={() => navigateToPlusPage(PLUS_UTM_MEDIUMS.SETTINGS)}>
           Join Now <ExternalLink className="size-4" />
         </Button>
       </div>

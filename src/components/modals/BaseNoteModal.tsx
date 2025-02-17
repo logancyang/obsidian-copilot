@@ -1,4 +1,4 @@
-import { App, FuzzySuggestModal, TFile, FuzzyMatch } from "obsidian";
+import { App, FuzzySuggestModal, TFile } from "obsidian";
 
 export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
   protected activeNote: TFile | null;
@@ -47,19 +47,5 @@ export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
       title += " (PDF)";
     }
     return title;
-  }
-
-  renderSuggestion(match: FuzzyMatch<T>, el: HTMLElement) {
-    const suggestionEl = el.createDiv({ cls: "suggestion-item pointer-events-none" });
-    const titleEl = suggestionEl.createDiv({ cls: "suggestion-title" });
-    const pathEl = suggestionEl.createDiv({ cls: "suggestion-path mt-1 text-muted text-xs" });
-
-    if (match.item instanceof TFile) {
-      const file = match.item;
-      titleEl.setText(
-        this.formatNoteTitle(file.basename, file === this.activeNote, file.extension)
-      );
-      pathEl.setText(file.path);
-    }
   }
 }

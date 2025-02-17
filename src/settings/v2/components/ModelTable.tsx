@@ -502,7 +502,7 @@ export const ModelTable: React.FC<ModelTableProps> = ({
       {renderMobileView()}
 
       <div className="mt-4 flex justify-end">
-        <Button onClick={onAdd} variant="outline" className="flex items-center gap-2">
+        <Button onClick={onAdd} variant="secondary" className="flex items-center gap-2">
           <Plus className="h-4 w-4" />
           Add Custom Model
         </Button>

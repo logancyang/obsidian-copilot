@@ -9,11 +9,10 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-interactive-accent text-on-accent shadow hover:bg-interactive-accent/90",
+        default:
+          "mod-cta bg-interactive-accent text-on-accent shadow hover:bg-interactive-accent-hover",
         destructive: "bg-modifier-error text-normal shadow-sm hover:bg-modifier-error/90",
-        outline:
-          "border border-border bg-primary shadow-sm hover:bg-interactive-accent hover:text-on-accent",
-        secondary: "bg-secondary text-normal shadow-sm hover:bg-secondary/80",
+        secondary: "bg-secondary text-normal shadow-sm hover:bg-interactive-hover",
         ghost: "clickable-icon bg-transparent hover:bg-interactive-accent hover:text-on-accent",
         link: "text-accent underline-offset-4 hover:underline",
         ghost2:
@@ -21,7 +20,7 @@ const buttonVariants = cva(
       },
       size: {
         default: "h-9 px-4 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
+        sm: "h-6 rounded-md px-3 text-xs",
         lg: "h-10 rounded-md px-8",
         icon: "size-7",
         fit: "px-1 text-xs gap-1",

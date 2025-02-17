@@ -152,7 +152,7 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
               </span>
             </div>
             <div className="self-end sm:self-auto">
-              <Button variant="outline" size="sm" onClick={handleReset}>
+              <Button variant="secondary" size="sm" onClick={handleReset}>
                 Reset Settings
               </Button>
             </div>

@@ -187,7 +187,7 @@ export function SettingItem(props: SettingItemProps) {
                 "text-sm !shadow transition-colors",
                 "focus:outline-none focus:ring-1 focus:ring-ring",
                 "disabled:cursor-not-allowed disabled:opacity-50",
-                "hover:bg-interactive-accent hover:text-on-accent"
+                "hover:bg-interactive-hover hover:text-normal"
               )}
             >
               {props.placeholder && (

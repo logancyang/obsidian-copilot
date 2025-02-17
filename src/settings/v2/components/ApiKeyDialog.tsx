@@ -156,15 +156,12 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({
                       <Button
                         onClick={() => verifyApiKey(item.provider, item.apiKey)}
                         disabled={!item.apiKey || verifyingProviders.size > 0}
-                        variant="outline"
+                        variant="secondary"
                         size="sm"
                         className="w-full whitespace-nowrap"
                       >
                         {verifyingProviders.has(item.provider) ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Verify
-                          </>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         ) : (
                           "Verify"
                         )}

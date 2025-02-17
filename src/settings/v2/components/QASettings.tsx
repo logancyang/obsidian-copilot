@@ -1,8 +1,9 @@
+import { PatternMatchingModal } from "@/components/modals/PatternMatchingModal";
 import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
-import { useTab } from "@/contexts/TabContext";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { HelpCircle } from "lucide-react";
 import React from "react";
@@ -12,21 +13,7 @@ interface QASettingsProps {
 }
 
 const QASettings: React.FC<QASettingsProps> = ({ indexVaultToVectorStore }) => {
-  const { modalContainer } = useTab();
   const settings = useSettingsValue();
-  const [openPopoverIds, setOpenPopoverIds] = React.useState<Set<string>>(new Set());
-
-  const handlePopoverOpen = (id: string) => {
-    setOpenPopoverIds((prev) => new Set([...prev, id]));
-  };
-
-  const handlePopoverClose = (id: string) => {
-    setOpenPopoverIds((prev) => {
-      const newSet = new Set(prev);
-      newSet.delete(id);
-      return newSet;
-    });
-  };
 
   const handlePartitionsChange = (value: string) => {
     const numValue = parseInt(value);
@@ -49,62 +36,47 @@ const QASettings: React.FC<QASettingsProps> = ({ indexVaultToVectorStore }) => {
             description={
               <div className="flex items-center gap-1.5">
                 <span className="leading-none">Decide when you want the vault to be indexed.</span>
-                <Popover
-                  open={openPopoverIds.has("index-help")}
-                  onOpenChange={(open) => {
-                    if (open) {
-                      handlePopoverOpen("index-help");
-                    } else {
-                      handlePopoverClose("index-help");
-                    }
-                  }}
-                >
-                  <PopoverTrigger asChild>
-                    <HelpCircle
-                      className="h-5 w-5 sm:h-4 sm:w-4 cursor-pointer text-muted hover:text-accent translate-y-[1px]"
-                      onMouseEnter={() => handlePopoverOpen("index-help")}
-                      onMouseLeave={() => handlePopoverClose("index-help")}
-                    />
-                  </PopoverTrigger>
-                  <PopoverContent
-                    container={modalContainer}
-                    className="w-[90vw] max-w-[400px] p-2 sm:p-3"
-                    side="bottom"
-                    align="center"
-                    sideOffset={0}
-                    onMouseEnter={() => handlePopoverOpen("index-help")}
-                    onMouseLeave={() => handlePopoverClose("index-help")}
-                  >
-                    <div className="space-y-2 sm:space-y-2.5">
-                      <div className="rounded bg-callout-warning/10 p-1.5 sm:p-2 ring-ring">
-                        <p className="text-callout-warning text-xs sm:text-sm">
+                <TooltipProvider delayDuration={0}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="size-4" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="space-y-2 py-2">
+                        <div className="space-y-1">
+                          <div className="text-muted text-sm">Choose when to index your vault:</div>
+                          <ul className="space-y-1 pl-2 list-disc text-sm">
+                            <li>
+                              <div className="flex items-center gap-1">
+                                <strong className="inline-block whitespace-nowrap">NEVER:</strong>
+                                <span>Manual indexing via command or refresh only</span>
+                              </div>
+                            </li>
+                            <li>
+                              <div className="flex items-center gap-1">
+                                <strong className="inline-block whitespace-nowrap">
+                                  ON STARTUP:
+                                </strong>
+                                <span>Index updates when plugin loads or reloads</span>
+                              </div>
+                            </li>
+                            <li>
+                              <div className="flex items-center gap-1">
+                                <strong className="inline-block whitespace-nowrap">
+                                  ON MODE SWITCH:
+                                </strong>
+                                <span>Updates when entering QA mode (Recommended)</span>
+                              </div>
+                            </li>
+                          </ul>
+                        </div>
+                        <p className="text-callout-warning text-sm">
                           Warning: Cost implications for large vaults with paid models
                         </p>
                       </div>
-                      <div className="space-y-1 sm:space-y-1.5">
-                        <p className="text-muted text-[11px] sm:text-xs">
-                          Choose when to index your vault:
-                        </p>
-                        <ul className="space-y-1 pl-2 sm:pl-3 list-disc text-[11px] sm:text-xs">
-                          <li>
-                            <strong className="inline-block whitespace-nowrap">NEVER：</strong>
-                            <span>Manual indexing via command or refresh only</span>
-                          </li>
-                          <li>
-                            <strong className="inline-block whitespace-nowrap">ON STARTUP：</strong>
-                            <span>Index updates when plugin loads or reloads</span>
-                          </li>
-                          <li>
-                            <strong className="inline-block whitespace-nowrap">
-                              ON MODE SWITCH：
-                            </strong>
-                            <span>Updates when entering QA mode (Recommended)</span>
-                          </li>
-                        </ul>
-                      </div>
-                    </div>
-                  </PopoverContent>
-                </Popover>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
             }
             value={settings.indexVaultToVectorStore}
@@ -186,35 +158,58 @@ const QASettings: React.FC<QASettingsProps> = ({ indexVaultToVectorStore }) => {
 
           {/* Exclusions */}
           <SettingItem
-            type="textarea"
+            type="custom"
             title="Exclusions"
             description={
               <>
                 <p>
-                  Comma separated list of paths, tags, note titles or file extension will be
-                  excluded from the indexing process. e.g. folder1, folder1/folder2, #tag1, #tag2,
-                  [[note1]], [[note2]], *.jpg, *.excallidraw.md etc,
+                  Exclude folders, tags, note titles or file extensions from being indexed.
+                  Previously indexed files will remain until a force re-index is performed.
                 </p>
-                <em>
-                  NOTE: Tags must be in the note properties, not the note content. Files which were
-                  previously indexed will remain in the index unless you force re-index.
-                </em>
               </>
             }
-            value={settings.qaExclusions}
-            onChange={(value) => updateSetting("qaExclusions", value)}
-            placeholder="folder1, folder1/folder2, #tag1, #tag2, [[note1]], [[note2]], *.jpg, *.excallidraw.md"
-          />
+          >
+            <Button
+              variant="secondary"
+              onClick={() =>
+                new PatternMatchingModal(
+                  app,
+                  (value) => updateSetting("qaExclusions", value),
+                  settings.qaExclusions,
+                  "Manage Exclusions"
+                ).open()
+              }
+            >
+              Manage
+            </Button>
+          </SettingItem>
 
           {/* Inclusions */}
           <SettingItem
-            type="textarea"
+            type="custom"
             title="Inclusions"
-            description="When specified, ONLY these paths, tags, or note titles will be indexed (comma separated). Takes precedence over exclusions. Files which were previously indexed will remain in the index unless you force re-index. Format: folder1, folder1/folder2, #tag1, #tag2, [[note1]], [[note2]]"
-            value={settings.qaInclusions}
-            onChange={(value) => updateSetting("qaInclusions", value)}
-            placeholder="folder1, #tag1, [[note1]]"
-          />
+            description={
+              <p>
+                Index only the specified paths, tags, or note titles. Exclusions take precedence
+                over inclusions. Previously indexed files will remain until a force re-index is
+                performed.
+              </p>
+            }
+          >
+            <Button
+              variant="secondary"
+              onClick={() =>
+                new PatternMatchingModal(
+                  app,
+                  (value) => updateSetting("qaInclusions", value),
+                  settings.qaInclusions,
+                  "Manage Inclusions"
+                ).open()
+              }
+            >
+              Manage
+            </Button>
+          </SettingItem>
 
           {/* Enable Obsidian Sync */}
           <SettingItem

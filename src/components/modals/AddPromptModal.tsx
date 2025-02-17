@@ -146,7 +146,7 @@ function AddPromptModalContent({
       </div>
 
       <div className="flex items-center justify-end gap-2">
-        <Button variant="outline" onClick={onCancel} disabled={isSubmitting}>
+        <Button variant="secondary" onClick={onCancel} disabled={isSubmitting}>
           Cancel
         </Button>
         <Button onClick={handleSave} disabled={!isValid || isSubmitting}>

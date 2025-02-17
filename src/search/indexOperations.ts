@@ -7,7 +7,12 @@ import { MD5 } from "crypto-js";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { App, Notice, TFile } from "obsidian";
 import { DBOperations } from "./dbOperations";
-import { extractAppIgnoreSettings, getMatchingPatterns, shouldIndexFile } from "./searchUtils";
+import {
+  extractAppIgnoreSettings,
+  getMatchingPatterns,
+  getDecodedPatterns,
+  shouldIndexFile,
+} from "./searchUtils";
 
 export interface IndexingState {
   isIndexingPaused: boolean;
@@ -367,24 +372,25 @@ export class IndexOperations {
   private updateIndexingNoticeMessage(): void {
     if (this.state.indexNoticeMessage) {
       const status = this.state.isIndexingPaused ? " (Paused)" : "";
+      const messages = [
+        `Copilot is indexing your vault...`,
+        `${this.state.indexedCount}/${this.state.totalFilesToIndex} files processed${status}`,
+      ];
 
-      // Get the settings
       const settings = getSettings();
-      const folders = extractAppIgnoreSettings(this.app);
 
-      // Prepare inclusion and exclusion filter messages
-      const inclusions = settings.qaInclusions
-        ? `Inclusions: ${settings.qaInclusions}`
-        : "Inclusions: None";
-      const exclusions =
-        folders.length > 0 || settings.qaExclusions
-          ? `Exclusions: ${folders.join(", ")}${folders.length ? ", " : ""}${settings.qaExclusions || "None"}`
-          : "Exclusions: None";
+      const inclusions = getDecodedPatterns(settings.qaInclusions);
+      if (inclusions.length > 0) {
+        messages.push(`Inclusions: ${inclusions.join(", ")}`);
+      }
 
-      this.state.indexNoticeMessage.textContent =
-        `Copilot is indexing your vault...\n` +
-        `${this.state.indexedCount}/${this.state.totalFilesToIndex} files processed${status}\n` +
-        `${exclusions}\n${inclusions}`;
+      const obsidianIgnoreFolders = extractAppIgnoreSettings(this.app);
+      const exclusions = [...obsidianIgnoreFolders, ...getDecodedPatterns(settings.qaExclusions)];
+      if (exclusions.length > 0) {
+        messages.push(`Exclusions: ${exclusions.join(", ")}`);
+      }
+
+      this.state.indexNoticeMessage.textContent = messages.join("\n");
     }
   }
 

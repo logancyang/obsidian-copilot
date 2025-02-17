@@ -543,10 +543,10 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
             </Label>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleAdd} disabled={isButtonDisabled()}>
+            <Button variant="secondary" onClick={handleAdd} disabled={isButtonDisabled()}>
               Add Model
             </Button>
-            <Button variant="outline" onClick={handleVerify} disabled={isButtonDisabled()}>
+            <Button variant="secondary" onClick={handleVerify} disabled={isButtonDisabled()}>
               {isVerifying ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
