@@ -14,12 +14,19 @@ function ExtensionInputModalContent({
   // TODO: Add validation
   const [extension, setExtension] = useState("");
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      onConfirm(extension);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <Input
         placeholder="Enter the extension (e.g. txt, excalidraw)"
         value={extension}
         onChange={(e) => setExtension(e.target.value)}
+        onKeyDown={handleKeyDown}
       />
       <div className="flex justify-end gap-2">
         <Button variant="secondary" onClick={onCancel}>

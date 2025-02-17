@@ -14,6 +14,12 @@ function CustomPatternInputModalContent({
   // TODO: Add validation
   const [pattern, setPattern] = useState("");
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      onConfirm(pattern);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-4">
@@ -25,6 +31,7 @@ function CustomPatternInputModalContent({
           placeholder="Enter the pattern"
           value={pattern}
           onChange={(e) => setPattern(e.target.value)}
+          onKeyDown={handleKeyDown}
         />
       </div>
       <div className="flex justify-end gap-2">
