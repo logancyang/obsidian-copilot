@@ -1,4 +1,6 @@
 import ChatModelManager from "@/LLMProviders/chatModelManager";
+import { removeThinkTags } from "@/utils";
+import { BaseChatModelCallOptions } from "@langchain/core/language_models/chat_models";
 
 export async function getStandaloneQuestion(
   question: string,
@@ -20,16 +22,17 @@ export async function getStandaloneQuestion(
     .map(([human, ai]) => `Human: ${human}\nAssistant: ${ai}`)
     .join("\n");
 
-  const response = await ChatModelManager.getInstance()
+  const chatModel = ChatModelManager.getInstance()
     .getChatModel()
-    .invoke([
-      {
-        role: "user",
-        content: condenseQuestionTemplate
-          .replace("{chat_history}", formattedChatHistory)
-          .replace("{question}", question),
-      },
-    ]);
+    .bind({ temperature: 0 } as BaseChatModelCallOptions);
+  const response = await chatModel.invoke([
+    {
+      role: "user",
+      content: condenseQuestionTemplate
+        .replace("{chat_history}", formattedChatHistory)
+        .replace("{question}", question),
+    },
+  ]);
 
-  return response.content as string;
+  return removeThinkTags(response.content as string);
 }
