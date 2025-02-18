@@ -1,12 +1,13 @@
 import { CustomPrompt, CustomPromptProcessor } from "@/customPromptProcessor";
 import { extractNoteFiles, getFileContent, getNotesFromPath } from "@/utils";
-import { Notice, TFile, Vault } from "obsidian";
+import { Notice, TFile, Vault, App } from "obsidian";
 
 // Mock Obsidian
 jest.mock("obsidian", () => ({
   Notice: jest.fn(),
   TFile: jest.fn(),
   Vault: jest.fn(),
+  App: jest.fn(),
 }));
 
 // Mock the utility functions
@@ -21,7 +22,7 @@ jest.mock("@/utils", () => ({
 
 describe("CustomPromptProcessor", () => {
   let processor: CustomPromptProcessor;
-  let mockVault: Vault;
+  let mockApp: App;
   let mockActiveNote: TFile;
 
   beforeEach(() => {
@@ -29,14 +30,21 @@ describe("CustomPromptProcessor", () => {
     jest.clearAllMocks();
 
     // Create mock objects
-    mockVault = {} as Vault;
+    mockApp = {
+      vault: {} as Vault,
+      metadataCache: {
+        getFileCache: jest.fn().mockReturnValue({
+          frontmatter: {},
+        }),
+      },
+    } as unknown as App;
     mockActiveNote = {
       path: "path/to/active/note.md",
       basename: "Active Note",
     } as TFile;
 
     // Create an instance of CustomPromptProcessor with mocked dependencies
-    processor = CustomPromptProcessor.getInstance(mockVault);
+    processor = CustomPromptProcessor.getInstance(mockApp);
   });
 
   it("should add 1 context and selectedText", async () => {
@@ -106,7 +114,7 @@ describe("CustomPromptProcessor", () => {
 
     expect(result).toContain("This is the active note: {activenote}");
     expect(result).toContain("Content of the active note");
-    expect(getFileContent).toHaveBeenCalledWith(mockActiveNote, mockVault);
+    expect(getFileContent).toHaveBeenCalledWith(mockActiveNote, mockApp.vault);
   });
 
   it("should handle {activeNote} when no active note is provided", async () => {
@@ -299,7 +307,7 @@ describe("CustomPromptProcessor", () => {
 
     expect(result).toContain("Summarize this: {selectedText}");
     expect(result).toContain("selectedText (entire active note):\n\n Content of the active note");
-    expect(getFileContent).toHaveBeenCalledWith(mockActiveNote, mockVault);
+    expect(getFileContent).toHaveBeenCalledWith(mockActiveNote, mockApp.vault);
   });
 
   it("should not duplicate active note content when both {} and {activeNote} are present", async () => {

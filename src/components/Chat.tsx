@@ -154,7 +154,7 @@ const Chat: React.FC<ChatProps> = ({
     setLoadingMessage(LOADING_MESSAGES.DEFAULT);
 
     // First, process the original user message for custom prompts
-    const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
+    const customPromptProcessor = CustomPromptProcessor.getInstance(app);
     let processedUserMessage = await customPromptProcessor.processCustomPrompt(
       inputMessage || "",
       "",
@@ -482,7 +482,7 @@ ${chatContent}`;
     };
   };
 
-  const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
+  const customPromptProcessor = CustomPromptProcessor.getInstance(app);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(
     createEffect(COMMAND_IDS.APPLY_CUSTOM_PROMPT, async (selectedText, customPrompt) => {

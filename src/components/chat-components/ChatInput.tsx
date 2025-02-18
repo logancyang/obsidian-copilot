@@ -39,6 +39,7 @@ import React, {
 } from "react";
 import { useDropzone } from "react-dropzone";
 import ContextControl from "./ContextControl";
+import ChatModelManager from "@/LLMProviders/chatModelManager";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -199,7 +200,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     };
 
     const showCustomPromptModal = async () => {
-      const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
+      const customPromptProcessor = CustomPromptProcessor.getInstance(app);
       const prompts = await customPromptProcessor.getAllPrompts();
       const promptTitles = prompts.map((prompt) => prompt.title);
 
@@ -207,6 +208,26 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         const selectedPrompt = prompts.find((prompt) => prompt.title === promptTitle);
         if (selectedPrompt) {
           customPromptProcessor.recordPromptUsage(selectedPrompt.title);
+
+          // If the prompt specifies a model, try to switch to it
+          if (selectedPrompt.model) {
+            try {
+              const modelInstance = ChatModelManager.getInstance().findModelByName(
+                selectedPrompt.model
+              );
+              if (modelInstance) {
+                await ChatModelManager.getInstance().setChatModel(modelInstance);
+              } else {
+                new Notice(`Model "${selectedPrompt.model}" not found. Using current model.`);
+              }
+            } catch (error) {
+              console.error("Error switching model:", error);
+              new Notice(
+                `Failed to switch to model "${selectedPrompt.model}". Using current model.`
+              );
+            }
+          }
+
           setInputMessage(selectedPrompt.content);
         }
       }).open();

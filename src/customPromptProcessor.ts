@@ -9,18 +9,24 @@ import {
   getNotesFromTags,
   processVariableNameForNotePath,
 } from "@/utils";
-import { normalizePath, Notice, TFile, Vault } from "obsidian";
+import { normalizePath, Notice, TFile, Vault, App } from "obsidian";
 
 export interface CustomPrompt {
   title: string;
   content: string;
+  model?: string;
+  isTemporaryModel?: boolean;
 }
 
 export class CustomPromptProcessor {
-  private static instance: CustomPromptProcessor;
+  private static instance: CustomPromptProcessor | null = null;
+  private vault: Vault;
   private usageStrategy: TimestampUsageStrategy;
+  private app: App;
 
-  private constructor(private vault: Vault) {
+  private constructor(app: App) {
+    this.app = app;
+    this.vault = app.vault;
     this.usageStrategy = new TimestampUsageStrategy();
   }
 
@@ -28,11 +34,33 @@ export class CustomPromptProcessor {
     return getSettings().customPromptsFolder;
   }
 
-  static getInstance(vault: Vault): CustomPromptProcessor {
+  static getInstance(app: App): CustomPromptProcessor {
     if (!CustomPromptProcessor.instance) {
-      CustomPromptProcessor.instance = new CustomPromptProcessor(vault);
+      CustomPromptProcessor.instance = new CustomPromptProcessor(app);
     }
     return CustomPromptProcessor.instance;
+  }
+
+  private parseFrontMatter(
+    file: TFile,
+    content: string
+  ): { frontmatter: { model?: string; isTemporaryModel?: boolean }; content: string } {
+    // Get the cached frontmatter from Obsidian's metadata cache
+    const cache = this.app.metadataCache.getFileCache(file);
+    const frontmatter = (cache?.frontmatter as Record<string, unknown>) || {};
+
+    // Handle both model and temp-model fields
+    const tempModel = frontmatter["temp-model"] as string | undefined;
+    const model = tempModel || (frontmatter.model as string | undefined);
+    const isTemporaryModel = "temp-model" in frontmatter;
+
+    // Get the content without frontmatter
+    const contentWithoutFrontmatter = content.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
+
+    return {
+      frontmatter: { model, isTemporaryModel },
+      content: contentWithoutFrontmatter,
+    };
   }
 
   recordPromptUsage(title: string) {
@@ -47,10 +75,13 @@ export class CustomPromptProcessor {
 
     const prompts: CustomPrompt[] = [];
     for (const file of files) {
-      const content = await this.vault.read(file);
+      const rawContent = await this.vault.read(file);
+      const { frontmatter, content } = this.parseFrontMatter(file, rawContent);
       prompts.push({
         title: file.basename,
         content: content,
+        model: frontmatter.model,
+        isTemporaryModel: frontmatter.isTemporaryModel,
       });
     }
 
@@ -64,8 +95,14 @@ export class CustomPromptProcessor {
     const filePath = `${this.customPromptsFolder}/${title}.md`;
     const file = this.vault.getAbstractFileByPath(filePath);
     if (file instanceof TFile) {
-      const content = await this.vault.read(file);
-      return { title, content };
+      const rawContent = await this.vault.read(file);
+      const { frontmatter, content } = this.parseFrontMatter(file, rawContent);
+      return {
+        title,
+        content,
+        model: frontmatter.model,
+        isTemporaryModel: frontmatter.isTemporaryModel,
+      };
     }
     return null;
   }
