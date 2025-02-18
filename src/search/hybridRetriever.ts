@@ -3,9 +3,10 @@ import ChatModelManager from "@/LLMProviders/chatModelManager";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings } from "@/settings/model";
-import { extractNoteTitles, getNoteFileFromTitle } from "@/utils";
+import { extractNoteTitles, getNoteFileFromTitle, removeThinkTags } from "@/utils";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
+import { BaseChatModelCallOptions } from "@langchain/core/language_models/chat_models";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { search } from "@orama/orama";
@@ -122,12 +123,14 @@ export class HybridRetriever extends BaseRetriever {
   private async rewriteQuery(query: string): Promise<string> {
     try {
       const promptResult = await this.queryRewritePrompt.format({ question: query });
-      const chatModel = ChatModelManager.getInstance().getChatModel();
+      const chatModel = ChatModelManager.getInstance()
+        .getChatModel()
+        .bind({ temperature: 0 } as BaseChatModelCallOptions);
       const rewrittenQueryObject = await chatModel.invoke(promptResult);
 
       // Directly return the content assuming it's structured as expected
       if (rewrittenQueryObject && "content" in rewrittenQueryObject) {
-        return rewrittenQueryObject.content as string;
+        return removeThinkTags(rewrittenQueryObject.content as string);
       }
       console.warn("Unexpected rewrittenQuery format. Falling back to original query.");
       return query;
