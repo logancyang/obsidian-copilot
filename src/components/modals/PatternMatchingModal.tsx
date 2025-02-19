@@ -35,7 +35,7 @@ function PatternListGroup({
       <ul className="list-disc list-inside pl-0 m-0 col-span-3 flex flex-col gap-1">
         {patterns.map((pattern) => (
           <li key={pattern} className="flex gap-2 hover:bg-dropdown-hover pl-2 pr-1 rounded-md">
-            <span className="flex-1">{pattern}</span>
+            <span className="flex-1 truncate whitespace-nowrap">{pattern}</span>
             <Button variant="ghost2" size="fit" onClick={() => onRemove(pattern)}>
               <X className="size-4" />
             </Button>

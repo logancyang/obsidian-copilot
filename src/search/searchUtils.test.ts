@@ -19,6 +19,7 @@ jest.mock("obsidian", () => ({
 const createTestFile = (path: string) => {
   const file = new TFile();
   file.path = path;
+  file.basename = path.split("/").pop()?.split(".")[0] || "";
   return file;
 };
 
@@ -55,44 +56,66 @@ describe("searchUtils", () => {
   describe("shouldIndexFile", () => {
     it("should return true when no inclusions or exclusions are specified", () => {
       const file = createTestFile("test.md");
-      expect(shouldIndexFile(file, [], [])).toBe(true);
+      expect(shouldIndexFile(file, null, null)).toBe(true);
     });
 
     it("should return false when file matches exclusion pattern", () => {
       const file = createTestFile("private/secret.md");
-      const exclusions = ["private"];
-      expect(shouldIndexFile(file, [], exclusions)).toBe(false);
+      const exclusions = {
+        folderPatterns: ["private"],
+      };
+      expect(shouldIndexFile(file, null, exclusions)).toBe(false);
     });
 
     it("should return true when file matches inclusion pattern", () => {
       const file = createTestFile("notes/important.md");
-      const inclusions = ["notes"];
-      expect(shouldIndexFile(file, inclusions, [])).toBe(true);
+      const inclusions = {
+        folderPatterns: ["notes"],
+      };
+      expect(shouldIndexFile(file, inclusions, null)).toBe(true);
     });
 
     it("should return false when file doesn't match inclusion pattern", () => {
       const file = createTestFile("random/file.md");
-      const inclusions = ["notes"];
-      expect(shouldIndexFile(file, inclusions, [])).toBe(false);
+      const inclusions = {
+        folderPatterns: ["notes"],
+      };
+      expect(shouldIndexFile(file, inclusions, null)).toBe(false);
     });
 
     it("should prioritize exclusions over inclusions", () => {
       const file = createTestFile("notes/private/secret.md");
-      const inclusions = ["notes"];
-      const exclusions = ["notes/private"];
+      const inclusions = {
+        folderPatterns: ["notes"],
+      };
+      const exclusions = {
+        folderPatterns: ["notes/private"],
+      };
       expect(shouldIndexFile(file, inclusions, exclusions)).toBe(false);
     });
 
     it("should handle multiple inclusion patterns", () => {
       const file = createTestFile("blog/post.md");
-      const inclusions = ["notes", "blog", "docs"];
-      expect(shouldIndexFile(file, inclusions, [])).toBe(true);
+      const inclusions = {
+        folderPatterns: ["notes", "blog", "docs"],
+      };
+      expect(shouldIndexFile(file, inclusions, null)).toBe(true);
+    });
+
+    it("should handle inclusion patterns with folders with slashes and spaces", () => {
+      const file = createTestFile("folder/with/100 spaces/post.md");
+      const inclusions = {
+        folderPatterns: ["folder/with/100 spaces"],
+      };
+      expect(shouldIndexFile(file, inclusions, null)).toBe(true);
     });
 
     it("should handle multiple exclusion patterns", () => {
       const file = createTestFile("temp/draft.md");
-      const exclusions = ["private", "temp", "archive"];
-      expect(shouldIndexFile(file, [], exclusions)).toBe(false);
+      const exclusions = {
+        folderPatterns: ["private", "temp", "archive"],
+      };
+      expect(shouldIndexFile(file, null, exclusions)).toBe(false);
     });
 
     it("should handle tag-based inclusion patterns", () => {
@@ -100,8 +123,10 @@ describe("searchUtils", () => {
       mockGetAbstractFileByPath.mockReturnValue(file);
       (utils.getTagsFromNote as jest.Mock).mockReturnValue(["important", "review"]);
 
-      const inclusions = ["#important"];
-      expect(shouldIndexFile(file, inclusions, [])).toBe(true);
+      const inclusions = {
+        tagPatterns: ["#important"],
+      };
+      expect(shouldIndexFile(file, inclusions, null)).toBe(true);
     });
 
     it("should handle tag-based exclusion patterns", () => {
@@ -109,28 +134,56 @@ describe("searchUtils", () => {
       mockGetAbstractFileByPath.mockReturnValue(file);
       (utils.getTagsFromNote as jest.Mock).mockReturnValue(["private", "draft"]);
 
-      const exclusions = ["#private"];
-      expect(shouldIndexFile(file, [], exclusions)).toBe(false);
+      const exclusions = {
+        tagPatterns: ["#private"],
+      };
+      expect(shouldIndexFile(file, null, exclusions)).toBe(false);
     });
 
     it("should handle file extension patterns in inclusions", () => {
       const file = createTestFile("notes/document.pdf");
-      const inclusions = ["*.pdf"];
-      expect(shouldIndexFile(file, inclusions, [])).toBe(true);
+      const inclusions = {
+        extensionPatterns: ["*.pdf"],
+      };
+      expect(shouldIndexFile(file, inclusions, null)).toBe(true);
     });
 
     it("should handle file extension patterns in exclusions", () => {
       const file = createTestFile("notes/document.pdf");
-      const exclusions = ["*.pdf"];
-      expect(shouldIndexFile(file, [], exclusions)).toBe(false);
+      const exclusions = {
+        extensionPatterns: ["*.pdf"],
+      };
+      expect(shouldIndexFile(file, null, exclusions)).toBe(false);
     });
 
     it("should return false when tag check fails due to file not found", () => {
       const file = createTestFile("notes/tagged.md");
       mockGetAbstractFileByPath.mockReturnValue(null);
 
-      const inclusions = ["#important"];
-      expect(shouldIndexFile(file, inclusions, [])).toBe(false);
+      const inclusions = {
+        tagPatterns: ["#important"],
+      };
+      expect(shouldIndexFile(file, inclusions, null)).toBe(false);
+    });
+
+    it("should handle note-based inclusion patterns", () => {
+      const file = createTestFile("notes/referenced.md");
+      mockGetAbstractFileByPath.mockReturnValue(file);
+
+      const inclusions = {
+        notePatterns: ["[[referenced]]"],
+      };
+      expect(shouldIndexFile(file, inclusions, null)).toBe(true);
+    });
+
+    it("should handle note-based exclusion patterns", () => {
+      const file = createTestFile("notes/draft.md");
+      mockGetAbstractFileByPath.mockReturnValue(file);
+
+      const exclusions = {
+        notePatterns: ["[[draft]]"],
+      };
+      expect(shouldIndexFile(file, null, exclusions)).toBe(false);
     });
   });
 
@@ -300,12 +353,12 @@ describe("searchUtils", () => {
     });
 
     it("should handle complex patterns", () => {
-      const value = "%23important,%5B%5BNote%201%5D%5D,*.pdf,folder/with/path";
+      const value = "%23important,%5B%5BNote%201%5D%5D,*.pdf,folder/with/100%20spaces";
       expect(getDecodedPatterns(value)).toEqual([
         "#important",
         "[[Note 1]]",
         "*.pdf",
-        "folder/with/path",
+        "folder/with/100 spaces",
       ]);
     });
   });

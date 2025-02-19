@@ -11,28 +11,43 @@ function ExtensionInputModalContent({
   onConfirm: (extension: string) => void;
   onCancel: () => void;
 }) {
-  // TODO: Add validation
   const [extension, setExtension] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const validateAndConfirm = (value: string) => {
+    if (value.includes(" ")) {
+      setError("Extension cannot contain spaces");
+      return;
+    }
+    setError(null);
+    onConfirm(value);
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
-      onConfirm(extension);
+      validateAndConfirm(extension);
     }
   };
 
   return (
     <div className="flex flex-col gap-4">
-      <Input
-        placeholder="Enter the extension (e.g. txt, excalidraw)"
-        value={extension}
-        onChange={(e) => setExtension(e.target.value)}
-        onKeyDown={handleKeyDown}
-      />
+      <div className="flex flex-col gap-2">
+        <Input
+          placeholder="Enter the extension (e.g. txt, excalidraw)"
+          value={extension}
+          onChange={(e) => {
+            setExtension(e.target.value);
+            setError(null);
+          }}
+          onKeyDown={handleKeyDown}
+        />
+        {error && <p className="text-error text-sm">{error}</p>}
+      </div>
       <div className="flex justify-end gap-2">
         <Button variant="secondary" onClick={onCancel}>
           Cancel
         </Button>
-        <Button variant="default" onClick={() => onConfirm(extension)}>
+        <Button variant="default" onClick={() => validateAndConfirm(extension)}>
           Confirm
         </Button>
       </div>

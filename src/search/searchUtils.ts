@@ -5,6 +5,13 @@ import { getTagsFromNote, stripHash } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
 import { App, TFile } from "obsidian";
 
+interface PatternCategory {
+  tagPatterns?: string[];
+  extensionPatterns?: string[];
+  folderPatterns?: string[];
+  notePatterns?: string[];
+}
+
 export async function getVectorLength(embeddingInstance: Embeddings | undefined): Promise<number> {
   if (!embeddingInstance) {
     throw new CustomError("Embedding instance not found.");
@@ -90,10 +97,16 @@ function getInclusionPatterns(): string[] {
  * Get the inclusion and exclusion patterns from the settings.
  * @returns An object containing the inclusions and exclusions patterns strings.
  */
-export function getMatchingPatterns(): { inclusions: string[]; exclusions: string[] } {
+export function getMatchingPatterns(): {
+  inclusions: PatternCategory | null;
+  exclusions: PatternCategory | null;
+} {
   const inclusions = getInclusionPatterns();
   const exclusions = getExclusionPatterns();
-  return { inclusions, exclusions };
+  return {
+    inclusions: inclusions ? categorizePatterns(inclusions) : null,
+    exclusions: exclusions ? categorizePatterns(exclusions) : null,
+  };
 }
 
 /**
@@ -103,11 +116,15 @@ export function getMatchingPatterns(): { inclusions: string[]; exclusions: strin
  * @param exclusions - The exclusions patterns.
  * @returns True if the file should be indexed, false otherwise.
  */
-export function shouldIndexFile(file: TFile, inclusions: string[], exclusions: string[]): boolean {
-  if (exclusions.length > 0 && matchFilePathWithPatterns(file.path, exclusions)) {
+export function shouldIndexFile(
+  file: TFile,
+  inclusions: PatternCategory | null,
+  exclusions: PatternCategory | null
+): boolean {
+  if (exclusions && matchFilePathWithPatterns(file.path, exclusions)) {
     return false;
   }
-  if (inclusions.length > 0 && !matchFilePathWithPatterns(file.path, inclusions)) {
+  if (inclusions && !matchFilePathWithPatterns(file.path, inclusions)) {
     return false;
   }
   return true;
@@ -125,7 +142,7 @@ export function categorizePatterns(patterns: string[]) {
   const notePatterns: string[] = [];
 
   const tagRegex = /^#[^\s#]+$/; // Matches #tag format
-  const extensionRegex = /^\*\.([a-zA-Z0-9]+)$/; // Matches *.extension format
+  const extensionRegex = /^\*\.([a-zA-Z0-9.]+)$/; // Matches *.extension format
   const noteRegex = /^\[\[(.*?)\]\]$/; // Matches [[note name]] format - removed global flag and added ^ $
 
   patterns.forEach((pattern) => {
@@ -166,15 +183,13 @@ export function createPatternSettingsValue({
   extensionPatterns,
   folderPatterns,
   notePatterns,
-}: {
-  tagPatterns: string[];
-  extensionPatterns: string[];
-  folderPatterns: string[];
-  notePatterns: string[];
-}) {
-  const patterns = [...tagPatterns, ...extensionPatterns, ...notePatterns, ...folderPatterns].map(
-    (pattern) => encodeURIComponent(pattern)
-  );
+}: PatternCategory) {
+  const patterns = [
+    ...(tagPatterns ?? []),
+    ...(extensionPatterns ?? []),
+    ...(notePatterns ?? []),
+    ...(folderPatterns ?? []),
+  ].map((pattern) => encodeURIComponent(pattern));
 
   return patterns.join(",");
 }
@@ -186,7 +201,7 @@ export function createPatternSettingsValue({
  * @returns True if the file path matches the tags, false otherwise.
  */
 function matchFilePathWithTags(filePath: string, tagPatterns: string[]): boolean {
-  if (!tagPatterns || tagPatterns.length === 0) return false;
+  if (tagPatterns.length === 0) return false;
 
   const file = app.vault.getAbstractFileByPath(filePath);
   if (file instanceof TFile) {
@@ -205,7 +220,7 @@ function matchFilePathWithTags(filePath: string, tagPatterns: string[]): boolean
  * @returns True if the file path matches the extensions, false otherwise.
  */
 function matchFilePathWithExtensions(filePath: string, extensionPatterns: string[]): boolean {
-  if (!extensionPatterns || extensionPatterns.length === 0) return false;
+  if (extensionPatterns.length === 0) return false;
 
   // Extract the file extension without the dot
   const fileExtension = filePath.split(".").pop()?.toLowerCase() || "";
@@ -221,7 +236,7 @@ function matchFilePathWithExtensions(filePath: string, extensionPatterns: string
  * @returns True if the file path matches the folders, false otherwise.
  */
 function matchFilePathWithFolders(filePath: string, folderPatterns: string[]): boolean {
-  if (!folderPatterns || folderPatterns.length === 0) return false;
+  if (folderPatterns.length === 0) return false;
 
   // Normalize path separators to forward slashes to ensure cross-platform compatibility
   const normalizedFilePath = filePath.replace(/\\/g, "/");
@@ -247,7 +262,7 @@ function matchFilePathWithFolders(filePath: string, folderPatterns: string[]): b
  * @returns True if the file path matches the note titles, false otherwise.
  */
 function matchFilePathWithNotes(filePath: string, noteTitles: string[]): boolean {
-  if (!noteTitles || noteTitles.length === 0) return false;
+  if (noteTitles.length === 0) return false;
 
   const file = app.vault.getAbstractFileByPath(filePath);
   if (file instanceof TFile) {
@@ -264,17 +279,16 @@ function matchFilePathWithNotes(filePath: string, noteTitles: string[]): boolean
  * @param patterns - The patterns to match the file path with.
  * @returns True if the file path matches the patterns, false otherwise.
  */
-function matchFilePathWithPatterns(filePath: string, patterns: string[]): boolean {
-  if (!patterns || patterns.length === 0) return false;
+function matchFilePathWithPatterns(filePath: string, patterns: PatternCategory): boolean {
+  if (!patterns) return false;
 
-  const { tagPatterns, extensionPatterns, folderPatterns, notePatterns } =
-    categorizePatterns(patterns);
+  const { tagPatterns, extensionPatterns, folderPatterns, notePatterns } = patterns;
 
   return (
-    matchFilePathWithTags(filePath, tagPatterns) ||
-    matchFilePathWithExtensions(filePath, extensionPatterns) ||
-    matchFilePathWithFolders(filePath, folderPatterns) ||
-    matchFilePathWithNotes(filePath, notePatterns)
+    matchFilePathWithTags(filePath, tagPatterns ?? []) ||
+    matchFilePathWithExtensions(filePath, extensionPatterns ?? []) ||
+    matchFilePathWithFolders(filePath, folderPatterns ?? []) ||
+    matchFilePathWithNotes(filePath, notePatterns ?? [])
   );
 }
 
