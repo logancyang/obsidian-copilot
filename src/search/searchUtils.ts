@@ -94,18 +94,24 @@ function getInclusionPatterns(): string[] {
 }
 
 /**
- * Get the inclusion and exclusion patterns from the settings.
+ * Get the inclusion and exclusion patterns from the settings or provided values.
+ * @param options - Optional parameters for inclusions and exclusions.
  * @returns An object containing the inclusions and exclusions patterns strings.
  */
-export function getMatchingPatterns(): {
+export function getMatchingPatterns(options?: { inclusions?: string; exclusions?: string }): {
   inclusions: PatternCategory | null;
   exclusions: PatternCategory | null;
 } {
-  const inclusions = getInclusionPatterns();
-  const exclusions = getExclusionPatterns();
+  const inclusionPatterns = options?.inclusions
+    ? getDecodedPatterns(options.inclusions)
+    : getInclusionPatterns();
+  const exclusionPatterns = options?.exclusions
+    ? getDecodedPatterns(options.exclusions)
+    : getExclusionPatterns();
+
   return {
-    inclusions: inclusions.length > 0 ? categorizePatterns(inclusions) : null,
-    exclusions: exclusions.length > 0 ? categorizePatterns(exclusions) : null,
+    inclusions: inclusionPatterns.length > 0 ? categorizePatterns(inclusionPatterns) : null,
+    exclusions: exclusionPatterns.length > 0 ? categorizePatterns(exclusionPatterns) : null,
   };
 }
 

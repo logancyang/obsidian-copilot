@@ -27,6 +27,8 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { Notice } from "obsidian";
 import ChainManager from "./chainManager";
 import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "./intentAnalyzer";
+import { getCurrentProject } from "@/aiParams";
+import ProjectManager from "./projectManager";
 
 export interface ChainRunner {
   run(
@@ -164,7 +166,7 @@ class LLMChainRunner extends BaseChainRunner {
     let fullAIResponse = "";
 
     try {
-      const chain = ChainManager.getChain();
+      const chain = this.chainManager.getChain();
       const chatStream = await chain.stream({
         input: userMessage.message,
       } as any);
@@ -221,7 +223,7 @@ class VaultQAChainRunner extends BaseChainRunner {
       const memory = this.chainManager.memoryManager.getMemory();
       const memoryVariables = await memory.loadMemoryVariables({});
       const chatHistory = extractChatHistory(memoryVariables);
-      const qaStream = await ChainManager.getRetrievalChain().stream({
+      const qaStream = await this.chainManager.getRetrievalChain().stream({
         question: userMessage.message,
         chat_history: chatHistory,
       } as any);
@@ -248,7 +250,7 @@ class VaultQAChainRunner extends BaseChainRunner {
   }
 
   private addSourcestoResponse(response: string): string {
-    const docTitles = extractUniqueTitlesFromDocs(ChainManager.retrievedDocuments);
+    const docTitles = extractUniqueTitlesFromDocs(this.chainManager.getRetrievedDocuments());
     if (docTitles.length > 0) {
       const links = docTitles.map((title) => `- [[${title}]]`).join("\n");
       response += "\n\n#### Sources:\n\n" + links;
@@ -347,6 +349,10 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     return this.hasCapability(model, ModelCapability.VISION);
   }
 
+  protected getSystemPrompt(): string {
+    return getSystemPrompt();
+  }
+
   private async streamMultimodalResponse(
     textContent: string,
     userMessage: ChatMessage,
@@ -363,7 +369,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     const messages: any[] = [];
 
     // Add system message if available
-    let fullSystemMessage = getSystemPrompt();
+    let fullSystemMessage = this.getSystemPrompt();
 
     // Add chat history context to system message if exists
     if (chatHistory.length > 0) {
@@ -693,4 +699,23 @@ class CopilotPlusChainRunner extends BaseChainRunner {
   }
 }
 
-export { CopilotPlusChainRunner, LLMChainRunner, VaultQAChainRunner };
+class ProjectChainRunner extends CopilotPlusChainRunner {
+  protected getSystemPrompt(): string {
+    // get current project
+    const projectConfig = getCurrentProject();
+
+    if (!projectConfig) {
+      return super.getSystemPrompt();
+    }
+
+    const context = ProjectManager.instance.getProjectContext(projectConfig.id);
+    let finalPrompt = projectConfig.systemPrompt;
+
+    if (context) {
+      finalPrompt += context;
+    }
+    return finalPrompt;
+  }
+}
+
+export { CopilotPlusChainRunner, LLMChainRunner, VaultQAChainRunner, ProjectChainRunner };

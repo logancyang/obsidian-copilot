@@ -1,4 +1,3 @@
-import ChatModelManager from "@/LLMProviders/chatModelManager";
 import { CustomModel } from "@/aiParams";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +14,7 @@ import { err2String, getNeedSetKeyProvider, getProviderInfo, getProviderLabel } 
 import { Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useState } from "react";
+import ProjectManager from "@/LLMProviders/projectManager";
 
 interface ApiKeyDialogProps {
   open: boolean;
@@ -96,7 +96,7 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({
         apiKey,
         enabled: true,
       };
-      await ChatModelManager.getInstance().ping(customModel);
+      await ProjectManager.instance.getCurrentChainManager().chatModelManager.ping(customModel);
 
       new Notice("API key verified successfully!");
       setUnverifiedKeys((prev) => {

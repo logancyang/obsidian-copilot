@@ -1,4 +1,11 @@
-import { useChainType, useModelKey } from "@/aiParams";
+import {
+  useChainType,
+  useModelKey,
+  useProjectLoading,
+  ProjectConfig,
+  getCurrentProject,
+  subscribeToProjectChange,
+} from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
 import { AddImageModal } from "@/components/modals/AddImageModal";
@@ -24,9 +31,9 @@ import {
   Command,
   CornerDownLeft,
   Image,
+  Loader2,
   StopCircle,
   X,
-  Loader2,
 } from "lucide-react";
 import { App, Notice, Platform, TFile } from "obsidian";
 import React, {
@@ -61,6 +68,7 @@ interface ChatInputProps {
   selectedImages: File[];
   onAddImage: (files: File[]) => void;
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
+  disableModelSwitch?: boolean;
 }
 
 const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
@@ -81,6 +89,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       selectedImages,
       onAddImage,
       setSelectedImages,
+      disableModelSwitch,
     },
     ref
   ) => {
@@ -93,17 +102,47 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const [currentModelKey, setCurrentModelKey] = useModelKey();
     const [modelError, setModelError] = useState<string | null>(null);
     const [currentChain] = useChainType();
+    const [isProjectLoading] = useProjectLoading();
     const [currentActiveNote, setCurrentActiveNote] = useState<TFile | null>(
       app.workspace.getActiveFile()
     );
+    const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
     const settings = useSettingsValue();
-    const isCopilotPlus = currentChain === ChainType.COPILOT_PLUS_CHAIN;
+    const isCopilotPlus =
+      currentChain === ChainType.COPILOT_PLUS_CHAIN || currentChain === ChainType.PROJECT_CHAIN;
 
     useImperativeHandle(ref, () => ({
       focus: () => {
         textAreaRef.current?.focus();
       },
     }));
+
+    useEffect(() => {
+      if (currentChain === ChainType.PROJECT_CHAIN) {
+        setSelectedProject(getCurrentProject());
+
+        const unsubscribe = subscribeToProjectChange((project) => {
+          setSelectedProject(project);
+        });
+
+        return () => {
+          unsubscribe();
+        };
+      } else {
+        setSelectedProject(null);
+      }
+    }, [currentChain]);
+
+    const getDisplayModelKey = (): string => {
+      if (
+        selectedProject &&
+        currentChain === ChainType.PROJECT_CHAIN &&
+        selectedProject.projectModelKey
+      ) {
+        return selectedProject.projectModelKey;
+      }
+      return currentModelKey;
+    };
 
     const onSendMessage = (includeVault: boolean) => {
       if (!isCopilotPlus) {
@@ -458,6 +497,14 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         )}
 
         <div className="relative" {...(isCopilotPlus ? getRootProps() : {})}>
+          {isProjectLoading && (
+            <div className="absolute inset-0 z-modal bg-background/80 backdrop-blur-sm flex items-center justify-center">
+              <div className="flex items-center gap-2">
+                <Loader2 className="size-4 animate-spin" />
+                <span className="text-sm">Loading the project context...</span>
+              </div>
+            </div>
+          )}
           <textarea
             ref={textAreaRef}
             className="w-full bg-transparent focus-visible:ring-0 border-none min-h-[60px] max-h-40 overflow-y-auto resize-none px-2 rounded-md text-sm text-normal"
@@ -469,6 +516,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
+            disabled={isProjectLoading}
           />
           {isCopilotPlus && (
             <>
@@ -492,17 +540,18 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           ) : (
             <DropdownMenu open={isModelDropdownOpen} onOpenChange={setIsModelDropdownOpen}>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost2" size="fit">
+                <Button variant="ghost2" size="fit" disabled={disableModelSwitch}>
                   {modelError ? (
                     <span className="text-error">Model Load Failed</span>
                   ) : settings.activeModels.find(
-                      (model) => model.enabled && getModelKeyFromModel(model) === currentModelKey
+                      (model) =>
+                        model.enabled && getModelKeyFromModel(model) === getDisplayModelKey()
                     ) ? (
                     <ModelDisplay
                       model={
                         settings.activeModels.find(
                           (model) =>
-                            model.enabled && getModelKeyFromModel(model) === currentModelKey
+                            model.enabled && getModelKeyFromModel(model) === getDisplayModelKey()
                         )!
                       }
                       iconSize={8}
@@ -510,47 +559,48 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                   ) : (
                     "Select Model"
                   )}
-                  <ChevronDown className="size-5 mt-0.5" />
+                  {!disableModelSwitch && <ChevronDown className="size-5 mt-0.5" />}
                 </Button>
               </DropdownMenuTrigger>
 
               <DropdownMenuContent align="start">
-                {settings.activeModels
-                  .filter((model) => model.enabled)
-                  .map((model) => {
-                    const { hasApiKey, errorNotice } = checkModelApiKey(model, settings);
-                    return (
-                      <DropdownMenuItem
-                        key={getModelKeyFromModel(model)}
-                        onSelect={async (event) => {
-                          if (!hasApiKey && errorNotice) {
-                            event.preventDefault();
-                            new Notice(errorNotice);
-                            return;
-                          }
-
-                          try {
-                            setModelError(null);
-                            setCurrentModelKey(getModelKeyFromModel(model));
-                          } catch (error) {
-                            const msg = `Model switch failed: ` + err2String(error);
-                            setModelError(msg);
-                            new Notice(msg);
-                            // Restore to the last valid model
-                            const lastValidModel = settings.activeModels.find(
-                              (m) => m.enabled && getModelKeyFromModel(m) === currentModelKey
-                            );
-                            if (lastValidModel) {
-                              setCurrentModelKey(getModelKeyFromModel(lastValidModel));
+                {!disableModelSwitch &&
+                  settings.activeModels
+                    .filter((model) => model.enabled)
+                    .map((model) => {
+                      const { hasApiKey, errorNotice } = checkModelApiKey(model, settings);
+                      return (
+                        <DropdownMenuItem
+                          key={getModelKeyFromModel(model)}
+                          onSelect={async (event) => {
+                            if (!hasApiKey && errorNotice) {
+                              event.preventDefault();
+                              new Notice(errorNotice);
+                              return;
                             }
-                          }
-                        }}
-                        className={!hasApiKey ? "opacity-50 cursor-not-allowed" : ""}
-                      >
-                        <ModelDisplay model={model} iconSize={12} />
-                      </DropdownMenuItem>
-                    );
-                  })}
+
+                            try {
+                              setModelError(null);
+                              setCurrentModelKey(getModelKeyFromModel(model));
+                            } catch (error) {
+                              const msg = `Model switch failed: ` + err2String(error);
+                              setModelError(msg);
+                              new Notice(msg);
+                              // Restore to the last valid model
+                              const lastValidModel = settings.activeModels.find(
+                                (m) => m.enabled && getModelKeyFromModel(m) === currentModelKey
+                              );
+                              if (lastValidModel) {
+                                setCurrentModelKey(getModelKeyFromModel(lastValidModel));
+                              }
+                            }
+                          }}
+                          className={!hasApiKey ? "opacity-50 cursor-not-allowed" : ""}
+                        >
+                          <ModelDisplay model={model} iconSize={12} />
+                        </DropdownMenuItem>
+                      );
+                    })}
               </DropdownMenuContent>
             </DropdownMenu>
           )}

@@ -496,6 +496,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   promptUsageTimestamps: {},
   defaultConversationNoteName: "{$topic}@{$date}_{$time}",
   inlineEditCommands: DEFAULT_INLINE_EDIT_COMMANDS,
+  projectList: [],
 };
 
 export const EVENT_NAMES = {
