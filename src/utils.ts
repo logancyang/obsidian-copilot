@@ -1,5 +1,6 @@
 import { ChainType, Document } from "@/chainFactory";
 import {
+  DisplayKeyProviders,
   NOMIC_EMBED_TEXT,
   Provider,
   ProviderInfo,
@@ -10,6 +11,7 @@ import {
   ChatModelProviders,
   EmbeddingModelProviders,
 } from "@/constants";
+import { CopilotSettings } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { MemoryVariables } from "@langchain/core/memory";
@@ -18,7 +20,6 @@ import { BaseChain, RetrievalQAChain } from "langchain/chains";
 import moment from "moment";
 import { MarkdownView, Notice, TFile, Vault, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
-import { CopilotSettings } from "@/settings/model";
 
 // Add custom error type at the top of the file
 interface APIError extends Error {
@@ -928,4 +929,14 @@ export function checkModelApiKey(
   return {
     hasApiKey: true,
   };
+}
+
+/**
+ * Removes any <think> tags and their content from the text.
+ * This is used to clean model outputs before using them for RAG.
+ * @param text - The text to remove think tags from
+ * @returns The text with think tags removed
+ */
+export function removeThinkTags(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
 }

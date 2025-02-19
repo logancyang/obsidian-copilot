@@ -11,28 +11,28 @@ function fixGrammarSpellingSelectionPrompt(selectedText: string): string {
 
 function summarizePrompt(selectedText: string): string {
   return (
-    `<instruction>Create a bullet-point summary of the text below. Identify the input language and respond in the same language. Each bullet point should capture a key point. Return only the bullet-point summary.</instruction>\n\n` +
+    `<instruction>Create a bullet-point summary of the text below. Each bullet point should capture a key point. Return only the bullet-point summary.</instruction>\n\n` +
     `<text>${selectedText}</text>`
   );
 }
 
 function tocPrompt(selectedText: string): string {
   return (
-    `<instruction>Generate a hierarchical table of contents for the text below. Use appropriate heading levels (H1, H2, H3, etc.). Include page numbers if present. Maintain the original language. Return only the table of contents.</instruction>\n\n` +
+    `<instruction>Generate a hierarchical table of contents for the text below. Use appropriate heading levels (H1, H2, H3, etc.). Include page numbers if present. Return only the table of contents.</instruction>\n\n` +
     `<text>${selectedText}</text>`
   );
 }
 
 function glossaryPrompt(selectedText: string): string {
   return (
-    `<instruction>Create a glossary of important terms, concepts, and phrases from the text below. Format each entry as "Term: Definition". Sort entries alphabetically. Maintain the original language. Return only the glossary.</instruction>\n\n` +
+    `<instruction>Create a glossary of important terms, concepts, and phrases from the text below. Format each entry as "Term: Definition". Sort entries alphabetically. Return only the glossary.</instruction>\n\n` +
     `<text>${selectedText}</text>`
   );
 }
 
 function simplifyPrompt(selectedText: string): string {
   return (
-    `<instruction>Simplify the text below to a 6th-grade reading level (ages 11-12). Use simple sentences, common words, and clear explanations. Maintain the original language and key concepts. Return only the simplified text.</instruction>\n\n` +
+    `<instruction>Simplify the text below to a 6th-grade reading level (ages 11-12). Use simple sentences, common words, and clear explanations. Maintain the original key concepts. Return only the simplified text.</instruction>\n\n` +
     `<text>${selectedText}</text>`
   );
 }
@@ -61,7 +61,6 @@ function rewriteTweetSelectionPrompt(selectedText: string): string {
     1. Maximum 280 characters
     2. Use concise, impactful language
     3. Maintain the core message
-    4. Keep the original language
     Return only the tweet text.</instruction>\n\n` + `<text>${selectedText}</text>`
   );
 }
@@ -74,7 +73,6 @@ function rewriteTweetThreadSelectionPrompt(selectedText: string): string {
     3. Separate tweets with "\n\n---\n\n"
     4. End with "THREAD END" on its own line
     5. Make content engaging and clear
-    6. Maintain the original language
     Return only the formatted thread.</instruction>\n\n` + `<text>${selectedText}</text>`
   );
 }
@@ -85,7 +83,6 @@ function rewriteShorterSelectionPrompt(selectedText: string): string {
     1. Main ideas and key points
     2. Essential details
     3. Original tone and style
-    4. Original language
     Return only the shortened text.</instruction>\n\n` + `<text>${selectedText}</text>`
   );
 }
@@ -96,7 +93,6 @@ function rewriteLongerSelectionPrompt(selectedText: string): string {
     1. Adding relevant details and examples
     2. Elaborating on key points
     3. Maintaining the original tone and style
-    4. Keeping the original language
     Return only the expanded text.</instruction>\n\n` + `<text>${selectedText}</text>`
   );
 }
@@ -107,7 +103,6 @@ function eli5SelectionPrompt(selectedText: string): string {
     1. Use basic vocabulary
     2. Include simple analogies
     3. Break down complex concepts
-    4. Keep the original language
     Return only the simplified explanation.</instruction>\n\n` + `<text>${selectedText}</text>`
   );
 }
@@ -118,7 +113,6 @@ function rewritePressReleaseSelectionPrompt(selectedText: string): string {
     1. Use formal, journalistic style
     2. Include headline and dateline
     3. Follow inverted pyramid structure
-    4. Maintain the original language
     Return only the press release format.</instruction>\n\n` + `<text>${selectedText}</text>`
   );
 }
@@ -137,9 +131,8 @@ function changeToneSelectionPrompt(selectedText: string, tone?: string) {
   return (
     `<instruction>Rewrite the text below in a ${tone} tone while:
     1. Keeping the original meaning
-    2. Maintaining the original language
-    3. Adjusting word choice and phrasing
-    4. Preserving key information
+    2. Adjusting word choice and phrasing
+    3. Preserving key information
     Return only the rewritten text.</instruction>\n\n` + `<text>${selectedText}</text>`
   );
 }
