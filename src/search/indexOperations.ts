@@ -59,7 +59,7 @@ export class IndexOperations {
   }
 
   public async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
-    let rateLimitNoticeShown = false;
+    const errors: string[] = [];
 
     try {
       const embeddingInstance = await this.embeddingsManager.getEmbeddingsAPI();
@@ -104,7 +104,6 @@ export class IndexOperations {
       }
 
       // Process chunks in batches
-      const errors: string[] = [];
       for (let i = 0; i < allChunks.length; i += this.embeddingBatchSize) {
         if (this.state.isIndexingCancelled) break;
         await this.handlePause();
@@ -152,22 +151,12 @@ export class IndexOperations {
             console.log("Copilot index checkpoint save completed.");
           }
         } catch (err) {
-          console.error("Batch processing error:", {
-            error: err,
-            batchSize: batch?.length || 0,
-            firstChunk: batch?.[0]
-              ? {
-                  path: batch[0].fileInfo?.path,
-                  contentLength: batch[0].content?.length,
-                  hasFileInfo: !!batch[0].fileInfo,
-                }
-              : "No chunks in batch",
-            errorType: err?.constructor?.name,
-            errorMessage: err?.message,
+          this.handleError(err, {
+            filePath: batch?.[0]?.fileInfo?.path,
+            errors,
+            batch,
           });
-          this.handleIndexingError(err, batch?.[0]?.fileInfo?.path, errors, rateLimitNoticeShown);
           if (this.isRateLimitError(err)) {
-            rateLimitNoticeShown = true;
             break;
           }
         }
@@ -184,7 +173,7 @@ export class IndexOperations {
 
       return this.state.indexedCount;
     } catch (error) {
-      this.handleFatalError(error);
+      this.handleError(error);
       return 0;
     }
   }
@@ -416,17 +405,78 @@ export class IndexOperations {
     }
   }
 
-  private handleIndexingError(
-    err: any,
-    filePath: string,
-    errors: string[],
-    rateLimitNoticeShown: boolean
-  ): void {
-    console.error(`Error indexing file ${filePath || "unknown"}:`, err);
-    errors.push(filePath || "unknown");
-    if (!rateLimitNoticeShown) {
-      new Notice(`Error indexing file ${filePath || "unknown"}. Check console for details.`);
+  private isStringLengthError(error: any): boolean {
+    if (!error) return false;
+
+    // Check if it's a direct RangeError
+    if (error instanceof RangeError && error.message.toLowerCase().includes("string length")) {
+      return true;
     }
+
+    // Check the error message at any depth
+    const message = error.message || error.toString();
+    const lowerMessage = message.toLowerCase();
+    return lowerMessage.includes("string length") || lowerMessage.includes("rangeerror");
+  }
+
+  private handleError(
+    error: any,
+    context?: {
+      filePath?: string;
+      errors?: string[];
+      batch?: Array<{ content: string; fileInfo: any }>;
+    }
+  ): void {
+    const filePath = context?.filePath;
+
+    // Log the error with appropriate context
+    if (filePath) {
+      if (context.batch) {
+        // Detailed batch processing error logging
+        console.error("Batch processing error:", {
+          error,
+          batchSize: context.batch.length || 0,
+          firstChunk: context.batch[0]
+            ? {
+                path: context.batch[0].fileInfo?.path,
+                contentLength: context.batch[0].content?.length,
+                hasFileInfo: !!context.batch[0].fileInfo,
+              }
+            : "No chunks in batch",
+          errorType: error?.constructor?.name,
+          errorMessage: error?.message,
+        });
+      } else {
+        console.error(`Error indexing file ${filePath}:`, error);
+      }
+      context.errors?.push(filePath);
+    } else {
+      console.error("Fatal error during indexing:", error);
+    }
+
+    // Hide any existing indexing notice
+    if (this.state.currentIndexingNotice) {
+      this.state.currentIndexingNotice.hide();
+    }
+
+    // Handle json stringify string length error consistently
+    if (this.isStringLengthError(error)) {
+      new Notice(
+        "Vault is too large for 1 partition, please increase the number of partitions in your Copilot QA settings!",
+        10000 // Show for 10 seconds
+      );
+      return;
+    }
+
+    // Show appropriate error notice
+    if (this.isRateLimitError(error)) {
+      return; // Don't show duplicate notices for rate limit errors
+    }
+
+    const message = filePath
+      ? `Error indexing file ${filePath}. Check console for details.`
+      : "Fatal error during indexing. Check console for details.";
+    new Notice(message);
   }
 
   private isRateLimitError(err: any): boolean {
@@ -448,14 +498,6 @@ export class IndexOperations {
     } else {
       new Notice("Indexing completed successfully!");
     }
-  }
-
-  private handleFatalError(error: any): void {
-    console.error("Fatal error during indexing:", error);
-    if (this.state.currentIndexingNotice) {
-      this.state.currentIndexingNotice.hide();
-    }
-    new Notice("Fatal error during indexing. Check console for details.");
   }
 
   public async reindexFile(file: TFile): Promise<void> {
@@ -503,7 +545,7 @@ export class IndexOperations {
         console.log(`Reindexed file: ${file.path}`);
       }
     } catch (error) {
-      console.error(`Error reindexing file ${file.path}:`, error);
+      this.handleError(error, { filePath: file.path });
     }
   }
 
