@@ -57,6 +57,12 @@ export class ContextProcessor {
 
     const processNote = async (note: TFile) => {
       try {
+        // Skip if this note was already processed by processCustomPrompt
+        const noteRef = `[[${note.basename}]]`;
+        if (processedVars.has(noteRef)) {
+          return;
+        }
+
         if (currentChain !== ChainType.COPILOT_PLUS_CHAIN && note.extension !== "md") {
           if (!fileParserManager.supportsExtension(note.extension)) {
             console.warn(`Unsupported file type: ${note.extension}`);
@@ -77,10 +83,10 @@ export class ContextProcessor {
           content = await this.processEmbeddedPDFs(content, vault, fileParserManager);
         }
 
-        additionalContext += `\n\n[[${note.basename}.${note.extension}]]:\n\n${content}`;
+        additionalContext += `\n\nTitle: [[${note.basename}]]\nPath: ${note.path}\n\n${content}`;
       } catch (error) {
         console.error(`Error processing file ${note.path}:`, error);
-        additionalContext += `\n\n[[${note.basename}]]: [Error: Could not process file]`;
+        additionalContext += `\n\nTitle: [[${note.basename}]]\nPath: ${note.path}\n\n[Error: Could not process file]`;
       }
     };
 
