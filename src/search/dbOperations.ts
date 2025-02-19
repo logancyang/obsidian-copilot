@@ -34,6 +34,7 @@ export class DBOperations {
   private initializationPromise: Promise<void>;
   private isIndexLoaded = false;
   private hasUnsavedChanges = false;
+  private filesWithoutEmbeddings: Set<string> = new Set();
 
   constructor(private app: App) {
     // Subscribe to settings changes
@@ -380,11 +381,10 @@ export class DBOperations {
       // Insert into the assigned partition
       try {
         await insert(this.oramaDb, docToSave);
-        if (getSettings().debug) {
-          logInfo(
-            `${existingDoc.hits.length > 0 ? "Updated" : "Inserted"} document ${docToSave.id} in partition ${partition}`
-          );
-        }
+        logInfo(
+          `${existingDoc.hits.length > 0 ? "Updated" : "Inserted"} document ${docToSave.id} in partition ${partition}`
+        );
+
         this.markUnsavedChanges();
         return docToSave;
       } catch (insertErr) {
@@ -646,5 +646,66 @@ export class DBOperations {
     }
 
     return result;
+  }
+
+  /**
+   * Mark a file as missing embeddings
+   */
+  public markFileMissingEmbeddings(filePath: string): void {
+    this.filesWithoutEmbeddings.add(filePath);
+  }
+
+  /**
+   * Clear the list of files missing embeddings
+   */
+  public clearFilesMissingEmbeddings(): void {
+    this.filesWithoutEmbeddings.clear();
+  }
+
+  /**
+   * Get the list of files missing embeddings
+   */
+  public getFilesMissingEmbeddings(): string[] {
+    return Array.from(this.filesWithoutEmbeddings);
+  }
+
+  /**
+   * Check if a file is missing embeddings
+   */
+  public isFileMissingEmbeddings(filePath: string): boolean {
+    return this.filesWithoutEmbeddings.has(filePath);
+  }
+
+  /**
+   * Check the integrity of the index by verifying all documents have proper embeddings.
+   * Any documents found to be missing embeddings will be marked for reindexing.
+   */
+  public async checkIndexIntegrity(): Promise<void> {
+    if (!this.oramaDb) {
+      throw new CustomError("Orama database not found.");
+    }
+
+    try {
+      // Get all indexed files
+      const indexedFiles = await this.getIndexedFiles();
+
+      // Check each file for embeddings
+      for (const filePath of indexedFiles) {
+        const hasEmbeddings = await this.hasEmbeddings(filePath);
+        if (!hasEmbeddings) {
+          this.markFileMissingEmbeddings(filePath);
+        }
+      }
+
+      const missingEmbeddings = this.getFilesMissingEmbeddings();
+      if (missingEmbeddings.length > 0) {
+        logInfo("Files missing embeddings after integrity check:", missingEmbeddings.join(", "));
+      } else {
+        logInfo("Index integrity check completed. All documents have embeddings.");
+      }
+    } catch (err) {
+      logError("Error checking index integrity:", err);
+      throw new CustomError("Failed to check index integrity.");
+    }
   }
 }

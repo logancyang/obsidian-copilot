@@ -1,5 +1,6 @@
 import { CHUNK_SIZE } from "@/constants";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
+import { logError, logInfo } from "@/logger";
 import { RateLimiter } from "@/rateLimiter";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { formatDateTime } from "@/utils";
@@ -9,8 +10,8 @@ import { App, Notice, TFile } from "obsidian";
 import { DBOperations } from "./dbOperations";
 import {
   extractAppIgnoreSettings,
-  getMatchingPatterns,
   getDecodedPatterns,
+  getMatchingPatterns,
   shouldIndexFile,
 } from "./searchUtils";
 
@@ -74,9 +75,10 @@ export class IndexOperations {
         overwrite = true;
       }
 
-      // Clear index if overwrite is true
+      // Clear index and tracking if overwrite is true
       if (overwrite) {
         await this.dbOps.clearIndex(embeddingInstance);
+        this.dbOps.clearFilesMissingEmbeddings();
       } else {
         // Run garbage collection first to clean up stale documents
         await this.dbOps.garbageCollect();
@@ -90,6 +92,9 @@ export class IndexOperations {
 
       this.initializeIndexingState(files.length);
       this.createIndexingNotice();
+
+      // Clear the missing embeddings list before starting new indexing
+      this.dbOps.clearFilesMissingEmbeddings();
 
       // New: Prepare all chunks first
       const allChunks = await this.prepareAllChunks(files);
@@ -114,14 +119,20 @@ export class IndexOperations {
           // Save batch to database
           for (let j = 0; j < batch.length; j++) {
             const chunk = batch[j];
-            await this.dbOps.upsert({
-              ...chunk.fileInfo,
-              id: this.getDocHash(chunk.content),
-              content: chunk.content,
-              embedding: embeddings[j],
-              created_at: Date.now(),
-              nchars: chunk.content.length,
-            });
+            try {
+              await this.dbOps.upsert({
+                ...chunk.fileInfo,
+                id: this.getDocHash(chunk.content),
+                content: chunk.content,
+                embedding: embeddings[j],
+                created_at: Date.now(),
+                nchars: chunk.content.length,
+              });
+            } catch (err) {
+              // If there was an error upserting, mark this file as missing embeddings
+              this.dbOps.markFileMissingEmbeddings(chunk.fileInfo.path);
+              throw err;
+            }
           }
 
           batch.forEach((chunk) => {
@@ -165,6 +176,12 @@ export class IndexOperations {
       this.finalizeIndexing(errors);
       await this.dbOps.saveDB();
       console.log("Copilot index final save completed.");
+
+      // Run integrity check in the background
+      this.dbOps.checkIndexIntegrity().catch((err) => {
+        logError("Background integrity check failed:", err);
+      });
+
       return this.state.indexedCount;
     } catch (error) {
       this.handleFatalError(error);
@@ -250,6 +267,7 @@ export class IndexOperations {
     // Get currently indexed files and latest mtime
     const indexedFilePaths = new Set(await this.dbOps.getIndexedFiles());
     const latestMtime = await this.dbOps.getLatestFileMtime();
+    const filesMissingEmbeddings = new Set(this.dbOps.getFilesMissingEmbeddings());
 
     // Get all markdown files that should be indexed under current rules
     const filesToIndex = new Set<TFile>();
@@ -268,17 +286,21 @@ export class IndexOperations {
       }
 
       const isIndexed = indexedFilePaths.has(file.path);
+      const needsEmbeddings = filesMissingEmbeddings.has(file.path);
 
-      if (!isIndexed || file.stat.mtime > latestMtime) {
+      if (!isIndexed || needsEmbeddings || file.stat.mtime > latestMtime) {
         filesToIndex.add(file);
       }
     }
 
-    if (getSettings().debug) {
-      console.log(`Files to index: ${filesToIndex.size}`);
-      console.log(`Previously indexed: ${indexedFilePaths.size}`);
-      console.log(`Empty files skipped: ${emptyFiles.size}`);
-    }
+    logInfo(
+      [
+        `Files to index: ${filesToIndex.size}`,
+        `Previously indexed: ${indexedFilePaths.size}`,
+        `Empty files skipped: ${emptyFiles.size}`,
+        `Files missing embeddings: ${filesMissingEmbeddings.size}`,
+      ].join("\n")
+    );
 
     return Array.from(filesToIndex);
   }
