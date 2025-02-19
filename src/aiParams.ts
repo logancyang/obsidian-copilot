@@ -34,6 +34,28 @@ const chainTypeAtom = atom(
   }
 );
 
+const currentProjectAtom = atom<ProjectConfig | null>(null);
+
+export interface ProjectConfig {
+  name: string;
+  description?: string;
+  systemPrompt: string;
+  projectModelKey: string;
+  modelConfigs: {
+    temperature?: number;
+    maxTokens?: number;
+    topP?: number;
+  };
+  contextSource: {
+    inclusions: string;
+    exclusions?: string;
+    webUrl?: string;
+    youtubeUrl?: string;
+  };
+  created: number;
+  UsageTimestamps: number;
+}
+
 export interface ModelConfig {
   modelName: string;
   temperature: number;
@@ -56,6 +78,7 @@ export interface ModelConfig {
   groqApiKey?: string;
   mistralApiKey?: string;
   enableCors?: boolean;
+  topP?: number;
 }
 
 export interface SetChainOptions {
@@ -79,6 +102,8 @@ export interface CustomModel {
   stream?: boolean;
   temperature?: number;
   maxTokens?: number;
+  TopP?: number;
+
   context?: number;
   believerExclusive?: boolean;
   capabilities?: ModelCapability[];
@@ -128,6 +153,28 @@ export function subscribeToChainTypeChange(callback: () => void): () => void {
 
 export function useChainType() {
   return useAtom(chainTypeAtom, {
+    store: settingsStore,
+  });
+}
+
+export function setCurrentProject(project: ProjectConfig | null) {
+  settingsStore.set(currentProjectAtom, project);
+}
+
+export function getCurrentProject(): ProjectConfig | null {
+  return settingsStore.get(currentProjectAtom);
+}
+
+export function subscribeToProjectChange(
+  callback: (project: ProjectConfig | null) => void
+): () => void {
+  return settingsStore.sub(currentProjectAtom, () => {
+    callback(settingsStore.get(currentProjectAtom));
+  });
+}
+
+export function useCurrentProject() {
+  return useAtom(currentProjectAtom, {
     store: settingsStore,
   });
 }

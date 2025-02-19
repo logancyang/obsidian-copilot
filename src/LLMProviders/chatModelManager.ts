@@ -103,6 +103,7 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
           organization: await getDecryptedKey(customModel.openAIOrgId || settings.openAIOrgId),
         },
+        topP: customModel.TopP,
         ...this.handleOpenAIExtraArgs(isOSeries, settings.maxTokens, settings.temperature),
       },
       [ChatModelProviders.ANTHROPIC]: {
@@ -114,6 +115,7 @@ export default class ChatModelManager {
           defaultHeaders: { "anthropic-dangerous-direct-browser-access": "true" },
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
+        topP: customModel.TopP,
       },
       [ChatModelProviders.AZURE_OPENAI]: {
         modelName:
@@ -130,6 +132,7 @@ export default class ChatModelManager {
           },
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
+        topP: customModel.TopP,
         ...this.handleOpenAIExtraArgs(isOSeries, settings.maxTokens, settings.temperature),
       },
       [ChatModelProviders.COHEREAI]: {
@@ -158,6 +161,7 @@ export default class ChatModelManager {
           },
         ],
         baseUrl: customModel.baseUrl,
+        topP: customModel.TopP,
       },
       [ChatModelProviders.OPENROUTERAI]: {
         modelName: modelName,
@@ -166,6 +170,7 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl || "https://openrouter.ai/api/v1",
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
+        topP: customModel.TopP,
       },
       [ChatModelProviders.GROQ]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.groqApiKey),
@@ -178,6 +183,7 @@ export default class ChatModelManager {
         apiKey: customModel.apiKey || "default-key",
         // MUST NOT use /v1 in the baseUrl for ollama
         baseUrl: customModel.baseUrl || "http://localhost:11434",
+        topP: customModel.TopP,
       },
       [ChatModelProviders.LM_STUDIO]: {
         modelName: modelName,
@@ -186,6 +192,7 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl || "http://localhost:1234/v1",
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
+        topP: customModel.TopP,
       },
       [ChatModelProviders.OPENAI_FORMAT]: {
         modelName: modelName,
@@ -195,6 +202,7 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
           defaultHeaders: { "dangerously-allow-browser": "true" },
         },
+        topP: customModel.TopP,
         ...this.handleOpenAIExtraArgs(isOSeries, settings.maxTokens, settings.temperature),
       },
       [ChatModelProviders.COPILOT_PLUS]: {
@@ -204,11 +212,13 @@ export default class ChatModelManager {
           baseURL: BREVILABS_API_BASE_URL,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
+        topP: customModel.TopP,
       },
       [ChatModelProviders.MISTRAL]: {
         model: modelName,
         apiKey: await getDecryptedKey(customModel.apiKey || settings.mistralApiKey),
         serverURL: customModel.baseUrl,
+        topP: customModel.TopP,
       },
     };
 
