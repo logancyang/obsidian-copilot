@@ -3,10 +3,12 @@ import {
   categorizePatterns,
   createPatternSettingsValue,
   getDecodedPatterns,
+  getMatchingPatterns,
   previewPatternValue,
   shouldIndexFile,
 } from "./searchUtils";
 import * as utils from "@/utils";
+import * as settingsModel from "@/settings/model";
 
 // Mock Obsidian's TFile class
 jest.mock("obsidian", () => ({
@@ -37,6 +39,15 @@ jest.mock("@/utils", () => ({
   getTagsFromNote: jest.fn(),
 }));
 
+// Add mock for settings
+jest.mock("@/settings/model", () => ({
+  ...jest.requireActual("@/settings/model"),
+  getSettings: jest.fn().mockReturnValue({
+    qaInclusions: "",
+    qaExclusions: "",
+  }),
+}));
+
 describe("searchUtils", () => {
   beforeAll(() => {
     // @ts-ignore
@@ -51,6 +62,12 @@ describe("searchUtils", () => {
   beforeEach(() => {
     mockGetAbstractFileByPath.mockReset();
     (utils.getTagsFromNote as jest.Mock).mockReset();
+    // Reset the settings mock before each test
+    (settingsModel.getSettings as jest.Mock).mockReset();
+    (settingsModel.getSettings as jest.Mock).mockReturnValue({
+      qaInclusions: "",
+      qaExclusions: "",
+    });
   });
 
   describe("shouldIndexFile", () => {
@@ -360,6 +377,71 @@ describe("searchUtils", () => {
         "*.pdf",
         "folder/with/100 spaces",
       ]);
+    });
+  });
+
+  describe("getMatchingPatterns", () => {
+    it("should return null inclusions and exclusions when no patterns are set", () => {
+      // No need to set mock return value as it's set in beforeEach
+      const { inclusions, exclusions } = getMatchingPatterns();
+      expect(inclusions).toBeNull();
+      expect(exclusions).toBeNull();
+    });
+
+    it("should return categorized inclusion patterns", () => {
+      // Mock settings with inclusions
+      (settingsModel.getSettings as jest.Mock).mockReturnValue({
+        qaInclusions: "notes,*.pdf,%23important,%5B%5BNote%201%5D%5D",
+        qaExclusions: "",
+      });
+
+      const { inclusions, exclusions } = getMatchingPatterns();
+      expect(inclusions).toEqual({
+        folderPatterns: ["notes"],
+        extensionPatterns: ["*.pdf"],
+        tagPatterns: ["#important"],
+        notePatterns: ["[[Note 1]]"],
+      });
+      expect(exclusions).toBeNull();
+    });
+
+    it("should return categorized exclusion patterns", () => {
+      // Mock settings with exclusions
+      (settingsModel.getSettings as jest.Mock).mockReturnValue({
+        qaInclusions: "",
+        qaExclusions: "private,%23draft,*.tmp",
+      });
+
+      const { inclusions, exclusions } = getMatchingPatterns();
+      expect(inclusions).toBeNull();
+      expect(exclusions).toEqual({
+        folderPatterns: ["private"],
+        tagPatterns: ["#draft"],
+        extensionPatterns: ["*.tmp"],
+        notePatterns: [],
+      });
+    });
+
+    it("should handle both inclusions and exclusions", () => {
+      // Mock settings with both inclusions and exclusions
+      (settingsModel.getSettings as jest.Mock).mockReturnValue({
+        qaInclusions: "notes,%23important",
+        qaExclusions: "private,%23draft",
+      });
+
+      const { inclusions, exclusions } = getMatchingPatterns();
+      expect(inclusions).toEqual({
+        folderPatterns: ["notes"],
+        tagPatterns: ["#important"],
+        extensionPatterns: [],
+        notePatterns: [],
+      });
+      expect(exclusions).toEqual({
+        folderPatterns: ["private"],
+        tagPatterns: ["#draft"],
+        extensionPatterns: [],
+        notePatterns: [],
+      });
     });
   });
 });

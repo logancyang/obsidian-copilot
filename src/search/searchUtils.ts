@@ -104,8 +104,8 @@ export function getMatchingPatterns(): {
   const inclusions = getInclusionPatterns();
   const exclusions = getExclusionPatterns();
   return {
-    inclusions: inclusions ? categorizePatterns(inclusions) : null,
-    exclusions: exclusions ? categorizePatterns(exclusions) : null,
+    inclusions: inclusions.length > 0 ? categorizePatterns(inclusions) : null,
+    exclusions: exclusions.length > 0 ? categorizePatterns(exclusions) : null,
   };
 }
 
