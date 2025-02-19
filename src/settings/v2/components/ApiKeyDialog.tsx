@@ -9,16 +9,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PasswordInput } from "@/components/ui/password-input";
-import {
-  ChatModelProviders,
-  DisplayKeyProviders,
-  EmbeddingModelProviders,
-  Provider,
-  ProviderInfo,
-  ProviderSettingsKeyMap,
-} from "@/constants";
+import { SettingKeyProviders, ProviderSettingsKeyMap } from "@/constants";
 import { CopilotSettings } from "@/settings/model";
-import { err2String, getProviderInfo, getProviderLabel } from "@/utils";
+import { err2String, getNeedSetKeyProvider, getProviderInfo, getProviderLabel } from "@/utils";
 import { Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useState } from "react";
@@ -32,7 +25,7 @@ interface ApiKeyDialogProps {
 }
 
 interface ProviderKeyItem {
-  provider: DisplayKeyProviders;
+  provider: SettingKeyProviders;
   apiKey: string;
   isVerified: boolean;
 }
@@ -44,8 +37,8 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({
   updateSetting,
   modalContainer,
 }) => {
-  const [verifyingProviders, setVerifyingProviders] = useState<Set<DisplayKeyProviders>>(new Set());
-  const [unverifiedKeys, setUnverifiedKeys] = useState<Set<DisplayKeyProviders>>(new Set());
+  const [verifyingProviders, setVerifyingProviders] = useState<Set<SettingKeyProviders>>(new Set());
+  const [unverifiedKeys, setUnverifiedKeys] = useState<Set<SettingKeyProviders>>(new Set());
 
   const handleOpenChange = (isOpen: boolean) => {
     if (isOpen) {
@@ -59,35 +52,23 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({
     onOpenChange(isOpen);
   };
 
-  // List of providers to exclude
-  const excludeProviders: Provider[] = [
-    ChatModelProviders.OPENAI_FORMAT,
-    ChatModelProviders.OLLAMA,
-    ChatModelProviders.LM_STUDIO,
-    ChatModelProviders.AZURE_OPENAI,
-    EmbeddingModelProviders.COPILOT_PLUS,
-    EmbeddingModelProviders.COPILOT_PLUS_JINA,
-  ];
-
   // Get API key by provider
-  const getApiKeyByProvider = (provider: DisplayKeyProviders): string => {
+  const getApiKeyByProvider = (provider: SettingKeyProviders): string => {
     const settingKey = ProviderSettingsKeyMap[provider];
     return (settings[settingKey] ?? "") as string;
   };
 
-  const providers: ProviderKeyItem[] = Object.entries(ProviderInfo)
-    .filter(([key]) => !excludeProviders.includes(key as Provider))
-    .map(([provider]) => {
-      const providerKey = provider as DisplayKeyProviders;
-      const apiKey = getApiKeyByProvider(providerKey);
-      return {
-        provider: providerKey,
-        apiKey,
-        isVerified: !!apiKey && !unverifiedKeys.has(providerKey),
-      };
-    });
+  const providers: ProviderKeyItem[] = getNeedSetKeyProvider().map((provider) => {
+    const providerKey = provider as SettingKeyProviders;
+    const apiKey = getApiKeyByProvider(providerKey);
+    return {
+      provider: providerKey,
+      apiKey,
+      isVerified: !!apiKey && !unverifiedKeys.has(providerKey),
+    };
+  });
 
-  const handleApiKeyChange = (provider: DisplayKeyProviders, value: string) => {
+  const handleApiKeyChange = (provider: SettingKeyProviders, value: string) => {
     const currentKey = getApiKeyByProvider(provider);
     if (currentKey !== value) {
       updateSetting(ProviderSettingsKeyMap[provider], value);
@@ -95,7 +76,7 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({
     }
   };
 
-  const verifyApiKey = async (provider: DisplayKeyProviders, apiKey: string) => {
+  const verifyApiKey = async (provider: SettingKeyProviders, apiKey: string) => {
     setVerifyingProviders((prev) => new Set(prev).add(provider));
     try {
       if (settings.debug) console.log(`Verifying ${provider} API key:`, apiKey);
