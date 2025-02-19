@@ -56,14 +56,9 @@ export const ModelCapabilityIcons: React.FC<ModelCapabilityIconsProps> = ({
 
 export const ModelDisplay: React.FC<ModelDisplayProps> = ({ model, iconSize = 14 }) => {
   const displayName = model.displayName || model.name;
-  const provider = `(${getProviderLabel(model.provider)})`;
-
   return (
     <div className="flex items-center gap-1">
-      <span>
-        {displayName}
-        <span className="text-[10px]">{provider}</span>
-      </span>
+      <span>{displayName}</span>
       {model.capabilities && model.capabilities.length > 0 && (
         <div className="flex gap-0.5 items-center">
           <ModelCapabilityIcons capabilities={model.capabilities} iconSize={iconSize} />
