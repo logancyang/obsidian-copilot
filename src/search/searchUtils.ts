@@ -1,9 +1,16 @@
 import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { getSettings } from "@/settings/model";
-import { getTagsFromNote, isPathInList, stripHash } from "@/utils";
+import { getTagsFromNote, stripHash } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
 import { App, TFile } from "obsidian";
+
+interface PatternCategory {
+  tagPatterns?: string[];
+  extensionPatterns?: string[];
+  folderPatterns?: string[];
+  notePatterns?: string[];
+}
 
 export async function getVectorLength(embeddingInstance: Embeddings | undefined): Promise<number> {
   if (!embeddingInstance) {
@@ -46,6 +53,23 @@ export async function getAllQAMarkdownContent(app: App): Promise<string> {
 }
 
 /**
+ * Get the decoded patterns from the settings string.
+ * @param value - The settings string.
+ * @returns An array of decoded patterns.
+ */
+export function getDecodedPatterns(value: string): string[] {
+  const patterns: string[] = [];
+  patterns.push(
+    ...value
+      .split(",")
+      .map((item) => decodeURIComponent(item.trim()))
+      .filter((item) => item.length > 0)
+  );
+
+  return patterns;
+}
+
+/**
  * Get the exclusion patterns the exclusion settings string.
  * @returns An array of exclusion patterns.
  */
@@ -53,18 +77,8 @@ function getExclusionPatterns(): string[] {
   if (!getSettings().qaExclusions) {
     return [];
   }
-  const exclusions: string[] = [];
-  exclusions.push(...extractAppIgnoreSettings(app));
 
-  if (getSettings().qaExclusions) {
-    exclusions.push(
-      ...getSettings()
-        .qaExclusions.split(",")
-        .map((item) => item.trim())
-    );
-  }
-
-  return exclusions;
+  return getDecodedPatterns(getSettings().qaExclusions);
 }
 
 /**
@@ -75,34 +89,188 @@ function getInclusionPatterns(): string[] {
   if (!getSettings().qaInclusions) {
     return [];
   }
-  const inclusions: string[] = [];
-  inclusions.push(
-    ...getSettings()
-      .qaInclusions.split(",")
-      .map((item) => item.trim())
-  );
 
-  return inclusions;
+  return getDecodedPatterns(getSettings().qaInclusions);
 }
 
 /**
  * Get the inclusion and exclusion patterns from the settings.
  * @returns An object containing the inclusions and exclusions patterns strings.
  */
-export function getMatchingPatterns(): { inclusions: string[]; exclusions: string[] } {
+export function getMatchingPatterns(): {
+  inclusions: PatternCategory | null;
+  exclusions: PatternCategory | null;
+} {
   const inclusions = getInclusionPatterns();
   const exclusions = getExclusionPatterns();
-  return { inclusions, exclusions };
+  return {
+    inclusions: inclusions.length > 0 ? categorizePatterns(inclusions) : null,
+    exclusions: exclusions.length > 0 ? categorizePatterns(exclusions) : null,
+  };
 }
 
-export function shouldIndexFile(file: TFile, inclusions: string[], exclusions: string[]): boolean {
-  if (exclusions.length > 0 && matchFilePathWithPatterns(file.path, exclusions)) {
+/**
+ * Should index the file based on the inclusions and exclusions patterns.
+ * @param file - The file to check.
+ * @param inclusions - The inclusions patterns.
+ * @param exclusions - The exclusions patterns.
+ * @returns True if the file should be indexed, false otherwise.
+ */
+export function shouldIndexFile(
+  file: TFile,
+  inclusions: PatternCategory | null,
+  exclusions: PatternCategory | null
+): boolean {
+  if (exclusions && matchFilePathWithPatterns(file.path, exclusions)) {
     return false;
   }
-  if (inclusions.length > 0 && !matchFilePathWithPatterns(file.path, inclusions)) {
+  if (inclusions && !matchFilePathWithPatterns(file.path, inclusions)) {
     return false;
   }
   return true;
+}
+
+/**
+ * Break down the patterns into their respective categories.
+ * @param patterns - The patterns to categorize.
+ * @returns An object containing the categorized patterns.
+ */
+export function categorizePatterns(patterns: string[]) {
+  const tagPatterns: string[] = [];
+  const extensionPatterns: string[] = [];
+  const folderPatterns: string[] = [];
+  const notePatterns: string[] = [];
+
+  const tagRegex = /^#[^\s#]+$/; // Matches #tag format
+  const extensionRegex = /^\*\.([a-zA-Z0-9.]+)$/; // Matches *.extension format
+  const noteRegex = /^\[\[(.*?)\]\]$/; // Matches [[note name]] format - removed global flag and added ^ $
+
+  patterns.forEach((pattern) => {
+    if (tagRegex.test(pattern)) {
+      tagPatterns.push(pattern);
+    } else if (extensionRegex.test(pattern)) {
+      extensionPatterns.push(pattern);
+    } else if (noteRegex.test(pattern)) {
+      notePatterns.push(pattern);
+    } else {
+      folderPatterns.push(pattern);
+    }
+  });
+
+  return { tagPatterns, extensionPatterns, folderPatterns, notePatterns };
+}
+
+/**
+ * Convert the pattern settings value to a preview string.
+ * @param value - The value to preview.
+ * @returns The previewed value.
+ */
+export function previewPatternValue(value: string): string {
+  const patterns = getDecodedPatterns(value);
+  return patterns.join(", ");
+}
+
+/**
+ * Create the pattern settings value from the categorized patterns.
+ * @param tagPatterns - The tag patterns.
+ * @param extensionPatterns - The extension patterns.
+ * @param folderPatterns - The folder patterns.
+ * @param notePatterns - The note patterns.
+ * @returns The pattern settings value.
+ */
+export function createPatternSettingsValue({
+  tagPatterns,
+  extensionPatterns,
+  folderPatterns,
+  notePatterns,
+}: PatternCategory) {
+  const patterns = [
+    ...(tagPatterns ?? []),
+    ...(extensionPatterns ?? []),
+    ...(notePatterns ?? []),
+    ...(folderPatterns ?? []),
+  ].map((pattern) => encodeURIComponent(pattern));
+
+  return patterns.join(",");
+}
+
+/**
+ * Match the file path with the tag patterns.
+ * @param filePath - The file path to match.
+ * @param tagPatterns - The tag patterns to match the file path with.
+ * @returns True if the file path matches the tags, false otherwise.
+ */
+function matchFilePathWithTags(filePath: string, tagPatterns: string[]): boolean {
+  if (tagPatterns.length === 0) return false;
+
+  const file = app.vault.getAbstractFileByPath(filePath);
+  if (file instanceof TFile) {
+    const tags = getTagsFromNote(file);
+    if (tagPatterns.some((pattern) => tags.includes(stripHash(pattern)))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Match the file path with the extension patterns.
+ * @param filePath - The file path to match.
+ * @param extensionPatterns - The extension patterns to match the file path with.
+ * @returns True if the file path matches the extensions, false otherwise.
+ */
+function matchFilePathWithExtensions(filePath: string, extensionPatterns: string[]): boolean {
+  if (extensionPatterns.length === 0) return false;
+
+  // Extract the file extension without the dot
+  const fileExtension = filePath.split(".").pop()?.toLowerCase() || "";
+
+  // Match if the file extension matches any of the patterns
+  return extensionPatterns.some((ext) => ext.slice(2) === fileExtension);
+}
+
+/**
+ * Match the file path with the folder patterns.
+ * @param filePath - The file path to match.
+ * @param folderPatterns - The folder patterns to match the file path with.
+ * @returns True if the file path matches the folders, false otherwise.
+ */
+function matchFilePathWithFolders(filePath: string, folderPatterns: string[]): boolean {
+  if (folderPatterns.length === 0) return false;
+
+  // Normalize path separators to forward slashes to ensure cross-platform compatibility
+  const normalizedFilePath = filePath.replace(/\\/g, "/");
+
+  return folderPatterns.some((pattern) => {
+    // Normalize pattern path separators and remove trailing slashes
+    const normalizedPattern = pattern.replace(/\\/g, "/").replace(/\/$/, "");
+
+    // Check if the path starts with the pattern
+    return (
+      normalizedFilePath.startsWith(normalizedPattern) &&
+      // Ensure it's a proper folder match by checking for / after pattern
+      (normalizedFilePath.length === normalizedPattern.length ||
+        normalizedFilePath[normalizedPattern.length] === "/")
+    );
+  });
+}
+
+/**
+ * Match the file path with the note title patterns.
+ * @param filePath - The file path to match.
+ * @param notePatterns - The note patterns to match the file path with.
+ * @returns True if the file path matches the note titles, false otherwise.
+ */
+function matchFilePathWithNotes(filePath: string, noteTitles: string[]): boolean {
+  if (noteTitles.length === 0) return false;
+
+  const file = app.vault.getAbstractFileByPath(filePath);
+  if (file instanceof TFile) {
+    if (noteTitles.some((title) => title.slice(2, -2) === file.basename)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -111,48 +279,17 @@ export function shouldIndexFile(file: TFile, inclusions: string[], exclusions: s
  * @param patterns - The patterns to match the file path with.
  * @returns True if the file path matches the patterns, false otherwise.
  */
-function matchFilePathWithPatterns(filePath: string, patterns: string[]): boolean {
-  if (!patterns || patterns.length === 0) return false;
+function matchFilePathWithPatterns(filePath: string, patterns: PatternCategory): boolean {
+  if (!patterns) return false;
 
-  // Group patterns by type for more efficient processing
-  const tagPatterns: string[] = [];
-  const extensionPatterns: string[] = [];
-  const pathPatterns: string[] = [];
+  const { tagPatterns, extensionPatterns, folderPatterns, notePatterns } = patterns;
 
-  patterns.forEach((pattern) => {
-    if (pattern.startsWith("#")) {
-      tagPatterns.push(stripHash(pattern));
-    } else if (pattern.startsWith("*")) {
-      extensionPatterns.push(pattern.slice(1).toLowerCase());
-    } else {
-      pathPatterns.push(pattern);
-    }
-  });
-
-  // Check extension patterns
-  if (extensionPatterns.length > 0) {
-    const fileExt = filePath.toLowerCase();
-    if (extensionPatterns.some((ext) => fileExt.endsWith(ext))) {
-      return true;
-    }
-  }
-
-  // Check path patterns
-  if (pathPatterns.length > 0) {
-    if (pathPatterns.some((pattern) => isPathInList(filePath, pattern))) {
-      return true;
-    }
-  }
-
-  const file = app.vault.getAbstractFileByPath(filePath);
-  if (file instanceof TFile) {
-    const tags = getTagsFromNote(file);
-    if (tagPatterns.some((pattern) => tags.includes(pattern))) {
-      return true;
-    }
-  }
-
-  return false;
+  return (
+    matchFilePathWithTags(filePath, tagPatterns ?? []) ||
+    matchFilePathWithExtensions(filePath, extensionPatterns ?? []) ||
+    matchFilePathWithFolders(filePath, folderPatterns ?? []) ||
+    matchFilePathWithNotes(filePath, notePatterns ?? [])
+  );
 }
 
 export function extractAppIgnoreSettings(app: App): string[] {

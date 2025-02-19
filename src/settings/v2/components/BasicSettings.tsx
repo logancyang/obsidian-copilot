@@ -137,7 +137,7 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
             >
               <Button
                 onClick={() => setIsApiKeyDialogOpen(true)}
-                variant="outline"
+                variant="secondary"
                 className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start"
               >
                 Set Keys
@@ -363,8 +363,7 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
               <Button
                 onClick={() => applyCustomNoteFormat()}
                 disabled={isChecking}
-                variant="outline"
-                size="sm"
+                variant="secondary"
               >
                 {isChecking ? (
                   <>
@@ -410,7 +409,7 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
             description="Enable or disable builtin Copilot commands"
             dialogTitle="Command Settings"
             dialogDescription="Enable or disable chat commands"
-            trigger={<Button variant="outline">Manage Commands</Button>}
+            trigger={<Button variant="secondary">Manage Commands</Button>}
           >
             <div className="h-[50vh] sm:h-[400px] overflow-y-auto px-1 py-2">
               <div className="space-y-4">
