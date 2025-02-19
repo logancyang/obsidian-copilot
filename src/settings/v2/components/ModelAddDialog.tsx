@@ -3,7 +3,7 @@ import { useTab } from "@/contexts/TabContext";
 import { getSettings } from "@/settings/model";
 import {
   ChatModelProviders,
-  DisplayKeyProviders,
+  SettingKeyProviders,
   EmbeddingModelProviders,
   MODEL_CAPABILITIES,
   ModelCapability,
@@ -126,7 +126,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
   };
 
   const getDefaultApiKey = (provider: Provider): string => {
-    return (settings[ProviderSettingsKeyMap[provider as DisplayKeyProviders]] as string) || "";
+    return (settings[ProviderSettingsKeyMap[provider as SettingKeyProviders]] as string) || "";
   };
 
   const getInitialModel = (provider = defaultProvider): CustomModel => {

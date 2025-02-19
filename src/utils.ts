@@ -1,13 +1,17 @@
 import { ChainType, Document } from "@/chainFactory";
 import {
+  DisplayKeyProviders,
   NOMIC_EMBED_TEXT,
   Provider,
   ProviderInfo,
   ProviderMetadata,
   USER_SENDER,
-  DisplayKeyProviders,
+  SettingKeyProviders,
   ProviderSettingsKeyMap,
+  ChatModelProviders,
+  EmbeddingModelProviders,
 } from "@/constants";
+import { CopilotSettings } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { MemoryVariables } from "@langchain/core/memory";
@@ -889,6 +893,22 @@ export function getMessageRole(
   return isOSeriesModel(model) ? "human" : defaultRole;
 }
 
+export function getNeedSetKeyProvider() {
+  // List of providers to exclude
+  const excludeProviders: Provider[] = [
+    ChatModelProviders.OPENAI_FORMAT,
+    ChatModelProviders.OLLAMA,
+    ChatModelProviders.LM_STUDIO,
+    ChatModelProviders.AZURE_OPENAI,
+    EmbeddingModelProviders.COPILOT_PLUS,
+    EmbeddingModelProviders.COPILOT_PLUS_JINA,
+  ];
+
+  return Object.entries(ProviderInfo)
+    .filter(([key]) => !excludeProviders.includes(key as Provider))
+    .map(([key]) => key as Provider);
+}
+
 export function checkModelApiKey(
   model: CustomModel,
   settings: Readonly<CopilotSettings>
@@ -896,10 +916,11 @@ export function checkModelApiKey(
   hasApiKey: boolean;
   errorNotice?: string;
 } {
-  const providerKeyName = ProviderSettingsKeyMap[model.provider as DisplayKeyProviders];
+  const needSetKeyPath = !!getNeedSetKeyProvider().find((provider) => provider === model.provider);
+  const providerKeyName = ProviderSettingsKeyMap[model.provider as SettingKeyProviders];
   const hasNoApiKey = !model.apiKey && !settings[providerKeyName];
 
-  if (hasNoApiKey) {
+  if (needSetKeyPath && hasNoApiKey) {
     const notice =
       `Please configure API Key for ${model.name} in settings first.` +
       "\nPath: Settings > copilot plugin > Basic Tab > Set Keys";
@@ -912,4 +933,14 @@ export function checkModelApiKey(
   return {
     hasApiKey: true,
   };
+}
+
+/**
+ * Removes any <think> tags and their content from the text.
+ * This is used to clean model outputs before using them for RAG.
+ * @param text - The text to remove think tags from
+ * @returns The text with think tags removed
+ */
+export function removeThinkTags(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
 }

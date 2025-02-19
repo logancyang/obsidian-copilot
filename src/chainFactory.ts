@@ -5,6 +5,7 @@ import { BaseRetriever } from "@langchain/core/retrievers";
 import { RunnablePassthrough, RunnableSequence } from "@langchain/core/runnables";
 import { BaseChatMemory } from "langchain/memory";
 import { formatDocumentsAsString } from "langchain/util/document";
+import { removeThinkTags } from "./utils";
 
 export interface LLMChainInput {
   llm: BaseLanguageModel;
@@ -177,8 +178,9 @@ Question: {question}
       llm,
       new StringOutputParser(),
       (output) => {
-        if (debug) console.log("Standalone Question: ", output);
-        return output;
+        const cleanedOutput = removeThinkTags(output);
+        if (debug) console.log("Standalone Question: ", cleanedOutput);
+        return cleanedOutput;
       },
     ]);
 
