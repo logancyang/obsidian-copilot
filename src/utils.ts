@@ -1,16 +1,16 @@
 import { ChainType, Document } from "@/chainFactory";
 import {
-  DisplayKeyProviders,
+  ChatModelProviders,
+  EmbeddingModelProviders,
   NOMIC_EMBED_TEXT,
   Provider,
   ProviderInfo,
   ProviderMetadata,
-  USER_SENDER,
-  SettingKeyProviders,
   ProviderSettingsKeyMap,
-  ChatModelProviders,
-  EmbeddingModelProviders,
+  SettingKeyProviders,
+  USER_SENDER,
 } from "@/constants";
+import { logInfo } from "@/logger";
 import { CopilotSettings } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
@@ -20,8 +20,6 @@ import { BaseChain, RetrievalQAChain } from "langchain/chains";
 import moment from "moment";
 import { MarkdownView, Notice, TFile, Vault, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
-import { CopilotSettings } from "@/settings/model";
-import { logInfo } from "@/logger";
 
 // Add custom error type at the top of the file
 interface APIError extends Error {
