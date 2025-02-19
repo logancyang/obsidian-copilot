@@ -1,6 +1,6 @@
 import { CHUNK_SIZE } from "@/constants";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
-import { logError } from "@/logger";
+import { logError, logInfo } from "@/logger";
 import { RateLimiter } from "@/rateLimiter";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { formatDateTime } from "@/utils";
@@ -293,12 +293,14 @@ export class IndexOperations {
       }
     }
 
-    if (getSettings().debug) {
-      console.log(`Files to index: ${filesToIndex.size}`);
-      console.log(`Previously indexed: ${indexedFilePaths.size}`);
-      console.log(`Empty files skipped: ${emptyFiles.size}`);
-      console.log(`Files missing embeddings: ${filesMissingEmbeddings.size}`);
-    }
+    logInfo(
+      [
+        `Files to index: ${filesToIndex.size}`,
+        `Previously indexed: ${indexedFilePaths.size}`,
+        `Empty files skipped: ${emptyFiles.size}`,
+        `Files missing embeddings: ${filesMissingEmbeddings.size}`,
+      ].join("\n")
+    );
 
     return Array.from(filesToIndex);
   }
