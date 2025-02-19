@@ -1,15 +1,17 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ChatModelManager from "@/LLMProviders/chatModelManager";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
+import { logInfo } from "@/logger";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings } from "@/settings/model";
-import { extractNoteTitles, getNoteFileFromTitle, removeThinkTags } from "@/utils";
+import { extractNoteFiles, removeThinkTags } from "@/utils";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
 import { BaseChatModelCallOptions } from "@langchain/core/language_models/chat_models";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { search } from "@orama/orama";
+import { TFile } from "obsidian";
 import { DBOperations } from "./dbOperations";
 
 export class HybridRetriever extends BaseRetriever {
@@ -38,10 +40,10 @@ export class HybridRetriever extends BaseRetriever {
     query: string,
     config?: BaseCallbackConfig
   ): Promise<Document[]> {
-    // Extract note titles wrapped in [[]] from the query
-    const noteTitles = extractNoteTitles(query);
-    // Retrieve chunks for explicitly mentioned note titles
-    const explicitChunks = await this.getExplicitChunks(noteTitles);
+    // Extract note TFiles wrapped in [[]] from the query
+    const noteFiles = extractNoteFiles(query, app.vault);
+    // Retrieve chunks for explicitly mentioned note files
+    const explicitChunks = await this.getExplicitChunks(noteFiles);
     let rewrittenQuery = query;
     if (config?.runName !== "no_hyde") {
       // Use config to determine if HyDE should be used
@@ -141,12 +143,11 @@ export class HybridRetriever extends BaseRetriever {
     }
   }
 
-  private async getExplicitChunks(noteTitles: string[]): Promise<Document[]> {
+  private async getExplicitChunks(noteFiles: TFile[]): Promise<Document[]> {
     const explicitChunks: Document[] = [];
-    for (const noteTitle of noteTitles) {
-      const noteFile = await getNoteFileFromTitle(app.vault, noteTitle);
+    for (const noteFile of noteFiles) {
       const db = await VectorStoreManager.getInstance().getDb();
-      const hits = await DBOperations.getDocsByPath(db, noteFile?.path ?? "");
+      const hits = await DBOperations.getDocsByPath(db, noteFile.path);
       if (hits) {
         const matchingChunks = hits.map(
           (hit: any) =>
@@ -249,18 +250,13 @@ export class HybridRetriever extends BaseRetriever {
     if (this.options.timeRange) {
       const { startTime, endTime } = this.options.timeRange;
 
-      const dateRange = this.generateDateRange(startTime, endTime);
+      const dailyNotes = this.generateDailyNoteDateRange(startTime, endTime);
 
-      if (getSettings().debug) {
-        console.log(
-          "==== Daily note date range: ====",
-          dateRange[0],
-          dateRange[dateRange.length - 1]
-        );
-      }
+      logInfo("==== Daily note date range: ====", dailyNotes[0], dailyNotes[dailyNotes.length - 1]);
 
       // Perform the first search with title filter
-      const dailyNoteResults = await this.getExplicitChunks(dateRange);
+      const dailyNoteFiles = extractNoteFiles(dailyNotes.join(", "), app.vault);
+      const dailyNoteResults = await this.getExplicitChunks(dailyNoteFiles);
 
       // Set includeInContext to true for all dailyNoteResults
       const dailyNoteResultsWithContext = dailyNoteResults.map((doc) => ({
@@ -271,9 +267,7 @@ export class HybridRetriever extends BaseRetriever {
         },
       }));
 
-      if (getSettings().debug) {
-        console.log("==== Modified and created time range: ====", startTime, endTime);
-      }
+      logInfo("==== Modified and created time range: ====", startTime, endTime);
 
       // Perform a second search with time range filters
       searchParams.where = {
@@ -371,18 +365,18 @@ export class HybridRetriever extends BaseRetriever {
     return vector;
   }
 
-  private generateDateRange(startTime: number, endTime: number): string[] {
-    const dateRange: string[] = [];
+  private generateDailyNoteDateRange(startTime: number, endTime: number): string[] {
+    const dailyNotes: string[] = [];
     const start = new Date(startTime);
     const end = new Date(endTime);
 
     const current = new Date(start);
     while (current <= end) {
-      dateRange.push(current.toLocaleDateString("en-CA"));
+      dailyNotes.push(`[[${current.toLocaleDateString("en-CA")}]]`);
       current.setDate(current.getDate() + 1);
     }
 
-    return dateRange;
+    return dailyNotes;
   }
 
   private filterAndFormatChunks(oramaChunks: Document[], explicitChunks: Document[]): Document[] {
