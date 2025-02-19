@@ -9,12 +9,14 @@ import { ChatCohere } from "@langchain/cohere";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatGroq } from "@langchain/groq";
+import { ChatMistralAI } from "@langchain/mistralai";
 import { ChatOllama } from "@langchain/ollama";
 import { ChatOpenAI } from "@langchain/openai";
-import { ChatMistralAI } from "@langchain/mistralai";
 import { Notice } from "obsidian";
 
-type ChatConstructorType = new (config: any) => BaseChatModel;
+type ChatConstructorType = {
+  new (config: any): any;
+};
 
 const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.OPENAI]: ChatOpenAI,
@@ -113,14 +115,17 @@ export default class ChatModelManager {
         },
       },
       [ChatModelProviders.AZURE_OPENAI]: {
-        modelName: modelName,
+        modelName:
+          customModel.azureOpenAIApiDeploymentName || settings.azureOpenAIApiDeploymentName,
         openAIApiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
         configuration: {
-          baseURL:
-            customModel.baseUrl ||
-            `https://${customModel.azureOpenAIApiInstanceName || settings.azureOpenAIApiInstanceName}.openai.azure.com/openai/deployments/${customModel.azureOpenAIApiDeploymentName || settings.azureOpenAIApiDeploymentName}`,
+          baseURL: `https://copilot-experimental.openai.azure.com/openai/deployments/${customModel.azureOpenAIApiDeploymentName || settings.azureOpenAIApiDeploymentName}`,
           defaultQuery: {
             "api-version": customModel.azureOpenAIApiVersion || settings.azureOpenAIApiVersion,
+          },
+          defaultHeaders: {
+            "Content-Type": "application/json",
+            "api-key": await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
           },
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
@@ -348,7 +353,6 @@ export default class ChatModelManager {
       const { streaming, maxTokens, maxCompletionTokens, ...pingConfig } = modelConfig;
       const isOSeries = isOSeriesModel(modelToTest.name);
       const tokenConfig = this.handleOpenAIExtraArgs(isOSeries, 10, modelConfig.temperature);
-
       const testModel = new (this.getProviderConstructor(modelToTest))({
         ...pingConfig,
         ...tokenConfig,
