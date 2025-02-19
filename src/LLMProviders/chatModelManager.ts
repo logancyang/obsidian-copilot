@@ -102,7 +102,7 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
           organization: await getDecryptedKey(customModel.openAIOrgId || settings.openAIOrgId),
         },
-        ...this.handleOpenAIExtraArgs(isOSeries, settings.maxTokens, settings.temperature),
+        ...this.handleOpenAIExtraArgs(isOSeries, settings.maxTokens, settings.temperature, customModel.reasoning_effort),
       },
       [ChatModelProviders.ANTHROPIC]: {
         anthropicApiKey: await getDecryptedKey(customModel.apiKey || settings.anthropicApiKey),
@@ -129,7 +129,7 @@ export default class ChatModelManager {
           },
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
-        ...this.handleOpenAIExtraArgs(isOSeries, settings.maxTokens, settings.temperature),
+        ...this.handleOpenAIExtraArgs(isOSeries, settings.maxTokens, settings.temperature, customModel.reasoning_effort),
       },
       [ChatModelProviders.COHEREAI]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
@@ -194,7 +194,7 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
           defaultHeaders: { "dangerously-allow-browser": "true" },
         },
-        ...this.handleOpenAIExtraArgs(isOSeries, settings.maxTokens, settings.temperature),
+        ...this.handleOpenAIExtraArgs(isOSeries, settings.maxTokens, settings.temperature, customModel.reasoning_effort),
       },
       [ChatModelProviders.COPILOT_PLUS]: {
         modelName: modelName,
@@ -218,7 +218,8 @@ export default class ChatModelManager {
     const tokenConfig = this.handleOpenAIExtraArgs(
       isOSeries,
       customModel.maxTokens ?? settings.maxTokens,
-      customModel.temperature ?? settings.temperature
+      customModel.temperature ?? settings.temperature,
+      customModel.reasoning_effort
     );
 
     return {
@@ -228,11 +229,13 @@ export default class ChatModelManager {
     };
   }
 
-  private handleOpenAIExtraArgs(isOSeriesModel: boolean, maxTokens: number, temperature: number) {
+  private handleOpenAIExtraArgs(isOSeriesModel: boolean, maxTokens: number, temperature: number, reasoning_effort?: number) {
     const config = isOSeriesModel
       ? {
           maxCompletionTokens: maxTokens,
           temperature: 1,
+          reasoning_effort: reasoning_effort,
+          streaming: false,
         }
       : {
           maxTokens: maxTokens,

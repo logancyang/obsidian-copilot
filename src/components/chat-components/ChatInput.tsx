@@ -8,7 +8,7 @@ import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { getToolDescription } from "@/tools/toolManager";
-import { err2String, extractNoteTitles, checkModelApiKey } from "@/utils";
+import { err2String, extractNoteTitles, checkModelApiKey, isOSeriesModel } from "@/utils";
 import {
   ArrowBigUp,
   ChevronDown,
