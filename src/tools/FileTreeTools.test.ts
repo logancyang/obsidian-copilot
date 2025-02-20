@@ -73,7 +73,7 @@ describe("FileTreeTools", () => {
     root.children = [docs];
   });
 
-  it("should generate correct JSON file tree representation", async () => {
+  it("should generate correct JSON file tree with filenames only", async () => {
     const tool = createGetFileTreeTool(root);
     const result = await tool.invoke({});
     const parsedResult = JSON.parse(result);
@@ -85,17 +85,14 @@ describe("FileTreeTools", () => {
           path: "docs",
           children: [
             {
-              path: "docs/projects",
-              children: [
-                { path: "docs/projects/project1.md" },
-                { path: "docs/projects/project2.md" },
-              ],
+              path: "projects",
+              children: [{ path: "project1.md" }, { path: "project2.md" }],
             },
             {
-              path: "docs/notes",
-              children: [{ path: "docs/notes/note1.md" }, { path: "docs/notes/note2.md" }],
+              path: "notes",
+              children: [{ path: "note1.md" }, { path: "note2.md" }],
             },
-            { path: "docs/readme.md" },
+            { path: "readme.md" },
           ],
         },
       ],

@@ -17,7 +17,7 @@ function isTFile(item: any): item is TFile {
 
 function buildFileTree(folder: TFolder): FileTreeNode {
   const node: FileTreeNode = {
-    path: folder.path,
+    path: folder.name,
     children: [],
   };
 
@@ -32,7 +32,7 @@ function buildFileTree(folder: TFolder): FileTreeNode {
   for (const child of folder.children) {
     if (isTFile(child)) {
       node.children?.push({
-        path: child.path,
+        path: child.name,
       });
     }
   }
