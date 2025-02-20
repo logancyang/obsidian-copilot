@@ -38,6 +38,16 @@ const AdvancedSettings: React.FC = () => {
               updateSetting("debug", checked);
             }}
           />
+
+          <SettingItem
+            type="switch"
+            title="Enable Compressed Vault Structure"
+            description="When enabled, the vault structure will be compressed when being added to chat context."
+            checked={settings.enableCompressedVaultStructure}
+            onCheckedChange={(checked) => {
+              updateSetting("enableCompressedVaultStructure", checked);
+            }}
+          />
         </div>
       </section>
     </div>

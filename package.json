@@ -51,7 +51,7 @@
     "@typescript-eslint/parser": "^8.19.1",
     "builtin-modules": "3.3.0",
     "electron": "^27.3.2",
-    "esbuild": "0.17.3",
+    "esbuild": "^0.25.0",
     "eslint": "^8.57.0",
     "eslint-plugin-json": "^4.0.1",
     "eslint-plugin-react": "^7.37.3",
