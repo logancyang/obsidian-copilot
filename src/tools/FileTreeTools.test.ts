@@ -1,11 +1,5 @@
 import { TFolder } from "obsidian";
 import { createGetFileTreeTool } from "./FileTreeTools";
-import * as settingsModule from "../settings/model";
-
-// Mock the settings
-jest.mock("../settings/model", () => ({
-  getSettings: jest.fn().mockReturnValue({ enableCompressedVaultStructure: false }),
-}));
 
 // Mock TFile class
 class MockTFile {
@@ -57,11 +51,6 @@ describe("FileTreeTools", () => {
   let root: MockTFolder;
 
   beforeEach(() => {
-    // Reset settings mock before each test
-    (settingsModule.getSettings as jest.Mock).mockReturnValue({
-      enableCompressedVaultStructure: false,
-    });
-
     root = new MockTFolder("", null);
 
     // Create a mock file structure
@@ -84,43 +73,7 @@ describe("FileTreeTools", () => {
     root.children = [docs];
   });
 
-  it("should generate correct JSON file tree with full paths when compression disabled", async () => {
-    const tool = createGetFileTreeTool(root);
-    const result = await tool.invoke({});
-    const parsedResult = JSON.parse(result);
-
-    const expected = {
-      path: "",
-      children: [
-        {
-          path: "docs",
-          children: [
-            {
-              path: "docs/projects",
-              children: [
-                { path: "docs/projects/project1.md" },
-                { path: "docs/projects/project2.md" },
-              ],
-            },
-            {
-              path: "docs/notes",
-              children: [{ path: "docs/notes/note1.md" }, { path: "docs/notes/note2.md" }],
-            },
-            { path: "docs/readme.md" },
-          ],
-        },
-      ],
-    };
-
-    expect(parsedResult).toEqual(expected);
-  });
-
-  it("should generate correct JSON file tree with compressed paths when compression enabled", async () => {
-    // Enable compressed structure
-    (settingsModule.getSettings as jest.Mock).mockReturnValue({
-      enableCompressedVaultStructure: true,
-    });
-
+  it("should generate correct JSON file tree with filenames only", async () => {
     const tool = createGetFileTreeTool(root);
     const result = await tool.invoke({});
     const parsedResult = JSON.parse(result);

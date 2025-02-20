@@ -46,7 +46,6 @@ export interface CopilotSettings {
   chatNoteContextTags: string[];
   enableIndexSync: boolean;
   debug: boolean;
-  enableCompressedVaultStructure: boolean;
   enableEncryption: boolean;
   maxSourceChunks: number;
   qaExclusions: string;

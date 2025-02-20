@@ -1,7 +1,6 @@
 import { tool } from "@langchain/core/tools";
 import { TFile, TFolder } from "obsidian";
 import { z } from "zod";
-import { getSettings } from "../settings/model";
 
 interface FileTreeNode {
   path: string;
@@ -17,11 +16,8 @@ function isTFile(item: any): item is TFile {
 }
 
 function buildFileTree(folder: TFolder): FileTreeNode {
-  const useCompressedStructure = getSettings().enableCompressedVaultStructure;
-  const nodePath = useCompressedStructure ? folder.name : folder.path;
-
   const node: FileTreeNode = {
-    path: nodePath,
+    path: folder.name,
     children: [],
   };
 
@@ -36,7 +32,7 @@ function buildFileTree(folder: TFolder): FileTreeNode {
   for (const child of folder.children) {
     if (isTFile(child)) {
       node.children?.push({
-        path: useCompressedStructure ? child.name : child.path,
+        path: child.name,
       });
     }
   }
