@@ -267,11 +267,10 @@ export class HybridRetriever extends BaseRetriever {
         },
       }));
 
-      logInfo("==== Modified and created time range: ====", startTime, endTime);
+      logInfo("==== Modified time range: ====", startTime, endTime);
 
       // Perform a second search with time range filters
       searchParams.where = {
-        ctime: { between: [startTime, endTime] },
         mtime: { between: [startTime, endTime] },
       };
 

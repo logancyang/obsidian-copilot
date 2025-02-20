@@ -332,7 +332,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       const currentFiles = new Set(extractNoteFiles(inputMessage, app.vault));
       // Get all URLs mentioned in the input
       const currentUrls = mention.extractAllUrls(inputMessage);
-      console.log("note files", currentFiles);
+
       setContextNotes((prev) =>
         prev.filter((note) => {
           // Check if this note was added manually via the "+" button
