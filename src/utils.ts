@@ -80,29 +80,6 @@ export const isFolderMatch = (fileFullpath: string, inputPath: string): boolean 
   return fileSegments.includes(inputPath.toLowerCase());
 };
 
-/**
- * @deprecated File display title can be duplicated, so we should use file path
- * instead of title to find the note file.
- */
-export async function getNoteFileFromTitle(vault: Vault, noteTitle: string): Promise<TFile | null> {
-  // Get all markdown files in the vault
-  const files = vault.getMarkdownFiles();
-
-  // Iterate through all files to find a match by title
-  for (const file of files) {
-    // Extract the title from the filename by removing the extension
-    const title = file.basename;
-
-    if (title === noteTitle) {
-      // If a match is found, return the file path
-      return file;
-    }
-  }
-
-  // If no match is found, return null
-  return null;
-}
-
 /** TODO: Rewrite with app.vault.getAbstractFileByPath() */
 export const getNotesFromPath = (vault: Vault, path: string): TFile[] => {
   const files = vault.getMarkdownFiles();

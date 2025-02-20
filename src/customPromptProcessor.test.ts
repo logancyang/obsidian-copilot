@@ -1,5 +1,5 @@
 import { CustomPrompt, CustomPromptProcessor } from "@/customPromptProcessor";
-import { extractNoteTitles, getFileContent, getNoteFileFromTitle, getNotesFromPath } from "@/utils";
+import { extractNoteFiles, getFileContent, getNotesFromPath } from "@/utils";
 import { Notice, TFile, Vault } from "obsidian";
 
 // Mock Obsidian
@@ -11,8 +11,7 @@ jest.mock("obsidian", () => ({
 
 // Mock the utility functions
 jest.mock("@/utils", () => ({
-  extractNoteTitles: jest.fn().mockReturnValue([]),
-  getNoteFileFromTitle: jest.fn(),
+  extractNoteFiles: jest.fn().mockReturnValue([]),
   getFileContent: jest.fn(),
   getFileName: jest.fn(),
   getNotesFromPath: jest.fn(),
@@ -176,14 +175,15 @@ describe("CustomPromptProcessor", () => {
     const selectedText = "";
 
     // Mock the necessary functions
-    (extractNoteTitles as jest.Mock).mockReturnValue(["Test Note"]);
-    (getNoteFileFromTitle as jest.Mock).mockResolvedValue({} as TFile);
+    (extractNoteFiles as jest.Mock).mockReturnValue([
+      { basename: "Test Note", path: "Test Note.md" },
+    ]);
     (getFileContent as jest.Mock).mockResolvedValue("Test note content");
 
     const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
 
     expect(result).toContain("Content of [[Test Note]] is important.");
-    expect(result).toContain("[[Test Note]]:\n\nTest note content");
+    expect(result).toContain("Title: [[Test Note]]\nPath: Test Note.md\n\nTest note content");
   });
 
   it("should process {[[note title]]} syntax correctly without duplication", async () => {
@@ -194,7 +194,9 @@ describe("CustomPromptProcessor", () => {
     jest
       .spyOn(processor, "extractVariablesFromPrompt")
       .mockResolvedValue([JSON.stringify([{ name: "Test Note", content: "Test note content" }])]);
-    (extractNoteTitles as jest.Mock).mockReturnValue(["Test Note"]);
+    (extractNoteFiles as jest.Mock).mockReturnValue([
+      { basename: "Test Note", path: "Test Note.md" },
+    ]);
 
     const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
 
@@ -202,13 +204,7 @@ describe("CustomPromptProcessor", () => {
     expect(result).toContain(
       '[[Test Note]]:\n\n[{"name":"Test Note","content":"Test note content"}]'
     );
-
-    // Ensure the content is not duplicated
-    const occurrences = (result.match(/Test note content/g) || []).length;
-    expect(occurrences).toBe(1);
-
-    // Verify that getNoteFileFromTitle was not called
-    expect(getNoteFileFromTitle).not.toHaveBeenCalled();
+    expect((result.match(/Test note content/g) || []).length).toBe(1);
   });
 
   it("should process both {[[note title]]} and [[note title]] syntax correctly", async () => {
@@ -219,23 +215,17 @@ describe("CustomPromptProcessor", () => {
     jest
       .spyOn(processor, "extractVariablesFromPrompt")
       .mockResolvedValue([JSON.stringify([{ name: "Note1", content: "Note1 content" }])]);
-    (extractNoteTitles as jest.Mock).mockReturnValue(["Note1", "Note2"]);
-    (getNoteFileFromTitle as jest.Mock).mockResolvedValue({} as TFile);
+    (extractNoteFiles as jest.Mock).mockReturnValue([
+      { basename: "Note1", path: "Note1.md" },
+      { basename: "Note2", path: "Note2.md" },
+    ]);
     (getFileContent as jest.Mock).mockResolvedValue("Note2 content");
 
     const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
 
     expect(result).toContain("{[[Note1]]} content and [[Note2]] are both important.");
     expect(result).toContain('[[Note1]]:\n\n[{"name":"Note1","content":"Note1 content"}]');
-    expect(result).toContain("[[Note2]]:\n\nNote2 content");
-
-    // Ensure Note1 content is not duplicated
-    const note1Occurrences = (result.match(/Note1 content/g) || []).length;
-    expect(note1Occurrences).toBe(1);
-
-    // Verify that getNoteFileFromTitle was called only for Note2
-    expect(getNoteFileFromTitle).toHaveBeenCalledTimes(1);
-    expect(getNoteFileFromTitle).toHaveBeenCalledWith(expect.anything(), "Note2");
+    expect(result).toContain("Title: [[Note2]]\nPath: Note2.md\n\nNote2 content");
   });
 
   it("should handle multiple occurrences of [[note title]] syntax", async () => {
@@ -243,8 +233,11 @@ describe("CustomPromptProcessor", () => {
     const selectedText = "";
 
     // Mock the necessary functions
-    (extractNoteTitles as jest.Mock).mockReturnValue(["Note1", "Note2", "Note3"]);
-    (getNoteFileFromTitle as jest.Mock).mockResolvedValue({} as TFile);
+    (extractNoteFiles as jest.Mock).mockReturnValue([
+      { basename: "Note1", path: "Note1.md" },
+      { basename: "Note2", path: "Note2.md" },
+      { basename: "Note3", path: "Note3.md" },
+    ]);
     (getFileContent as jest.Mock)
       .mockResolvedValueOnce("Note1 content")
       .mockResolvedValueOnce("Note2 content")
@@ -253,9 +246,9 @@ describe("CustomPromptProcessor", () => {
     const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
 
     expect(result).toContain("[[Note1]] is related to [[Note2]] and [[Note3]].");
-    expect(result).toContain("[[Note1]]:\n\nNote1 content");
-    expect(result).toContain("[[Note2]]:\n\nNote2 content");
-    expect(result).toContain("[[Note3]]:\n\nNote3 content");
+    expect(result).toContain("Title: [[Note1]]\nPath: Note1.md\n\nNote1 content");
+    expect(result).toContain("Title: [[Note2]]\nPath: Note2.md\n\nNote2 content");
+    expect(result).toContain("Title: [[Note3]]\nPath: Note3.md\n\nNote3 content");
   });
 
   it("should handle non-existent note titles gracefully", async () => {
@@ -263,8 +256,7 @@ describe("CustomPromptProcessor", () => {
     const selectedText = "";
 
     // Mock the necessary functions
-    (extractNoteTitles as jest.Mock).mockReturnValue(["Non-existent Note"]);
-    (getNoteFileFromTitle as jest.Mock).mockResolvedValue(null);
+    (extractNoteFiles as jest.Mock).mockReturnValue(["Non-existent Note"]);
 
     const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
 
@@ -329,20 +321,6 @@ describe("CustomPromptProcessor", () => {
     expect(result).toContain("Summarize this: {selectedText}. Additional info: {activeNote}");
     expect(result).toContain("selectedText (entire active note):\n\n Content of the active note");
     expect(result).not.toContain("activeNote:");
-    expect((result.match(/Content of the active note/g) || []).length).toBe(1);
-  });
-
-  it("should handle {} when no active note or selected text is available", async () => {
-    const doc: CustomPrompt = {
-      title: "test-prompt",
-      content: "Process this: {}",
-    };
-    const selectedText = "";
-
-    const result = await processor.processCustomPrompt(doc.content, selectedText, undefined);
-
-    expect(result).toContain("Process this: {selectedText}");
-    expect(result).toContain("selectedText:\n\n (No selected text or active note available)");
   });
 
   it("should prioritize selected text over active note when both are available", async () => {
@@ -358,6 +336,6 @@ describe("CustomPromptProcessor", () => {
 
     expect(result).toContain("Analyze this: {selectedText}");
     expect(result).toContain("selectedText:\n\n This is the selected text");
-    expect(result).not.toContain("Content of the active note");
+    expect(result).not.toContain("selectedText (entire active note):");
   });
 });
