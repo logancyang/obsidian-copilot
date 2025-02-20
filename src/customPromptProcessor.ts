@@ -2,10 +2,9 @@ import { CustomError } from "@/error";
 import { TimestampUsageStrategy } from "@/promptUsageStrategy";
 import { getSettings } from "@/settings/model";
 import {
-  extractNoteTitles,
+  extractNoteFiles,
   getFileContent,
   getFileName,
-  getNoteFileFromTitle,
   getNotesFromPath,
   getNotesFromTags,
   processVariableNameForNotePath,
@@ -218,15 +217,14 @@ export class CustomPromptProcessor {
       }
     }
 
-    // Process [[note title]] syntax only for those not already processed
-    const noteTitles = extractNoteTitles(processedPrompt);
-    for (const noteTitle of noteTitles) {
-      // Check if this note title wasn't already processed in extractVariablesFromPrompt
-      if (!matches.some((match) => match[1].includes(`[[${noteTitle}]]`))) {
-        const noteFile = await getNoteFileFromTitle(this.vault, noteTitle);
-        if (noteFile) {
-          const noteContent = await getFileContent(noteFile, this.vault);
-          additionalInfo += `\n\n[[${noteTitle}]]:\n\n${noteContent}`;
+    // Process [[note title]] syntax with new reference system
+    const noteFiles = extractNoteFiles(processedPrompt, this.vault);
+    for (const noteFile of noteFiles) {
+      // Check if this note wasn't already processed in extractVariablesFromPrompt
+      if (!matches.some((match) => match[1].includes(`[[${noteFile.basename}]]`))) {
+        const noteContent = await getFileContent(noteFile, this.vault);
+        if (noteContent) {
+          additionalInfo += `\n\nTitle: [[${noteFile.basename}]]\nPath: ${noteFile.path}\n\n${noteContent}`;
         }
       }
     }
@@ -245,9 +243,9 @@ export class CustomPromptProcessor {
     }
 
     // Add explicitly referenced note titles
-    const noteTitles = extractNoteTitles(this.lastProcessedPrompt || "");
-    for (const title of noteTitles) {
-      processedVars.add(`[[${title}]]`);
+    const noteFiles = extractNoteFiles(this.lastProcessedPrompt || "", this.vault);
+    for (const file of noteFiles) {
+      processedVars.add(`[[${file.basename}]]`);
     }
 
     return processedVars;

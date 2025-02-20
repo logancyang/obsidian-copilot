@@ -80,29 +80,6 @@ export const isFolderMatch = (fileFullpath: string, inputPath: string): boolean 
   return fileSegments.includes(inputPath.toLowerCase());
 };
 
-/**
- * @deprecated File display title can be duplicated, so we should use file path
- * instead of title to find the note file.
- */
-export async function getNoteFileFromTitle(vault: Vault, noteTitle: string): Promise<TFile | null> {
-  // Get all markdown files in the vault
-  const files = vault.getMarkdownFiles();
-
-  // Iterate through all files to find a match by title
-  for (const file of files) {
-    // Extract the title from the filename by removing the extension
-    const title = file.basename;
-
-    if (title === noteTitle) {
-      // If a match is found, return the file path
-      return file;
-    }
-  }
-
-  // If no match is found, return null
-  return null;
-}
-
 /** TODO: Rewrite with app.vault.getAbstractFileByPath() */
 export const getNotesFromPath = (vault: Vault, path: string): TFile[] => {
   const files = vault.getMarkdownFiles();
@@ -389,17 +366,55 @@ export function extractChatHistory(memoryVariables: MemoryVariables): [string, s
   return chatHistory;
 }
 
-// TODO: Deprecate this. Note mentions should be an object with title and path (optional).
-// When user input `[[` the popup should show title and path for selection.
-// The selected item has path to avoid duplicate titles. If user manually types
-// the full title, path can still be missing. In that case title is used to retrieve
-// the note.
-export function extractNoteTitles(query: string): string[] {
-  // Use a regular expression to extract note titles wrapped in [[]]
+export function extractNoteFiles(query: string, vault: Vault): TFile[] {
+  // Use a regular expression to extract note titles and paths wrapped in [[]]
   const regex = /\[\[(.*?)\]\]/g;
   const matches = query.match(regex);
-  const uniqueTitles = new Set(matches ? matches.map((match) => match.slice(2, -2)) : []);
-  return Array.from(uniqueTitles);
+  const uniqueFiles = new Map<string, TFile>();
+
+  if (matches) {
+    matches.forEach((match) => {
+      const inner = match.slice(2, -2);
+
+      // First try to get file by full path
+      const file = vault.getAbstractFileByPath(inner);
+
+      if (file instanceof TFile) {
+        // Found by path, use it directly
+        uniqueFiles.set(file.path, file);
+      } else {
+        // Try to find by title
+        const files = vault.getMarkdownFiles();
+        const matchingFiles = files.filter((f) => f.basename === inner);
+
+        if (matchingFiles.length > 0) {
+          if (isNoteTitleUnique(inner, vault)) {
+            // Only one file with this title, use it
+            uniqueFiles.set(matchingFiles[0].path, matchingFiles[0]);
+          } else {
+            // Multiple files with same title - this shouldn't happen
+            // as we should be using full paths for duplicate titles
+            console.warn(
+              `Found multiple files with title "${inner}". Expected a full path for duplicate titles.`
+            );
+          }
+        }
+      }
+    });
+  }
+
+  return Array.from(uniqueFiles.values());
+}
+
+// Helper function to check if a note title is unique in the vault
+export function isNoteTitleUnique(title: string, vault: Vault): boolean {
+  const files = vault.getMarkdownFiles();
+  return files.filter((f) => f.basename === title).length === 1;
+}
+
+// Helper function to determine if we should show the full path for a file
+export function shouldShowPath(file: TFile): boolean {
+  return (file as any).needsPathDisplay === true;
 }
 
 /**

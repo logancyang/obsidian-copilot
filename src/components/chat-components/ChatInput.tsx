@@ -1,14 +1,23 @@
 import { useChainType, useModelKey } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
+import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
 import { AddImageModal } from "@/components/modals/AddImageModal";
 import { ListPromptModal } from "@/components/modals/ListPromptModal";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ModelDisplay } from "@/components/ui/model-display";
 import { ContextProcessor } from "@/contextProcessor";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { getToolDescription } from "@/tools/toolManager";
-import { err2String, extractNoteTitles, checkModelApiKey } from "@/utils";
+import { checkModelApiKey, err2String, extractNoteFiles, isNoteTitleUnique } from "@/utils";
 import {
   ArrowBigUp,
   ChevronDown,
@@ -18,28 +27,18 @@ import {
   StopCircle,
   X,
 } from "lucide-react";
-import { App, Platform, TFile } from "obsidian";
+import { App, Notice, Platform, TFile } from "obsidian";
 import React, {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
   useState,
-  useCallback,
 } from "react";
-import ContextControl from "./ContextControl";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
 import { useDropzone } from "react-dropzone";
-import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
-import { ModelDisplay } from "@/components/ui/model-display";
-import { Notice } from "obsidian";
+import ContextControl from "./ContextControl";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -165,7 +164,12 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           onNoteSelect: async (note: TFile) => {
             const before = inputMessage.slice(0, cursorPos - 2);
             const after = inputMessage.slice(cursorPos - 1);
-            const newInputMessage = `${before}[[${note.basename}]]${after}`;
+
+            // Check if this note title has duplicates
+            const isUnique = isNoteTitleUnique(note.basename, app.vault);
+            // If the title is unique, just show the title, otherwise show the full path
+            const noteRef = isUnique ? note.basename : note.path;
+            const newInputMessage = `${before}[[${noteRef}]]${after}`;
             setInputMessage(newInputMessage);
 
             const activeNote = app.workspace.getActiveFile();
@@ -183,7 +187,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
             // Add a delay to ensure the cursor is set after inputMessage is updated
             setTimeout(() => {
               if (textAreaRef.current) {
-                const newCursorPos = cursorPos + note.basename.length + 2;
+                const newCursorPos = cursorPos + noteRef.length + 2;
                 textAreaRef.current.setSelectionRange(newCursorPos, newCursorPos);
               }
             }, 0);
@@ -325,7 +329,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
     useEffect(() => {
       // Get all note titles that are referenced using [[note]] syntax in the input
-      const currentTitles = new Set(extractNoteTitles(inputMessage));
+      const currentFiles = new Set(extractNoteFiles(inputMessage, app.vault));
       // Get all URLs mentioned in the input
       const currentUrls = mention.extractAllUrls(inputMessage);
 
@@ -344,22 +348,19 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           if (note.path === currentActiveNote?.path) {
             if (wasAddedViaReference) {
               // Case 1: Active note was added by typing [[note]]
-              // Keep it only if its title is still in the input
-              // This ensures it's removed when you delete the [[note]] reference
-              return currentTitles.has(note.basename);
+              // Keep it only if its file is still in the input
+              return currentFiles.has(note);
             } else {
               // Case 2: Active note was NOT added by [[note]], but by the includeActiveNote toggle
               // Keep it only if includeActiveNote is true
-              // This handles the "Include active note" toggle in the UI
               return includeActiveNote;
             }
           } else {
             // Handling for all other notes (not the active note)
             if (wasAddedViaReference) {
               // Case 3: Other note was added by typing [[note]]
-              // Keep it only if its title is still in the input
-              // This ensures it's removed when you delete the [[note]] reference
-              return currentTitles.has(note.basename);
+              // Keep it only if its file is still in the input
+              return currentFiles.has(note);
             } else {
               // Case 4: Other note was added via "Add Note to Context" button
               // Always keep these notes as they were manually added
@@ -371,7 +372,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
       // Remove any URLs that are no longer present in the input
       setContextUrls((prev) => prev.filter((url) => currentUrls.includes(url)));
-    }, [inputMessage, includeActiveNote, currentActiveNote, mention, setContextNotes]);
+    }, [inputMessage, includeActiveNote, currentActiveNote, mention, setContextNotes, app.vault]);
 
     // Update the current active note whenever it changes
     useEffect(() => {

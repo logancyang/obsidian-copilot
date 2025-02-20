@@ -57,6 +57,12 @@ export class ContextProcessor {
 
     const processNote = async (note: TFile) => {
       try {
+        // Skip if this note was already processed by processCustomPrompt
+        const noteRef = `[[${note.basename}]]`;
+        if (processedVars.has(noteRef)) {
+          return;
+        }
+
         if (currentChain !== ChainType.COPILOT_PLUS_CHAIN && note.extension !== "md") {
           if (!fileParserManager.supportsExtension(note.extension)) {
             console.warn(`Unsupported file type: ${note.extension}`);
@@ -77,10 +83,10 @@ export class ContextProcessor {
           content = await this.processEmbeddedPDFs(content, vault, fileParserManager);
         }
 
-        additionalContext += `\n\n[[${note.basename}.${note.extension}]]:\n\n${content}`;
+        additionalContext += `\n\nTitle: [[${note.basename}]]\nPath: ${note.path}\n\n${content}`;
       } catch (error) {
         console.error(`Error processing file ${note.path}:`, error);
-        additionalContext += `\n\n[[${note.basename}]]: [Error: Could not process file]`;
+        additionalContext += `\n\nTitle: [[${note.basename}]]\nPath: ${note.path}\n\n[Error: Could not process file]`;
       }
     };
 
@@ -114,11 +120,8 @@ export class ContextProcessor {
     setContextNotes: (notes: TFile[] | ((prev: TFile[]) => TFile[])) => void,
     setIncludeActiveNote: (include: boolean) => void
   ): Promise<void> {
-    // First check if this note can be added
-    if (
-      contextNotes.some((existing) => existing.path === note.path) ||
-      (activeNote && note.path === activeNote.path)
-    ) {
+    // Only check if the note exists in contextNotes
+    if (contextNotes.some((existing) => existing.path === note.path)) {
       return; // Note already exists in context
     }
 
@@ -126,18 +129,18 @@ export class ContextProcessor {
     const content = await vault.read(note);
     const hasEmbeddedPDFs = await this.hasEmbeddedPDFs(content);
 
-    // If it's the active note, set includeActiveNote to true
+    // Set includeActiveNote if it's the active note
     if (activeNote && note.path === activeNote.path) {
       setIncludeActiveNote(true);
-    } else {
-      // Otherwise add it to contextNotes
-      setContextNotes((prev: TFile[]) => [
-        ...prev,
-        Object.assign(note, {
-          wasAddedViaReference: true,
-          hasEmbeddedPDFs,
-        }),
-      ]);
     }
+
+    // Add to contextNotes with wasAddedViaReference flag
+    setContextNotes((prev: TFile[]) => [
+      ...prev,
+      Object.assign(note, {
+        wasAddedViaReference: true,
+        hasEmbeddedPDFs,
+      }),
+    ]);
   }
 }

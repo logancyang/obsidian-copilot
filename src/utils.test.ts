@@ -1,7 +1,7 @@
 import * as Obsidian from "obsidian";
 import { TFile } from "obsidian";
 import {
-  extractNoteTitles,
+  extractNoteFiles,
   getNotesFromPath,
   getNotesFromTags,
   isFolderMatch,
@@ -9,31 +9,55 @@ import {
 } from "./utils";
 
 // Mock Obsidian's TFile class
-jest.mock("obsidian", () => ({
-  TFile: class TFile {
+jest.mock("obsidian", () => {
+  class MockTFile {
     path: string;
     basename: string;
     extension: string;
 
-    constructor(path: string) {
+    constructor(path: string = "") {
       this.path = path;
       const parts = path.split("/");
       const filename = parts[parts.length - 1];
       this.basename = filename.replace(/\.[^/.]+$/, "");
       this.extension = filename.split(".").pop() || "";
     }
-  },
-  Vault: class Vault {
-    getMarkdownFiles() {
-      return [
-        { path: "test/test2/note1.md" },
-        { path: "test/note2.md" },
-        { path: "test2/note3.md" },
-        { path: "note4.md" },
+  }
+
+  class MockVault {
+    private files: MockTFile[];
+
+    constructor() {
+      this.files = [
+        new MockTFile("test/test2/note1.md"),
+        new MockTFile("test/note2.md"),
+        new MockTFile("test2/note3.md"),
+        new MockTFile("note4.md"),
+        new MockTFile("Note1.md"),
+        new MockTFile("Note2.md"),
+        new MockTFile("Note 1.md"),
+        new MockTFile("Another Note.md"),
+        new MockTFile("Note-1.md"),
+        new MockTFile("Note_2.md"),
+        new MockTFile("Note#3.md"),
       ];
     }
-  },
-}));
+
+    getMarkdownFiles() {
+      return this.files;
+    }
+
+    getAbstractFileByPath(path: string) {
+      const file = this.files.find((f) => f.path === path + (path.endsWith(".md") ? "" : ".md"));
+      return file || null;
+    }
+  }
+
+  return {
+    TFile: MockTFile,
+    Vault: MockVault,
+  };
+});
 
 // Mock the metadata cache
 const mockMetadataCache = {
@@ -97,11 +121,18 @@ describe("Vault", () => {
   it("should return all markdown files", async () => {
     const vault = new Obsidian.Vault();
     const files = vault.getMarkdownFiles();
-    expect(files).toEqual([
-      { path: "test/test2/note1.md" },
-      { path: "test/note2.md" },
-      { path: "test2/note3.md" },
-      { path: "note4.md" },
+    expect(files.map((f) => f.path)).toEqual([
+      "test/test2/note1.md",
+      "test/note2.md",
+      "test2/note3.md",
+      "note4.md",
+      "Note1.md",
+      "Note2.md",
+      "Note 1.md",
+      "Another Note.md",
+      "Note-1.md",
+      "Note_2.md",
+      "Note#3.md",
     ]);
   });
 });
@@ -110,36 +141,43 @@ describe("getNotesFromPath", () => {
   it("should return all markdown files", async () => {
     const vault = new Obsidian.Vault();
     const files = await getNotesFromPath(vault, "/");
-    expect(files).toEqual([
-      { path: "test/test2/note1.md" },
-      { path: "test/note2.md" },
-      { path: "test2/note3.md" },
-      { path: "note4.md" },
+    expect(files.map((f) => f.path)).toEqual([
+      "test/test2/note1.md",
+      "test/note2.md",
+      "test2/note3.md",
+      "note4.md",
+      "Note1.md",
+      "Note2.md",
+      "Note 1.md",
+      "Another Note.md",
+      "Note-1.md",
+      "Note_2.md",
+      "Note#3.md",
     ]);
   });
 
   it("should return filtered markdown files 1", async () => {
     const vault = new Obsidian.Vault();
     const files = await getNotesFromPath(vault, "test2");
-    expect(files).toEqual([{ path: "test/test2/note1.md" }, { path: "test2/note3.md" }]);
+    expect(files.map((f) => f.path)).toEqual(["test/test2/note1.md", "test2/note3.md"]);
   });
 
   it("should return filtered markdown files 2", async () => {
     const vault = new Obsidian.Vault();
     const files = await getNotesFromPath(vault, "test");
-    expect(files).toEqual([{ path: "test/test2/note1.md" }, { path: "test/note2.md" }]);
+    expect(files.map((f) => f.path)).toEqual(["test/test2/note1.md", "test/note2.md"]);
   });
 
   it("should return filtered markdown files 3", async () => {
     const vault = new Obsidian.Vault();
     const files = await getNotesFromPath(vault, "note4.md");
-    expect(files).toEqual([{ path: "note4.md" }]);
+    expect(files.map((f) => f.path)).toEqual(["note4.md"]);
   });
 
   it("should return filtered markdown files 4", async () => {
     const vault = new Obsidian.Vault();
     const files = await getNotesFromPath(vault, "/test");
-    expect(files).toEqual([{ path: "test/test2/note1.md" }, { path: "test/note2.md" }]);
+    expect(files.map((f) => f.path)).toEqual(["test/test2/note1.md", "test/note2.md"]);
   });
 
   it("should not return markdown files", async () => {
@@ -292,46 +330,51 @@ describe("getNotesFromTags", () => {
   });
 });
 
-describe("extractNoteTitles", () => {
+describe("extractNoteFiles", () => {
+  let mockVault: Obsidian.Vault;
+
+  beforeEach(() => {
+    mockVault = new Obsidian.Vault();
+  });
+
   it("should extract single note title", () => {
     const query = "Please refer to [[Note1]] for more information.";
-    const expected = ["Note1"];
-    const result = extractNoteTitles(query);
-    expect(result).toEqual(expected);
+    const result = extractNoteFiles(query, mockVault);
+    const resultPaths = result.map((f) => f.path);
+    expect(resultPaths).toEqual(["Note1.md"]);
   });
 
   it("should extract multiple note titles", () => {
     const query = "Please refer to [[Note1]] and [[Note2]] for more information.";
-    const expected = ["Note1", "Note2"];
-    const result = extractNoteTitles(query);
-    expect(result).toEqual(expected);
+    const result = extractNoteFiles(query, mockVault);
+    const resultPaths = result.map((f) => f.path);
+    expect(resultPaths).toEqual(["Note1.md", "Note2.md"]);
   });
 
   it("should handle note titles with spaces", () => {
     const query = "Check out [[Note 1]] and [[Another Note]] for details.";
-    const expected = ["Note 1", "Another Note"];
-    const result = extractNoteTitles(query);
-    expect(result).toEqual(expected);
+    const result = extractNoteFiles(query, mockVault);
+    const resultPaths = result.map((f) => f.path);
+    expect(resultPaths).toEqual(["Note 1.md", "Another Note.md"]);
   });
 
-  it("should ignore duplicates and return unique titles", () => {
+  it("should handle duplicate note titles", () => {
     const query = "Refer to [[Note1]], [[Note2]], and [[Note1]] again.";
-    const expected = ["Note1", "Note2"];
-    const result = extractNoteTitles(query);
-    expect(result).toEqual(expected);
+    const result = extractNoteFiles(query, mockVault);
+    const resultPaths = result.map((f) => f.path);
+    expect(resultPaths).toEqual(["Note1.md", "Note2.md"]);
   });
 
-  it("should return an empty array if no note titles are found", () => {
+  it("should return empty array when no note titles found", () => {
     const query = "There are no note titles in this string.";
-    const expected: string[] = [];
-    const result = extractNoteTitles(query);
-    expect(result).toEqual(expected);
+    const result = extractNoteFiles(query, mockVault);
+    expect(result).toEqual([]);
   });
 
-  it("should extract note titles with special characters", () => {
+  it("should handle note titles with special characters", () => {
     const query = "Important notes: [[Note-1]], [[Note_2]], and [[Note#3]].";
-    const expected = ["Note-1", "Note_2", "Note#3"];
-    const result = extractNoteTitles(query);
-    expect(result).toEqual(expected);
+    const result = extractNoteFiles(query, mockVault);
+    const resultPaths = result.map((f) => f.path);
+    expect(resultPaths).toEqual(["Note-1.md", "Note_2.md", "Note#3.md"]);
   });
 });

@@ -1,5 +1,5 @@
 import CopilotPlugin from "@/main";
-import { extractNoteTitles } from "@/utils";
+import { extractNoteFiles } from "@/utils";
 import { App, Modal, Notice, TFile } from "obsidian";
 
 export class OramaSearchModal extends Modal {
@@ -36,7 +36,7 @@ export class OramaSearchModal extends Modal {
 
     searchButton.addEventListener("click", async () => {
       const input = this.searchInput.value;
-      const notePaths = extractNoteTitles(input);
+      const notePaths = extractNoteFiles(input, this.app.vault).map((file) => file.path);
 
       if (notePaths.length === 0) {
         new Notice("No valid note paths found. Use format: - [[Note Name]]");
