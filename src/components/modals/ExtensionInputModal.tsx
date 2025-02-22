@@ -33,7 +33,7 @@ function ExtensionInputModalContent({
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         <Input
-          placeholder="Enter the extension (e.g. txt, excalidraw)"
+          placeholder="Enter the extension (e.g. txt, excalidraw.md)"
           value={extension}
           onChange={(e) => {
             setExtension(e.target.value);

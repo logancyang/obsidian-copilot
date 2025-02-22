@@ -84,6 +84,14 @@ describe("searchUtils", () => {
       expect(shouldIndexFile(file, null, exclusions)).toBe(false);
     });
 
+    it("should return false when file matches exclusion extension pattern", () => {
+      const file = createTestFile("Excalidraw/Drawing 2025-02-21 20.59.40.excalidraw.md");
+      const exclusions = {
+        extensionPatterns: ["*.excalidraw.md"],
+      };
+      expect(shouldIndexFile(file, null, exclusions)).toBe(false);
+    });
+
     it("should return true when file matches inclusion pattern", () => {
       const file = createTestFile("notes/important.md");
       const inclusions = {
