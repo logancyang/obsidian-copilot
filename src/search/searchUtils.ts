@@ -222,11 +222,15 @@ function matchFilePathWithTags(filePath: string, tagPatterns: string[]): boolean
 function matchFilePathWithExtensions(filePath: string, extensionPatterns: string[]): boolean {
   if (extensionPatterns.length === 0) return false;
 
-  // Extract the file extension without the dot
-  const fileExtension = filePath.split(".").pop()?.toLowerCase() || "";
+  // Convert file path to lowercase for case-insensitive matching
+  const normalizedPath = filePath.toLowerCase();
 
-  // Match if the file extension matches any of the patterns
-  return extensionPatterns.some((ext) => ext.slice(2) === fileExtension);
+  // Check if the file path ends with any of the extension patterns
+  return extensionPatterns.some((pattern) => {
+    // Convert *.extension to .extension
+    const patternExt = pattern.slice(1).toLowerCase();
+    return normalizedPath.endsWith(patternExt);
+  });
 }
 
 /**
