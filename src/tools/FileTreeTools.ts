@@ -1,11 +1,9 @@
 import { tool } from "@langchain/core/tools";
 import { TFile, TFolder } from "obsidian";
 import { z } from "zod";
+import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 
-interface FileTreeNode {
-  path: string;
-  children?: FileTreeNode[];
-}
+type FileTreeNode = { [key: string]: string[] | FileTreeNode | (string[] | FileTreeNode)[] };
 
 function isTFolder(item: any): item is TFolder {
   return "children" in item && "path" in item;
@@ -16,38 +14,67 @@ function isTFile(item: any): item is TFile {
 }
 
 function buildFileTree(folder: TFolder): FileTreeNode {
-  const node: FileTreeNode = {
-    path: folder.name,
-    children: [],
-  };
+  const result: FileTreeNode = {};
+  const files: string[] = [];
+  const folders: FileTreeNode = {};
 
-  // Add folders first
-  for (const child of folder.children) {
-    if (isTFolder(child)) {
-      node.children?.push(buildFileTree(child));
-    }
-  }
+  // Get exclusion patterns from settings
+  const { inclusions, exclusions } = getMatchingPatterns();
 
-  // Then add files
+  // Separate files and folders
   for (const child of folder.children) {
     if (isTFile(child)) {
-      node.children?.push({
-        path: child.name,
-      });
+      // Only include file if it passes the pattern checks
+      if (shouldIndexFile(child, inclusions, exclusions)) {
+        files.push(child.name);
+      }
+    } else if (isTFolder(child)) {
+      const subTree = buildFileTree(child);
+      // Only include folder if it has any content after filtering
+      if (Object.keys(subTree).length > 0) {
+        Object.assign(folders, subTree);
+      }
     }
   }
 
-  return node;
+  // If this is root folder, name it "vault" and return merged result
+  if (!folder.name) {
+    // Only return if there's content after filtering
+    if (files.length || Object.keys(folders).length) {
+      return {
+        vault: files.length ? (Object.keys(folders).length ? [files, folders] : files) : folders,
+      };
+    }
+    return {};
+  }
+
+  // For named folders, nest everything under the folder name
+  // Only include folder if it has any content after filtering
+  if (files.length || Object.keys(folders).length) {
+    result[folder.name] = files.length
+      ? Object.keys(folders).length
+        ? [files, folders]
+        : files
+      : folders;
+  }
+
+  return result;
 }
 
 const createGetFileTreeTool = (root: TFolder) =>
   tool(
     async () => {
-      return JSON.stringify(buildFileTree(root), null, 0);
+      const prompt = `A JSON represents the file tree as a nested structure:
+* The root object has a key "vault" which maps to an array with two items:
+ * An array of files at the current directory.
+ * An object of subdirectories, where each subdirectory follows the same structure as the root.
+
+`;
+      return prompt + JSON.stringify(buildFileTree(root));
     },
     {
       name: "getFileTree",
-      description: "Get the complete file tree structure of the folder as JSON",
+      description: "Get the file tree as JSON where folders are objects and files are arrays",
       schema: z.object({}),
     }
   );

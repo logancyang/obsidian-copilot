@@ -1,5 +1,12 @@
 import { TFolder } from "obsidian";
 import { createGetFileTreeTool } from "./FileTreeTools";
+import * as searchUtils from "@/search/searchUtils";
+
+// Mock the searchUtils functions
+jest.mock("@/search/searchUtils", () => ({
+  getMatchingPatterns: jest.fn(),
+  shouldIndexFile: jest.fn(),
+}));
 
 // Mock TFile class
 class MockTFile {
@@ -70,29 +77,39 @@ describe("FileTreeTools", () => {
       new MockTFile("docs/notes/note2.md", notes),
     ];
 
-    root.children = [docs];
+    root.children = [docs, new MockTFile("readme.md", root)];
+
+    // Reset mocks before each test
+    jest.clearAllMocks();
+
+    // Default mock implementations
+    (searchUtils.getMatchingPatterns as jest.Mock).mockReturnValue({
+      inclusions: null,
+      exclusions: null,
+    });
+    (searchUtils.shouldIndexFile as jest.Mock).mockReturnValue(true);
   });
 
-  it("should generate correct JSON file tree with filenames only", async () => {
+  it("should generate correct JSON file tree when no exclusions", async () => {
     const tool = createGetFileTreeTool(root);
     const result = await tool.invoke({});
-    const parsedResult = JSON.parse(result);
+    // Extract JSON part after the prompt
+    const jsonPart = result.substring(result.indexOf("{"));
+    const parsedResult = JSON.parse(jsonPart);
+
+    expect(searchUtils.getMatchingPatterns).toHaveBeenCalled();
+    expect(searchUtils.shouldIndexFile).toHaveBeenCalled();
 
     const expected = {
-      path: "",
-      children: [
+      vault: [
+        ["readme.md"],
         {
-          path: "docs",
-          children: [
+          docs: [
+            ["readme.md"],
             {
-              path: "projects",
-              children: [{ path: "project1.md" }, { path: "project2.md" }],
+              projects: ["project1.md", "project2.md"],
+              notes: ["note1.md", "note2.md"],
             },
-            {
-              path: "notes",
-              children: [{ path: "note1.md" }, { path: "note2.md" }],
-            },
-            { path: "readme.md" },
           ],
         },
       ],
@@ -101,15 +118,63 @@ describe("FileTreeTools", () => {
     expect(parsedResult).toEqual(expected);
   });
 
-  it("should handle empty folder", async () => {
-    const emptyRoot = new MockTFolder("", null);
-    const tool = createGetFileTreeTool(emptyRoot);
+  it("should exclude files based on patterns", async () => {
+    // Mock shouldIndexFile to exclude all files in projects folder
+    (searchUtils.shouldIndexFile as jest.Mock).mockImplementation((file) => {
+      return !file.path.includes("projects");
+    });
+
+    const tool = createGetFileTreeTool(root);
     const result = await tool.invoke({});
-    const parsedResult = JSON.parse(result);
+    const jsonPart = result.substring(result.indexOf("{"));
+    const parsedResult = JSON.parse(jsonPart);
 
     const expected = {
-      path: "",
-      children: [],
+      vault: [
+        ["readme.md"],
+        {
+          docs: [
+            ["readme.md"],
+            {
+              notes: ["note1.md", "note2.md"],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(parsedResult).toEqual(expected);
+  });
+
+  it("should handle empty folder after exclusions", async () => {
+    // Mock shouldIndexFile to exclude all files
+    (searchUtils.shouldIndexFile as jest.Mock).mockReturnValue(false);
+
+    const tool = createGetFileTreeTool(root);
+    const result = await tool.invoke({});
+    const jsonPart = result.substring(result.indexOf("{"));
+    const parsedResult = JSON.parse(jsonPart);
+
+    expect(parsedResult).toEqual({});
+  });
+
+  it("should handle partial folder exclusions", async () => {
+    // Mock shouldIndexFile to only include files with "note" in the path
+    (searchUtils.shouldIndexFile as jest.Mock).mockImplementation((file) => {
+      return file.path.includes("note");
+    });
+
+    const tool = createGetFileTreeTool(root);
+    const result = await tool.invoke({});
+    const jsonPart = result.substring(result.indexOf("{"));
+    const parsedResult = JSON.parse(jsonPart);
+
+    const expected = {
+      vault: {
+        docs: {
+          notes: ["note1.md", "note2.md"],
+        },
+      },
     };
 
     expect(parsedResult).toEqual(expected);
