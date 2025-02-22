@@ -64,7 +64,13 @@ function buildFileTree(folder: TFolder): FileTreeNode {
 const createGetFileTreeTool = (root: TFolder) =>
   tool(
     async () => {
-      return JSON.stringify(buildFileTree(root));
+      const prompt = `A JSON represents the file tree as a nested structure:
+* The root object has a key "vault" which maps to an array with two items:
+ * An array of files at the current directory.
+ * An object of subdirectories, where each subdirectory follows the same structure as the root.
+
+`;
+      return prompt + JSON.stringify(buildFileTree(root));
     },
     {
       name: "getFileTree",
