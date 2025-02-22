@@ -93,7 +93,9 @@ describe("FileTreeTools", () => {
   it("should generate correct JSON file tree when no exclusions", async () => {
     const tool = createGetFileTreeTool(root);
     const result = await tool.invoke({});
-    const parsedResult = JSON.parse(result);
+    // Extract JSON part after the prompt
+    const jsonPart = result.substring(result.indexOf("{"));
+    const parsedResult = JSON.parse(jsonPart);
 
     expect(searchUtils.getMatchingPatterns).toHaveBeenCalled();
     expect(searchUtils.shouldIndexFile).toHaveBeenCalled();
@@ -124,7 +126,8 @@ describe("FileTreeTools", () => {
 
     const tool = createGetFileTreeTool(root);
     const result = await tool.invoke({});
-    const parsedResult = JSON.parse(result);
+    const jsonPart = result.substring(result.indexOf("{"));
+    const parsedResult = JSON.parse(jsonPart);
 
     const expected = {
       vault: [
@@ -149,7 +152,8 @@ describe("FileTreeTools", () => {
 
     const tool = createGetFileTreeTool(root);
     const result = await tool.invoke({});
-    const parsedResult = JSON.parse(result);
+    const jsonPart = result.substring(result.indexOf("{"));
+    const parsedResult = JSON.parse(jsonPart);
 
     expect(parsedResult).toEqual({});
   });
@@ -162,7 +166,8 @@ describe("FileTreeTools", () => {
 
     const tool = createGetFileTreeTool(root);
     const result = await tool.invoke({});
-    const parsedResult = JSON.parse(result);
+    const jsonPart = result.substring(result.indexOf("{"));
+    const parsedResult = JSON.parse(jsonPart);
 
     const expected = {
       vault: {
