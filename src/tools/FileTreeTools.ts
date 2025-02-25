@@ -44,7 +44,7 @@ function buildFileTree(
         }
 
         // Always count file extensions
-        const ext = getFileExtension(child.name);
+        const ext = getFileExtension(child.name) || "unknown";
         if (ext) {
           extensionCounts[ext] = (extensionCounts[ext] || 0) + 1;
         }

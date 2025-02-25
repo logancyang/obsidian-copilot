@@ -79,7 +79,12 @@ describe("FileTreeTools", () => {
       new MockTFile("docs/notes/image.png", notes),
     ];
 
-    root.children = [docs, new MockTFile("readme.md", root), new MockTFile("config.json", root)];
+    root.children = [
+      docs,
+      new MockTFile("readme.md", root),
+      new MockTFile("config.json", root),
+      new MockTFile("text", root),
+    ];
 
     // Reset mocks before each test
     jest.clearAllMocks();
@@ -99,7 +104,7 @@ describe("FileTreeTools", () => {
     // Define expected tree structure
     const expectedTree = {
       vault: {
-        files: ["readme.md", "config.json"],
+        files: ["readme.md", "config.json", "text"],
         subFolders: {
           docs: {
             files: ["readme.md"],
@@ -116,7 +121,7 @@ describe("FileTreeTools", () => {
             extensionCounts: { md: 5, json: 1, png: 1 },
           },
         },
-        extensionCounts: { md: 6, json: 2, png: 1 },
+        extensionCounts: { md: 6, json: 2, png: 1, unknown: 1 },
       },
     };
 
@@ -153,7 +158,7 @@ describe("FileTreeTools", () => {
             extensionCounts: { md: 5, json: 1, png: 1 },
           },
         },
-        extensionCounts: { md: 6, json: 2, png: 1 },
+        extensionCounts: { md: 6, json: 2, png: 1, unknown: 1 },
       },
     };
 
@@ -172,7 +177,7 @@ describe("FileTreeTools", () => {
     // Define expected tree with projects excluded
     const expectedTree = {
       vault: {
-        files: ["readme.md", "config.json"],
+        files: ["readme.md", "config.json", "text"],
         subFolders: {
           docs: {
             files: ["readme.md"],
@@ -185,7 +190,7 @@ describe("FileTreeTools", () => {
             extensionCounts: { md: 3, png: 1 },
           },
         },
-        extensionCounts: { md: 4, png: 1, json: 1 },
+        extensionCounts: { md: 4, png: 1, json: 1, unknown: 1 },
       },
     };
 
