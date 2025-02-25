@@ -203,6 +203,70 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         "", // Empty string for sourcePath as we don't have a specific source file
         componentRef.current
       );
+
+      // Function to add apply buttons to code blocks
+      const addApplyButtonsToCodeBlocks = () => {
+        if (!contentRef.current) return;
+
+        // Find all pre elements (code blocks) in the rendered content
+        const codeBlocks = contentRef.current.querySelectorAll("pre");
+
+        codeBlocks.forEach((pre) => {
+          // Create apply button
+          const applyButton = document.createElement("button");
+          applyButton.className = "apply-code-button";
+          applyButton.textContent = "Apply";
+          applyButton.title = "Apply this code";
+
+          // Get the code element
+          const codeElement = pre.querySelector("code");
+          if (!codeElement) return;
+
+          // Process the code block to extract metadata and clean the display
+          const originalCode = codeElement.textContent || "";
+          const lines = originalCode.split("\n");
+          const firstLine = lines[0].trim();
+
+          // Extract metadata from the first line
+          const metadata: Record<string, string> = {};
+          let shouldRemoveFirstLine = false;
+
+          // Check if the first line contains path= or other metadata
+          const firstLinePathMatch = firstLine.match(/path=([^\s]+)/);
+          if (firstLinePathMatch && firstLinePathMatch[1]) {
+            metadata.path = firstLinePathMatch[1];
+            shouldRemoveFirstLine = true;
+
+            // Update the button title to include the filename
+            const filename = metadata.path.split("/").pop();
+            applyButton.title = `Apply to ${filename}`;
+            applyButton.textContent = `Apply to ${filename}`;
+          }
+
+          // If we found metadata in the first line, remove it from the displayed code
+          if (shouldRemoveFirstLine) {
+            const cleanedCode = lines.slice(1).join("\n");
+            codeElement.textContent = cleanedCode;
+
+            // Store the original code and metadata as data attributes
+            pre.dataset.originalCode = originalCode;
+            pre.dataset.path = metadata.path;
+          }
+
+          // Add click event listener to the apply button
+          applyButton.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log("Apply " + pre.dataset.path);
+          });
+
+          // Add the apply button to the pre element
+          pre.appendChild(applyButton);
+        });
+      };
+
+      // Add apply buttons to code blocks after rendering
+      addApplyButtonsToCodeBlocks();
     }
 
     // Cleanup function
