@@ -9,6 +9,7 @@ import { insertIntoEditor } from "@/utils";
 import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Notice } from "obsidian";
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
   if (!context || (context.notes.length === 0 && context.urls.length === 0)) {
@@ -78,6 +79,40 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       }, 2000);
     });
   };
+
+  const handleApplyCode = useCallback(
+    async (path: string, code: string) => {
+      try {
+        // Get the file from the path
+        const file = app.vault.getAbstractFileByPath(path);
+
+        if (!file || !(file instanceof TFile)) {
+          new Notice(`File not found: ${path}`);
+          return;
+        }
+
+        // Get the original content
+        const originalContent = await app.vault.read(file);
+
+        // Open the Apply View in a new leaf
+        const leaf = app.workspace.getLeaf(true);
+        await leaf.setViewState({
+          type: "obsidian-copilot-apply-view",
+          active: true,
+          state: {
+            file: file,
+            originalContent: originalContent,
+            newContent: code,
+            path: path,
+          },
+        });
+      } catch (error) {
+        console.error("Error applying code:", error);
+        new Notice(`Error applying code: ${error.message}`);
+      }
+    },
+    [app]
+  );
 
   const preprocess = useCallback(
     (content: string): string => {
@@ -261,7 +296,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             applyButton.addEventListener("click", (e) => {
               e.preventDefault();
               e.stopPropagation();
-              console.log("Apply " + pre.dataset.path);
+              if (pre.dataset.path && pre.dataset.originalCode) {
+                handleApplyCode(pre.dataset.path, codeElement.textContent || "");
+              }
             });
 
             // Add the apply button to the pre element only when path is found
@@ -289,7 +326,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         componentRef.current = null;
       }
     };
-  }, [message, app, componentRef, isStreaming, preprocess]);
+  }, [message, app, componentRef, isStreaming, preprocess, handleApplyCode]);
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
