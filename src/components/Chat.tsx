@@ -18,6 +18,7 @@ import { FileParserManager } from "@/tools/FileParserManager";
 import { err2String, formatDateTime } from "@/utils";
 import { Notice, TFile } from "obsidian";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { Buffer } from "buffer";
 
 interface ChatProps {
   sharedState: SharedState;
