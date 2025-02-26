@@ -3,7 +3,7 @@ import { App, ItemView, TFile, WorkspaceLeaf, Notice } from "obsidian";
 import { createRoot } from "react-dom/client";
 import { diffLines, Change } from "diff";
 import { Button } from "./ui/button";
-import { Check, X as XIcon, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Check, X as XIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const APPLY_VIEW_TYPE = "obsidian-copilot-apply-view";
@@ -294,23 +294,39 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
               {/* Only show accept/reject buttons for blocks with changes */}
               {hasChanges && (
                 <div className="diff-block-actions flex justify-end p-2 bg-background-secondary border-t border-gray-300">
-                  <Button
-                    variant={isRejected ? "destructive" : "ghost"}
-                    size="sm"
+                  <button
                     onClick={() => rejectBlock(blockIndex)}
-                    className="mr-2"
+                    style={{
+                      backgroundColor: isRejected ? "#991b1b" : "#b91c1c",
+                      color: "white",
+                      padding: "0.25rem 0.5rem",
+                      borderRadius: "0.25rem",
+                      display: "flex",
+                      alignItems: "center",
+                      marginRight: "0.5rem",
+                      border: isRejected ? "2px solid #ef4444" : "none",
+                      cursor: "pointer",
+                    }}
                   >
-                    <ThumbsDown className="mr-1 h-4 w-4" />
+                    <XIcon className="mr-1 h-4 w-4" />
                     Reject
-                  </Button>
-                  <Button
-                    variant={isAccepted ? "default" : "ghost"}
-                    size="sm"
+                  </button>
+                  <button
                     onClick={() => acceptBlock(blockIndex)}
+                    style={{
+                      backgroundColor: isAccepted ? "#166534" : "#15803d",
+                      color: "white",
+                      padding: "0.25rem 0.5rem",
+                      borderRadius: "0.25rem",
+                      display: "flex",
+                      alignItems: "center",
+                      border: isAccepted ? "2px solid #22c55e" : "none",
+                      cursor: "pointer",
+                    }}
                   >
-                    <ThumbsUp className="mr-1 h-4 w-4" />
+                    <Check className="mr-1 h-4 w-4" />
                     Accept
-                  </Button>
+                  </button>
                 </div>
               )}
             </div>
