@@ -9,7 +9,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { HelpCircle } from "lucide-react";
-import { SettingSwitch } from "@/components/ui/setting-switch";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { FormField } from "@/components/ui/form-field";
@@ -139,7 +138,7 @@ export const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
             </div>
           </FormField>
 
-          {/*            <FormField
+          {/*<FormField
               label={
                 <div className="flex items-center gap-2">
                   Temperature
@@ -189,7 +188,7 @@ export const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
                 min={0}
                 step={100}
               />
-            </FormField>*/}
+            </FormField>
 
           <div className="flex items-center justify-between py-2">
             <div className="flex items-center gap-2">
@@ -209,7 +208,7 @@ export const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
               checked={localModel.stream ?? true}
               onCheckedChange={(checked) => handleUpdate("stream", checked)}
             />
-          </div>
+          </div>*/}
         </div>
       </DialogContent>
     </Dialog>
