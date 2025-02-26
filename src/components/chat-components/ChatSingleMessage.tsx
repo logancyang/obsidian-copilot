@@ -227,41 +227,54 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           const lines = originalCode.split("\n");
           const firstLine = lines[0].trim();
 
-          // Extract metadata from the first line
-          const metadata: Record<string, string> = {};
-          let shouldRemoveFirstLine = false;
-
           // Check if the first line contains path= or other metadata
-          const firstLinePathMatch = firstLine.match(/path=([^\s]+)/);
-          if (firstLinePathMatch && firstLinePathMatch[1]) {
-            metadata.path = firstLinePathMatch[1];
-            shouldRemoveFirstLine = true;
+          let pathMatch = null;
 
-            // Update the button title to include the filename
-            const filename = metadata.path.split("/").pop();
-            applyButton.title = `Apply to ${filename}`;
-            applyButton.textContent = `Apply to ${filename}`;
+          // Check for path in HTML comment format: <!-- path=Notes/My Notes.md -->
+          const htmlCommentMatch = firstLine.match(/<!--\s*path=([^>]+?)\s*-->/);
+          if (htmlCommentMatch && htmlCommentMatch[1]) {
+            pathMatch = htmlCommentMatch[1].trim();
           }
 
-          // If we found metadata in the first line, remove it from the displayed code
-          if (shouldRemoveFirstLine) {
+          if (pathMatch) {
+            // Create a path indicator at the top of the code block
+            const pathIndicator = document.createElement("div");
+            pathIndicator.className = "code-path-indicator";
+            pathIndicator.textContent = pathMatch;
+            pathIndicator.style.fontSize = "0.8em";
+            pathIndicator.style.padding = "0.2rem 0.5rem";
+            pathIndicator.style.borderBottom = "1px solid var(--background-modifier-border)";
+            pathIndicator.style.color = "var(--text-muted)";
+
+            // Insert the path indicator before the code element
+            pre.insertBefore(pathIndicator, codeElement);
+
+            // Remove the path from the first line
             const cleanedCode = lines.slice(1).join("\n");
             codeElement.textContent = cleanedCode;
 
             // Store the original code and metadata as data attributes
             pre.dataset.originalCode = originalCode;
-            pre.dataset.path = metadata.path;
+            pre.dataset.path = pathMatch;
+
+            // Add click event listener to the apply button
+            applyButton.addEventListener("click", (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log("Apply " + pre.dataset.path);
+            });
+
+            // Add the apply button to the pre element only when path is found
+            pre.appendChild(applyButton);
+          } else {
+            // No path found, find and reposition Obsidian's copy button to the right
+            const copyButton = pre.querySelector(".copy-code-button") as HTMLElement;
+            if (copyButton) {
+              // Reposition the copy button to the right
+              copyButton.style.right = "0";
+              copyButton.style.borderRadius = "0 4px 0 4px"; // Use the right-side border radius
+            }
           }
-
-          // Add click event listener to the apply button
-          applyButton.addEventListener("click", (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            console.log("Apply " + pre.dataset.path);
-          });
-
-          // Add the apply button to the pre element
-          pre.appendChild(applyButton);
         });
       };
 
