@@ -94,6 +94,14 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         // Get the original content
         const originalContent = await app.vault.read(file);
 
+        // Check if the current active note is the same as the target note
+        const activeFile = app.workspace.getActiveFile();
+        if (!activeFile || activeFile.path !== file.path) {
+          // If not, open the target file in the current leaf
+          await app.workspace.getLeaf().openFile(file);
+          new Notice(`Switched to ${file.name}`);
+        }
+
         // Open the Apply View in a new leaf
         const leaf = app.workspace.getLeaf(true);
         await leaf.setViewState({
