@@ -390,4 +390,10 @@ export default class ChatModelManager {
     const settings = getSettings();
     return settings.activeModels.find((model) => model.name === modelName);
   }
+
+  getCurrentModel(): CustomModel | null {
+    const currentModelKey = getModelKey();
+    if (!currentModelKey) return null;
+    return this.findModelByName(currentModelKey.split("|")[0]) || null;
+  }
 }
