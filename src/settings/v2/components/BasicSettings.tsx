@@ -98,6 +98,16 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
     }
   };
 
+  const defaultModelActivated = !!settings.activeModels.find(
+    (m) => m.enabled && getModelKeyFromModel(m) === settings.defaultModelKey
+  );
+  const enableActivatedModels = settings.activeModels
+    .filter((m) => m.enabled)
+    .map((model) => ({
+      label: getModelDisplayWithIcons(model),
+      value: getModelKeyFromModel(model),
+    }));
+
   return (
     <div className="space-y-4">
       <PlusSettings />
@@ -158,7 +168,7 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
             type="select"
             title="Default Chat Model"
             description="Select the Chat model to use"
-            value={settings.defaultModelKey}
+            value={defaultModelActivated ? settings.defaultModelKey : "Select Model"}
             onChange={(value) => {
               const selectedModel = settings.activeModels.find(
                 (m) => m.enabled && getModelKeyFromModel(m) === value
@@ -172,12 +182,11 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
               }
               updateSetting("defaultModelKey", value);
             }}
-            options={settings.activeModels
-              .filter((m) => m.enabled)
-              .map((model) => ({
-                label: getModelDisplayWithIcons(model),
-                value: getModelKeyFromModel(model),
-              }))}
+            options={
+              defaultModelActivated
+                ? enableActivatedModels
+                : [{ label: "Select Model", value: "Select Model" }, ...enableActivatedModels]
+            }
             placeholder="Model"
           />
 

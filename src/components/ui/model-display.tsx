@@ -20,36 +20,38 @@ export const ModelCapabilityIcons: React.FC<ModelCapabilityIconsProps> = ({
 }) => {
   return (
     <>
-      {capabilities.map((cap, index) => {
-        switch (cap) {
-          case ModelCapability.REASONING:
-            return (
-              <Lightbulb
-                key={index}
-                className="text-model-capabilities-blue"
-                style={{ width: iconSize, height: iconSize }}
-              />
-            );
-          case ModelCapability.VISION:
-            return (
-              <Eye
-                key={index}
-                className="text-model-capabilities-green"
-                style={{ width: iconSize, height: iconSize }}
-              />
-            );
-          case ModelCapability.WEB_SEARCH:
-            return (
-              <Globe
-                key={index}
-                className="text-model-capabilities-blue"
-                style={{ width: iconSize, height: iconSize }}
-              />
-            );
-          default:
-            return null;
-        }
-      })}
+      {capabilities
+        .sort((a, b) => a.localeCompare(b))
+        .map((cap, index) => {
+          switch (cap) {
+            case ModelCapability.REASONING:
+              return (
+                <Lightbulb
+                  key={index}
+                  className="text-model-capabilities-blue"
+                  style={{ width: iconSize, height: iconSize }}
+                />
+              );
+            case ModelCapability.VISION:
+              return (
+                <Eye
+                  key={index}
+                  className="text-model-capabilities-green"
+                  style={{ width: iconSize, height: iconSize }}
+                />
+              );
+            case ModelCapability.WEB_SEARCH:
+              return (
+                <Globe
+                  key={index}
+                  className="text-model-capabilities-blue"
+                  style={{ width: iconSize, height: iconSize }}
+                />
+              );
+            default:
+              return null;
+          }
+        })}
     </>
   );
 };

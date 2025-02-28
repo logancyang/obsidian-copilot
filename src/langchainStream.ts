@@ -1,7 +1,8 @@
 import { AI_SENDER } from "@/constants";
 import ChainManager from "@/LLMProviders/chainManager";
 import { ChatMessage } from "@/sharedState";
-import { formatDateTime } from "./utils";
+import { err2String, formatDateTime } from "./utils";
+import { logError } from "@/logger";
 
 export type Role = "assistant" | "user" | "system";
 
@@ -29,22 +30,12 @@ export const getAIResponse = async (
       options
     );
   } catch (error) {
-    console.error("Model request failed:", error);
-    let errorMessage = "Model request failed: ";
-
-    if (error instanceof Error) {
-      errorMessage += error.message;
-      if (error.cause) {
-        errorMessage += ` Cause: ${error.cause}`;
-      }
-    } else if (typeof error === "object" && error !== null) {
-      errorMessage += JSON.stringify(error);
-    } else {
-      errorMessage += String(error);
-    }
+    logError("Model request failed:", error);
+    const errorMessage = "Model request failed: " + err2String(error);
 
     addMessage({
       sender: AI_SENDER,
+      isErrorMessage: true,
       message: `Error: ${errorMessage}`,
       isVisible: true,
       timestamp: formatDateTime(new Date()),

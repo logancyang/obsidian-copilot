@@ -204,7 +204,7 @@ export function SettingItem(props: SettingItemProps) {
             <div
               className={cn(
                 "pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2",
-                "transition-colors group-hover:[&>svg]:text-on-accent",
+                "transition-colors group-hover:[&>svg]:text-normal",
                 disabled && "opacity-50"
               )}
             >
