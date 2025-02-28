@@ -203,6 +203,83 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         "", // Empty string for sourcePath as we don't have a specific source file
         componentRef.current
       );
+
+      // Function to add apply buttons to code blocks
+      const addApplyButtonsToCodeBlocks = () => {
+        if (!contentRef.current) return;
+
+        // Find all pre elements (code blocks) in the rendered content
+        const codeBlocks = contentRef.current.querySelectorAll("pre");
+
+        codeBlocks.forEach((pre) => {
+          // Create apply button
+          const applyButton = document.createElement("button");
+          applyButton.className = "apply-code-button";
+          applyButton.textContent = "Apply";
+          applyButton.title = "Apply this code";
+
+          // Get the code element
+          const codeElement = pre.querySelector("code");
+          if (!codeElement) return;
+
+          // Process the code block to extract metadata and clean the display
+          const originalCode = codeElement.textContent || "";
+          const lines = originalCode.split("\n");
+          const firstLine = lines[0].trim();
+
+          // Check if the first line contains path= or other metadata
+          let pathMatch = null;
+
+          // Check for path in HTML comment format: <!-- path=Notes/My Notes.md -->
+          const htmlCommentMatch = firstLine.match(/<!--\s*path=([^>]+?)\s*-->/);
+          if (htmlCommentMatch && htmlCommentMatch[1]) {
+            pathMatch = htmlCommentMatch[1].trim();
+          }
+
+          if (pathMatch) {
+            // Create a path indicator at the top of the code block
+            const pathIndicator = document.createElement("div");
+            pathIndicator.className = "code-path-indicator";
+            pathIndicator.textContent = pathMatch;
+            pathIndicator.style.fontSize = "0.8em";
+            pathIndicator.style.padding = "0.2rem 0.5rem";
+            pathIndicator.style.borderBottom = "1px solid var(--background-modifier-border)";
+            pathIndicator.style.color = "var(--text-muted)";
+
+            // Insert the path indicator before the code element
+            pre.insertBefore(pathIndicator, codeElement);
+
+            // Remove the path from the first line
+            const cleanedCode = lines.slice(1).join("\n");
+            codeElement.textContent = cleanedCode;
+
+            // Store the original code and metadata as data attributes
+            pre.dataset.originalCode = originalCode;
+            pre.dataset.path = pathMatch;
+
+            // Add click event listener to the apply button
+            applyButton.addEventListener("click", (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log("Apply " + pre.dataset.path);
+            });
+
+            // Add the apply button to the pre element only when path is found
+            pre.appendChild(applyButton);
+          } else {
+            // No path found, find and reposition Obsidian's copy button to the right
+            const copyButton = pre.querySelector(".copy-code-button") as HTMLElement;
+            if (copyButton) {
+              // Reposition the copy button to the right
+              copyButton.style.right = "0";
+              copyButton.style.borderRadius = "0 4px 0 4px"; // Use the right-side border radius
+            }
+          }
+        });
+      };
+
+      // Add apply buttons to code blocks after rendering
+      addApplyButtonsToCodeBlocks();
     }
 
     // Cleanup function
