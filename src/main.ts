@@ -4,6 +4,7 @@ import { CustomModel } from "@/aiParams";
 import { parseChatContent, updateChatMemory } from "@/chatUtils";
 import { registerBuiltInCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
+import { ApplyView, APPLY_VIEW_TYPE } from "@/components/ApplyView";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 import { CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { registerContextMenu } from "@/contextMenu";
@@ -72,6 +73,7 @@ export default class CopilotPlugin extends Plugin {
     this.fileParserManager = new FileParserManager(this.brevilabsClient);
 
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
+    this.registerView(APPLY_VIEW_TYPE, (leaf: WorkspaceLeaf) => new ApplyView(leaf));
 
     this.initActiveLeafChangeHandler();
 

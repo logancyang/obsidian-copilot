@@ -9,6 +9,8 @@ import { insertIntoEditor } from "@/utils";
 import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Notice } from "obsidian";
+import { BrevilabsClient, ComposerApplyRequest } from "@/LLMProviders/brevilabsClient";
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
   if (!context || (context.notes.length === 0 && context.urls.length === 0)) {
@@ -48,6 +50,7 @@ interface ChatSingleMessageProps {
   onRegenerate?: () => void;
   onEdit?: (newMessage: string) => void;
   onDelete: () => void;
+  chatHistory?: ChatMessage[];
 }
 
 const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
@@ -57,6 +60,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   onRegenerate,
   onEdit,
   onDelete,
+  chatHistory = [],
 }) => {
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
@@ -78,6 +82,95 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       }, 2000);
     });
   };
+
+  const handleApplyCode = useCallback(
+    async (path: string, code: string) => {
+      try {
+        // Get the file from the path
+        const file = app.vault.getAbstractFileByPath(path);
+
+        if (!file || !(file instanceof TFile)) {
+          new Notice(`File not found: ${path}`);
+          return;
+        }
+
+        // Get the original content
+        const originalContent = await app.vault.read(file);
+
+        // Check if the current active note is the same as the target note
+        const activeFile = app.workspace.getActiveFile();
+        if (!activeFile || activeFile.path !== file.path) {
+          // If not, open the target file in the current leaf
+          await app.workspace.getLeaf().openFile(file);
+          new Notice(`Switched to ${file.name}`);
+        }
+
+        try {
+          // Call the composer apply endpoint
+          const brevilabsClient = BrevilabsClient.getInstance();
+
+          // Convert chat history to the format expected by the API
+          const formattedChatHistory = chatHistory
+            .filter((msg) => msg.isVisible)
+            .map((msg) => ({
+              role: msg.sender === USER_SENDER ? "user" : "assistant",
+              content: msg.message,
+            }));
+
+          // Create the request object
+          const request: ComposerApplyRequest = {
+            target_note: {
+              title: file.basename,
+              content: originalContent,
+            },
+            chat_history: formattedChatHistory,
+            markdown_block: code,
+          };
+
+          // Call the composer apply endpoint
+
+          console.log("==== Composer Request ====\n", request);
+          const response = await brevilabsClient.composerApply(request);
+
+          // Use the content from the response
+          const newContent = response.content;
+
+          // Open the Apply View in a new leaf with the processed content
+          const leaf = app.workspace.getLeaf(true);
+          await leaf.setViewState({
+            type: "obsidian-copilot-apply-view",
+            active: true,
+            state: {
+              file: file,
+              originalContent: originalContent,
+              newContent: newContent,
+              path: path,
+            },
+          });
+        } catch (error) {
+          console.error("Error calling composer apply:", error);
+          new Notice(`Error processing code: ${error.message}`);
+
+          // Fallback to original behavior if composer apply fails
+          const leaf = app.workspace.getLeaf(true);
+          await leaf.setViewState({
+            type: "obsidian-copilot-apply-view",
+            active: true,
+            state: {
+              file: file,
+              originalContent: originalContent,
+              newContent: code,
+              path: path,
+            },
+          });
+        }
+      } catch (error) {
+        console.error("Error applying code:", error);
+        new Notice(`Error applying code: ${error.message}`);
+      }
+    },
+    [app, chatHistory]
+  );
 
   const preprocess = useCallback(
     (content: string): string => {
@@ -203,6 +296,85 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         "", // Empty string for sourcePath as we don't have a specific source file
         componentRef.current
       );
+
+      // Function to add apply buttons to code blocks
+      const addApplyButtonsToCodeBlocks = () => {
+        if (!contentRef.current) return;
+
+        // Find all pre elements (code blocks) in the rendered content
+        const codeBlocks = contentRef.current.querySelectorAll("pre");
+
+        codeBlocks.forEach((pre) => {
+          // Create apply button
+          const applyButton = document.createElement("button");
+          applyButton.className = "apply-code-button";
+          applyButton.textContent = "Apply";
+          applyButton.title = "Apply this code";
+
+          // Get the code element
+          const codeElement = pre.querySelector("code");
+          if (!codeElement) return;
+
+          // Process the code block to extract metadata and clean the display
+          const originalCode = codeElement.textContent || "";
+          const lines = originalCode.split("\n");
+          const firstLine = lines[0].trim();
+
+          // Check if the first line contains path= or other metadata
+          let pathMatch = null;
+
+          // Check for path in HTML comment format: <!-- path=Notes/My Notes.md -->
+          const htmlCommentMatch = firstLine.match(/<!--\s*path=([^>]+?)\s*-->/);
+          if (htmlCommentMatch && htmlCommentMatch[1]) {
+            pathMatch = htmlCommentMatch[1].trim();
+          }
+
+          if (pathMatch) {
+            // Create a path indicator at the top of the code block
+            const pathIndicator = document.createElement("div");
+            pathIndicator.className = "code-path-indicator";
+            pathIndicator.textContent = pathMatch;
+            pathIndicator.style.fontSize = "0.8em";
+            pathIndicator.style.padding = "0.2rem 0.5rem";
+            pathIndicator.style.borderBottom = "1px solid var(--background-modifier-border)";
+            pathIndicator.style.color = "var(--text-muted)";
+
+            // Insert the path indicator before the code element
+            pre.insertBefore(pathIndicator, codeElement);
+
+            // Remove the path from the first line
+            const cleanedCode = lines.slice(1).join("\n");
+            codeElement.textContent = cleanedCode;
+
+            // Store the original code and metadata as data attributes
+            pre.dataset.originalCode = originalCode;
+            pre.dataset.path = pathMatch;
+
+            // Add click event listener to the apply button
+            applyButton.addEventListener("click", (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (pre.dataset.path && pre.dataset.originalCode) {
+                handleApplyCode(pre.dataset.path, codeElement.textContent || "");
+              }
+            });
+
+            // Add the apply button to the pre element only when path is found
+            pre.appendChild(applyButton);
+          } else {
+            // No path found, find and reposition Obsidian's copy button to the right
+            const copyButton = pre.querySelector(".copy-code-button") as HTMLElement;
+            if (copyButton) {
+              // Reposition the copy button to the right
+              copyButton.style.right = "0";
+              copyButton.style.borderRadius = "0 4px 0 4px"; // Use the right-side border radius
+            }
+          }
+        });
+      };
+
+      // Add apply buttons to code blocks after rendering
+      addApplyButtonsToCodeBlocks();
     }
 
     // Cleanup function
@@ -212,7 +384,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         componentRef.current = null;
       }
     };
-  }, [message, app, componentRef, isStreaming, preprocess]);
+  }, [message, app, componentRef, isStreaming, preprocess, handleApplyCode]);
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
