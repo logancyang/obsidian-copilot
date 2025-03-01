@@ -1,5 +1,9 @@
-import { DEFAULT_INLINE_EDIT_COMMANDS, SELECTED_TEXT_PLACEHOLDER } from "@/commands/constants";
-import { InlineEditCommandSettings, getSettings } from "@/settings/model";
+import {
+  COMMAND_NAME_MAX_LENGTH,
+  DEFAULT_INLINE_EDIT_COMMANDS,
+  SELECTED_TEXT_PLACEHOLDER,
+} from "@/commands/constants";
+import { InlineEditCommandSettings, getSettings, useSettingsValue } from "@/settings/model";
 
 export function getCommandId(commandName: string) {
   return commandName.replace(/\s+/g, "-").toLowerCase();
@@ -7,7 +11,7 @@ export function getCommandId(commandName: string) {
 
 /**
  * Validate the command name. A command name must be:
- * - less than 20 characters
+ * - less than 50 characters
  * - not empty
  * - only contain alphanumeric characters and spaces
  * @param commandName - The name of the command.
@@ -17,8 +21,8 @@ export function validateCommandName(commandName: string) {
     throw new Error("Command name is required");
   }
 
-  if (commandName.length > 20) {
-    throw new Error("Command name must be less than 20 characters");
+  if (commandName.length > COMMAND_NAME_MAX_LENGTH) {
+    throw new Error(`Command name must be less than ${COMMAND_NAME_MAX_LENGTH} characters`);
   }
 
   if (!/^[a-zA-Z0-9\s]+$/.test(commandName)) {
@@ -27,12 +31,17 @@ export function validateCommandName(commandName: string) {
 }
 
 export function getCommandById(commandId: string): InlineEditCommandSettings | undefined {
-  const commandSettings = getCommands();
+  const commandSettings = getInlineEditCommands();
   return commandSettings.find((command) => getCommandId(command.name) === commandId);
 }
 
-export function getCommands(): InlineEditCommandSettings[] {
+export function getInlineEditCommands(): InlineEditCommandSettings[] {
   return getSettings().inlineEditCommands ?? DEFAULT_INLINE_EDIT_COMMANDS;
+}
+
+export function useInlineEditCommands(): InlineEditCommandSettings[] {
+  const settings = useSettingsValue();
+  return settings.inlineEditCommands ?? DEFAULT_INLINE_EDIT_COMMANDS;
 }
 
 /**
