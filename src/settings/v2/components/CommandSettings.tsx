@@ -2,7 +2,7 @@ import React from "react";
 import { SettingItem } from "@/components/ui/setting-item";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 
-export const AdvancedSettings: React.FC = () => {
+export const CommandSettings: React.FC = () => {
   const settings = useSettingsValue();
 
   return (

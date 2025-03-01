@@ -1,49 +1,29 @@
-import { COMMAND_PROMPT_MAP } from "@/commands/promptUtils";
 import { AddPromptModal } from "@/components/modals/AddPromptModal";
 import { AdhocPromptModal } from "@/components/modals/AdhocPromptModal";
 import { DebugSearchModal } from "@/components/modals/DebugSearchModal";
 import { InlineEditModal } from "@/components/modals/InlineEditModal";
-import { LanguageModal } from "@/components/modals/LanguageModal";
 import { ListPromptModal } from "@/components/modals/ListPromptModal";
 import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
 import { RemoveFromIndexModal } from "@/components/modals/RemoveFromIndexModal";
-import { ToneModal } from "@/components/modals/ToneModal";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
 import CopilotPlugin from "@/main";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
-import { getSettings } from "@/settings/model";
-import { ChatMessage } from "@/sharedState";
-import { formatDateTime, err2String } from "@/utils";
+import { CopilotSettings, InlineEditCommandSettings } from "@/settings/model";
+import { err2String } from "@/utils";
 import { Editor, Notice, TFile } from "obsidian";
-import {
-  COMMAND_IDS,
-  COMMAND_NAMES,
-  CommandId,
-  DISABLEABLE_COMMANDS,
-  PROCESS_SELECTION_COMMANDS,
-  USER_SENDER,
-} from "../constants";
-
-/**
- * Check if a command is enabled.
- * @returns - True if the command is enabled or not set, false otherwise
- */
-export function isCommandEnabled(id: CommandId) {
-  const commandSettings = getSettings().enabledCommands[id];
-  return commandSettings?.enabled !== false;
-}
+import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";
+import { getCommandById, getCommandId, getCommands } from "@/commands/inlineEditCommandUtils";
+import { logError } from "@/logger";
 
 /**
  * Add a command to the plugin.
  */
 export function addCommand(plugin: CopilotPlugin, id: CommandId, callback: () => void) {
-  if (isCommandEnabled(id)) {
-    plugin.addCommand({
-      id,
-      name: COMMAND_NAMES[id],
-      callback,
-    });
-  }
+  plugin.addCommand({
+    id,
+    name: COMMAND_NAMES[id],
+    callback,
+  });
 }
 
 /**
@@ -54,13 +34,11 @@ function addEditorCommand(
   id: CommandId,
   callback: (editor: Editor) => void
 ) {
-  if (isCommandEnabled(id)) {
-    plugin.addCommand({
-      id,
-      name: COMMAND_NAMES[id],
-      editorCallback: callback,
-    });
-  }
+  plugin.addCommand({
+    id,
+    name: COMMAND_NAMES[id],
+    editorCallback: callback,
+  });
 }
 
 /**
@@ -71,130 +49,73 @@ export function addCheckCommand(
   id: CommandId,
   callback: (checking: boolean) => boolean | void
 ) {
-  if (isCommandEnabled(id)) {
-    plugin.addCommand({
-      id,
-      name: COMMAND_NAMES[id],
-      checkCallback: callback,
-    });
-  }
+  plugin.addCommand({
+    id,
+    name: COMMAND_NAMES[id],
+    checkCallback: callback,
+  });
 }
 
 /**
  * Process an inline edit command and display a modal with the processed prompt.
  */
-async function processInlineEditCommand(
-  plugin: CopilotPlugin,
-  editor: Editor,
-  commandId: (typeof PROCESS_SELECTION_COMMANDS)[number],
-  eventSubtype?: string
-) {
+async function processInlineEditCommand(editor: Editor, commandId: string) {
   const selectedText = editor.getSelection().trim();
   if (!selectedText) {
     return;
   }
 
-  const promptFn = COMMAND_PROMPT_MAP[commandId];
-  const messageWithPrompt = await promptFn(selectedText, eventSubtype);
-
-  const promptMessage: ChatMessage = {
-    message: messageWithPrompt,
-    sender: USER_SENDER,
-    isVisible: false,
-    timestamp: formatDateTime(new Date()),
-  };
-
-  if (selectedText) {
-    new InlineEditModal(app, {
-      selectedText,
-      commandId,
-      promptMessage,
-      chainManager: plugin.chainManager,
-    }).open();
+  const command = getCommandById(commandId);
+  if (!command) {
+    logError(`Command not found for id ${commandId}`);
+    return;
   }
+
+  new InlineEditModal(app, {
+    selectedText,
+    command,
+  }).open();
 }
 
-export function registerBuiltInCommands(plugin: CopilotPlugin) {
-  // Remove all built in commands first
-  DISABLEABLE_COMMANDS.forEach((id) => {
-    // removeCommand is not available in TypeScript for some reasons
-    // https://docs.obsidian.md/Reference/TypeScript+API/Plugin/removeCommand
-    (plugin as any).removeCommand(id);
+export function registerInlineEditCommands(
+  plugin: CopilotPlugin,
+  prevCommands: InlineEditCommandSettings[],
+  nextCommands: InlineEditCommandSettings[]
+) {
+  prevCommands.forEach((command) => {
+    const id = getCommandId(command.name);
+    if (id) {
+      // removeCommand is not available in TypeScript for some reasons
+      // https://docs.obsidian.md/Reference/TypeScript+API/Plugin/removeCommand
+      (plugin as any).removeCommand(id);
+    }
   });
 
+  nextCommands.forEach((command) => {
+    const id = getCommandId(command.name);
+    plugin.addCommand({
+      id,
+      name: command.name,
+      editorCallback: (editor) => {
+        processInlineEditCommand(editor, id);
+      },
+    });
+  });
+}
+
+export function registerCommands(
+  plugin: CopilotPlugin,
+  prev: CopilotSettings | undefined,
+  next: CopilotSettings
+) {
+  registerInlineEditCommands(
+    plugin,
+    prev?.inlineEditCommands ?? [],
+    // If a user comes from a legacy version and doesn't have inlineEditCommands
+    // in settings, we use the default commands.
+    next.inlineEditCommands ?? getCommands()
+  );
   const promptProcessor = CustomPromptProcessor.getInstance(plugin.app.vault);
-
-  addEditorCommand(plugin, COMMAND_IDS.FIX_GRAMMAR, (editor) => {
-    processInlineEditCommand(plugin, editor, COMMAND_IDS.FIX_GRAMMAR);
-  });
-
-  addEditorCommand(plugin, COMMAND_IDS.SUMMARIZE, (editor) => {
-    processInlineEditCommand(plugin, editor, COMMAND_IDS.SUMMARIZE);
-  });
-
-  addEditorCommand(plugin, COMMAND_IDS.GENERATE_TOC, (editor) => {
-    processInlineEditCommand(plugin, editor, COMMAND_IDS.GENERATE_TOC);
-  });
-
-  addEditorCommand(plugin, COMMAND_IDS.GENERATE_GLOSSARY, (editor) => {
-    processInlineEditCommand(plugin, editor, COMMAND_IDS.GENERATE_GLOSSARY);
-  });
-
-  addEditorCommand(plugin, COMMAND_IDS.SIMPLIFY, (editor) => {
-    processInlineEditCommand(plugin, editor, COMMAND_IDS.SIMPLIFY);
-  });
-
-  addEditorCommand(plugin, COMMAND_IDS.EMOJIFY, (editor) => {
-    processInlineEditCommand(plugin, editor, COMMAND_IDS.EMOJIFY);
-  });
-
-  addEditorCommand(plugin, COMMAND_IDS.REMOVE_URLS, (editor) => {
-    processInlineEditCommand(plugin, editor, COMMAND_IDS.REMOVE_URLS);
-  });
-
-  addEditorCommand(plugin, COMMAND_IDS.REWRITE_TWEET, (editor) => {
-    processInlineEditCommand(plugin, editor, COMMAND_IDS.REWRITE_TWEET);
-  });
-
-  addEditorCommand(plugin, COMMAND_IDS.REWRITE_TWEET_THREAD, (editor) => {
-    processInlineEditCommand(plugin, editor, COMMAND_IDS.REWRITE_TWEET_THREAD);
-  });
-
-  addEditorCommand(plugin, COMMAND_IDS.MAKE_SHORTER, (editor) => {
-    processInlineEditCommand(plugin, editor, COMMAND_IDS.MAKE_SHORTER);
-  });
-
-  addEditorCommand(plugin, COMMAND_IDS.MAKE_LONGER, (editor) => {
-    processInlineEditCommand(plugin, editor, COMMAND_IDS.MAKE_LONGER);
-  });
-
-  addEditorCommand(plugin, COMMAND_IDS.ELI5, (editor) => {
-    processInlineEditCommand(plugin, editor, COMMAND_IDS.ELI5);
-  });
-
-  addEditorCommand(plugin, COMMAND_IDS.PRESS_RELEASE, (editor) => {
-    processInlineEditCommand(plugin, editor, COMMAND_IDS.PRESS_RELEASE);
-  });
-
-  addEditorCommand(plugin, COMMAND_IDS.TRANSLATE, (editor) => {
-    new LanguageModal(plugin.app, (language) => {
-      if (!language) {
-        new Notice("Please select a language.");
-        return;
-      }
-      processInlineEditCommand(plugin, editor, COMMAND_IDS.TRANSLATE, language);
-    }).open();
-  });
-
-  addEditorCommand(plugin, COMMAND_IDS.CHANGE_TONE, (editor) => {
-    new ToneModal(plugin.app, (tone) => {
-      if (!tone) {
-        new Notice("Please select a tone.");
-        return;
-      }
-      processInlineEditCommand(plugin, editor, COMMAND_IDS.CHANGE_TONE, tone);
-    }).open();
-  });
 
   addEditorCommand(plugin, COMMAND_IDS.COUNT_WORD_AND_TOKENS_SELECTION, async (editor: Editor) => {
     const selectedText = await editor.getSelection();

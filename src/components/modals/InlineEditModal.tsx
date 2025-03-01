@@ -1,6 +1,6 @@
-import { COMMAND_NAMES, CommandId } from "@/constants";
-import ChainManager from "@/LLMProviders/chainManager";
+import { processCommandPrompt } from "@/commands/inlineEditCommandUtils";
 import ChatModelManager from "@/LLMProviders/chatModelManager";
+import { InlineEditCommandSettings } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { insertIntoEditor } from "@/utils";
 import { Copy, PenLine } from "lucide-react";
@@ -10,9 +10,7 @@ import { createRoot, Root } from "react-dom/client";
 
 interface InlineEditModalContentProps {
   originalText: string;
-  promptMessage: ChatMessage;
-  chainManager: ChainManager;
-  commandId: CommandId;
+  command: InlineEditCommandSettings;
   customTemperature?: number;
   onInsert: (message: string) => void;
   onReplace: (message: string) => void;
@@ -21,9 +19,7 @@ interface InlineEditModalContentProps {
 
 function InlineEditModalContent({
   originalText,
-  promptMessage,
-  chainManager,
-  commandId,
+  command,
   onInsert,
   onReplace,
   onClose,
@@ -31,7 +27,7 @@ function InlineEditModalContent({
   const [aiCurrentMessage, setAiCurrentMessage] = useState<string | null>(null);
   const [processedMessage, setProcessedMessage] = useState<string | null>(null);
 
-  const commandName = COMMAND_NAMES[commandId];
+  const commandName = command.name;
   const handleAddMessage = useCallback((message: ChatMessage) => {
     setProcessedMessage(message.message);
   }, []);
@@ -39,10 +35,10 @@ function InlineEditModalContent({
   useEffect(() => {
     const abortController = new AbortController();
     async function stream() {
+      // TODO: Use the chat model in the command settings
+      const prompt = processCommandPrompt(command.prompt, originalText);
       let fullAIResponse = "";
-      const chatStream = await ChatModelManager.getInstance()
-        .getChatModel()
-        .stream(promptMessage.message);
+      const chatStream = await ChatModelManager.getInstance().getChatModel().stream(prompt);
       for await (const chunk of chatStream) {
         if (abortController?.signal.aborted) break;
         fullAIResponse += chunk.content;
@@ -56,7 +52,7 @@ function InlineEditModalContent({
     return () => {
       abortController.abort();
     };
-  }, [promptMessage, chainManager, handleAddMessage]);
+  }, [command.prompt, originalText, handleAddMessage]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -114,9 +110,7 @@ export class InlineEditModal extends Modal {
     app: App,
     private configs: {
       selectedText: string;
-      commandId: CommandId;
-      promptMessage: ChatMessage;
-      chainManager: ChainManager;
+      command: InlineEditCommandSettings;
     }
   ) {
     super(app);
@@ -125,7 +119,7 @@ export class InlineEditModal extends Modal {
   onOpen() {
     const { contentEl } = this;
     this.root = createRoot(contentEl);
-    const { selectedText, commandId, promptMessage, chainManager } = this.configs;
+    const { selectedText, command } = this.configs;
 
     const handleInsert = (message: string) => {
       insertIntoEditor(message);
@@ -144,9 +138,7 @@ export class InlineEditModal extends Modal {
     this.root.render(
       <InlineEditModalContent
         originalText={selectedText}
-        promptMessage={promptMessage}
-        chainManager={chainManager}
-        commandId={commandId}
+        command={command}
         onInsert={handleInsert}
         onReplace={handleReplace}
         onClose={handleClose}

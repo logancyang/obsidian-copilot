@@ -4,15 +4,12 @@ import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
+import VectorStoreManager from "@/search/vectorStoreManager";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { HelpCircle } from "lucide-react";
 import React from "react";
 
-interface QASettingsProps {
-  indexVaultToVectorStore(overwrite?: boolean): Promise<number>;
-}
-
-const QASettings: React.FC<QASettingsProps> = ({ indexVaultToVectorStore }) => {
+export const QASettings: React.FC = () => {
   const settings = useSettingsValue();
 
   const handlePartitionsChange = (value: string) => {
@@ -20,7 +17,7 @@ const QASettings: React.FC<QASettingsProps> = ({ indexVaultToVectorStore }) => {
     if (numValue !== settings.numPartitions) {
       new RebuildIndexConfirmModal(app, async () => {
         updateSetting("numPartitions", numValue);
-        await indexVaultToVectorStore(true);
+        await VectorStoreManager.getInstance().indexVaultToVectorStore(true);
       }).open();
     }
   };
@@ -233,5 +230,3 @@ const QASettings: React.FC<QASettingsProps> = ({ indexVaultToVectorStore }) => {
     </div>
   );
 };
-
-export default QASettings;
