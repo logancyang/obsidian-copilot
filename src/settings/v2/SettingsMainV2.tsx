@@ -5,14 +5,15 @@ import { TabProvider, useTab } from "@/contexts/TabContext";
 import CopilotPlugin from "@/main";
 import { resetSettings } from "@/settings/model";
 import { checkLatestVersion, isNewerVersion } from "@/utils";
-import { Cog, Cpu, Database, Wrench } from "lucide-react";
+import { Cog, Command, Cpu, Database, Wrench } from "lucide-react";
 import React, { useEffect, useState } from "react";
-import AdvancedSettings from "./components/AdvancedSettings";
-import BasicSettings from "./components/BasicSettings";
-import ModelSettings from "./components/ModelSettings";
-import QASettings from "./components/QASettings";
+import { AdvancedSettings } from "./components/AdvancedSettings";
+import { BasicSettings } from "./components/BasicSettings";
+import { ModelSettings } from "./components/ModelSettings";
+import { QASettings } from "./components/QASettings";
+import { CommandSettings } from "@/settings/v2/components/CommandSettings";
 
-const TAB_IDS = ["basic", "model", "QA", "advanced"] as const;
+const TAB_IDS = ["basic", "model", "QA", "command", "advanced"] as const;
 type TabId = (typeof TAB_IDS)[number];
 
 // tab icons
@@ -20,28 +21,18 @@ const icons: Record<TabId, JSX.Element> = {
   basic: <Cog className="w-5 h-5" />,
   model: <Cpu className="w-5 h-5" />,
   QA: <Database className="w-5 h-5" />,
+  command: <Command className="w-5 h-5" />,
   advanced: <Wrench className="w-5 h-5" />,
 };
 
 // tab components
-const components = (plugin: CopilotPlugin): Record<TabId, React.FC> => ({
-  basic: () => (
-    <BasicSettings
-      indexVaultToVectorStore={plugin.vectorStoreManager.indexVaultToVectorStore.bind(
-        plugin.vectorStoreManager
-      )}
-    />
-  ),
+const components: Record<TabId, React.FC> = {
+  basic: () => <BasicSettings />,
   model: () => <ModelSettings />,
-  QA: () => (
-    <QASettings
-      indexVaultToVectorStore={plugin.vectorStoreManager.indexVaultToVectorStore.bind(
-        plugin.vectorStoreManager
-      )}
-    />
-  ),
-  advanced: AdvancedSettings,
-});
+  QA: () => <QASettings />,
+  command: () => <CommandSettings />,
+  advanced: () => <AdvancedSettings />,
+};
 
 // tabs
 const tabs: TabItemType[] = TAB_IDS.map((id) => ({
@@ -71,7 +62,7 @@ const SettingsContent: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
 
       <div>
         {TAB_IDS.map((id) => {
-          const Component = components(plugin)[id];
+          const Component = components[id];
           return (
             <TabContent key={id} id={id} isSelected={selectedTab === id}>
               <Component />
