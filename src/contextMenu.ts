@@ -1,9 +1,9 @@
-import { getCommandId, getCommands } from "@/commands/inlineEditCommandUtils";
+import { getCommandId, getInlineEditCommands } from "@/commands/inlineEditCommandUtils";
 import CopilotPlugin from "@/main";
 import { Editor, Menu } from "obsidian";
 
 export function registerContextMenu(menu: Menu, editor: Editor, plugin: CopilotPlugin) {
-  const commands = getCommands();
+  const commands = getInlineEditCommands();
 
   commands
     .filter((command) => command.showInContextMenu)

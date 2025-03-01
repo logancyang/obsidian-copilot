@@ -12,7 +12,11 @@ import { CopilotSettings, InlineEditCommandSettings } from "@/settings/model";
 import { err2String } from "@/utils";
 import { Editor, Notice, TFile } from "obsidian";
 import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";
-import { getCommandById, getCommandId, getCommands } from "@/commands/inlineEditCommandUtils";
+import {
+  getCommandById,
+  getCommandId,
+  getInlineEditCommands,
+} from "@/commands/inlineEditCommandUtils";
 import { logError } from "@/logger";
 
 /**
@@ -113,7 +117,7 @@ export function registerCommands(
     prev?.inlineEditCommands ?? [],
     // If a user comes from a legacy version and doesn't have inlineEditCommands
     // in settings, we use the default commands.
-    next.inlineEditCommands ?? getCommands()
+    next.inlineEditCommands ?? getInlineEditCommands()
   );
   const promptProcessor = CustomPromptProcessor.getInstance(plugin.app.vault);
 

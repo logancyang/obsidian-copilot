@@ -1,6 +1,7 @@
 import { InlineEditCommandSettings } from "@/settings/model";
 
 export const SELECTED_TEXT_PLACEHOLDER = "{copilot-selection}";
+export const COMMAND_NAME_MAX_LENGTH = 50;
 
 export const DEFAULT_INLINE_EDIT_COMMANDS: InlineEditCommandSettings[] = [
   {
