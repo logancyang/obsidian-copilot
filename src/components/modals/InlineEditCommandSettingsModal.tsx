@@ -6,8 +6,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import React, { useState } from "react";
 import { createRoot, Root } from "react-dom/client";
-import { InlineEditCommandSettings } from "@/settings/model";
+import {
+  getModelKeyFromModel,
+  InlineEditCommandSettings,
+  useSettingsValue,
+} from "@/settings/model";
 import { validateCommandName } from "@/commands/inlineEditCommandUtils";
+import { getModelDisplayText } from "@/components/ui/model-display";
+import { cn } from "@/lib/utils";
+import { ChevronDown } from "lucide-react";
+import { logError } from "@/logger";
 
 type FormErrors = {
   name?: string;
@@ -19,14 +27,19 @@ function InlineEditCommandSettingsModalContent({
   onConfirm,
   onCancel,
   onRemove,
-  container,
 }: {
   command: InlineEditCommandSettings;
   onConfirm: (command: InlineEditCommandSettings) => void;
   onCancel: () => void;
   onRemove?: () => void;
-  container: HTMLElement;
 }) {
+  const settings = useSettingsValue();
+  const activeModels = settings.activeModels
+    .filter((m) => m.enabled)
+    .map((model) => ({
+      label: getModelDisplayText(model),
+      value: getModelKeyFromModel(model),
+    }));
   const [command, setCommand] = useState(initialCommand);
   const [errors, setErrors] = useState<FormErrors>({});
 
@@ -93,12 +106,48 @@ function InlineEditCommandSettingsModalContent({
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="modelKey">Model (Optional)</Label>
-        <Input
-          id="modelKey"
-          value={command.modelKey || ""}
-          onChange={(e) => handleUpdate("modelKey", e.target.value || undefined)}
-          placeholder="Enter model key"
-        />
+        <div className="relative w-full group">
+          <select
+            value={command.modelKey}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (!value) {
+                handleUpdate("modelKey", "");
+                return;
+              }
+              const selectedModel = activeModels.find((m) => m.value === value);
+              if (!selectedModel) {
+                logError(`Model ${value} not found`);
+                handleUpdate("modelKey", "");
+                return;
+              }
+              handleUpdate("modelKey", e.target.value);
+            }}
+            className={cn(
+              "w-full appearance-none",
+              "flex h-9 rounded-md border border-solid border-border bg-dropdown px-3 py-1 pr-8",
+              "text-sm !shadow transition-colors",
+              "focus:outline-none focus:ring-1 focus:ring-ring",
+              "disabled:cursor-not-allowed disabled:opacity-50",
+              "hover:bg-interactive-hover hover:text-normal"
+            )}
+          >
+            <option value="">Inherit from chat model</option>
+            {activeModels.map((option) => (
+              <option key={option.value} value={option.value.toString()}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <div
+            className={cn(
+              "pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2",
+              "transition-colors group-hover:[&>svg]:text-normal"
+            )}
+          >
+            <ChevronDown className="h-4 w-4" />
+          </div>
+        </div>
       </div>
 
       <div className="flex items-center gap-2">
@@ -166,7 +215,6 @@ export class InlineEditCommandSettingsModal extends Modal {
         onConfirm={handleConfirm}
         onCancel={() => this.close()}
         onRemove={this.onRemove ? handleRemove : undefined}
-        container={this.contentEl}
       />
     );
   }
