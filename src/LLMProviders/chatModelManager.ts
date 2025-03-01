@@ -1,6 +1,7 @@
 import { CustomModel, getModelKey, ModelConfig, setModelKey } from "@/aiParams";
 import { BREVILABS_API_BASE_URL, BUILTIN_CHAT_MODELS, ChatModelProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
+import { logError } from "@/logger";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { err2String, isOSeriesModel, safeFetch } from "@/utils";
 import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
@@ -290,31 +291,34 @@ export default class ChatModelManager {
   async setChatModel(model: CustomModel): Promise<void> {
     const modelKey = getModelKeyFromModel(model);
     setModelKey(modelKey);
-    if (!ChatModelManager.modelMap.hasOwnProperty(modelKey)) {
+    try {
+      const modelInstance = await this.createModelInstance(model);
+      ChatModelManager.chatModel = modelInstance;
+    } catch (error) {
+      logError(error);
+      new Notice(`Error creating model: ${modelKey}`);
+    }
+  }
+
+  async createModelInstance(model: CustomModel): Promise<BaseChatModel> {
+    // Create and return the appropriate model
+    const modelKey = getModelKeyFromModel(model);
+    const selectedModel = ChatModelManager.modelMap[modelKey];
+    if (!selectedModel) {
       throw new Error(`No model found for: ${modelKey}`);
     }
-
-    // Create and return the appropriate model
-    const selectedModel = ChatModelManager.modelMap[modelKey];
     if (!selectedModel.hasApiKey) {
-      const errorMessage = `API key is not provided for the model: ${modelKey}. Model switch failed.`;
+      const errorMessage = `API key is not provided for the model: ${modelKey}.`;
       new Notice(errorMessage);
-      // Stop execution and deliberate fail the model switch
       throw new Error(errorMessage);
     }
 
     const modelConfig = await this.getModelConfig(model);
 
-    try {
-      const newModelInstance = new selectedModel.AIConstructor({
-        ...modelConfig,
-      });
-      // Set the new model
-      ChatModelManager.chatModel = newModelInstance;
-    } catch (error) {
-      console.error(error);
-      new Notice(`Error creating model: ${modelKey}`);
-    }
+    const newModelInstance = new selectedModel.AIConstructor({
+      ...modelConfig,
+    });
+    return newModelInstance;
   }
 
   validateChatModel(chatModel: BaseChatModel): boolean {
