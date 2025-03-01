@@ -8,7 +8,7 @@ import { ModelAddDialog } from "@/settings/v2/components/ModelAddDialog";
 import { ModelTable } from "@/settings/v2/components/ModelTable";
 import { ModelEditDialog } from "@/settings/v2/components/ModelEditDialog";
 
-const ModelSettings: React.FC = () => {
+export const ModelSettings: React.FC = () => {
   const settings = useSettingsValue();
   const [editingModel, setEditingModel] = useState<CustomModel | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -169,5 +169,3 @@ const ModelSettings: React.FC = () => {
     </div>
   );
 };
-
-export default ModelSettings;

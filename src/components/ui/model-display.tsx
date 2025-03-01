@@ -73,7 +73,7 @@ export const ModelDisplay: React.FC<ModelDisplayProps> = ({ model, iconSize = 14
 export const getModelDisplayText = (model: CustomModel): string => {
   const displayName = model.displayName || model.name;
   const provider = `(${getProviderLabel(model.provider)})`;
-  return `${displayName}${provider}`;
+  return `${displayName} ${provider}`;
 };
 
 export const getModelDisplayWithIcons = (model: CustomModel): string => {
@@ -94,5 +94,5 @@ export const getModelDisplayWithIcons = (model: CustomModel): string => {
         }
       })
       .join("|") || "";
-  return `${displayName}${provider} ${icons}`;
+  return `${displayName} ${provider} ${icons}`;
 };
