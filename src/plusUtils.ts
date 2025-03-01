@@ -7,7 +7,13 @@ import {
   PlusUtmMedium,
 } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import { getSettings, setSettings, updateSetting, useSettingsValue } from "@/settings/model";
+import {
+  getSettings,
+  getSystemPrompt,
+  setSettings,
+  updateSetting,
+  useSettingsValue,
+} from "@/settings/model";
 import { setChainType, setModelKey } from "@/aiParams";
 import { CopilotPlusExpiredModal } from "@/components/modals/CopilotPlusExpiredModal";
 import VectorStoreManager from "@/search/vectorStoreManager";
@@ -18,6 +24,13 @@ export const DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY =
 export const DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL = EmbeddingModels.COPILOT_PLUS_SMALL;
 export const DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY =
   DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL + "|" + EmbeddingModelProviders.COPILOT_PLUS;
+
+// Cache for the composer prompt
+let cachedComposerPrompt: string | null = null;
+
+export function resetComposerPromptCache(): void {
+  cachedComposerPrompt = null;
+}
 
 /** Check if the model key is a Copilot Plus model. */
 export function isPlusModel(modelKey: string): boolean {
@@ -78,5 +91,30 @@ export function turnOffPlus(): void {
   updateSetting("isPlusUser", false);
   if (previousIsPlusUser) {
     new CopilotPlusExpiredModal(app).open();
+  }
+}
+
+export async function getComposerSystemPrompt(): Promise<string> {
+  // Get the current system prompt
+  const currentSystemPrompt = getSystemPrompt();
+
+  // If we already have a cached composer prompt, use it
+  if (cachedComposerPrompt) {
+    return `${currentSystemPrompt}\n${cachedComposerPrompt}`;
+  }
+
+  // Otherwise, fetch it from the API
+  const brevilabsClient = BrevilabsClient.getInstance();
+  try {
+    // Get the composer prompt from the API
+    const composerPromptResponse = await brevilabsClient.composerPrompt();
+    cachedComposerPrompt = composerPromptResponse.prompt;
+
+    // Combine the prompts
+    return `${currentSystemPrompt}\n${cachedComposerPrompt}`;
+  } catch (error) {
+    console.error("Failed to fetch composer prompt:", error);
+    // Fallback to just the system prompt if API call fails
+    return currentSystemPrompt;
   }
 }

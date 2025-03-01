@@ -149,9 +149,22 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   // Handle accepting all changes that have been marked as accepted
   const handleAccept = async () => {
     try {
-      // Filter out rejected changes and include accepted ones
+      // Filter out rejected changes and properly handle accepted removals
       const newContent = diff
-        .filter((change) => !change.rejected && (!change.removed || change.accepted))
+        .filter((change) => {
+          // Keep changes that are not rejected
+          if (change.rejected) return false;
+
+          // For removed changes, we want to exclude them when accepted
+          // (since accepting a removal means we want to remove that content)
+          if (change.removed) return !change.accepted;
+
+          // For added changes, we want to include them when accepted
+          if (change.added) return change.accepted;
+
+          // Keep unchanged content
+          return true;
+        })
         .map((change) => change.value)
         .join("");
 

@@ -10,6 +10,7 @@ import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Notice } from "obsidian";
+import { BrevilabsClient, ComposerApplyRequest } from "@/LLMProviders/brevilabsClient";
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
   if (!context || (context.notes.length === 0 && context.urls.length === 0)) {
@@ -49,6 +50,7 @@ interface ChatSingleMessageProps {
   onRegenerate?: () => void;
   onEdit?: (newMessage: string) => void;
   onDelete: () => void;
+  chatHistory?: ChatMessage[];
 }
 
 const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
@@ -58,6 +60,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   onRegenerate,
   onEdit,
   onDelete,
+  chatHistory = [],
 }) => {
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
@@ -102,24 +105,71 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           new Notice(`Switched to ${file.name}`);
         }
 
-        // Open the Apply View in a new leaf
-        const leaf = app.workspace.getLeaf(true);
-        await leaf.setViewState({
-          type: "obsidian-copilot-apply-view",
-          active: true,
-          state: {
-            file: file,
-            originalContent: originalContent,
-            newContent: code,
-            path: path,
-          },
-        });
+        try {
+          // Call the composer apply endpoint
+          const brevilabsClient = BrevilabsClient.getInstance();
+
+          // Convert chat history to the format expected by the API
+          const formattedChatHistory = chatHistory
+            .filter((msg) => msg.isVisible)
+            .map((msg) => ({
+              role: msg.sender === USER_SENDER ? "user" : "assistant",
+              content: msg.message,
+            }));
+
+          // Create the request object
+          const request: ComposerApplyRequest = {
+            target_note: {
+              title: file.basename,
+              content: originalContent,
+            },
+            chat_history: formattedChatHistory,
+            markdown_block: code,
+          };
+
+          // Call the composer apply endpoint
+
+          console.log("==== Composer Request ====\n", request);
+          const response = await brevilabsClient.composerApply(request);
+
+          // Use the content from the response
+          const newContent = response.content;
+
+          // Open the Apply View in a new leaf with the processed content
+          const leaf = app.workspace.getLeaf(true);
+          await leaf.setViewState({
+            type: "obsidian-copilot-apply-view",
+            active: true,
+            state: {
+              file: file,
+              originalContent: originalContent,
+              newContent: newContent,
+              path: path,
+            },
+          });
+        } catch (error) {
+          console.error("Error calling composer apply:", error);
+          new Notice(`Error processing code: ${error.message}`);
+
+          // Fallback to original behavior if composer apply fails
+          const leaf = app.workspace.getLeaf(true);
+          await leaf.setViewState({
+            type: "obsidian-copilot-apply-view",
+            active: true,
+            state: {
+              file: file,
+              originalContent: originalContent,
+              newContent: code,
+              path: path,
+            },
+          });
+        }
       } catch (error) {
         console.error("Error applying code:", error);
         new Notice(`Error applying code: ${error.message}`);
       }
     },
-    [app]
+    [app, chatHistory]
   );
 
   const preprocess = useCallback(
