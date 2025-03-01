@@ -14,9 +14,11 @@ export function getCommandId(commandName: string) {
  * - less than 50 characters
  * - not empty
  * - only contain alphanumeric characters and spaces
+ * - not duplicate an existing command name (except when editing the same command)
  * @param commandName - The name of the command.
+ * @param currentCommandName - Optional. The current name of the command being edited.
  */
-export function validateCommandName(commandName: string) {
+export function validateCommandName(commandName: string, currentCommandName?: string) {
   if (!commandName) {
     throw new Error("Command name is required");
   }
@@ -27,6 +29,18 @@ export function validateCommandName(commandName: string) {
 
   if (!/^[a-zA-Z0-9\s]+$/.test(commandName)) {
     throw new Error("Command name must only contain alphanumeric characters and spaces");
+  }
+
+  // Check for duplicate command names, but allow keeping the same name when editing
+  const existingCommands = getInlineEditCommands();
+  if (
+    existingCommands.some(
+      (cmd) =>
+        cmd.name.toLowerCase() === commandName.toLowerCase() &&
+        cmd.name.toLowerCase() !== currentCommandName?.toLowerCase()
+    )
+  ) {
+    throw new Error("A command with this name already exists");
   }
 }
 

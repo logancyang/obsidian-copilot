@@ -39,8 +39,6 @@ export const CommandSettings: React.FC = () => {
     );
   };
 
-  // TODO: Add command and verify that it doesn't already exist
-
   return (
     <div className="space-y-4">
       <section>

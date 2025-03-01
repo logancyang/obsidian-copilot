@@ -19,20 +19,6 @@ export const DEFAULT_INLINE_EDIT_COMMANDS: InlineEditCommandSettings[] = [
     showInContextMenu: true,
   },
   {
-    name: "Generate table of contents",
-    prompt:
-      `<instruction>Generate a hierarchical table of contents for the text below. Use appropriate heading levels (H1, H2, H3, etc.). Include page numbers if present. Return only the table of contents.</instruction>\n\n` +
-      `<text>${SELECTED_TEXT_PLACEHOLDER}</text>`,
-    showInContextMenu: false,
-  },
-  {
-    name: "Generate glossary",
-    prompt:
-      `<instruction>Create a glossary of important terms, concepts, and phrases from the text below. Format each entry as "Term: Definition". Sort entries alphabetically. Return only the glossary.</instruction>\n\n` +
-      `<text>{copilot-selection}</text>`,
-    showInContextMenu: false,
-  },
-  {
     name: "Simplify",
     prompt:
       `<instruction>Simplify the text below to a 6th-grade reading level (ages 11-12). Use simple sentences, common words, and clear explanations. Maintain the original key concepts. Return only the simplified text.</instruction>\n\n` +
@@ -49,6 +35,41 @@ export const DEFAULT_INLINE_EDIT_COMMANDS: InlineEditCommandSettings[] = [
     4. Choose emojis that match the context and tone
     Return only the emojified text.</instruction>\n\n` + `<text>{copilot-selection}</text>`,
     showInContextMenu: true,
+  },
+  {
+    name: "Make shorter",
+    prompt:
+      `<instruction>Reduce the text below to half its length while preserving these elements:
+    1. Main ideas and key points
+    2. Essential details
+    3. Original tone and style
+    Return only the shortened text.</instruction>\n\n` +
+      `<text>${SELECTED_TEXT_PLACEHOLDER}</text>`,
+    showInContextMenu: true,
+  },
+  {
+    name: "Make longer",
+    prompt:
+      `<instruction>Expand the text below to twice its length by:
+    1. Adding relevant details and examples
+    2. Elaborating on key points
+    3. Maintaining the original tone and style
+    Return only the expanded text.</instruction>\n\n` + `<text>${SELECTED_TEXT_PLACEHOLDER}</text>`,
+    showInContextMenu: true,
+  },
+  {
+    name: "Generate table of contents",
+    prompt:
+      `<instruction>Generate a hierarchical table of contents for the text below. Use appropriate heading levels (H1, H2, H3, etc.). Include page numbers if present. Return only the table of contents.</instruction>\n\n` +
+      `<text>${SELECTED_TEXT_PLACEHOLDER}</text>`,
+    showInContextMenu: false,
+  },
+  {
+    name: "Generate glossary",
+    prompt:
+      `<instruction>Create a glossary of important terms, concepts, and phrases from the text below. Format each entry as "Term: Definition". Sort entries alphabetically. Return only the glossary.</instruction>\n\n` +
+      `<text>{copilot-selection}</text>`,
+    showInContextMenu: false,
   },
   {
     name: "Remove URLs",
@@ -79,27 +100,6 @@ export const DEFAULT_INLINE_EDIT_COMMANDS: InlineEditCommandSettings[] = [
     Return only the formatted thread.</instruction>\n\n` +
       `<text>${SELECTED_TEXT_PLACEHOLDER}</text>`,
     showInContextMenu: false,
-  },
-  {
-    name: "Make shorter",
-    prompt:
-      `<instruction>Reduce the text below to half its length while preserving these elements:
-    1. Main ideas and key points
-    2. Essential details
-    3. Original tone and style
-    Return only the shortened text.</instruction>\n\n` +
-      `<text>${SELECTED_TEXT_PLACEHOLDER}</text>`,
-    showInContextMenu: true,
-  },
-  {
-    name: "Make longer",
-    prompt:
-      `<instruction>Expand the text below to twice its length by:
-    1. Adding relevant details and examples
-    2. Elaborating on key points
-    3. Maintaining the original tone and style
-    Return only the expanded text.</instruction>\n\n` + `<text>${SELECTED_TEXT_PLACEHOLDER}</text>`,
-    showInContextMenu: true,
   },
   {
     name: "Explain like I am 5",

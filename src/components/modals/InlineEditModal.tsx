@@ -13,7 +13,6 @@ import { createRoot, Root } from "react-dom/client";
 interface InlineEditModalContentProps {
   originalText: string;
   command: InlineEditCommandSettings;
-  customTemperature?: number;
   onInsert: (message: string) => void;
   onReplace: (message: string) => void;
   onClose: () => void;
