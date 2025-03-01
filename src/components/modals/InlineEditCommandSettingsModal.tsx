@@ -58,7 +58,7 @@ function InlineEditCommandSettingsModalContent({
     const newErrors: FormErrors = {};
 
     try {
-      validateCommandName(command.name);
+      validateCommandName(command.name, initialCommand.name);
     } catch (e) {
       newErrors.name = e.message;
     }
