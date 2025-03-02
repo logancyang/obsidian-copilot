@@ -5,6 +5,7 @@ import { turnOffPlus, turnOnPlus } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { extractErrorDetail } from "@/utils";
 import { Notice } from "obsidian";
+import { Buffer } from "buffer";
 
 export interface BrocaResponse {
   response: {

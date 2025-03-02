@@ -1,5 +1,6 @@
 import { type CopilotSettings } from "@/settings/model";
 import { Platform } from "obsidian";
+import { Buffer } from "buffer";
 
 // @ts-ignore
 let safeStorageInternal: Electron.SafeStorage | null = null;
