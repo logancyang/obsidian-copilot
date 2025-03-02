@@ -26,6 +26,7 @@ import {
   Image,
   StopCircle,
   X,
+  Loader2,
 } from "lucide-react";
 import { App, Notice, Platform, TFile } from "obsidian";
 import React, {
@@ -420,7 +421,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
     return (
       <div
-        className="flex flex-col gap-0.5 w-full border border-border border-solid rounded-md pt-2 pb-1 px-1"
+        className="flex flex-col gap-0.5 w-full border border-border border-solid rounded-md pt-2 pb-1 px-1 @container/chat-input"
         ref={containerRef}
       >
         <ContextControl
@@ -482,8 +483,13 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           )}
         </div>
 
-        <div className="flex gap-1 justify-between px-1">
-          <div className="flex items-center gap-1">
+        <div className="flex gap-1 justify-between px-1 h-6">
+          {isGenerating ? (
+            <div className="flex items-center gap-1 px-1 text-faint text-sm">
+              <Loader2 className="size-3 animate-spin" />
+              <span>Generating...</span>
+            </div>
+          ) : (
             <DropdownMenu open={isModelDropdownOpen} onOpenChange={setIsModelDropdownOpen}>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost2" size="fit">
@@ -547,25 +553,10 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                   })}
               </DropdownMenuContent>
             </DropdownMenu>
-
-            {isCopilotPlus && (
-              <Button
-                variant="ghost2"
-                size="fit"
-                onClick={() => {
-                  new AddImageModal(app, onAddImage).open();
-                }}
-              >
-                <div className="flex items-center gap-1">
-                  <span>image</span>
-                  <Image className="!size-3" />
-                </div>
-              </Button>
-            )}
-          </div>
+          )}
 
           <div className="flex items-center gap-1">
-            {isGenerating && (
+            {isGenerating ? (
               <Button
                 variant="ghost2"
                 size="fit"
@@ -573,42 +564,57 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                 onClick={() => onStopGenerating()}
               >
                 <StopCircle className="size-4" />
+                Stop
               </Button>
-            )}
-            <Button
-              variant="ghost2"
-              size="fit"
-              className="text-muted"
-              onClick={() => onSendMessage(false)}
-            >
-              <CornerDownLeft className="!size-3" />
-              <span>chat</span>
-            </Button>
+            ) : (
+              <>
+                {isCopilotPlus && (
+                  <Button
+                    variant="ghost2"
+                    size="fit"
+                    onClick={() => {
+                      new AddImageModal(app, onAddImage).open();
+                    }}
+                  >
+                    <Image className="w-4 h-4" />
+                  </Button>
+                )}
+                <Button
+                  variant="ghost2"
+                  size="fit"
+                  className="text-muted"
+                  onClick={() => onSendMessage(false)}
+                >
+                  <CornerDownLeft className="!size-3" />
+                  <span>chat</span>
+                </Button>
 
-            {currentChain === "copilot_plus" && (
-              <Button
-                variant="ghost2"
-                size="fit"
-                className="text-muted"
-                onClick={() => onSendMessage(true)}
-              >
-                <div className="flex items-center gap-1">
-                  {Platform.isMacOS ? (
-                    <div className="flex items-center">
-                      <Command className="!size-3" />
-                      <ArrowBigUp className="!size-3" />
-                      <CornerDownLeft className="!size-3" />
+                {currentChain === "copilot_plus" && (
+                  <Button
+                    variant="ghost2"
+                    size="fit"
+                    className="text-muted @xs/chat-input:inline-flex hidden"
+                    onClick={() => onSendMessage(true)}
+                  >
+                    <div className="flex items-center gap-1">
+                      {Platform.isMacOS ? (
+                        <div className="flex items-center">
+                          <Command className="!size-3" />
+                          <ArrowBigUp className="!size-3" />
+                          <CornerDownLeft className="!size-3" />
+                        </div>
+                      ) : (
+                        <div className="flex items-center">
+                          <span>Ctrl</span>
+                          <ArrowBigUp className="size-4" />
+                          <CornerDownLeft className="!size-3" />
+                        </div>
+                      )}
+                      <span>vault</span>
                     </div>
-                  ) : (
-                    <div className="flex items-center">
-                      <span>Ctrl</span>
-                      <ArrowBigUp className="size-4" />
-                      <CornerDownLeft className="!size-3" />
-                    </div>
-                  )}
-                  <span>vault</span>
-                </div>
-              </Button>
+                  </Button>
+                )}
+              </>
             )}
           </div>
         </div>
