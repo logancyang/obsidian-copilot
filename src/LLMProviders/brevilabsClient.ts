@@ -3,7 +3,6 @@ import { getDecryptedKey } from "@/encryptionService";
 import { logInfo } from "@/logger";
 import { turnOffPlus, turnOnPlus } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
-import { extractErrorDetail } from "@/utils";
 import { Notice } from "obsidian";
 import { Buffer } from "buffer";
 
@@ -101,7 +100,7 @@ export class BrevilabsClient {
     body: any,
     method = "POST",
     excludeAuthHeader = false
-  ): Promise<T> {
+  ): Promise<{ data: T | null; error?: Error }> {
     this.checkLicenseKey();
 
     const url = new URL(`${BREVILABS_API_BASE_URL}${endpoint}`);
@@ -124,9 +123,19 @@ export class BrevilabsClient {
       ...(method === "POST" && { body: JSON.stringify(body) }),
     });
     const data = await response.json();
+    if (!response.ok) {
+      try {
+        const errorDetail = data.detail;
+        const error = new Error(errorDetail.reason);
+        error.name = errorDetail.error;
+        return { data: null, error };
+      } catch {
+        return { data: null, error: new Error("Unknown error") };
+      }
+    }
     logInfo(`==== ${endpoint} request ====:`, data);
 
-    return data;
+    return { data };
   }
 
   /**
@@ -135,64 +144,107 @@ export class BrevilabsClient {
    * unknown error.
    */
   async validateLicenseKey(): Promise<boolean | undefined> {
-    try {
-      logInfo("settings value", getSettings().plusLicenseKey);
-      await this.makeRequest(
-        "/license",
-        {
-          license_key: await getDecryptedKey(getSettings().plusLicenseKey),
-        },
-        "POST",
-        true
-      );
-      turnOnPlus();
-      return true;
-    } catch (error) {
-      if (extractErrorDetail(error).reason === "Invalid license key") {
-        logInfo("validateLicenseKey: false");
+    logInfo("settings value", getSettings().plusLicenseKey);
+    const { error } = await this.makeRequest(
+      "/license",
+      {
+        license_key: await getDecryptedKey(getSettings().plusLicenseKey),
+      },
+      "POST",
+      true
+    );
+    if (error) {
+      if (error.message === "Invalid license key") {
         turnOffPlus();
         return false;
       }
-      return;
-
       // Do nothing if the error is not about the invalid license key
+      return;
     }
+    turnOnPlus();
+    return true;
   }
 
   async broca(userMessage: string): Promise<BrocaResponse> {
-    const brocaResponse = await this.makeRequest<BrocaResponse>("/broca", {
+    const { data, error } = await this.makeRequest<BrocaResponse>("/broca", {
       message: userMessage,
     });
+    if (error) {
+      throw error;
+    }
+    if (!data) {
+      throw new Error("No data returned from broca");
+    }
 
-    return brocaResponse;
+    return data;
   }
 
   async rerank(query: string, documents: string[]): Promise<RerankResponse> {
-    return this.makeRequest<RerankResponse>("/rerank", {
+    const { data, error } = await this.makeRequest<RerankResponse>("/rerank", {
       query,
       documents,
       model: "rerank-2",
     });
+    if (error) {
+      throw error;
+    }
+    if (!data) {
+      throw new Error("No data returned from rerank");
+    }
+
+    return data;
   }
 
   async url4llm(url: string): Promise<Url4llmResponse> {
-    return this.makeRequest<Url4llmResponse>("/url4llm", { url });
+    const { data, error } = await this.makeRequest<Url4llmResponse>("/url4llm", { url });
+    if (error) {
+      throw error;
+    }
+    if (!data) {
+      throw new Error("No data returned from url4llm");
+    }
+
+    return data;
   }
 
   async pdf4llm(binaryContent: ArrayBuffer): Promise<Pdf4llmResponse> {
     // Convert ArrayBuffer to base64 string
     const base64Content = Buffer.from(binaryContent).toString("base64");
 
-    return this.makeRequest<Pdf4llmResponse>("/pdf4llm", {
+    const { data, error } = await this.makeRequest<Pdf4llmResponse>("/pdf4llm", {
       pdf: base64Content,
     });
+    if (error) {
+      throw error;
+    }
+    if (!data) {
+      throw new Error("No data returned from pdf4llm");
+    }
+
+    return data;
   }
 
   async webSearch(query: string): Promise<WebSearchResponse> {
-    return this.makeRequest<WebSearchResponse>("/websearch", { query });
+    const { data, error } = await this.makeRequest<WebSearchResponse>("/websearch", { query });
+    if (error) {
+      throw error;
+    }
+    if (!data) {
+      throw new Error("No data returned from websearch");
+    }
+
+    return data;
   }
 
   async youtube4llm(url: string): Promise<Youtube4llmResponse> {
-    return this.makeRequest<Youtube4llmResponse>("/youtube4llm", { url });
+    const { data, error } = await this.makeRequest<Youtube4llmResponse>("/youtube4llm", { url });
+    if (error) {
+      throw error;
+    }
+    if (!data) {
+      throw new Error("No data returned from youtube4llm");
+    }
+
+    return data;
   }
 }
