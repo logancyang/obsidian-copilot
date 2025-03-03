@@ -43,11 +43,11 @@ export interface ErrorDetail {
 }
 
 export function extractErrorDetail(error: any): ErrorDetail {
-  const errorJson = error?.json?.detail || error?.json || {};
+  const errorDetail = error?.detail || {};
   return {
-    status: errorJson.status,
-    message: errorJson.message || error?.message,
-    reason: errorJson.reason,
+    status: errorDetail.status,
+    message: errorDetail.message || error?.message,
+    reason: errorDetail.reason,
   };
 }
 
