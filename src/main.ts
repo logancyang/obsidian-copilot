@@ -32,6 +32,7 @@ import {
   WorkspaceLeaf,
 } from "obsidian";
 import { IntentAnalyzer } from "./LLMProviders/intentAnalyzer";
+import ChatModelManager from "@/LLMProviders/chatModelManager";
 
 export default class CopilotPlugin extends Plugin {
   // A chat history that stores the messages sent and received
@@ -43,6 +44,7 @@ export default class CopilotPlugin extends Plugin {
   vectorStoreManager: VectorStoreManager;
   fileParserManager: FileParserManager;
   settingsUnsubscriber?: () => void;
+  private chatModelManager: ChatModelManager;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -74,6 +76,8 @@ export default class CopilotPlugin extends Plugin {
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
 
     this.initActiveLeafChangeHandler();
+
+    this.chatModelManager = ChatModelManager.getInstance();
 
     this.addRibbonIcon("message-square", "Open Copilot Chat", (evt: MouseEvent) => {
       this.activateView();
@@ -202,9 +206,49 @@ export default class CopilotPlugin extends Plugin {
     } as Partial<Editor> as Editor;
   }
 
-  processCustomPrompt(eventType: string, customPrompt: string) {
+  async processCustomPrompt(
+    eventType: string,
+    customPrompt: string,
+    model?: string,
+    isTemporary?: boolean
+  ) {
     const editor = this.getCurrentEditorOrDummy();
-    this.processText(editor, eventType, customPrompt, false);
+
+    // If a model is specified, switch to it
+    let originalModel: CustomModel | null = null;
+    if (model) {
+      try {
+        // Only store the original model if this is a temporary switch
+        if (isTemporary) {
+          originalModel = this.chatModelManager.getCurrentModel();
+        }
+        const targetModel = this.chatModelManager.findModelByName(model);
+        if (targetModel) {
+          await this.chatModelManager.setChatModel(targetModel);
+        } else {
+          new Notice(`Model "${model}" not found. Using current model.`);
+        }
+      } catch (error) {
+        console.error("Error switching model:", error);
+        new Notice(`Failed to switch to model "${model}". Using current model.`);
+      }
+    }
+
+    try {
+      await this.processText(editor, eventType, customPrompt, false);
+    } finally {
+      // Restore the original model only if this was a temporary switch
+      if (originalModel && isTemporary) {
+        try {
+          await this.chatModelManager.setChatModel(originalModel);
+        } catch (error) {
+          console.error("Error restoring original model:", error);
+          new Notice(
+            "Failed to restore original model. You may need to manually reset your model in settings."
+          );
+        }
+      }
+    }
   }
 
   toggleView() {

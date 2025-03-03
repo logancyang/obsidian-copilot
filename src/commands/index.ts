@@ -122,7 +122,7 @@ export function registerBuiltInCommands(plugin: CopilotPlugin) {
     (plugin as any).removeCommand(id);
   });
 
-  const promptProcessor = CustomPromptProcessor.getInstance(plugin.app.vault);
+  const promptProcessor = CustomPromptProcessor.getInstance(plugin.app);
 
   addEditorCommand(plugin, COMMAND_IDS.FIX_GRAMMAR, (editor) => {
     processInlineEditCommand(plugin, editor, COMMAND_IDS.FIX_GRAMMAR);
@@ -249,7 +249,12 @@ export function registerBuiltInCommands(plugin: CopilotPlugin) {
           new Notice(`No prompt found with the title "${promptTitle}".`);
           return;
         }
-        plugin.processCustomPrompt(COMMAND_IDS.APPLY_CUSTOM_PROMPT, prompt.content);
+        plugin.processCustomPrompt(
+          COMMAND_IDS.APPLY_CUSTOM_PROMPT,
+          prompt.content,
+          prompt.model,
+          prompt.isTemporaryModel
+        );
       } catch (err) {
         console.error(err);
         new Notice("An error occurred.");
@@ -260,6 +265,7 @@ export function registerBuiltInCommands(plugin: CopilotPlugin) {
   addCommand(plugin, COMMAND_IDS.APPLY_ADHOC_PROMPT, async () => {
     const modal = new AdhocPromptModal(plugin.app, async (adhocPrompt: string) => {
       try {
+        // For ad-hoc prompts, we don't support model switching
         plugin.processCustomPrompt(COMMAND_IDS.APPLY_ADHOC_PROMPT, adhocPrompt);
       } catch (err) {
         console.error(err);
