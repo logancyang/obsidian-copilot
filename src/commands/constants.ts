@@ -12,6 +12,17 @@ export const DEFAULT_INLINE_EDIT_COMMANDS: InlineEditCommandSettings[] = [
     showInContextMenu: true,
   },
   {
+    name: "Translate to Chinese",
+    prompt:
+      `<instruction>Translate the text below into Chinese:
+    1. Preserve the meaning and tone
+    2. Maintain appropriate cultural context
+    3. Keep formatting and structure
+    Return only the translated text.</instruction>\n\n` +
+      `<text>${SELECTED_TEXT_PLACEHOLDER}</text>`,
+    showInContextMenu: true,
+  },
+  {
     name: "Summarize",
     prompt:
       `<instruction>Create a bullet-point summary of the text below. Each bullet point should capture a key point. Return only the bullet-point summary.</instruction>\n\n` +
