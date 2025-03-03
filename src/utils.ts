@@ -20,6 +20,7 @@ import { BaseChain, RetrievalQAChain } from "langchain/chains";
 import moment from "moment";
 import { MarkdownView, Notice, TFile, Vault, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
+import { Buffer } from "buffer";
 
 // Add custom error type at the top of the file
 interface APIError extends Error {
