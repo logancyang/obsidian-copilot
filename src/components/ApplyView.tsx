@@ -86,7 +86,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     const initialDiff = diffLines(state.originalContent, state.newContent);
     return initialDiff.map((change) => ({
       ...change,
-      accepted: false,
+      accepted: true,
       rejected: false,
     }));
   });
@@ -142,20 +142,16 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   // Handle accepting all changes that have been marked as accepted
   const handleAccept = async () => {
     try {
-      // Filter out rejected changes and properly handle accepted removals
+      // Filter out rejected changes and include both accepted and unselected changes
       const newContent = diff
         .filter((change) => {
-          // Keep changes that are not rejected
-          if (change.rejected) return false;
-
-          // For removed changes, we want to exclude them when accepted
-          // (since accepting a removal means we want to remove that content)
-          if (change.removed) return !change.accepted;
-
-          // For added changes, we want to include them when accepted
-          if (change.added) return change.accepted;
-
-          // Keep unchanged content
+          // Handle rejected changes
+          if (change.rejected) {
+            if (change.added) return false;
+            else if (change.removed) return true;
+          }
+          // Handle accepted or unselected changes
+          if (change.removed) return false;
           return true;
         })
         .map((change) => change.value)
@@ -234,7 +230,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
           </Button>
           <Button onClick={handleAccept}>
             <Check className="mr-1 h-4 w-4" />
-            Apply Accepted Changes
+            Apply Changes
           </Button>
         </div>
       </div>
@@ -256,7 +252,6 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                 {
                   "border-green shadow-[0_0_5px_rgba(var(--color-green-rgb),0.2)]": isAccepted,
                   "border-red shadow-[0_0_5px_rgba(var(--color-red-rgb),0.2)]": isRejected,
-                  "border-border": !isAccepted && !isRejected,
                 }
               )}
             >
