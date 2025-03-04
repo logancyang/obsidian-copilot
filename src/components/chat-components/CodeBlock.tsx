@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Check } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 
 interface CodeBlockProps {
   code: string;
@@ -44,8 +44,12 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ code, path, onApply }) => 
             onClick={handleApply}
             disabled={isApplying}
           >
-            <Check className="mr-1 h-4 w-4" />
-            {isApplying ? "Applying..." : "Apply"}
+            {isApplying ? (
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+            ) : (
+              <Check className="mr-1 h-4 w-4" />
+            )}
+            Apply
           </Button>
         )}
       </pre>
