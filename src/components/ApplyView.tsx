@@ -278,28 +278,14 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
               {/* Only show accept/reject buttons for blocks with changes */}
               {hasChanges && (
                 <div className="flex justify-end p-2 bg-background-secondary-alt border-t border-border gap-2">
-                  <button
-                    onClick={() => rejectBlock(blockIndex)}
-                    className={cn(
-                      "flex items-center px-2 py-1 rounded-md transition-colors duration-200",
-                      "bg-modifier-error text-text-normal hover:bg-modifier-error-hover",
-                      "border border-red shadow-sm"
-                    )}
-                  >
-                    <XIcon className="mr-1 h-4 w-4" />
+                  <Button variant="secondary" size="sm" onClick={() => rejectBlock(blockIndex)}>
+                    <XIcon className="h-4 w-4" />
                     Reject
-                  </button>
-                  <button
-                    onClick={() => acceptBlock(blockIndex)}
-                    className={cn(
-                      "flex items-center px-2 py-1 rounded-md transition-colors duration-200",
-                      "bg-modifier-success text-text-normal hover:bg-modifier-success-hover",
-                      "border border-green shadow-sm"
-                    )}
-                  >
-                    <Check className="mr-1 h-4 w-4" />
+                  </Button>
+                  <Button size="sm" onClick={() => acceptBlock(blockIndex)}>
+                    <Check className="h-4 w-4" />
                     Accept
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
