@@ -78,8 +78,11 @@ interface ApplyViewRootProps {
 }
 
 const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
-  // Initialize diff with extended properties
+  // Initialize diff with extended properties - moved before conditional
   const [diff, setDiff] = useState<ExtendedChange[]>(() => {
+    if (!state?.originalContent || !state?.newContent) {
+      return [];
+    }
     const initialDiff = diffLines(state.originalContent, state.newContent);
     return initialDiff.map((change) => ({
       ...change,
@@ -102,6 +105,8 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
 
   // Update summary when diff changes
   useEffect(() => {
+    if (!diff.length) return;
+
     const additions = diff.filter((change) => change.added).length;
     const deletions = diff.filter((change) => change.removed).length;
     const accepted = diff.filter((change) => change.accepted).length;
@@ -118,6 +123,8 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
 
   // Process diff into blocks of related changes
   useEffect(() => {
+    if (!diff.length) return;
+
     const blocks: ExtendedChange[][] = [];
     let currentBlock: ExtendedChange[] = [];
     let inChangeBlock = false;
@@ -145,6 +152,19 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
 
     setChangeBlocks(blocks);
   }, [diff]);
+
+  // Add defensive check for state after hooks
+  if (!state || !state.originalContent || !state.newContent) {
+    console.error("Invalid state:", state);
+    return (
+      <div className="flex flex-col h-full items-center justify-center">
+        <div className="text-error">Error: Invalid state - missing content</div>
+        <Button onClick={close} className="mt-4">
+          Close
+        </Button>
+      </div>
+    );
+  }
 
   // Handle accepting all changes that have been marked as accepted
   const handleAccept = async () => {
@@ -227,8 +247,8 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   };
 
   return (
-    <div className="apply-view flex flex-col h-full">
-      <div className="apply-view-header flex justify-between items-center p-2 border-b border-border">
+    <div className="flex flex-col h-full">
+      <div className="flex justify-between items-center p-2 border-b border-border">
         <div className="flex items-center">
           <h3 className="m-0 text-lg font-medium">
             Apply Changes to {state.path || state.file.path}
@@ -247,7 +267,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
       </div>
 
       {/* Summary section */}
-      <div className="apply-view-summary p-2 border-b border-border bg-background-secondary-alt">
+      <div className="p-2 border-b border-border bg-background-secondary-alt">
         <div className="flex flex-wrap gap-4 text-sm">
           <div className="flex items-center">
             <span className="font-medium mr-1">Changes:</span> {summary.totalChanges}
@@ -266,7 +286,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
         </div>
       </div>
 
-      <div className="apply-view-content flex-1 overflow-auto p-2">
+      <div className="flex-1 overflow-auto p-2">
         {changeBlocks.map((block, blockIndex) => {
           // Check if this block contains any changes (added or removed)
           const hasChanges = block.some((change) => change.added || change.removed);
@@ -278,27 +298,30 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
           return (
             <div
               key={blockIndex}
-              className={cn("diff-block mb-4 border rounded-md overflow-hidden", {
-                "border-green-500 accepted": isAccepted,
-                "border-red-500 rejected": isRejected,
-                "border-gray-300": !isAccepted && !isRejected,
-              })}
+              className={cn(
+                "mb-4 border rounded-md overflow-hidden transition-colors duration-200",
+                {
+                  "border-green-500 shadow-[0_0_5px_rgba(0,128,0,0.2)]": isAccepted,
+                  "border-red-500 shadow-[0_0_5px_rgba(255,0,0,0.2)]": isRejected,
+                  "border-gray-300": !isAccepted && !isRejected,
+                }
+              )}
             >
               {block.map((change, changeIndex) => (
                 <div
                   key={`${blockIndex}-${changeIndex}`}
-                  className={cn("diff-line flex", {
-                    "bg-green-500/20 added": change.added,
-                    "bg-red-500/20 removed": change.removed,
+                  className={cn("flex relative border-l-3", {
+                    "bg-green-500/20 border-l-green-500": change.added,
+                    "bg-red-500/20 border-l-red-500": change.removed,
                     "opacity-50":
                       (change.added && change.rejected) || (change.removed && !change.accepted),
                   })}
                 >
-                  <div className="diff-line-indicator w-6 flex-shrink-0 flex items-center justify-center text-sm">
+                  <div className="w-6 flex-shrink-0 flex items-center justify-center text-sm font-bold bg-black/5">
                     {change.added && "+"}
                     {change.removed && "-"}
                   </div>
-                  <div className="diff-content flex-1 font-mono whitespace-pre-wrap py-1 px-2">
+                  <div className="flex-1 font-mono text-sm whitespace-pre-wrap py-1 px-2">
                     {change.value}
                   </div>
                 </div>
@@ -306,36 +329,27 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
 
               {/* Only show accept/reject buttons for blocks with changes */}
               {hasChanges && (
-                <div className="diff-block-actions flex justify-end p-2 bg-background-secondary border-t border-gray-300">
+                <div className="flex justify-end p-2 bg-background-secondary-alt border-t border-border gap-2">
                   <button
                     onClick={() => rejectBlock(blockIndex)}
-                    style={{
-                      backgroundColor: isRejected ? "#991b1b" : "#b91c1c",
-                      color: "white",
-                      padding: "0.25rem 0.5rem",
-                      borderRadius: "0.25rem",
-                      display: "flex",
-                      alignItems: "center",
-                      marginRight: "0.5rem",
-                      border: isRejected ? "2px solid #ef4444" : "none",
-                      cursor: "pointer",
-                    }}
+                    className={cn(
+                      "flex items-center px-2 py-1 rounded text-white transition-colors duration-200",
+                      isRejected
+                        ? "bg-red-800 border-2 border-red-500"
+                        : "bg-red-700 hover:bg-red-800"
+                    )}
                   >
                     <XIcon className="mr-1 h-4 w-4" />
                     Reject
                   </button>
                   <button
                     onClick={() => acceptBlock(blockIndex)}
-                    style={{
-                      backgroundColor: isAccepted ? "#166534" : "#15803d",
-                      color: "white",
-                      padding: "0.25rem 0.5rem",
-                      borderRadius: "0.25rem",
-                      display: "flex",
-                      alignItems: "center",
-                      border: isAccepted ? "2px solid #22c55e" : "none",
-                      cursor: "pointer",
-                    }}
+                    className={cn(
+                      "flex items-center px-2 py-1 rounded text-white transition-colors duration-200",
+                      isAccepted
+                        ? "bg-green-800 border-2 border-green-500"
+                        : "bg-green-700 hover:bg-green-800"
+                    )}
                   >
                     <Check className="mr-1 h-4 w-4" />
                     Accept
