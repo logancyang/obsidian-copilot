@@ -2,7 +2,7 @@ import React from "react";
 import { SettingItem } from "@/components/ui/setting-item";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 
-const AdvancedSettings: React.FC = () => {
+export const AdvancedSettings: React.FC = () => {
   const settings = useSettingsValue();
 
   return (
@@ -43,5 +43,3 @@ const AdvancedSettings: React.FC = () => {
     </div>
   );
 };
-
-export default AdvancedSettings;
