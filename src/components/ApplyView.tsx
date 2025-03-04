@@ -219,17 +219,17 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     <div className="flex flex-col h-full">
       <div className="flex justify-between items-center p-2 border-b border-border">
         <div className="flex items-center">
-          <h3 className="m-0 text-lg font-medium">
+          <h3 className="m-0 text-sm font-medium">
             Apply Changes to {state.path || state.file.path}
           </h3>
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary" onClick={handleReject}>
-            <XIcon className="mr-1 h-4 w-4" />
+          <Button variant="secondary" size="sm" onClick={handleReject}>
+            <XIcon className="mr-1 h-3 w-3" />
             Reject All
           </Button>
-          <Button onClick={handleAccept}>
-            <Check className="mr-1 h-4 w-4" />
+          <Button size="sm" onClick={handleAccept}>
+            <Check className="mr-1 h-3 w-3" />
             Apply Changes
           </Button>
         </div>

@@ -135,8 +135,13 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           const response = await brevilabsClient.composerApply(request);
 
           // Use the content from the response
-          const newContent = response.content;
+          let newContent = response.content;
 
+          //TODO: Remove this once the issue is fixed in the backend
+          // Remove trailing newline from newContent if originalContent doesn't end with one
+          if (!originalContent.endsWith("\n") && newContent.endsWith("\n")) {
+            newContent = newContent.slice(0, -1);
+          }
           // Open the Apply View in a new leaf with the processed content
           const leaf = app.workspace.getLeaf(true);
           await leaf.setViewState({
