@@ -2,7 +2,7 @@ import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ChainManager from "@/LLMProviders/chainManager";
 import { CustomModel } from "@/aiParams";
 import { parseChatContent, updateChatMemory } from "@/chatUtils";
-import { registerBuiltInCommands } from "@/commands";
+import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import { ApplyView, APPLY_VIEW_TYPE } from "@/components/ApplyView";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
@@ -47,14 +47,13 @@ export default class CopilotPlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
-    this.settingsUnsubscriber = subscribeToSettingsChange(async () => {
-      const settings = getSettings();
-      if (settings.enableEncryption) {
-        await this.saveData(await encryptAllKeys(settings));
+    this.settingsUnsubscriber = subscribeToSettingsChange(async (prev, next) => {
+      if (next.enableEncryption) {
+        await this.saveData(await encryptAllKeys(next));
       } else {
-        await this.saveData(settings);
+        await this.saveData(next);
       }
-      registerBuiltInCommands(this);
+      registerCommands(this, prev, next);
     });
     this.addSettingTab(new CopilotSettingTab(this.app, this));
     // Always have one instance of sharedState and chainManager in the plugin
@@ -81,7 +80,7 @@ export default class CopilotPlugin extends Plugin {
       this.activateView();
     });
 
-    registerBuiltInCommands(this);
+    registerCommands(this, undefined, getSettings());
 
     IntentAnalyzer.initTools(this.app.vault);
 

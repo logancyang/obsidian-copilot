@@ -127,7 +127,8 @@ abstract class BaseChainRunner implements ChainRunner {
       if (msg.search(/401|invalid|not valid/gi) !== -1) {
         errorMessage =
           "Something went wrong. Please check if you have set your API key." +
-          "\nPath: Settings > copilot plugin > Basic Tab > Set Keys" +
+          "\nPath: Settings > copilot plugin > Basic Tab > Set Keys." +
+          "\nOr check model config" +
           "\nError Details: " +
           errorMessage;
       }

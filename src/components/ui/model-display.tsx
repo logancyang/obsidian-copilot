@@ -20,36 +20,38 @@ export const ModelCapabilityIcons: React.FC<ModelCapabilityIconsProps> = ({
 }) => {
   return (
     <>
-      {capabilities.map((cap, index) => {
-        switch (cap) {
-          case ModelCapability.REASONING:
-            return (
-              <Lightbulb
-                key={index}
-                className="text-model-capabilities-blue"
-                style={{ width: iconSize, height: iconSize }}
-              />
-            );
-          case ModelCapability.VISION:
-            return (
-              <Eye
-                key={index}
-                className="text-model-capabilities-green"
-                style={{ width: iconSize, height: iconSize }}
-              />
-            );
-          case ModelCapability.WEB_SEARCH:
-            return (
-              <Globe
-                key={index}
-                className="text-model-capabilities-blue"
-                style={{ width: iconSize, height: iconSize }}
-              />
-            );
-          default:
-            return null;
-        }
-      })}
+      {capabilities
+        .sort((a, b) => a.localeCompare(b))
+        .map((cap, index) => {
+          switch (cap) {
+            case ModelCapability.REASONING:
+              return (
+                <Lightbulb
+                  key={index}
+                  className="text-model-capabilities-blue"
+                  style={{ width: iconSize, height: iconSize }}
+                />
+              );
+            case ModelCapability.VISION:
+              return (
+                <Eye
+                  key={index}
+                  className="text-model-capabilities-green"
+                  style={{ width: iconSize, height: iconSize }}
+                />
+              );
+            case ModelCapability.WEB_SEARCH:
+              return (
+                <Globe
+                  key={index}
+                  className="text-model-capabilities-blue"
+                  style={{ width: iconSize, height: iconSize }}
+                />
+              );
+            default:
+              return null;
+          }
+        })}
     </>
   );
 };
@@ -71,7 +73,7 @@ export const ModelDisplay: React.FC<ModelDisplayProps> = ({ model, iconSize = 14
 export const getModelDisplayText = (model: CustomModel): string => {
   const displayName = model.displayName || model.name;
   const provider = `(${getProviderLabel(model.provider)})`;
-  return `${displayName}${provider}`;
+  return `${displayName} ${provider}`;
 };
 
 export const getModelDisplayWithIcons = (model: CustomModel): string => {
@@ -92,5 +94,5 @@ export const getModelDisplayWithIcons = (model: CustomModel): string => {
         }
       })
       .join("|") || "";
-  return `${displayName}${provider} ${icons}`;
+  return `${displayName} ${provider} ${icons}`;
 };

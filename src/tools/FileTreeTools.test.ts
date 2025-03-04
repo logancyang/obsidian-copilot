@@ -1,5 +1,5 @@
 import { TFolder } from "obsidian";
-import { createGetFileTreeTool } from "./FileTreeTools";
+import { createGetFileTreeTool, buildFileTree } from "./FileTreeTools";
 import * as searchUtils from "@/search/searchUtils";
 
 // Mock the searchUtils functions
@@ -70,14 +70,21 @@ describe("FileTreeTools", () => {
     projects.children = [
       new MockTFile("docs/projects/project1.md", projects),
       new MockTFile("docs/projects/project2.md", projects),
+      new MockTFile("docs/projects/data.json", projects),
     ];
 
     notes.children = [
       new MockTFile("docs/notes/note1.md", notes),
       new MockTFile("docs/notes/note2.md", notes),
+      new MockTFile("docs/notes/image.png", notes),
     ];
 
-    root.children = [docs, new MockTFile("readme.md", root)];
+    root.children = [
+      docs,
+      new MockTFile("readme.md", root),
+      new MockTFile("config.json", root),
+      new MockTFile("text", root),
+    ];
 
     // Reset mocks before each test
     jest.clearAllMocks();
@@ -90,32 +97,72 @@ describe("FileTreeTools", () => {
     (searchUtils.shouldIndexFile as jest.Mock).mockReturnValue(true);
   });
 
-  it("should generate correct JSON file tree when no exclusions", async () => {
-    const tool = createGetFileTreeTool(root);
-    const result = await tool.invoke({});
-    // Extract JSON part after the prompt
-    const jsonPart = result.substring(result.indexOf("{"));
-    const parsedResult = JSON.parse(jsonPart);
+  it("should generate correct file tree structure with files and extension counts", async () => {
+    // Test buildFileTree function directly
+    const tree = buildFileTree(root);
 
-    expect(searchUtils.getMatchingPatterns).toHaveBeenCalled();
-    expect(searchUtils.shouldIndexFile).toHaveBeenCalled();
-
-    const expected = {
-      vault: [
-        ["readme.md"],
-        {
-          docs: [
-            ["readme.md"],
-            {
-              projects: ["project1.md", "project2.md"],
-              notes: ["note1.md", "note2.md"],
+    // Define expected tree structure
+    const expectedTree = {
+      vault: {
+        files: ["readme.md", "config.json", "text"],
+        subFolders: {
+          docs: {
+            files: ["readme.md"],
+            subFolders: {
+              projects: {
+                files: ["project1.md", "project2.md", "data.json"],
+                extensionCounts: { md: 2, json: 1 },
+              },
+              notes: {
+                files: ["note1.md", "note2.md", "image.png"],
+                extensionCounts: { md: 2, png: 1 },
+              },
             },
-          ],
+            extensionCounts: { md: 5, json: 1, png: 1 },
+          },
         },
-      ],
+        extensionCounts: { md: 6, json: 2, png: 1, unknown: 1 },
+      },
     };
 
-    expect(parsedResult).toEqual(expected);
+    expect(tree).toEqual(expectedTree);
+
+    // Also test the tool to ensure it uses buildFileTree correctly
+    const tool = createGetFileTreeTool(root);
+    const result = await tool.invoke({});
+
+    // Extract JSON part after the prompt
+    const jsonPart = result.substring(result.indexOf("{"));
+    const treeFromTool = JSON.parse(jsonPart);
+
+    expect(treeFromTool).toEqual(expectedTree);
+  });
+
+  it("should handle size limit by rebuilding without files", async () => {
+    // Test buildFileTree with size limit handling
+    const tree = buildFileTree(root, false);
+
+    // Define expected simplified tree structure
+    const expectedTree = {
+      vault: {
+        subFolders: {
+          docs: {
+            subFolders: {
+              projects: {
+                extensionCounts: { md: 2, json: 1 },
+              },
+              notes: {
+                extensionCounts: { md: 2, png: 1 },
+              },
+            },
+            extensionCounts: { md: 5, json: 1, png: 1 },
+          },
+        },
+        extensionCounts: { md: 6, json: 2, png: 1, unknown: 1 },
+      },
+    };
+
+    expect(tree).toEqual(expectedTree);
   });
 
   it("should exclude files based on patterns", async () => {
@@ -124,59 +171,41 @@ describe("FileTreeTools", () => {
       return !file.path.includes("projects");
     });
 
-    const tool = createGetFileTreeTool(root);
-    const result = await tool.invoke({});
-    const jsonPart = result.substring(result.indexOf("{"));
-    const parsedResult = JSON.parse(jsonPart);
+    // Test buildFileTree with exclusion patterns
+    const tree = buildFileTree(root);
 
-    const expected = {
-      vault: [
-        ["readme.md"],
-        {
-          docs: [
-            ["readme.md"],
-            {
-              notes: ["note1.md", "note2.md"],
-            },
-          ],
-        },
-      ],
-    };
-
-    expect(parsedResult).toEqual(expected);
-  });
-
-  it("should handle empty folder after exclusions", async () => {
-    // Mock shouldIndexFile to exclude all files
-    (searchUtils.shouldIndexFile as jest.Mock).mockReturnValue(false);
-
-    const tool = createGetFileTreeTool(root);
-    const result = await tool.invoke({});
-    const jsonPart = result.substring(result.indexOf("{"));
-    const parsedResult = JSON.parse(jsonPart);
-
-    expect(parsedResult).toEqual({});
-  });
-
-  it("should handle partial folder exclusions", async () => {
-    // Mock shouldIndexFile to only include files with "note" in the path
-    (searchUtils.shouldIndexFile as jest.Mock).mockImplementation((file) => {
-      return file.path.includes("note");
-    });
-
-    const tool = createGetFileTreeTool(root);
-    const result = await tool.invoke({});
-    const jsonPart = result.substring(result.indexOf("{"));
-    const parsedResult = JSON.parse(jsonPart);
-
-    const expected = {
+    // Define expected tree with projects excluded
+    const expectedTree = {
       vault: {
-        docs: {
-          notes: ["note1.md", "note2.md"],
+        files: ["readme.md", "config.json", "text"],
+        subFolders: {
+          docs: {
+            files: ["readme.md"],
+            subFolders: {
+              notes: {
+                files: ["note1.md", "note2.md", "image.png"],
+                extensionCounts: { md: 2, png: 1 },
+              },
+            },
+            extensionCounts: { md: 3, png: 1 },
+          },
         },
+        extensionCounts: { md: 4, png: 1, json: 1, unknown: 1 },
       },
     };
 
-    expect(parsedResult).toEqual(expected);
+    expect(tree).toEqual(expectedTree);
+  });
+
+  it("should handle empty folders after filtering", async () => {
+    // Mock shouldIndexFile to exclude all files
+    (searchUtils.shouldIndexFile as jest.Mock).mockReturnValue(false);
+
+    // Test buildFileTree with all files excluded
+    const tree = buildFileTree(root);
+
+    const expectedTree = {};
+
+    expect(tree).toEqual(expectedTree);
   });
 });

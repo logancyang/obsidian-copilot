@@ -11,6 +11,30 @@ import {
   EmbeddingModelProviders,
 } from "@/constants";
 
+export interface InlineEditCommandSettings {
+  /**
+   * The name of the command. The name will be turned into id by replacing
+   * spaces with underscores.
+   */
+  name: string;
+
+  /**
+   * The model key of the command. If not provided, the current chat model will
+   * be used.
+   */
+  modelKey?: string;
+
+  /**
+   * The prompt of the command.
+   */
+  prompt: string;
+
+  /**
+   * Whether to show the command in the context menu.
+   */
+  showInContextMenu: boolean;
+}
+
 export interface CopilotSettings {
   plusLicenseKey: string;
   openAIApiKey: string;
@@ -51,7 +75,6 @@ export interface CopilotSettings {
   qaExclusions: string;
   qaInclusions: string;
   groqApiKey: string;
-  enabledCommands: Record<string, { enabled: boolean }>;
   activeModels: Array<CustomModel>;
   activeEmbeddingModels: Array<CustomModel>;
   promptUsageTimestamps: Record<string, number>;
@@ -65,6 +88,7 @@ export interface CopilotSettings {
   defaultConversationNoteName: string;
   // undefined means never checked
   isPlusUser: boolean | undefined;
+  inlineEditCommands: InlineEditCommandSettings[] | undefined;
 }
 
 export const settingsStore = createStore();
@@ -109,8 +133,16 @@ export function resetSettings(): void {
 /**
  * Subscribes to changes in the settings atom.
  */
-export function subscribeToSettingsChange(callback: () => void): () => void {
-  return settingsStore.sub(settingsAtom, callback);
+export function subscribeToSettingsChange(
+  callback: (prev: CopilotSettings, next: CopilotSettings) => void
+): () => void {
+  let previousValue = getSettings();
+
+  return settingsStore.sub(settingsAtom, () => {
+    const currentValue = getSettings();
+    callback(previousValue, currentValue);
+    previousValue = currentValue;
+  });
 }
 
 /**

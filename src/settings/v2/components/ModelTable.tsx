@@ -72,22 +72,36 @@ const CAPABILITY_ICONS: Record<
   },
 } as const;
 
+const CAPABILITY_ORDER = [
+  ModelCapability.REASONING,
+  ModelCapability.VISION,
+  ModelCapability.WEB_SEARCH,
+] as const;
+
 const renderCapabilities = (model: CustomModel) => {
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="flex gap-2 items-center justify-center">
-        {model.capabilities?.map((capability) => {
+      <div className="grid grid-cols-3 gap-1 w-16 mx-auto">
+        {CAPABILITY_ORDER.map((capability) => {
           const config = CAPABILITY_ICONS[capability];
-          if (!config) return null;
+          if (!config) return <div key={capability} className="w-4" />;
 
           const Icon = config.icon;
-          return (
+          const hasCapability = model.capabilities?.includes(capability);
+
+          return hasCapability ? (
             <Tooltip key={capability}>
               <TooltipTrigger asChild>
-                <Icon className={`h-4 w-4 ${config.color}`} />
+                <div className="flex items-center justify-center">
+                  <Icon className={`h-4 w-4 ${config.color}`} />
+                </div>
               </TooltipTrigger>
               <TooltipContent side="bottom">{config.tooltip}</TooltipContent>
             </Tooltip>
+          ) : (
+            <div key={capability} className="flex items-center justify-center">
+              <div className="w-4 h-4" />
+            </div>
           );
         })}
       </div>
@@ -289,7 +303,7 @@ const SortableTableRow: React.FC<{
       </TableCell>
       <TableCell className="pl-0">{model.displayName || model.name}</TableCell>
       <TableCell>{getProviderLabel(model.provider, model)}</TableCell>
-      <TableCell className="text-center">{renderCapabilities(model)}</TableCell>
+      <TableCell className="text-center flex justify-center">{renderCapabilities(model)}</TableCell>
       {!isEmbeddingModel && (
         <TableCell className="text-center">
           <Checkbox

@@ -1,16 +1,9 @@
 import { ChainType } from "@/chainFactory";
-import { isCommandEnabled } from "@/commands";
 import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SettingItem } from "@/components/ui/setting-item";
-import { SettingSwitch } from "@/components/ui/setting-switch";
-import {
-  COMMAND_NAMES,
-  DEFAULT_OPEN_AREA,
-  DISABLEABLE_COMMANDS,
-  PLUS_UTM_MEDIUMS,
-} from "@/constants";
+import { DEFAULT_OPEN_AREA, PLUS_UTM_MEDIUMS } from "@/constants";
 import { useTab } from "@/contexts/TabContext";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
 import { formatDateTime, checkModelApiKey } from "@/utils";
@@ -22,6 +15,7 @@ import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { createPlusPageUrl } from "@/plusUtils";
 import { getModelDisplayWithIcons } from "@/components/ui/model-display";
+import VectorStoreManager from "@/search/vectorStoreManager";
 
 const ChainType2Label: Record<ChainType, string> = {
   [ChainType.LLM_CHAIN]: "Chat",
@@ -29,11 +23,7 @@ const ChainType2Label: Record<ChainType, string> = {
   [ChainType.COPILOT_PLUS_CHAIN]: "Copilot Plus (beta)",
 };
 
-interface BasicSettingsProps {
-  indexVaultToVectorStore(overwrite?: boolean): Promise<number>;
-}
-
-const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }) => {
+export const BasicSettings: React.FC = () => {
   const { modalContainer } = useTab();
   const settings = useSettingsValue();
   const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
@@ -46,7 +36,7 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
     if (modelKey !== settings.embeddingModelKey) {
       new RebuildIndexConfirmModal(app, async () => {
         updateSetting("embeddingModelKey", modelKey);
-        await indexVaultToVectorStore(true);
+        await VectorStoreManager.getInstance().indexVaultToVectorStore(true);
       }).open();
     }
   };
@@ -97,6 +87,16 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
       setIsChecking(false);
     }
   };
+
+  const defaultModelActivated = !!settings.activeModels.find(
+    (m) => m.enabled && getModelKeyFromModel(m) === settings.defaultModelKey
+  );
+  const enableActivatedModels = settings.activeModels
+    .filter((m) => m.enabled)
+    .map((model) => ({
+      label: getModelDisplayWithIcons(model),
+      value: getModelKeyFromModel(model),
+    }));
 
   return (
     <div className="space-y-4">
@@ -158,7 +158,7 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
             type="select"
             title="Default Chat Model"
             description="Select the Chat model to use"
-            value={settings.defaultModelKey}
+            value={defaultModelActivated ? settings.defaultModelKey : "Select Model"}
             onChange={(value) => {
               const selectedModel = settings.activeModels.find(
                 (m) => m.enabled && getModelKeyFromModel(m) === value
@@ -172,12 +172,11 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
               }
               updateSetting("defaultModelKey", value);
             }}
-            options={settings.activeModels
-              .filter((m) => m.enabled)
-              .map((model) => ({
-                label: getModelDisplayWithIcons(model),
-                value: getModelKeyFromModel(model),
-              }))}
+            options={
+              defaultModelActivated
+                ? enableActivatedModels
+                : [{ label: "Select Model", value: "Select Model" }, ...enableActivatedModels]
+            }
             placeholder="Model"
           />
 
@@ -401,47 +400,8 @@ const BasicSettings: React.FC<BasicSettingsProps> = ({ indexVaultToVectorStore }
             checked={settings.showRelevantNotes}
             onCheckedChange={(checked) => updateSetting("showRelevantNotes", checked)}
           />
-
-          {/* Advanced Configuration Group */}
-          <SettingItem
-            type="dialog"
-            title="Command Settings"
-            description="Enable or disable builtin Copilot commands"
-            dialogTitle="Command Settings"
-            dialogDescription="Enable or disable chat commands"
-            trigger={<Button variant="secondary">Manage Commands</Button>}
-          >
-            <div className="h-[50vh] sm:h-[400px] overflow-y-auto px-1 py-2">
-              <div className="space-y-4">
-                {DISABLEABLE_COMMANDS.map((command) => (
-                  <div
-                    key={command}
-                    className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 py-2 sm:py-0.5"
-                  >
-                    <div className="space-y-0.5 flex-1">
-                      <div className="text-sm font-medium">{COMMAND_NAMES[command]}</div>
-                    </div>
-                    <SettingSwitch
-                      checked={isCommandEnabled(command)}
-                      onCheckedChange={(checked) => {
-                        const newEnabledCommands = {
-                          ...settings.enabledCommands,
-                          [command]: {
-                            enabled: checked,
-                          },
-                        };
-                        updateSetting("enabledCommands", newEnabledCommands);
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </SettingItem>
         </div>
       </section>
     </div>
   );
 };
-
-export default BasicSettings;

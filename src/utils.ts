@@ -20,6 +20,7 @@ import { BaseChain, RetrievalQAChain } from "langchain/chains";
 import moment from "moment";
 import { MarkdownView, Notice, TFile, Vault, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
+import { Buffer } from "buffer";
 
 // Add custom error type at the top of the file
 interface APIError extends Error {
@@ -42,11 +43,11 @@ export interface ErrorDetail {
 }
 
 export function extractErrorDetail(error: any): ErrorDetail {
-  const errorJson = error?.json?.detail || error?.json || {};
+  const errorDetail = error?.detail || {};
   return {
-    status: errorJson.status,
-    message: errorJson.message || error?.message,
-    reason: errorJson.reason,
+    status: errorDetail.status,
+    message: errorDetail.message || error?.message,
+    reason: errorDetail.reason,
   };
 }
 
