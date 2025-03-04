@@ -94,33 +94,6 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   // Group changes into blocks for better UI presentation
   const [changeBlocks, setChangeBlocks] = useState<ExtendedChange[][]>([]);
 
-  // Calculate summary statistics
-  const [summary, setSummary] = useState({
-    totalChanges: 0,
-    additions: 0,
-    deletions: 0,
-    accepted: 0,
-    rejected: 0,
-  });
-
-  // Update summary when diff changes
-  useEffect(() => {
-    if (!diff.length) return;
-
-    const additions = diff.filter((change) => change.added).length;
-    const deletions = diff.filter((change) => change.removed).length;
-    const accepted = diff.filter((change) => change.accepted).length;
-    const rejected = diff.filter((change) => change.rejected).length;
-
-    setSummary({
-      totalChanges: additions + deletions,
-      additions,
-      deletions,
-      accepted,
-      rejected,
-    });
-  }, [diff]);
-
   // Process diff into blocks of related changes
   useEffect(() => {
     if (!diff.length) return;
@@ -266,26 +239,6 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
         </div>
       </div>
 
-      {/* Summary section */}
-      <div className="p-2 border-b border-border bg-background-secondary-alt">
-        <div className="flex flex-wrap gap-4 text-sm">
-          <div className="flex items-center">
-            <span className="font-medium mr-1">Changes:</span> {summary.totalChanges}
-          </div>
-          <div className="flex items-center">
-            <span className="text-green-600 mr-1">+{summary.additions}</span> additions
-          </div>
-          <div className="flex items-center">
-            <span className="text-red-600 mr-1">-{summary.deletions}</span> deletions
-          </div>
-          <div className="flex items-center">
-            <span className="font-medium mr-1">Status:</span>
-            <span className="text-green-600 mr-1">{summary.accepted}</span> accepted,
-            <span className="text-red-600 ml-1 mr-1">{summary.rejected}</span> rejected
-          </div>
-        </div>
-      </div>
-
       <div className="flex-1 overflow-auto p-2">
         {changeBlocks.map((block, blockIndex) => {
           // Check if this block contains any changes (added or removed)
@@ -301,9 +254,9 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
               className={cn(
                 "mb-4 border rounded-md overflow-hidden transition-colors duration-200",
                 {
-                  "border-green-500 shadow-[0_0_5px_rgba(0,128,0,0.2)]": isAccepted,
-                  "border-red-500 shadow-[0_0_5px_rgba(255,0,0,0.2)]": isRejected,
-                  "border-gray-300": !isAccepted && !isRejected,
+                  "border-green shadow-[0_0_5px_rgba(var(--color-green-rgb),0.2)]": isAccepted,
+                  "border-red shadow-[0_0_5px_rgba(var(--color-red-rgb),0.2)]": isRejected,
+                  "border-border": !isAccepted && !isRejected,
                 }
               )}
             >
@@ -311,8 +264,8 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                 <div
                   key={`${blockIndex}-${changeIndex}`}
                   className={cn("flex relative border-l-3", {
-                    "bg-green-500/20 border-l-green-500": change.added,
-                    "bg-red-500/20 border-l-red-500": change.removed,
+                    "bg-modifier-success border-l-green": change.added,
+                    "bg-modifier-error border-l-red": change.removed,
                     "opacity-50":
                       (change.added && change.rejected) || (change.removed && !change.accepted),
                   })}
@@ -333,10 +286,8 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                   <button
                     onClick={() => rejectBlock(blockIndex)}
                     className={cn(
-                      "flex items-center px-2 py-1 rounded text-white transition-colors duration-200",
-                      isRejected
-                        ? "bg-red-800 border-2 border-red-500"
-                        : "bg-red-700 hover:bg-red-800"
+                      "flex items-center px-2 py-1 rounded border transition-colors duration-200",
+                      "bg-red-rgb text-white border-red"
                     )}
                   >
                     <XIcon className="mr-1 h-4 w-4" />
@@ -345,10 +296,8 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                   <button
                     onClick={() => acceptBlock(blockIndex)}
                     className={cn(
-                      "flex items-center px-2 py-1 rounded text-white transition-colors duration-200",
-                      isAccepted
-                        ? "bg-green-800 border-2 border-green-500"
-                        : "bg-green-700 hover:bg-green-800"
+                      "flex items-center px-2 py-1 rounded border transition-colors duration-200",
+                      "bg-green-rgb text-white border-green"
                     )}
                   >
                     <Check className="mr-1 h-4 w-4" />
