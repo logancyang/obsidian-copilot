@@ -11,6 +11,8 @@ import { App, Component, MarkdownRenderer, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Notice } from "obsidian";
 import { BrevilabsClient, ComposerApplyRequest } from "@/LLMProviders/brevilabsClient";
+import { CodeBlock } from "./CodeBlock";
+import { createRoot } from "react-dom/client";
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
   if (!context || (context.notes.length === 0 && context.urls.length === 0)) {
@@ -297,98 +299,31 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         componentRef.current
       );
 
-      // Function to add apply buttons to code blocks
-      const addApplyButtonsToCodeBlocks = () => {
-        if (!contentRef.current) return;
+      // Process code blocks after rendering
+      const codeBlocks = contentRef.current.querySelectorAll("pre");
+      codeBlocks.forEach((pre) => {
+        const codeElement = pre.querySelector("code");
+        if (!codeElement) return;
 
-        // Find all pre elements (code blocks) in the rendered content
-        const codeBlocks = contentRef.current.querySelectorAll("pre");
+        const originalCode = codeElement.textContent || "";
+        const lines = originalCode.split("\n");
+        const firstLine = lines[0].trim();
 
-        codeBlocks.forEach((pre) => {
-          // Create apply button
-          const applyButton = document.createElement("button");
-          applyButton.className = "apply-code-button";
-          applyButton.textContent = "Apply";
-          applyButton.title = "Apply this code";
+        // Check for path in HTML comment format: <!-- path=Notes/My Notes.md -->
+        const htmlCommentMatch = firstLine.match(/<!--\s*path=([^>]+?)\s*-->/);
+        if (htmlCommentMatch && htmlCommentMatch[1]) {
+          const path = htmlCommentMatch[1].trim();
+          const cleanedCode = lines.slice(1).join("\n");
 
-          // Get the code element
-          const codeElement = pre.querySelector("code");
-          if (!codeElement) return;
+          // Create a container for the React component
+          const container = document.createElement("div");
+          pre.parentNode?.replaceChild(container, pre);
 
-          // Process the code block to extract metadata and clean the display
-          const originalCode = codeElement.textContent || "";
-          const lines = originalCode.split("\n");
-          const firstLine = lines[0].trim();
-
-          // Check if the first line contains path= or other metadata
-          let pathMatch = null;
-
-          // Check for path in HTML comment format: <!-- path=Notes/My Notes.md -->
-          const htmlCommentMatch = firstLine.match(/<!--\s*path=([^>]+?)\s*-->/);
-          if (htmlCommentMatch && htmlCommentMatch[1]) {
-            pathMatch = htmlCommentMatch[1].trim();
-          }
-
-          if (pathMatch) {
-            // Create a path indicator at the top of the code block
-            const pathIndicator = document.createElement("div");
-            pathIndicator.className = "code-path-indicator";
-            pathIndicator.textContent = pathMatch;
-            pathIndicator.style.fontSize = "0.8em";
-            pathIndicator.style.padding = "0.2rem 0.5rem";
-            pathIndicator.style.borderBottom = "1px solid var(--background-modifier-border)";
-            pathIndicator.style.color = "var(--text-muted)";
-
-            // Insert the path indicator before the code element
-            pre.insertBefore(pathIndicator, codeElement);
-
-            // Remove the path from the first line
-            const cleanedCode = lines.slice(1).join("\n");
-            codeElement.textContent = cleanedCode;
-
-            // Store the original code and metadata as data attributes
-            pre.dataset.originalCode = originalCode;
-            pre.dataset.path = pathMatch;
-
-            // Add click event listener to the apply button
-            applyButton.addEventListener("click", async (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              if (pre.dataset.path && pre.dataset.originalCode) {
-                // Set loading state
-                applyButton.disabled = true;
-                applyButton.textContent = "...";
-                applyButton.style.opacity = "0.7";
-                applyButton.style.cursor = "not-allowed";
-
-                try {
-                  await handleApplyCode(pre.dataset.path, codeElement.textContent || "");
-                } finally {
-                  // Reset button state
-                  applyButton.disabled = false;
-                  applyButton.textContent = "Apply";
-                  applyButton.style.opacity = "1";
-                  applyButton.style.cursor = "pointer";
-                }
-              }
-            });
-
-            // Add the apply button to the pre element only when path is found
-            pre.appendChild(applyButton);
-          } else {
-            // No path found, find and reposition Obsidian's copy button to the right
-            const copyButton = pre.querySelector(".copy-code-button") as HTMLElement;
-            if (copyButton) {
-              // Reposition the copy button to the right
-              copyButton.style.right = "0";
-              copyButton.style.borderRadius = "0 4px 0 4px"; // Use the right-side border radius
-            }
-          }
-        });
-      };
-
-      // Add apply buttons to code blocks after rendering
-      addApplyButtonsToCodeBlocks();
+          // Create a root and render the CodeBlock component
+          const root = createRoot(container);
+          root.render(<CodeBlock code={cleanedCode} path={path} onApply={handleApplyCode} />);
+        }
+      });
     }
 
     // Cleanup function
