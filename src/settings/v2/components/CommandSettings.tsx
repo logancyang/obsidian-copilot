@@ -2,8 +2,8 @@ import React from "react";
 import { InlineEditCommandSettings, updateSetting } from "@/settings/model";
 import { Button } from "@/components/ui/button";
 import { InlineEditCommandSettingsModal } from "@/components/modals/InlineEditCommandSettingsModal";
-import { useInlineEditCommands } from "@/commands/inlineEditCommandUtils";
-import { PencilLine, Plus } from "lucide-react";
+import { hasModifiedCommand, useInlineEditCommands } from "@/commands/inlineEditCommandUtils";
+import { Lightbulb, PencilLine, Plus } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -43,6 +43,12 @@ export const CommandSettings: React.FC = () => {
     <div className="space-y-4">
       <section>
         <div className="text-xl font-bold mb-6">Custom Commands</div>
+        {!hasModifiedCommand() && (
+          <div className="border border-border border-solid p-4 rounded-md text-muted flex items-start gap-2">
+            <Lightbulb className="size-5" /> Take control of your inline edit commands! You can now
+            create your own or edit built-in ones to tailor functionality to your needs.
+          </div>
+        )}
 
         <div className="flex flex-col gap-4">
           <Table>

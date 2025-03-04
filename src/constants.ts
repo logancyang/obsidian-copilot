@@ -489,7 +489,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   showSuggestedPrompts: true,
   showRelevantNotes: true,
   numPartitions: 1,
-  enabledCommands: {},
   promptUsageTimestamps: {},
   defaultConversationNoteName: "{$topic}@{$date}_{$time}",
   inlineEditCommands: DEFAULT_INLINE_EDIT_COMMANDS,

@@ -71,3 +71,9 @@ export function processCommandPrompt(prompt: string, selectedText: string) {
     prompt.slice(0, index) + selectedText + prompt.slice(index + SELECTED_TEXT_PLACEHOLDER.length)
   );
 }
+
+export function hasModifiedCommand() {
+  const commands = getInlineEditCommands();
+  const defaultCommands = DEFAULT_INLINE_EDIT_COMMANDS;
+  return commands !== defaultCommands;
+}

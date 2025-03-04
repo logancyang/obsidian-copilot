@@ -75,7 +75,6 @@ export interface CopilotSettings {
   qaExclusions: string;
   qaInclusions: string;
   groqApiKey: string;
-  enabledCommands: Record<string, { enabled: boolean }>;
   activeModels: Array<CustomModel>;
   activeEmbeddingModels: Array<CustomModel>;
   promptUsageTimestamps: Record<string, number>;
