@@ -351,11 +351,25 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             pre.dataset.path = pathMatch;
 
             // Add click event listener to the apply button
-            applyButton.addEventListener("click", (e) => {
+            applyButton.addEventListener("click", async (e) => {
               e.preventDefault();
               e.stopPropagation();
               if (pre.dataset.path && pre.dataset.originalCode) {
-                handleApplyCode(pre.dataset.path, codeElement.textContent || "");
+                // Set loading state
+                applyButton.disabled = true;
+                applyButton.textContent = "...";
+                applyButton.style.opacity = "0.7";
+                applyButton.style.cursor = "not-allowed";
+
+                try {
+                  await handleApplyCode(pre.dataset.path, codeElement.textContent || "");
+                } finally {
+                  // Reset button state
+                  applyButton.disabled = false;
+                  applyButton.textContent = "Apply";
+                  applyButton.style.opacity = "1";
+                  applyButton.style.cursor = "pointer";
+                }
               }
             });
 
