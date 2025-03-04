@@ -270,10 +270,31 @@ export class BrevilabsClient {
   }
 
   async composerPrompt(): Promise<ComposerPromptResponse> {
-    return this.makeRequest<ComposerPromptResponse>("/composer/prompt", {}, "GET");
+    const { data, error } = await this.makeRequest<ComposerPromptResponse>(
+      "/composer/prompt",
+      {},
+      "GET"
+    );
+    if (error) {
+      throw error;
+    }
+    if (!data) {
+      throw new Error("No data returned from composerPrompt");
+    }
+    return data;
   }
 
   async composerApply(request: ComposerApplyRequest): Promise<ComposerApplyResponse> {
-    return this.makeRequest<ComposerApplyResponse>("/composer/apply", request);
+    const { data, error } = await this.makeRequest<ComposerApplyResponse>(
+      "/composer/apply",
+      request
+    );
+    if (error) {
+      throw error;
+    }
+    if (!data) {
+      throw new Error("No data returned from composerApply");
+    }
+    return data;
   }
 }
