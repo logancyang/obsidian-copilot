@@ -42,7 +42,13 @@ export const CommandSettings: React.FC = () => {
   return (
     <div className="space-y-4">
       <section>
-        <div className="text-xl font-bold mb-6">Custom Commands</div>
+        <div className="flex flex-col mb-4 gap-2">
+          <div className="text-xl font-bold">Custom Commands</div>
+          <div className="text-sm text-muted">
+            To trigger a custom command, highlight text in the editor and select it from the command
+            palette, or right-click and choose it from the context menu if configured.
+          </div>
+        </div>
         {!hasModifiedCommand() && (
           <div className="border border-border border-solid p-4 rounded-md text-muted flex items-start gap-2">
             <Lightbulb className="size-5" /> Take control of your inline edit commands! You can now
