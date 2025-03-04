@@ -265,11 +265,11 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                       (change.added && change.rejected) || (change.removed && !change.accepted),
                   })}
                 >
-                  <div className="w-6 flex-shrink-0 flex items-center justify-center text-sm font-bold bg-black/5">
+                  <div className="w-6 flex-shrink-0 flex items-center justify-center text-sm font-bold bg-background-secondary-alt">
                     {change.added && "+"}
                     {change.removed && "-"}
                   </div>
-                  <div className="flex-1 font-mono text-sm whitespace-pre-wrap py-1 px-2">
+                  <div className="flex-1 font-mono text-sm whitespace-pre-wrap py-1 px-2 text-text-normal">
                     {change.value}
                   </div>
                 </div>
@@ -282,7 +282,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                     onClick={() => rejectBlock(blockIndex)}
                     className={cn(
                       "flex items-center px-2 py-1 rounded-md transition-colors duration-200",
-                      "bg-modifier-error text-white hover:bg-modifier-error-hover",
+                      "bg-modifier-error text-text-normal hover:bg-modifier-error-hover",
                       "border border-red shadow-sm"
                     )}
                   >
@@ -293,7 +293,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                     onClick={() => acceptBlock(blockIndex)}
                     className={cn(
                       "flex items-center px-2 py-1 rounded-md transition-colors duration-200",
-                      "bg-modifier-success text-white hover:bg-modifier-success-hover",
+                      "bg-modifier-success text-text-normal hover:bg-modifier-success-hover",
                       "border border-green shadow-sm"
                     )}
                   >
