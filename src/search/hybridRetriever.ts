@@ -42,6 +42,10 @@ export class HybridRetriever extends BaseRetriever {
   ): Promise<Document[]> {
     // Extract note TFiles wrapped in [[]] from the query
     const noteFiles = extractNoteFiles(query, app.vault);
+    // Add note titles to salient terms
+    const noteTitles = noteFiles.map((file) => file.basename);
+    const enhancedSalientTerms = [...this.options.salientTerms, ...noteTitles];
+
     // Retrieve chunks for explicitly mentioned note files
     const explicitChunks = await this.getExplicitChunks(noteFiles);
     let rewrittenQuery = query;
@@ -50,10 +54,10 @@ export class HybridRetriever extends BaseRetriever {
       // Generate a hypothetical answer passage
       rewrittenQuery = await this.rewriteQuery(query);
     }
-    // Perform vector similarity search using ScoreThresholdRetriever
+    // Pass enhanced salient terms to include titles
     const oramaChunks = await this.getOramaChunks(
       rewrittenQuery,
-      this.options.salientTerms,
+      enhancedSalientTerms,
       this.options.textWeight
     );
 
