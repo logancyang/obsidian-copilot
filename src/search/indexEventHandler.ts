@@ -1,15 +1,17 @@
 import { getChainType } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { getSettings } from "@/settings/model";
-import { App, Platform, TAbstractFile, TFile } from "obsidian";
+import { App, MarkdownView, Platform, TAbstractFile, TFile } from "obsidian";
 import { DBOperations } from "./dbOperations";
 import { IndexOperations } from "./indexOperations";
 import { getMatchingPatterns, shouldIndexFile } from "./searchUtils";
 
-const DEBOUNCE_DELAY = 10000; // 10 seconds
+const DEBOUNCE_DELAY = 5000; // 5 seconds
 
 export class IndexEventHandler {
   private debounceTimer: number | null = null;
+  private lastActiveFile: TFile | null = null;
+  private lastActiveFileMtime: number | null = null;
 
   constructor(
     private app: App,
@@ -23,26 +25,44 @@ export class IndexEventHandler {
     if (getSettings().debug) {
       console.log("Copilot Plus: Initializing event listeners");
     }
-    this.app.vault.on("modify", this.handleFileModify);
+    this.app.workspace.on("active-leaf-change", this.handleActiveLeafChange);
     this.app.vault.on("delete", this.handleFileDelete);
   }
 
-  private handleFileModify = async (file: TAbstractFile) => {
+  private handleActiveLeafChange = async (leaf: any) => {
     if (Platform.isMobile && getSettings().disableIndexOnMobile) {
       return;
     }
+
     const currentChainType = getChainType();
+    if (currentChainType !== ChainType.COPILOT_PLUS_CHAIN) {
+      return;
+    }
 
-    if (
-      file instanceof TFile &&
-      file.extension === "md" &&
-      currentChainType === ChainType.COPILOT_PLUS_CHAIN
-    ) {
+    // Get the previously active file that we need to check
+    const fileToCheck = this.lastActiveFile;
+    const previousMtime = this.lastActiveFileMtime;
+
+    // Update tracking for the new active file
+    const currentView = leaf?.view;
+    this.lastActiveFile = currentView instanceof MarkdownView ? currentView.file : null;
+    this.lastActiveFileMtime = this.lastActiveFile ? this.lastActiveFile.stat.mtime : null;
+
+    // If there was no previous file or it's the same as current, do nothing
+    if (!fileToCheck || fileToCheck === this.lastActiveFile) {
+      return;
+    }
+
+    // Only process markdown files that match inclusion/exclusion patterns
+    if (fileToCheck.extension === "md") {
       const { inclusions, exclusions } = getMatchingPatterns();
-      const shouldProcess = shouldIndexFile(file, inclusions, exclusions);
+      const shouldProcess = shouldIndexFile(fileToCheck, inclusions, exclusions);
 
-      if (shouldProcess) {
-        this.debouncedReindexFile(file);
+      // Check if file was modified while it was active
+      const wasModified = previousMtime !== null && fileToCheck.stat.mtime > previousMtime;
+
+      if (shouldProcess && wasModified) {
+        this.debouncedReindexFile(fileToCheck);
       }
     }
   };
@@ -71,7 +91,7 @@ export class IndexEventHandler {
     if (this.debounceTimer !== null) {
       window.clearTimeout(this.debounceTimer);
     }
-    this.app.vault.off("modify", this.handleFileModify);
+    this.app.workspace.off("active-leaf-change", this.handleActiveLeafChange);
     this.app.vault.off("delete", this.handleFileDelete);
   }
 }
