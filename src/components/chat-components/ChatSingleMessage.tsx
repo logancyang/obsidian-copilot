@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { ChatMessage } from "@/sharedState";
 import { insertIntoEditor } from "@/utils";
 import { Bot, User } from "lucide-react";
-import { App, Component, MarkdownRenderer, TFile } from "obsidian";
+import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
@@ -259,6 +259,18 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     }
   };
 
+  const handleInsertIntoEditor = () => {
+    let leaf = app.workspace.getMostRecentLeaf();
+    if (!leaf || !(leaf.view instanceof MarkdownView)) {
+      leaf = app.workspace.getLeaf(false);
+      if (!leaf || !(leaf.view instanceof MarkdownView)) return;
+    }
+
+    const editor = leaf.view.editor;
+    const hasSelection = editor.getSelection().length > 0;
+    insertIntoEditor(message.message, hasSelection);
+  };
+
   const renderMessageContent = () => {
     if (message.content) {
       return (
@@ -346,7 +358,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                 message={message}
                 onCopy={copyToClipboard}
                 isCopied={isCopied}
-                onInsertIntoEditor={() => insertIntoEditor(message.message)}
+                onInsertIntoEditor={handleInsertIntoEditor}
                 onRegenerate={onRegenerate}
                 onEdit={handleEdit}
                 onDelete={onDelete}
