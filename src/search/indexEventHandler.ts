@@ -46,10 +46,15 @@ export class IndexEventHandler {
     // Update tracking for the new active file
     const currentView = leaf?.view;
     this.lastActiveFile = currentView instanceof MarkdownView ? currentView.file : null;
-    this.lastActiveFileMtime = this.lastActiveFile ? this.lastActiveFile.stat.mtime : null;
+    this.lastActiveFileMtime = this.lastActiveFile?.stat?.mtime ?? null;
 
     // If there was no previous file or it's the same as current, do nothing
     if (!fileToCheck || fileToCheck === this.lastActiveFile) {
+      return;
+    }
+
+    // Safety check for file stats and mtime
+    if (!fileToCheck?.stat?.mtime || previousMtime === null) {
       return;
     }
 
@@ -91,6 +96,18 @@ export class IndexEventHandler {
     if (this.debounceTimer !== null) {
       window.clearTimeout(this.debounceTimer);
     }
+    this.app.workspace.off("active-leaf-change", this.handleActiveLeafChange);
+    this.app.vault.off("delete", this.handleFileDelete);
+  }
+
+  public unload() {
+    if (this.debounceTimer !== null) {
+      window.clearTimeout(this.debounceTimer);
+    }
+    // Clean up file tracking
+    this.lastActiveFile = null;
+    this.lastActiveFileMtime = null;
+
     this.app.workspace.off("active-leaf-change", this.handleActiveLeafChange);
     this.app.vault.off("delete", this.handleFileDelete);
   }
