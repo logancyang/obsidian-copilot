@@ -115,28 +115,48 @@ export class IndexOperations {
             batch.map((chunk) => chunk.content)
           );
 
+          // Validate embeddings
+          if (!embeddings || embeddings.length !== batch.length) {
+            throw new Error(
+              `Embedding model returned ${embeddings?.length ?? 0} embeddings for ${batch.length} documents`
+            );
+          }
+
           // Save batch to database
           for (let j = 0; j < batch.length; j++) {
             const chunk = batch[j];
+            const embedding = embeddings[j];
+
+            // Skip documents with invalid embeddings
+            if (!embedding || !Array.isArray(embedding) || embedding.length === 0) {
+              logError(`Invalid embedding for document ${chunk.fileInfo.path}: ${embedding}`);
+              this.dbOps.markFileMissingEmbeddings(chunk.fileInfo.path);
+              continue;
+            }
+
             try {
               await this.dbOps.upsert({
                 ...chunk.fileInfo,
                 id: this.getDocHash(chunk.content),
                 content: chunk.content,
-                embedding: embeddings[j],
+                embedding,
                 created_at: Date.now(),
                 nchars: chunk.content.length,
               });
+              // Mark success for this file
+              this.state.processedFiles.add(chunk.fileInfo.path);
             } catch (err) {
-              // If there was an error upserting, mark this file as missing embeddings
+              // Log error but continue processing other documents in batch
+              this.handleError(err, {
+                filePath: chunk.fileInfo.path,
+                errors,
+              });
               this.dbOps.markFileMissingEmbeddings(chunk.fileInfo.path);
-              throw err;
+              continue;
             }
           }
 
-          batch.forEach((chunk) => {
-            this.state.processedFiles.add(chunk.fileInfo.path);
-          });
+          // Update progress after the batch
           this.state.indexedCount = this.state.processedFiles.size;
           this.updateIndexingNoticeMessage();
 
