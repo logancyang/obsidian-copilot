@@ -44,7 +44,8 @@ export class HybridRetriever extends BaseRetriever {
     const noteFiles = extractNoteFiles(query, app.vault);
     // Add note titles to salient terms
     const noteTitles = noteFiles.map((file) => file.basename);
-    const enhancedSalientTerms = [...this.options.salientTerms, ...noteTitles];
+    // Use Set to ensure uniqueness when combining terms
+    const enhancedSalientTerms = [...new Set([...this.options.salientTerms, ...noteTitles])];
 
     // Retrieve chunks for explicitly mentioned note files
     const explicitChunks = await this.getExplicitChunks(noteFiles);
