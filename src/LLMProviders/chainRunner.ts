@@ -650,7 +650,10 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         context =
           "\n\n# Additional context:\n\n" +
           validOutputs
-            .map((output) => `# ${output.tool}\n${JSON.stringify(output.output)}`)
+            .map(
+              (output) =>
+                `<${output.tool}>\n${typeof output.output !== "string" ? JSON.stringify(output.output) : output.output}\n</${output.tool}>`
+            )
             .join("\n\n");
       }
     }
