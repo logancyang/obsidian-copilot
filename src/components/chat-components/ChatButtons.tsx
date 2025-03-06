@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { Platform } from "obsidian";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
@@ -13,6 +12,7 @@ import {
   TextCursorInput,
   Trash2,
 } from "lucide-react";
+import { Platform } from "obsidian";
 import React from "react";
 
 interface ChatButtonsProps {
@@ -89,12 +89,12 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
                 onClick={onInsertIntoEditor}
                 variant="ghost2"
                 size="fit"
-                title="Insert to note at cursor"
+                title="Insert / Replace at cursor"
               >
                 <TextCursorInput className="size-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Insert to note at cursor</TooltipContent>
+            <TooltipContent>Insert / Replace at cursor</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>

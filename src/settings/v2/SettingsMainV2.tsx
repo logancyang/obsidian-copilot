@@ -4,6 +4,7 @@ import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/u
 import { TabProvider, useTab } from "@/contexts/TabContext";
 import CopilotPlugin from "@/main";
 import { resetSettings } from "@/settings/model";
+import { CommandSettings } from "@/settings/v2/components/CommandSettings";
 import { checkLatestVersion, isNewerVersion } from "@/utils";
 import { Cog, Command, Cpu, Database, Wrench } from "lucide-react";
 import React, { useEffect, useState } from "react";
@@ -11,7 +12,6 @@ import { AdvancedSettings } from "./components/AdvancedSettings";
 import { BasicSettings } from "./components/BasicSettings";
 import { ModelSettings } from "./components/ModelSettings";
 import { QASettings } from "./components/QASettings";
-import { CommandSettings } from "@/settings/v2/components/CommandSettings";
 
 const TAB_IDS = ["basic", "model", "QA", "command", "advanced"] as const;
 type TabId = (typeof TAB_IDS)[number];
@@ -120,7 +120,14 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
             <div className="flex items-center gap-2">
               <span>Copilot Settings</span>
               <span className="text-xs text-muted">
-                v{plugin.manifest.version}
+                <a
+                  href="https://github.com/logancyang/obsidian-copilot/releases/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent hover:underline"
+                >
+                  v{plugin.manifest.version}
+                </a>
                 {updateError ? (
                   <span className="text-error" title={updateError}>
                     {" "}

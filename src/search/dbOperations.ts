@@ -5,6 +5,7 @@ import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { areEmbeddingModelsSame } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
 import { create, insert, Orama, remove, removeMultiple, search } from "@orama/orama";
+import { Mutex } from "async-mutex";
 import { MD5 } from "crypto-js";
 import { App, Notice, Platform } from "obsidian";
 import { ChunkedStorage } from "./chunkedStorage";
@@ -35,6 +36,7 @@ export class DBOperations {
   private isIndexLoaded = false;
   private hasUnsavedChanges = false;
   private filesWithoutEmbeddings: Set<string> = new Set();
+  private upsertMutex = new Mutex();
 
   constructor(private app: App) {
     // Subscribe to settings changes
@@ -359,54 +361,58 @@ export class DBOperations {
 
   async upsert(docToSave: any): Promise<any | undefined> {
     if (!this.oramaDb) throw new Error("DB not initialized");
+    const db = this.oramaDb;
 
-    try {
-      // Calculate partition first
-      const partition = this.chunkedStorage?.assignDocumentToPartition(
-        docToSave.id,
-        getSettings().numPartitions
-      );
-
-      // Check if document exists
-      const existingDoc = await search(this.oramaDb, {
-        term: docToSave.id,
-        properties: ["id"],
-        limit: 1,
-      });
-
-      if (existingDoc.hits.length > 0) {
-        await remove(this.oramaDb, existingDoc.hits[0].id);
-      }
-
-      // Insert into the assigned partition
+    // Use mutex to make the operation atomic
+    return await this.upsertMutex.runExclusive(async () => {
       try {
-        await insert(this.oramaDb, docToSave);
-        logInfo(
-          `${existingDoc.hits.length > 0 ? "Updated" : "Inserted"} document ${docToSave.id} in partition ${partition}`
+        // Calculate partition first
+        const partition = this.chunkedStorage?.assignDocumentToPartition(
+          docToSave.id,
+          getSettings().numPartitions
         );
 
-        this.markUnsavedChanges();
-        return docToSave;
-      } catch (insertErr) {
-        logError(
-          `Failed to ${existingDoc.hits.length > 0 ? "update" : "insert"} document ${docToSave.id}:`,
-          insertErr
-        );
-        // If we removed an existing document but failed to insert the new one,
-        // we should try to restore the old document
+        // Check if document exists
+        const existingDoc = await search(db, {
+          term: docToSave.id,
+          properties: ["id"],
+          limit: 1,
+        });
+
         if (existingDoc.hits.length > 0) {
-          try {
-            await insert(this.oramaDb, existingDoc.hits[0].document);
-          } catch (restoreErr) {
-            logError("Failed to restore previous document version:", restoreErr);
-          }
+          await remove(db, existingDoc.hits[0].id);
         }
+
+        // Insert into the assigned partition
+        try {
+          await insert(db, docToSave);
+          logInfo(
+            `${existingDoc.hits.length > 0 ? "Updated" : "Inserted"} document ${docToSave.id} in partition ${partition}`
+          );
+
+          this.markUnsavedChanges();
+          return docToSave;
+        } catch (insertErr) {
+          logError(
+            `Failed to ${existingDoc.hits.length > 0 ? "update" : "insert"} document ${docToSave.id}:`,
+            insertErr
+          );
+          // If we removed an existing document but failed to insert the new one,
+          // we should try to restore the old document
+          if (existingDoc.hits.length > 0) {
+            try {
+              await insert(db, existingDoc.hits[0].document);
+            } catch (restoreErr) {
+              logError("Failed to restore previous document version:", restoreErr);
+            }
+          }
+          return undefined;
+        }
+      } catch (err) {
+        logError(`Error upserting document ${docToSave.id}:`, err);
         return undefined;
       }
-    } catch (err) {
-      logError(`Error upserting document ${docToSave.id}:`, err);
-      return undefined;
-    }
+    });
   }
 
   async getLatestFileMtime(): Promise<number> {
