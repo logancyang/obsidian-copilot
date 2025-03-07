@@ -1,4 +1,4 @@
-import { CustomModel, getModelKey, ModelConfig, setModelKey } from "@/aiParams";
+import { CustomModel, getModelKey, ModelConfig } from "@/aiParams";
 import {
   BREVILABS_API_BASE_URL,
   BUILTIN_CHAT_MODELS,
@@ -306,7 +306,8 @@ export default class ChatModelManager {
 
   async setChatModel(model: CustomModel): Promise<void> {
     const modelKey = getModelKeyFromModel(model);
-    setModelKey(modelKey);
+    // todo 为啥这里需要重新设置？
+    // setModelKey(modelKey);
     try {
       const modelInstance = await this.createModelInstance(model);
       ChatModelManager.chatModel = modelInstance;

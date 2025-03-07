@@ -17,6 +17,7 @@ interface ChatMessagesProps {
   onDelete: (messageIndex: number) => void;
   onInsertToChat: (prompt: string) => void;
   onReplaceChat: (prompt: string) => void;
+  showHelperComponents: boolean;
 }
 
 const ChatMessages = memo(
@@ -31,6 +32,7 @@ const ChatMessages = memo(
     onDelete,
     onInsertToChat,
     onReplaceChat,
+    showHelperComponents = true,
   }: ChatMessagesProps) => {
     const [loadingDots, setLoadingDots] = useState("");
 
@@ -63,14 +65,16 @@ const ChatMessages = memo(
     if (!chatHistory.filter((message) => message.isVisible).length && !currentAiMessage) {
       return (
         <div className="flex flex-col gap-2 overflow-y-auto w-full h-full">
-          {settings.showRelevantNotes && (
+          {showHelperComponents && settings.showRelevantNotes && (
             <RelevantNotes
               onInsertToChat={onInsertToChat}
               defaultOpen={true}
               key="relevant-notes-before-chat"
             />
           )}
-          {settings.showSuggestedPrompts && <SuggestedPrompts onClick={onReplaceChat} />}
+          {showHelperComponents && settings.showSuggestedPrompts && (
+            <SuggestedPrompts onClick={onReplaceChat} />
+          )}
         </div>
       );
     }
@@ -81,7 +85,7 @@ const ChatMessages = memo(
 
     return (
       <div className="flex flex-col flex-1 h-full overflow-hidden">
-        {settings.showRelevantNotes && (
+        {showHelperComponents && settings.showRelevantNotes && (
           <RelevantNotes
             className="mb-4"
             onInsertToChat={onInsertToChat}
@@ -104,6 +108,7 @@ const ChatMessages = memo(
                   onRegenerate={() => onRegenerate(index)}
                   onEdit={(newMessage) => onEdit(index, newMessage)}
                   onDelete={() => onDelete(index)}
+                  chatHistory={chatHistory}
                 />
               )
           )}
@@ -119,6 +124,7 @@ const ChatMessages = memo(
               app={app}
               isStreaming={true}
               onDelete={() => {}}
+              chatHistory={chatHistory}
             />
           )}
         </div>

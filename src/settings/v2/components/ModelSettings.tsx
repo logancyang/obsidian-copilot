@@ -2,11 +2,11 @@ import React, { useState } from "react";
 import { SettingItem } from "@/components/ui/setting-item";
 import { setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import { CustomModel } from "@/aiParams";
-import ChatModelManager from "@/LLMProviders/chatModelManager";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
 import { ModelAddDialog } from "@/settings/v2/components/ModelAddDialog";
 import { ModelTable } from "@/settings/v2/components/ModelTable";
 import { ModelEditDialog } from "@/settings/v2/components/ModelEditDialog";
+import ProjectManager from "@/LLMProviders/projectManager";
 
 export const ModelSettings: React.FC = () => {
   const settings = useSettingsValue();
@@ -94,7 +94,9 @@ export const ModelSettings: React.FC = () => {
             const updatedModels = [...settings.activeModels, model];
             updateSetting("activeModels", updatedModels);
           }}
-          ping={(model) => ChatModelManager.getInstance().ping(model)}
+          ping={(model) =>
+            ProjectManager.instance.getCurrentChainManager().chatModelManager.ping(model)
+          }
         />
 
         <div className="space-y-4">

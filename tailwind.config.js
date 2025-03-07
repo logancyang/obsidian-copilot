@@ -43,11 +43,12 @@ module.exports = {
       inherit: colors.inherit,
       current: colors.current,
       transparent: colors.transparent,
-      background: "var(--background-primary)",
       primary: "var(--background-primary)",
       "primary-alt": "var(--background-primary-alt)",
       secondary: "var(--background-secondary)",
       "secondary-alt": "var(--background-secondary-alt)",
+      success: "rgba(var(--color-green-rgb),0.2)",
+      error: "rgba(var(--color-red-rgb),0.2)",
       modifier: {
         hover: "var(--background-modifier-hover)",
         "active-hover": "var(--background-modifier-active-hover)",

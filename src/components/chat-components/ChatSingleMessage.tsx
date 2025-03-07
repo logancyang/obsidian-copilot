@@ -3,12 +3,15 @@ import { SourcesModal } from "@/components/modals/SourcesModal";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { USER_SENDER } from "@/constants";
+import { useApplyCode } from "@/hooks/useApplyCode";
 import { cn } from "@/lib/utils";
 import { ChatMessage } from "@/sharedState";
 import { insertIntoEditor } from "@/utils";
 import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createRoot, Root } from "react-dom/client";
+import { CodeBlock } from "./CodeBlock";
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
   if (!context || (context.notes.length === 0 && context.urls.length === 0)) {
@@ -48,6 +51,7 @@ interface ChatSingleMessageProps {
   onRegenerate?: () => void;
   onEdit?: (newMessage: string) => void;
   onDelete: () => void;
+  chatHistory?: ChatMessage[];
 }
 
 const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
@@ -57,6 +61,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   onRegenerate,
   onEdit,
   onDelete,
+  chatHistory = [],
 }) => {
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
@@ -64,6 +69,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleApplyCode = useApplyCode(app, chatHistory);
 
   const copyToClipboard = () => {
     if (!navigator.clipboard || !navigator.clipboard.writeText) {
@@ -199,8 +206,10 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   };
 
   useEffect(() => {
+    const roots: Root[] = [];
+    let isUnmounting = false;
+
     if (contentRef.current && message.sender !== USER_SENDER) {
-      // Clear previous content
       contentRef.current.innerHTML = "";
 
       // Create a new Component instance if it doesn't exist
@@ -210,23 +219,77 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
       const processedMessage = preprocess(message.message);
 
-      // Use Obsidian's MarkdownRenderer to render the message
-      MarkdownRenderer.renderMarkdown(
-        processedMessage,
-        contentRef.current,
-        "", // Empty string for sourcePath as we don't have a specific source file
-        componentRef.current
-      );
+      if (!isUnmounting) {
+        // Use Obsidian's MarkdownRenderer to render the message
+        MarkdownRenderer.renderMarkdown(
+          processedMessage,
+          contentRef.current,
+          "", // Empty string for sourcePath as we don't have a specific source file
+          componentRef.current
+        );
+
+        // Process code blocks after rendering
+        const codeBlocks = contentRef.current.querySelectorAll("pre");
+        if (codeBlocks.length > 0) {
+          codeBlocks.forEach((pre) => {
+            if (isUnmounting) return;
+
+            const codeElement = pre.querySelector("code");
+            if (!codeElement) return;
+
+            const originalCode = codeElement.textContent || "";
+            const lines = originalCode.split("\n");
+            const firstLine = lines[0].trim();
+
+            // Check for path in HTML comment format: <!-- path=Notes/My Notes.md -->
+            const htmlCommentMatch = firstLine.match(/<!--\s*path=([^>]+?)\s*-->/);
+            if (htmlCommentMatch && htmlCommentMatch[1]) {
+              const path = htmlCommentMatch[1].trim();
+              const cleanedCode = lines.slice(1).join("\n");
+
+              // Create a container for the React component
+              const container = document.createElement("div");
+              pre.parentNode?.replaceChild(container, pre);
+
+              // Create a root and render the CodeBlock component
+              const root = createRoot(container);
+              roots.push(root);
+              if (!isUnmounting) {
+                root.render(
+                  <CodeBlock
+                    code={cleanedCode}
+                    path={path}
+                    onApply={isStreaming ? undefined : handleApplyCode}
+                  />
+                );
+              }
+            }
+          });
+        }
+      }
     }
 
     // Cleanup function
     return () => {
-      if (componentRef.current) {
-        componentRef.current.unload();
-        componentRef.current = null;
-      }
+      isUnmounting = true;
+
+      // Schedule cleanup to run after current render cycle
+      setTimeout(() => {
+        if (componentRef.current) {
+          componentRef.current.unload();
+          componentRef.current = null;
+        }
+
+        roots.forEach((root) => {
+          try {
+            root.unmount();
+          } catch {
+            // Ignore unmount errors during cleanup
+          }
+        });
+      }, 0);
     };
-  }, [message, app, componentRef, isStreaming, preprocess]);
+  }, [message, app, componentRef, isStreaming, preprocess, handleApplyCode]);
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
@@ -361,7 +424,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         )}
       >
         <div className="w-6 shrink-0">{message.sender === USER_SENDER ? <User /> : <Bot />}</div>
-        <div className="flex flex-col flex-grow max-w-full gap-2">
+        <div className="flex flex-col flex-grow max-w-full gap-2 overflow-hidden">
           {!isEditing && <MessageContext context={message.context} />}
           <div className="message-content">{renderMessageContent()}</div>
 

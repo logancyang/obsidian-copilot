@@ -71,9 +71,37 @@ export interface Youtube4llmResponse {
   elapsed_time_ms: number;
 }
 
-interface LicenseResponse {
+export interface LicenseResponse {
   is_valid: boolean;
   plan: string;
+}
+
+export interface AutocompleteResponse {
+  response: {
+    completion: string;
+  };
+  elapsed_time_ms: number;
+}
+
+export interface ComposerPromptResponse {
+  prompt: string;
+}
+
+export interface ComposerApplyResponse {
+  content: string;
+}
+
+// Define interface for the composerApply request
+export interface ComposerApplyRequest {
+  target_note: {
+    title: string;
+    content: string;
+  };
+  chat_history: Array<{
+    role: string;
+    content: string;
+  }>;
+  markdown_block: string;
 }
 
 export class BrevilabsClient {
@@ -249,6 +277,55 @@ export class BrevilabsClient {
       throw new Error("No data returned from youtube4llm");
     }
 
+    return data;
+  }
+
+  async autocomplete(
+    prefix: string,
+    noteContext: string = "",
+    relevant_notes: string = ""
+  ): Promise<AutocompleteResponse> {
+    const { data, error } = await this.makeRequest<AutocompleteResponse>("/autocomplete", {
+      prompt: prefix,
+      note_context: noteContext,
+      relevant_notes: relevant_notes,
+      max_tokens: 64,
+    });
+    if (error) {
+      throw error;
+    }
+    if (!data) {
+      throw new Error("No data returned from autocomplete");
+    }
+    return data;
+  }
+
+  async composerPrompt(): Promise<ComposerPromptResponse> {
+    const { data, error } = await this.makeRequest<ComposerPromptResponse>(
+      "/composer/prompt",
+      {},
+      "GET"
+    );
+    if (error) {
+      throw error;
+    }
+    if (!data) {
+      throw new Error("No data returned from composerPrompt");
+    }
+    return data;
+  }
+
+  async composerApply(request: ComposerApplyRequest): Promise<ComposerApplyResponse> {
+    const { data, error } = await this.makeRequest<ComposerApplyResponse>(
+      "/composer/apply",
+      request
+    );
+    if (error) {
+      throw error;
+    }
+    if (!data) {
+      throw new Error("No data returned from composerApply");
+    }
     return data;
   }
 }

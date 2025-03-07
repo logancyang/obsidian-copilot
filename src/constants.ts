@@ -50,6 +50,8 @@ export enum ChatModels {
   AZURE_OPENAI = "azure-openai",
   GEMINI_PRO = "gemini-2.0-pro-exp",
   GEMINI_FLASH = "gemini-2.0-flash",
+  GEMINI_15_PRO = "gemini-1.5-pro-001",
+  GEMINI_15_FLASH = "gemini-1.5-flash-001", // TODO(logan): Project should use 2.0 flash once it supports context caching
   CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest",
   CLAUDE_3_5_HAIKU = "claude-3-5-haiku-latest",
   COMMAND_R = "command-r",
@@ -114,6 +116,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     core: true,
+    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -168,6 +171,24 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.GOOGLE,
     enabled: true,
     isBuiltIn: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
+    name: ChatModels.GEMINI_15_PRO,
+    provider: ChatModelProviders.GOOGLE,
+    enabled: true,
+    isBuiltIn: true,
+    core: true,
+    projectEnabled: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
+    name: ChatModels.GEMINI_15_FLASH,
+    provider: ChatModelProviders.GOOGLE,
+    enabled: true,
+    isBuiltIn: true,
+    core: true,
+    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -468,6 +489,18 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
 
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];
 
+export const EVENT_NAMES = {
+  CHAT_IS_VISIBLE: "chat-is-visible",
+  ACTIVE_LEAF_CHANGE: "active-leaf-change",
+};
+
+export const AUTOCOMPLETE_CONFIG = {
+  DELAY_MS: 300,
+  MIN_TRIGGER_LENGTH: 3,
+  MAX_CONTEXT_LENGTH: 10000,
+  KEYBIND: "Tab",
+} as const;
+
 export const DEFAULT_SETTINGS: CopilotSettings = {
   isPlusUser: false,
   plusLicenseKey: "",
@@ -521,11 +554,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   promptUsageTimestamps: {},
   defaultConversationNoteName: "{$topic}@{$date}_{$time}",
   inlineEditCommands: DEFAULT_INLINE_EDIT_COMMANDS,
-};
-
-export const EVENT_NAMES = {
-  CHAT_IS_VISIBLE: "chat-is-visible",
-  ACTIVE_LEAF_CHANGE: "active-leaf-change",
+  projectList: [],
+  enableAutocomplete: true,
 };
 
 export enum ABORT_REASON {
