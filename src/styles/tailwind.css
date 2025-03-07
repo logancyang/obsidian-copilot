@@ -432,48 +432,24 @@ If your plugin does not need CSS, delete this file.
 .message-content pre .copy-code-button {
   position: absolute;
   top: 0;
-  right: 60px; /* Move to the left to make room for apply button */
+  right: 0;
   padding: 4px 8px;
   color: var(--text-muted);
   background-color: var(--background-primary);
   border: 1px solid var(--background-modifier-border);
-  border-radius: 4px 0 0 4px; /* Change border radius for left position */
+  border-radius: 0 4px 0 4px;
   font-size: 0.8em;
   transition: all 0.1s ease;
   opacity: 0;
-}
-
-/* Style for the apply button in code blocks */
-.message-content pre .apply-code-button {
-  position: absolute;
-  top: 0;
-  right: 0; /* Position to the right of the copy button */
-  padding: 4px 8px;
-  color: white;
-  background-color: var(--text-accent);
-  border: 1px solid var(--text-accent);
-  border-radius: 0 4px 0 4px; /* Change border radius for right position */
-  font-size: 0.8em;
-  transition: all 0.1s ease;
-  opacity: 1; /* Always visible */
-  font-weight: 500;
 }
 
 .message-content pre:hover .copy-code-button {
   opacity: 1;
 }
 
-.message-content pre .copy-code-button:hover,
-.message-content pre .apply-code-button:hover {
+.message-content pre .copy-code-button:hover {
   background-color: var(--background-modifier-hover);
   color: var(--text-normal);
-}
-
-/* Apply button specific hover effect */
-.message-content pre .apply-code-button:hover {
-  background-color: var(--interactive-accent-hover);
-  color: white;
-  border-color: var(--interactive-accent-hover);
 }
 
 .message-content ul,
