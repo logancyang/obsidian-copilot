@@ -258,7 +258,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                     <Checkbox
                       id={`block-${blockIndex}`}
                       checked={isAccepted}
-                      onCheckedChange={(checked) => toggleBlock(blockIndex, checked === true)}
+                      onCheckedChange={(checked) => toggleBlock(blockIndex, !!checked)}
                     />
                   </div>
                 </div>

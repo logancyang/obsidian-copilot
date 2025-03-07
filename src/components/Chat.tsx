@@ -12,7 +12,7 @@ import { getAIResponse } from "@/langchainStream";
 import ChainManager from "@/LLMProviders/chainManager";
 import CopilotPlugin from "@/main";
 import { Mention } from "@/mentions/Mention";
-import { resetComposerPromptCache } from "@/plusUtils";
+import { resetComposerPromptCache } from "@/composerUtils";
 import { getSettings, useSettingsValue } from "@/settings/model";
 import SharedState, { ChatMessage, useSharedState } from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";

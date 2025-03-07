@@ -61,14 +61,19 @@ export function useApplyCode(app: App, chatHistory: ChatMessage[] = []) {
           const response = await brevilabsClient.composerApply(request);
 
           // Use the content from the response
-          const newContent = response.content;
+          let newContent = response.content;
 
+          // Remove the code block markers if they exist
           //TODO: Remove this once the issue is fixed in the backend
+          if (newContent.startsWith("```\n") && newContent.endsWith("\n```")) {
+            newContent = newContent.slice(4, -4);
+          }
+
           // Remove trailing newline from newContent if originalContent doesn't end with one
-          const fixedContent =
-            !originalContent.endsWith("\n") && newContent.endsWith("\n")
-              ? newContent.slice(0, -1)
-              : newContent;
+          //TODO: Remove this once the issue is fixed in the backend
+          if (!originalContent.endsWith("\n") && newContent.endsWith("\n")) {
+            newContent = newContent.slice(0, -1);
+          }
 
           // Open the Apply View in a new leaf with the processed content
           const leaf = app.workspace.getLeaf(true);
@@ -76,10 +81,10 @@ export function useApplyCode(app: App, chatHistory: ChatMessage[] = []) {
             type: APPLY_VIEW_TYPE,
             active: true,
             state: {
-              file: file,
-              originalContent: originalContent,
-              newContent: fixedContent,
-              path: path,
+              file,
+              originalContent,
+              newContent,
+              path,
             },
           });
         } catch (error) {

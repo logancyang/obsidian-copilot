@@ -10,7 +10,7 @@ import {
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { ChatMessage } from "@/sharedState";
 import { ToolManager } from "@/tools/toolManager";
-import { getComposerSystemPrompt } from "@/plusUtils";
+import { getComposerSystemPrompt } from "@/composerUtils";
 import {
   err2String,
   extractChatHistory,
