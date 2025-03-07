@@ -1,7 +1,7 @@
 import { CustomModel } from "@/aiParams";
+import { DEFAULT_INLINE_EDIT_COMMANDS } from "@/commands/constants";
 import { type CopilotSettings } from "@/settings/model";
 import { ChainType } from "./chainFactory";
-import { DEFAULT_INLINE_EDIT_COMMANDS } from "@/commands/constants";
 
 export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
 export const CHAT_VIEWTYPE = "copilot-chat-view";
@@ -440,6 +440,18 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
 
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];
 
+export const EVENT_NAMES = {
+  CHAT_IS_VISIBLE: "chat-is-visible",
+  ACTIVE_LEAF_CHANGE: "active-leaf-change",
+};
+
+export const AUTOCOMPLETE_CONFIG = {
+  DELAY_MS: 300,
+  MIN_TRIGGER_LENGTH: 3,
+  MAX_CONTEXT_LENGTH: 5000,
+  KEYBIND: "Tab",
+} as const;
+
 export const DEFAULT_SETTINGS: CopilotSettings = {
   isPlusUser: false,
   plusLicenseKey: "",
@@ -492,11 +504,9 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   promptUsageTimestamps: {},
   defaultConversationNoteName: "{$topic}@{$date}_{$time}",
   inlineEditCommands: DEFAULT_INLINE_EDIT_COMMANDS,
-};
 
-export const EVENT_NAMES = {
-  CHAT_IS_VISIBLE: "chat-is-visible",
-  ACTIVE_LEAF_CHANGE: "active-leaf-change",
+  // Autocomplete settings
+  enableAutocomplete: true,
 };
 
 export enum ABORT_REASON {

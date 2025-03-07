@@ -2,20 +2,20 @@ import { ChainType } from "@/chainFactory";
 import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { SettingItem } from "@/components/ui/setting-item";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DEFAULT_OPEN_AREA, PLUS_UTM_MEDIUMS } from "@/constants";
 import { useTab } from "@/contexts/TabContext";
+import { createPlusPageUrl } from "@/plusUtils";
+import VectorStoreManager from "@/search/vectorStoreManager";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
-import { formatDateTime, checkModelApiKey } from "@/utils";
+import { PlusSettings } from "@/settings/v2/components/PlusSettings";
+import { checkModelApiKey, formatDateTime } from "@/utils";
 import { HelpCircle, Key, Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useState } from "react";
 import ApiKeyDialog from "./ApiKeyDialog";
-import { PlusSettings } from "@/settings/v2/components/PlusSettings";
-import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { createPlusPageUrl } from "@/plusUtils";
-import { getModelDisplayWithIcons } from "@/components/ui/model-display";
-import VectorStoreManager from "@/search/vectorStoreManager";
 
 const ChainType2Label: Record<ChainType, string> = {
   [ChainType.LLM_CHAIN]: "Chat",
@@ -399,6 +399,34 @@ export const BasicSettings: React.FC = () => {
             description="Show relevant notes in the chat view"
             checked={settings.showRelevantNotes}
             onCheckedChange={(checked) => updateSetting("showRelevantNotes", checked)}
+          />
+
+          {/* Autocomplete Toggle */}
+          <SettingItem
+            type="switch"
+            title="Enable Autocomplete"
+            description={
+              <div className="flex items-center gap-1.5">
+                <span className="leading-none">
+                  Enable AI-powered autocomplete suggestions while typing
+                </span>
+                <TooltipProvider delayDuration={0}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="size-4" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-96 flex flex-col gap-2">
+                      <div className="text-sm text-muted pt-2">
+                        When enabled, you&apos;ll get AI-powered suggestions as you type. Press Tab
+                        to accept a suggestion.
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            }
+            checked={settings.enableAutocomplete}
+            onCheckedChange={(checked) => updateSetting("enableAutocomplete", checked)}
           />
         </div>
       </section>

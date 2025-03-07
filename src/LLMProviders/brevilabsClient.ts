@@ -3,8 +3,8 @@ import { getDecryptedKey } from "@/encryptionService";
 import { logInfo } from "@/logger";
 import { turnOffPlus, turnOnPlus } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
-import { Notice } from "obsidian";
 import { Buffer } from "buffer";
+import { Notice } from "obsidian";
 
 export interface BrocaResponse {
   response: {
@@ -67,6 +67,15 @@ export interface WebSearchResponse {
 export interface Youtube4llmResponse {
   response: {
     transcript: string;
+  };
+  elapsed_time_ms: number;
+}
+
+export interface AutocompleteResponse {
+  response: {
+    completion: string;
+    reasoning: string;
+    completed_local_sentence: string;
   };
   elapsed_time_ms: number;
 }
@@ -243,6 +252,27 @@ export class BrevilabsClient {
     }
     if (!data) {
       throw new Error("No data returned from youtube4llm");
+    }
+
+    return data;
+  }
+
+  async autocomplete(
+    prefix: string,
+    noteContext: string = "",
+    relevant_notes: string = ""
+  ): Promise<AutocompleteResponse> {
+    const { data, error } = await this.makeRequest<AutocompleteResponse>("/autocomplete", {
+      prompt: prefix,
+      note_context: noteContext,
+      relevant_notes: relevant_notes,
+      max_tokens: 64,
+    });
+    if (error) {
+      throw error;
+    }
+    if (!data) {
+      throw new Error("No data returned from autocomplete");
     }
 
     return data;
