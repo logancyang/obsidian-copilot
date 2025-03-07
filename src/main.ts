@@ -4,7 +4,7 @@ import { CustomModel } from "@/aiParams";
 import { parseChatContent, updateChatMemory } from "@/chatUtils";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
-import { ApplyView, APPLY_VIEW_TYPE } from "@/components/ApplyView";
+import { ApplyView, APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 import { CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { registerContextMenu } from "@/contextMenu";

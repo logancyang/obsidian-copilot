@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { App, ItemView, TFile, WorkspaceLeaf, Notice } from "obsidian";
 import { createRoot } from "react-dom/client";
 import { diffLines, Change } from "diff";
-import { Button } from "./ui/button";
+import { Button } from "../ui/button";
 import { Check, X as XIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +18,7 @@ export interface ApplyViewState {
 // Extended Change interface to track user decisions
 interface ExtendedChange extends Change {
   accepted?: boolean;
+  rejected?: boolean;
 }
 
 export class ApplyView extends ItemView {
@@ -87,6 +88,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     return initialDiff.map((change) => ({
       ...change,
       accepted: true,
+      rejected: false,
     }));
   });
 
@@ -177,6 +179,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
           newDiff[index] = {
             ...newDiff[index],
             accepted: true,
+            rejected: false,
           };
         }
       });
@@ -198,6 +201,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
           newDiff[index] = {
             ...newDiff[index],
             accepted: false,
+            rejected: true,
           };
         }
       });

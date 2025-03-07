@@ -9,10 +9,9 @@ import { insertIntoEditor } from "@/utils";
 import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Notice } from "obsidian";
-import { BrevilabsClient, ComposerApplyRequest } from "@/LLMProviders/brevilabsClient";
 import { CodeBlock } from "./CodeBlock";
 import { createRoot } from "react-dom/client";
+import { useApplyCode } from "@/hooks/useApplyCode";
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
   if (!context || (context.notes.length === 0 && context.urls.length === 0)) {
@@ -71,6 +70,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   const componentRef = useRef<Component | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const handleApplyCode = useApplyCode(app, chatHistory);
+
   const copyToClipboard = () => {
     if (!navigator.clipboard || !navigator.clipboard.writeText) {
       return;
@@ -84,100 +85,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       }, 2000);
     });
   };
-
-  const handleApplyCode = useCallback(
-    async (path: string, code: string) => {
-      try {
-        // Get the file from the path
-        const file = app.vault.getAbstractFileByPath(path);
-
-        if (!file || !(file instanceof TFile)) {
-          new Notice(`File not found: ${path}`);
-          return;
-        }
-
-        // Get the original content
-        const originalContent = await app.vault.read(file);
-
-        // Check if the current active note is the same as the target note
-        const activeFile = app.workspace.getActiveFile();
-        if (!activeFile || activeFile.path !== file.path) {
-          // If not, open the target file in the current leaf
-          await app.workspace.getLeaf().openFile(file);
-          new Notice(`Switched to ${file.name}`);
-        }
-
-        try {
-          // Call the composer apply endpoint
-          const brevilabsClient = BrevilabsClient.getInstance();
-
-          // Convert chat history to the format expected by the API
-          const formattedChatHistory = chatHistory
-            .filter((msg) => msg.isVisible)
-            .map((msg) => ({
-              role: msg.sender === USER_SENDER ? "user" : "assistant",
-              content: msg.message,
-            }));
-
-          // Create the request object
-          const request: ComposerApplyRequest = {
-            target_note: {
-              title: file.basename,
-              content: originalContent,
-            },
-            chat_history: formattedChatHistory,
-            markdown_block: code,
-          };
-
-          // Call the composer apply endpoint
-
-          console.log("==== Composer Request ====\n", request);
-          const response = await brevilabsClient.composerApply(request);
-
-          // Use the content from the response
-          let newContent = response.content;
-
-          //TODO: Remove this once the issue is fixed in the backend
-          // Remove trailing newline from newContent if originalContent doesn't end with one
-          if (!originalContent.endsWith("\n") && newContent.endsWith("\n")) {
-            newContent = newContent.slice(0, -1);
-          }
-          // Open the Apply View in a new leaf with the processed content
-          const leaf = app.workspace.getLeaf(true);
-          await leaf.setViewState({
-            type: "obsidian-copilot-apply-view",
-            active: true,
-            state: {
-              file: file,
-              originalContent: originalContent,
-              newContent: newContent,
-              path: path,
-            },
-          });
-        } catch (error) {
-          console.error("Error calling composer apply:", error);
-          new Notice(`Error processing code: ${error.message}`);
-
-          // Fallback to original behavior if composer apply fails
-          const leaf = app.workspace.getLeaf(true);
-          await leaf.setViewState({
-            type: "obsidian-copilot-apply-view",
-            active: true,
-            state: {
-              file: file,
-              originalContent: originalContent,
-              newContent: code,
-              path: path,
-            },
-          });
-        }
-      } catch (error) {
-        console.error("Error applying code:", error);
-        new Notice(`Error applying code: ${error.message}`);
-      }
-    },
-    [app, chatHistory]
-  );
 
   const preprocess = useCallback(
     (content: string): string => {
