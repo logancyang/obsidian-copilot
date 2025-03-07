@@ -89,6 +89,9 @@ export interface CopilotSettings {
   // undefined means never checked
   isPlusUser: boolean | undefined;
   inlineEditCommands: InlineEditCommandSettings[] | undefined;
+
+  // Autocomplete settings
+  enableAutocomplete: boolean;
 }
 
 export const settingsStore = createStore();

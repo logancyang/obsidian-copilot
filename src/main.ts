@@ -1,6 +1,7 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ChainManager from "@/LLMProviders/chainManager";
 import { CustomModel } from "@/aiParams";
+import { AutocompleteService } from "@/autocomplete/autocompleteService";
 import { parseChatContent, updateChatMemory } from "@/chatUtils";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
@@ -43,6 +44,7 @@ export default class CopilotPlugin extends Plugin {
   vectorStoreManager: VectorStoreManager;
   fileParserManager: FileParserManager;
   settingsUnsubscriber?: () => void;
+  private autocompleteService: AutocompleteService;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -108,6 +110,9 @@ export default class CopilotPlugin extends Plugin {
         }
       })
     );
+
+    // Initialize autocomplete service
+    this.autocompleteService = AutocompleteService.getInstance(this);
   }
 
   async onunload() {
@@ -116,6 +121,7 @@ export default class CopilotPlugin extends Plugin {
       this.vectorStoreManager.onunload();
     }
     this.settingsUnsubscriber?.();
+    this.autocompleteService?.destroy();
 
     console.log("Copilot plugin unloaded");
   }
