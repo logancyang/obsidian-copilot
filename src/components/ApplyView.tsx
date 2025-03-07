@@ -18,7 +18,6 @@ export interface ApplyViewState {
 // Extended Change interface to track user decisions
 interface ExtendedChange extends Change {
   accepted?: boolean;
-  rejected?: boolean;
 }
 
 export class ApplyView extends ItemView {
@@ -56,11 +55,12 @@ export class ApplyView extends ItemView {
   private render() {
     if (!this.state) return;
 
-    const container = this.containerEl.children[1];
-    container.empty();
-    container.addClass("apply-view-container");
+    // The second child is the actual content of the view, and the first child is the title of the view
+    // NOTE: While no official documentation is found, this seems like a standard pattern across community plugins.
+    const contentEl = this.containerEl.children[1];
+    contentEl.empty();
 
-    const rootEl = container.createDiv();
+    const rootEl = contentEl.createDiv();
     if (!this.root) {
       this.root = createRoot(rootEl);
     }
@@ -87,7 +87,6 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     return initialDiff.map((change) => ({
       ...change,
       accepted: true,
-      rejected: false,
     }));
   });
 
@@ -142,17 +141,11 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   // Handle accepting all changes that have been marked as accepted
   const handleAccept = async () => {
     try {
-      // Filter out rejected changes and include both accepted and unselected changes
       const newContent = diff
         .filter((change) => {
-          // Handle rejected changes
-          if (change.rejected) {
-            if (change.added) return false;
-            else if (change.removed) return true;
-          }
-          // Handle accepted or unselected changes
-          if (change.removed) return false;
-          return true;
+          if (change.added) return change.accepted;
+          else if (change.removed) return !change.accepted;
+          return true; // Unchanged lines are always included
         })
         .map((change) => change.value)
         .join("");
@@ -184,7 +177,6 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
           newDiff[index] = {
             ...newDiff[index],
             accepted: true,
-            rejected: false,
           };
         }
       });
@@ -206,7 +198,6 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
           newDiff[index] = {
             ...newDiff[index],
             accepted: false,
-            rejected: true,
           };
         }
       });
@@ -261,8 +252,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                   className={cn("flex relative border-l-3", {
                     "bg-modifier-success border-l-green": change.added,
                     "bg-modifier-error border-l-red": change.removed,
-                    "opacity-50":
-                      (change.added && change.rejected) || (change.removed && !change.accepted),
+                    "opacity-50": !change.accepted,
                   })}
                 >
                   <div className="w-6 flex-shrink-0 flex items-center justify-center text-sm font-bold bg-background-secondary-alt">
