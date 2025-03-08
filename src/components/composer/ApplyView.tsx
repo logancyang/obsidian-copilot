@@ -6,6 +6,7 @@ import { Button } from "../ui/button";
 import { Check, X as XIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ApplyChangesConfirmModal } from "@/components/modals/ApplyChangesConfirmModal";
+import { logError } from "@/logger";
 
 export const APPLY_VIEW_TYPE = "obsidian-copilot-apply-view";
 
@@ -133,7 +134,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
 
   // Add defensive check for state after hooks
   if (!state || !state.originalContent || !state.newContent) {
-    console.error("Invalid state:", state);
+    logError("Invalid state:", state);
     return (
       <div className="flex flex-col h-full items-center justify-center">
         <div className="text-error">Error: Invalid state - missing content</div>
@@ -173,7 +174,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
 
       applyChanges();
     } catch (error) {
-      console.error("Error applying changes:", error);
+      logError("Error applying changes:", error);
       new Notice(`Error applying changes: ${error.message}`);
     }
   };
@@ -186,7 +187,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
       new Notice("Changes applied successfully");
       close();
     } catch (error) {
-      console.error("Error applying changes:", error);
+      logError("Error applying changes:", error);
       new Notice(`Error applying changes: ${error.message}`);
     }
   };

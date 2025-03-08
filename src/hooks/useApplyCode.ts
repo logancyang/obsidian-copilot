@@ -4,6 +4,7 @@ import { BrevilabsClient, ComposerApplyRequest } from "@/LLMProviders/brevilabsC
 import { ChatMessage } from "@/sharedState";
 import { USER_SENDER } from "@/constants";
 import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
+import { logError, logInfo } from "@/logger";
 
 /**
  * Custom hook for applying code to a file using the composer API
@@ -57,7 +58,7 @@ export function useApplyCode(app: App, chatHistory: ChatMessage[] = []) {
           };
 
           // Call the composer apply endpoint
-          console.log("==== Composer Request ====\n", request);
+          logInfo("==== Composer Request ====\n", request);
           const response = await brevilabsClient.composerApply(request);
 
           // Use the content from the response
@@ -88,7 +89,7 @@ export function useApplyCode(app: App, chatHistory: ChatMessage[] = []) {
             },
           });
         } catch (error) {
-          console.error("Error calling composer apply:", error);
+          logError("Error calling composer apply:", error);
           new Notice(`Error processing code: ${error.message}`);
 
           // Fallback to original behavior if composer apply fails
@@ -105,7 +106,7 @@ export function useApplyCode(app: App, chatHistory: ChatMessage[] = []) {
           });
         }
       } catch (error) {
-        console.error("Error applying code:", error);
+        logError("Error applying code:", error);
         new Notice(`Error applying code: ${error.message}`);
       }
     },
