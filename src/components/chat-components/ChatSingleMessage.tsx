@@ -10,7 +10,7 @@ import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { CodeBlock } from "./CodeBlock";
-import { createRoot } from "react-dom/client";
+import { createRoot, Root } from "react-dom/client";
 import { useApplyCode } from "@/hooks/useApplyCode";
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
@@ -192,8 +192,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   };
 
   useEffect(() => {
+    const roots: Root[] = [];
     if (contentRef.current && message.sender !== USER_SENDER) {
-      // Clear previous content
       contentRef.current.innerHTML = "";
 
       // Create a new Component instance if it doesn't exist
@@ -213,29 +213,38 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
       // Process code blocks after rendering
       const codeBlocks = contentRef.current.querySelectorAll("pre");
-      codeBlocks.forEach((pre) => {
-        const codeElement = pre.querySelector("code");
-        if (!codeElement) return;
+      if (codeBlocks.length > 0) {
+        codeBlocks.forEach((pre) => {
+          const codeElement = pre.querySelector("code");
+          if (!codeElement) return;
 
-        const originalCode = codeElement.textContent || "";
-        const lines = originalCode.split("\n");
-        const firstLine = lines[0].trim();
+          const originalCode = codeElement.textContent || "";
+          const lines = originalCode.split("\n");
+          const firstLine = lines[0].trim();
 
-        // Check for path in HTML comment format: <!-- path=Notes/My Notes.md -->
-        const htmlCommentMatch = firstLine.match(/<!--\s*path=([^>]+?)\s*-->/);
-        if (htmlCommentMatch && htmlCommentMatch[1]) {
-          const path = htmlCommentMatch[1].trim();
-          const cleanedCode = lines.slice(1).join("\n");
+          // Check for path in HTML comment format: <!-- path=Notes/My Notes.md -->
+          const htmlCommentMatch = firstLine.match(/<!--\s*path=([^>]+?)\s*-->/);
+          if (htmlCommentMatch && htmlCommentMatch[1]) {
+            const path = htmlCommentMatch[1].trim();
+            const cleanedCode = lines.slice(1).join("\n");
 
-          // Create a container for the React component
-          const container = document.createElement("div");
-          pre.parentNode?.replaceChild(container, pre);
+            // Create a container for the React component
+            const container = document.createElement("div");
+            pre.parentNode?.replaceChild(container, pre);
 
-          // Create a root and render the CodeBlock component
-          const root = createRoot(container);
-          root.render(<CodeBlock code={cleanedCode} path={path} onApply={handleApplyCode} />);
-        }
-      });
+            // Create a root and render the CodeBlock component
+            const root = createRoot(container);
+            root.render(
+              <CodeBlock
+                code={cleanedCode}
+                path={path}
+                onApply={isStreaming ? undefined : handleApplyCode}
+              />
+            );
+            roots.push(root);
+          }
+        });
+      }
     }
 
     // Cleanup function
@@ -244,6 +253,10 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         componentRef.current.unload();
         componentRef.current = null;
       }
+
+      roots.forEach((root) => {
+        root.unmount();
+      });
     };
   }, [message, app, componentRef, isStreaming, preprocess, handleApplyCode]);
 
@@ -380,7 +393,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         )}
       >
         <div className="w-6 shrink-0">{message.sender === USER_SENDER ? <User /> : <Bot />}</div>
-        <div className="flex flex-col flex-grow max-w-full gap-2">
+        <div className="flex flex-col flex-grow max-w-full gap-2 overflow-hidden">
           {!isEditing && <MessageContext context={message.context} />}
           <div className="message-content">{renderMessageContent()}</div>
 

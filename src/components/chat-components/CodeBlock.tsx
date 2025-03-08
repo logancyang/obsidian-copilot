@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { Check, Loader2 } from "lucide-react";
 
 interface CodeBlockProps {
@@ -24,34 +23,25 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ code, path, onApply }) => 
   };
 
   return (
-    <div className="relative">
+    <div className="border border-border border-solid rounded-md my-2 flex flex-col overflow-hidden">
       {path && (
-        <div className="code-path-indicator text-xs p-1 border-b border-border text-muted-foreground">
-          {path}
+        <div className="flex justify-between items-center border-[0px] border-b border-border border-solid gap-2 p-2 overflow-hidden">
+          <div className="text-xs p-1 text-muted-foreground truncate flex-1">{path}</div>
+          {onApply && (
+            <Button variant="ghost2" size="fit" onClick={handleApply} disabled={isApplying}>
+              {isApplying ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
+              Apply
+            </Button>
+          )}
         </div>
       )}
-      <pre className="relative">
+
+      <pre className="m-0 border-none">
         <code>{code}</code>
-        {path && onApply && (
-          <Button
-            variant="default"
-            size="sm"
-            className={cn(
-              "absolute top-2 right-2 bg-primary hover:bg-primary/90 text-primary-foreground",
-              "shadow-sm border border-border",
-              isApplying && "opacity-70 cursor-not-allowed"
-            )}
-            onClick={handleApply}
-            disabled={isApplying}
-          >
-            {isApplying ? (
-              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-            ) : (
-              <Check className="mr-1 h-4 w-4" />
-            )}
-            Apply
-          </Button>
-        )}
       </pre>
     </div>
   );
