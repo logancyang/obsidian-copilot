@@ -5,7 +5,7 @@ import { diffLines, Change } from "diff";
 import { Button } from "../ui/button";
 import { Check, X as XIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Checkbox } from "../ui/checkbox";
+import { ApplyChangesConfirmModal } from "@/components/modals/ApplyChangesConfirmModal";
 
 export const APPLY_VIEW_TYPE = "obsidian-copilot-apply-view";
 
@@ -18,7 +18,7 @@ export interface ApplyViewState {
 
 // Extended Change interface to track user decisions
 interface ExtendedChange extends Change {
-  accepted: boolean;
+  accepted: boolean | null;
 }
 
 export class ApplyView extends ItemView {
@@ -87,9 +87,15 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     const initialDiff = diffLines(state.originalContent, state.newContent);
     return initialDiff.map((change) => ({
       ...change,
-      accepted: true,
+      accepted: null, // Start with null (undecided)
     }));
   });
+
+  console.log(diff);
+  const undecidedChanges = diff.filter(
+    (change) => (change.added || change.removed) && change.accepted === null
+  );
+  const hasAnyDecidedChanges = diff.some((change) => change.accepted !== null);
 
   // Group changes into blocks for better UI presentation
   const [changeBlocks, setChangeBlocks] = useState<ExtendedChange[][]>([]);
@@ -139,18 +145,44 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     );
   }
 
-  // Handle accepting all changes that have been marked as accepted
-  const handleAccept = async () => {
+  // Handle applying changes that have been marked as accepted
+  const handleApply = async () => {
     try {
-      const newContent = diff
-        .filter((change) => {
-          if (change.added) return change.accepted;
-          else if (change.removed) return !change.accepted;
-          return true; // Unchanged lines are always included
-        })
-        .map((change) => change.value)
-        .join("");
+      const applyChanges = async () => {
+        const newContent = diff
+          .filter((change) => {
+            if (change.added) return change.accepted === true;
+            else if (change.removed) return change.accepted === false;
+            return true; // Unchanged lines are always included
+          })
+          .map((change) => change.value)
+          .join("");
 
+        await app.vault.modify(state.file, newContent);
+        new Notice("Changes applied successfully");
+        close();
+      };
+
+      if (undecidedChanges.length > 0) {
+        // Divide by 2 because each change has a pair of added and removed lines
+        const modal = new ApplyChangesConfirmModal(app, undecidedChanges.length / 2, () => {
+          applyChanges();
+        });
+        modal.open();
+        return;
+      }
+
+      applyChanges();
+    } catch (error) {
+      console.error("Error applying changes:", error);
+      new Notice(`Error applying changes: ${error.message}`);
+    }
+  };
+
+  // Apply all changes regardless of whether they have been marked as accepted
+  const handleAcceptAll = async () => {
+    try {
+      const newContent = diff.map((change) => change.value).join("");
       await app.vault.modify(state.file, newContent);
       new Notice("Changes applied successfully");
       close();
@@ -165,8 +197,8 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     close();
   };
 
-  // Toggle a block of changes
-  const toggleBlock = (blockIndex: number, accepted: boolean) => {
+  // Accept a block of changes
+  const acceptBlock = (blockIndex: number) => {
     setDiff((prevDiff) => {
       const newDiff = [...prevDiff];
       const block = changeBlocks[blockIndex];
@@ -177,7 +209,28 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
         if (index !== -1) {
           newDiff[index] = {
             ...newDiff[index],
-            accepted,
+            accepted: true,
+          };
+        }
+      });
+
+      return newDiff;
+    });
+  };
+
+  // Reject a block of changes
+  const rejectBlock = (blockIndex: number) => {
+    setDiff((prevDiff) => {
+      const newDiff = [...prevDiff];
+      const block = changeBlocks[blockIndex];
+
+      // Find the indices of the changes in this block
+      block.forEach((blockChange) => {
+        const index = newDiff.findIndex((change) => change === blockChange);
+        if (index !== -1) {
+          newDiff[index] = {
+            ...newDiff[index],
+            accepted: false,
           };
         }
       });
@@ -187,23 +240,27 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex justify-between items-center p-2 border-b border-border">
-        <div className="flex items-center">
-          <h3 className="m-0 text-sm font-medium">
-            Apply Changes to {state.path || state.file.path}
-          </h3>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={handleReject}>
-            <XIcon className="mr-1 h-3 w-3" />
-            Reject All
-          </Button>
-          <Button size="sm" onClick={handleAccept}>
-            <Check className="mr-1 h-3 w-3" />
-            Apply Changes
-          </Button>
-        </div>
+    <div className="flex flex-col h-full relative">
+      <div className="flex z-[1] gap-2 fixed bottom-2 left-1/2 -translate-x-1/2 p-2 border border-solid border-border rounded-md bg-secondary">
+        <Button variant="destructive" size="sm" onClick={handleReject}>
+          <XIcon className="size-4" />
+          Reject All
+        </Button>
+        <Button variant="success" size="sm" onClick={handleAcceptAll}>
+          <Check className="size-4" />
+          Accept All
+        </Button>
+        <Button
+          disabled={!hasAnyDecidedChanges}
+          variant="secondary"
+          size="sm"
+          onClick={handleApply}
+        >
+          Apply Changes
+        </Button>
+      </div>
+      <div className="flex items-center p-2 border-[0px] border-solid border-b border-border text-sm font-medium">
+        {state.path || state.file.path}
       </div>
 
       <div className="flex-1 overflow-auto p-2">
@@ -211,55 +268,119 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
           // Check if this block contains any changes (added or removed)
           const hasChanges = block.some((change) => change.added || change.removed);
 
-          // Check if all changes in this block are accepted
-          const isAccepted = hasChanges && block.every((change) => change.accepted);
+          // Get the decision status for this block
+          const blockStatus = hasChanges
+            ? block.every(
+                (change) => (!change.added && !change.removed) || change.accepted === true
+              )
+              ? "accepted"
+              : block.every(
+                    (change) => (!change.added && !change.removed) || change.accepted === false
+                  )
+                ? "rejected"
+                : "undecided"
+            : "unchanged";
 
           return (
             <div
               key={blockIndex}
-              className={cn(
-                "mb-4 border rounded-md overflow-hidden transition-colors duration-200",
-                {
-                  "border-green shadow-[0_0_5px_rgba(var(--color-green-rgb),0.2)]": isAccepted,
-                  "border-red shadow-[0_0_5px_rgba(var(--color-red-rgb),0.2)]":
-                    !isAccepted && hasChanges,
-                }
-              )}
+              className={cn("mb-4 border rounded-md overflow-hidden border-border", {
+                "border-solid": blockStatus !== "unchanged",
+              })}
             >
-              {block.map((change, changeIndex) => (
-                <div
-                  key={`${blockIndex}-${changeIndex}`}
-                  className={cn("flex relative border-l-3", {
-                    "bg-modifier-success border-l-green": change.added,
-                    "bg-modifier-error border-l-red": change.removed,
-                    "opacity-50": !change.accepted && (change.added || change.removed),
-                  })}
-                >
-                  <div className="w-6 flex-shrink-0 flex items-center justify-center text-sm font-bold bg-background-secondary-alt">
-                    {change.added && "+"}
-                    {change.removed && "-"}
+              {blockStatus === "accepted" ? (
+                // Show only the accepted version
+                <div className="flex-1 font-mono text-sm whitespace-pre-wrap py-1 px-2 text-text-normal">
+                  {block
+                    .filter((change) => !change.removed)
+                    .map((change, idx) => (
+                      <div key={idx}>{change.value}</div>
+                    ))}
+                </div>
+              ) : blockStatus === "rejected" ? (
+                // Show only the original version
+                <div className="flex-1 font-mono text-sm whitespace-pre-wrap py-1 px-2 text-text-normal">
+                  {block
+                    .filter((change) => !change.added)
+                    .map((change, idx) => (
+                      <div key={idx}>{change.value}</div>
+                    ))}
+                </div>
+              ) : (
+                // Show the diff view for undecided blocks
+                block.map((change, changeIndex) => (
+                  <div
+                    key={`${blockIndex}-${changeIndex}`}
+                    className={cn("flex relative border-l-3", {
+                      "bg-success border-l-green": change.added,
+                      "bg-error border-l-red": change.removed,
+                    })}
+                  >
+                    <div className="flex-1 font-mono text-sm whitespace-pre-wrap py-1 px-2 text-text-normal">
+                      {change.value}
+                    </div>
                   </div>
-                  <div className="flex-1 font-mono text-sm whitespace-pre-wrap py-1 px-2 text-text-normal">
-                    {change.value}
+                ))
+              )}
+
+              {/* Only show accept/reject buttons for blocks with changes that are undecided */}
+              {hasChanges && blockStatus === "undecided" && (
+                <div className="flex items-center justify-end p-2 border-[0px] border-solid border-t border-border">
+                  <div className="flex items-center gap-2">
+                    <Button variant="destructive" size="sm" onClick={() => rejectBlock(blockIndex)}>
+                      <XIcon className="size-4" />
+                      Reject
+                    </Button>
+                    <Button variant="success" size="sm" onClick={() => acceptBlock(blockIndex)}>
+                      <Check className="size-4" />
+                      Accept
+                    </Button>
                   </div>
                 </div>
-              ))}
+              )}
 
-              {/* Only show checkbox for blocks with changes */}
-              {hasChanges && (
-                <div className="flex items-center justify-between p-2 bg-background-secondary-alt border-t border-border">
-                  <div className="text-sm text-muted-foreground">
-                    {isAccepted ? "This change will be applied" : "This change will be skipped"}
-                  </div>
+              {/* Show status for decided blocks with revert option */}
+              {hasChanges && (blockStatus === "accepted" || blockStatus === "rejected") && (
+                <div className="flex items-center justify-end p-2 border-[0px] border-solid border-t border-border">
                   <div className="flex items-center gap-2">
-                    <label htmlFor={`block-${blockIndex}`} className="text-sm cursor-pointer">
-                      {isAccepted ? "Accepted" : "Rejected"}
-                    </label>
-                    <Checkbox
-                      id={`block-${blockIndex}`}
-                      checked={isAccepted}
-                      onCheckedChange={(checked) => toggleBlock(blockIndex, !!checked)}
-                    />
+                    <div className="text-sm font-medium mr-2">
+                      {blockStatus === "accepted" ? (
+                        <div className="flex items-center gap-1 text-success">
+                          <Check className="size-4" />
+                          <div>Accepted</div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 text-error">
+                          <XIcon className="size-4" />
+                          <div>Rejected</div>
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        // Reset the block to undecided state
+                        setDiff((prevDiff) => {
+                          const newDiff = [...prevDiff];
+                          const block = changeBlocks[blockIndex];
+
+                          block.forEach((blockChange) => {
+                            const index = newDiff.findIndex((change) => change === blockChange);
+                            if (index !== -1) {
+                              newDiff[index] = {
+                                ...newDiff[index],
+                                accepted: null,
+                              };
+                            }
+                          });
+
+                          return newDiff;
+                        });
+                      }}
+                    >
+                      Revert
+                    </Button>
                   </div>
                 </div>
               )}

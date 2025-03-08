@@ -153,7 +153,7 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
           "border-accent/50",
           "relative",
           "z-[9999]",
-          "bg-background",
+          "bg-primary",
           "rounded-lg",
           "transform-gpu",
         ],
@@ -284,7 +284,7 @@ const SortableTableRow: React.FC<{
       className={cn(
         "hover:bg-interactive-accent/10 transition-colors duration-200",
         isDragging &&
-          "shadow-lg bg-background/90 backdrop-blur-sm relative z-[100] cursor-grabbing border-2 border-accent/50",
+          "shadow-lg bg-primary/90 backdrop-blur-sm relative z-[100] cursor-grabbing border-2 border-accent/50",
         !isDragging && "z-auto"
       )}
     >

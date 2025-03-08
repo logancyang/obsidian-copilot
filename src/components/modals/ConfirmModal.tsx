@@ -6,16 +6,20 @@ function ConfirmModalContent({
   content,
   onConfirm,
   onCancel,
+  confirmButtonText,
+  cancelButtonText,
 }: {
   content: string;
   onConfirm: () => void;
   onCancel: () => void;
+  confirmButtonText: string;
+  cancelButtonText: string;
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
       <div>{content}</div>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
-        <button onClick={onCancel}>Cancel</button>
+        <button onClick={onCancel}>{cancelButtonText}</button>
         <button
           style={{
             backgroundColor: "var(--interactive-accent)",
@@ -24,7 +28,7 @@ function ConfirmModalContent({
           }}
           onClick={onConfirm}
         >
-          Continue
+          {confirmButtonText}
         </button>
       </div>
     </div>
@@ -38,7 +42,9 @@ export class ConfirmModal extends Modal {
     app: App,
     private onConfirm: () => void,
     private content: string,
-    title: string
+    title: string,
+    private confirmButtonText: string = "Continue",
+    private cancelButtonText: string = "Cancel"
   ) {
     super(app);
     // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
@@ -64,6 +70,8 @@ export class ConfirmModal extends Modal {
         content={this.content}
         onConfirm={handleConfirm}
         onCancel={handleCancel}
+        confirmButtonText={this.confirmButtonText}
+        cancelButtonText={this.cancelButtonText}
       />
     );
   }
