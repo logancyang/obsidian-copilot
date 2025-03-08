@@ -58,7 +58,6 @@ module.exports = {
         "error-hover": "var(--background-modifier-error-hover)",
         success: "var(--background-modifier-success)",
         "success-rgb": "rgba(var(--background-modifier-success-rgb),<alpha-value>)",
-        "success-hover": "var(--background-modifier-success-hover)",
         message: "var(--background-modifier-message)",
         "form-field": "var(--background-form-field)",
       },
