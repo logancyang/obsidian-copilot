@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import { App, ItemView, TFile, WorkspaceLeaf, Notice } from "obsidian";
 import { createRoot } from "react-dom/client";
 import { diffLines, Change } from "diff";
@@ -91,17 +91,13 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     }));
   });
 
-  console.log(diff);
   const undecidedChanges = diff.filter(
     (change) => (change.added || change.removed) && change.accepted === null
   );
   const hasAnyDecidedChanges = diff.some((change) => change.accepted !== null);
 
   // Group changes into blocks for better UI presentation
-  const [changeBlocks, setChangeBlocks] = useState<ExtendedChange[][]>([]);
-
-  // Process diff into blocks of related changes
-  useEffect(() => {
+  const changeBlocks = useMemo(() => {
     if (!diff.length) return;
 
     const blocks: ExtendedChange[][] = [];
@@ -129,8 +125,11 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
       blocks.push(currentBlock);
     }
 
-    setChangeBlocks(blocks);
+    return blocks;
   }, [diff]);
+
+  // Add refs to track change blocks
+  const blockRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // Add defensive check for state after hooks
   if (!state || !state.originalContent || !state.newContent) {
@@ -197,11 +196,38 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     close();
   };
 
+  // Function to focus on the next change block or scroll to top if it's the last block
+  const focusNextChangeBlock = (currentBlockIndex: number) => {
+    if (!changeBlocks) return;
+
+    // Find the next block with changes that is undecided
+    let nextBlockIndex = -1;
+    for (let i = currentBlockIndex + 1; i < changeBlocks.length; i++) {
+      const block = changeBlocks[i];
+      const hasChanges = block.some((change) => change.added || change.removed);
+      const isUndecided = block.some(
+        (change) => (change.added || change.removed) && change.accepted === null
+      );
+
+      if (hasChanges && isUndecided) {
+        nextBlockIndex = i;
+        break;
+      }
+    }
+
+    // If there's a next block, scroll to it
+    if (nextBlockIndex !== -1 && blockRefs.current[nextBlockIndex]) {
+      blockRefs.current[nextBlockIndex]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  };
+
   // Accept a block of changes
   const acceptBlock = (blockIndex: number) => {
     setDiff((prevDiff) => {
       const newDiff = [...prevDiff];
-      const block = changeBlocks[blockIndex];
+      const block = changeBlocks?.[blockIndex];
+
+      if (!block) return newDiff;
 
       // Find the indices of the changes in this block
       block.forEach((blockChange) => {
@@ -216,13 +242,18 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
 
       return newDiff;
     });
+
+    // Focus on the next change block after state update
+    setTimeout(() => focusNextChangeBlock(blockIndex), 0);
   };
 
   // Reject a block of changes
   const rejectBlock = (blockIndex: number) => {
     setDiff((prevDiff) => {
       const newDiff = [...prevDiff];
-      const block = changeBlocks[blockIndex];
+      const block = changeBlocks?.[blockIndex];
+
+      if (!block) return newDiff;
 
       // Find the indices of the changes in this block
       block.forEach((blockChange) => {
@@ -237,6 +268,9 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
 
       return newDiff;
     });
+
+    // Focus on the next change block after state update
+    setTimeout(() => focusNextChangeBlock(blockIndex), 0);
   };
 
   return (
@@ -264,7 +298,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
       </div>
 
       <div className="flex-1 overflow-auto p-2">
-        {changeBlocks.map((block, blockIndex) => {
+        {changeBlocks?.map((block, blockIndex) => {
           // Check if this block contains any changes (added or removed)
           const hasChanges = block.some((change) => change.added || change.removed);
 
@@ -284,6 +318,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
           return (
             <div
               key={blockIndex}
+              ref={(el) => (blockRefs.current[blockIndex] = el)}
               className={cn("mb-4 border rounded-md overflow-hidden border-border", {
                 "border-solid": blockStatus !== "unchanged",
               })}
@@ -363,7 +398,9 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                         // Reset the block to undecided state
                         setDiff((prevDiff) => {
                           const newDiff = [...prevDiff];
-                          const block = changeBlocks[blockIndex];
+                          const block = changeBlocks?.[blockIndex];
+
+                          if (!block) return newDiff;
 
                           block.forEach((blockChange) => {
                             const index = newDiff.findIndex((change) => change === blockChange);
