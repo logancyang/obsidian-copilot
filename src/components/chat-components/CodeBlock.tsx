@@ -28,7 +28,13 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ code, path, onApply }) => 
         <div className="flex justify-between items-center border-[0px] border-b border-border border-solid gap-2 p-2 overflow-hidden">
           <div className="text-xs p-1 text-muted-foreground truncate flex-1">{path}</div>
           {onApply && (
-            <Button variant="ghost2" size="fit" onClick={handleApply} disabled={isApplying}>
+            <Button
+              className="text-muted"
+              variant="ghost2"
+              size="fit"
+              onClick={handleApply}
+              disabled={isApplying}
+            >
               {isApplying ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
