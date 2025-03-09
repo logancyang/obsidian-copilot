@@ -69,6 +69,9 @@ export function useApplyCode(app: App, chatHistory: ChatMessage[] = []) {
           if (newContent.startsWith("```\n") && newContent.endsWith("\n```")) {
             newContent = newContent.slice(4, -4);
           }
+          if (newContent.startsWith("```markdown\n") && newContent.endsWith("\n```")) {
+            newContent = newContent.slice(12, -4);
+          }
 
           // Remove trailing newline from newContent if originalContent doesn't end with one
           //TODO: Remove this once the issue is fixed in the backend
