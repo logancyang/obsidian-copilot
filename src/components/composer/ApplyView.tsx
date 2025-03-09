@@ -131,6 +131,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
 
   // Add refs to track change blocks
   const blockRefs = useRef<(HTMLDivElement | null)[]>([]);
+  console.log(changeBlocks);
 
   // Add defensive check for state after hooks
   if (!state || !state.originalContent || !state.newContent) {
@@ -182,7 +183,12 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   // Apply all changes regardless of whether they have been marked as accepted
   const handleAcceptAll = async () => {
     try {
-      const newContent = diff.map((change) => change.value).join("");
+      const newContent = diff
+        .filter((change) => {
+          return change.added || !change.removed;
+        })
+        .map((change) => change.value)
+        .join("");
       await app.vault.modify(state.file, newContent);
       new Notice("Changes applied successfully");
       close();
