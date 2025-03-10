@@ -6,14 +6,13 @@ import {
 import { InlineEditCommandSettings, getSettings, useSettingsValue } from "@/settings/model";
 
 export function getCommandId(commandName: string) {
-  return commandName.replace(/\s+/g, "-").toLowerCase();
+  return encodeURIComponent(commandName.toLowerCase());
 }
 
 /**
  * Validate the command name. A command name must be:
  * - less than 50 characters
  * - not empty
- * - only contain alphanumeric characters and spaces
  * - not duplicate an existing command name (except when editing the same command)
  * @param commandName - The name of the command.
  * @param currentCommandName - Optional. The current name of the command being edited.
@@ -25,10 +24,6 @@ export function validateCommandName(commandName: string, currentCommandName?: st
 
   if (commandName.length > COMMAND_NAME_MAX_LENGTH) {
     throw new Error(`Command name must be less than ${COMMAND_NAME_MAX_LENGTH} characters`);
-  }
-
-  if (!/^[a-zA-Z0-9\s]+$/.test(commandName)) {
-    throw new Error("Command name must only contain alphanumeric characters and spaces");
   }
 
   // Check for duplicate command names, but allow keeping the same name when editing

@@ -14,7 +14,6 @@ import { cn } from "@/lib/utils";
 import { getModelKeyFromModel } from "@/settings/model";
 import { getProviderLabel } from "@/utils";
 import {
-  Move,
   Pencil,
   Plus,
   Trash2,
@@ -24,6 +23,7 @@ import {
   ChevronDown,
   ChevronRight,
   LucideProps,
+  GripVertical,
 } from "lucide-react";
 import React, { ForwardRefExoticComponent, RefAttributes } from "react";
 import {
@@ -168,7 +168,7 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
               {...attributes}
               {...listeners}
             >
-              <Move className="h-4 w-4 text-muted-foreground" />
+              <GripVertical className="h-4 w-4 text-muted-foreground" />
             </div>
           )}
 
@@ -297,7 +297,7 @@ const SortableTableRow: React.FC<{
             {...attributes}
             {...listeners}
           >
-            <Move className="h-4 w-4 text-muted-foreground hover:text-foreground transition-colors" />
+            <GripVertical className="h-4 w-4 text-muted-foreground hover:text-foreground transition-colors" />
           </Button>
         )}
       </TableCell>

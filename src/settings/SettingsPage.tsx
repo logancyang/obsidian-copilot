@@ -6,6 +6,7 @@ import { App, Notice, PluginSettingTab } from "obsidian";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import SettingsMainV2 from "@/settings/v2/SettingsMainV2";
+import { ContainerContext } from "@/settings/v2/components/ContainerContext";
 
 export class CopilotSettingTab extends PluginSettingTab {
   plugin: CopilotPlugin;
@@ -44,6 +45,10 @@ export class CopilotSettingTab extends PluginSettingTab {
     const div = containerEl.createDiv("div");
     const sections = createRoot(div);
 
-    sections.render(<SettingsMainV2 plugin={this.plugin} />);
+    sections.render(
+      <ContainerContext.Provider value={containerEl}>
+        <SettingsMainV2 plugin={this.plugin} />
+      </ContainerContext.Provider>
+    );
   }
 }
