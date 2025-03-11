@@ -8,9 +8,9 @@ import {
   ModelCapability,
 } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import { getSystemPrompt } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { ToolManager } from "@/tools/toolManager";
+import { getComposerSystemPrompt } from "@/composerUtils";
 import {
   err2String,
   extractChatHistory,
@@ -363,7 +363,8 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     const messages: any[] = [];
 
     // Add system message if available
-    let fullSystemMessage = getSystemPrompt();
+
+    let fullSystemMessage = await getComposerSystemPrompt();
 
     // Add chat history context to system message if exists
     if (chatHistory.length > 0) {

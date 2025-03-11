@@ -12,6 +12,7 @@ import { getAIResponse } from "@/langchainStream";
 import ChainManager from "@/LLMProviders/chainManager";
 import CopilotPlugin from "@/main";
 import { Mention } from "@/mentions/Mention";
+import { resetComposerPromptCache } from "@/composerUtils";
 import { getSettings, useSettingsValue } from "@/settings/model";
 import SharedState, { ChatMessage, useSharedState } from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
@@ -544,6 +545,8 @@ ${chatContent}`;
     }
     clearMessages();
     chainManager.memoryManager.clearChatMemory();
+    // Reset the composer prompt cache when starting a new chat
+    resetComposerPromptCache();
     setCurrentAiMessage("");
     setContextNotes([]);
     setIncludeActiveNote(false);
