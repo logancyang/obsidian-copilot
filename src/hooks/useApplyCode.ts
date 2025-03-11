@@ -17,10 +17,28 @@ export function useApplyCode(app: App, chatHistory: ChatMessage[] = []) {
     async (path: string, code: string) => {
       try {
         // Get the file from the path
-        const file = app.vault.getAbstractFileByPath(path);
+        let file = app.vault.getAbstractFileByPath(path);
+        let isNewFile = false;
 
-        if (!file || !(file instanceof TFile)) {
-          new Notice(`File not found: ${path}`);
+        // If file doesn't exist, create it
+        if (!file) {
+          try {
+            // Create the file with the provided code as content
+            await app.vault.create(path, code);
+            new Notice(`Created new file: ${path}`);
+
+            // Get the newly created file
+            file = app.vault.getAbstractFileByPath(path);
+            isNewFile = true;
+          } catch (createError) {
+            logError("Error creating file:", createError);
+            new Notice(`Failed to create file: ${createError.message}`);
+            return;
+          }
+        }
+
+        if (!(file instanceof TFile)) {
+          new Notice(`Path is not a file: ${path}`);
           return;
         }
 
@@ -35,6 +53,12 @@ export function useApplyCode(app: App, chatHistory: ChatMessage[] = []) {
           new Notice(`Switched to ${file.name}`);
         }
 
+        // If the file is newly created, don't show the apply view
+        if (isNewFile) {
+          return;
+        }
+
+        // Generate new content and show diff in the apply view.
         try {
           // Call the composer apply endpoint
           const brevilabsClient = BrevilabsClient.getInstance();
