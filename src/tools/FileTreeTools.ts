@@ -109,7 +109,7 @@ const createGetFileTreeTool = (root: TFolder) =>
 `;
       const jsonResult = JSON.stringify(tree);
 
-      // Check if result is too large (0.5MB)
+      // If the file tree is larger than 0.5MB, use the simplified version instead.
       if (jsonResult.length > 500000) {
         // Rebuild tree without file lists
         const simplifiedTree = buildFileTree(root, false);
