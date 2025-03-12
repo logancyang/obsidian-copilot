@@ -207,6 +207,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
   useEffect(() => {
     const roots: Root[] = [];
+    let isUnmounting = false;
+
     if (contentRef.current && message.sender !== USER_SENDER) {
       contentRef.current.innerHTML = "";
 
@@ -217,60 +219,75 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
       const processedMessage = preprocess(message.message);
 
-      // Use Obsidian's MarkdownRenderer to render the message
-      MarkdownRenderer.renderMarkdown(
-        processedMessage,
-        contentRef.current,
-        "", // Empty string for sourcePath as we don't have a specific source file
-        componentRef.current
-      );
+      if (!isUnmounting) {
+        // Use Obsidian's MarkdownRenderer to render the message
+        MarkdownRenderer.renderMarkdown(
+          processedMessage,
+          contentRef.current,
+          "", // Empty string for sourcePath as we don't have a specific source file
+          componentRef.current
+        );
 
-      // Process code blocks after rendering
-      const codeBlocks = contentRef.current.querySelectorAll("pre");
-      if (codeBlocks.length > 0) {
-        codeBlocks.forEach((pre) => {
-          const codeElement = pre.querySelector("code");
-          if (!codeElement) return;
+        // Process code blocks after rendering
+        const codeBlocks = contentRef.current.querySelectorAll("pre");
+        if (codeBlocks.length > 0) {
+          codeBlocks.forEach((pre) => {
+            if (isUnmounting) return;
 
-          const originalCode = codeElement.textContent || "";
-          const lines = originalCode.split("\n");
-          const firstLine = lines[0].trim();
+            const codeElement = pre.querySelector("code");
+            if (!codeElement) return;
 
-          // Check for path in HTML comment format: <!-- path=Notes/My Notes.md -->
-          const htmlCommentMatch = firstLine.match(/<!--\s*path=([^>]+?)\s*-->/);
-          if (htmlCommentMatch && htmlCommentMatch[1]) {
-            const path = htmlCommentMatch[1].trim();
-            const cleanedCode = lines.slice(1).join("\n");
+            const originalCode = codeElement.textContent || "";
+            const lines = originalCode.split("\n");
+            const firstLine = lines[0].trim();
 
-            // Create a container for the React component
-            const container = document.createElement("div");
-            pre.parentNode?.replaceChild(container, pre);
+            // Check for path in HTML comment format: <!-- path=Notes/My Notes.md -->
+            const htmlCommentMatch = firstLine.match(/<!--\s*path=([^>]+?)\s*-->/);
+            if (htmlCommentMatch && htmlCommentMatch[1]) {
+              const path = htmlCommentMatch[1].trim();
+              const cleanedCode = lines.slice(1).join("\n");
 
-            // Create a root and render the CodeBlock component
-            const root = createRoot(container);
-            root.render(
-              <CodeBlock
-                code={cleanedCode}
-                path={path}
-                onApply={isStreaming ? undefined : handleApplyCode}
-              />
-            );
-            roots.push(root);
-          }
-        });
+              // Create a container for the React component
+              const container = document.createElement("div");
+              pre.parentNode?.replaceChild(container, pre);
+
+              // Create a root and render the CodeBlock component
+              const root = createRoot(container);
+              roots.push(root);
+              if (!isUnmounting) {
+                root.render(
+                  <CodeBlock
+                    code={cleanedCode}
+                    path={path}
+                    onApply={isStreaming ? undefined : handleApplyCode}
+                  />
+                );
+              }
+            }
+          });
+        }
       }
     }
 
     // Cleanup function
     return () => {
-      if (componentRef.current) {
-        componentRef.current.unload();
-        componentRef.current = null;
-      }
+      isUnmounting = true;
 
-      roots.forEach((root) => {
-        root.unmount();
-      });
+      // Schedule cleanup to run after current render cycle
+      setTimeout(() => {
+        if (componentRef.current) {
+          componentRef.current.unload();
+          componentRef.current = null;
+        }
+
+        roots.forEach((root) => {
+          try {
+            root.unmount();
+          } catch {
+            // Ignore unmount errors during cleanup
+          }
+        });
+      }, 0);
     };
   }, [message, app, componentRef, isStreaming, preprocess, handleApplyCode]);
 

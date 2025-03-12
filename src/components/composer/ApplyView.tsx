@@ -1,12 +1,12 @@
-import React, { useState, useMemo, useRef } from "react";
-import { App, ItemView, TFile, WorkspaceLeaf, Notice } from "obsidian";
-import { createRoot } from "react-dom/client";
-import { diffLines, Change } from "diff";
-import { Button } from "../ui/button";
-import { Check, X as XIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { ApplyChangesConfirmModal } from "@/components/modals/ApplyChangesConfirmModal";
+import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
+import { Change, diffLines } from "diff";
+import { Check, X as XIcon } from "lucide-react";
+import { App, ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
+import React, { useMemo, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { Button } from "../ui/button";
 
 export const APPLY_VIEW_TYPE = "obsidian-copilot-apply-view";
 
@@ -131,7 +131,6 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
 
   // Add refs to track change blocks
   const blockRefs = useRef<(HTMLDivElement | null)[]>([]);
-  console.log(changeBlocks);
 
   // Add defensive check for state after hooks
   if (!state || !state.originalContent || !state.newContent) {

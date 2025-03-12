@@ -102,14 +102,6 @@ export class CodeMirrorIntegration {
     const cursor = editor.getCursor();
     const { prefix, noteContext } = getEditorContext(editor, cursor);
 
-    // Get the last word or character for language detection
-    const lastWord = prefix.trim().split(/\s+/).pop() || "";
-    const isNonSpaceDelimited = isNonSpaceDelimitedText(lastWord);
-    logInfo(
-      "[Copilot Autocomplete] Input type:",
-      isNonSpaceDelimited ? "Non-space-delimited" : "Space-delimited"
-    );
-
     // Check if we should continue suggesting based on context
     if (!this.shouldContinueSuggesting(prefix)) {
       logInfo("[Copilot Autocomplete] Context indicates no further suggestions needed");
@@ -127,8 +119,6 @@ export class CodeMirrorIntegration {
     }
 
     try {
-      logInfo("[Copilot Autocomplete] Fetching completion from API");
-
       // Get relevant notes from cache
       const relevantNotesStr = await RelevantNotesCache.getInstance().getRelevantNotes(view.file);
       const relevantNoteTitles = RelevantNotesCache.getInstance().getRelevantNoteTitles();
