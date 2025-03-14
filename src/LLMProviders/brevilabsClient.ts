@@ -144,7 +144,6 @@ export class BrevilabsClient {
    * unknown error.
    */
   async validateLicenseKey(): Promise<boolean | undefined> {
-    logInfo("settings value", getSettings().plusLicenseKey);
     const { error } = await this.makeRequest(
       "/license",
       {
