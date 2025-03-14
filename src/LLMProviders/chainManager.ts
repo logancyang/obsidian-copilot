@@ -1,10 +1,12 @@
 import {
   getChainType,
   getModelKey,
+  ProjectConfig,
   SetChainOptions,
   setChainType,
   subscribeToChainTypeChange,
   subscribeToModelKeyChange,
+  subscribeToProjectChange,
 } from "@/aiParams";
 import ChainFactory, { ChainType, Document } from "@/chainFactory";
 import { BUILTIN_CHAT_MODELS, USER_SENDER, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
@@ -12,6 +14,7 @@ import {
   ChainRunner,
   CopilotPlusChainRunner,
   LLMChainRunner,
+  ProjectChainRunner,
   VaultQAChainRunner,
 } from "@/LLMProviders/chainRunner";
 import { logError, logInfo } from "@/logger";
@@ -64,6 +67,16 @@ export default class ChainManager {
       })
     );
     subscribeToSettingsChange(async () => await this.createChainWithNewModel());
+
+    // Subscribe to Project changes
+    subscribeToProjectChange(async (project) => {
+      if (project) {
+        await this.setProjectChat(project);
+        await this.loadProjectContext(project);
+      } else {
+        await this.clearProjectContext();
+      }
+    });
   }
 
   private async initialize() {
@@ -196,6 +209,11 @@ export default class ChainManager {
         break;
       }
 
+      case ChainType.PROJECT_CHAIN: {
+        setChainType(ChainType.PROJECT_CHAIN);
+        break;
+      }
+
       default:
         this.validateChainType(chainType);
         break;
@@ -211,6 +229,8 @@ export default class ChainManager {
         return new VaultQAChainRunner(this);
       case ChainType.COPILOT_PLUS_CHAIN:
         return new CopilotPlusChainRunner(this);
+      case ChainType.PROJECT_CHAIN:
+        return new ProjectChainRunner(this);
       default:
         throw new Error(`Unsupported chain type: ${chainType}`);
     }
@@ -284,6 +304,78 @@ export default class ChainManager {
           .getMemory()
           .saveContext({ input: userMsg.message }, { output: aiMsg.message });
       }
+    }
+  }
+
+  private async loadProjectContext(project: ProjectConfig) {
+    try {
+      await this.memoryManager.clearChatMemory();
+
+      // 如果项目有预设的 context，加载它们
+      if (project.contextSource) {
+        // 这里可以根据 project.contextSource 的配置来加载相关文档
+        logInfo(`Loading context from sources for project: ${project.name}`);
+
+        // TODO: 实现具体的上下文加载逻辑
+        // 可以使用 vectorStoreManager 来索引和加载相关文档
+        if (project.contextSource.inclusions) {
+          // 处理包含的文件/文件夹
+        }
+      }
+
+      logInfo(`Loaded context for project: ${project.name}`);
+    } catch (error) {
+      logError(`Failed to load project context: ${error}`);
+      throw error;
+    }
+  }
+
+  private async clearProjectContext() {
+    try {
+      // todo
+      // await this.memoryManager.clearChatMemory();
+      logInfo("Cleared project context");
+    } catch (error) {
+      logError(`Failed to clear project context: ${error}`);
+      throw error;
+    }
+  }
+
+  async setProjectChat(project: ProjectConfig) {
+    try {
+      const customModel = findCustomModel(project.projectModelKey, getSettings().activeModels);
+      if (!customModel) {
+        throw new Error(`Model not found for key: ${project.projectModelKey}`);
+      }
+
+      const mergedModel = {
+        ...customModel,
+        ...project.modelConfigs,
+      };
+
+      // update chat model
+      await this.chatModelManager.setChatModel(mergedModel);
+
+      // Set project-specific system prompt words
+      if (project.systemPrompt) {
+        // TODO: 实现设置系统提示词的逻辑
+      }
+
+      // Get chatModel, memory, prompt, and embeddingAPI from respective managers
+      const chatModel = this.chatModelManager.getChatModel();
+      const memory = this.memoryManager.getMemory();
+
+      // todo
+      ChainManager.chain = ChainFactory.createNewLLMChain({
+        llm: chatModel,
+        memory: memory,
+        prompt: "" as any, // todo
+        abortController: "" as any, // todo
+      }) as RunnableSequence;
+
+      logInfo(`Project chat set with model: ${project.projectModelKey}`);
+    } catch (error) {
+      logError(`setProjectChat failed: ${error}`);
     }
   }
 }

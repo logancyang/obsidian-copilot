@@ -693,4 +693,45 @@ class CopilotPlusChainRunner extends BaseChainRunner {
   }
 }
 
-export { CopilotPlusChainRunner, LLMChainRunner, VaultQAChainRunner };
+class ProjectChainRunner extends BaseChainRunner {
+  async run(
+    userMessage: ChatMessage,
+    abortController: AbortController,
+    updateCurrentAiMessage: (message: string) => void,
+    addMessage: (message: ChatMessage) => void,
+    options: {
+      debug?: boolean;
+      ignoreSystemMessage?: boolean;
+      updateLoading?: (loading: boolean) => void;
+    }
+  ): Promise<string> {
+    const { debug = false } = options;
+    let fullAIResponse = "";
+
+    try {
+      const chain = this.chainManager.chatModelManager.getChatModel();
+      const chatStream = await chain.stream({
+        input: userMessage.message,
+      } as any);
+
+      for await (const chunk of chatStream) {
+        if (abortController.signal.aborted) break;
+        fullAIResponse += chunk.content;
+        updateCurrentAiMessage(fullAIResponse);
+      }
+    } catch (error) {
+      await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
+    }
+
+    return this.handleResponse(
+      fullAIResponse,
+      userMessage,
+      abortController,
+      addMessage,
+      updateCurrentAiMessage,
+      debug
+    );
+  }
+}
+
+export { CopilotPlusChainRunner, LLMChainRunner, VaultQAChainRunner, ProjectChainRunner };

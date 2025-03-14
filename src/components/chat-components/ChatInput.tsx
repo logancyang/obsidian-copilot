@@ -61,6 +61,8 @@ interface ChatInputProps {
   selectedImages: File[];
   onAddImage: (files: File[]) => void;
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
+  modelKey?: string;
+  disableModelSwitch?: boolean;
 }
 
 const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
@@ -81,6 +83,8 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       selectedImages,
       onAddImage,
       setSelectedImages,
+      modelKey,
+      disableModelSwitch,
     },
     ref
   ) => {
@@ -492,17 +496,20 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           ) : (
             <DropdownMenu open={isModelDropdownOpen} onOpenChange={setIsModelDropdownOpen}>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost2" size="fit">
+                <Button variant="ghost2" size="fit" disabled={disableModelSwitch}>
                   {modelError ? (
                     <span className="text-error">Model Load Failed</span>
                   ) : settings.activeModels.find(
-                      (model) => model.enabled && getModelKeyFromModel(model) === currentModelKey
+                      (model) =>
+                        model.enabled &&
+                        getModelKeyFromModel(model) === (modelKey || currentModelKey)
                     ) ? (
                     <ModelDisplay
                       model={
                         settings.activeModels.find(
                           (model) =>
-                            model.enabled && getModelKeyFromModel(model) === currentModelKey
+                            model.enabled &&
+                            getModelKeyFromModel(model) === (modelKey || currentModelKey)
                         )!
                       }
                       iconSize={8}
@@ -510,47 +517,48 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                   ) : (
                     "Select Model"
                   )}
-                  <ChevronDown className="size-5 mt-0.5" />
+                  {!disableModelSwitch && <ChevronDown className="size-5 mt-0.5" />}
                 </Button>
               </DropdownMenuTrigger>
 
               <DropdownMenuContent align="start">
-                {settings.activeModels
-                  .filter((model) => model.enabled)
-                  .map((model) => {
-                    const { hasApiKey, errorNotice } = checkModelApiKey(model, settings);
-                    return (
-                      <DropdownMenuItem
-                        key={getModelKeyFromModel(model)}
-                        onSelect={async (event) => {
-                          if (!hasApiKey && errorNotice) {
-                            event.preventDefault();
-                            new Notice(errorNotice);
-                            return;
-                          }
-
-                          try {
-                            setModelError(null);
-                            setCurrentModelKey(getModelKeyFromModel(model));
-                          } catch (error) {
-                            const msg = `Model switch failed: ` + err2String(error);
-                            setModelError(msg);
-                            new Notice(msg);
-                            // Restore to the last valid model
-                            const lastValidModel = settings.activeModels.find(
-                              (m) => m.enabled && getModelKeyFromModel(m) === currentModelKey
-                            );
-                            if (lastValidModel) {
-                              setCurrentModelKey(getModelKeyFromModel(lastValidModel));
+                {!disableModelSwitch &&
+                  settings.activeModels
+                    .filter((model) => model.enabled)
+                    .map((model) => {
+                      const { hasApiKey, errorNotice } = checkModelApiKey(model, settings);
+                      return (
+                        <DropdownMenuItem
+                          key={getModelKeyFromModel(model)}
+                          onSelect={async (event) => {
+                            if (!hasApiKey && errorNotice) {
+                              event.preventDefault();
+                              new Notice(errorNotice);
+                              return;
                             }
-                          }
-                        }}
-                        className={!hasApiKey ? "opacity-50 cursor-not-allowed" : ""}
-                      >
-                        <ModelDisplay model={model} iconSize={12} />
-                      </DropdownMenuItem>
-                    );
-                  })}
+
+                            try {
+                              setModelError(null);
+                              setCurrentModelKey(getModelKeyFromModel(model));
+                            } catch (error) {
+                              const msg = `Model switch failed: ` + err2String(error);
+                              setModelError(msg);
+                              new Notice(msg);
+                              // Restore to the last valid model
+                              const lastValidModel = settings.activeModels.find(
+                                (m) => m.enabled && getModelKeyFromModel(m) === currentModelKey
+                              );
+                              if (lastValidModel) {
+                                setCurrentModelKey(getModelKeyFromModel(lastValidModel));
+                              }
+                            }
+                          }}
+                          className={!hasApiKey ? "opacity-50 cursor-not-allowed" : ""}
+                        >
+                          <ModelDisplay model={model} iconSize={12} />
+                        </DropdownMenuItem>
+                      );
+                    })}
               </DropdownMenuContent>
             </DropdownMenu>
           )}
