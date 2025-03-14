@@ -159,22 +159,13 @@ function InlineEditCommandSettingsModalContent({
         <Label htmlFor="showInContextMenu">Show in context menu</Label>
       </div>
 
-      <div className="flex justify-between gap-2">
-        {onRemove ? (
-          <Button variant="destructive" onClick={onRemove}>
-            Remove
-          </Button>
-        ) : (
-          <div className="flex-1" />
-        )}
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button variant="default" onClick={handleSubmit}>
-            Save
-          </Button>
-        </div>
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button variant="default" onClick={handleSubmit}>
+          Save
+        </Button>
       </div>
     </div>
   );
