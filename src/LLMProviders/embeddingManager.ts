@@ -10,6 +10,7 @@ import { Embeddings } from "@langchain/core/embeddings";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { OllamaEmbeddings } from "@langchain/ollama";
 import { OpenAIEmbeddings } from "@langchain/openai";
+import { AzureOpenAIEmbeddings } from "@langchain/openai";
 import { Notice } from "obsidian";
 import { CustomJinaEmbeddings } from "./CustomJinaEmbeddings";
 
@@ -21,7 +22,7 @@ const EMBEDDING_PROVIDER_CONSTRUCTORS = {
   [EmbeddingModelProviders.OPENAI]: OpenAIEmbeddings,
   [EmbeddingModelProviders.COHEREAI]: CohereEmbeddings,
   [EmbeddingModelProviders.GOOGLE]: GoogleGenerativeAIEmbeddings,
-  [EmbeddingModelProviders.AZURE_OPENAI]: OpenAIEmbeddings,
+  [EmbeddingModelProviders.AZURE_OPENAI]: AzureOpenAIEmbeddings,
   [EmbeddingModelProviders.OLLAMA]: OllamaEmbeddings,
   [EmbeddingModelProviders.LM_STUDIO]: OpenAIEmbeddings,
   [EmbeddingModelProviders.OPENAI_FORMAT]: OpenAIEmbeddings,
@@ -226,16 +227,12 @@ export default class EmbeddingManager {
       },
       [EmbeddingModelProviders.AZURE_OPENAI]: {
         modelName,
-        openAIApiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
-        configuration: {
-          baseURL:
-            customModel.baseUrl ||
-            `https://${customModel.azureOpenAIApiInstanceName || settings.azureOpenAIApiInstanceName}.openai.azure.com/openai/deployments/${customModel.azureOpenAIApiEmbeddingDeploymentName || settings.azureOpenAIApiEmbeddingDeploymentName}`,
-          defaultQuery: {
-            "api-version": customModel.azureOpenAIApiVersion || settings.azureOpenAIApiVersion,
-          },
-          fetch: customModel.enableCors ? safeFetch : undefined,
-        },
+        azureOpenAIApiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
+        azureOpenAIApiInstanceName:
+          customModel.azureOpenAIApiInstanceName || settings.azureOpenAIApiInstanceName,
+        azureOpenAIApiDeploymentName:
+          customModel.azureOpenAIApiEmbeddingDeploymentName || settings.azureOpenAIApiEmbeddingDeploymentName,
+        azureOpenAIApiVersion: customModel.azureOpenAIApiVersion || settings.azureOpenAIApiVersion,
       },
       [EmbeddingModelProviders.OLLAMA]: {
         baseUrl: customModel.baseUrl || "http://localhost:11434",
