@@ -452,7 +452,7 @@ export const EVENT_NAMES = {
 export const AUTOCOMPLETE_CONFIG = {
   DELAY_MS: 300,
   MIN_TRIGGER_LENGTH: 3,
-  MAX_CONTEXT_LENGTH: 5000,
+  MAX_CONTEXT_LENGTH: 10000,
   KEYBIND: "Tab",
 } as const;
 

@@ -79,8 +79,6 @@ export interface LicenseResponse {
 export interface AutocompleteResponse {
   response: {
     completion: string;
-    reasoning: string;
-    completed_local_sentence: string;
   };
   elapsed_time_ms: number;
 }

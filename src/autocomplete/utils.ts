@@ -70,7 +70,7 @@ export function isNonSpaceDelimitedText(text: string): boolean {
  * Gets the context around the cursor
  * @param editor The editor instance
  * @param cursor The cursor position
- * @returns Object containing prefix (2 lines before cursor) and noteContext (50 lines before/after with cursor marker)
+ * @returns Object containing prefix (a few lines before cursor) and noteContext (50 lines before/after with cursor marker)
  */
 export function getEditorContext(
   editor: Editor,
@@ -79,8 +79,8 @@ export function getEditorContext(
   let prefix = "";
   let noteContext = "";
 
-  // Get last 2 lines for prefix
-  const prefixStartLine = Math.max(0, cursor.line - 2);
+  // Get last 5 lines for prefix
+  const prefixStartLine = Math.max(0, cursor.line - 5);
   for (let i = prefixStartLine; i < cursor.line; i++) {
     prefix += editor.getLine(i) + "\n";
   }
