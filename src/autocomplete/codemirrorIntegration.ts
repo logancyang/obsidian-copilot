@@ -62,9 +62,6 @@ export class CodeMirrorIntegration {
   }
 
   private shouldContinueSuggesting(context: string): boolean {
-    // Don't continue suggesting at the end of sentences
-    if (/[.!?]\s$/.test(context)) return false;
-
     // Get the last word, ignoring emojis and special characters
     const words = context
       .trim()
