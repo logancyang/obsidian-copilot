@@ -1,12 +1,10 @@
 import {
   getChainType,
   getModelKey,
-  ProjectConfig,
   SetChainOptions,
   setChainType,
   subscribeToChainTypeChange,
   subscribeToModelKeyChange,
-  subscribeToProjectChange,
 } from "@/aiParams";
 import ChainFactory, { ChainType, Document } from "@/chainFactory";
 import { BUILTIN_CHAT_MODELS, USER_SENDER, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
@@ -35,15 +33,19 @@ import MemoryManager from "./memoryManager";
 import PromptManager from "./promptManager";
 
 export default class ChainManager {
-  private static chain: RunnableSequence;
-  private static retrievalChain: RunnableSequence;
+  private chain: RunnableSequence;
+  private retrievalChain: RunnableSequence;
+  private retrievedDocuments: Document[] = [];
+
+  public getRetrievedDocuments(): Document[] {
+    return this.retrievedDocuments;
+  }
 
   public app: App;
   public vectorStoreManager: VectorStoreManager;
   public chatModelManager: ChatModelManager;
   public memoryManager: MemoryManager;
   public promptManager: PromptManager;
-  public static retrievedDocuments: Document[] = [];
 
   constructor(app: App, vectorStoreManager: VectorStoreManager) {
     // Instantiate singletons
@@ -67,28 +69,18 @@ export default class ChainManager {
       })
     );
     subscribeToSettingsChange(async () => await this.createChainWithNewModel());
-
-    // Subscribe to Project changes
-    subscribeToProjectChange(async (project) => {
-      if (project) {
-        await this.setProjectChat(project);
-        await this.loadProjectContext(project);
-      } else {
-        await this.clearProjectContext();
-      }
-    });
   }
 
   private async initialize() {
     await this.createChainWithNewModel();
   }
 
-  static getChain(): RunnableSequence {
-    return ChainManager.chain;
+  public getChain(): RunnableSequence {
+    return this.chain;
   }
 
-  static getRetrievalChain(): RunnableSequence {
-    return ChainManager.retrievalChain;
+  public getRetrievalChain(): RunnableSequence {
+    return this.retrievalChain;
   }
 
   private validateChainType(chainType: ChainType): void {
@@ -105,14 +97,14 @@ export default class ChainManager {
   }
 
   private validateChainInitialization() {
-    if (!ChainManager.chain || !isSupportedChain(ChainManager.chain)) {
+    if (!this.chain || !isSupportedChain(this.chain)) {
       console.error("Chain is not initialized properly, re-initializing chain: ", getChainType());
       this.setChain(getChainType());
     }
   }
 
-  static storeRetrieverDocuments(documents: Document[]) {
-    ChainManager.retrievedDocuments = documents;
+  public storeRetrieverDocuments(documents: Document[]) {
+    this.retrievedDocuments = documents;
   }
 
   /**
@@ -156,7 +148,7 @@ export default class ChainManager {
 
     switch (chainType) {
       case ChainType.LLM_CHAIN: {
-        ChainManager.chain = ChainFactory.createNewLLMChain({
+        this.chain = ChainFactory.createNewLLMChain({
           llm: chatModel,
           memory: memory,
           prompt: options.prompt || chatPrompt,
@@ -177,13 +169,13 @@ export default class ChainManager {
         });
 
         // Create new conversational retrieval chain
-        ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain(
+        this.retrievalChain = ChainFactory.createConversationalRetrievalChain(
           {
             llm: chatModel,
             retriever: retriever,
             systemMessage: getSystemPrompt(),
           },
-          ChainManager.storeRetrieverDocuments.bind(ChainManager),
+          this.storeRetrieverDocuments.bind(this),
           getSettings().debug
         );
 
@@ -198,7 +190,7 @@ export default class ChainManager {
       case ChainType.COPILOT_PLUS_CHAIN: {
         // For initial load of the plugin
         await this.initializeQAChain(options);
-        ChainManager.chain = ChainFactory.createNewLLMChain({
+        this.chain = ChainFactory.createNewLLMChain({
           llm: chatModel,
           memory: memory,
           prompt: options.prompt || chatPrompt,
@@ -210,6 +202,14 @@ export default class ChainManager {
       }
 
       case ChainType.PROJECT_CHAIN: {
+        // For initial load of the plugin
+        await this.initializeQAChain(options);
+        this.chain = ChainFactory.createNewLLMChain({
+          llm: chatModel,
+          memory: memory,
+          prompt: options.prompt || chatPrompt,
+          abortController: options.abortController,
+        }) as RunnableSequence;
         setChainType(ChainType.PROJECT_CHAIN);
         break;
       }
@@ -304,78 +304,6 @@ export default class ChainManager {
           .getMemory()
           .saveContext({ input: userMsg.message }, { output: aiMsg.message });
       }
-    }
-  }
-
-  private async loadProjectContext(project: ProjectConfig) {
-    try {
-      await this.memoryManager.clearChatMemory();
-
-      // 如果项目有预设的 context，加载它们
-      if (project.contextSource) {
-        // 这里可以根据 project.contextSource 的配置来加载相关文档
-        logInfo(`Loading context from sources for project: ${project.name}`);
-
-        // TODO: 实现具体的上下文加载逻辑
-        // 可以使用 vectorStoreManager 来索引和加载相关文档
-        if (project.contextSource.inclusions) {
-          // 处理包含的文件/文件夹
-        }
-      }
-
-      logInfo(`Loaded context for project: ${project.name}`);
-    } catch (error) {
-      logError(`Failed to load project context: ${error}`);
-      throw error;
-    }
-  }
-
-  private async clearProjectContext() {
-    try {
-      // todo
-      // await this.memoryManager.clearChatMemory();
-      logInfo("Cleared project context");
-    } catch (error) {
-      logError(`Failed to clear project context: ${error}`);
-      throw error;
-    }
-  }
-
-  async setProjectChat(project: ProjectConfig) {
-    try {
-      const customModel = findCustomModel(project.projectModelKey, getSettings().activeModels);
-      if (!customModel) {
-        throw new Error(`Model not found for key: ${project.projectModelKey}`);
-      }
-
-      const mergedModel = {
-        ...customModel,
-        ...project.modelConfigs,
-      };
-
-      // update chat model
-      await this.chatModelManager.setChatModel(mergedModel);
-
-      // Set project-specific system prompt words
-      if (project.systemPrompt) {
-        // TODO: 实现设置系统提示词的逻辑
-      }
-
-      // Get chatModel, memory, prompt, and embeddingAPI from respective managers
-      const chatModel = this.chatModelManager.getChatModel();
-      const memory = this.memoryManager.getMemory();
-
-      // todo
-      ChainManager.chain = ChainFactory.createNewLLMChain({
-        llm: chatModel,
-        memory: memory,
-        prompt: "" as any, // todo
-        abortController: "" as any, // todo
-      }) as RunnableSequence;
-
-      logInfo(`Project chat set with model: ${project.projectModelKey}`);
-    } catch (error) {
-      logError(`setProjectChat failed: ${error}`);
     }
   }
 }

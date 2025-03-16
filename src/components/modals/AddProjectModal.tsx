@@ -31,6 +31,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
 
   const [formData, setFormData] = useState<Partial<ProjectConfig>>(
     initialProject || {
+      id: crypto.randomUUID(),
       name: "",
       description: "",
       systemPrompt: "",
@@ -38,13 +39,12 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
       modelConfigs: {
         temperature: 1.0,
         maxTokens: 1000,
-        topP: 1,
       },
       contextSource: {
         inclusions: "",
         exclusions: "",
-        webUrl: "",
-        youtubeUrl: "",
+        webUrls: "",
+        youtubeUrls: "",
       },
       created: Date.now(),
       UsageTimestamps: Date.now(),
@@ -225,16 +225,6 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
                 className="w-full"
               />
             </FormField>
-            <FormField label="Top P">
-              <SettingSlider
-                value={formData.modelConfigs?.topP ?? 1}
-                onChange={(value) => handleInputChange("modelConfigs.topP", value)}
-                min={0}
-                max={1}
-                step={0.1}
-                className="w-full"
-              />
-            </FormField>
           </div>
         </div>
 
@@ -299,9 +289,9 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
             </div>
           </FormField>
 
-          <FormField label="Web URL">
+          <FormField label="Web URLs">
             <Textarea
-              value={formData.contextSource?.webUrl}
+              value={formData.contextSource?.webUrls}
               onChange={(e) => {
                 const urls = e.target.value
                   .split("\n")
@@ -316,16 +306,16 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
                     }
                   })
                   .join("\n");
-                handleInputChange("contextSource.webUrl", urls);
+                handleInputChange("contextSource.webUrls", urls);
               }}
               placeholder="Enter web URLs, one per line"
               className="min-h-[80px] w-full"
             />
           </FormField>
 
-          <FormField label="YouTube URL">
+          <FormField label="YouTube URLs">
             <Textarea
-              value={formData.contextSource?.youtubeUrl}
+              value={formData.contextSource?.youtubeUrls}
               onChange={(e) => {
                 const urls = e.target.value
                   .split("\n")
@@ -343,7 +333,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
                     }
                   })
                   .join("\n");
-                handleInputChange("contextSource.youtubeUrl", urls);
+                handleInputChange("contextSource.youtubeUrls", urls);
               }}
               placeholder="Enter YouTube URLs, one per line"
               className="min-h-[80px] w-full"

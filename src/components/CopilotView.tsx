@@ -11,7 +11,10 @@ import * as React from "react";
 import { Root, createRoot } from "react-dom/client";
 
 export default class CopilotView extends ItemView {
-  private chainManager: ChainManager;
+  private get chainManager(): ChainManager {
+    return this.plugin.projectManager.getCurrentChainManager();
+  }
+
   private fileParserManager: FileParserManager;
   private root: Root | null = null;
   private handleSaveAsNote: (() => Promise<void>) | null = null;
@@ -25,7 +28,6 @@ export default class CopilotView extends ItemView {
     super(leaf);
     this.sharedState = plugin.sharedState;
     this.app = plugin.app;
-    this.chainManager = plugin.chainManager;
     this.fileParserManager = plugin.fileParserManager;
     this.eventTarget = new EventTarget();
     this.plugin = plugin;

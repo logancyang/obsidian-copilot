@@ -164,7 +164,7 @@ class LLMChainRunner extends BaseChainRunner {
     let fullAIResponse = "";
 
     try {
-      const chain = ChainManager.getChain();
+      const chain = this.chainManager.getChain();
       const chatStream = await chain.stream({
         input: userMessage.message,
       } as any);
@@ -221,7 +221,7 @@ class VaultQAChainRunner extends BaseChainRunner {
       const memory = this.chainManager.memoryManager.getMemory();
       const memoryVariables = await memory.loadMemoryVariables({});
       const chatHistory = extractChatHistory(memoryVariables);
-      const qaStream = await ChainManager.getRetrievalChain().stream({
+      const qaStream = await this.chainManager.getRetrievalChain().stream({
         question: userMessage.message,
         chat_history: chatHistory,
       } as any);
@@ -248,7 +248,7 @@ class VaultQAChainRunner extends BaseChainRunner {
   }
 
   private addSourcestoResponse(response: string): string {
-    const docTitles = extractUniqueTitlesFromDocs(ChainManager.retrievedDocuments);
+    const docTitles = extractUniqueTitlesFromDocs(this.chainManager.getRetrievedDocuments());
     if (docTitles.length > 0) {
       const links = docTitles.map((title) => `- [[${title}]]`).join("\n");
       response += "\n\n#### Sources:\n\n" + links;

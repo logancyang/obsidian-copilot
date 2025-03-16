@@ -37,6 +37,7 @@ const chainTypeAtom = atom(
 const currentProjectAtom = atom<ProjectConfig | null>(null);
 
 export interface ProjectConfig {
+  id: string;
   name: string;
   description?: string;
   systemPrompt: string;
@@ -44,13 +45,12 @@ export interface ProjectConfig {
   modelConfigs: {
     temperature?: number;
     maxTokens?: number;
-    topP?: number;
   };
   contextSource: {
     inclusions: string;
     exclusions?: string;
-    webUrl?: string;
-    youtubeUrl?: string;
+    webUrls?: string;
+    youtubeUrls?: string;
   };
   created: number;
   UsageTimestamps: number;
@@ -78,7 +78,6 @@ export interface ModelConfig {
   groqApiKey?: string;
   mistralApiKey?: string;
   enableCors?: boolean;
-  topP?: number;
 }
 
 export interface SetChainOptions {
@@ -102,7 +101,6 @@ export interface CustomModel {
   stream?: boolean;
   temperature?: number;
   maxTokens?: number;
-  TopP?: number;
 
   context?: number;
   believerExclusive?: boolean;
