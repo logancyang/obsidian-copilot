@@ -56,8 +56,9 @@ export default class CopilotPlugin extends Plugin {
       registerCommands(this, prev, next);
     });
     this.addSettingTab(new CopilotSettingTab(this.app, this));
-    // Always have one instance of sharedState and chainManager in the plugin
-    this.sharedState = new SharedState();
+
+    // Always have one instance of sharedState in the plugin
+    this.sharedState = new SharedState(this);
 
     this.vectorStoreManager = VectorStoreManager.getInstance();
 
@@ -67,7 +68,7 @@ export default class CopilotPlugin extends Plugin {
     checkIsPlusUser();
 
     // Initialize ProjectManager
-    this.projectManager = ProjectManager.getInstance(this.app, this.vectorStoreManager);
+    this.projectManager = ProjectManager.getInstance(this.app, this.vectorStoreManager, this);
 
     // Initialize FileParserManager early with other core services
     this.fileParserManager = new FileParserManager(this.brevilabsClient);

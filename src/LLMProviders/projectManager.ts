@@ -2,13 +2,16 @@ import { App, Notice } from "obsidian";
 import ChainManager from "./chainManager";
 import VectorStoreManager from "../search/vectorStoreManager";
 import { ProjectConfig, subscribeToProjectChange, setProjectLoading } from "../aiParams";
-import { logError, logInfo } from "../logger";
+import { logError, logInfo } from "@/logger";
 import { ChainType } from "@/chainFactory";
 import { getSettings } from "@/settings/model";
 import { err2String, findCustomModel } from "@/utils";
 import { Mention } from "@/mentions/Mention";
 import { BrevilabsClient } from "./brevilabsClient";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
+import CopilotPlugin from "@/main";
+import { CHAT_VIEWTYPE } from "@/constants";
+import CopilotView from "@/components/CopilotView";
 
 export default class ProjectManager {
   private static instance: ProjectManager;
@@ -17,10 +20,12 @@ export default class ProjectManager {
   private defaultChainManager: ChainManager;
   private app: App;
   private vectorStoreManager: VectorStoreManager;
+  private plugin: CopilotPlugin;
 
-  private constructor(app: App, vectorStoreManager: VectorStoreManager) {
+  private constructor(app: App, vectorStoreManager: VectorStoreManager, plugin: CopilotPlugin) {
     this.app = app;
     this.vectorStoreManager = vectorStoreManager;
+    this.plugin = plugin;
     this.chainManagerMap = new Map();
     this.currentProjectId = null;
     this.defaultChainManager = new ChainManager(app, vectorStoreManager);
@@ -35,12 +40,18 @@ export default class ProjectManager {
     });
   }
 
-  public static getInstance(app?: App, vectorStoreManager?: VectorStoreManager): ProjectManager {
+  public static getInstance(
+    app?: App,
+    vectorStoreManager?: VectorStoreManager,
+    plugin?: CopilotPlugin
+  ): ProjectManager {
     if (!ProjectManager.instance) {
-      if (!app || !vectorStoreManager) {
-        throw new Error("ProjectManager needs to be initialized with App and VectorStoreManager");
+      if (!app || !vectorStoreManager || !plugin) {
+        throw new Error(
+          "ProjectManager needs to be initialized with App, VectorStoreManager and Plugin"
+        );
       }
-      ProjectManager.instance = new ProjectManager(app, vectorStoreManager);
+      ProjectManager.instance = new ProjectManager(app, vectorStoreManager, plugin);
     }
     return ProjectManager.instance;
   }
@@ -61,6 +72,9 @@ export default class ProjectManager {
         return;
       }
 
+      // 保存当前项目的聊天记录
+      await this.plugin.autosaveCurrentChat();
+
       let chainManager = this.chainManagerMap.get(projectId);
       const isNewChainManager = !chainManager;
 
@@ -73,9 +87,14 @@ export default class ProjectManager {
       await this.loadProjectContext(project, chainManager!);
       this.currentProjectId = projectId;
 
+      // 更新视图中的聊天记录
+      const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view as CopilotView;
+      if (chatView) {
+        chatView.updateView();
+      }
+
       logInfo(`Switched to project: ${project.name}`);
-      // 模拟加载耗时
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 200));
     } catch (error) {
       logError(`Failed to switch project: ${error}`);
       throw error;
@@ -142,10 +161,11 @@ export default class ProjectManager {
 
   private async clearProject(): Promise<void> {
     try {
+      // todo
       if (this.currentProjectId) {
         const currentChainManager = this.chainManagerMap.get(this.currentProjectId);
         if (currentChainManager) {
-          await currentChainManager.memoryManager.clearChatMemory();
+          await this.plugin.autosaveCurrentChat();
         }
       }
       this.currentProjectId = null;

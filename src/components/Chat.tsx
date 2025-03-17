@@ -65,6 +65,8 @@ const Chat: React.FC<ChatProps> = ({
   const contextProcessor = ContextProcessor.getInstance();
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  console.log(chatHistory.length + " chatHistory===============chatHistory");
+
   useEffect(() => {
     const handleChatVisibility = () => {
       if (inputRef.current) {
@@ -159,6 +161,7 @@ const Chat: React.FC<ChatProps> = ({
 
     // Add messages to chat history
     addMessage(userMessage);
+    chainManager.addChatMessage(userMessage);
     setLoading(true);
     setLoadingMessage(LOADING_MESSAGES.DEFAULT);
 
@@ -207,6 +210,7 @@ const Chat: React.FC<ChatProps> = ({
 
     // Add hidden user message to chat history
     addMessage(promptMessageHidden);
+    chainManager.addChatMessage(promptMessageHidden);
 
     // Add to user message history if there's text
     if (inputMessage) {
