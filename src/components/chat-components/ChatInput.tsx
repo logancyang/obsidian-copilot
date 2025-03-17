@@ -1,4 +1,4 @@
-import { useChainType, useModelKey } from "@/aiParams";
+import { useChainType, useModelKey, useProjectLoading } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
 import { AddImageModal } from "@/components/modals/AddImageModal";
@@ -24,9 +24,9 @@ import {
   Command,
   CornerDownLeft,
   Image,
+  Loader2,
   StopCircle,
   X,
-  Loader2,
 } from "lucide-react";
 import { App, Notice, Platform, TFile } from "obsidian";
 import React, {
@@ -97,11 +97,13 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const [currentModelKey, setCurrentModelKey] = useModelKey();
     const [modelError, setModelError] = useState<string | null>(null);
     const [currentChain] = useChainType();
+    const [isProjectLoading] = useProjectLoading();
     const [currentActiveNote, setCurrentActiveNote] = useState<TFile | null>(
       app.workspace.getActiveFile()
     );
     const settings = useSettingsValue();
-    const isCopilotPlus = currentChain === ChainType.COPILOT_PLUS_CHAIN;
+    const isCopilotPlus =
+      currentChain === ChainType.COPILOT_PLUS_CHAIN || currentChain === ChainType.PROJECT_CHAIN;
 
     useImperativeHandle(ref, () => ({
       focus: () => {
@@ -462,6 +464,14 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         )}
 
         <div className="relative" {...(isCopilotPlus ? getRootProps() : {})}>
+          {isProjectLoading && (
+            <div className="absolute inset-0 z-modal bg-background/80 backdrop-blur-sm flex items-center justify-center">
+              <div className="flex items-center gap-2">
+                <Loader2 className="size-4 animate-spin" />
+                <span className="text-sm">Loading the project context...</span>
+              </div>
+            </div>
+          )}
           <textarea
             ref={textAreaRef}
             className="w-full bg-transparent focus-visible:ring-0 border-none min-h-[60px] max-h-40 overflow-y-auto resize-none px-2 rounded-md text-sm text-normal"
@@ -473,6 +483,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
+            disabled={isProjectLoading}
           />
           {isCopilotPlus && (
             <>

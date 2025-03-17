@@ -1,7 +1,7 @@
 import { App, Notice } from "obsidian";
 import ChainManager from "./chainManager";
 import VectorStoreManager from "../search/vectorStoreManager";
-import { ProjectConfig, subscribeToProjectChange } from "../aiParams";
+import { ProjectConfig, subscribeToProjectChange, setProjectLoading } from "../aiParams";
 import { logError, logInfo } from "../logger";
 import { ChainType } from "@/chainFactory";
 import { getSettings } from "@/settings/model";
@@ -49,11 +49,13 @@ export default class ProjectManager {
     if (!this.currentProjectId) {
       return this.defaultChainManager;
     }
-    return this.chainManagerMap.get(this.currentProjectId) || this.defaultChainManager;
+    // todo
+    return this.chainManagerMap.get(this.currentProjectId)!;
   }
 
   public async switchProject(project: ProjectConfig): Promise<void> {
     try {
+      setProjectLoading(true);
       const projectId = project.id;
       if (this.currentProjectId === projectId) {
         return;
@@ -64,17 +66,21 @@ export default class ProjectManager {
 
       if (isNewChainManager) {
         chainManager = new ChainManager(this.app, this.vectorStoreManager);
-        await this.setProjectChat(project, chainManager);
         this.chainManagerMap.set(projectId, chainManager);
+        await this.setProjectChat(project, chainManager);
       }
 
       await this.loadProjectContext(project, chainManager!);
       this.currentProjectId = projectId;
 
       logInfo(`Switched to project: ${project.name}`);
+      // 模拟加载耗时
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     } catch (error) {
       logError(`Failed to switch project: ${error}`);
       throw error;
+    } finally {
+      setProjectLoading(false);
     }
   }
 

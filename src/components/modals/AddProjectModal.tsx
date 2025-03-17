@@ -1,7 +1,7 @@
 import { App, Modal, Notice } from "obsidian";
 import React, { useState } from "react";
 import { createRoot, Root } from "react-dom/client";
-import { err2String, checkModelApiKey } from "@/utils";
+import { err2String, checkModelApiKey, randomUUID } from "@/utils";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
 
   const [formData, setFormData] = useState<Partial<ProjectConfig>>(
     initialProject || {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       name: "",
       description: "",
       systemPrompt: "",

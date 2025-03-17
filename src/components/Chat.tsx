@@ -56,7 +56,6 @@ const Chat: React.FC<ChatProps> = ({
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [showChatUI, setShowChatUI] = useState(false);
-  // const [mode, setMode] = useState<ChainType>(ChainType.PROJECT_CHAIN);
 
   const [previousMode, setPreviousMode] = useState<ChainType | null>(null);
   const [mode, setSelectedChain] = useChainType();
@@ -625,7 +624,7 @@ ${chatContent}`;
           {mode === ChainType.PROJECT_CHAIN && (
             <div className={`${mode === ChainType.PROJECT_CHAIN ? "z-modal" : ""}`}>
               <ProjectList
-                projects={[...settings.projectList]}
+                projects={settings.projectList || []}
                 defaultOpen={true}
                 app={app}
                 hasMessages={false}
@@ -663,6 +662,9 @@ ${chatContent}`;
                   if (previousMode) {
                     setSelectedChain(previousMode);
                     setPreviousMode(null);
+                  } else {
+                    // default back to chat mode
+                    setSelectedChain(ChainType.LLM_CHAIN);
                   }
                 }}
                 showChatUI={(v) => setShowChatUI(v)}

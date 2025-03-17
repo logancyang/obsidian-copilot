@@ -73,7 +73,7 @@ export function ChatControls({
                   copilot plus (beta)
                 </div>
               )}
-              {selectedChain === ChainType.PROJECT_CHAIN && "project"}
+              {selectedChain === ChainType.PROJECT_CHAIN && "plus projects (alpha)"}
               <ChevronDown className="size-5 mt-0.5" />
             </Button>
           </DropdownMenuTrigger>
@@ -114,15 +114,28 @@ export function ChatControls({
                 <SquareArrowOutUpRight className="size-3" />
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem
-              className="flex items-center gap-2"
-              onSelect={() => {
-                handleModeChange(ChainType.PROJECT_CHAIN);
-              }}
-            >
-              <LibraryBig className="size-4" />
-              Project
-            </DropdownMenuItem>
+
+            {isPlusUser ? (
+              <DropdownMenuItem
+                className="flex items-center gap-1"
+                onSelect={() => {
+                  handleModeChange(ChainType.PROJECT_CHAIN);
+                }}
+              >
+                <LibraryBig className="size-4" />
+                plus projects (alpha)
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem
+                onSelect={() => {
+                  navigateToPlusPage(PLUS_UTM_MEDIUMS.CHAT_MODE_SELECT);
+                  onCloseProject?.();
+                }}
+              >
+                copilot plus (beta)
+                <SquareArrowOutUpRight className="size-3" />
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

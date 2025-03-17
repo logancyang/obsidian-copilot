@@ -35,6 +35,7 @@ const chainTypeAtom = atom(
 );
 
 const currentProjectAtom = atom<ProjectConfig | null>(null);
+const projectLoadingAtom = atom<boolean>(false);
 
 export interface ProjectConfig {
   id: string;
@@ -173,6 +174,26 @@ export function subscribeToProjectChange(
 
 export function useCurrentProject() {
   return useAtom(currentProjectAtom, {
+    store: settingsStore,
+  });
+}
+
+export function setProjectLoading(loading: boolean) {
+  settingsStore.set(projectLoadingAtom, loading);
+}
+
+export function isProjectLoading(): boolean {
+  return settingsStore.get(projectLoadingAtom);
+}
+
+export function subscribeToProjectLoadingChange(callback: (loading: boolean) => void): () => void {
+  return settingsStore.sub(projectLoadingAtom, () => {
+    callback(settingsStore.get(projectLoadingAtom));
+  });
+}
+
+export function useProjectLoading() {
+  return useAtom(projectLoadingAtom, {
     store: settingsStore,
   });
 }

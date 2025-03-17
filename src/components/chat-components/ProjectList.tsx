@@ -319,12 +319,14 @@ export const ProjectList = memo(
                         ))}
                       </div>
                     </div>
-                    <div
-                      className="absolute bottom-0 left-0 right-0 h-6"
-                      style={{
-                        background: "linear-gradient(transparent, var(--background-primary) 75%)",
-                      }}
-                    />
+                    {projects.length > 0 && (
+                      <div
+                        className="absolute bottom-0 left-0 right-0 h-6"
+                        style={{
+                          background: "linear-gradient(transparent, var(--background-primary) 75%)",
+                        }}
+                      />
+                    )}
                   </div>
                 </CollapsibleContent>
               </Collapsible>
