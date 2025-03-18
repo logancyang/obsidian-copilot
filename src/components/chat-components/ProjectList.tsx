@@ -13,7 +13,7 @@ import {
   Plus,
   X,
 } from "lucide-react";
-import React, { memo, useEffect, useRef, useState } from "react";
+import React, { memo, useEffect, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AddProjectModal } from "@/components/modals/AddProjectModal";
 import { App } from "obsidian";
@@ -104,6 +104,7 @@ export const ProjectList = memo(
     hasMessages = false,
     showChatUI,
     onClose,
+    inputRef,
   }: {
     className?: string;
     projects: ProjectConfig[];
@@ -114,11 +115,11 @@ export const ProjectList = memo(
     hasMessages?: boolean;
     showChatUI: (v: boolean) => void;
     onClose: () => void;
+    inputRef: React.RefObject<HTMLTextAreaElement>;
   }): React.ReactElement => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
     const [showChatInput, setShowChatInput] = useState(false);
     const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
-    const inputRef = useRef<HTMLTextAreaElement>(null);
 
     // Auto collapse when messages appear
     useEffect(() => {
@@ -170,6 +171,7 @@ export const ProjectList = memo(
       setIsOpen(false);
       showChatUI(true);
       setCurrentProject(p);
+
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus();

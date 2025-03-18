@@ -69,8 +69,6 @@ export default class CopilotView extends ItemView {
   ): void {
     if (!this.root) return;
 
-    console.log("==========renderView refresh======");
-
     this.root.render(
       <AppContext.Provider value={this.app}>
         <EventTargetContext.Provider value={this.eventTarget}>
@@ -98,13 +96,10 @@ export default class CopilotView extends ItemView {
   }
 
   updateView(): void {
-    // 获取当前 ChainManager 的聊天记录
-    const currentChainManager = this.plugin.projectManager.getCurrentChainManager();
-    console.log("currentChainManager 长度: " + currentChainManager.chatMessages.length);
-    // 更新 sharedState
-
-    this.sharedState.replaceMessages(currentChainManager.getChatMessages());
-    console.log("sharedState  长度: " + this.sharedState.getMessages().length);
+    // load currentChainManager chatMessages
+    this.sharedState.replaceMessages(
+      this.plugin.projectManager.getCurrentChainManager().getChatMessages()
+    );
 
     const handleSaveAsNote = (saveFunction: () => Promise<void>) => {
       this.handleSaveAsNote = saveFunction;

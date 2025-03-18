@@ -65,8 +65,6 @@ const Chat: React.FC<ChatProps> = ({
   const contextProcessor = ContextProcessor.getInstance();
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  console.log(chatHistory.length + " chatHistory===============chatHistory");
-
   useEffect(() => {
     const handleChatVisibility = () => {
       if (inputRef.current) {
@@ -161,7 +159,6 @@ const Chat: React.FC<ChatProps> = ({
 
     // Add messages to chat history
     addMessage(userMessage);
-    chainManager.addChatMessage(userMessage);
     setLoading(true);
     setLoadingMessage(LOADING_MESSAGES.DEFAULT);
 
@@ -210,7 +207,6 @@ const Chat: React.FC<ChatProps> = ({
 
     // Add hidden user message to chat history
     addMessage(promptMessageHidden);
-    chainManager.addChatMessage(promptMessageHidden);
 
     // Add to user message history if there's text
     if (inputMessage) {
@@ -591,11 +587,6 @@ ${chatContent}`;
           onSaveAsNote={() => handleSaveAsNote(true)}
           onModeChange={(newMode) => {
             setPreviousMode(mode);
-            if (newMode === ChainType.PROJECT_CHAIN) {
-              // todo 可能需要清除 chat 等原来 mode 的 history
-            } else {
-              // todo 是不是需要清除 project history、context
-            }
           }}
         />
         <ChatInput
@@ -662,13 +653,16 @@ ${chatContent}`;
                   new Notice(`${originP.name} updated successfully`);
                   return true;
                 }}
+                inputRef={inputRef}
                 onClose={() => {
                   if (previousMode) {
                     setSelectedChain(previousMode);
                     setPreviousMode(null);
                   } else {
-                    // default back to chat mode
-                    setSelectedChain(ChainType.LLM_CHAIN);
+                    // default back to chat or plus mode
+                    setSelectedChain(
+                      settings.isPlusUser ? ChainType.COPILOT_PLUS_CHAIN : ChainType.LLM_CHAIN
+                    );
                   }
                 }}
                 showChatUI={(v) => setShowChatUI(v)}

@@ -1,7 +1,7 @@
 import { App, Notice } from "obsidian";
 import ChainManager from "./chainManager";
 import VectorStoreManager from "../search/vectorStoreManager";
-import { ProjectConfig, subscribeToProjectChange, setProjectLoading } from "../aiParams";
+import { ProjectConfig, setProjectLoading, subscribeToProjectChange } from "../aiParams";
 import { logError, logInfo } from "@/logger";
 import { ChainType } from "@/chainFactory";
 import { getSettings } from "@/settings/model";
@@ -10,7 +10,7 @@ import { Mention } from "@/mentions/Mention";
 import { BrevilabsClient } from "./brevilabsClient";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import CopilotPlugin from "@/main";
-import { CHAT_VIEWTYPE } from "@/constants";
+import { BUILTIN_CHAT_MODELS, CHAT_VIEWTYPE } from "@/constants";
 import CopilotView from "@/components/CopilotView";
 
 export default class ProjectManager {
@@ -34,9 +34,13 @@ export default class ProjectManager {
     subscribeToProjectChange(async (project) => {
       if (project) {
         await this.switchProject(project);
-      } else {
-        await this.clearProject();
+        return;
       }
+      // clear project and switch to defaultChainManager
+      const currentProjectId = this.currentProjectId;
+      this.currentProjectId = null; // ensure set currentProjectId to null
+      this.switchDefaultChainManager();
+      await this.clearProject(currentProjectId);
     });
   }
 
@@ -57,11 +61,16 @@ export default class ProjectManager {
   }
 
   public getCurrentChainManager(): ChainManager {
+    // if this.currentProjectId not exist, should use this.defaultChainManager
     if (!this.currentProjectId) {
       return this.defaultChainManager;
     }
-    // todo
-    return this.chainManagerMap.get(this.currentProjectId)!;
+    // otherwise
+    const m = this.chainManagerMap.get(this.currentProjectId);
+    if (!m) {
+      throw new Error(`ChainManager not found for project: ${this.currentProjectId}`);
+    }
+    return m;
   }
 
   public async switchProject(project: ProjectConfig): Promise<void> {
@@ -71,30 +80,28 @@ export default class ProjectManager {
       if (this.currentProjectId === projectId) {
         return;
       }
+      this.currentProjectId = projectId;
 
       // 保存当前项目的聊天记录
       await this.plugin.autosaveCurrentChat();
 
+      // get or create chainManager
       let chainManager = this.chainManagerMap.get(projectId);
-      const isNewChainManager = !chainManager;
-
-      if (isNewChainManager) {
+      if (!chainManager) {
         chainManager = new ChainManager(this.app, this.vectorStoreManager);
         this.chainManagerMap.set(projectId, chainManager);
-        await this.setProjectChat(project, chainManager);
       }
 
-      await this.loadProjectContext(project, chainManager!);
-      this.currentProjectId = projectId;
+      await Promise.all([
+        this.setProjectChatModel(project),
+        // load context
+        this.loadProjectContext(project),
+      ]);
 
-      // 更新视图中的聊天记录
-      const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view as CopilotView;
-      if (chatView) {
-        chatView.updateView();
-      }
+      // fresh chat view
+      this.refreshChatView();
 
       logInfo(`Switched to project: ${project.name}`);
-      await new Promise((resolve) => setTimeout(resolve, 200));
     } catch (error) {
       logError(`Failed to switch project: ${error}`);
       throw error;
@@ -103,16 +110,9 @@ export default class ProjectManager {
     }
   }
 
-  private async loadProjectContext(
-    project: ProjectConfig,
-    chainManager: ChainManager
-  ): Promise<void> {
+  private async loadProjectContext(project: ProjectConfig): Promise<void> {
     try {
-      // await chainManager.memoryManager.clearChatMemory();
-
       if (project.contextSource) {
-        logInfo(`Loading context from sources for project: ${project.name}`);
-
         const contextParts = await Promise.all([
           this.processMarkdownContext(
             project.contextSource.inclusions,
@@ -123,22 +123,24 @@ export default class ProjectManager {
         ]);
 
         const contextText = contextParts.join("");
-        // todo
+        // todo  待处理 context
         console.log(contextText);
       }
-
-      logInfo(`Loaded context for project: ${project.name}`);
     } catch (error) {
       logError(`Failed to load project context: ${error}`);
       throw error;
     }
   }
 
-  private async setProjectChat(project: ProjectConfig, chainManager: ChainManager): Promise<void> {
+  private async setProjectChatModel(project: ProjectConfig): Promise<void> {
+    let newModelKey = project.projectModelKey;
     try {
-      const customModel = findCustomModel(project.projectModelKey, getSettings().activeModels);
+      let customModel = findCustomModel(newModelKey, getSettings().activeModels);
       if (!customModel) {
-        throw new Error(`Model not found for key: ${project.projectModelKey}`);
+        // Reset default model if no model is found
+        console.error("Resetting default model. No model configuration found for: ", newModelKey);
+        customModel = BUILTIN_CHAT_MODELS[0];
+        newModelKey = customModel.name + "|" + customModel.provider;
       }
 
       const mergedModel = {
@@ -146,34 +148,45 @@ export default class ProjectManager {
         ...project.modelConfigs,
       };
 
-      await chainManager.chatModelManager.setChatModel(mergedModel);
+      const currentChainManager = this.getCurrentChainManager();
+      await currentChainManager.chatModelManager.setChatModel(mergedModel);
 
-      await chainManager.setChain(ChainType.PROJECT_CHAIN, {
-        prompt: chainManager.promptManager.createProjectChatPrompt(project.systemPrompt),
+      await currentChainManager.setChain(ChainType.PROJECT_CHAIN, {
+        prompt: currentChainManager.promptManager.createProjectChatPrompt(project.systemPrompt),
       });
-
-      logInfo(`Project chat set with model: ${project.projectModelKey}`);
     } catch (error) {
       logError(`setProjectChat failed: ${error}`);
       throw error;
     }
   }
 
-  private async clearProject(): Promise<void> {
+  private refreshChatView() {
+    // get chat view
+    const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view as CopilotView;
+    if (chatView) {
+      chatView.updateView();
+    }
+  }
+
+  private async clearProject(currentProjectId: string | null) {
     try {
-      // todo
-      if (this.currentProjectId) {
-        const currentChainManager = this.chainManagerMap.get(this.currentProjectId);
-        if (currentChainManager) {
-          await this.plugin.autosaveCurrentChat();
-        }
+      const currentChainManager = currentProjectId
+        ? this.chainManagerMap.get(currentProjectId)
+        : null;
+      if (currentChainManager) {
+        // todo 需不需要保存？
+        await this.plugin.autosaveCurrentChat();
       }
-      this.currentProjectId = null;
+
       logInfo("Project cleared");
     } catch (error) {
       logError(`Failed to clear project: ${error}`);
       throw error;
     }
+  }
+
+  private switchDefaultChainManager() {
+    this.refreshChatView();
   }
 
   public getDefaultChainManager(): ChainManager {

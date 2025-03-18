@@ -49,7 +49,7 @@ export default class ChainManager {
 
   // A chat history that stores the messages sent and received
   // Only reset when the user explicitly clicks "New Chat"
-  public chatMessages: ChatMessage[] = [];
+  private chatMessages: ChatMessage[] = [];
 
   constructor(app: App, vectorStoreManager: VectorStoreManager) {
     this.chatMessages = [];
@@ -64,6 +64,7 @@ export default class ChainManager {
     // Initialize async operations
     this.initialize();
 
+    // todo setting 变化，导致 chain 变化，这个 createChainWithNewModel 方法可能需要更改
     // Set up subscriptions
     subscribeToModelKeyChange(async () => await this.createChainWithNewModel());
     subscribeToChainTypeChange(() =>
