@@ -182,14 +182,17 @@ export class IndexOperations {
         }
       }
 
+      // Show completion notice before running integrity check
       this.finalizeIndexing(errors);
       await this.dbOps.saveDB();
       console.log("Copilot index final save completed.");
 
-      // Run integrity check in the background
-      this.dbOps.checkIndexIntegrity().catch((err) => {
-        logError("Background integrity check failed:", err);
-      });
+      // Run integrity check with setTimeout to ensure it's non-blocking
+      setTimeout(() => {
+        this.dbOps.checkIndexIntegrity().catch((err) => {
+          logError("Background integrity check failed:", err);
+        });
+      }, 0);
 
       return this.state.indexedCount;
     } catch (error) {
