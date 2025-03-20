@@ -3,8 +3,8 @@ import { getDecryptedKey } from "@/encryptionService";
 import { logInfo } from "@/logger";
 import { turnOffPlus, turnOnPlus } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
-import { Notice } from "obsidian";
 import { Buffer } from "buffer";
+import { Notice } from "obsidian";
 
 export interface BrocaResponse {
   response: {
@@ -69,6 +69,11 @@ export interface Youtube4llmResponse {
     transcript: string;
   };
   elapsed_time_ms: number;
+}
+
+interface LicenseResponse {
+  is_valid: boolean;
+  plan: string;
 }
 
 export class BrevilabsClient {
@@ -143,8 +148,8 @@ export class BrevilabsClient {
    * @returns true if the license key is valid, false if the license key is invalid, and undefined if
    * unknown error.
    */
-  async validateLicenseKey(): Promise<boolean | undefined> {
-    const { error } = await this.makeRequest(
+  async validateLicenseKey(): Promise<{ isValid: boolean | undefined; plan?: string }> {
+    const { data, error } = await this.makeRequest<LicenseResponse>(
       "/license",
       {
         license_key: await getDecryptedKey(getSettings().plusLicenseKey),
@@ -155,13 +160,13 @@ export class BrevilabsClient {
     if (error) {
       if (error.message === "Invalid license key") {
         turnOffPlus();
-        return false;
+        return { isValid: false };
       }
       // Do nothing if the error is not about the invalid license key
-      return;
+      return { isValid: undefined };
     }
     turnOnPlus();
-    return true;
+    return { isValid: true, plan: data?.plan };
   }
 
   async broca(userMessage: string): Promise<BrocaResponse> {
