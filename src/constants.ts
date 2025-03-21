@@ -1,7 +1,7 @@
 import { CustomModel } from "@/aiParams";
+import { DEFAULT_INLINE_EDIT_COMMANDS } from "@/commands/constants";
 import { type CopilotSettings } from "@/settings/model";
 import { ChainType } from "./chainFactory";
-import { DEFAULT_INLINE_EDIT_COMMANDS } from "@/commands/constants";
 
 export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
 export const CHAT_VIEWTYPE = "copilot-chat-view";
@@ -93,6 +93,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     core: true,
+    plusExclusive: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -205,6 +206,7 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
     isBuiltIn: true,
     isEmbeddingModel: true,
     core: true,
+    plusExclusive: true,
   },
   {
     name: EmbeddingModels.COPILOT_PLUS_LARGE,
@@ -213,6 +215,7 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
     isBuiltIn: true,
     isEmbeddingModel: true,
     core: true,
+    plusExclusive: true,
     believerExclusive: true,
     dimensions: 1024,
   },
@@ -223,6 +226,7 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
     isBuiltIn: true,
     isEmbeddingModel: true,
     core: true,
+    plusExclusive: true,
     dimensions: 512,
   },
   {

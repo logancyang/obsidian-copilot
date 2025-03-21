@@ -4,13 +4,13 @@ import { BREVILABS_API_BASE_URL, EmbeddingModelProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { CustomError } from "@/error";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
+import { BrevilabsClient } from "./brevilabsClient";
 import { err2String, safeFetch } from "@/utils";
 import { CohereEmbeddings } from "@langchain/cohere";
 import { Embeddings } from "@langchain/core/embeddings";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { OllamaEmbeddings } from "@langchain/ollama";
-import { OpenAIEmbeddings } from "@langchain/openai";
-import { AzureOpenAIEmbeddings } from "@langchain/openai";
+import { AzureOpenAIEmbeddings, OpenAIEmbeddings } from "@langchain/openai";
 import { Notice } from "obsidian";
 import { CustomJinaEmbeddings } from "./CustomJinaEmbeddings";
 
@@ -139,6 +139,24 @@ export default class EmbeddingManager {
       throw new CustomError(`No embedding model found for: ${embeddingModelKey}`);
     }
 
+    const customModel = this.getCustomModel(embeddingModelKey);
+
+    // Check if model is plus-exclusive but user is not a plus user
+    if (customModel.plusExclusive && !getSettings().isPlusUser) {
+      new Notice("Plus-only model, please consider upgrading to Plus to access it.");
+      throw new CustomError("Plus-only model selected but user is not on Plus plan");
+    }
+
+    // Check if model is believer-exclusive but user is not on believer plan
+    if (customModel.believerExclusive) {
+      const brevilabsClient = BrevilabsClient.getInstance();
+      const result = await brevilabsClient.validateLicenseKey();
+      if (!result.plan || result.plan.toLowerCase() !== "believer") {
+        new Notice("Believer-only model, please consider upgrading to Believer to access it.");
+        throw new CustomError("Believer-only model selected but user is not on Believer plan");
+      }
+    }
+
     const selectedModel = EmbeddingManager.modelMap[embeddingModelKey];
     if (!selectedModel.hasApiKey) {
       throw new CustomError(
@@ -146,7 +164,6 @@ export default class EmbeddingManager {
       );
     }
 
-    const customModel = this.getCustomModel(embeddingModelKey);
     const config = await this.getEmbeddingConfig(customModel);
 
     try {
@@ -231,7 +248,8 @@ export default class EmbeddingManager {
         azureOpenAIApiInstanceName:
           customModel.azureOpenAIApiInstanceName || settings.azureOpenAIApiInstanceName,
         azureOpenAIApiDeploymentName:
-          customModel.azureOpenAIApiEmbeddingDeploymentName || settings.azureOpenAIApiEmbeddingDeploymentName,
+          customModel.azureOpenAIApiEmbeddingDeploymentName ||
+          settings.azureOpenAIApiEmbeddingDeploymentName,
         azureOpenAIApiVersion: customModel.azureOpenAIApiVersion || settings.azureOpenAIApiVersion,
       },
       [EmbeddingModelProviders.OLLAMA]: {

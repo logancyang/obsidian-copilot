@@ -1,3 +1,5 @@
+import * as settingsModel from "@/settings/model";
+import * as utils from "@/utils";
 import { TFile } from "obsidian";
 import {
   categorizePatterns,
@@ -7,13 +9,19 @@ import {
   previewPatternValue,
   shouldIndexFile,
 } from "./searchUtils";
-import * as utils from "@/utils";
-import * as settingsModel from "@/settings/model";
 
 // Mock Obsidian's TFile class
 jest.mock("obsidian", () => ({
   TFile: class TFile {
     path: string;
+  },
+}));
+
+jest.mock("@/LLMProviders/brevilabsClient", () => ({
+  BrevilabsClient: {
+    getInstance: jest.fn().mockReturnValue({
+      validateLicenseKey: jest.fn().mockResolvedValue({ isValid: true, plan: "believer" }),
+    }),
   },
 }));
 

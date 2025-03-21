@@ -1,4 +1,6 @@
+import { setChainType, setModelKey } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
+import { CopilotPlusExpiredModal } from "@/components/modals/CopilotPlusExpiredModal";
 import {
   ChatModelProviders,
   ChatModels,
@@ -7,10 +9,8 @@ import {
   PlusUtmMedium,
 } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import { getSettings, setSettings, updateSetting, useSettingsValue } from "@/settings/model";
-import { setChainType, setModelKey } from "@/aiParams";
-import { CopilotPlusExpiredModal } from "@/components/modals/CopilotPlusExpiredModal";
 import VectorStoreManager from "@/search/vectorStoreManager";
+import { getSettings, setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 
 export const DEFAULT_COPILOT_PLUS_CHAT_MODEL = ChatModels.COPILOT_PLUS_FLASH;
 export const DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY =
@@ -37,7 +37,18 @@ export async function checkIsPlusUser(): Promise<boolean | undefined> {
     return false;
   }
   const brevilabsClient = BrevilabsClient.getInstance();
-  return await brevilabsClient.validateLicenseKey();
+  const result = await brevilabsClient.validateLicenseKey();
+  return result.isValid;
+}
+
+/** Check if the user is on the believer plan. */
+export async function isBelieverPlan(): Promise<boolean> {
+  if (!getSettings().plusLicenseKey) {
+    return false;
+  }
+  const brevilabsClient = BrevilabsClient.getInstance();
+  const result = await brevilabsClient.validateLicenseKey();
+  return result.plan?.toLowerCase() === "believer";
 }
 
 /**

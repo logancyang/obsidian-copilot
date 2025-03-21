@@ -2,9 +2,9 @@ import { ChainType } from "@/chainFactory";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 
+import { ModelCapability } from "@/constants";
 import { settingsAtom, settingsStore } from "@/settings/model";
 import { atom, useAtom } from "jotai";
-import { ModelCapability } from "@/constants";
 
 const userModelKeyAtom = atom<string | null>(null);
 const modelKeyAtom = atom(
@@ -80,6 +80,7 @@ export interface CustomModel {
   temperature?: number;
   maxTokens?: number;
   context?: number;
+  plusExclusive?: boolean;
   believerExclusive?: boolean;
   capabilities?: ModelCapability[];
   displayName?: string;
