@@ -1,4 +1,4 @@
-import { useChainType, useModelKey } from "@/aiParams";
+import { ProjectConfig, useChainType, useModelKey } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { updateChatMemory } from "@/chatUtils";
 import { ChatControls } from "@/components/chat-components/ChatControls";
@@ -541,6 +541,40 @@ ${chatContent}`;
     [addMessage, chainManager.memoryManager, chatHistory, clearMessages]
   );
 
+  const handleAddProject = useCallback(
+    (project: ProjectConfig) => {
+      const currentProjects = settings.projectList || [];
+      const existingIndex = currentProjects.findIndex((p) => p.name === project.name);
+
+      if (existingIndex >= 0) {
+        throw new Error(`Project "${project.name}" already exists, please use a different name`);
+      }
+
+      const newProjectList = [...currentProjects, project];
+      updateSetting("projectList", newProjectList);
+      new Notice(`${project.name} added successfully`);
+      return true;
+    },
+    [settings.projectList]
+  );
+
+  const handleEditProject = useCallback(
+    (originP: ProjectConfig, updateP: ProjectConfig) => {
+      const currentProjects = settings.projectList || [];
+      const existingProject = currentProjects.find((p) => p.name === originP.name);
+
+      if (!existingProject) {
+        throw new Error(`Project "${originP.name}" does not exist`);
+      }
+
+      const newProjectList = currentProjects.map((p) => (p.name === originP.name ? updateP : p));
+      updateSetting("projectList", newProjectList);
+      new Notice(`${originP.name} updated successfully`);
+      return true;
+    },
+    [settings.projectList]
+  );
+
   const handleInsertToChat = useCallback((prompt: string) => {
     setInputMessage((prev) => `${prev} ${prompt} `);
   }, []);
@@ -623,36 +657,8 @@ ${chatContent}`;
                 defaultOpen={true}
                 app={app}
                 hasMessages={false}
-                onProjectAdded={(project) => {
-                  const currentProjects = settings.projectList || [];
-                  const existingIndex = currentProjects.findIndex((p) => p.name === project.name);
-
-                  if (existingIndex >= 0) {
-                    throw new Error(
-                      `Project "${project.name}" already exists, please use a different name`
-                    );
-                  }
-
-                  const newProjectList = [...currentProjects, project];
-                  updateSetting("projectList", newProjectList);
-                  new Notice(`${project.name} added successfully`);
-                  return true;
-                }}
-                onEditProject={(originP, updateP) => {
-                  const currentProjects = settings.projectList || [];
-                  const existingProject = currentProjects.find((p) => p.name === originP.name);
-
-                  if (!existingProject) {
-                    throw new Error(`Project "${originP.name}" does not exist`);
-                  }
-
-                  const newProjectList = currentProjects.map((p) =>
-                    p.name === originP.name ? updateP : p
-                  );
-                  updateSetting("projectList", newProjectList);
-                  new Notice(`${originP.name} updated successfully`);
-                  return true;
-                }}
+                onProjectAdded={handleAddProject}
+                onEditProject={handleEditProject}
                 inputRef={inputRef}
                 onClose={() => {
                   if (previousMode) {

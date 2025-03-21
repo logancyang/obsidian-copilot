@@ -1,13 +1,12 @@
 import {
   getChainType,
+  getCurrentProject,
   getModelKey,
   SetChainOptions,
   setChainType,
-  subscribeToChainTypeChange,
-  subscribeToModelKeyChange,
 } from "@/aiParams";
 import ChainFactory, { ChainType, Document } from "@/chainFactory";
-import { BUILTIN_CHAT_MODELS, USER_SENDER, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
+import { BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
 import {
   ChainRunner,
   CopilotPlusChainRunner,
@@ -64,18 +63,10 @@ export default class ChainManager {
     // Initialize async operations
     this.initialize();
 
-    // todo setting 变化，导致 chain 变化，这个 createChainWithNewModel 方法可能需要更改
-    // Set up subscriptions
-    subscribeToModelKeyChange(async () => await this.createChainWithNewModel());
-    subscribeToChainTypeChange(() =>
-      this.setChain(getChainType(), {
-        refreshIndex:
-          getSettings().indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH &&
-          (getChainType() === ChainType.VAULT_QA_CHAIN ||
-            getChainType() === ChainType.COPILOT_PLUS_CHAIN),
-      })
-    );
-    subscribeToSettingsChange(async () => await this.createChainWithNewModel());
+    subscribeToSettingsChange(async () => {
+      // ensure every chain must be updated when setting change
+      await this.createChainWithNewModel();
+    });
   }
 
   private async initialize() {
@@ -106,7 +97,8 @@ export default class ChainManager {
   private validateChainInitialization() {
     if (!this.chain || !isSupportedChain(this.chain)) {
       console.error("Chain is not initialized properly, re-initializing chain: ", getChainType());
-      this.setChain(getChainType());
+      this.createChainWithNewModel({}, false);
+      // this.setChain(getChainType());
     }
   }
 
@@ -118,21 +110,45 @@ export default class ChainManager {
    * Update the active model and create a new chain with the specified model
    * name.
    */
-  async createChainWithNewModel(): Promise<void> {
-    let newModelKey = getModelKey();
+  async createChainWithNewModel(
+    options: SetChainOptions = {},
+    neededReInitChatMode: boolean = true
+  ): Promise<void> {
+    const chainType = getChainType();
+    const currentProject = getCurrentProject();
+
+    if (chainType === ChainType.PROJECT_CHAIN && !currentProject) {
+      return;
+    }
+
+    let newModelKey =
+      chainType === ChainType.PROJECT_CHAIN ? currentProject?.projectModelKey : getModelKey();
+
+    if (!newModelKey) {
+      new Notice("No model key found");
+      throw new Error("No model key found");
+    }
+
     try {
-      let customModel = findCustomModel(newModelKey, getSettings().activeModels);
-      if (!customModel) {
-        // Reset default model if no model is found
-        console.error("Resetting default model. No model configuration found for: ", newModelKey);
-        customModel = BUILTIN_CHAT_MODELS[0];
-        newModelKey = customModel.name + "|" + customModel.provider;
+      if (neededReInitChatMode) {
+        let customModel = findCustomModel(newModelKey, getSettings().activeModels);
+        if (!customModel) {
+          // Reset default model if no model is found
+          console.error("Resetting default model. No model configuration found for: ", newModelKey);
+          customModel = BUILTIN_CHAT_MODELS[0];
+          newModelKey = customModel.name + "|" + customModel.provider;
+        }
+        const mergedModel = {
+          ...customModel,
+          ...currentProject?.modelConfigs,
+        };
+        await this.chatModelManager.setChatModel(mergedModel);
       }
-      await this.chatModelManager.setChatModel(customModel);
+
       // Must update the chatModel for chain because ChainFactory always
       // retrieves the old chain without the chatModel change if it exists!
       // Create a new chain with the new chatModel
-      this.setChain(getChainType());
+      this.setChain(chainType, options);
       logInfo(`Setting model to ${newModelKey}`);
     } catch (error) {
       logError(`createChainWithNewModel failed: ${error}`);
@@ -286,9 +302,10 @@ export default class ChainManager {
         ]);
       }
 
-      this.setChain(getChainType(), {
+      this.createChainWithNewModel({ prompt: effectivePrompt }, false);
+      /*this.setChain(getChainType(), {
         prompt: effectivePrompt,
-      });
+      });*/
     }
 
     const chainRunner = this.getChainRunner();

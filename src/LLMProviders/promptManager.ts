@@ -5,6 +5,7 @@ import {
   MessagesPlaceholder,
   SystemMessagePromptTemplate,
 } from "@langchain/core/prompts";
+import { getCurrentProject, isProjectMode } from "@/aiParams";
 
 export default class PromptManager {
   private static instance: PromptManager;
@@ -22,32 +23,25 @@ export default class PromptManager {
   }
 
   static getInstance(): PromptManager {
-    if (!PromptManager.instance) {
+    return new PromptManager();
+    /*if (!PromptManager.instance) {
       PromptManager.instance = new PromptManager();
     }
-    return PromptManager.instance;
+    return PromptManager.instance;*/
   }
 
   private initChatPrompt(): void {
+    let systemPrompt = getSystemPrompt();
+
+    const currentProject = getCurrentProject();
+    if (currentProject && isProjectMode()) {
+      systemPrompt = currentProject.systemPrompt;
+    }
+
     // Escape curly braces in the system message
-    const escapedSystemMessage = this.escapeTemplateString(getSystemPrompt());
-
-    this.chatPrompt = ChatPromptTemplate.fromMessages([
-      SystemMessagePromptTemplate.fromTemplate(escapedSystemMessage),
-      new MessagesPlaceholder("history"),
-      HumanMessagePromptTemplate.fromTemplate("{input}"),
-    ]);
-  }
-
-  /**
-   * 创建项目特定的聊天提示模板
-   * @param systemPrompt - 项目的系统提示词
-   * @returns 项目特定的聊天提示模板
-   */
-  public createProjectChatPrompt(systemPrompt: string): ChatPromptTemplate {
     const escapedSystemMessage = this.escapeTemplateString(systemPrompt);
 
-    return ChatPromptTemplate.fromMessages([
+    this.chatPrompt = ChatPromptTemplate.fromMessages([
       SystemMessagePromptTemplate.fromTemplate(escapedSystemMessage),
       new MessagesPlaceholder("history"),
       HumanMessagePromptTemplate.fromTemplate("{input}"),

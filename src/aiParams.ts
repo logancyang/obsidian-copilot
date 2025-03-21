@@ -197,3 +197,7 @@ export function useProjectLoading() {
     store: settingsStore,
   });
 }
+
+export function isProjectMode() {
+  return getChainType() === ChainType.PROJECT_CHAIN;
+}

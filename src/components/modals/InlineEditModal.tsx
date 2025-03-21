@@ -1,7 +1,6 @@
 import { useModelKey } from "@/aiParams";
 import { processCommandPrompt } from "@/commands/inlineEditCommandUtils";
 import { getModelDisplayText } from "@/components/ui/model-display";
-import ChatModelManager from "@/LLMProviders/chatModelManager";
 import { InlineEditCommandSettings, useSettingsValue } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { findCustomModel, insertIntoEditor } from "@/utils";
@@ -9,6 +8,7 @@ import { Bot, Copy, PenLine } from "lucide-react";
 import { App, Modal, Notice } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
+import ProjectManager from "@/LLMProviders/projectManager";
 
 interface InlineEditModalContentProps {
   originalText: string;
@@ -44,7 +44,9 @@ function InlineEditModalContent({
     async function stream() {
       const prompt = processCommandPrompt(command.prompt, originalText);
       let fullAIResponse = "";
-      const chatModel = await ChatModelManager.getInstance().createModelInstance(selectedModel);
+      const chatModel = await ProjectManager.instance
+        .getCurrentChainManager()
+        .chatModelManager.createModelInstance(selectedModel);
       const chatStream = await chatModel.stream(prompt);
       for await (const chunk of chatStream) {
         if (abortController?.signal.aborted) break;

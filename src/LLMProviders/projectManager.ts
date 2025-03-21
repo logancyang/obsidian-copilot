@@ -1,26 +1,35 @@
 import { App, Notice } from "obsidian";
 import ChainManager from "./chainManager";
 import VectorStoreManager from "../search/vectorStoreManager";
-import { ProjectConfig, setProjectLoading, subscribeToProjectChange } from "../aiParams";
+import {
+  getChainType,
+  isProjectMode,
+  ProjectConfig,
+  setProjectLoading,
+  subscribeToChainTypeChange,
+  subscribeToModelKeyChange,
+  subscribeToProjectChange,
+} from "@/aiParams";
 import { logError, logInfo } from "@/logger";
 import { ChainType } from "@/chainFactory";
 import { getSettings } from "@/settings/model";
-import { err2String, findCustomModel } from "@/utils";
+import { err2String } from "@/utils";
 import { Mention } from "@/mentions/Mention";
 import { BrevilabsClient } from "./brevilabsClient";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import CopilotPlugin from "@/main";
-import { BUILTIN_CHAT_MODELS, CHAT_VIEWTYPE } from "@/constants";
+import { CHAT_VIEWTYPE, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import CopilotView from "@/components/CopilotView";
 
 export default class ProjectManager {
-  private static instance: ProjectManager;
+  public static instance: ProjectManager;
   private chainManagerMap: Map<string, ChainManager>;
   private currentProjectId: string | null;
   private defaultChainManager: ChainManager;
   private app: App;
   private vectorStoreManager: VectorStoreManager;
   private plugin: CopilotPlugin;
+  private processedContextMap: Map<string, string>;
 
   private constructor(app: App, vectorStoreManager: VectorStoreManager, plugin: CopilotPlugin) {
     this.app = app;
@@ -29,6 +38,25 @@ export default class ProjectManager {
     this.chainManagerMap = new Map();
     this.currentProjectId = null;
     this.defaultChainManager = new ChainManager(app, vectorStoreManager);
+    this.processedContextMap = new Map();
+
+    // Set up subscriptions
+    subscribeToModelKeyChange(async () => {
+      await this.getCurrentChainManager().createChainWithNewModel();
+    });
+
+    subscribeToChainTypeChange(async () => {
+      // When switching from other modes to project mode, no need to update the chain.
+      if (isProjectMode()) {
+        return;
+      }
+      await this.getCurrentChainManager().createChainWithNewModel({
+        refreshIndex:
+          getSettings().indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH &&
+          (getChainType() === ChainType.VAULT_QA_CHAIN ||
+            getChainType() === ChainType.COPILOT_PLUS_CHAIN),
+      });
+    });
 
     // Subscribe to Project changes
     subscribeToProjectChange(async (project) => {
@@ -45,16 +73,11 @@ export default class ProjectManager {
   }
 
   public static getInstance(
-    app?: App,
-    vectorStoreManager?: VectorStoreManager,
-    plugin?: CopilotPlugin
+    app: App,
+    vectorStoreManager: VectorStoreManager,
+    plugin: CopilotPlugin
   ): ProjectManager {
     if (!ProjectManager.instance) {
-      if (!app || !vectorStoreManager || !plugin) {
-        throw new Error(
-          "ProjectManager needs to be initialized with App, VectorStoreManager and Plugin"
-        );
-      }
       ProjectManager.instance = new ProjectManager(app, vectorStoreManager, plugin);
     }
     return ProjectManager.instance;
@@ -93,7 +116,6 @@ export default class ProjectManager {
       }
 
       await Promise.all([
-        this.setProjectChatModel(project),
         // load context
         this.loadProjectContext(project),
       ]);
@@ -113,6 +135,11 @@ export default class ProjectManager {
   private async loadProjectContext(project: ProjectConfig): Promise<void> {
     try {
       if (project.contextSource) {
+        if (this.processedContextMap.has(project.id)) {
+          logInfo(`Using cached context for project: ${project.name}`);
+          return;
+        }
+
         const contextParts = await Promise.all([
           this.processMarkdownContext(
             project.contextSource.inclusions,
@@ -122,40 +149,19 @@ export default class ProjectManager {
           this.processYoutubeUrlsContext(project.contextSource.youtubeUrls),
         ]);
 
-        const contextText = contextParts.join("");
-        // todo  待处理 context
-        console.log(contextText);
+        const contextText = `
+<ProjectContext>
+# Project Context
+The following information is relevant context for this project. Use this information to inform your responses when appropriate:
+
+${contextParts.join("\n")}
+<ProjectContext>
+`;
+
+        this.processedContextMap.set(project.id, contextText);
       }
     } catch (error) {
       logError(`Failed to load project context: ${error}`);
-      throw error;
-    }
-  }
-
-  private async setProjectChatModel(project: ProjectConfig): Promise<void> {
-    let newModelKey = project.projectModelKey;
-    try {
-      let customModel = findCustomModel(newModelKey, getSettings().activeModels);
-      if (!customModel) {
-        // Reset default model if no model is found
-        console.error("Resetting default model. No model configuration found for: ", newModelKey);
-        customModel = BUILTIN_CHAT_MODELS[0];
-        newModelKey = customModel.name + "|" + customModel.provider;
-      }
-
-      const mergedModel = {
-        ...customModel,
-        ...project.modelConfigs,
-      };
-
-      const currentChainManager = this.getCurrentChainManager();
-      await currentChainManager.chatModelManager.setChatModel(mergedModel);
-
-      await currentChainManager.setChain(ChainType.PROJECT_CHAIN, {
-        prompt: currentChainManager.promptManager.createProjectChatPrompt(project.systemPrompt),
-      });
-    } catch (error) {
-      logError(`setProjectChat failed: ${error}`);
       throw error;
     }
   }
@@ -165,6 +171,20 @@ export default class ProjectManager {
     const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view as CopilotView;
     if (chatView) {
       chatView.updateView();
+    }
+  }
+
+  public getProjectContext(projectId: string): string | null {
+    return this.processedContextMap.get(projectId) || null;
+  }
+
+  public clearContextCache(projectId?: string): void {
+    if (projectId) {
+      this.processedContextMap.delete(projectId);
+      logInfo(`Context cache cleared for project: ${projectId}`);
+    } else {
+      this.processedContextMap.clear();
+      logInfo("All context caches cleared");
     }
   }
 
@@ -200,6 +220,7 @@ export default class ProjectManager {
         await chainManager.memoryManager.clearChatMemory();
       }
       this.chainManagerMap.clear();
+      this.processedContextMap.clear();
       await this.defaultChainManager.memoryManager.clearChatMemory();
       logInfo("ProjectManager disposed");
     } catch (error) {
@@ -208,12 +229,6 @@ export default class ProjectManager {
     }
   }
 
-  /**
-   * 处理 Markdown 文件上下文
-   * @param inclusions - 包含的模式
-   * @param exclusions - 排除的模式
-   * @returns 所有匹配文件的内容
-   */
   private async processMarkdownContext(inclusions?: string, exclusions?: string): Promise<string> {
     if (!inclusions && !exclusions) {
       return "";
@@ -236,9 +251,6 @@ export default class ProjectManager {
     return allContent;
   }
 
-  /**
-   * 处理 Web URLs 上下文
-   */
   private async processWebUrlsContext(webUrls?: string): Promise<string> {
     if (!webUrls?.trim()) {
       return "";
@@ -255,9 +267,6 @@ export default class ProjectManager {
     }
   }
 
-  /**
-   * 处理 YouTube URLs 上下文
-   */
   private async processYoutubeUrlsContext(youtubeUrls?: string): Promise<string> {
     if (!youtubeUrls?.trim()) {
       return "";

@@ -1,4 +1,11 @@
-import { useChainType, useModelKey, useProjectLoading } from "@/aiParams";
+import {
+  useChainType,
+  useModelKey,
+  useProjectLoading,
+  ProjectConfig,
+  getCurrentProject,
+  subscribeToProjectChange,
+} from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
 import { AddImageModal } from "@/components/modals/AddImageModal";
@@ -61,7 +68,6 @@ interface ChatInputProps {
   selectedImages: File[];
   onAddImage: (files: File[]) => void;
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
-  modelKey?: string;
   disableModelSwitch?: boolean;
 }
 
@@ -83,7 +89,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       selectedImages,
       onAddImage,
       setSelectedImages,
-      modelKey,
       disableModelSwitch,
     },
     ref
@@ -101,6 +106,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const [currentActiveNote, setCurrentActiveNote] = useState<TFile | null>(
       app.workspace.getActiveFile()
     );
+    const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
     const settings = useSettingsValue();
     const isCopilotPlus =
       currentChain === ChainType.COPILOT_PLUS_CHAIN || currentChain === ChainType.PROJECT_CHAIN;
@@ -110,6 +116,33 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         textAreaRef.current?.focus();
       },
     }));
+
+    useEffect(() => {
+      if (currentChain === ChainType.PROJECT_CHAIN) {
+        setSelectedProject(getCurrentProject());
+
+        const unsubscribe = subscribeToProjectChange((project) => {
+          setSelectedProject(project);
+        });
+
+        return () => {
+          unsubscribe();
+        };
+      } else {
+        setSelectedProject(null);
+      }
+    }, [currentChain]);
+
+    const getDisplayModelKey = (): string => {
+      if (
+        selectedProject &&
+        currentChain === ChainType.PROJECT_CHAIN &&
+        selectedProject.projectModelKey
+      ) {
+        return selectedProject.projectModelKey;
+      }
+      return currentModelKey;
+    };
 
     const onSendMessage = (includeVault: boolean) => {
       if (!isCopilotPlus) {
@@ -512,15 +545,13 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                     <span className="text-error">Model Load Failed</span>
                   ) : settings.activeModels.find(
                       (model) =>
-                        model.enabled &&
-                        getModelKeyFromModel(model) === (modelKey || currentModelKey)
+                        model.enabled && getModelKeyFromModel(model) === getDisplayModelKey()
                     ) ? (
                     <ModelDisplay
                       model={
                         settings.activeModels.find(
                           (model) =>
-                            model.enabled &&
-                            getModelKeyFromModel(model) === (modelKey || currentModelKey)
+                            model.enabled && getModelKeyFromModel(model) === getDisplayModelKey()
                         )!
                       }
                       iconSize={8}

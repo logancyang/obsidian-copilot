@@ -140,6 +140,9 @@ export const ProjectList = memo(
         app,
         async (updatedProject: ProjectConfig) => {
           onEditProject(originP, updatedProject);
+          if (selectedProject && selectedProject.name === originP.name) {
+            setSelectedProject(updatedProject);
+          }
         },
         originP
       );

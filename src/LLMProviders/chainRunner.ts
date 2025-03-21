@@ -27,6 +27,8 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { Notice } from "obsidian";
 import ChainManager from "./chainManager";
 import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "./intentAnalyzer";
+import { getCurrentProject } from "@/aiParams";
+import ProjectManager from "./projectManager";
 
 export interface ChainRunner {
   run(
@@ -347,6 +349,10 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     return this.hasCapability(model, ModelCapability.VISION);
   }
 
+  protected getSystemPrompt(): string {
+    return getSystemPrompt();
+  }
+
   private async streamMultimodalResponse(
     textContent: string,
     userMessage: ChatMessage,
@@ -363,7 +369,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     const messages: any[] = [];
 
     // Add system message if available
-    let fullSystemMessage = getSystemPrompt();
+    let fullSystemMessage = this.getSystemPrompt();
 
     // Add chat history context to system message if exists
     if (chatHistory.length > 0) {
@@ -693,6 +699,23 @@ class CopilotPlusChainRunner extends BaseChainRunner {
   }
 }
 
-class ProjectChainRunner extends CopilotPlusChainRunner {}
+class ProjectChainRunner extends CopilotPlusChainRunner {
+  protected getSystemPrompt(): string {
+    // 获取当前项目
+    const projectConfig = getCurrentProject();
+
+    if (!projectConfig) {
+      return super.getSystemPrompt();
+    }
+
+    const context = ProjectManager.instance.getProjectContext(projectConfig.id);
+    let finalPrompt = projectConfig.systemPrompt;
+
+    if (context) {
+      finalPrompt += context;
+    }
+    return finalPrompt;
+  }
+}
 
 export { CopilotPlusChainRunner, LLMChainRunner, VaultQAChainRunner, ProjectChainRunner };
