@@ -8,10 +8,13 @@ import { FileParserManager } from "@/tools/FileParserManager";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
-import { Root, createRoot } from "react-dom/client";
+import { createRoot, Root } from "react-dom/client";
 
 export default class CopilotView extends ItemView {
-  private chainManager: ChainManager;
+  private get chainManager(): ChainManager {
+    return this.plugin.projectManager.getCurrentChainManager();
+  }
+
   private fileParserManager: FileParserManager;
   private root: Root | null = null;
   private handleSaveAsNote: (() => Promise<void>) | null = null;
@@ -25,7 +28,6 @@ export default class CopilotView extends ItemView {
     super(leaf);
     this.sharedState = plugin.sharedState;
     this.app = plugin.app;
-    this.chainManager = plugin.chainManager;
     this.fileParserManager = plugin.fileParserManager;
     this.eventTarget = new EventTarget();
     this.plugin = plugin;
@@ -50,14 +52,24 @@ export default class CopilotView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
-    const root = createRoot(this.containerEl.children[1]);
+    this.root = createRoot(this.containerEl.children[1]);
     const handleSaveAsNote = (saveFunction: () => Promise<void>) => {
       this.handleSaveAsNote = saveFunction;
     };
     const updateUserMessageHistory = (newMessage: string) => {
       this.plugin.updateUserMessageHistory(newMessage);
     };
-    root.render(
+
+    this.renderView(handleSaveAsNote, updateUserMessageHistory);
+  }
+
+  private renderView(
+    handleSaveAsNote: (saveFunction: () => Promise<void>) => void,
+    updateUserMessageHistory: (newMessage: string) => void
+  ): void {
+    if (!this.root) return;
+
+    this.root.render(
       <AppContext.Provider value={this.app}>
         <EventTargetContext.Provider value={this.eventTarget}>
           <React.StrictMode>
@@ -83,14 +95,26 @@ export default class CopilotView extends ItemView {
     }
   }
 
+  updateView(): void {
+    // load currentChainManager chatMessages
+    this.sharedState.replaceMessages(
+      this.plugin.projectManager.getCurrentChainManager().getChatMessages()
+    );
+
+    const handleSaveAsNote = (saveFunction: () => Promise<void>) => {
+      this.handleSaveAsNote = saveFunction;
+    };
+    const updateUserMessageHistory = (newMessage: string) => {
+      this.plugin.updateUserMessageHistory(newMessage);
+    };
+
+    this.renderView(handleSaveAsNote, updateUserMessageHistory);
+  }
+
   async onClose(): Promise<void> {
     if (this.root) {
       this.root.unmount();
+      this.root = null;
     }
-  }
-
-  updateView(): void {
-    // Force a re-render of the React component
-    this.onOpen();
   }
 }

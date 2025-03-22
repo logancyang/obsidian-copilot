@@ -12,10 +12,11 @@ export default class MemoryManager {
   }
 
   static getInstance(): MemoryManager {
-    if (!MemoryManager.instance) {
+    return new MemoryManager();
+    /*if (!MemoryManager.instance) {
       MemoryManager.instance = new MemoryManager();
     }
-    return MemoryManager.instance;
+    return MemoryManager.instance;*/
   }
 
   private initMemory(): void {

@@ -34,6 +34,29 @@ const chainTypeAtom = atom(
   }
 );
 
+const currentProjectAtom = atom<ProjectConfig | null>(null);
+const projectLoadingAtom = atom<boolean>(false);
+
+export interface ProjectConfig {
+  id: string;
+  name: string;
+  description?: string;
+  systemPrompt: string;
+  projectModelKey: string;
+  modelConfigs: {
+    temperature?: number;
+    maxTokens?: number;
+  };
+  contextSource: {
+    inclusions: string;
+    exclusions?: string;
+    webUrls?: string;
+    youtubeUrls?: string;
+  };
+  created: number;
+  UsageTimestamps: number;
+}
+
 export interface ModelConfig {
   modelName: string;
   temperature: number;
@@ -79,6 +102,7 @@ export interface CustomModel {
   stream?: boolean;
   temperature?: number;
   maxTokens?: number;
+
   context?: number;
   plusExclusive?: boolean;
   believerExclusive?: boolean;
@@ -131,4 +155,50 @@ export function useChainType() {
   return useAtom(chainTypeAtom, {
     store: settingsStore,
   });
+}
+
+export function setCurrentProject(project: ProjectConfig | null) {
+  settingsStore.set(currentProjectAtom, project);
+}
+
+export function getCurrentProject(): ProjectConfig | null {
+  return settingsStore.get(currentProjectAtom);
+}
+
+export function subscribeToProjectChange(
+  callback: (project: ProjectConfig | null) => void
+): () => void {
+  return settingsStore.sub(currentProjectAtom, () => {
+    callback(settingsStore.get(currentProjectAtom));
+  });
+}
+
+export function useCurrentProject() {
+  return useAtom(currentProjectAtom, {
+    store: settingsStore,
+  });
+}
+
+export function setProjectLoading(loading: boolean) {
+  settingsStore.set(projectLoadingAtom, loading);
+}
+
+export function isProjectLoading(): boolean {
+  return settingsStore.get(projectLoadingAtom);
+}
+
+export function subscribeToProjectLoadingChange(callback: (loading: boolean) => void): () => void {
+  return settingsStore.sub(projectLoadingAtom, () => {
+    callback(settingsStore.get(projectLoadingAtom));
+  });
+}
+
+export function useProjectLoading() {
+  return useAtom(projectLoadingAtom, {
+    store: settingsStore,
+  });
+}
+
+export function isProjectMode() {
+  return getChainType() === ChainType.PROJECT_CHAIN;
 }

@@ -1,12 +1,13 @@
 import React from "react";
 import {
-  Download,
-  MoreHorizontal,
-  Sparkles,
-  FileText,
-  RefreshCw,
-  MessageCirclePlus,
   ChevronDown,
+  Download,
+  FileText,
+  LibraryBig,
+  MessageCirclePlus,
+  MoreHorizontal,
+  RefreshCw,
+  Sparkles,
   SquareArrowOutUpRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,7 @@ import { DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useChainType } from "@/aiParams";
+import { setCurrentProject, useChainType } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { Notice } from "obsidian";
 import VectorStoreManager from "@/search/vectorStoreManager";
@@ -35,12 +36,28 @@ export async function refreshVaultIndex() {
 interface ChatControlsProps {
   onNewChat: () => void;
   onSaveAsNote: () => void;
+  onModeChange: (mode: ChainType) => void;
+  onCloseProject?: () => void;
 }
 
-export function ChatControls({ onNewChat, onSaveAsNote }: ChatControlsProps) {
+export function ChatControls({
+  onNewChat,
+  onSaveAsNote,
+  onModeChange,
+  onCloseProject,
+}: ChatControlsProps) {
   const settings = useSettingsValue();
   const [selectedChain, setSelectedChain] = useChainType();
   const isPlusUser = useIsPlusUser();
+
+  const handleModeChange = (chainType: ChainType) => {
+    setSelectedChain(chainType);
+    onModeChange(chainType);
+    if (chainType !== ChainType.PROJECT_CHAIN) {
+      setCurrentProject(null);
+      onCloseProject?.();
+    }
+  };
 
   return (
     <div className="w-full py-1 flex justify-between items-center px-1">
@@ -56,18 +73,31 @@ export function ChatControls({ onNewChat, onSaveAsNote }: ChatControlsProps) {
                   copilot plus (beta)
                 </div>
               )}
+              {selectedChain === ChainType.PROJECT_CHAIN && "plus projects (alpha)"}
               <ChevronDown className="size-5 mt-0.5" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuItem onSelect={() => setSelectedChain(ChainType.LLM_CHAIN)}>
+            <DropdownMenuItem
+              onSelect={() => {
+                handleModeChange(ChainType.LLM_CHAIN);
+              }}
+            >
               chat
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setSelectedChain(ChainType.VAULT_QA_CHAIN)}>
+            <DropdownMenuItem
+              onSelect={() => {
+                handleModeChange(ChainType.VAULT_QA_CHAIN);
+              }}
+            >
               vault QA
             </DropdownMenuItem>
             {isPlusUser ? (
-              <DropdownMenuItem onSelect={() => setSelectedChain(ChainType.COPILOT_PLUS_CHAIN)}>
+              <DropdownMenuItem
+                onSelect={() => {
+                  handleModeChange(ChainType.COPILOT_PLUS_CHAIN);
+                }}
+              >
                 <div className="flex items-center gap-1">
                   <Sparkles className="size-4" />
                   copilot plus (beta)
@@ -77,6 +107,29 @@ export function ChatControls({ onNewChat, onSaveAsNote }: ChatControlsProps) {
               <DropdownMenuItem
                 onSelect={() => {
                   navigateToPlusPage(PLUS_UTM_MEDIUMS.CHAT_MODE_SELECT);
+                  onCloseProject?.();
+                }}
+              >
+                copilot plus (beta)
+                <SquareArrowOutUpRight className="size-3" />
+              </DropdownMenuItem>
+            )}
+
+            {isPlusUser ? (
+              <DropdownMenuItem
+                className="flex items-center gap-1"
+                onSelect={() => {
+                  handleModeChange(ChainType.PROJECT_CHAIN);
+                }}
+              >
+                <LibraryBig className="size-4" />
+                plus projects (alpha)
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem
+                onSelect={() => {
+                  navigateToPlusPage(PLUS_UTM_MEDIUMS.CHAT_MODE_SELECT);
+                  onCloseProject?.();
                 }}
               >
                 copilot plus (beta)

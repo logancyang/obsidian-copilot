@@ -1,6 +1,6 @@
-import ChatModelManager from "@/LLMProviders/chatModelManager";
 import { removeThinkTags } from "@/utils";
 import { BaseChatModelCallOptions } from "@langchain/core/language_models/chat_models";
+import ProjectManager from "@/LLMProviders/projectManager";
 
 export async function getStandaloneQuestion(
   question: string,
@@ -22,8 +22,9 @@ export async function getStandaloneQuestion(
     .map(([human, ai]) => `Human: ${human}\nAssistant: ${ai}`)
     .join("\n");
 
-  const chatModel = ChatModelManager.getInstance()
-    .getChatModel()
+  const chatModel = ProjectManager.instance
+    .getCurrentChainManager()
+    .chatModelManager.getChatModel()
     .bind({ temperature: 0 } as BaseChatModelCallOptions);
   const response = await chatModel.invoke([
     {

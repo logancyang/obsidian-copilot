@@ -90,16 +90,6 @@ If your plugin does not need CSS, delete this file.
   overflow: hidden;
 }
 
-.bottom-container {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-end;
-  width: 100%;
-  flex: 0 0 auto;
-  box-sizing: border-box;
-}
-
 .chat-context-menu {
   display: flex;
   align-items: center;
