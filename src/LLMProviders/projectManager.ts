@@ -7,6 +7,7 @@ import {
   subscribeToModelKeyChange,
   subscribeToProjectChange,
 } from "@/aiParams";
+import { ProjectContextCache } from "@/cache/projectContextCache";
 import { ChainType } from "@/chainFactory";
 import { updateChatMemory } from "@/chatUtils";
 import CopilotView from "@/components/CopilotView";
@@ -29,19 +30,16 @@ export default class ProjectManager {
   private app: App;
   private plugin: CopilotPlugin;
   private readonly chainMangerInstance: ChainManager;
-
-  private projectContextCache: Map<string, string>;
+  private readonly projectContextCache: ProjectContextCache;
   private chatMessageCache: Map<string, ChatMessage[]>;
-
   private defaultProjectKey: string = "defaultProjectKey";
 
   private constructor(app: App, vectorStoreManager: VectorStoreManager, plugin: CopilotPlugin) {
     this.app = app;
     this.plugin = plugin;
     this.currentProjectId = null;
-
     this.chainMangerInstance = new ChainManager(app, vectorStoreManager);
-    this.projectContextCache = new Map();
+    this.projectContextCache = ProjectContextCache.getInstance();
     this.chatMessageCache = new Map();
 
     // Set up subscriptions
@@ -85,7 +83,7 @@ export default class ProjectManager {
           // Check if project configuration has changed
           if (JSON.stringify(prevProject) !== JSON.stringify(nextProject)) {
             // Clear context cache for this project
-            this.clearContextCache(nextProject.id);
+            await this.projectContextCache.clearForProject(nextProject);
 
             // If this is the current project, reload its context and recreate chain
             if (this.currentProjectId === nextProject.id) {
@@ -169,7 +167,7 @@ export default class ProjectManager {
       this.getCurrentChainManager().getChatMessages()
     );
 
-    // todo 需不需要？
+    // TODO(emt-lin): do this or not?
     await this.plugin.autosaveCurrentChat();
   }
 
@@ -189,8 +187,9 @@ export default class ProjectManager {
   private async loadProjectContext(project: ProjectConfig): Promise<void> {
     try {
       if (project.contextSource) {
-        if (this.projectContextCache.has(project.id)) {
-          logInfo(`Using cached context for project: ${project.name}`);
+        // Try to get context from cache first
+        const cachedContext = await this.projectContextCache.get(project);
+        if (cachedContext) {
           return;
         }
 
@@ -227,7 +226,8 @@ ${contextParts.join("\n\n")}
 </ProjectContext>
 `;
 
-        this.projectContextCache.set(project.id, contextText);
+        // Cache the generated context
+        await this.projectContextCache.set(project, contextText);
       }
     } catch (error) {
       logError(`Failed to load project context: ${error}`);
@@ -244,12 +244,19 @@ ${contextParts.join("\n\n")}
   }
 
   public getProjectContext(projectId: string): string | null {
-    return this.projectContextCache.get(projectId) || null;
+    const project = getSettings().projectList.find((p) => p.id === projectId);
+    if (!project) {
+      return null;
+    }
+    return this.projectContextCache.getSync(project);
   }
 
-  public clearContextCache(projectId: string): void {
-    this.projectContextCache.delete(projectId);
-    logInfo(`Context cache cleared for project: ${projectId}`);
+  public async clearContextCache(projectId: string): Promise<void> {
+    const project = getSettings().projectList.find((p) => p.id === projectId);
+    if (project) {
+      await this.projectContextCache.clearForProject(project);
+      logInfo(`Context cache cleared for project: ${projectId}`);
+    }
   }
 
   private async processMarkdownContext(inclusions?: string, exclusions?: string): Promise<string> {

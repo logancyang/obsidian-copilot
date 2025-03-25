@@ -1,3 +1,4 @@
+import { getCurrentProject } from "@/aiParams";
 import { getStandaloneQuestion } from "@/chainUtils";
 import {
   ABORT_REASON,
@@ -27,7 +28,6 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { Notice } from "obsidian";
 import ChainManager from "./chainManager";
 import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "./intentAnalyzer";
-import { getCurrentProject } from "@/aiParams";
 import ProjectManager from "./projectManager";
 
 export interface ChainRunner {
@@ -45,7 +45,15 @@ export interface ChainRunner {
 }
 
 abstract class BaseChainRunner implements ChainRunner {
-  constructor(protected chainManager: ChainManager) {}
+  protected chainManager: ChainManager;
+
+  constructor(chainManager: ChainManager) {
+    this.chainManager = chainManager;
+  }
+
+  protected getSystemPrompt(): string {
+    return getSystemPrompt();
+  }
 
   abstract run(
     userMessage: ChatMessage,
@@ -347,10 +355,6 @@ class CopilotPlusChainRunner extends BaseChainRunner {
 
   private isMultimodalModel(model: BaseChatModel): boolean {
     return this.hasCapability(model, ModelCapability.VISION);
-  }
-
-  protected getSystemPrompt(): string {
-    return getSystemPrompt();
   }
 
   private async streamMultimodalResponse(
@@ -708,14 +712,16 @@ class ProjectChainRunner extends CopilotPlusChainRunner {
       return super.getSystemPrompt();
     }
 
+    // Get cached context synchronously
     const context = ProjectManager.instance.getProjectContext(projectConfig.id);
     let finalPrompt = projectConfig.systemPrompt;
 
     if (context) {
-      finalPrompt += context;
+      finalPrompt = `${finalPrompt}\n\n${context}`;
     }
+
     return finalPrompt;
   }
 }
 
-export { CopilotPlusChainRunner, LLMChainRunner, VaultQAChainRunner, ProjectChainRunner };
+export { CopilotPlusChainRunner, LLMChainRunner, ProjectChainRunner, VaultQAChainRunner };

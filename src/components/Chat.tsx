@@ -1,4 +1,10 @@
-import { ProjectConfig, useChainType, useModelKey } from "@/aiParams";
+import {
+  getCurrentProject,
+  ProjectConfig,
+  setCurrentProject,
+  useChainType,
+  useModelKey,
+} from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { updateChatMemory } from "@/chatUtils";
 import { ChatControls } from "@/components/chat-components/ChatControls";
@@ -17,9 +23,9 @@ import { getSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import SharedState, { ChatMessage, useSharedState } from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { err2String, formatDateTime } from "@/utils";
+import { Buffer } from "buffer";
 import { Notice, TFile } from "obsidian";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Buffer } from "buffer";
 
 type ChatMode = "default" | "project";
 
@@ -569,6 +575,13 @@ ${chatContent}`;
 
       const newProjectList = currentProjects.map((p) => (p.name === originP.name ? updateP : p));
       updateSetting("projectList", newProjectList);
+
+      // If this is the current project, update the current project atom
+      const currentProject = getCurrentProject();
+      if (currentProject?.id === originP.id) {
+        setCurrentProject(updateP);
+      }
+
       new Notice(`${originP.name} updated successfully`);
       return true;
     },
