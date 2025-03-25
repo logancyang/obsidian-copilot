@@ -1,17 +1,17 @@
-import { App, Modal, Notice } from "obsidian";
-import React, { useState } from "react";
-import { createRoot, Root } from "react-dom/client";
-import { err2String, checkModelApiKey, randomUUID } from "@/utils";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { ProjectConfig } from "@/aiParams";
+import { PatternMatchingModal } from "@/components/modals/PatternMatchingModal";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
-import { ProjectConfig } from "@/aiParams";
-import { useSettingsValue, getModelKeyFromModel } from "@/settings/model";
+import { Input } from "@/components/ui/input";
 import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { ObsidianNativeSelect } from "@/components/ui/obsidian-native-select";
 import { SettingSlider } from "@/components/ui/setting-slider";
-import { PatternMatchingModal } from "@/components/modals/PatternMatchingModal";
+import { Textarea } from "@/components/ui/textarea";
+import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
+import { checkModelApiKey, err2String, randomUUID } from "@/utils";
+import { App, Modal, Notice } from "obsidian";
+import React, { useState } from "react";
+import { createRoot, Root } from "react-dom/client";
 
 interface AddProjectModalContentProps {
   initialProject?: ProjectConfig;
@@ -67,7 +67,10 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
     setFormData((prev) => {
       // Handle text input
       if (typeof value === "string") {
-        value = value.trim();
+        // Only trim for specific fields that shouldn't have whitespace
+        if (field === "name" || field === "projectModelKey") {
+          value = value.trim();
+        }
       }
       // Handle string arrays
       if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
