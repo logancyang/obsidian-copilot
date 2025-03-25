@@ -203,11 +203,10 @@ export default class ProjectManager {
         ]).then((res) => res.filter((it) => !!it));
 
         const contextText = `
+# Project Context
+The following information is the relevant context for this project. Use this information to inform your responses when appropriate:
 
 <ProjectContext>
-# Project Context
-The following information is relevant context for this project. Use this information to inform your responses when appropriate:
-
 ${contextParts.join("\n")}
 <ProjectContext>
 `;
