@@ -52,12 +52,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
   );
 
   const isFormValid = () => {
-    return (
-      formData.name &&
-      formData.systemPrompt &&
-      formData.projectModelKey &&
-      formData.contextSource?.inclusions?.trim()
-    );
+    return formData.name && formData.projectModelKey;
   };
 
   const handleInputChange = (
@@ -100,7 +95,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
   };
 
   const handleSave = async () => {
-    const requiredFields = ["name", "systemPrompt", "projectModelKey"];
+    const requiredFields = ["name", "projectModelKey"];
     const missingFields = requiredFields.filter((field) => !formData[field as keyof ProjectConfig]);
 
     if (missingFields.length > 0) {
@@ -159,10 +154,8 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
         </FormField>
 
         <FormField
-          label="Prompt"
-          required
-          error={touched.systemPrompt && !formData.systemPrompt}
-          errorMessage="System prompt is required"
+          label="Project System Prompt"
+          description="Custom instructions for how the AI should behave in this project context"
         >
           <Textarea
             value={formData.systemPrompt}
@@ -235,9 +228,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
           <div className="text-base font-medium">Context Sources</div>
           <FormField
             label="Inclusions"
-            required
-            error={touched.inclusions && !formData.contextSource?.inclusions?.trim()}
-            errorMessage="At least one inclusion pattern is required"
+            description="Define patterns to include specific files or folders in the project context"
           >
             <div className="flex items-center gap-2">
               <div className="flex-1 text-xs text-muted">
@@ -252,7 +243,6 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
                     app,
                     (value: string) => {
                       handleInputChange("contextSource.inclusions", value);
-                      setTouched((prev) => ({ ...prev, inclusions: true }));
                     },
                     formData.contextSource?.inclusions || "",
                     "Manage Inclusions"
