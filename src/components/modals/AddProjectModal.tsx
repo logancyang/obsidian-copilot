@@ -286,20 +286,20 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
             <Textarea
               value={formData.contextSource?.webUrls}
               onChange={(e) => {
-                const urls = e.target.value
-                  .split("\n")
-                  .map((url) => url.trim())
-                  .filter((url) => {
-                    if (!url) return false;
-                    try {
-                      new URL(url);
-                      return true;
-                    } catch {
-                      return false;
-                    }
-                  })
-                  .join("\n");
-                handleInputChange("contextSource.webUrls", urls);
+                const urls = e.target.value.split("\n");
+
+                // Process each URL while preserving spaces and empty lines
+                const processedUrls = urls.map((url) => {
+                  if (!url.trim()) return url; // Preserve empty lines and whitespace-only lines
+                  try {
+                    new URL(url.trim());
+                    return url; // Keep original formatting including spaces
+                  } catch {
+                    return url; // Keep invalid URLs for user to fix
+                  }
+                });
+
+                handleInputChange("contextSource.webUrls", processedUrls.join("\n"));
               }}
               placeholder="Enter web URLs, one per line"
               className="min-h-[80px] w-full"
@@ -310,23 +310,26 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
             <Textarea
               value={formData.contextSource?.youtubeUrls}
               onChange={(e) => {
-                const urls = e.target.value
-                  .split("\n")
-                  .map((url) => url.trim())
-                  .filter((url) => {
-                    if (!url) return false;
-                    try {
-                      const urlObj = new URL(url);
-                      return (
-                        urlObj.hostname.includes("youtube.com") ||
-                        urlObj.hostname.includes("youtu.be")
-                      );
-                    } catch {
-                      return false;
+                const urls = e.target.value.split("\n");
+
+                // Process each URL while preserving spaces and empty lines
+                const processedUrls = urls.map((url) => {
+                  if (!url.trim()) return url; // Preserve empty lines and whitespace-only lines
+                  try {
+                    const urlObj = new URL(url.trim());
+                    if (
+                      urlObj.hostname.includes("youtube.com") ||
+                      urlObj.hostname.includes("youtu.be")
+                    ) {
+                      return url; // Keep original formatting including spaces
                     }
-                  })
-                  .join("\n");
-                handleInputChange("contextSource.youtubeUrls", urls);
+                    return url; // Keep non-YouTube URLs for user to fix
+                  } catch {
+                    return url; // Keep invalid URLs for user to fix
+                  }
+                });
+
+                handleInputChange("contextSource.youtubeUrls", processedUrls.join("\n"));
               }}
               placeholder="Enter YouTube URLs, one per line"
               className="min-h-[80px] w-full"

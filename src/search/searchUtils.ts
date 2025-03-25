@@ -95,19 +95,30 @@ function getInclusionPatterns(): string[] {
 
 /**
  * Get the inclusion and exclusion patterns from the settings or provided values.
+ * NOTE: isProject is used to determine if the patterns should be used for a project, ignoring global inclusions and exclusions
  * @param options - Optional parameters for inclusions and exclusions.
  * @returns An object containing the inclusions and exclusions patterns strings.
  */
-export function getMatchingPatterns(options?: { inclusions?: string; exclusions?: string }): {
+export function getMatchingPatterns(options?: {
+  inclusions?: string;
+  exclusions?: string;
+  isProject?: boolean;
+}): {
   inclusions: PatternCategory | null;
   exclusions: PatternCategory | null;
 } {
+  // For projects, don't fall back to global patterns
   const inclusionPatterns = options?.inclusions
     ? getDecodedPatterns(options.inclusions)
-    : getInclusionPatterns();
+    : options?.isProject
+      ? []
+      : getInclusionPatterns();
+
   const exclusionPatterns = options?.exclusions
     ? getDecodedPatterns(options.exclusions)
-    : getExclusionPatterns();
+    : options?.isProject
+      ? []
+      : getExclusionPatterns();
 
   return {
     inclusions: inclusionPatterns.length > 0 ? categorizePatterns(inclusionPatterns) : null,

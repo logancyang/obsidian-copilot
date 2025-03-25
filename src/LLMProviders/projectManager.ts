@@ -185,6 +185,7 @@ export default class ProjectManager {
     await updateChatMemory(messages, chainManager.memoryManager);
   }
 
+  // TODO(logan): This should be reused as a generic context loading function
   private async loadProjectContext(project: ProjectConfig): Promise<void> {
     try {
       if (project.contextSource) {
@@ -193,22 +194,37 @@ export default class ProjectManager {
           return;
         }
 
-        const contextParts = await Promise.all([
+        const [markdownContext, webContext, youtubeContext] = await Promise.all([
           this.processMarkdownContext(
             project.contextSource.inclusions,
             project.contextSource.exclusions
           ),
           this.processWebUrlsContext(project.contextSource.webUrls),
           this.processYoutubeUrlsContext(project.contextSource.youtubeUrls),
-        ]).then((res) => res.filter((it) => !!it));
+        ]);
+
+        // Build context sections only for non-null sources
+        const contextParts = [];
+
+        if (project.contextSource.inclusions || project.contextSource.exclusions) {
+          contextParts.push(`## Markdown Files\n${markdownContext}`);
+        }
+
+        if (project.contextSource.webUrls?.trim()) {
+          contextParts.push(`## Web Content\n${webContext}`);
+        }
+
+        if (project.contextSource.youtubeUrls?.trim()) {
+          contextParts.push(`## YouTube Content\n${youtubeContext}`);
+        }
 
         const contextText = `
 # Project Context
 The following information is the relevant context for this project. Use this information to inform your responses when appropriate:
 
 <ProjectContext>
-${contextParts.join("\n")}
-<ProjectContext>
+${contextParts.join("\n\n")}
+</ProjectContext>
 `;
 
         this.projectContextCache.set(project.id, contextText);
@@ -241,21 +257,37 @@ ${contextParts.join("\n")}
       return "";
     }
 
-    let allContent = "";
+    // NOTE: Must not fallback to GLOBAL inclusions and exclusions in Copilot settings in Projects!
+    // This is to avoid project inclusions in the project that conflict with the global ones
+    // Project UI should be the ONLY source of truth for project inclusions and exclusions
     const { inclusions: inclusionPatterns, exclusions: exclusionPatterns } = getMatchingPatterns({
       inclusions,
       exclusions,
+      isProject: true,
     });
 
     const files = this.app.vault.getMarkdownFiles().filter((file) => {
       return shouldIndexFile(file, inclusionPatterns, exclusionPatterns);
     });
 
-    await Promise.all(files.map((file) => this.app.vault.cachedRead(file))).then((contents) =>
-      contents.map((c) => (allContent += c + " "))
+    // Process each file with its metadata
+    const processedNotes = await Promise.all(
+      files.map(async (file) => {
+        const content = await this.app.vault.cachedRead(file);
+        const stat = await this.app.vault.adapter.stat(file.path);
+
+        // Format the note with metadata
+        return `[[${file.basename}]]
+path: ${file.path}
+created: ${stat ? new Date(stat.ctime).toISOString() : "unknown"}
+modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}
+
+${content}`;
+      })
     );
 
-    return allContent;
+    // Join all processed notes with double newlines
+    return processedNotes.join("\n\n");
   }
 
   private async processWebUrlsContext(webUrls?: string): Promise<string> {
