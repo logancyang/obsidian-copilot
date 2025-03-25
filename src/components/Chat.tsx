@@ -634,6 +634,10 @@ ${chatContent}`;
           onSaveAsNote={() => handleSaveAsNote(true)}
           onModeChange={(newMode) => {
             setPreviousMode(mode);
+            // Hide chat UI when switching to project mode
+            if (newMode === ChainType.PROJECT_CHAIN) {
+              setShowChatUI(false);
+            }
           }}
         />
         <ChatInput
