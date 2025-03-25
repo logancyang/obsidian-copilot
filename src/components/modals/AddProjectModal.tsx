@@ -190,7 +190,11 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
             onBlur={() => setTouched((prev) => ({ ...prev, projectModelKey: true }))}
             placeholder="Select a model"
             options={settings.activeModels
-              .filter((m) => m.enabled)
+              .filter(
+                (m) =>
+                  m.provider === "google" &&
+                  (m.name === "gemini-1.5-flash-001" || m.name === "gemini-1.5-pro-001")
+              )
               .map((model) => ({
                 label: getModelDisplayWithIcons(model),
                 value: getModelKeyFromModel(model),
