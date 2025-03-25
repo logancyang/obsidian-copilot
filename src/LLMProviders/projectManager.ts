@@ -1,6 +1,3 @@
-import { App, Notice } from "obsidian";
-import ChainManager from "./chainManager";
-import VectorStoreManager from "../search/vectorStoreManager";
 import {
   getChainType,
   isProjectMode,
@@ -10,18 +7,21 @@ import {
   subscribeToModelKeyChange,
   subscribeToProjectChange,
 } from "@/aiParams";
-import { logError, logInfo } from "@/logger";
 import { ChainType } from "@/chainFactory";
-import { getSettings, subscribeToSettingsChange } from "@/settings/model";
-import { err2String } from "@/utils";
-import { Mention } from "@/mentions/Mention";
-import { BrevilabsClient } from "./brevilabsClient";
-import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
-import CopilotPlugin from "@/main";
-import { CHAT_VIEWTYPE, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
-import CopilotView from "@/components/CopilotView";
-import { ChatMessage } from "@/sharedState";
 import { updateChatMemory } from "@/chatUtils";
+import CopilotView from "@/components/CopilotView";
+import { CHAT_VIEWTYPE, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
+import { logError, logInfo } from "@/logger";
+import CopilotPlugin from "@/main";
+import { Mention } from "@/mentions/Mention";
+import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
+import { getSettings, subscribeToSettingsChange } from "@/settings/model";
+import { ChatMessage } from "@/sharedState";
+import { err2String } from "@/utils";
+import { App, Notice } from "obsidian";
+import VectorStoreManager from "../search/vectorStoreManager";
+import { BrevilabsClient } from "./brevilabsClient";
+import ChainManager from "./chainManager";
 
 export default class ProjectManager {
   public static instance: ProjectManager;
@@ -87,10 +87,13 @@ export default class ProjectManager {
             // Clear context cache for this project
             this.clearContextCache(nextProject.id);
 
-            // If this is the current project, reload its context
+            // If this is the current project, reload its context and recreate chain
             if (this.currentProjectId === nextProject.id) {
-              console.log("reload its context");
-              await this.loadProjectContext(nextProject);
+              await Promise.all([
+                this.loadProjectContext(nextProject),
+                // Recreate chain to pick up new system prompt
+                this.getCurrentChainManager().createChainWithNewModel(),
+              ]);
             }
           }
         }
