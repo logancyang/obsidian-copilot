@@ -1,7 +1,17 @@
+import { ProjectConfig, setCurrentProject } from "@/aiParams";
+import { AddProjectModal } from "@/components/modals/AddProjectModal";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { ProjectConfig, setCurrentProject } from "@/aiParams";
+import { logError } from "@/logger";
 import {
   BookOpen,
   ChevronDown,
@@ -13,18 +23,8 @@ import {
   Plus,
   X,
 } from "lucide-react";
-import React, { memo, useEffect, useState } from "react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AddProjectModal } from "@/components/modals/AddProjectModal";
 import { App } from "obsidian";
-import { logError } from "@/logger";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import React, { memo, useEffect, useState } from "react";
 
 function ProjectItem({
   project,
@@ -38,7 +38,7 @@ function ProjectItem({
   return (
     <div
       className="flex gap-2 p-3 justify-between items-center rounded-lg bg-secondary/40 border border-border border-solid group transition-all duration-200 hover:border-interactive-accent/30 hover:bg-interactive-accent/5 hover:shadow-[0_2px_12px_rgba(0,0,0,0.1)] active:scale-[0.98] cursor-pointer"
-      onDoubleClick={() => loadContext(project)}
+      onClick={() => loadContext(project)}
     >
       <div className="flex items-center gap-2 flex-1 overflow-hidden">
         <div className="text-blue-400">
@@ -348,7 +348,7 @@ export const ProjectList = memo(
                 <div className="flex flex-col gap-3 text-sm">
                   <div className="flex items-center gap-2">
                     <MessageSquare className="size-4" />
-                    <span>Double-click a project card to start chatting</span>
+                    <span>Click a project card to start chatting</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <BookOpen className="size-4" />
