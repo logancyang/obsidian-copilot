@@ -1,5 +1,6 @@
 import { ProjectConfig, setCurrentProject } from "@/aiParams";
 import { AddProjectModal } from "@/components/modals/AddProjectModal";
+import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -12,8 +13,8 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
+import { updateSetting } from "@/settings/model";
 import {
-  BookOpen,
   ChevronDown,
   ChevronUp,
   Edit2,
@@ -21,19 +22,22 @@ import {
   Info,
   MessageSquare,
   Plus,
+  Trash2,
   X,
 } from "lucide-react";
-import { App } from "obsidian";
+import { App, Notice } from "obsidian";
 import React, { memo, useEffect, useState } from "react";
 
 function ProjectItem({
   project,
   loadContext,
   onEdit,
+  onDelete,
 }: {
   project: ProjectConfig;
   loadContext: (project: ProjectConfig) => void;
   onEdit: (project: ProjectConfig) => void;
+  onDelete: (project: ProjectConfig) => void;
 }) {
   return (
     <div
@@ -87,6 +91,28 @@ function ProjectItem({
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">Start Chat</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost2"
+              size="icon"
+              className="h-6 w-6 hover:bg-destructive/10 hover:text-destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                const modal = new ConfirmModal(
+                  app,
+                  () => onDelete(project),
+                  `Are you sure you want to delete project "${project.name}"?`,
+                  "Delete Project"
+                );
+                modal.open();
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Delete Project</TooltipContent>
         </Tooltip>
       </div>
     </div>
@@ -147,6 +173,20 @@ export const ProjectList = memo(
         originP
       );
       modal.open();
+    };
+
+    const handleDeleteProject = (project: ProjectConfig) => {
+      const currentProjects = projects || [];
+      const newProjectList = currentProjects.filter((p) => p.name !== project.name);
+
+      // If the deleted project is currently selected, close it
+      if (selectedProject?.name === project.name) {
+        enableOrDisableProject(false);
+      }
+
+      // Update the project list in settings
+      updateSetting("projectList", newProjectList);
+      new Notice(`Project "${project.name}" deleted successfully`);
     };
 
     const enableOrDisableProject = (enable: boolean, project?: ProjectConfig) => {
@@ -320,6 +360,7 @@ export const ProjectList = memo(
                             project={project}
                             loadContext={handleLoadContext}
                             onEdit={handleEditProject}
+                            onDelete={handleDeleteProject}
                           />
                         ))}
                       </div>
@@ -342,19 +383,13 @@ export const ProjectList = memo(
             <div className="flex flex-col gap-4 items-center justify-center p-8 text-muted bg-secondary/30">
               <div className="max-w-[600px] space-y-4">
                 <p className="text-base text-center">
-                  Create and explore personalized AI assistants with custom instructions, knowledge
-                  bases, and skill sets for each project.
+                  Create your project-based AI assistants with custom instructions, context, and
+                  model configurations.
                 </p>
                 <div className="flex flex-col gap-3 text-sm">
                   <div className="flex items-center gap-2">
                     <MessageSquare className="size-4" />
                     <span>Click a project card to start chatting</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <BookOpen className="size-4" />
-                    <span>
-                      The more you use a project, the deeper the AI&#39;s understanding becomes
-                    </span>
                   </div>
                 </div>
               </div>
