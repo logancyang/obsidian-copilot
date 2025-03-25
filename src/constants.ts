@@ -112,6 +112,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     core: true,
+    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -174,6 +175,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     core: true,
+    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -182,6 +184,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     core: true,
+    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {

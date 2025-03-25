@@ -312,7 +312,7 @@ export const ProjectList = memo(
                   <div className="flex items-center gap-2">
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Button size="fit" onClick={handleAddProject}>
+                        <Button size="fit" className="px-2" onClick={handleAddProject}>
                           Create
                           <Plus className="size-3" />
                         </Button>

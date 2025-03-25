@@ -104,6 +104,7 @@ export interface CustomModel {
   maxTokens?: number;
 
   context?: number;
+  projectEnabled?: boolean;
   plusExclusive?: boolean;
   believerExclusive?: boolean;
   capabilities?: ModelCapability[];
