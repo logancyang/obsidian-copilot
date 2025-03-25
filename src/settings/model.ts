@@ -1,4 +1,4 @@
-import { CustomModel } from "@/aiParams";
+import { CustomModel, ProjectConfig } from "@/aiParams";
 import { atom, createStore, useAtomValue } from "jotai";
 
 import { type ChainType } from "@/chainFactory";
@@ -89,9 +89,9 @@ export interface CopilotSettings {
   // undefined means never checked
   isPlusUser: boolean | undefined;
   inlineEditCommands: InlineEditCommandSettings[] | undefined;
-
   // Autocomplete settings
   enableAutocomplete: boolean;
+  projectList: Array<ProjectConfig>;
 }
 
 export const settingsStore = createStore();

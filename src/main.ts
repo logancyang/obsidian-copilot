@@ -1,5 +1,5 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import ChainManager from "@/LLMProviders/chainManager";
+import ProjectManager from "@/LLMProviders/projectManager";
 import { CustomModel } from "@/aiParams";
 import { AutocompleteService } from "@/autocomplete/autocompleteService";
 import { parseChatContent, updateChatMemory } from "@/chatUtils";
@@ -34,12 +34,13 @@ import {
   WorkspaceLeaf,
 } from "obsidian";
 import { IntentAnalyzer } from "./LLMProviders/intentAnalyzer";
+import { logInfo } from "@/logger";
 
 export default class CopilotPlugin extends Plugin {
   // A chat history that stores the messages sent and received
   // Only reset when the user explicitly clicks "New Chat"
   sharedState: SharedState;
-  chainManager: ChainManager;
+  projectManager: ProjectManager;
   brevilabsClient: BrevilabsClient;
   userMessageHistory: string[] = [];
   vectorStoreManager: VectorStoreManager;
@@ -58,8 +59,9 @@ export default class CopilotPlugin extends Plugin {
       registerCommands(this, prev, next);
     });
     this.addSettingTab(new CopilotSettingTab(this.app, this));
-    // Always have one instance of sharedState and chainManager in the plugin
-    this.sharedState = new SharedState();
+
+    // Always have one instance of sharedState in the plugin
+    this.sharedState = new SharedState(this);
 
     this.vectorStoreManager = VectorStoreManager.getInstance();
 
@@ -68,7 +70,8 @@ export default class CopilotPlugin extends Plugin {
     this.brevilabsClient.setPluginVersion(this.manifest.version);
     checkIsPlusUser();
 
-    this.chainManager = new ChainManager(this.app, this.vectorStoreManager);
+    // Initialize ProjectManager
+    this.projectManager = ProjectManager.getInstance(this.app, this.vectorStoreManager, this);
 
     // Initialize FileParserManager early with other core services
     this.fileParserManager = new FileParserManager(this.brevilabsClient);
@@ -122,10 +125,11 @@ export default class CopilotPlugin extends Plugin {
     if (this.vectorStoreManager) {
       this.vectorStoreManager.onunload();
     }
+
     this.settingsUnsubscriber?.();
     this.autocompleteService?.destroy();
 
-    console.log("Copilot plugin unloaded");
+    logInfo("Copilot plugin unloaded");
   }
 
   updateUserMessageHistory(newMessage: string) {
@@ -308,7 +312,7 @@ export default class CopilotPlugin extends Plugin {
     messages.forEach((message) => this.sharedState.addMessage(message));
 
     // Update the chain's memory with the loaded messages
-    await updateChatMemory(messages, this.chainManager.memoryManager);
+    await updateChatMemory(messages, this.projectManager.getCurrentChainManager().memoryManager);
 
     // Check if the Copilot view is already active
     const existingView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0];

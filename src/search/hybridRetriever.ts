@@ -1,5 +1,4 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import ChatModelManager from "@/LLMProviders/chatModelManager";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
 import { logInfo } from "@/logger";
 import VectorStoreManager from "@/search/vectorStoreManager";
@@ -13,6 +12,7 @@ import { BaseRetriever } from "@langchain/core/retrievers";
 import { search } from "@orama/orama";
 import { TFile } from "obsidian";
 import { DBOperations } from "./dbOperations";
+import ProjectManager from "@/LLMProviders/projectManager";
 
 export class HybridRetriever extends BaseRetriever {
   public lc_namespace = ["hybrid_retriever"];
@@ -130,8 +130,9 @@ export class HybridRetriever extends BaseRetriever {
   private async rewriteQuery(query: string): Promise<string> {
     try {
       const promptResult = await this.queryRewritePrompt.format({ question: query });
-      const chatModel = ChatModelManager.getInstance()
-        .getChatModel()
+      const chatModel = ProjectManager.instance
+        .getCurrentChainManager()
+        .chatModelManager.getChatModel()
         .bind({ temperature: 0 } as BaseChatModelCallOptions);
       const rewrittenQueryObject = await chatModel.invoke(promptResult);
 

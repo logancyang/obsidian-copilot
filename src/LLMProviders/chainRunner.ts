@@ -1,4 +1,6 @@
+import { getCurrentProject } from "@/aiParams";
 import { getStandaloneQuestion } from "@/chainUtils";
+import { getComposerSystemPrompt } from "@/composerUtils";
 import {
   ABORT_REASON,
   AI_SENDER,
@@ -10,7 +12,6 @@ import {
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { ChatMessage } from "@/sharedState";
 import { ToolManager } from "@/tools/toolManager";
-import { getComposerSystemPrompt } from "@/composerUtils";
 import {
   err2String,
   extractChatHistory,
@@ -27,6 +28,7 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { Notice } from "obsidian";
 import ChainManager from "./chainManager";
 import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "./intentAnalyzer";
+import ProjectManager from "./projectManager";
 
 export interface ChainRunner {
   run(
@@ -43,7 +45,15 @@ export interface ChainRunner {
 }
 
 abstract class BaseChainRunner implements ChainRunner {
-  constructor(protected chainManager: ChainManager) {}
+  protected chainManager: ChainManager;
+
+  constructor(chainManager: ChainManager) {
+    this.chainManager = chainManager;
+  }
+
+  protected async getSystemPrompt(): Promise<string> {
+    return getComposerSystemPrompt();
+  }
 
   abstract run(
     userMessage: ChatMessage,
@@ -164,7 +174,7 @@ class LLMChainRunner extends BaseChainRunner {
     let fullAIResponse = "";
 
     try {
-      const chain = ChainManager.getChain();
+      const chain = this.chainManager.getChain();
       const chatStream = await chain.stream({
         input: userMessage.message,
       } as any);
@@ -221,7 +231,7 @@ class VaultQAChainRunner extends BaseChainRunner {
       const memory = this.chainManager.memoryManager.getMemory();
       const memoryVariables = await memory.loadMemoryVariables({});
       const chatHistory = extractChatHistory(memoryVariables);
-      const qaStream = await ChainManager.getRetrievalChain().stream({
+      const qaStream = await this.chainManager.getRetrievalChain().stream({
         question: userMessage.message,
         chat_history: chatHistory,
       } as any);
@@ -248,7 +258,7 @@ class VaultQAChainRunner extends BaseChainRunner {
   }
 
   private addSourcestoResponse(response: string): string {
-    const docTitles = extractUniqueTitlesFromDocs(ChainManager.retrievedDocuments);
+    const docTitles = extractUniqueTitlesFromDocs(this.chainManager.getRetrievedDocuments());
     if (docTitles.length > 0) {
       const links = docTitles.map((title) => `- [[${title}]]`).join("\n");
       response += "\n\n#### Sources:\n\n" + links;
@@ -364,7 +374,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
 
     // Add system message if available
 
-    let fullSystemMessage = await getComposerSystemPrompt();
+    let fullSystemMessage = await this.getSystemPrompt();
 
     // Add chat history context to system message if exists
     if (chatHistory.length > 0) {
@@ -694,4 +704,25 @@ class CopilotPlusChainRunner extends BaseChainRunner {
   }
 }
 
-export { CopilotPlusChainRunner, LLMChainRunner, VaultQAChainRunner };
+class ProjectChainRunner extends CopilotPlusChainRunner {
+  protected async getSystemPrompt(): Promise<string> {
+    // get current project
+    const projectConfig = getCurrentProject();
+
+    if (!projectConfig) {
+      return super.getSystemPrompt();
+    }
+
+    // Get cached context synchronously
+    const context = ProjectManager.instance.getProjectContext(projectConfig.id);
+    let finalPrompt = projectConfig.systemPrompt;
+
+    if (context) {
+      finalPrompt = `${finalPrompt}\n\n${context}`;
+    }
+
+    return finalPrompt;
+  }
+}
+
+export { CopilotPlusChainRunner, LLMChainRunner, ProjectChainRunner, VaultQAChainRunner };

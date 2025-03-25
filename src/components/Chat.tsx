@@ -1,9 +1,17 @@
-import { useChainType, useModelKey } from "@/aiParams";
+import {
+  getCurrentProject,
+  ProjectConfig,
+  setCurrentProject,
+  useChainType,
+  useModelKey,
+} from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { updateChatMemory } from "@/chatUtils";
 import { ChatControls } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
+import { ProjectList } from "@/components/chat-components/ProjectList";
+import { resetComposerPromptCache } from "@/composerUtils";
 import { ABORT_REASON, COMMAND_IDS, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
 import { ContextProcessor } from "@/contextProcessor";
@@ -12,14 +20,15 @@ import { getAIResponse } from "@/langchainStream";
 import ChainManager from "@/LLMProviders/chainManager";
 import CopilotPlugin from "@/main";
 import { Mention } from "@/mentions/Mention";
-import { resetComposerPromptCache } from "@/composerUtils";
-import { getSettings, useSettingsValue } from "@/settings/model";
+import { getSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import SharedState, { ChatMessage, useSharedState } from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { err2String, formatDateTime } from "@/utils";
+import { Buffer } from "buffer";
 import { Notice, TFile } from "obsidian";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Buffer } from "buffer";
+
+type ChatMode = "default" | "project";
 
 interface ChatProps {
   sharedState: SharedState;
@@ -28,6 +37,7 @@ interface ChatProps {
   updateUserMessageHistory: (newMessage: string) => void;
   fileParserManager: FileParserManager;
   plugin: CopilotPlugin;
+  mode?: ChatMode;
 }
 
 const Chat: React.FC<ChatProps> = ({
@@ -52,6 +62,10 @@ const Chat: React.FC<ChatProps> = ({
   const [contextNotes, setContextNotes] = useState<TFile[]>([]);
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const [showChatUI, setShowChatUI] = useState(false);
+
+  const [previousMode, setPreviousMode] = useState<ChainType | null>(null);
+  const [mode, setSelectedChain] = useChainType();
 
   const mention = Mention.getInstance();
 
@@ -534,6 +548,47 @@ ${chatContent}`;
     [addMessage, chainManager.memoryManager, chatHistory, clearMessages]
   );
 
+  const handleAddProject = useCallback(
+    (project: ProjectConfig) => {
+      const currentProjects = settings.projectList || [];
+      const existingIndex = currentProjects.findIndex((p) => p.name === project.name);
+
+      if (existingIndex >= 0) {
+        throw new Error(`Project "${project.name}" already exists, please use a different name`);
+      }
+
+      const newProjectList = [...currentProjects, project];
+      updateSetting("projectList", newProjectList);
+      new Notice(`${project.name} added successfully`);
+      return true;
+    },
+    [settings.projectList]
+  );
+
+  const handleEditProject = useCallback(
+    (originP: ProjectConfig, updateP: ProjectConfig) => {
+      const currentProjects = settings.projectList || [];
+      const existingProject = currentProjects.find((p) => p.name === originP.name);
+
+      if (!existingProject) {
+        throw new Error(`Project "${originP.name}" does not exist`);
+      }
+
+      const newProjectList = currentProjects.map((p) => (p.name === originP.name ? updateP : p));
+      updateSetting("projectList", newProjectList);
+
+      // If this is the current project, update the current project atom
+      const currentProject = getCurrentProject();
+      if (currentProject?.id === originP.id) {
+        setCurrentProject(updateP);
+      }
+
+      new Notice(`${originP.name} updated successfully`);
+      return true;
+    },
+    [settings.projectList]
+  );
+
   const handleInsertToChat = useCallback((prompt: string) => {
     setInputMessage((prev) => `${prev} ${prompt} `);
   }, []);
@@ -559,22 +614,35 @@ ${chatContent}`;
     handleSaveAsNote,
   ]);
 
-  return (
-    <div className="chat-container">
-      <ChatMessages
-        chatHistory={chatHistory}
-        currentAiMessage={currentAiMessage}
-        loading={loading}
-        loadingMessage={loadingMessage}
-        app={app}
-        onRegenerate={handleRegenerate}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-        onInsertToChat={handleInsertToChat}
-        onReplaceChat={setInputMessage}
-      />
-      <div className="bottom-container">
-        <ChatControls onNewChat={handleNewChat} onSaveAsNote={() => handleSaveAsNote(true)} />
+  const renderChatComponents = () => (
+    <>
+      <div className="flex-1 overflow-y-auto">
+        <ChatMessages
+          chatHistory={chatHistory}
+          currentAiMessage={currentAiMessage}
+          loading={loading}
+          loadingMessage={loadingMessage}
+          app={app}
+          onRegenerate={handleRegenerate}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onInsertToChat={handleInsertToChat}
+          onReplaceChat={setInputMessage}
+          showHelperComponents={mode !== "project"}
+        />
+      </div>
+      <div className="flex flex-col items-center justify-end w-full flex-none box-border sticky bottom-0 border-t border-border">
+        <ChatControls
+          onNewChat={handleNewChat}
+          onSaveAsNote={() => handleSaveAsNote(true)}
+          onModeChange={(newMode) => {
+            setPreviousMode(mode);
+            // Hide chat UI when switching to project mode
+            if (newMode === ChainType.PROJECT_CHAIN) {
+              setShowChatUI(false);
+            }
+          }}
+        />
         <ChatInput
           ref={inputRef}
           inputMessage={inputMessage}
@@ -592,7 +660,43 @@ ${chatContent}`;
           selectedImages={selectedImages}
           onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
           setSelectedImages={setSelectedImages}
+          disableModelSwitch={mode === "project"}
         />
+      </div>
+    </>
+  );
+
+  return (
+    <div className="chat-container">
+      <div className="h-full">
+        <div className="flex flex-col h-full relative">
+          {mode === ChainType.PROJECT_CHAIN && (
+            <div className={`${mode === ChainType.PROJECT_CHAIN ? "z-modal" : ""}`}>
+              <ProjectList
+                projects={settings.projectList || []}
+                defaultOpen={true}
+                app={app}
+                hasMessages={false}
+                onProjectAdded={handleAddProject}
+                onEditProject={handleEditProject}
+                inputRef={inputRef}
+                onClose={() => {
+                  if (previousMode) {
+                    setSelectedChain(previousMode);
+                    setPreviousMode(null);
+                  } else {
+                    // default back to chat or plus mode
+                    setSelectedChain(
+                      settings.isPlusUser ? ChainType.COPILOT_PLUS_CHAIN : ChainType.LLM_CHAIN
+                    );
+                  }
+                }}
+                showChatUI={(v) => setShowChatUI(v)}
+              />
+            </div>
+          )}
+          {(mode !== "project" || (mode === "project" && showChatUI)) && renderChatComponents()}
+        </div>
       </div>
     </div>
   );
