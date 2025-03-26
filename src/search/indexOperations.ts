@@ -192,7 +192,7 @@ export class IndexOperations {
         this.dbOps.checkIndexIntegrity().catch((err) => {
           logError("Background integrity check failed:", err);
         });
-      }, 0);
+      }, 1000); // 1 second delay to ensure the index is saved
 
       return this.state.indexedCount;
     } catch (error) {
