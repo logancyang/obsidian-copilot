@@ -373,7 +373,6 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     const messages: any[] = [];
 
     // Add system message if available
-
     let fullSystemMessage = await this.getSystemPrompt();
 
     // Add chat history context to system message if exists
@@ -394,9 +393,8 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     }
 
     // Add chat history
-    for (const [human, ai] of chatHistory) {
-      messages.push({ role: "user", content: human });
-      messages.push({ role: "assistant", content: ai });
+    for (const entry of chatHistory) {
+      messages.push({ role: entry.role, content: entry.content });
     }
 
     // Get the current chat model
@@ -493,7 +491,18 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       try {
         // Use the original message for intent analysis
         const messageForAnalysis = userMessage.originalMessage || userMessage.message;
-        toolCalls = await IntentAnalyzer.analyzeIntent(messageForAnalysis);
+        const messageWithAddedContext = userMessage.message;
+
+        // Format chat history from memory
+        const memory = this.chainManager.memoryManager.getMemory();
+        const memoryVariables = await memory.loadMemoryVariables({});
+        const chatHistory = extractChatHistory(memoryVariables);
+
+        toolCalls = await IntentAnalyzer.analyzeIntent(
+          messageForAnalysis,
+          messageWithAddedContext,
+          chatHistory
+        );
       } catch (error: any) {
         return this.handleResponse(
           getApiErrorMessage(error),
@@ -544,7 +553,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         if (debug) console.log("==== Step 5: Invoking QA Chain ====");
         const qaPrompt = await this.chainManager.promptManager.getQAPrompt({
           question: enhancedQuestion,
-          context: context,
+          context,
           systemMessage: "", // System prompt is added separately in streamMultimodalResponse
         });
 
