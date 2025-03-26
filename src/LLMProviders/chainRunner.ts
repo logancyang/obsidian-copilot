@@ -1,6 +1,6 @@
 import { getCurrentProject } from "@/aiParams";
 import { getStandaloneQuestion } from "@/chainUtils";
-import { getComposerSystemPrompt } from "@/composerUtils";
+import { getSystemPrompt } from "@/settings/model";
 import {
   ABORT_REASON,
   AI_SENDER,
@@ -49,10 +49,6 @@ abstract class BaseChainRunner implements ChainRunner {
 
   constructor(chainManager: ChainManager) {
     this.chainManager = chainManager;
-  }
-
-  protected async getSystemPrompt(): Promise<string> {
-    return getComposerSystemPrompt();
   }
 
   abstract run(
@@ -373,7 +369,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     const messages: any[] = [];
 
     // Add system message if available
-    let fullSystemMessage = await this.getSystemPrompt();
+    let fullSystemMessage = getSystemPrompt();
 
     // Add chat history context to system message if exists
     if (chatHistory.length > 0) {

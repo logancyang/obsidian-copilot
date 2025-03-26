@@ -11,7 +11,6 @@ import { ChatControls } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
 import { ProjectList } from "@/components/chat-components/ProjectList";
-import { resetComposerPromptCache } from "@/composerUtils";
 import { ABORT_REASON, COMMAND_IDS, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
 import { ContextProcessor } from "@/contextProcessor";
@@ -601,7 +600,6 @@ ${chatContent}`;
     clearMessages();
     chainManager.memoryManager.clearChatMemory();
     // Reset the composer prompt cache when starting a new chat
-    resetComposerPromptCache();
     setCurrentAiMessage("");
     setContextNotes([]);
     setIncludeActiveNote(false);
