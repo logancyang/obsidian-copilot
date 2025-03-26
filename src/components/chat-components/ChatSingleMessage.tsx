@@ -121,11 +121,25 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         });
       };
 
-      const replaceLinks = (text: string, regex: RegExp, template: (file: TFile) => string) =>
-        text.replace(regex, (match: string, selection: string) => {
-          const file = app.metadataCache.getFirstLinkpathDest(selection, sourcePath);
-          return file ? template(file) : match;
-        });
+      const replaceLinks = (text: string, regex: RegExp, template: (file: TFile) => string) => {
+        // Split text into code blocks and non-code blocks
+        const parts = text.split(/(```[\s\S]*?```|`[^`]*`)/g);
+
+        return parts
+          .map((part, index) => {
+            // Even indices are normal text, odd indices are code blocks
+            if (index % 2 === 0) {
+              // Process links only in non-code blocks
+              return part.replace(regex, (match: string, selection: string) => {
+                const file = app.metadataCache.getFirstLinkpathDest(selection, sourcePath);
+                return file ? template(file) : match;
+              });
+            }
+            // Return code blocks unchanged
+            return part;
+          })
+          .join("");
+      };
 
       // Process LaTeX
       const latexProcessed = content
