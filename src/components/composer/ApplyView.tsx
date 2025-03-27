@@ -1,20 +1,20 @@
 import { ApplyChangesConfirmModal } from "@/components/modals/ApplyChangesConfirmModal";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
-import { Change, diffLines } from "diff";
+import { Change } from "diff";
 import { Check, X as XIcon } from "lucide-react";
 import { App, ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
-import React, { useMemo, useRef, useState } from "react";
+import React, { useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { Button } from "../ui/button";
+import { Composer } from "@/LLMProviders/composer";
+import { useState } from "react";
 
 export const APPLY_VIEW_TYPE = "obsidian-copilot-apply-view";
 
 export interface ApplyViewState {
-  file: TFile;
-  originalContent: string;
-  newContent: string;
-  path?: string;
+  changes: Change[];
+  path: string;
 }
 
 // Extended Change interface to track user decisions
@@ -80,13 +80,8 @@ interface ApplyViewRootProps {
 }
 
 const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
-  // Initialize diff with extended properties - moved before conditional
   const [diff, setDiff] = useState<ExtendedChange[]>(() => {
-    if (!state?.originalContent || !state?.newContent) {
-      return [];
-    }
-    const initialDiff = diffLines(state.originalContent, state.newContent);
-    return initialDiff.map((change) => ({
+    return state.changes.map((change) => ({
       ...change,
       accepted: null, // Start with null (undecided)
     }));
@@ -98,46 +93,17 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   const hasAnyDecidedChanges = diff.some((change) => change.accepted !== null);
 
   // Group changes into blocks for better UI presentation
-  const changeBlocks = useMemo(() => {
-    if (!diff.length) return;
-
-    const blocks: ExtendedChange[][] = [];
-    let currentBlock: ExtendedChange[] = [];
-    let inChangeBlock = false;
-
-    diff.forEach((change) => {
-      if (change.added || change.removed) {
-        if (!inChangeBlock) {
-          inChangeBlock = true;
-          currentBlock = [];
-        }
-        currentBlock.push(change);
-      } else {
-        if (inChangeBlock) {
-          blocks.push([...currentBlock]);
-          currentBlock = [];
-          inChangeBlock = false;
-        }
-        blocks.push([change]);
-      }
-    });
-
-    if (currentBlock.length > 0) {
-      blocks.push(currentBlock);
-    }
-
-    return blocks;
-  }, [diff]);
+  const changeBlocks = Composer.getChangeBlocks(diff);
 
   // Add refs to track change blocks
   const blockRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // Add defensive check for state after hooks
-  if (!state || !state.originalContent || !state.newContent) {
+  if (!state || !state.changes) {
     logError("Invalid state:", state);
     return (
       <div className="flex flex-col h-full items-center justify-center">
-        <div className="text-error">Error: Invalid state - missing content</div>
+        <div className="text-error">Error: Invalid state - missing changes</div>
         <Button onClick={close} className="mt-4">
           Close
         </Button>
@@ -158,7 +124,14 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
           .map((change) => change.value)
           .join("");
 
-        await app.vault.modify(state.file, newContent);
+        const file = app.vault.getAbstractFileByPath(state.path);
+        if (!file || !(file instanceof TFile)) {
+          new Notice("File not found:" + state.path);
+          close();
+          return;
+        }
+
+        await app.vault.modify(file, newContent);
         new Notice("Changes applied successfully");
         close();
       };

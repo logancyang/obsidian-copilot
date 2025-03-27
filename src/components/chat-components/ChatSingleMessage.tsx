@@ -3,7 +3,6 @@ import { SourcesModal } from "@/components/modals/SourcesModal";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { USER_SENDER } from "@/constants";
-import { useApplyCode } from "@/hooks/useApplyCode";
 import { cn } from "@/lib/utils";
 import { ChatMessage } from "@/sharedState";
 import { insertIntoEditor } from "@/utils";
@@ -11,7 +10,7 @@ import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
-import { CodeBlock } from "./CodeBlock";
+import { ComposerCodeBlock } from "./ComposerCodeBlock";
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
   if (!context || (context.notes.length === 0 && context.urls.length === 0)) {
@@ -69,8 +68,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const handleApplyCode = useApplyCode(app, chatHistory);
 
   const copyToClipboard = () => {
     if (!navigator.clipboard || !navigator.clipboard.writeText) {
@@ -255,13 +252,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
               const root = createRoot(container);
               roots.push(root);
               if (!isUnmounting) {
-                root.render(
-                  <CodeBlock
-                    code={cleanedCode}
-                    path={path}
-                    onApply={isStreaming ? undefined : handleApplyCode}
-                  />
-                );
+                root.render(<ComposerCodeBlock path={path} code={cleanedCode} />);
               }
             }
           });
@@ -289,7 +280,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         });
       }, 0);
     };
-  }, [message, app, componentRef, isStreaming, preprocess, handleApplyCode]);
+  }, [message, app, componentRef, isStreaming, preprocess]);
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {

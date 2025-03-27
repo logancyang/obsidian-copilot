@@ -2,14 +2,17 @@ import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Check, Loader2 } from "lucide-react";
 import { Component, MarkdownRenderer } from "obsidian";
+import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
+import { Composer } from "@/LLMProviders/composer";
+import { logError } from "@/logger";
+import { Notice } from "obsidian";
 
-interface CodeBlockProps {
+interface ComposerCodeBlockProps {
   code: string;
-  path?: string;
-  onApply?: (path: string, code: string) => Promise<void>;
+  path: string;
 }
 
-export const CodeBlock: React.FC<CodeBlockProps> = ({ code, path, onApply }) => {
+export const ComposerCodeBlock: React.FC<ComposerCodeBlockProps> = ({ path, code }) => {
   const [isApplying, setIsApplying] = useState(false);
   const codeRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
@@ -38,11 +41,25 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ code, path, onApply }) => 
   }, [code, path]);
 
   const handleApply = async () => {
-    if (!path || !onApply) return;
+    if (!path) return;
 
     setIsApplying(true);
     try {
-      await onApply(path, code);
+      const changes = Composer.getChanges(path);
+
+      // Open the Apply View in a new leaf with the processed content
+      const leaf = app.workspace.getLeaf(true);
+      await leaf.setViewState({
+        type: APPLY_VIEW_TYPE,
+        active: true,
+        state: {
+          changes,
+          path,
+        },
+      });
+    } catch (error) {
+      logError("Error calling composer apply:", error);
+      new Notice(`Error processing code: ${error.message}`);
     } finally {
       setIsApplying(false);
     }
@@ -53,7 +70,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ code, path, onApply }) => 
       {path && (
         <div className="flex justify-between items-center border-[0px] border-b border-border border-solid gap-2 p-2 overflow-hidden">
           <div className="text-xs p-1 text-muted-foreground truncate flex-1">{path}</div>
-          {onApply && (
+          {
             <Button
               className="text-muted"
               variant="ghost2"
@@ -68,7 +85,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ code, path, onApply }) => 
               )}
               Apply
             </Button>
-          )}
+          }
         </div>
       )}
 

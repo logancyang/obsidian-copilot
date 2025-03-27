@@ -6,6 +6,7 @@ import { App, TFile } from "obsidian";
 
 export class Composer {
   private static instance: Composer;
+  private static changesMap: { [key: string]: Change[] } = {};
   private constructor() {}
 
   public static getInstance(): Composer {
@@ -13,6 +14,32 @@ export class Composer {
       Composer.instance = new Composer();
     }
     return Composer.instance;
+  }
+
+  public static getChanges(notePath: string): Change[] {
+    return Composer.changesMap[notePath] || [];
+  }
+
+  // Group changes into blocks for better UI presentation
+  public static getChangeBlocks(changes: Change[]): Change[][] {
+    const blocks: Change[][] = [];
+    let currentBlock: Change[] = [];
+
+    changes.forEach((change) => {
+      if (change.added || change.removed) {
+        currentBlock.push(change);
+      } else {
+        if (currentBlock.length > 0) {
+          blocks.push(currentBlock);
+          currentBlock = [];
+        }
+        blocks.push([change]);
+      }
+    });
+    if (currentBlock.length > 0) {
+      blocks.push(currentBlock);
+    }
+    return blocks;
   }
 
   private async composerResponse(
@@ -110,28 +137,6 @@ export class Composer {
     }
   }
 
-  // Group changes into blocks for better UI presentation
-  private getChangeBlocks(changes: Change[]): Change[][] {
-    const blocks: Change[][] = [];
-    let currentBlock: Change[] = [];
-
-    changes.forEach((change) => {
-      if (change.added || change.removed) {
-        currentBlock.push(change);
-      } else {
-        if (currentBlock.length > 0) {
-          blocks.push(currentBlock);
-          currentBlock = [];
-        }
-        blocks.push([change]);
-      }
-    });
-    if (currentBlock.length > 0) {
-      blocks.push(currentBlock);
-    }
-    return blocks;
-  }
-
   // Break content into lines and wrap each line in ~~
   private strikeThrough(content: string): string {
     const lines = content.trim().split("\n");
@@ -181,11 +186,13 @@ export class Composer {
       const originalContent = await app.vault.read(file);
       // Get the diff
       const changes = diffTrimmedLines(originalContent, newContent, { newlineIsToken: true });
+      // Cache the changes to be used by the Apply view.
+      Composer.changesMap[path] = changes;
 
       console.log("==== Changes ====\n", changes);
 
       // Group changes into blocks
-      const blocks = this.getChangeBlocks(changes);
+      const blocks = Composer.getChangeBlocks(changes);
 
       // Process blocks into markdown
       const markdownChanges = this.getRelevantChangesMarkdown(blocks);
