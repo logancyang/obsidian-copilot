@@ -120,7 +120,9 @@ export default class ChatModelManager {
           customModel.azureOpenAIApiDeploymentName || settings.azureOpenAIApiDeploymentName,
         openAIApiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
         configuration: {
-          baseURL: customModel.baseUrl,
+          baseURL:
+            customModel.baseUrl ||
+            `https://${customModel.azureOpenAIApiInstanceName || settings.azureOpenAIApiInstanceName}.openai.azure.com/openai/deployments/${customModel.azureOpenAIApiDeploymentName || settings.azureOpenAIApiDeploymentName}`,
           defaultQuery: {
             "api-version": customModel.azureOpenAIApiVersion || settings.azureOpenAIApiVersion,
           },
