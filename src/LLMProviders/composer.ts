@@ -48,7 +48,7 @@ export class Composer {
     debug: boolean
   ): Promise<string> {
     const composerSystemPrompt = `
-    You are a helpful assistant that creates note content for obsidian users.
+    You are a helpful assistant that creates markdown notes for obsidian users.
 
     # Task
     Your task is to generate the new markdown note content and the note path when the user input contains @composer:
@@ -64,7 +64,7 @@ export class Composer {
 
     # Output Format
     Return your response in JSON format with the following fields:
-    * "note_path": Required. The path of the markdown note (either existing path or new path for new notes.
+    * "note_path": Required. The path of the markdown file. Must end with .md. (either existing path or new path for new notes.
     * "note_content": Required. The complete content of the markdown note after your changes or the error message.
     * "success": Required. true or false. Whether the note content was created successfully.`;
 
@@ -92,6 +92,9 @@ export class Composer {
     }
     const response = await chatModel.invoke(messages);
     let responseContent = response.content as string;
+    if (debug) {
+      console.log("==== Composer Response ====\n", responseContent);
+    }
     if (responseContent.startsWith("```json") && responseContent.endsWith("```")) {
       responseContent = responseContent.slice(7, -3);
     }
@@ -176,7 +179,8 @@ export class Composer {
       // Get the file from the path
       const file = app.vault.getAbstractFileByPath(path);
       if (!file) {
-        throw new Error(`File not found: ${path}`);
+        // If the file does not exist, return the newContent directly
+        return newContent;
       }
 
       if (!(file instanceof TFile)) {
