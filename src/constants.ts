@@ -50,6 +50,8 @@ export enum ChatModels {
   AZURE_OPENAI = "azure-openai",
   GEMINI_PRO = "gemini-2.0-pro-exp",
   GEMINI_FLASH = "gemini-2.0-flash",
+  GEMINI_15_PRO = "gemini-1.5-pro-001",
+  GEMINI_15_FLASH = "gemini-1.5-flash-001", // TODO(logan): Project should use 2.0 flash once it supports context caching
   CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest",
   CLAUDE_3_5_HAIKU = "claude-3-5-haiku-latest",
   COMMAND_R = "command-r",
@@ -111,6 +113,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     core: true,
+    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -165,6 +168,24 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.GOOGLE,
     enabled: true,
     isBuiltIn: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
+    name: ChatModels.GEMINI_15_PRO,
+    provider: ChatModelProviders.GOOGLE,
+    enabled: true,
+    isBuiltIn: true,
+    core: true,
+    projectEnabled: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
+    name: ChatModels.GEMINI_15_FLASH,
+    provider: ChatModelProviders.GOOGLE,
+    enabled: true,
+    isBuiltIn: true,
+    core: true,
+    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -497,6 +518,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   promptUsageTimestamps: {},
   defaultConversationNoteName: "{$topic}@{$date}_{$time}",
   inlineEditCommands: DEFAULT_INLINE_EDIT_COMMANDS,
+  projectList: [],
 };
 
 export const EVENT_NAMES = {

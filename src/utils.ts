@@ -1053,3 +1053,7 @@ export function checkModelApiKey(
 export function removeThinkTags(text: string): string {
   return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
 }
+
+export function randomUUID() {
+  return crypto.randomUUID();
+}
