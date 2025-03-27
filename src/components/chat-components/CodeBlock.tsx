@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Check, Loader2 } from "lucide-react";
+import { Component, MarkdownRenderer } from "obsidian";
 
 interface CodeBlockProps {
   code: string;
@@ -10,6 +11,31 @@ interface CodeBlockProps {
 
 export const CodeBlock: React.FC<CodeBlockProps> = ({ code, path, onApply }) => {
   const [isApplying, setIsApplying] = useState(false);
+  const codeRef = useRef<HTMLDivElement>(null);
+  const componentRef = useRef<Component | null>(null);
+
+  useEffect(() => {
+    if (codeRef.current && path) {
+      // Create a new Component instance if it doesn't exist
+      if (!componentRef.current) {
+        componentRef.current = new Component();
+      }
+
+      // Clear previous content
+      codeRef.current.innerHTML = "";
+
+      // Render markdown content
+      MarkdownRenderer.renderMarkdown(code, codeRef.current, path, componentRef.current);
+
+      // Cleanup function
+      return () => {
+        if (componentRef.current) {
+          componentRef.current.unload();
+          componentRef.current = null;
+        }
+      };
+    }
+  }, [code, path]);
 
   const handleApply = async () => {
     if (!path || !onApply) return;
@@ -46,9 +72,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ code, path, onApply }) => 
         </div>
       )}
 
-      <pre className="m-0 border-none">
-        <code>{code}</code>
-      </pre>
+      <div ref={codeRef} className="m-0 border-none" />
     </div>
   );
 };

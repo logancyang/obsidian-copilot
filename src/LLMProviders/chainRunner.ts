@@ -1,6 +1,6 @@
 import { getCurrentProject } from "@/aiParams";
-import { BaseChatModelCallOptions } from "@langchain/core/language_models/chat_models";
 import { getStandaloneQuestion } from "@/chainUtils";
+import { Composer } from "./composer";
 import { getSystemPrompt } from "@/settings/model";
 import {
   ABORT_REASON,
@@ -354,71 +354,6 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     return this.hasCapability(model, ModelCapability.VISION);
   }
 
-  private async composerResponse(
-    textContent: string,
-    userMessage: ChatMessage,
-    debug: boolean
-  ): Promise<string> {
-    // Get chat history
-    const memory = this.chainManager.memoryManager.getMemory();
-    const memoryVariables = await memory.loadMemoryVariables({});
-    const chatHistory = extractChatHistory(memoryVariables);
-
-    const composerSystemPrompt = `
-    You are a helpful assistant that creates note content for obsidian users.
-
-# Task
-Your task is to generate the new markdown note content and the note path when the user input contains @composer:
-1. For editing existing notes - Return the updated markdown note content and the original note path.
-2. For creating new notes - Return the new markdown note content and the new note path based on user's request.
-
-Below is the chat history the user and the previous assistant have had. You should continue the conversation if necessary but respond in a different format.
-<CHAT_HISTORY>
-${chatHistory.map((entry) => `${entry.role}: ${entry.content}`).join("\n")}
-</CHAT_HISTORY>
-
-# Output Format
-Return your response in JSON format with the following fields:
-* "note_path": Required. The path of the markdown note (either existing path or new path for new notes.
-* "note_content": Required. The complete content of the markdown note after your changes
-`;
-
-    const messages: any[] = [
-      {
-        role: "system",
-        content: composerSystemPrompt,
-      },
-    ];
-
-    const chatModel = this.chainManager.chatModelManager
-      .getChatModel()
-      .bind({ maxTokens: 16000 } as BaseChatModelCallOptions);
-
-    // Get the current chat model
-    const chatModelCurrent = this.chainManager.chatModelManager.getChatModel();
-    const isMultimodalCurrent = this.isMultimodalModel(chatModelCurrent);
-
-    // Build message content with text and images for multimodal models, or just text for text-only models
-    const content = isMultimodalCurrent
-      ? await this.buildMessageContent(textContent, userMessage)
-      : textContent;
-
-    // Add current user message
-    messages.push({
-      role: "user",
-      content,
-    });
-
-    if (debug) {
-      console.log("==== Composer Request ====\n", messages);
-    }
-    const response = await chatModel.invoke(messages);
-    if (debug) {
-      console.log("==== Composer Response ====\n", response.content);
-    }
-    return response.content as string;
-  }
-
   private async streamMultimodalResponse(
     textContent: string,
     userMessage: ChatMessage,
@@ -435,7 +370,7 @@ Return your response in JSON format with the following fields:
     const messages: any[] = [];
 
     // Add system message if available
-    let fullSystemMessage = getSystemPrompt();
+    let fullSystemMessage = await this.getSystemPrompt();
 
     // Add chat history context to system message if exists
     if (chatHistory.length > 0) {
@@ -577,14 +512,14 @@ Return your response in JSON format with the following fields:
         (output) => output.tool === "localSearch" && output.output && output.output.length > 0
       );
 
+      // Format chat history from memory
+      const memory = this.chainManager.memoryManager.getMemory();
+      const memoryVariables = await memory.loadMemoryVariables({});
+      const chatHistory = extractChatHistory(memoryVariables);
+
       if (localSearchResult) {
         if (debug) console.log("==== Step 2: Processing local search results ====");
         const documents = JSON.parse(localSearchResult.output);
-
-        // Format chat history from memory
-        const memory = this.chainManager.memoryManager.getMemory();
-        const memoryVariables = await memory.loadMemoryVariables({});
-        const chatHistory = extractChatHistory(memoryVariables);
 
         if (debug) console.log("==== Step 3: Condensing Question ====");
         const standaloneQuestion = await getStandaloneQuestion(cleanedUserMessage, chatHistory);
@@ -630,14 +565,11 @@ Return your response in JSON format with the following fields:
         }
 
         if (messageForAnalysis.includes("@composer")) {
-          const composerResponse = await this.composerResponse(
-            enhancedUserMessage,
-            userMessage,
-            debug
-          );
-          const composerUserMessage = this.prepareComposerUserMessage(
+          const composerUserMessage = await Composer.getInstance().composerUserMessage(
             messageForAnalysis,
-            composerResponse
+            enhancedUserMessage,
+            chatHistory,
+            debug
           );
           fullAIResponse = await this.streamMultimodalResponse(
             composerUserMessage,
@@ -732,19 +664,6 @@ Return your response in JSON format with the following fields:
     return toolOutputs;
   }
 
-  private prepareComposerUserMessage(userMessage: string, composerOutput: string) {
-    return `User message: ${userMessage}
-
-    The user is calling @composer tool to generate note content. Below are the @composer output:
-
-    <COMPOSER_OUTPUT>
-    ${composerOutput}
-    </COMPOSER_OUTPUT>
-
-    Return the content inside <COMPOSER_OUTPUT> directly without any additional text.
-`;
-  }
-
   private prepareEnhancedUserMessage(userMessage: string, toolOutputs: any[]) {
     let context = "";
     if (toolOutputs.length > 0) {
@@ -794,6 +713,25 @@ Return your response in JSON format with the following fields:
       ? `Local Search Result for ${timeExpression}:\n${formattedDocs}`
       : `Local Search Result:\n${formattedDocs}`;
   }
+
+  protected async getSystemPrompt(): Promise<string> {
+    // get current project
+    const projectConfig = getCurrentProject();
+
+    if (!projectConfig) {
+      return getSystemPrompt();
+    }
+
+    // Get cached context synchronously
+    const context = ProjectManager.instance.getProjectContext(projectConfig.id);
+    let finalPrompt = projectConfig.systemPrompt;
+
+    if (context) {
+      finalPrompt = `${finalPrompt}\n\n${context}`;
+    }
+
+    return finalPrompt;
+  }
 }
 
 class ProjectChainRunner extends CopilotPlusChainRunner {
@@ -802,7 +740,7 @@ class ProjectChainRunner extends CopilotPlusChainRunner {
     const projectConfig = getCurrentProject();
 
     if (!projectConfig) {
-      return super.getSystemPrompt();
+      return getSystemPrompt();
     }
 
     // Get cached context synchronously
