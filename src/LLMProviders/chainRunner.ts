@@ -29,6 +29,42 @@ import { Notice } from "obsidian";
 import ChainManager from "./chainManager";
 import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "./intentAnalyzer";
 
+class ThinkBlockStreamer {
+  private hasOpenThinkBlock = false;
+  private fullResponse = "";
+
+  constructor(private updateCurrentAiMessage: (message: string) => void) {}
+
+  processChunk(chunk: any) {
+    this.fullResponse += chunk.content;
+
+    if (chunk.additional_kwargs?.reasoning_content) {
+      // If we don't have an open think block, add one
+      if (!this.hasOpenThinkBlock) {
+        this.fullResponse += "\n<think>";
+        this.hasOpenThinkBlock = true;
+      }
+      // Add the new reasoning content
+      this.fullResponse += chunk.additional_kwargs.reasoning_content;
+    } else if (this.hasOpenThinkBlock) {
+      // If we have an open think block but no more reasoning content, close it
+      this.fullResponse += "</think>";
+      this.hasOpenThinkBlock = false;
+    }
+
+    this.updateCurrentAiMessage(this.fullResponse);
+  }
+
+  close() {
+    // Make sure to close any open think block at the end
+    if (this.hasOpenThinkBlock) {
+      this.fullResponse += "</think>";
+      this.updateCurrentAiMessage(this.fullResponse);
+    }
+    return this.fullResponse;
+  }
+}
+
 export interface ChainRunner {
   run(
     userMessage: ChatMessage,
@@ -162,7 +198,7 @@ class LLMChainRunner extends BaseChainRunner {
     }
   ): Promise<string> {
     const { debug = false } = options;
-    let fullAIResponse = "";
+    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage);
 
     try {
       const chain = ChainManager.getChain();
@@ -172,15 +208,14 @@ class LLMChainRunner extends BaseChainRunner {
 
       for await (const chunk of chatStream) {
         if (abortController.signal.aborted) break;
-        fullAIResponse += chunk.content;
-        updateCurrentAiMessage(fullAIResponse);
+        streamer.processChunk(chunk);
       }
     } catch (error) {
       await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
     }
 
     return this.handleResponse(
-      fullAIResponse,
+      streamer.close(),
       userMessage,
       abortController,
       addMessage,
@@ -437,16 +472,15 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       console.log("==== Final Request to AI ====\n", messages);
     }
 
-    let fullAIResponse = "";
+    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage);
     const chatStream = await this.chainManager.chatModelManager.getChatModel().stream(messages);
 
     for await (const chunk of chatStream) {
       if (abortController.signal.aborted) break;
-      fullAIResponse += chunk.content;
-      updateCurrentAiMessage(fullAIResponse);
+      streamer.processChunk(chunk);
     }
 
-    return fullAIResponse;
+    return streamer.close();
   }
 
   async run(
