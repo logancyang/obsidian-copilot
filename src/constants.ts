@@ -58,11 +58,13 @@ export enum ChatModels {
   GROQ_LLAMA_8b = "llama3-8b-8192",
   MISTRAL_TINY = "mistral-tiny-latest",
   DEEPSEEK_REASONER = "deepseek-reasoner",
+  DEEPSEEK_CHAT = "deepseek-chat",
 }
 
 // Model Providers
 export enum ChatModelProviders {
   OPENAI = "openai",
+  OPENAI_FORMAT = "3rd party (openai-format)",
   AZURE_OPENAI = "azure openai",
   ANTHROPIC = "anthropic",
   COHEREAI = "cohereai",
@@ -71,7 +73,6 @@ export enum ChatModelProviders {
   GROQ = "groq",
   OLLAMA = "ollama",
   LM_STUDIO = "lm-studio",
-  OPENAI_FORMAT = "3rd party (openai-format)",
   COPILOT_PLUS = "copilot-plus",
   MISTRAL = "mistralai",
   DEEPSEEK = "deepseek",
@@ -172,6 +173,12 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.AZURE_OPENAI,
     provider: ChatModelProviders.AZURE_OPENAI,
+    enabled: true,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.DEEPSEEK_CHAT,
+    provider: ChatModelProviders.DEEPSEEK,
     enabled: true,
     isBuiltIn: true,
   },
@@ -367,7 +374,7 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     label: "DeepSeek",
     host: "https://api.deepseek.com/",
     keyManagementURL: "https://platform.deepseek.com/api-keys",
-    testModel: ChatModels.DEEPSEEK_REASONER,
+    testModel: ChatModels.DEEPSEEK_CHAT,
   },
   [EmbeddingModelProviders.COPILOT_PLUS]: {
     label: "Copilot Plus",
