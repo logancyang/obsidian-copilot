@@ -1,6 +1,6 @@
 import { type CopilotSettings } from "@/settings/model";
-import { Platform } from "obsidian";
 import { Buffer } from "buffer";
+import { Platform } from "obsidian";
 
 // @ts-ignore
 let safeStorageInternal: Electron.SafeStorage | null = null;
@@ -52,6 +52,15 @@ export async function encryptAllKeys(
   if (Array.isArray(settings.activeModels)) {
     newSettings.activeModels = await Promise.all(
       settings.activeModels.map(async (model) => ({
+        ...model,
+        apiKey: await getEncryptedKey(model.apiKey || ""),
+      }))
+    );
+  }
+
+  if (Array.isArray(settings.activeEmbeddingModels)) {
+    newSettings.activeEmbeddingModels = await Promise.all(
+      settings.activeEmbeddingModels.map(async (model) => ({
         ...model,
         apiKey: await getEncryptedKey(model.apiKey || ""),
       }))
