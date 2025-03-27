@@ -17,8 +17,9 @@ export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assist
   7. When showing note titles, use [[title]] format and do not wrap them in \` \`.
   8. When showing **Obsidian internal** image links, use ![[link]] format and do not wrap them in \` \`.
   9. When showing **web** image links, use ![link](url) format and do not wrap them in \` \`.
-  10. Always respond in the language of the user's query.
-  11. Do NOT mention the additional context provided such as getCurrentTime and getTimeRangeMs if it's irrelevant to the user message.`;
+  10. When generating a table, use compact formatting without excessive whitespace.
+  11. Always respond in the language of the user's query.
+  12. Do NOT mention the additional context provided such as getCurrentTime and getTimeRangeMs if it's irrelevant to the user message.`;
 export const EMPTY_INDEX_ERROR_MESSAGE =
   "Copilot index does not exist. Please index your vault first!\n\n1. Set a working embedding model in QA settings. If it's not a local model, don't forget to set the API key. \n\n2. Click 'Refresh Index for Vault' and wait for indexing to complete. If you encounter the rate limiting error, please turn your request per second down in QA setting.";
 export const CHUNK_SIZE = 6000;
