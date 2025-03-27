@@ -55,6 +55,7 @@ export class Composer {
     1. For editing existing notes - Return the updated markdown note content and the original note path.
     2. For creating new notes - Return the new markdown note content and the new note path based on user's request.
     3. If user's request is not clear, such as the note path is not provided, return an error message and set success to false.
+    4. Do no include the title to the note content.
 
     Below is the chat history the user and the previous assistant have had. You should continue the conversation if necessary but respond in a different format.
     <CHAT_HISTORY>
@@ -128,7 +129,7 @@ export class Composer {
         ${changesMarkdown}
         \`\`\`
 
-        Return the markdown block above directly and add a summary of the changes at the end.`;
+        Return the markdown block above directly and add a brief summary of the changes at the end.`;
     } else {
       return `User message: ${originalMessage}
 

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Check, Loader2 } from "lucide-react";
+import { Check } from "lucide-react";
 import { Component, MarkdownRenderer } from "obsidian";
 import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
 import { Composer } from "@/LLMProviders/composer";
@@ -13,7 +13,6 @@ interface ComposerCodeBlockProps {
 }
 
 export const ComposerCodeBlock: React.FC<ComposerCodeBlockProps> = ({ path, code }) => {
-  const [isApplying, setIsApplying] = useState(false);
   const codeRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
 
@@ -43,7 +42,6 @@ export const ComposerCodeBlock: React.FC<ComposerCodeBlockProps> = ({ path, code
   const handleApply = async () => {
     if (!path) return;
 
-    setIsApplying(true);
     try {
       const changes = Composer.getChanges(path);
 
@@ -60,8 +58,6 @@ export const ComposerCodeBlock: React.FC<ComposerCodeBlockProps> = ({ path, code
     } catch (error) {
       logError("Error calling composer apply:", error);
       new Notice(`Error processing code: ${error.message}`);
-    } finally {
-      setIsApplying(false);
     }
   };
 
@@ -71,18 +67,8 @@ export const ComposerCodeBlock: React.FC<ComposerCodeBlockProps> = ({ path, code
         <div className="flex justify-between items-center border-[0px] border-b border-border border-solid gap-2 p-2 overflow-hidden">
           <div className="text-xs p-1 text-muted-foreground truncate flex-1">{path}</div>
           {
-            <Button
-              className="text-muted"
-              variant="ghost2"
-              size="fit"
-              onClick={handleApply}
-              disabled={isApplying}
-            >
-              {isApplying ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Check className="h-4 w-4" />
-              )}
+            <Button className="text-muted" variant="ghost2" size="fit" onClick={handleApply}>
+              <Check className="h-4 w-4" />
               Apply
             </Button>
           }

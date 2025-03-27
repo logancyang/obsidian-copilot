@@ -6,7 +6,6 @@ import {
   pomodoroTool,
   TimeInfo,
 } from "@/tools/TimeTools";
-import { composerTool } from "@/tools/ComposerTools";
 import { createGetFileTreeTool } from "@/tools/FileTreeTools";
 import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools";
 import { ToolManager } from "@/tools/toolManager";
@@ -123,14 +122,6 @@ export class IntentAnalyzer {
           query: cleanQuery,
           chatHistory,
         },
-      });
-    }
-
-    // Handle @composer command
-    if (message.includes("@composer")) {
-      processedToolCalls.push({
-        tool: composerTool,
-        args: {},
       });
     }
 
