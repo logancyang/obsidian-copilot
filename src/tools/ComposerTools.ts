@@ -51,48 +51,15 @@ Return your response in JSON format with the following fields:
   return removeThinkTags(response.content as string);
 }
 
+// This tool does not output anything. It is only used to route the chat message to the composer.
 const composerTool = tool(
-  async ({
-    message,
-    chatHistory,
-  }: {
-    message: string;
-    chatHistory: { role: string; content: string }[];
-  }) => {
-    // Implementation will be added later
-    let composerOutput = await getComposerOutput(message, chatHistory as ChatHistoryEntry[]);
-    composerOutput = composerOutput.trim();
-    if (composerOutput.startsWith("```json") && composerOutput.endsWith("```")) {
-      composerOutput = composerOutput.slice(7, -3);
-    }
-    console.log("==== Composer Output ====\n", composerOutput);
-    const jsonOutput = JSON.parse(composerOutput);
-
-    const output = `The user calls @composer tool to generate new note content.
-Below are the generated change blocks in markdown.
-<CHANGE_BLOCKS>
-\`\`\`markdown
-${jsonOutput.note_content}
-\`\`\`
-</CHANGE_BLOCKS>
-
-Return above codeblocks directly to users and add summarize the changes`;
-    return output;
+  async () => {
+    return "";
   },
   {
     name: "composer",
-    description: "Create new note content based on the query and chat context",
-    schema: z.object({
-      message: z.string().describe("The composition message including the note context"),
-      chatHistory: z
-        .array(
-          z.object({
-            role: z.string(),
-            content: z.string(),
-          })
-        )
-        .describe("Previous conversation turns with role and content"),
-    }),
+    description: "Edit existing notes or create new notes",
+    schema: z.void(),
   }
 );
 

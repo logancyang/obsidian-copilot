@@ -10,9 +10,10 @@ import { composerTool } from "@/tools/ComposerTools";
 import { createGetFileTreeTool } from "@/tools/FileTreeTools";
 import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools";
 import { ToolManager } from "@/tools/toolManager";
-import { ChatHistoryEntry, extractYoutubeUrl } from "@/utils";
+import { extractChatHistory, extractYoutubeUrl } from "@/utils";
 import { BrevilabsClient } from "./brevilabsClient";
 import { Vault } from "obsidian";
+import ProjectManager from "./projectManager";
 
 // TODO: Add @index with explicit pdf files in chat context menu
 export const COPILOT_TOOL_NAMES = ["@vault", "@composer", "@web", "@youtube", "@pomodoro"];
@@ -41,11 +42,7 @@ export class IntentAnalyzer {
     }
   }
 
-  static async analyzeIntent(
-    originalMessage: string,
-    messageWithAddedContext: string,
-    chatHistory: ChatHistoryEntry[]
-  ): Promise<ToolCall[]> {
+  static async analyzeIntent(originalMessage: string): Promise<ToolCall[]> {
     try {
       const brocaResponse = await BrevilabsClient.getInstance().broca(originalMessage);
 
@@ -78,8 +75,6 @@ export class IntentAnalyzer {
       await this.processAtCommands(originalMessage, processedToolCalls, {
         timeRange,
         salientTerms,
-        messageWithAddedContext,
-        chatHistory,
       });
 
       return processedToolCalls;
@@ -95,12 +90,10 @@ export class IntentAnalyzer {
     context: {
       timeRange?: { startTime: TimeInfo; endTime: TimeInfo };
       salientTerms: string[];
-      messageWithAddedContext: string;
-      chatHistory: ChatHistoryEntry[];
     }
   ): Promise<void> {
     const message = originalMessage.toLowerCase();
-    const { timeRange, salientTerms, messageWithAddedContext, chatHistory } = context;
+    const { timeRange, salientTerms } = context;
 
     // Handle @vault command
     if (message.includes("@vault") && (salientTerms.length > 0 || timeRange)) {
@@ -120,6 +113,10 @@ export class IntentAnalyzer {
     // Handle @web command
     if (message.includes("@web")) {
       const cleanQuery = this.removeAtCommands(originalMessage);
+      const memory = ProjectManager.instance.getCurrentChainManager().memoryManager.getMemory();
+      const memoryVariables = await memory.loadMemoryVariables({});
+      const chatHistory = extractChatHistory(memoryVariables);
+
       processedToolCalls.push({
         tool: webSearchTool,
         args: {
@@ -133,10 +130,7 @@ export class IntentAnalyzer {
     if (message.includes("@composer")) {
       processedToolCalls.push({
         tool: composerTool,
-        args: {
-          message: messageWithAddedContext,
-          chatHistory,
-        },
+        args: {},
       });
     }
 

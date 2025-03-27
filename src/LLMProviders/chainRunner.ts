@@ -1,4 +1,5 @@
 import { getCurrentProject } from "@/aiParams";
+import { BaseChatModelCallOptions } from "@langchain/core/language_models/chat_models";
 import { getStandaloneQuestion } from "@/chainUtils";
 import { getSystemPrompt } from "@/settings/model";
 import {
@@ -353,6 +354,71 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     return this.hasCapability(model, ModelCapability.VISION);
   }
 
+  private async composerResponse(
+    textContent: string,
+    userMessage: ChatMessage,
+    debug: boolean
+  ): Promise<string> {
+    // Get chat history
+    const memory = this.chainManager.memoryManager.getMemory();
+    const memoryVariables = await memory.loadMemoryVariables({});
+    const chatHistory = extractChatHistory(memoryVariables);
+
+    const composerSystemPrompt = `
+    You are a helpful assistant that creates note content for obsidian users.
+
+# Task
+Your task is to generate the new markdown note content and the note path when the user input contains @composer:
+1. For editing existing notes - Return the updated markdown note content and the original note path.
+2. For creating new notes - Return the new markdown note content and the new note path based on user's request.
+
+Below is the chat history the user and the previous assistant have had. You should continue the conversation if necessary but respond in a different format.
+<CHAT_HISTORY>
+${chatHistory.map((entry) => `${entry.role}: ${entry.content}`).join("\n")}
+</CHAT_HISTORY>
+
+# Output Format
+Return your response in JSON format with the following fields:
+* "note_path": Required. The path of the markdown note (either existing path or new path for new notes.
+* "note_content": Required. The complete content of the markdown note after your changes
+`;
+
+    const messages: any[] = [
+      {
+        role: "system",
+        content: composerSystemPrompt,
+      },
+    ];
+
+    const chatModel = this.chainManager.chatModelManager
+      .getChatModel()
+      .bind({ maxTokens: 16000 } as BaseChatModelCallOptions);
+
+    // Get the current chat model
+    const chatModelCurrent = this.chainManager.chatModelManager.getChatModel();
+    const isMultimodalCurrent = this.isMultimodalModel(chatModelCurrent);
+
+    // Build message content with text and images for multimodal models, or just text for text-only models
+    const content = isMultimodalCurrent
+      ? await this.buildMessageContent(textContent, userMessage)
+      : textContent;
+
+    // Add current user message
+    messages.push({
+      role: "user",
+      content,
+    });
+
+    if (debug) {
+      console.log("==== Composer Request ====\n", messages);
+    }
+    const response = await chatModel.invoke(messages);
+    if (debug) {
+      console.log("==== Composer Response ====\n", response.content);
+    }
+    return response.content as string;
+  }
+
   private async streamMultimodalResponse(
     textContent: string,
     userMessage: ChatMessage,
@@ -484,21 +550,10 @@ class CopilotPlusChainRunner extends BaseChainRunner {
 
       if (debug) console.log("==== Step 1: Analyzing intent ====");
       let toolCalls;
+      // Use the original message for intent analysis
+      const messageForAnalysis = userMessage.originalMessage || userMessage.message;
       try {
-        // Use the original message for intent analysis
-        const messageForAnalysis = userMessage.originalMessage || userMessage.message;
-        const messageWithAddedContext = userMessage.message;
-
-        // Format chat history from memory
-        const memory = this.chainManager.memoryManager.getMemory();
-        const memoryVariables = await memory.loadMemoryVariables({});
-        const chatHistory = extractChatHistory(memoryVariables);
-
-        toolCalls = await IntentAnalyzer.analyzeIntent(
-          messageForAnalysis,
-          messageWithAddedContext,
-          chatHistory
-        );
+        toolCalls = await IntentAnalyzer.analyzeIntent(messageForAnalysis);
       } catch (error: any) {
         return this.handleResponse(
           getApiErrorMessage(error),
@@ -574,13 +629,32 @@ class CopilotPlusChainRunner extends BaseChainRunner {
           console.log("Enhanced user message:", enhancedUserMessage);
         }
 
-        fullAIResponse = await this.streamMultimodalResponse(
-          enhancedUserMessage,
-          userMessage,
-          abortController,
-          updateCurrentAiMessage,
-          debug
-        );
+        if (messageForAnalysis.includes("@composer")) {
+          const composerResponse = await this.composerResponse(
+            enhancedUserMessage,
+            userMessage,
+            debug
+          );
+          const composerUserMessage = this.prepareComposerUserMessage(
+            messageForAnalysis,
+            composerResponse
+          );
+          fullAIResponse = await this.streamMultimodalResponse(
+            composerUserMessage,
+            userMessage,
+            abortController,
+            updateCurrentAiMessage,
+            debug
+          );
+        } else {
+          fullAIResponse = await this.streamMultimodalResponse(
+            enhancedUserMessage,
+            userMessage,
+            abortController,
+            updateCurrentAiMessage,
+            debug
+          );
+        }
       }
     } catch (error) {
       // Reset loading message to default
@@ -656,6 +730,19 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       toolOutputs.push({ tool: toolCall.tool.name, output });
     }
     return toolOutputs;
+  }
+
+  private prepareComposerUserMessage(userMessage: string, composerOutput: string) {
+    return `User message: ${userMessage}
+
+    The user is calling @composer tool to generate note content. Below are the @composer output:
+
+    <COMPOSER_OUTPUT>
+    ${composerOutput}
+    </COMPOSER_OUTPUT>
+
+    Return the content inside <COMPOSER_OUTPUT> directly without any additional text.
+`;
   }
 
   private prepareEnhancedUserMessage(userMessage: string, toolOutputs: any[]) {
