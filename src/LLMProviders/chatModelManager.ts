@@ -1,5 +1,10 @@
 import { CustomModel, getModelKey, ModelConfig, setModelKey } from "@/aiParams";
-import { BREVILABS_API_BASE_URL, BUILTIN_CHAT_MODELS, ChatModelProviders } from "@/constants";
+import {
+  BREVILABS_API_BASE_URL,
+  BUILTIN_CHAT_MODELS,
+  ChatModelProviders,
+  ProviderInfo,
+} from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { logError } from "@/logger";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
@@ -8,6 +13,7 @@ import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatCohere } from "@langchain/cohere";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { ChatDeepSeek } from "@langchain/deepseek";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatGroq } from "@langchain/groq";
 import { ChatMistralAI } from "@langchain/mistralai";
@@ -32,6 +38,7 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.OPENAI_FORMAT]: ChatOpenAI,
   [ChatModelProviders.COPILOT_PLUS]: ChatOpenAI,
   [ChatModelProviders.MISTRAL]: ChatMistralAI,
+  [ChatModelProviders.DEEPSEEK]: ChatDeepSeek,
 } as const;
 
 type ChatProviderConstructMap = typeof CHAT_PROVIDER_CONSTRUCTORS;
@@ -61,6 +68,7 @@ export default class ChatModelManager {
     [ChatModelProviders.OPENAI_FORMAT]: () => "default-key",
     [ChatModelProviders.COPILOT_PLUS]: () => getSettings().plusLicenseKey,
     [ChatModelProviders.MISTRAL]: () => getSettings().mistralApiKey,
+    [ChatModelProviders.DEEPSEEK]: () => getSettings().deepseekApiKey,
   } as const;
 
   private constructor() {
@@ -209,6 +217,14 @@ export default class ChatModelManager {
         model: modelName,
         apiKey: await getDecryptedKey(customModel.apiKey || settings.mistralApiKey),
         serverURL: customModel.baseUrl,
+      },
+      [ChatModelProviders.DEEPSEEK]: {
+        modelName: modelName,
+        apiKey: await getDecryptedKey(customModel.apiKey || settings.deepseekApiKey),
+        configuration: {
+          baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.DEEPSEEK].host,
+          fetch: customModel.enableCors ? safeFetch : undefined,
+        },
       },
     };
 

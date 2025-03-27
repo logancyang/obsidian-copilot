@@ -57,6 +57,7 @@ export enum ChatModels {
   OPENROUTER_GPT_4o = "openai/chatgpt-4o-latest",
   GROQ_LLAMA_8b = "llama3-8b-8192",
   MISTRAL_TINY = "mistral-tiny-latest",
+  DEEPSEEK_REASONER = "deepseek-reasoner",
 }
 
 // Model Providers
@@ -73,6 +74,7 @@ export enum ChatModelProviders {
   OPENAI_FORMAT = "3rd party (openai-format)",
   COPILOT_PLUS = "copilot-plus",
   MISTRAL = "mistralai",
+  DEEPSEEK = "deepseek",
 }
 
 export enum ModelCapability {
@@ -172,6 +174,13 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.AZURE_OPENAI,
     enabled: true,
     isBuiltIn: true,
+  },
+  {
+    name: ChatModels.DEEPSEEK_REASONER,
+    provider: ChatModelProviders.DEEPSEEK,
+    enabled: true,
+    isBuiltIn: true,
+    capabilities: [ModelCapability.REASONING],
   },
 ];
 
@@ -354,6 +363,12 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     keyManagementURL: "https://console.mistral.ai/api-keys",
     testModel: ChatModels.MISTRAL_TINY,
   },
+  [ChatModelProviders.DEEPSEEK]: {
+    label: "DeepSeek",
+    host: "https://api.deepseek.com/",
+    keyManagementURL: "https://platform.deepseek.com/api-keys",
+    testModel: ChatModels.DEEPSEEK_REASONER,
+  },
   [EmbeddingModelProviders.COPILOT_PLUS]: {
     label: "Copilot Plus",
     host: "https://api.brevilabs.com/v1",
@@ -377,6 +392,7 @@ export const ProviderSettingsKeyMap: Record<SettingKeyProviders, keyof CopilotSe
   cohereai: "cohereApiKey",
   "copilot-plus": "plusLicenseKey",
   mistralai: "mistralApiKey",
+  deepseek: "deepseekApiKey",
 };
 
 export enum VAULT_VECTOR_STORE_STRATEGY {
@@ -460,6 +476,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   azureOpenAIApiEmbeddingDeploymentName: "",
   googleApiKey: "",
   openRouterAiApiKey: "",
+  mistralApiKey: "",
+  deepseekApiKey: "",
   defaultChainType: ChainType.LLM_CHAIN,
   defaultModelKey: ChatModels.GPT_4o + "|" + ChatModelProviders.OPENAI,
   embeddingModelKey: EmbeddingModels.OPENAI_EMBEDDING_SMALL + "|" + EmbeddingModelProviders.OPENAI,
@@ -485,7 +503,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableEncryption: false,
   maxSourceChunks: 3,
   groqApiKey: "",
-  mistralApiKey: "",
   activeModels: BUILTIN_CHAT_MODELS,
   activeEmbeddingModels: BUILTIN_EMBEDDING_MODELS,
   embeddingRequestsPerMin: 90,

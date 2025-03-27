@@ -50,6 +50,7 @@ export interface CopilotSettings {
   googleApiKey: string;
   openRouterAiApiKey: string;
   mistralApiKey: string;
+  deepseekApiKey: string;
   defaultChainType: ChainType;
   defaultModelKey: string;
   embeddingModelKey: string;
