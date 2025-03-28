@@ -10,17 +10,17 @@ import {
   SettingKeyProviders,
   USER_SENDER,
 } from "@/constants";
-import { logInfo } from "@/logger";
+import { logError, logInfo } from "@/logger";
 import { CopilotSettings } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { MemoryVariables } from "@langchain/core/memory";
 import { RunnableSequence } from "@langchain/core/runnables";
+import { Buffer } from "buffer";
 import { BaseChain, RetrievalQAChain } from "langchain/chains";
 import moment from "moment";
 import { MarkdownView, Notice, TFile, Vault, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
-import { Buffer } from "buffer";
 
 // Add custom error type at the top of the file
 interface APIError extends Error {
@@ -499,8 +499,38 @@ export class ImageProcessor {
     ".svg",
   ];
 
-  static async isImageUrl(url: string): Promise<boolean> {
+  private static readonly MAX_IMAGE_SIZE = 3 * 1024 * 1024; // 3MB
+  private static readonly MIME_TYPES = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+    ".svg": "image/svg+xml",
+  };
+
+  static async isImageUrl(url: string, vault: Vault): Promise<boolean> {
     try {
+      // First check if it's an Obsidian vault image path
+      if (this.IMAGE_EXTENSIONS.some((ext) => url.toLowerCase().endsWith(ext))) {
+        // Verify the file exists and is accessible
+        const file = vault.getAbstractFileByPath(url);
+        if (!file || !(file instanceof TFile)) {
+          logError("File not found in vault");
+          return false;
+        }
+
+        // Check file size
+        if (file.stat.size > this.MAX_IMAGE_SIZE) {
+          logError("File too large:", file.stat.size, "bytes");
+          return false;
+        }
+
+        return true;
+      }
+
+      // Then check if it's a valid URL
       const urlObj = new URL(url);
 
       // First check: URL path ends with image extension
@@ -520,7 +550,7 @@ export class ImageProcessor {
           return true;
         }
       } catch (error) {
-        console.debug("Error checking content-type:", error);
+        logError("Error checking content-type:", error);
       }
 
       // Final check: Analyze URL patterns that commonly indicate image content
@@ -546,23 +576,114 @@ export class ImageProcessor {
       // If multiple image-related indicators are present, likely an image URL
       const imageIndicatorCount = imageIndicators.filter(Boolean).length;
       return imageIndicatorCount >= 2; // Require at least 2 indicators to consider it an image URL
-    } catch (error) {
-      console.error("Error checking if URL is image:", error);
-      return false;
+    } catch {
+      // If URL construction fails, it might still be a valid Obsidian vault image path
+      return this.IMAGE_EXTENSIONS.some((ext) => url.toLowerCase().endsWith(ext));
     }
   }
 
-  static async convertToBase64(imageUrl: string, vault: Vault): Promise<ImageContent> {
-    const base64Url = await this.imageToBase64(imageUrl, vault);
-    return {
-      type: "image_url",
-      image_url: {
-        url: base64Url,
-      },
-    };
+  private static async handleVaultImage(file: TFile, vault: Vault): Promise<string | null> {
+    try {
+      // Check file size first
+      if (file.stat.size > this.MAX_IMAGE_SIZE) {
+        logError(`Image too large: ${file.stat.size} bytes, skipping: ${file.path}`);
+        return null;
+      }
+
+      // Read the file as array buffer
+      const arrayBuffer = await vault.readBinary(file);
+
+      // Validate MIME type
+      const mimeType = await this.getMimeType(arrayBuffer, file.extension);
+      if (!mimeType.startsWith("image/")) {
+        logError(`Invalid MIME type: ${mimeType}, skipping: ${file.path}`);
+        return null;
+      }
+
+      const buffer = Buffer.from(arrayBuffer);
+      const base64 = buffer.toString("base64");
+
+      const result = `data:${mimeType};base64,${base64}`;
+      return result;
+    } catch (error) {
+      logError("Error in handleVaultImage:", error);
+      return null;
+    }
   }
 
-  private static async imageToBase64(imageUrl: string, vault: Vault): Promise<string> {
+  private static async handleWebImage(imageUrl: string): Promise<string | null> {
+    try {
+      const response = await safeFetch(imageUrl, {
+        method: "GET",
+        headers: {},
+      });
+
+      if (!response.ok) {
+        logError(`Failed to fetch image: ${response.statusText}, skipping: ${imageUrl}`);
+        return null;
+      }
+
+      // Try to get content type from response headers
+      const contentType = response.headers.get("content-type");
+      if (!contentType?.startsWith("image/")) {
+        logError(`Invalid content type: ${contentType}, skipping: ${imageUrl}`);
+        return null;
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+
+      // Check file size
+      if (arrayBuffer.byteLength > this.MAX_IMAGE_SIZE) {
+        logError(`Image too large: ${arrayBuffer.byteLength} bytes, skipping: ${imageUrl}`);
+        return null;
+      }
+
+      const buffer = Buffer.from(arrayBuffer);
+      const base64 = buffer.toString("base64");
+      return `data:${contentType};base64,${base64}`;
+    } catch (error) {
+      logError("Error converting image to base64:", error);
+      return null;
+    }
+  }
+
+  private static async handleLocalImage(imageUrl: string, vault: Vault): Promise<string | null> {
+    try {
+      const localPath = decodeURIComponent(imageUrl.replace("app://", ""));
+      const file = vault.getAbstractFileByPath(localPath);
+      if (!file || !(file instanceof TFile)) {
+        logError(`Local image not found: ${localPath}`);
+        return null;
+      }
+
+      // Check file size
+      if (file.stat.size > this.MAX_IMAGE_SIZE) {
+        logError(`Image too large: ${file.stat.size} bytes, skipping: ${localPath}`);
+        return null;
+      }
+
+      // Read the file as array buffer
+      const arrayBuffer = await vault.readBinary(file);
+
+      // Validate MIME type
+      const mimeType = await this.getMimeType(arrayBuffer, file.extension);
+      if (!mimeType.startsWith("image/")) {
+        logError(`Invalid MIME type: ${mimeType}, skipping: ${localPath}`);
+        return null;
+      }
+
+      const buffer = Buffer.from(arrayBuffer);
+      const base64 = buffer.toString("base64");
+
+      const result = `data:${mimeType};base64,${base64}`;
+      return result;
+    } catch (error) {
+      logError("Error in handleLocalImage:", error);
+      return null;
+    }
+  }
+
+  private static async imageToBase64(imageUrl: string, vault: Vault): Promise<string | null> {
     // If it's already a data URL, return it as is
     if (imageUrl.startsWith("data:")) {
       return imageUrl;
@@ -573,52 +694,59 @@ export class ImageProcessor {
       return await this.handleLocalImage(imageUrl, vault);
     }
 
+    // Check if it's an Obsidian vault image (direct file path)
+    const file = vault.getAbstractFileByPath(imageUrl);
+    if (file instanceof TFile) {
+      return await this.handleVaultImage(file, vault);
+    }
+
     // Handle web images
     return await this.handleWebImage(imageUrl);
   }
 
-  private static async handleLocalImage(imageUrl: string, vault: Vault): Promise<string> {
-    const localPath = decodeURIComponent(imageUrl.replace("app://", ""));
-    const file = vault.getAbstractFileByPath(localPath);
-    if (!file || !(file instanceof TFile)) {
-      throw new Error(`Local image not found: ${localPath}`);
+  static async convertToBase64(imageUrl: string, vault: Vault): Promise<ImageContent | null> {
+    const base64Url = await this.imageToBase64(imageUrl, vault);
+    if (!base64Url) {
+      return null;
     }
-
-    // Read the file as array buffer
-    const arrayBuffer = await vault.readBinary(file);
-    const buffer = Buffer.from(arrayBuffer);
-    const base64 = buffer.toString("base64");
-
-    // Get mime type from file extension
-    const mimeType = `image/${file.extension}`;
-    return `data:${mimeType};base64,${base64}`;
+    return {
+      type: "image_url",
+      image_url: {
+        url: base64Url,
+      },
+    };
   }
 
-  private static async handleWebImage(imageUrl: string): Promise<string> {
-    try {
-      const response = await safeFetch(imageUrl, {
-        method: "GET",
-        headers: {},
-      });
+  private static async getMimeType(arrayBuffer: ArrayBuffer, extension: string): Promise<string> {
+    // Get the first few bytes to check for magic numbers
+    const bytes = new Uint8Array(arrayBuffer.slice(0, 4));
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.statusText}`);
-      }
-
-      // Try to get content type from response headers
-      const contentType = response.headers.get("content-type");
-      if (!contentType?.startsWith("image/")) {
-        throw new Error(`Invalid content type: ${contentType}`);
-      }
-
-      const arrayBuffer = await response.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      const base64 = buffer.toString("base64");
-      return `data:${contentType};base64,${base64}`;
-    } catch (error) {
-      console.error("Error converting image to base64:", error);
-      throw error;
+    // Check for common image magic numbers
+    if (bytes[0] === 0xff && bytes[1] === 0xd8) {
+      return "image/jpeg";
     }
+    if (bytes[0] === 0x89 && bytes[1] === 0x50) {
+      return "image/png";
+    }
+    if (bytes[0] === 0x47 && bytes[1] === 0x49) {
+      return "image/gif";
+    }
+    if (bytes[0] === 0x52 && bytes[1] === 0x49) {
+      return "image/webp";
+    }
+    if (bytes[0] === 0x42 && bytes[1] === 0x4d) {
+      return "image/bmp";
+    }
+    if (bytes[0] === 0x3c && bytes[1] === 0x73) {
+      return "image/svg+xml";
+    }
+
+    // Fall back to extension-based detection
+    const mimeType = this.MIME_TYPES[extension.toLowerCase() as keyof typeof this.MIME_TYPES];
+    if (!mimeType) {
+      throw new Error(`Unsupported image extension: ${extension}`);
+    }
+    return mimeType;
   }
 }
 

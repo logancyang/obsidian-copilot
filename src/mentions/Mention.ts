@@ -63,7 +63,7 @@ export class Mention {
     // Process all URLs concurrently
     const processPromises = urls.map(async (url) => {
       // Check if it's an image URL
-      if (await ImageProcessor.isImageUrl(url)) {
+      if (await ImageProcessor.isImageUrl(url, app.vault)) {
         imageUrls.push(url);
         return null;
       }

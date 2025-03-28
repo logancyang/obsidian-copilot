@@ -11,6 +11,7 @@ import {
   ModelCapability,
 } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
+import { logError } from "@/logger";
 import { ChatMessage } from "@/sharedState";
 import { ToolManager } from "@/tools/toolManager";
 import {
@@ -30,6 +31,42 @@ import { Notice } from "obsidian";
 import ChainManager from "./chainManager";
 import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "./intentAnalyzer";
 import ProjectManager from "./projectManager";
+
+class ThinkBlockStreamer {
+  private hasOpenThinkBlock = false;
+  private fullResponse = "";
+
+  constructor(private updateCurrentAiMessage: (message: string) => void) {}
+
+  processChunk(chunk: any) {
+    this.fullResponse += chunk.content;
+
+    if (chunk.additional_kwargs?.reasoning_content) {
+      // If we don't have an open think block, add one
+      if (!this.hasOpenThinkBlock) {
+        this.fullResponse += "\n<think>";
+        this.hasOpenThinkBlock = true;
+      }
+      // Add the new reasoning content
+      this.fullResponse += chunk.additional_kwargs.reasoning_content;
+    } else if (this.hasOpenThinkBlock) {
+      // If we have an open think block but no more reasoning content, close it
+      this.fullResponse += "</think>";
+      this.hasOpenThinkBlock = false;
+    }
+
+    this.updateCurrentAiMessage(this.fullResponse);
+  }
+
+  close() {
+    // Make sure to close any open think block at the end
+    if (this.hasOpenThinkBlock) {
+      this.fullResponse += "</think>";
+      this.updateCurrentAiMessage(this.fullResponse);
+    }
+    return this.fullResponse;
+  }
+}
 
 export interface ChainRunner {
   run(
@@ -168,7 +205,7 @@ class LLMChainRunner extends BaseChainRunner {
     }
   ): Promise<string> {
     const { debug = false } = options;
-    let fullAIResponse = "";
+    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage);
 
     try {
       const chain = this.chainManager.getChain();
@@ -178,15 +215,14 @@ class LLMChainRunner extends BaseChainRunner {
 
       for await (const chunk of chatStream) {
         if (abortController.signal.aborted) break;
-        fullAIResponse += chunk.content;
-        updateCurrentAiMessage(fullAIResponse);
+        streamer.processChunk(chunk);
       }
     } catch (error) {
       await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
     }
 
     return this.handleResponse(
-      fullAIResponse,
+      streamer.close(),
       userMessage,
       abortController,
       addMessage,
@@ -282,17 +318,26 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     try {
       const imageUrls = await Promise.all(
         urls.map(async (url) => {
-          if (await ImageProcessor.isImageUrl(url)) {
-            return await ImageProcessor.convertToBase64(url, this.chainManager.app.vault);
+          if (await ImageProcessor.isImageUrl(url, this.chainManager.app.vault)) {
+            const imageContent = await ImageProcessor.convertToBase64(
+              url,
+              this.chainManager.app.vault
+            );
+            if (!imageContent) {
+              logError(`Failed to process image: ${url}`);
+              return null;
+            }
+            return imageContent;
           }
           return null;
         })
       );
 
       // Filter out null values and return valid image URLs
-      return imageUrls.filter((item): item is ImageContent => item !== null);
+      const validImages = imageUrls.filter((item): item is ImageContent => item !== null);
+      return validImages;
     } catch (error) {
-      console.error("Error processing image URLs:", error);
+      logError("Error processing image URLs:", error);
       return [];
     }
   }
@@ -305,17 +350,29 @@ class CopilotPlusChainRunner extends BaseChainRunner {
             (item): item is ImageContent => item.type === "image_url" && !!item.image_url?.url
           )
           .map(async (item) => {
-            return await ImageProcessor.convertToBase64(
+            const processedContent = await ImageProcessor.convertToBase64(
               item.image_url.url,
               this.chainManager.app.vault
             );
+            if (!processedContent) {
+              logError(`Failed to process existing image: ${item.image_url.url}`);
+              return null;
+            }
+            return processedContent;
           })
       );
-      return imageContent;
+      return imageContent.filter((item): item is ImageContent => item !== null);
     } catch (error) {
-      console.error("Error processing images:", error);
-      throw error;
+      logError("Error processing images:", error);
+      return [];
     }
+  }
+
+  private async extractEmbeddedImages(content: string): Promise<string[]> {
+    const imageRegex = /!\[\[(.*?\.(png|jpg|jpeg|gif|webp|bmp|svg))\]\]/g;
+    const matches = [...content.matchAll(imageRegex)];
+    const images = matches.map((match) => match[1]);
+    return images;
   }
 
   private async buildMessageContent(
@@ -332,6 +389,13 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     // Process URLs in the message to identify images
     if (userMessage.context?.urls && userMessage.context.urls.length > 0) {
       const imageContents = await this.processImageUrls(userMessage.context.urls);
+      content.push(...imageContents);
+    }
+
+    // Process embedded images from the text content
+    const embeddedImages = await this.extractEmbeddedImages(textContent);
+    if (embeddedImages.length > 0) {
+      const imageContents = await this.processImageUrls(embeddedImages);
       content.push(...imageContents);
     }
 
@@ -414,16 +478,15 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       console.log("==== Final Request to AI ====\n", messages);
     }
 
-    let fullAIResponse = "";
+    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage);
     const chatStream = await this.chainManager.chatModelManager.getChatModel().stream(messages);
 
     for await (const chunk of chatStream) {
       if (abortController.signal.aborted) break;
-      fullAIResponse += chunk.content;
-      updateCurrentAiMessage(fullAIResponse);
+      streamer.processChunk(chunk);
     }
 
-    return fullAIResponse;
+    return streamer.close();
   }
 
   async run(
@@ -741,6 +804,27 @@ class ProjectChainRunner extends CopilotPlusChainRunner {
 
     if (!projectConfig) {
       return getSystemPrompt();
+    }
+
+    // Get cached context synchronously
+    const context = ProjectManager.instance.getProjectContext(projectConfig.id);
+    let finalPrompt = projectConfig.systemPrompt;
+
+    if (context) {
+      finalPrompt = `${finalPrompt}\n\n${context}`;
+    }
+
+    return finalPrompt;
+  }
+}
+
+class ProjectChainRunner extends CopilotPlusChainRunner {
+  protected async getSystemPrompt(): Promise<string> {
+    // get current project
+    const projectConfig = getCurrentProject();
+
+    if (!projectConfig) {
+      return super.getSystemPrompt();
     }
 
     // Get cached context synchronously

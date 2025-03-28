@@ -599,7 +599,6 @@ ${chatContent}`;
     }
     clearMessages();
     chainManager.memoryManager.clearChatMemory();
-    // Reset the composer prompt cache when starting a new chat
     setCurrentAiMessage("");
     setContextNotes([]);
     setIncludeActiveNote(false);

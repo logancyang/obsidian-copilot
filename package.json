@@ -1,6 +1,6 @@
 {
   "name": "obsidian-copilot",
-  "version": "2.8.7",
+  "version": "2.8.8",
   "description": "ChatGPT integration for Obsidian",
   "main": "main.js",
   "scripts": {
@@ -81,6 +81,7 @@
     "@langchain/cohere": "^0.3.0",
     "@langchain/community": "^0.3.22",
     "@langchain/core": "^0.3.27",
+    "@langchain/deepseek": "^0.0.1",
     "@langchain/google-genai": "^0.1.6",
     "@langchain/groq": "^0.1.2",
     "@langchain/mistralai": "^0.2.0",

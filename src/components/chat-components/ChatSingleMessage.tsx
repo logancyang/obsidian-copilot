@@ -3,6 +3,7 @@ import { SourcesModal } from "@/components/modals/SourcesModal";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { USER_SENDER } from "@/constants";
+import { useApplyCode } from "@/hooks/useApplyCode";
 import { cn } from "@/lib/utils";
 import { ChatMessage } from "@/sharedState";
 import { insertIntoEditor } from "@/utils";
@@ -68,6 +69,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleApplyCode = useApplyCode(app, chatHistory);
 
   const copyToClipboard = () => {
     if (!navigator.clipboard || !navigator.clipboard.writeText) {
@@ -280,7 +283,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         });
       }, 0);
     };
-  }, [message, app, componentRef, isStreaming, preprocess]);
+  }, [message, app, componentRef, isStreaming, preprocess, handleApplyCode]);
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {

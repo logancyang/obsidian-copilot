@@ -12,7 +12,7 @@ import { ToolManager } from "@/tools/toolManager";
 import { extractChatHistory, extractYoutubeUrl } from "@/utils";
 import { BrevilabsClient } from "./brevilabsClient";
 import { Vault } from "obsidian";
-import ProjectManager from "./projectManager";
+import ProjectManager from "@/LLMProviders/projectManager";
 
 // TODO: Add @index with explicit pdf files in chat context menu
 export const COPILOT_TOOL_NAMES = ["@vault", "@composer", "@web", "@youtube", "@pomodoro"];
