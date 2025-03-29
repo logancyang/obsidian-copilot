@@ -1,4 +1,3 @@
-import { ApplyChangesConfirmModal } from "@/components/modals/ApplyChangesConfirmModal";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { Change } from "diff";
@@ -87,11 +86,6 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     }));
   });
 
-  const undecidedChanges = diff.filter(
-    (change) => (change.added || change.removed) && change.accepted === null
-  );
-  const hasAnyDecidedChanges = diff.some((change) => change.accepted !== null);
-
   // Group changes into blocks for better UI presentation
   const changeBlocks = Composer.getChangeBlocks(diff);
 
@@ -111,67 +105,15 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     );
   }
 
-  // Handle applying changes that have been marked as accepted
-  const handleApply = async () => {
-    try {
-      const applyChanges = async () => {
-        const newContent = diff
-          .filter((change) => {
-            if (change.added) return change.accepted === true;
-            else if (change.removed) return change.accepted === false;
-            return true; // Unchanged lines are always included
-          })
-          .map((change) => change.value)
-          .join("");
-
-        const file = app.vault.getAbstractFileByPath(state.path);
-        if (!file || !(file instanceof TFile)) {
-          new Notice("File not found:" + state.path);
-          close();
-          return;
-        }
-
-        await app.vault.modify(file, newContent);
-        new Notice("Changes applied successfully");
-        close();
-      };
-
-      if (undecidedChanges.length > 0) {
-        // Divide by 2 because each change has a pair of added and removed lines
-        const modal = new ApplyChangesConfirmModal(app, undecidedChanges.length / 2, () => {
-          applyChanges();
-        });
-        modal.open();
-        return;
-      }
-
-      applyChanges();
-    } catch (error) {
-      logError("Error applying changes:", error);
-      new Notice(`Error applying changes: ${error.message}`);
-    }
-  };
-
   // Apply all changes regardless of whether they have been marked as accepted
-  const handleAcceptAll = async () => {
+  const handleAccept = async () => {
     try {
-      const newContent = diff
-        .filter((change) => {
-          return change.added || !change.removed;
-        })
-        .map((change) => change.value)
-        .join("");
+      // Mark all undecided changes as accepted
+      const updatedDiff = diff.map((change) =>
+        change.accepted === null ? { ...change, accepted: true } : change
+      );
 
-      const file = app.vault.getAbstractFileByPath(state.path);
-      if (!file || !(file instanceof TFile)) {
-        new Notice("File not found:" + state.path);
-        close();
-        return;
-      }
-
-      await app.vault.modify(file, newContent);
-      new Notice("Changes applied successfully");
-      close();
+      await applyDecidedChangesToFile(updatedDiff);
     } catch (error) {
       logError("Error applying changes:", error);
       new Notice(`Error applying changes: ${error.message}`);
@@ -179,7 +121,41 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   };
 
   // Handle rejecting all changes
-  const handleReject = () => {
+  const handleReject = async () => {
+    try {
+      // Mark all undecided changes as rejected
+      const updatedDiff = diff.map((change) =>
+        change.accepted === null ? { ...change, accepted: false } : change
+      );
+
+      await applyDecidedChangesToFile(updatedDiff);
+    } catch (error) {
+      logError("Error applying changes:", error);
+      new Notice(`Error applying changes: ${error.message}`);
+    }
+  };
+
+  // Shared function to apply changes to file
+  const applyDecidedChangesToFile = async (updatedDiff: ExtendedChange[]) => {
+    // Apply changes based on their accepted status
+    const newContent = updatedDiff
+      .filter((change) => {
+        if (change.added) return change.accepted === true; // Include if accepted
+        if (change.removed) return change.accepted === false; // Include if rejected
+        return true; // Keep unchanged lines
+      })
+      .map((change) => change.value)
+      .join("");
+
+    const file = app.vault.getAbstractFileByPath(state.path);
+    if (!file || !(file instanceof TFile)) {
+      new Notice("File not found:" + state.path);
+      close();
+      return;
+    }
+
+    await app.vault.modify(file, newContent);
+    new Notice("Changes applied successfully");
     close();
   };
 
@@ -193,7 +169,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
       const block = changeBlocks[i];
       const hasChanges = block.some((change) => change.added || change.removed);
       const isUndecided = block.some(
-        (change) => (change.added || change.removed) && change.accepted === null
+        (change) => (change.added || change.removed) && (change as ExtendedChange).accepted === null
       );
 
       if (hasChanges && isUndecided) {
@@ -265,23 +241,15 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
       <div className="flex z-[1] gap-2 fixed bottom-2 left-1/2 -translate-x-1/2 p-2 border border-solid border-border rounded-md bg-secondary">
         <Button variant="destructive" size="sm" onClick={handleReject}>
           <XIcon className="size-4" />
-          Reject All
+          Reject
         </Button>
-        <Button variant="success" size="sm" onClick={handleAcceptAll}>
+        <Button variant="success" size="sm" onClick={handleAccept}>
           <Check className="size-4" />
-          Accept All
-        </Button>
-        <Button
-          disabled={!hasAnyDecidedChanges}
-          variant="secondary"
-          size="sm"
-          onClick={handleApply}
-        >
-          Apply Changes
+          Accept
         </Button>
       </div>
       <div className="flex items-center p-2 border-[0px] border-solid border-b border-border text-sm font-medium">
-        {state.path || state.file.path}
+        {state.path}
       </div>
 
       <div className="flex-1 overflow-auto p-2">
@@ -292,11 +260,14 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
           // Get the decision status for this block
           const blockStatus = hasChanges
             ? block.every(
-                (change) => (!change.added && !change.removed) || change.accepted === true
+                (change) =>
+                  (!change.added && !change.removed) || (change as ExtendedChange).accepted === true
               )
               ? "accepted"
               : block.every(
-                    (change) => (!change.added && !change.removed) || change.accepted === false
+                    (change) =>
+                      (!change.added && !change.removed) ||
+                      (change as ExtendedChange).accepted === false
                   )
                 ? "rejected"
                 : "undecided"
