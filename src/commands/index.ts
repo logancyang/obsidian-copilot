@@ -10,8 +10,9 @@ import CopilotPlugin from "@/main";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { CopilotSettings, InlineEditCommandSettings } from "@/settings/model";
 import { err2String } from "@/utils";
-import { Editor, Notice, TFile } from "obsidian";
-import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";
+import { Editor, Notice, TFile, MarkdownView } from "obsidian";
+import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "@/constants";
+import { SELECTED_TEXT_PLACEHOLDER } from "@/commands/constants";
 import {
   getCommandById,
   getCommandId,
@@ -61,9 +62,11 @@ export function addCheckCommand(
 }
 
 /**
- * Process an inline edit command and display a modal with the processed prompt.
+ * Process an inline edit command.
+ * If it's the "Add Smart Footnote" command, handle it specially.
+ * Otherwise, display the standard modal.
  */
-async function processInlineEditCommand(editor: Editor, commandId: string) {
+async function processInlineEditCommand(plugin: CopilotPlugin, editor: Editor, commandId: string) {
   const selectedText = editor.getSelection().trim();
   if (!selectedText) {
     return;
@@ -75,10 +78,143 @@ async function processInlineEditCommand(editor: Editor, commandId: string) {
     return;
   }
 
-  new InlineEditModal(app, {
-    selectedText,
-    command,
-  }).open();
+  // Check if this is our specific command
+  if (command.name === "Add Smart Footnote") {
+    // Call our custom handler function (to be implemented)
+    await handleSmartFootnote(plugin, editor, selectedText, command);
+  } else {
+    // Otherwise, use the default modal behavior
+    new InlineEditModal(plugin.app, {
+      selectedText,
+      command,
+    }).open();
+  }
+}
+
+/**
+ * Handles the Smart Footnote generation and insertion.
+ * @param plugin The CopilotPlugin instance
+ * @param editor The editor instance
+ * @param selectedText The text selected by the user
+ * @param command The command configuration object
+ */
+async function handleSmartFootnote(
+  plugin: CopilotPlugin,
+  editor: Editor,
+  selectedText: string,
+  command: InlineEditCommandSettings
+) {
+  console.log("Handling Smart Footnote for:", selectedText);
+
+  // Get the active editor reliably before the async call
+  const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
+  if (!activeView) {
+    new Notice("Cannot add footnote: No active Markdown editor found.");
+    return;
+  }
+  const currentEditor = activeView.editor;
+  const selectionEndPos = currentEditor.getCursor("to"); // Store position
+
+  const notice = new Notice("Generating Smart Footnote...", 0);
+
+  try {
+    // 1. Format the AI prompt
+    const prompt = command.prompt.replace(SELECTED_TEXT_PLACEHOLDER, selectedText);
+    // Keep this log? It can be useful for debugging user prompts.
+    // console.log("Formatted Prompt:", prompt);
+
+    // 2. Call the AI service
+    const chatModel = plugin.chainManager.chatModelManager.getChatModel();
+    if (!chatModel) {
+      throw new Error("Chat model is not available.");
+    }
+    const aiResult = await chatModel.invoke(prompt);
+    const aiTextResult =
+      typeof aiResult.content === "string" ? aiResult.content.trim() : JSON.stringify(aiResult);
+
+    if (!aiTextResult) {
+      throw new Error("AI returned empty content.");
+    }
+
+    // Remove Raw and Text AI Result logs
+    // console.log("AI Result Raw:", aiResult);
+    // console.log("AI Result Text:", aiTextResult);
+
+    // --- Footnote Insertion Logic ---
+
+    // 4. Determine unique footnote ID using UP-TO-DATE content
+    const docContent = currentEditor.getValue(); // MOVED HERE, AFTER await
+    // Remove ID Calculation logs
+    // console.log("--- Footnote ID Calculation ---");
+    // console.log("Document Content Length:", docContent.length);
+    // const contentTail = docContent.substring(Math.max(0, docContent.length - 100));
+    // console.log("Document Content Tail for Regex Check:", JSON.stringify(contentTail));
+
+    let nextId = 1;
+    const footnoteDefRegex = new RegExp("\\[\\^sn(\\d+)\\]:", "g");
+    // console.log("Using Regex:", footnoteDefRegex);
+
+    let match;
+    let maxId = 0;
+    // console.log("Initial maxId:", maxId);
+
+    while ((match = footnoteDefRegex.exec(docContent)) !== null) {
+      // console.log("Regex Match Found:", match[0], "| Extracted ID String:", match[1]);
+      try {
+        const idNum = parseInt(match[1], 10);
+        // console.log("Parsed ID Number:", idNum);
+        if (!isNaN(idNum)) {
+          if (idNum > maxId) {
+            maxId = idNum;
+            // console.log("Updated maxId:", maxId);
+          }
+        } else {
+          // Keep this warning? It indicates a malformed footnote ID in the doc.
+          console.warn("Could not parse footnote ID string during calculation:", match[1]);
+        }
+      } catch (parseError) {
+        console.error("Error parsing footnote ID string during calculation:", match[1], parseError);
+      }
+    }
+    // console.log("Final maxId before increment:", maxId);
+
+    nextId = maxId + 1;
+    const footnoteId = `sn${nextId}`;
+    // console.log("Calculated nextId:", nextId, "| footnoteId:", footnoteId);
+    // console.log("--- End Footnote ID Calculation ---");
+
+    // 5. Insert footnote marker "[^id]" after selection
+    const marker = `[^${footnoteId}]`;
+    // Use the stored position, as editor state might change during async call
+    currentEditor.replaceRange(marker, selectionEndPos);
+
+    // 6. Append footnote definition "[^id]: result" to end of doc
+    // Ensure it starts on a new line, add extra newline if doc doesn't end with one
+    // IMPORTANT: Use the same docContent read for ID calculation for prefix logic
+    const definitionPrefix = docContent.endsWith("\n\n")
+      ? ""
+      : docContent.endsWith("\n")
+        ? "\n"
+        : "\n\n";
+    const definition = `${definitionPrefix}[^${footnoteId}]: ${aiTextResult}`;
+    const endOfDocPos = { line: currentEditor.lineCount(), ch: 0 };
+    currentEditor.replaceRange(definition, endOfDocPos);
+
+    // --- End Footnote Insertion ---
+
+    notice.setMessage("Smart Footnote inserted!");
+    // Remove inserted ID log
+    // console.log(`Inserted footnote with ID: ${footnoteId}`);
+
+    // Optional: Move cursor after the inserted marker
+    const newCursorPos = { line: selectionEndPos.line, ch: selectionEndPos.ch + marker.length };
+    currentEditor.setCursor(newCursorPos);
+  } catch (error) {
+    console.error("Error generating or inserting Smart Footnote:", error);
+    notice.setMessage(`Error: ${error.message}`);
+  } finally {
+    setTimeout(() => notice.hide(), 5000);
+  }
 }
 
 export function registerInlineEditCommands(
@@ -101,7 +237,7 @@ export function registerInlineEditCommands(
       id,
       name: command.name,
       editorCallback: (editor) => {
-        processInlineEditCommand(editor, id);
+        processInlineEditCommand(plugin, editor, id);
       },
     });
   });
