@@ -15,7 +15,7 @@ import { Vault } from "obsidian";
 import ProjectManager from "@/LLMProviders/projectManager";
 
 // TODO: Add @index with explicit pdf files in chat context menu
-export const COPILOT_TOOL_NAMES = ["@vault", "@web", "@youtube", "@pomodoro"];
+export const COPILOT_TOOL_NAMES = ["@vault", "@composer", "@web", "@youtube", "@pomodoro"];
 
 type ToolCall = {
   tool: any;
