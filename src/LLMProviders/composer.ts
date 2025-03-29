@@ -3,6 +3,18 @@ import { BaseChatModelCallOptions } from "@langchain/core/language_models/chat_m
 import ProjectManager from "./projectManager";
 import { Change, diffTrimmedLines } from "diff";
 import { App, TFile } from "obsidian";
+import { StructuredOutputParser } from "langchain/output_parsers";
+import { z } from "zod";
+
+interface ComposerNote {
+  note_path: string;
+  note_content: string;
+}
+
+interface ComposerResponse {
+  notes?: ComposerNote[];
+  error?: string;
+}
 
 export class Composer {
   private static instance: Composer;
@@ -46,32 +58,45 @@ export class Composer {
     content: string,
     chatHistory: ChatHistoryEntry[],
     debug: boolean
-  ): Promise<string> {
+  ): Promise<ComposerResponse> {
     const composerSystemPrompt = `
     You are a helpful assistant that creates markdown notes for obsidian users.
 
     # Task
-    Your task is to generate the new markdown note content and the note path when the user input contains @composer:
+    Your task is to generate one or more markdown notes when the user input contains @composer:
     1. For editing existing notes - Return the updated markdown note content and the original note path.
     2. For creating new notes - Return the new markdown note content and the new note path based on user's request.
-    3. If user's request is not clear, such as the note path is not provided, return an error message and set success to false.
+    3. If user's request is not clear, such as the note path is not provided, return an error message.
     4. Do no include the title to the note content.
+    5. You can return multiple notes if the user's request involves creating multiple notes.
 
     Below is the chat history the user and the previous assistant have had. You should continue the conversation if necessary but respond in a different format.
     <CHAT_HISTORY>
     ${chatHistory.map((entry) => `${entry.role}: ${entry.content}`).join("\n")}
-    </CHAT_HISTORY>
+    </CHAT_HISTORY>`;
 
-    # Output Format
-    Return your response in JSON format with the following fields:
-    * "note_path": Required. The path of the markdown file. Must end with .md. (either existing path or new path for new notes.
-    * "note_content": Required. The complete content of the markdown note after your changes or the error message.
-    * "success": Required. true or false. Whether the note content was created successfully.`;
+    // Define the schema for the output
+    const schema = z.object({
+      notes: z
+        .array(
+          z.object({
+            note_path: z.string().refine((val) => val.endsWith(".md"), {
+              message: "note_path must end with .md",
+            }),
+            note_content: z.string(),
+          })
+        )
+        .optional(),
+      error: z.string().optional(),
+    });
+
+    // Create the output parser
+    const parser = StructuredOutputParser.fromZodSchema(schema);
 
     const messages: any[] = [
       {
         role: "system",
-        content: composerSystemPrompt,
+        content: composerSystemPrompt + "\n\n" + parser.getFormatInstructions(),
       },
     ];
 
@@ -79,7 +104,10 @@ export class Composer {
     const chatModel = ProjectManager.instance
       .getCurrentChainManager()
       .chatModelManager.getChatModel()
-      .bind({ temperature: 0, maxTokens: 16000 } as BaseChatModelCallOptions);
+      .bind({
+        temperature: 0,
+        maxTokens: 16000,
+      } as BaseChatModelCallOptions);
 
     // Add current user message
     messages.push({
@@ -90,15 +118,19 @@ export class Composer {
     if (debug) {
       console.log("==== Composer Request ====\n", messages);
     }
-    const response = await chatModel.invoke(messages);
-    let responseContent = response.content as string;
-    if (debug) {
+
+    try {
+      const response = await chatModel.invoke(messages);
+      const responseContent =
+        typeof response.content === "string" ? response.content : JSON.stringify(response.content);
       console.log("==== Composer Response ====\n", responseContent);
+      return await parser.parse(responseContent);
+    } catch (error) {
+      console.error("Error parsing composer response:", error);
+      return {
+        error: `Error parsing composer response: ${error.message}`,
+      };
     }
-    if (responseContent.startsWith("```json") && responseContent.endsWith("```")) {
-      responseContent = responseContent.slice(7, -3);
-    }
-    return responseContent;
   }
 
   public async composerUserMessage(
@@ -107,37 +139,39 @@ export class Composer {
     chatHistory: ChatHistoryEntry[],
     debug: boolean
   ): Promise<string> {
-    const composerOutputString = await this.composerResponse(
-      messageWithContext,
-      chatHistory,
-      debug
-    );
-    const composerOutput = JSON.parse(composerOutputString);
+    const composerOutput = await this.composerResponse(messageWithContext, chatHistory, debug);
     if (debug) {
       console.log("==== Composer Output ====\n", composerOutput);
     }
-    if (composerOutput.success) {
-      const changesMarkdown = await this.getChangesMarkdown(
-        app,
-        composerOutput.note_path,
-        composerOutput.note_content,
-        debug
-      );
+    if (!composerOutput.error) {
+      const notes = composerOutput.notes || [];
+      const changesMarkdownPromises = notes.map(async (note: ComposerNote) => {
+        const changesMarkdown = await this.getChangesMarkdown(
+          app,
+          note.note_path,
+          note.note_content,
+          debug
+        );
+        return `\`\`\`markdown
+<!-- path=${note.note_path} -->
+${changesMarkdown}
+\`\`\``;
+      });
+      const changesMarkdownBlocks = await Promise.all(changesMarkdownPromises);
+
       return `User message: ${originalMessage}
 
-        The user is calling @composer tool to generate note content. Below is the markdown block representing the changes from the @composer output:
+The user is calling @composer tool to generate note content. Below are the markdown blocks representing the changes from the @composer output:
 
-        \`\`\`markdown
-        <!-- path=${composerOutput.note_path} -->
-        ${changesMarkdown}
-        \`\`\`
+${changesMarkdownBlocks.join("\n\n")}
 
-        Return the markdown block above directly and add a brief summary of the changes at the end.`;
+Return the markdown blocks above directly and add a brief summary of the changes at the end.`;
     } else {
       return `User message: ${originalMessage}
 
-        The user is calling @composer tool to generate note content. However, the note content was not created successfully. Below is the output
-        ${composerOutput.note_content}`;
+The user is calling @composer tool to generate note content. However, the note content was not created successfully. Below is the output
+
+${composerOutput.error}`;
     }
   }
 

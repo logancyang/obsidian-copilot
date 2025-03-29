@@ -803,27 +803,6 @@ class ProjectChainRunner extends CopilotPlusChainRunner {
     const projectConfig = getCurrentProject();
 
     if (!projectConfig) {
-      return getSystemPrompt();
-    }
-
-    // Get cached context synchronously
-    const context = ProjectManager.instance.getProjectContext(projectConfig.id);
-    let finalPrompt = projectConfig.systemPrompt;
-
-    if (context) {
-      finalPrompt = `${finalPrompt}\n\n${context}`;
-    }
-
-    return finalPrompt;
-  }
-}
-
-class ProjectChainRunner extends CopilotPlusChainRunner {
-  protected async getSystemPrompt(): Promise<string> {
-    // get current project
-    const projectConfig = getCurrentProject();
-
-    if (!projectConfig) {
       return super.getSystemPrompt();
     }
 

@@ -161,7 +161,15 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
         })
         .map((change) => change.value)
         .join("");
-      await app.vault.modify(state.file, newContent);
+
+      const file = app.vault.getAbstractFileByPath(state.path);
+      if (!file || !(file instanceof TFile)) {
+        new Notice("File not found:" + state.path);
+        close();
+        return;
+      }
+
+      await app.vault.modify(file, newContent);
       new Notice("Changes applied successfully");
       close();
     } catch (error) {
