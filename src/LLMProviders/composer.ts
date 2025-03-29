@@ -70,6 +70,10 @@ export class Composer {
     4. Do no include the title to the note content.
     5. You can return multiple notes if the user's request involves creating multiple notes.
 
+    # Important JSON Formatting Rules
+    1. All newlines in string values must be escaped as \\n
+    2. The response must be valid JSON that can be parsed
+
     Below is the chat history the user and the previous assistant have had. You should continue the conversation if necessary but respond in a different format.
     <CHAT_HISTORY>
     ${chatHistory.map((entry) => `${entry.role}: ${entry.content}`).join("\n")}
@@ -178,7 +182,7 @@ ${composerOutput.error}`;
   // Break content into lines and wrap each line in ~~
   private strikeThrough(content: string): string {
     const lines = content.trim().split("\n");
-    return lines.map((line) => "~~" + line.trim() + "~~").join("\n");
+    return lines.map((line) => "- " + line).join("\n");
   }
 
   // Get relevant changes only and combine them into a single markdown block

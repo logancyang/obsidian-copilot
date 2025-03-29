@@ -1,7 +1,6 @@
-import React, { useEffect, useRef } from "react";
+import React from "react";
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
-import { Component, MarkdownRenderer } from "obsidian";
 import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
 import { Composer } from "@/LLMProviders/composer";
 import { logError } from "@/logger";
@@ -14,32 +13,6 @@ interface ComposerCodeBlockProps {
 }
 
 export const ComposerCodeBlock: React.FC<ComposerCodeBlockProps> = ({ path, code }) => {
-  const codeRef = useRef<HTMLDivElement>(null);
-  const componentRef = useRef<Component | null>(null);
-
-  useEffect(() => {
-    if (codeRef.current && path) {
-      // Create a new Component instance if it doesn't exist
-      if (!componentRef.current) {
-        componentRef.current = new Component();
-      }
-
-      // Clear previous content
-      codeRef.current.innerHTML = "";
-
-      // Render markdown content
-      MarkdownRenderer.renderMarkdown(code, codeRef.current, path, componentRef.current);
-
-      // Cleanup function
-      return () => {
-        if (componentRef.current) {
-          componentRef.current.unload();
-          componentRef.current = null;
-        }
-      };
-    }
-  }, [code, path]);
-
   const handleApply = async () => {
     if (!path) return;
 
@@ -114,8 +87,9 @@ export const ComposerCodeBlock: React.FC<ComposerCodeBlockProps> = ({ path, code
           }
         </div>
       )}
-
-      <div ref={codeRef} className="m-0 border-none" />
+      <pre className="m-0 border-none">
+        <code>{code}</code>
+      </pre>
     </div>
   );
 };
