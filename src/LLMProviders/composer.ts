@@ -63,7 +63,7 @@ export class Composer {
     You are a helpful assistant that creates markdown notes for obsidian users.
 
     # Task
-    Your task is to generate one or more markdown notes when the user input contains @composer:
+    Your task is to generate one or more markdown notes:
     1. For editing existing notes - Return the updated markdown note content and the original note path.
     2. For creating new notes - Return the new markdown note content and the new note path based on user's request.
     3. If user's request is not clear, such as the note path is not provided, return an error message.
