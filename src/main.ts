@@ -18,6 +18,7 @@ import {
   sanitizeSettings,
   setSettings,
   subscribeToSettingsChange,
+  updateSetting,
 } from "@/settings/model";
 import SharedState from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
@@ -26,12 +27,15 @@ import {
   MarkdownView,
   Menu,
   Notice,
+  ObsidianProtocolData,
   Plugin,
   TFile,
   TFolder,
   WorkspaceLeaf,
 } from "obsidian";
 import { IntentAnalyzer } from "./LLMProviders/intentAnalyzer";
+import { logError, logInfo } from "@/logger";
+import { CopilotPlusWelcomeModal } from "@/components/modals/CopilotPlusWelcomeModal";
 
 export default class CopilotPlugin extends Plugin {
   // A chat history that stores the messages sent and received
@@ -44,6 +48,8 @@ export default class CopilotPlugin extends Plugin {
   fileParserManager: FileParserManager;
   settingsUnsubscriber?: () => void;
 
+  settingTab: CopilotSettingTab;
+
   async onload(): Promise<void> {
     await this.loadSettings();
     this.settingsUnsubscriber = subscribeToSettingsChange(async (prev, next) => {
@@ -54,7 +60,8 @@ export default class CopilotPlugin extends Plugin {
       }
       registerCommands(this, prev, next);
     });
-    this.addSettingTab(new CopilotSettingTab(this.app, this));
+    this.settingTab = new CopilotSettingTab(this.app, this);
+    this.addSettingTab(this.settingTab);
     // Always have one instance of sharedState and chainManager in the plugin
     this.sharedState = new SharedState();
 
@@ -108,6 +115,9 @@ export default class CopilotPlugin extends Plugin {
         }
       })
     );
+
+    // register copilot handler for license key
+    this.registerObsidianProtocolHandler("copilot", this.registerLicenseKeyHandler.bind(this));
   }
 
   async onunload() {
@@ -327,5 +337,46 @@ export default class CopilotPlugin extends Plugin {
       content: doc.pageContent,
       metadata: doc.metadata,
     }));
+  }
+
+  registerLicenseKeyHandler(params: ObsidianProtocolData) {
+    const encodedLicenseKey = params["licenseKey"];
+
+    if (encodedLicenseKey) {
+      try {
+        const licenseKey = decodeURIComponent(encodedLicenseKey);
+        logInfo(`==== licenseKey ====:`, licenseKey);
+
+        // update license key
+        updateSetting("plusLicenseKey", licenseKey);
+
+        // valid
+        checkIsPlusUser().then((result) => {
+          if (!result) {
+            new Notice("Invalid license key");
+            logError("Invalid license key");
+          } else {
+            new CopilotPlusWelcomeModal(this.app).open();
+          }
+        });
+
+        // if setting not exist, fallback to direct updateSetting, don't need to open setting
+        if (!this.app.setting) {
+          return;
+        }
+
+        this.app.setting.open();
+        // This `if` check is necessary. If we omit it, the following bug occurs:
+        // https://github.com/RyotaUshio/obsidian-pdf-plus/issues/309
+        // I learned this from the core Sync plugin's `openSettings` method.
+        if (this.app.setting.activeTab !== this.settingTab) {
+          this.app.setting.openTabById(this.manifest.id);
+          updateSetting("plusLicenseKey", licenseKey);
+        }
+      } catch (error) {
+        new Notice("set license key failed, please set your license key manually");
+        logError("License key decoding error:", error);
+      }
+    }
   }
 }
