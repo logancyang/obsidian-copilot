@@ -5,9 +5,9 @@ import { TabProvider, useTab } from "@/contexts/TabContext";
 import CopilotPlugin from "@/main";
 import { resetSettings } from "@/settings/model";
 import { CommandSettings } from "@/settings/v2/components/CommandSettings";
-import { checkLatestVersion, isNewerVersion } from "@/utils";
+import { useLatestVersion } from "@/hooks/useLatestVersion";
 import { Cog, Command, Cpu, Database, Wrench } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { AdvancedSettings } from "./components/AdvancedSettings";
 import { BasicSettings } from "./components/BasicSettings";
 import { ModelSettings } from "./components/ModelSettings";
@@ -81,24 +81,7 @@ interface SettingsMainV2Props {
 const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
   // Add a key state that we'll change when resetting
   const [resetKey, setResetKey] = React.useState(0);
-  const [latestVersion, setLatestVersion] = useState<string | null>(null);
-  const [updateError, setUpdateError] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Check version when settings tab is opened
-    const checkForUpdates = async () => {
-      const { version, error } = await checkLatestVersion();
-      if (error) {
-        console.error("Version check failed:", error);
-        setUpdateError(error);
-      } else if (version) {
-        setLatestVersion(version);
-        setUpdateError(null);
-      }
-    };
-
-    checkForUpdates();
-  }, [plugin.manifest.version]); // Only re-run if plugin version changes
+  const { latestVersion, hasUpdate } = useLatestVersion(plugin.manifest.version);
 
   const handleReset = async () => {
     const modal = new ResetSettingsConfirmModal(app, async () => {
@@ -109,9 +92,6 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
     modal.open();
   };
 
-  const isNewerVersionAvailable =
-    latestVersion && isNewerVersion(latestVersion, plugin.manifest.version);
-
   return (
     <TabProvider>
       <div>
@@ -119,35 +99,25 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
           <h1 className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div className="flex items-center gap-2">
               <span>Copilot Settings</span>
-              <span className="text-xs text-muted">
-                <a
-                  href="https://github.com/logancyang/obsidian-copilot/releases/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-accent hover:underline"
-                >
-                  v{plugin.manifest.version}
-                </a>
-                {updateError ? (
-                  <span className="text-error" title={updateError}>
-                    {" "}
-                    (update check failed)
-                  </span>
-                ) : (
-                  latestVersion && (
-                    <>
-                      {isNewerVersionAvailable ? (
-                        <span className="text-accent" title="A new version is available">
-                          {" "}
-                          (latest: v{latestVersion})
-                        </span>
-                      ) : (
-                        <span className="text-accent"> (up to date)</span>
-                      )}
-                    </>
-                  )
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-muted">v{plugin.manifest.version}</span>
+                {latestVersion && (
+                  <>
+                    {hasUpdate ? (
+                      <a
+                        href="obsidian://show-plugin?id=copilot"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-accent hover:underline"
+                      >
+                        (Update to v{latestVersion})
+                      </a>
+                    ) : (
+                      <span className="text-xs text-normal"> (up to date)</span>
+                    )}
+                  </>
                 )}
-              </span>
+              </div>
             </div>
             <div className="self-end sm:self-auto">
               <Button variant="secondary" size="sm" onClick={handleReset}>
