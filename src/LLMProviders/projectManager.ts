@@ -83,7 +83,7 @@ export default class ProjectManager {
           // Check if project configuration has changed
           if (JSON.stringify(prevProject) !== JSON.stringify(nextProject)) {
             // Clear context cache for this project
-            await this.projectContextCache.clearForProject(nextProject);
+            await this.projectContextCache.clearForProject(prevProject);
 
             // If this is the current project, reload its context and recreate chain
             if (this.currentProjectId === nextProject.id) {
