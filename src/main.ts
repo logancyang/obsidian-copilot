@@ -126,6 +126,10 @@ export default class CopilotPlugin extends Plugin {
       this.vectorStoreManager.onunload();
     }
 
+    if (this.projectManager) {
+      this.projectManager.onunload();
+    }
+
     this.settingsUnsubscriber?.();
     this.autocompleteService?.destroy();
 

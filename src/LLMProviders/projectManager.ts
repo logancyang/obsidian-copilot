@@ -39,7 +39,7 @@ export default class ProjectManager {
     this.plugin = plugin;
     this.currentProjectId = null;
     this.chainMangerInstance = new ChainManager(app, vectorStoreManager);
-    this.projectContextCache = ProjectContextCache.getInstance();
+    this.projectContextCache = ProjectContextCache.getInstance(app);
     this.chatMessageCache = new Map();
 
     // Set up subscriptions
@@ -251,14 +251,6 @@ ${contextParts.join("\n\n")}
     return this.projectContextCache.getSync(project);
   }
 
-  public async clearContextCache(projectId: string): Promise<void> {
-    const project = getSettings().projectList.find((p) => p.id === projectId);
-    if (project) {
-      await this.projectContextCache.clearForProject(project);
-      logInfo(`Context cache cleared for project: ${projectId}`);
-    }
-  }
-
   private async processMarkdownContext(inclusions?: string, exclusions?: string): Promise<string> {
     if (!inclusions && !exclusions) {
       return "";
@@ -335,5 +327,9 @@ ${content}`;
 
     const results = await Promise.all(processPromises);
     return results.join("");
+  }
+
+  public onunload(): void {
+    this.projectContextCache.cleanup();
   }
 }
