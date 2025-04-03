@@ -2,6 +2,7 @@ import { CustomModel } from "@/aiParams";
 import { DEFAULT_INLINE_EDIT_COMMANDS } from "@/commands/constants";
 import { type CopilotSettings } from "@/settings/model";
 import { ChainType } from "./chainFactory";
+import { v4 as uuidv4 } from "uuid";
 
 export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
 export const CHAT_VIEWTYPE = "copilot-chat-view";
@@ -469,6 +470,7 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
+  userId: uuidv4(),
   isPlusUser: false,
   plusLicenseKey: "",
   openAIApiKey: "",
