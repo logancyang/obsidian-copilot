@@ -59,6 +59,7 @@ export interface CopilotSettings {
   temperature: number;
   maxTokens: number;
   contextTurns: number;
+  lastDismissedVersion: string | null;
   // Do not use this directly, use getSystemPrompt() instead
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;

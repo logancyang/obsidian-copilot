@@ -19,6 +19,7 @@ import { err2String, formatDateTime } from "@/utils";
 import { Notice, TFile } from "obsidian";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Buffer } from "buffer";
+import { NewVersionBanner } from "@/components/chat-components/NewVersionBanner";
 
 interface ChatProps {
   sharedState: SharedState;
@@ -557,7 +558,8 @@ ${chatContent}`;
   ]);
 
   return (
-    <div className="chat-container">
+    <div className="flex flex-col size-full overflow-hidden">
+      <NewVersionBanner currentVersion={plugin.manifest.version} />
       <ChatMessages
         chatHistory={chatHistory}
         currentAiMessage={currentAiMessage}

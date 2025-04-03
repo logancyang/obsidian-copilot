@@ -82,14 +82,6 @@ If your plugin does not need CSS, delete this file.
   width: 70%;
 }
 
-.chat-container {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-}
-
 .bottom-container {
   display: flex;
   flex-direction: column;
