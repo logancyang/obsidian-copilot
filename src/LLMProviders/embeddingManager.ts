@@ -256,6 +256,9 @@ export default class EmbeddingManager {
         baseUrl: customModel.baseUrl || "http://localhost:11434",
         model: modelName,
         truncate: true,
+        headers: {
+          Authorization: `Bearer ${await getDecryptedKey(customModel.apiKey || "default-key")}`,
+        },
       },
       [EmbeddingModelProviders.LM_STUDIO]: {
         modelName,

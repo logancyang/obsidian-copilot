@@ -182,10 +182,11 @@ export default class ChatModelManager {
       [ChatModelProviders.OLLAMA]: {
         // ChatOllama has `model` instead of `modelName`!!
         model: modelName,
-        // @ts-ignore
-        apiKey: customModel.apiKey || "default-key",
         // MUST NOT use /v1 in the baseUrl for ollama
         baseUrl: customModel.baseUrl || "http://localhost:11434",
+        headers: new Headers({
+          Authorization: `Bearer ${await getDecryptedKey(customModel.apiKey || "default-key")}`,
+        }),
       },
       [ChatModelProviders.LM_STUDIO]: {
         modelName: modelName,
