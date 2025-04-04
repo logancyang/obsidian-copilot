@@ -28,8 +28,6 @@ import { Buffer } from "buffer";
 import { Notice, TFile } from "obsidian";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
 
-type ChatMode = "default" | "project";
-
 interface ChatProps {
   sharedState: SharedState;
   chainManager: ChainManager;
@@ -37,7 +35,6 @@ interface ChatProps {
   updateUserMessageHistory: (newMessage: string) => void;
   fileParserManager: FileParserManager;
   plugin: CopilotPlugin;
-  mode?: ChatMode;
 }
 
 const Chat: React.FC<ChatProps> = ({
