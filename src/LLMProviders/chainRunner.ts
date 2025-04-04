@@ -617,39 +617,30 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         // Append sources to the response
         sources = this.getSources(documents);
       } else {
-        const enhancedUserMessage = this.prepareEnhancedUserMessage(
-          cleanedUserMessage,
-          toolOutputs
-        );
+        // Enhance with tool outputs.
+        let enhancedUserMessage = this.prepareEnhancedUserMessage(cleanedUserMessage, toolOutputs);
         // If no results, default to LLM Chain
         if (debug) {
           console.log("No local search results. Using standard LLM Chain.");
           console.log("Enhanced user message:", enhancedUserMessage);
         }
 
+        // Enhance with composer output.
         if (messageForAnalysis.includes("@composer")) {
-          const composerUserMessage = await Composer.getInstance().composerUserMessage(
+          enhancedUserMessage = await Composer.getInstance().prepareUserMessageWithComposerOutput(
             messageForAnalysis,
             enhancedUserMessage,
             chatHistory,
             debug
           );
-          fullAIResponse = await this.streamMultimodalResponse(
-            composerUserMessage,
-            userMessage,
-            abortController,
-            updateCurrentAiMessage,
-            debug
-          );
-        } else {
-          fullAIResponse = await this.streamMultimodalResponse(
-            enhancedUserMessage,
-            userMessage,
-            abortController,
-            updateCurrentAiMessage,
-            debug
-          );
         }
+        fullAIResponse = await this.streamMultimodalResponse(
+          enhancedUserMessage,
+          userMessage,
+          abortController,
+          updateCurrentAiMessage,
+          debug
+        );
       }
     } catch (error) {
       // Reset loading message to default

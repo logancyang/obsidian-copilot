@@ -137,7 +137,7 @@ export class Composer {
     }
   }
 
-  public async composerUserMessage(
+  public async prepareUserMessageWithComposerOutput(
     originalMessage: string,
     messageWithContext: string,
     chatHistory: ChatHistoryEntry[],
