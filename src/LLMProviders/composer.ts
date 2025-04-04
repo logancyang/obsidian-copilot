@@ -232,7 +232,9 @@ ${composerOutput.error}`;
       // Cache the changes to be used by the Apply view.
       Composer.changesMap[path] = changes;
 
-      console.log("==== Changes ====\n", changes);
+      if (debug) {
+        console.log("==== Changes ====\n", changes);
+      }
 
       // Group changes into blocks
       const blocks = Composer.getChangeBlocks(changes);

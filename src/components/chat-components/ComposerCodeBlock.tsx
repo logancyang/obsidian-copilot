@@ -23,15 +23,25 @@ export const ComposerCodeBlock: React.FC<ComposerCodeBlockProps> = ({ path, code
       let isNewFile = false;
 
       // If file doesn't exist, create it
-      console.log("file", file);
       if (!file) {
         try {
-          // Create the file with the provided code as content
-          await app.vault.create(path, code);
-          new Notice(`Created new file: ${path}`);
+          // Create the folder if it doesn't exist
+          if (path.includes("/")) {
+            const folderPath = path.split("/").slice(0, -1).join("/");
+            const folder = app.vault.getAbstractFileByPath(folderPath);
+            if (!folder) {
+              await app.vault.createFolder(folderPath);
+            }
+          }
+          file = await app.vault.create(path, code);
+          if (file) {
+            new Notice(`Created new file: ${path}`);
+            isNewFile = true;
+          } else {
+            new Notice(`Failed to create file: ${path}`);
+            return;
+          }
 
-          // Get the newly created file
-          file = app.vault.getAbstractFileByPath(path);
           isNewFile = true;
         } catch (createError) {
           logError("Error creating file:", createError);
