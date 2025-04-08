@@ -11,7 +11,7 @@ import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
-import { CodeBlock } from "./CodeBlock";
+import { ComposerCodeBlock } from "./ComposerCodeBlock";
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
   if (!context || (context.notes.length === 0 && context.urls.length === 0)) {
@@ -255,13 +255,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
               const root = createRoot(container);
               roots.push(root);
               if (!isUnmounting) {
-                root.render(
-                  <CodeBlock
-                    code={cleanedCode}
-                    path={path}
-                    onApply={isStreaming ? undefined : handleApplyCode}
-                  />
-                );
+                root.render(<ComposerCodeBlock path={path} code={cleanedCode} />);
               }
             }
           });

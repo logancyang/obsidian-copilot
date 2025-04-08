@@ -1,10 +1,10 @@
-import { removeThinkTags } from "@/utils";
+import { removeThinkTags, ChatHistoryEntry } from "@/utils";
 import { BaseChatModelCallOptions } from "@langchain/core/language_models/chat_models";
 import ProjectManager from "@/LLMProviders/projectManager";
 
 export async function getStandaloneQuestion(
   question: string,
-  chatHistory: [string, string][]
+  chatHistory: ChatHistoryEntry[]
 ): Promise<string> {
   const condenseQuestionTemplate = `Given the following conversation and a follow up question,
     summarize the conversation as context and keep the follow up question unchanged, in its original language.
@@ -19,7 +19,7 @@ export async function getStandaloneQuestion(
     Standalone question:`;
 
   const formattedChatHistory = chatHistory
-    .map(([human, ai]) => `Human: ${human}\nAssistant: ${ai}`)
+    .map(({ role, content }) => `${role}: ${content}`)
     .join("\n");
 
   const chatModel = ProjectManager.instance

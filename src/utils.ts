@@ -354,14 +354,23 @@ export function getSendChatContextNotesPrompt(
   );
 }
 
-export function extractChatHistory(memoryVariables: MemoryVariables): [string, string][] {
-  const chatHistory: [string, string][] = [];
+export interface ChatHistoryEntry {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export function extractChatHistory(memoryVariables: MemoryVariables): ChatHistoryEntry[] {
+  const chatHistory: ChatHistoryEntry[] = [];
   const { history } = memoryVariables;
 
   for (let i = 0; i < history.length; i += 2) {
     const userMessage = history[i]?.content || "";
     const aiMessage = history[i + 1]?.content || "";
-    chatHistory.push([userMessage, aiMessage]);
+
+    chatHistory.push(
+      { role: "user", content: userMessage },
+      { role: "assistant", content: aiMessage }
+    );
   }
 
   return chatHistory;

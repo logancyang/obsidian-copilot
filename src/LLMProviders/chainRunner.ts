@@ -1,6 +1,7 @@
 import { getCurrentProject } from "@/aiParams";
 import { getStandaloneQuestion } from "@/chainUtils";
-import { getComposerSystemPrompt } from "@/composerUtils";
+import { Composer } from "./composer";
+import { getSystemPrompt } from "@/settings/model";
 import {
   ABORT_REASON,
   AI_SENDER,
@@ -86,10 +87,6 @@ abstract class BaseChainRunner implements ChainRunner {
 
   constructor(chainManager: ChainManager) {
     this.chainManager = chainManager;
-  }
-
-  protected async getSystemPrompt(): Promise<string> {
-    return getComposerSystemPrompt();
   }
 
   abstract run(
@@ -437,7 +434,6 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     const messages: any[] = [];
 
     // Add system message if available
-
     let fullSystemMessage = await this.getSystemPrompt();
 
     // Add chat history context to system message if exists
@@ -458,9 +454,8 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     }
 
     // Add chat history
-    for (const [human, ai] of chatHistory) {
-      messages.push({ role: "user", content: human });
-      messages.push({ role: "assistant", content: ai });
+    for (const entry of chatHistory) {
+      messages.push({ role: entry.role, content: entry.content });
     }
 
     // Get the current chat model
@@ -553,9 +548,9 @@ class CopilotPlusChainRunner extends BaseChainRunner {
 
       if (debug) console.log("==== Step 1: Analyzing intent ====");
       let toolCalls;
+      // Use the original message for intent analysis
+      const messageForAnalysis = userMessage.originalMessage || userMessage.message;
       try {
-        // Use the original message for intent analysis
-        const messageForAnalysis = userMessage.originalMessage || userMessage.message;
         toolCalls = await IntentAnalyzer.analyzeIntent(messageForAnalysis);
       } catch (error: any) {
         return this.handleResponse(
@@ -580,14 +575,14 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         (output) => output.tool === "localSearch" && output.output && output.output.length > 0
       );
 
+      // Format chat history from memory
+      const memory = this.chainManager.memoryManager.getMemory();
+      const memoryVariables = await memory.loadMemoryVariables({});
+      const chatHistory = extractChatHistory(memoryVariables);
+
       if (localSearchResult) {
         if (debug) console.log("==== Step 2: Processing local search results ====");
         const documents = JSON.parse(localSearchResult.output);
-
-        // Format chat history from memory
-        const memory = this.chainManager.memoryManager.getMemory();
-        const memoryVariables = await memory.loadMemoryVariables({});
-        const chatHistory = extractChatHistory(memoryVariables);
 
         if (debug) console.log("==== Step 3: Condensing Question ====");
         const standaloneQuestion = await getStandaloneQuestion(cleanedUserMessage, chatHistory);
@@ -607,7 +602,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         if (debug) console.log("==== Step 5: Invoking QA Chain ====");
         const qaPrompt = await this.chainManager.promptManager.getQAPrompt({
           question: enhancedQuestion,
-          context: context,
+          context,
           systemMessage: "", // System prompt is added separately in streamMultimodalResponse
         });
 
@@ -622,16 +617,23 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         // Append sources to the response
         sources = this.getSources(documents);
       } else {
-        const enhancedUserMessage = this.prepareEnhancedUserMessage(
-          cleanedUserMessage,
-          toolOutputs
-        );
+        // Enhance with tool outputs.
+        let enhancedUserMessage = this.prepareEnhancedUserMessage(cleanedUserMessage, toolOutputs);
         // If no results, default to LLM Chain
         if (debug) {
           console.log("No local search results. Using standard LLM Chain.");
           console.log("Enhanced user message:", enhancedUserMessage);
         }
 
+        // Enhance with composer output.
+        if (messageForAnalysis.includes("@composer")) {
+          enhancedUserMessage = await Composer.getInstance().prepareUserMessageWithComposerOutput(
+            messageForAnalysis,
+            enhancedUserMessage,
+            chatHistory,
+            debug
+          );
+        }
         fullAIResponse = await this.streamMultimodalResponse(
           enhancedUserMessage,
           userMessage,
@@ -764,6 +766,25 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     return timeExpression
       ? `Local Search Result for ${timeExpression}:\n${formattedDocs}`
       : `Local Search Result:\n${formattedDocs}`;
+  }
+
+  protected async getSystemPrompt(): Promise<string> {
+    // get current project
+    const projectConfig = getCurrentProject();
+
+    if (!projectConfig) {
+      return getSystemPrompt();
+    }
+
+    // Get cached context synchronously
+    const context = ProjectManager.instance.getProjectContext(projectConfig.id);
+    let finalPrompt = projectConfig.systemPrompt;
+
+    if (context) {
+      finalPrompt = `${finalPrompt}\n\n${context}`;
+    }
+
+    return finalPrompt;
   }
 }
 
