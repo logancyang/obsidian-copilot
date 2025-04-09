@@ -13,6 +13,7 @@ import { extractChatHistory, extractYoutubeUrl } from "@/utils";
 import { BrevilabsClient } from "./brevilabsClient";
 import { Vault } from "obsidian";
 import ProjectManager from "@/LLMProviders/projectManager";
+import { isProjectMode } from "@/aiParams";
 
 // TODO: Add @index with explicit pdf files in chat context menu
 export const COPILOT_TOOL_NAMES = ["@vault", "@composer", "@web", "@youtube", "@pomodoro"];
@@ -43,7 +44,10 @@ export class IntentAnalyzer {
 
   static async analyzeIntent(originalMessage: string): Promise<ToolCall[]> {
     try {
-      const brocaResponse = await BrevilabsClient.getInstance().broca(originalMessage);
+      const brocaResponse = await BrevilabsClient.getInstance().broca(
+        originalMessage,
+        isProjectMode()
+      );
 
       // Check if the response is successful and has the expected structure
       if (!brocaResponse?.response) {
