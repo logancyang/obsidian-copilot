@@ -776,8 +776,8 @@ class ProjectChainRunner extends CopilotPlusChainRunner {
       return super.getSystemPrompt();
     }
 
-    // Get cached context synchronously
-    const context = ProjectManager.instance.getProjectContext(projectConfig.id);
+    // Get context asynchronously
+    const context = await ProjectManager.instance.getProjectContext(projectConfig.id);
     let finalPrompt = projectConfig.systemPrompt;
 
     if (context) {

@@ -1,27 +1,35 @@
 import { ProjectConfig } from "@/aiParams";
 import { logError, logInfo } from "@/logger";
-import { MD5 } from "crypto-js";
-import { App, TAbstractFile, TFile, Vault } from "obsidian";
+import { TAbstractFile, TFile, Vault } from "obsidian";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import { getSettings } from "@/settings/model";
+import { MD5 } from "crypto-js";
 
 const DEBOUNCE_DELAY = 5000; // 5 seconds
+
+export interface ContextCache {
+  markdownContext: string;
+  webContexts: Record<string, string>; // URL -> context
+  youtubeContexts: Record<string, string>; // URL -> context
+  timestamp: number;
+  markdownNeedsReload: boolean;
+}
 
 export class ProjectContextCache {
   private static instance: ProjectContextCache;
   private cacheDir: string = ".copilot/project-context-cache";
-  private memoryCache: Map<string, string> = new Map();
+  private memoryCache: Map<string, ContextCache> = new Map();
   private vault: Vault;
   private debounceTimer: number | null = null;
 
-  private constructor(private app: App) {
+  private constructor() {
     this.vault = app.vault;
     this.initializeEventListeners();
   }
 
-  static getInstance(app: App): ProjectContextCache {
+  static getInstance(): ProjectContextCache {
     if (!ProjectContextCache.instance) {
-      ProjectContextCache.instance = new ProjectContextCache(app);
+      ProjectContextCache.instance = new ProjectContextCache();
     }
     return ProjectContextCache.instance;
   }
@@ -71,10 +79,10 @@ export class ProjectContextCache {
           });
 
           if (shouldIndexFile(file, inclusions, exclusions)) {
-            // clear cache
-            await this.clearForProject(project);
+            // Only clear markdown context, keep web and youtube contexts
+            await this.clearMarkdownContext(project);
             logInfo(
-              `Cleared context cache for project ${project.name} due to file change: ${file.path}`
+              `Cleared markdown context cache for project ${project.name} due to file change: ${file.path}`
             );
           }
         }),
@@ -92,13 +100,8 @@ export class ProjectContextCache {
   }
 
   private getCacheKey(project: ProjectConfig): string {
-    // Use project ID, system prompt, and context sources for a unique cache key
-    const metadata = JSON.stringify({
-      id: project.id,
-      contextSource: project.contextSource,
-      systemPrompt: project.systemPrompt,
-    });
-    const key = MD5(metadata).toString();
+    // Use project ID as cache key
+    const key = MD5(project.id).toString();
     return key;
   }
 
@@ -106,7 +109,7 @@ export class ProjectContextCache {
     return `${this.cacheDir}/${cacheKey}.json`;
   }
 
-  async get(project: ProjectConfig): Promise<string | null> {
+  async get(project: ProjectConfig): Promise<ContextCache | null> {
     try {
       const cacheKey = this.getCacheKey(project);
 
@@ -121,10 +124,10 @@ export class ProjectContextCache {
       if (await this.vault.adapter.exists(cachePath)) {
         logInfo("File cache hit for project:", project.name);
         const cacheContent = await this.vault.adapter.read(cachePath);
-        const context = JSON.parse(cacheContent).context;
+        const contextCache = JSON.parse(cacheContent);
         // Store in memory cache
-        this.memoryCache.set(cacheKey, context);
-        return context;
+        this.memoryCache.set(cacheKey, contextCache);
+        return contextCache;
       }
       logInfo("Cache miss for project:", project.name);
       return null;
@@ -134,7 +137,7 @@ export class ProjectContextCache {
     }
   }
 
-  getSync(project: ProjectConfig): string | null {
+  getSync(project: ProjectConfig): ContextCache | null {
     try {
       const cacheKey = this.getCacheKey(project);
       const memoryResult = this.memoryCache.get(cacheKey);
@@ -150,24 +153,66 @@ export class ProjectContextCache {
     }
   }
 
-  async set(project: ProjectConfig, context: string): Promise<void> {
+  async set(project: ProjectConfig, contextCache: ContextCache): Promise<void> {
     try {
       await this.ensureCacheDir();
       const cacheKey = this.getCacheKey(project);
       const cachePath = this.getCachePath(cacheKey);
       logInfo("Caching context for project:", project.name);
       // Store in memory cache
-      this.memoryCache.set(cacheKey, context);
+      this.memoryCache.set(cacheKey, contextCache);
       // Store in file cache
-      await this.vault.adapter.write(
-        cachePath,
-        JSON.stringify({
-          context,
-          timestamp: Date.now(),
-        })
-      );
+      await this.vault.adapter.write(cachePath, JSON.stringify(contextCache));
     } catch (error) {
       logError("Error writing to project context cache:", error);
+    }
+  }
+
+  async updateWebContext(project: ProjectConfig, url: string, context: string): Promise<void> {
+    const cache = (await this.get(project)) || {
+      markdownContext: "",
+      webContexts: {},
+      youtubeContexts: {},
+      timestamp: Date.now(),
+      markdownNeedsReload: false,
+    };
+
+    cache.webContexts[url] = context;
+    await this.set(project, cache);
+  }
+
+  async updateYoutubeContext(project: ProjectConfig, url: string, context: string): Promise<void> {
+    const cache = (await this.get(project)) || {
+      markdownContext: "",
+      webContexts: {},
+      youtubeContexts: {},
+      timestamp: Date.now(),
+      markdownNeedsReload: false,
+    };
+
+    cache.youtubeContexts[url] = context;
+    await this.set(project, cache);
+  }
+
+  async updateMarkdownContext(project: ProjectConfig, context: string): Promise<void> {
+    const cache = (await this.get(project)) || {
+      markdownContext: "",
+      webContexts: {},
+      youtubeContexts: {},
+      timestamp: Date.now(),
+      markdownNeedsReload: false,
+    };
+
+    cache.markdownContext = context;
+    await this.set(project, cache);
+  }
+
+  async clearMarkdownContext(project: ProjectConfig): Promise<void> {
+    const cache = await this.get(project);
+    if (cache) {
+      cache.markdownContext = "";
+      cache.markdownNeedsReload = true;
+      await this.set(project, cache);
     }
   }
 

@@ -7,7 +7,7 @@ import {
   subscribeToModelKeyChange,
   subscribeToProjectChange,
 } from "@/aiParams";
-import { ProjectContextCache } from "@/cache/projectContextCache";
+import { ContextCache, ProjectContextCache } from "@/cache/projectContextCache";
 import { ChainType } from "@/chainFactory";
 import { updateChatMemory } from "@/chatUtils";
 import CopilotView from "@/components/CopilotView";
@@ -39,7 +39,7 @@ export default class ProjectManager {
     this.plugin = plugin;
     this.currentProjectId = null;
     this.chainMangerInstance = new ChainManager(app, vectorStoreManager);
-    this.projectContextCache = ProjectContextCache.getInstance(app);
+    this.projectContextCache = ProjectContextCache.getInstance();
     this.chatMessageCache = new Map();
 
     // Set up subscriptions
@@ -82,8 +82,8 @@ export default class ProjectManager {
         if (prevProject) {
           // Check if project configuration has changed
           if (JSON.stringify(prevProject) !== JSON.stringify(nextProject)) {
-            // Clear context cache for this project
-            await this.projectContextCache.clearForProject(prevProject);
+            // Compare project configuration changes and selectively update cache
+            await this.compareAndUpdateCache(prevProject, nextProject);
 
             // If this is the current project, reload its context and recreate chain
             if (this.currentProjectId === nextProject.id) {
@@ -184,54 +184,103 @@ export default class ProjectManager {
   }
 
   // TODO(logan): This should be reused as a generic context loading function
-  private async loadProjectContext(project: ProjectConfig): Promise<void> {
+  private async loadProjectContext(project: ProjectConfig): Promise<ContextCache | null> {
     try {
-      if (project.contextSource) {
-        // Try to get context from cache first
-        const cachedContext = await this.projectContextCache.get(project);
-        if (cachedContext) {
-          return;
-        }
-
-        const [markdownContext, webContext, youtubeContext] = await Promise.all([
-          this.processMarkdownContext(
-            project.contextSource.inclusions,
-            project.contextSource.exclusions
-          ),
-          this.processWebUrlsContext(project.contextSource.webUrls),
-          this.processYoutubeUrlsContext(project.contextSource.youtubeUrls),
-        ]);
-
-        // Build context sections only for non-null sources
-        const contextParts = [];
-
-        if (project.contextSource.inclusions || project.contextSource.exclusions) {
-          contextParts.push(`## Markdown Files\n${markdownContext}`);
-        }
-
-        if (project.contextSource.webUrls?.trim()) {
-          contextParts.push(`## Web Content\n${webContext}`);
-        }
-
-        if (project.contextSource.youtubeUrls?.trim()) {
-          contextParts.push(`## YouTube Content\n${youtubeContext}`);
-        }
-
-        const contextText = `
-# Project Context
-The following information is the relevant context for this project. Use this information to inform your responses when appropriate:
-
-<ProjectContext>
-${contextParts.join("\n\n")}
-</ProjectContext>
-`;
-
-        // Cache the generated context
-        await this.projectContextCache.set(project, contextText);
+      if (!project.contextSource) {
+        return null;
       }
+
+      const contextCache = (await this.projectContextCache.get(project)) || {
+        markdownContext: "",
+        webContexts: {},
+        youtubeContexts: {},
+        timestamp: Date.now(),
+        markdownNeedsReload: false,
+      };
+
+      const [updatedContextCache] = await Promise.all([
+        this.processMarkdownFiles(project, contextCache),
+        this.processWebUrls(project, contextCache),
+        this.processYoutubeUrls(project, contextCache),
+      ]);
+
+      updatedContextCache.timestamp = Date.now();
+      await this.projectContextCache.set(project, updatedContextCache);
+      return updatedContextCache;
     } catch (error) {
       logError(`Failed to load project context: ${error}`);
       throw error;
+    }
+  }
+
+  private async compareAndUpdateCache(prevProject: ProjectConfig, nextProject: ProjectConfig) {
+    try {
+      const cache = await this.projectContextCache.get(prevProject);
+
+      // If no cache exists, return true to create a new cache later
+      if (!cache) {
+        return true;
+      }
+
+      // Check if Markdown configuration has changed
+      const prevInclusions = prevProject.contextSource?.inclusions || "";
+      const nextInclusions = nextProject.contextSource?.inclusions || "";
+      const prevExclusions = prevProject.contextSource?.exclusions || "";
+      const nextExclusions = nextProject.contextSource?.exclusions || "";
+
+      if (prevInclusions !== nextInclusions || prevExclusions !== nextExclusions) {
+        // Markdown config changed, clear markdown context and mark for reload
+        cache.markdownContext = "";
+        cache.markdownNeedsReload = true;
+        logInfo(
+          `Markdown configuration changed for project ${nextProject.name}, marking for reload`
+        );
+      }
+
+      // Check if Web URLs configuration has changed
+      const prevWebUrls = prevProject.contextSource?.webUrls || "";
+      const nextWebUrls = nextProject.contextSource?.webUrls || "";
+
+      if (prevWebUrls !== nextWebUrls) {
+        // Find removed URLs
+        const prevUrls = prevWebUrls.split("\n").filter((url) => url.trim());
+        const nextUrls = nextWebUrls.split("\n").filter((url) => url.trim());
+
+        // Remove context for URLs that no longer exist
+        for (const url of prevUrls) {
+          if (!nextUrls.includes(url) && cache.webContexts[url]) {
+            delete cache.webContexts[url];
+            logInfo(`Removed web context for URL ${url} in project ${nextProject.name}`);
+          }
+        }
+      }
+
+      // Check if YouTube URLs configuration has changed
+      const prevYoutubeUrls = prevProject.contextSource?.youtubeUrls || "";
+      const nextYoutubeUrls = nextProject.contextSource?.youtubeUrls || "";
+
+      if (prevYoutubeUrls !== nextYoutubeUrls) {
+        // Find removed URLs
+        const prevUrls = prevYoutubeUrls.split("\n").filter((url) => url.trim());
+        const nextUrls = nextYoutubeUrls.split("\n").filter((url) => url.trim());
+
+        // Remove context for URLs that no longer exist
+        for (const url of prevUrls) {
+          if (!nextUrls.includes(url) && cache.youtubeContexts[url]) {
+            delete cache.youtubeContexts[url];
+            logInfo(`Removed YouTube context for URL ${url} in project ${nextProject.name}`);
+          }
+        }
+      }
+
+      // Update cache if needed
+      if (cache.markdownNeedsReload) {
+        // Save updated cache with the new project ID
+        await this.projectContextCache.set(nextProject, cache);
+        logInfo(`Updated cache for project ${nextProject.name}`);
+      }
+    } catch (error) {
+      logError(`Error comparing project configurations: ${error}`);
     }
   }
 
@@ -243,12 +292,125 @@ ${contextParts.join("\n\n")}
     }
   }
 
-  public getProjectContext(projectId: string): string | null {
+  public async getProjectContext(projectId: string): Promise<string | null> {
     const project = getSettings().projectList.find((p) => p.id === projectId);
     if (!project) {
       return null;
     }
-    return this.projectContextCache.getSync(project);
+
+    const contextCache = this.projectContextCache.getSync(project);
+    if (!contextCache) {
+      return null;
+    }
+
+    if (contextCache.markdownNeedsReload) {
+      const updatedCache = await this.loadProjectContext(project);
+      if (!updatedCache) {
+        return null;
+      }
+      return this.formatProjectContext(updatedCache);
+    }
+
+    return this.formatProjectContext(contextCache);
+  }
+
+  private formatProjectContext(contextCache: ContextCache): string {
+    const contextParts = [];
+
+    if (contextCache.markdownContext) {
+      contextParts.push(`## Markdown Files\n${contextCache.markdownContext}`);
+    }
+
+    if (Object.keys(contextCache.webContexts).length > 0) {
+      contextParts.push(`## Web Content\n${Object.values(contextCache.webContexts).join("\n\n")}`);
+    }
+
+    if (Object.keys(contextCache.youtubeContexts).length > 0) {
+      contextParts.push(
+        `## YouTube Content\n${Object.values(contextCache.youtubeContexts).join("\n\n")}`
+      );
+    }
+
+    return `
+# Project Context
+The following information is the relevant context for this project. Use this information to inform your responses when appropriate:
+
+<ProjectContext>
+${contextParts.join("\n\n")}
+</ProjectContext>
+`;
+  }
+
+  private async processMarkdownFiles(
+    project: ProjectConfig,
+    contextCache: ContextCache
+  ): Promise<ContextCache> {
+    if (project.contextSource?.inclusions || project.contextSource?.exclusions) {
+      // Only process if needsReload is true or there is no existing content
+      if (contextCache.markdownNeedsReload || !contextCache.markdownContext.trim()) {
+        const markdownContext = await this.processMarkdownContext(
+          project.contextSource.inclusions,
+          project.contextSource.exclusions
+        );
+        contextCache.markdownContext = markdownContext;
+        contextCache.markdownNeedsReload = false; // reset flag
+      }
+    }
+    return contextCache;
+  }
+
+  private async processWebUrls(
+    project: ProjectConfig,
+    contextCache: ContextCache
+  ): Promise<ContextCache> {
+    if (!project.contextSource?.webUrls?.trim()) {
+      return contextCache;
+    }
+
+    const urls = project.contextSource.webUrls.split("\n").filter((url) => url.trim());
+    const webContextPromises = urls.map(async (url) => {
+      if (!contextCache.webContexts[url]) {
+        const webContext = await this.processWebUrlsContext(url);
+        return { url, context: webContext };
+      }
+      return null;
+    });
+
+    const results = await Promise.all(webContextPromises);
+    results.forEach((result) => {
+      if (result) {
+        contextCache.webContexts[result.url] = result.context;
+      }
+    });
+
+    return contextCache;
+  }
+
+  private async processYoutubeUrls(
+    project: ProjectConfig,
+    contextCache: ContextCache
+  ): Promise<ContextCache> {
+    if (!project.contextSource?.youtubeUrls?.trim()) {
+      return contextCache;
+    }
+
+    const urls = project.contextSource.youtubeUrls.split("\n").filter((url) => url.trim());
+    const youtubeContextPromises = urls.map(async (url) => {
+      if (!contextCache.youtubeContexts[url]) {
+        const youtubeContext = await this.processYoutubeUrlsContext(url);
+        return { url, context: youtubeContext };
+      }
+      return null;
+    });
+
+    const results = await Promise.all(youtubeContextPromises);
+    results.forEach((result) => {
+      if (result) {
+        contextCache.youtubeContexts[result.url] = result.context;
+      }
+    });
+
+    return contextCache;
   }
 
   private async processMarkdownContext(inclusions?: string, exclusions?: string): Promise<string> {
