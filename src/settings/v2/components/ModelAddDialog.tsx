@@ -3,13 +3,13 @@ import { useTab } from "@/contexts/TabContext";
 import { getSettings } from "@/settings/model";
 import {
   ChatModelProviders,
-  SettingKeyProviders,
   EmbeddingModelProviders,
   MODEL_CAPABILITIES,
   ModelCapability,
   Provider,
   ProviderMetadata,
   ProviderSettingsKeyMap,
+  SettingKeyProviders,
 } from "@/constants";
 import { CustomModel } from "@/aiParams";
 import { err2String, getProviderInfo, getProviderLabel, omit } from "@/utils";
@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, Loader2, HelpCircle } from "lucide-react";
+import { ChevronDown, HelpCircle, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -496,7 +496,25 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
             )}
           </FormField>
 
-          <FormField label="Model Capabilities">
+          <FormField
+            label={
+              <div className="flex items-center gap-1.5">
+                <span className="leading-none">Model Capabilities</span>
+                <TooltipProvider delayDuration={0}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="size-4" />
+                    </TooltipTrigger>
+                    <TooltipContent align="start" className="max-w-96" side="bottom">
+                      <div className="text-sm text-muted">
+                        Only used to display model capabilities, does not affect model functionality
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            }
+          >
             <div className="flex gap-4 items-center">
               {capabilityOptions.map(({ id, label, description }) => (
                 <div key={id} className="flex items-center gap-2">
@@ -539,7 +557,21 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
               onCheckedChange={(checked: boolean) => setModel({ ...model, enableCors: checked })}
             />
             <Label htmlFor="enable-cors" className="text-sm">
-              Enable CORS
+              <div className="flex items-center gap-1.5">
+                <span>Enable CORS</span>
+                <TooltipProvider delayDuration={0}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="size-4" />
+                    </TooltipTrigger>
+                    <TooltipContent align="start" className="max-w-96" side="bottom">
+                      <div className="text-sm text-muted">
+                        Only check this option when prompted that CORS is needed
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
             </Label>
           </div>
           <div className="flex gap-2">

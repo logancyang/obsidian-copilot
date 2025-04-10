@@ -14,7 +14,17 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { FormField } from "@/components/ui/form-field";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { MODEL_CAPABILITIES, ModelCapability } from "@/constants";
+import {
+  MODEL_CAPABILITIES,
+  ModelCapability,
+  Provider,
+  ProviderMetadata,
+  ProviderSettingsKeyMap,
+  SettingKeyProviders,
+} from "@/constants";
+import { getProviderInfo, getProviderLabel } from "@/utils";
+import { PasswordInput } from "@/components/ui/password-input";
+import { getSettings } from "@/settings/model";
 
 interface ModelEditDialogProps {
   open: boolean;
@@ -31,9 +41,18 @@ export const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
 }) => {
   const { modalContainer } = useTab();
   const [localModel, setLocalModel] = useState<CustomModel | null>(model);
+  const [providerInfo, setProviderInfo] = useState<ProviderMetadata>({} as ProviderMetadata);
+  const settings = getSettings();
+
+  const getDefaultApiKey = (provider: Provider): string => {
+    return (settings[ProviderSettingsKeyMap[provider as SettingKeyProviders]] as string) || "";
+  };
 
   useEffect(() => {
     setLocalModel(model);
+    if (model?.provider) {
+      setProviderInfo(getProviderInfo(model.provider));
+    }
   }, [model]);
 
   if (!localModel) return null;
@@ -47,11 +66,28 @@ export const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
     onUpdate(updatedModel);
   };
 
+  const getPlaceholderUrl = () => {
+    if (!localModel || !localModel.provider || localModel.provider !== "azure-openai") {
+      return providerInfo.host || "https://api.example.com/v1";
+    }
+
+    const instanceName = localModel.azureOpenAIApiInstanceName || "[instance]";
+    const deploymentName = localModel.isEmbeddingModel
+      ? localModel.azureOpenAIApiEmbeddingDeploymentName || "[deployment]"
+      : localModel.azureOpenAIApiDeploymentName || "[deployment]";
+    const apiVersion = localModel.azureOpenAIApiVersion || "[api-version]";
+    const endpoint = localModel.isEmbeddingModel ? "embeddings" : "chat/completions";
+
+    return `https://${instanceName}.openai.azure.com/openai/deployments/${deploymentName}/${endpoint}?api-version=${apiVersion}`;
+  };
+
   const capabilityOptions = Object.entries(MODEL_CAPABILITIES).map(([id, description]) => ({
     id,
     label: id.charAt(0).toUpperCase() + id.slice(1),
     description,
   })) as Array<{ id: ModelCapability; label: string; description: string }>;
+
+  const displayApiKey = localModel.apiKey || getDefaultApiKey(localModel.provider as Provider);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -61,7 +97,7 @@ export const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
           <DialogDescription>Customize model parameters.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-3">
           <FormField label="Model Name" required>
             <Input
               type="text"
@@ -106,7 +142,58 @@ export const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
             />
           </FormField>
 
-          <FormField label="Model Capabilities">
+          <FormField label="Provider">
+            <Input
+              type="text"
+              value={getProviderLabel(localModel.provider)}
+              disabled
+              className="bg-muted"
+            />
+          </FormField>
+
+          <FormField label="Base URL" description="Leave it blank, unless you are using a proxy.">
+            <Input
+              type="text"
+              placeholder={getPlaceholderUrl()}
+              value={localModel.baseUrl || ""}
+              onChange={(e) => handleUpdate("baseUrl", e.target.value)}
+            />
+          </FormField>
+
+          <FormField label="API Key">
+            <PasswordInput
+              placeholder={`Enter ${providerInfo.label || "Provider"} API Key`}
+              value={displayApiKey}
+              onChange={(value) => handleUpdate("apiKey", value)}
+            />
+            {providerInfo.keyManagementURL && (
+              <p className="text-xs text-muted">
+                <a href={providerInfo.keyManagementURL} target="_blank" rel="noopener noreferrer">
+                  Get {providerInfo.label} API Key
+                </a>
+              </p>
+            )}
+          </FormField>
+
+          <FormField
+            label={
+              <div className="flex items-center gap-1.5">
+                <span className="leading-none">Model Capabilities</span>
+                <TooltipProvider delayDuration={0}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="size-4" />
+                    </TooltipTrigger>
+                    <TooltipContent align="start" className="max-w-96" side="bottom">
+                      <div className="text-sm text-muted">
+                        Only used to display model capabilities, does not affect model functionality
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            }
+          >
             <div className="flex gap-4 items-center">
               {capabilityOptions.map(({ id, label, description }) => (
                 <div key={id} className="flex items-center gap-2">
