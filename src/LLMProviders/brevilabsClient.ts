@@ -176,9 +176,10 @@ export class BrevilabsClient {
     return { isValid: true, plan: data?.plan };
   }
 
-  async broca(userMessage: string): Promise<BrocaResponse> {
+  async broca(userMessage: string, isProjectMode: boolean): Promise<BrocaResponse> {
     const { data, error } = await this.makeRequest<BrocaResponse>("/broca", {
       message: userMessage,
+      is_project_mode: isProjectMode,
     });
     if (error) {
       throw error;
