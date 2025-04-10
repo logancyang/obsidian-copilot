@@ -1,13 +1,31 @@
 import { ProjectConfig } from "@/aiParams";
 import { logError, logInfo } from "@/logger";
+import { TAbstractFile, TFile, Vault } from "obsidian";
+import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
+import { getSettings } from "@/settings/model";
 import { MD5 } from "crypto-js";
+
+const DEBOUNCE_DELAY = 5000; // 5 seconds
+
+export interface ContextCache {
+  markdownContext: string;
+  webContexts: Record<string, string>; // URL -> context
+  youtubeContexts: Record<string, string>; // URL -> context
+  timestamp: number;
+  markdownNeedsReload: boolean;
+}
 
 export class ProjectContextCache {
   private static instance: ProjectContextCache;
   private cacheDir: string = ".copilot/project-context-cache";
-  private memoryCache: Map<string, string> = new Map();
+  private memoryCache: Map<string, ContextCache> = new Map();
+  private vault: Vault;
+  private debounceTimer: number | null = null;
 
-  private constructor() {}
+  private constructor() {
+    this.vault = app.vault;
+    this.initializeEventListeners();
+  }
 
   static getInstance(): ProjectContextCache {
     if (!ProjectContextCache.instance) {
@@ -16,23 +34,74 @@ export class ProjectContextCache {
     return ProjectContextCache.instance;
   }
 
+  private handleFileEvent = (file: TAbstractFile) => {
+    if (file instanceof TFile) {
+      this.debouncedHandleFileChange(file);
+    }
+  };
+
+  private initializeEventListeners() {
+    // Monitor file events
+    this.vault.on("create", this.handleFileEvent);
+    this.vault.on("modify", this.handleFileEvent);
+    this.vault.on("delete", this.handleFileEvent);
+    this.vault.on("rename", this.handleFileEvent);
+  }
+
+  private debouncedHandleFileChange = (file: TFile) => {
+    if (this.debounceTimer !== null) {
+      window.clearTimeout(this.debounceTimer);
+    }
+
+    this.debounceTimer = window.setTimeout(() => {
+      this.handleFileChange(file);
+      this.debounceTimer = null;
+    }, DEBOUNCE_DELAY);
+  };
+
+  private async handleFileChange(file: TFile) {
+    try {
+      // enable markdown file
+      if (file.extension !== "md") {
+        return;
+      }
+
+      const settings = getSettings();
+      const projects = settings.projectList || [];
+
+      // check if the project needs to clear cache
+      await Promise.all([
+        projects.map(async (project) => {
+          const { inclusions, exclusions } = getMatchingPatterns({
+            inclusions: project.contextSource.inclusions,
+            exclusions: project.contextSource.exclusions,
+            isProject: true,
+          });
+
+          if (shouldIndexFile(file, inclusions, exclusions)) {
+            // Only clear markdown context, keep web and youtube contexts
+            await this.clearMarkdownContext(project);
+            logInfo(
+              `Cleared markdown context cache for project ${project.name} due to file change: ${file.path}`
+            );
+          }
+        }),
+      ]);
+    } catch (error) {
+      logError("Error handling file change for project context cache:", error);
+    }
+  }
+
   private async ensureCacheDir() {
-    if (!(await app.vault.adapter.exists(this.cacheDir))) {
+    if (!(await this.vault.adapter.exists(this.cacheDir))) {
       logInfo("Creating project context cache directory:", this.cacheDir);
-      await app.vault.adapter.mkdir(this.cacheDir);
+      await this.vault.adapter.mkdir(this.cacheDir);
     }
   }
 
   private getCacheKey(project: ProjectConfig): string {
-    // Use project ID, system prompt, and context sources for a unique cache key
-    logInfo("Generating cache key for project context:", project.contextSource);
-    const metadata = JSON.stringify({
-      id: project.id,
-      contextSource: project.contextSource,
-      systemPrompt: project.systemPrompt,
-    });
-    const key = MD5(metadata).toString();
-    logInfo("Generated cache key for project:", { name: project.name, key });
+    // Use project ID as cache key
+    const key = MD5(project.id).toString();
     return key;
   }
 
@@ -40,7 +109,7 @@ export class ProjectContextCache {
     return `${this.cacheDir}/${cacheKey}.json`;
   }
 
-  async get(project: ProjectConfig): Promise<string | null> {
+  async get(project: ProjectConfig): Promise<ContextCache | null> {
     try {
       const cacheKey = this.getCacheKey(project);
 
@@ -52,13 +121,13 @@ export class ProjectContextCache {
       }
 
       const cachePath = this.getCachePath(cacheKey);
-      if (await app.vault.adapter.exists(cachePath)) {
+      if (await this.vault.adapter.exists(cachePath)) {
         logInfo("File cache hit for project:", project.name);
-        const cacheContent = await app.vault.adapter.read(cachePath);
-        const context = JSON.parse(cacheContent).context;
+        const cacheContent = await this.vault.adapter.read(cachePath);
+        const contextCache = JSON.parse(cacheContent);
         // Store in memory cache
-        this.memoryCache.set(cacheKey, context);
-        return context;
+        this.memoryCache.set(cacheKey, contextCache);
+        return contextCache;
       }
       logInfo("Cache miss for project:", project.name);
       return null;
@@ -68,7 +137,7 @@ export class ProjectContextCache {
     }
   }
 
-  getSync(project: ProjectConfig): string | null {
+  getSync(project: ProjectConfig): ContextCache | null {
     try {
       const cacheKey = this.getCacheKey(project);
       const memoryResult = this.memoryCache.get(cacheKey);
@@ -84,38 +153,78 @@ export class ProjectContextCache {
     }
   }
 
-  async set(project: ProjectConfig, context: string): Promise<void> {
+  async set(project: ProjectConfig, contextCache: ContextCache): Promise<void> {
     try {
       await this.ensureCacheDir();
       const cacheKey = this.getCacheKey(project);
       const cachePath = this.getCachePath(cacheKey);
       logInfo("Caching context for project:", project.name);
       // Store in memory cache
-      this.memoryCache.set(cacheKey, context);
+      this.memoryCache.set(cacheKey, contextCache);
       // Store in file cache
-      await app.vault.adapter.write(
-        cachePath,
-        JSON.stringify({
-          context,
-          timestamp: Date.now(),
-        })
-      );
+      await this.vault.adapter.write(cachePath, JSON.stringify(contextCache));
     } catch (error) {
       logError("Error writing to project context cache:", error);
     }
   }
 
-  async clear(): Promise<void> {
+  async updateWebContext(project: ProjectConfig, url: string, context: string): Promise<void> {
+    const cache = (await this.get(project)) || {
+      markdownContext: "",
+      webContexts: {},
+      youtubeContexts: {},
+      timestamp: Date.now(),
+      markdownNeedsReload: false,
+    };
+
+    cache.webContexts[url] = context;
+    await this.set(project, cache);
+  }
+
+  async updateYoutubeContext(project: ProjectConfig, url: string, context: string): Promise<void> {
+    const cache = (await this.get(project)) || {
+      markdownContext: "",
+      webContexts: {},
+      youtubeContexts: {},
+      timestamp: Date.now(),
+      markdownNeedsReload: false,
+    };
+
+    cache.youtubeContexts[url] = context;
+    await this.set(project, cache);
+  }
+
+  async updateMarkdownContext(project: ProjectConfig, context: string): Promise<void> {
+    const cache = (await this.get(project)) || {
+      markdownContext: "",
+      webContexts: {},
+      youtubeContexts: {},
+      timestamp: Date.now(),
+      markdownNeedsReload: false,
+    };
+
+    cache.markdownContext = context;
+    await this.set(project, cache);
+  }
+
+  async clearMarkdownContext(project: ProjectConfig): Promise<void> {
+    const cache = await this.get(project);
+    if (cache) {
+      cache.markdownContext = "";
+      cache.markdownNeedsReload = true;
+      await this.set(project, cache);
+    }
+  }
+
+  async clearAllCache(): Promise<void> {
     try {
       // Clear memory cache
       this.memoryCache.clear();
       // Clear file cache
-      if (await app.vault.adapter.exists(this.cacheDir)) {
-        const files = await app.vault.adapter.list(this.cacheDir);
+      if (await this.vault.adapter.exists(this.cacheDir)) {
+        const files = await this.vault.adapter.list(this.cacheDir);
         logInfo("Clearing project context cache, removing files:", files.files.length);
-        for (const file of files.files) {
-          await app.vault.adapter.remove(file);
-        }
+        await Promise.all([files.files.map((file) => this.vault.adapter.remove(file))]);
       }
     } catch (error) {
       logError("Error clearing project context cache:", error);
@@ -129,12 +238,23 @@ export class ProjectContextCache {
       this.memoryCache.delete(cacheKey);
       // Clear from file cache
       const cachePath = this.getCachePath(cacheKey);
-      if (await app.vault.adapter.exists(cachePath)) {
+      if (await this.vault.adapter.exists(cachePath)) {
         logInfo("Clearing cache for project:", project.name);
-        await app.vault.adapter.remove(cachePath);
+        await this.vault.adapter.remove(cachePath);
       }
     } catch (error) {
       logError("Error clearing cache for project:", error);
     }
+  }
+
+  public cleanup() {
+    if (this.debounceTimer !== null) {
+      window.clearTimeout(this.debounceTimer);
+    }
+
+    this.vault.off("create", this.handleFileEvent);
+    this.vault.off("modify", this.handleFileEvent);
+    this.vault.off("delete", this.handleFileEvent);
+    this.vault.off("rename", this.handleFileEvent);
   }
 }
