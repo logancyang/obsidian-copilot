@@ -30,8 +30,8 @@ async function extractVariablesFromPrompt(
   customPrompt: string,
   vault: Vault,
   activeNote?: TFile | null
-): Promise<string[]> {
-  const variablesWithContent: string[] = [];
+): Promise<Map<string, string>> {
+  const variablesMap = new Map<string, string>();
   let match;
 
   while ((match = VARIABLE_REGEX.exec(customPrompt)) !== null) {
@@ -75,16 +75,13 @@ async function extractVariablesFromPrompt(
       const markdownContent = notes
         .map((note) => `## ${note.name}\n\n${note.content}`)
         .join("\n\n");
-      variablesWithContent.push(markdownContent);
+      variablesMap.set(variableName, markdownContent);
     } else {
-      // If no notes are found, add an empty string to the variablesWithContent array
-      // This prevents the subsequent variables from being mapped to the wrong index.
-      variablesWithContent.push("");
       console.warn(`No notes found for variable: ${variableName}`);
     }
   }
 
-  return variablesWithContent;
+  return variablesMap;
 }
 
 /**
@@ -96,9 +93,8 @@ export async function processPrompt(
   vault: Vault,
   activeNote?: TFile | null
 ): Promise<string> {
-  const variablesWithContent = await extractVariablesFromPrompt(customPrompt, vault, activeNote);
+  const variablesMap = await extractVariablesFromPrompt(customPrompt, vault, activeNote);
   let processedPrompt = customPrompt;
-  const matches = [...processedPrompt.matchAll(VARIABLE_REGEX)];
 
   let additionalInfo = "";
   let activeNoteContent: string | null = null;
@@ -106,34 +102,33 @@ export async function processPrompt(
   if (processedPrompt.includes("{}")) {
     processedPrompt = processedPrompt.replace(/\{\}/g, "{selectedText}");
     if (selectedText) {
-      additionalInfo += `selectedText:\n\n ${selectedText}`;
+      additionalInfo += `selectedText:\n\n${selectedText}`;
     } else if (activeNote) {
       activeNoteContent = await getFileContent(activeNote, vault);
-      additionalInfo += `selectedText (entire active note):\n\n ${activeNoteContent}`;
+      additionalInfo += `selectedText (entire active note):\n\n${activeNoteContent}`;
     } else {
-      additionalInfo += `selectedText:\n\n (No selected text or active note available)`;
+      additionalInfo += `selectedText:\n\n(No selected text or active note available)`;
     }
   }
 
-  for (let i = 0; i < variablesWithContent.length; i++) {
-    if (matches[i]) {
-      const varname = matches[i][1];
-      if (varname.toLowerCase() === "activenote" && activeNoteContent) {
-        // Skip adding activeNote content if it's already added as selectedText
-        continue;
-      }
-      additionalInfo += `\n\n${varname}:\n\n${variablesWithContent[i]}`;
+  // Add variable contents to the additional info
+  for (const [varName, content] of variablesMap.entries()) {
+    if (varName.toLowerCase() === "activenote" && activeNoteContent) {
+      // Skip adding activeNote content if it's already added as selectedText
+      continue;
     }
+    additionalInfo += `\n\n${varName}:\n\n${content}`;
   }
 
   // Process [[note title]] syntax with new reference system
   const noteFiles = extractNoteFiles(processedPrompt, vault);
   for (const noteFile of noteFiles) {
     // Check if this note wasn't already processed in extractVariablesFromPrompt
-    if (!matches.some((match) => match[1].includes(`[[${noteFile.basename}]]`))) {
+    const noteName = `[[${noteFile.basename}]]`;
+    if (!variablesMap.has(noteName)) {
       const noteContent = await getFileContent(noteFile, vault);
       if (noteContent) {
-        additionalInfo += `\n\nTitle: [[${noteFile.basename}]]\nPath: ${noteFile.path}\n\n${noteContent}`;
+        additionalInfo += `\n\nTitle: ${noteName}\nPath: ${noteFile.path}\n\n${noteContent}`;
       }
     }
   }
@@ -246,12 +241,12 @@ export class CustomPromptProcessor {
    *
    * @param {string} customPrompt - the custom prompt to process
    * @param {TFile} [activeNote] - the currently active note (optional)
-   * @return {Promise<string[]>} array of variable contents
+   * @return {Promise<Map<string, string>>} map of variable name to content
    */
   public async extractVariablesFromPrompt(
     customPrompt: string,
     activeNote?: TFile
-  ): Promise<string[]> {
+  ): Promise<Map<string, string>> {
     return extractVariablesFromPrompt(customPrompt, this.vault, activeNote);
   }
 
@@ -281,16 +276,20 @@ export class CustomPromptProcessor {
   async getProcessedVariables(): Promise<Set<string>> {
     const processedVars = new Set<string>();
 
-    // Add variables from the last processed prompt
-    const matches = this.lastProcessedPrompt?.matchAll(VARIABLE_REGEX) || [];
-    for (const match of matches) {
-      processedVars.add(match[1]);
-    }
+    if (this.lastProcessedPrompt) {
+      // Extract variables using the same method as in processing
+      const variablesMap = await extractVariablesFromPrompt(this.lastProcessedPrompt, this.vault);
 
-    // Add explicitly referenced note titles
-    const noteFiles = extractNoteFiles(this.lastProcessedPrompt || "", this.vault);
-    for (const file of noteFiles) {
-      processedVars.add(`[[${file.basename}]]`);
+      // Add all variable names from the map
+      for (const varName of variablesMap.keys()) {
+        processedVars.add(varName);
+      }
+
+      // Add explicitly referenced note titles
+      const noteFiles = extractNoteFiles(this.lastProcessedPrompt, this.vault);
+      for (const file of noteFiles) {
+        processedVars.add(`[[${file.basename}]]`);
+      }
     }
 
     return processedVars;
