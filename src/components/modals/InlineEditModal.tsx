@@ -29,6 +29,7 @@ function InlineEditModalContent({
   const [aiCurrentMessage, setAiCurrentMessage] = useState<string | null>(null);
   const [processedMessage, setProcessedMessage] = useState<string | null>(null);
   const replaceButtonRef = useRef<HTMLButtonElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [generating, setGenerating] = useState(true);
   const [modelKey] = useModelKey();
   const settings = useSettingsValue();
@@ -52,7 +53,7 @@ function InlineEditModalContent({
       for await (const chunk of chatStream) {
         if (abortController?.signal.aborted) break;
         fullAIResponse += chunk.content;
-        setAiCurrentMessage(fullAIResponse.trim());
+        setAiCurrentMessage(fullAIResponse);
       }
       if (!abortController?.signal.aborted) {
         setProcessedMessage(fullAIResponse.trim());
@@ -71,6 +72,14 @@ function InlineEditModalContent({
     }
   }, [generating]);
 
+  // Scroll textarea to bottom when content changes
+  useEffect(() => {
+    if (textareaRef.current && aiCurrentMessage && generating) {
+      const textarea = textareaRef.current;
+      textarea.scrollTop = textarea.scrollHeight;
+    }
+  }, [aiCurrentMessage, generating]);
+
   return (
     <div className="flex flex-col gap-4">
       <div className="max-h-60 overflow-y-auto text-muted whitespace-pre-wrap">{originalText}</div>
@@ -81,13 +90,10 @@ function InlineEditModalContent({
             {commandName}
           </div>
         )}
-        <div className="text-muted flex items-center gap-2 font-bold">
-          <Bot className="w-4 h-4" />
-          {getModelDisplayText(selectedModel)}
-        </div>
       </div>
       <div className="relative group">
         <textarea
+          ref={textareaRef}
           className="w-full h-60 text-text peer"
           value={processedMessage ?? aiCurrentMessage ?? "loading..."}
           disabled={processedMessage == null}
@@ -105,20 +111,23 @@ function InlineEditModalContent({
           </button>
         )}
       </div>
-      <div className="flex justify-end gap-2">
-        <Button variant="secondary" onClick={onClose}>
-          Close
-        </Button>
-        <Button disabled={generating} onClick={() => onInsert(processedMessage ?? "")}>
-          Insert
-        </Button>
-        <Button
-          ref={replaceButtonRef}
-          disabled={generating}
-          onClick={() => onReplace(processedMessage ?? "")}
-        >
-          Replace
-        </Button>
+      <div className="flex justify-between gap-2">
+        <div className="text-faint text-xs flex items-center gap-2 font-bold">
+          <Bot className="w-4 h-4" />
+          {getModelDisplayText(selectedModel)}
+        </div>
+        <div className="flex gap-2">
+          <Button disabled={generating} onClick={() => onInsert(processedMessage ?? "")}>
+            Insert
+          </Button>
+          <Button
+            ref={replaceButtonRef}
+            disabled={generating}
+            onClick={() => onReplace(processedMessage ?? "")}
+          >
+            Replace
+          </Button>
+        </div>
       </div>
     </div>
   );
