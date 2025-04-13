@@ -178,8 +178,11 @@ function InlineEditModalContent({
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
 
+    // Skip appending the selected text to the prompt because it's already
+    // included in the original prompt.
+    const prompt = await processCommandPrompt(followupInstruction, originalText, true);
     try {
-      const result = await streamResponse(followupInstruction, abortController);
+      const result = await streamResponse(prompt, abortController);
 
       if (result) {
         // Reset follow-up instruction on success

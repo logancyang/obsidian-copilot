@@ -57,7 +57,11 @@ export function useInlineEditCommands(): InlineEditCommandSettings[] {
 /**
  * Process the command prompt.
  */
-export async function processCommandPrompt(prompt: string, selectedText: string) {
+export async function processCommandPrompt(
+  prompt: string,
+  selectedText: string,
+  skipAppendingSelectedText = false
+) {
   const processedPrompt = await processPrompt(
     prompt,
     selectedText,
@@ -65,7 +69,7 @@ export async function processCommandPrompt(prompt: string, selectedText: string)
     app.workspace.getActiveFile()
   );
 
-  if (processedPrompt.includes("{selectedText}")) {
+  if (processedPrompt.includes("{selectedText}") || skipAppendingSelectedText) {
     // Containing {selectedText} means the prompt was using the custom prompt
     // processor way of handling the selected text. No need to go through the
     // legacy placeholder.
