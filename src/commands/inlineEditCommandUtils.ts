@@ -1,8 +1,9 @@
 import {
   COMMAND_NAME_MAX_LENGTH,
   DEFAULT_INLINE_EDIT_COMMANDS,
-  SELECTED_TEXT_PLACEHOLDER,
+  SELECTED_TEXT_PLACEHOLDER as LEGACY_SELECTED_TEXT_PLACEHOLDER,
 } from "@/commands/constants";
+import { processPrompt } from "@/customPromptProcessor";
 import { InlineEditCommandSettings, getSettings, useSettingsValue } from "@/settings/model";
 
 export function getCommandId(commandName: string) {
@@ -54,16 +55,38 @@ export function useInlineEditCommands(): InlineEditCommandSettings[] {
 }
 
 /**
- * Replace the {copilot-selection} placeholder with the selected text.
- * If the placeholder is not found, append the selected text to the prompt.
+ * Process the command prompt.
  */
-export function processCommandPrompt(prompt: string, selectedText: string) {
-  const index = prompt.indexOf(SELECTED_TEXT_PLACEHOLDER);
+export async function processCommandPrompt(prompt: string, selectedText: string) {
+  const processedPrompt = await processPrompt(
+    prompt,
+    selectedText,
+    app.vault,
+    app.workspace.getActiveFile()
+  );
+
+  if (processedPrompt.includes("{selectedText}")) {
+    // Containing {selectedText} means the prompt was using the custom prompt
+    // processor way of handling the selected text. No need to go through the
+    // legacy placeholder.
+    return processedPrompt;
+  }
+
+  // This is the legacy custom command selected text placeholder. It replaced
+  // {copilot-selection} in the prompt with the selected text. This is different
+  // from the custom prompt processor which uses {} in the prompt and appends
+  // the selected text to the prompt. We cannot change user's custom commands
+  // that have the old placeholder, so we need to support both.
+  // Also, selected text is required for custom commands. If neither `{}` nor
+  // `{copilot-selection}` is found, append the selected text to the prompt.
+  const index = processedPrompt.indexOf(LEGACY_SELECTED_TEXT_PLACEHOLDER);
   if (index === -1) {
-    return prompt + "\n\n" + selectedText;
+    return processedPrompt + "\n\n" + selectedText;
   }
   return (
-    prompt.slice(0, index) + selectedText + prompt.slice(index + SELECTED_TEXT_PLACEHOLDER.length)
+    processedPrompt.slice(0, index) +
+    selectedText +
+    processedPrompt.slice(index + LEGACY_SELECTED_TEXT_PLACEHOLDER.length)
   );
 }
 

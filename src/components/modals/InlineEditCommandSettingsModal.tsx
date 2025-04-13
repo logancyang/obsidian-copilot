@@ -16,6 +16,7 @@ import { getModelDisplayText } from "@/components/ui/model-display";
 import { cn } from "@/lib/utils";
 import { ChevronDown } from "lucide-react";
 import { logError } from "@/logger";
+import { CustomPromptSyntaxInstruction } from "@/components/CustomPromptSyntaxInstruction";
 
 type FormErrors = {
   name?: string;
@@ -90,10 +91,7 @@ function InlineEditCommandSettingsModalContent({
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="prompt">Prompt</Label>
-        <div className="text-sm text-muted mb-2">
-          Use <code>{"{copilot-selection}"}</code> as a placeholder for the selected text. If not
-          included, the selected text will be appended to the prompt.
-        </div>
+        <CustomPromptSyntaxInstruction />
         <Textarea
           id="prompt"
           value={command.prompt}

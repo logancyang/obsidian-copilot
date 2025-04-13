@@ -46,7 +46,7 @@ function InlineEditModalContent({
   useEffect(() => {
     const abortController = new AbortController();
     async function stream() {
-      const prompt = processCommandPrompt(command.prompt, originalText);
+      const prompt = await processCommandPrompt(command.prompt, originalText);
       let fullAIResponse = "";
       const chatModel = await ChatModelManager.getInstance().createModelInstance(selectedModel);
       const chatStream = await chatModel.stream(prompt);
@@ -72,7 +72,7 @@ function InlineEditModalContent({
     }
   }, [generating]);
 
-  // Scroll textarea to bottom when content changes
+  // Scroll textarea to bottom when generating content
   useEffect(() => {
     if (textareaRef.current && aiCurrentMessage && generating) {
       const textarea = textareaRef.current;
