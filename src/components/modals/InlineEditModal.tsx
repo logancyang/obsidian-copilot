@@ -1,5 +1,6 @@
 import { useModelKey } from "@/aiParams";
 import { processCommandPrompt } from "@/commands/inlineEditCommandUtils";
+import { Button } from "@/components/ui/button";
 import { getModelDisplayText } from "@/components/ui/model-display";
 import ChatModelManager from "@/LLMProviders/chatModelManager";
 import { InlineEditCommandSettings, useSettingsValue } from "@/settings/model";
@@ -7,7 +8,7 @@ import { ChatMessage } from "@/sharedState";
 import { findCustomModel, insertIntoEditor } from "@/utils";
 import { Bot, Copy, PenLine } from "lucide-react";
 import { App, Modal, Notice } from "obsidian";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
 
 interface InlineEditModalContentProps {
@@ -27,6 +28,8 @@ function InlineEditModalContent({
 }: InlineEditModalContentProps) {
   const [aiCurrentMessage, setAiCurrentMessage] = useState<string | null>(null);
   const [processedMessage, setProcessedMessage] = useState<string | null>(null);
+  const replaceButtonRef = useRef<HTMLButtonElement>(null);
+  const [generating, setGenerating] = useState(true);
   const [modelKey] = useModelKey();
   const settings = useSettingsValue();
   const selectedModel = useMemo(
@@ -49,10 +52,11 @@ function InlineEditModalContent({
       for await (const chunk of chatStream) {
         if (abortController?.signal.aborted) break;
         fullAIResponse += chunk.content;
-        setAiCurrentMessage(fullAIResponse);
+        setAiCurrentMessage(fullAIResponse.trim());
       }
       if (!abortController?.signal.aborted) {
-        setProcessedMessage(fullAIResponse);
+        setProcessedMessage(fullAIResponse.trim());
+        setGenerating(false);
       }
     }
     stream();
@@ -60,6 +64,12 @@ function InlineEditModalContent({
       abortController.abort();
     };
   }, [command.prompt, originalText, handleAddMessage, selectedModel]);
+
+  useEffect(() => {
+    if (!generating) {
+      replaceButtonRef.current?.focus();
+    }
+  }, [generating]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -96,21 +106,19 @@ function InlineEditModalContent({
         )}
       </div>
       <div className="flex justify-end gap-2">
-        <button onClick={onClose}>Close</button>
-        <button
-          disabled={processedMessage == null}
-          className="!bg-interactive-accent !text-on-accent cursor-pointer"
-          onClick={() => onInsert(processedMessage ?? "")}
-        >
+        <Button variant="secondary" onClick={onClose}>
+          Close
+        </Button>
+        <Button disabled={generating} onClick={() => onInsert(processedMessage ?? "")}>
           Insert
-        </button>
-        <button
-          disabled={processedMessage == null}
-          className="!bg-interactive-accent !text-on-accent cursor-pointer"
+        </Button>
+        <Button
+          ref={replaceButtonRef}
+          disabled={generating}
           onClick={() => onReplace(processedMessage ?? "")}
         >
           Replace
-        </button>
+        </Button>
       </div>
     </div>
   );
