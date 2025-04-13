@@ -276,13 +276,13 @@ export class CustomPromptProcessor {
   /**
    * Get a set of all variables that were processed in the last prompt.
    * @return {Promise<Set<string>>} A set of variable names that were processed
-   * @deprecated Use the module-level processPrompt function which returns the processed content directly
+   * @deprecated
    */
   async getProcessedVariables(): Promise<Set<string>> {
     const processedVars = new Set<string>();
 
     // Add variables from the last processed prompt
-    const matches = this.lastProcessedPrompt?.matchAll(/\{(?!copilot-selection\})([^}]+)\}/g) || [];
+    const matches = this.lastProcessedPrompt?.matchAll(VARIABLE_REGEX) || [];
     for (const match of matches) {
       processedVars.add(match[1]);
     }
