@@ -5,6 +5,7 @@ import { err2String } from "@/utils";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { CustomPromptSyntaxInstruction } from "@/components/CustomPromptSyntaxInstruction";
 
 interface AddPromptModalContentProps {
   initialTitle?: string;
@@ -97,21 +98,7 @@ function AddPromptModalContent({
           </div>
           <div className="text-sm text-muted -mt-1">Use the following syntax in your prompt:</div>
         </div>
-        <div className="text-sm flex flex-col gap-1 bg-secondary/30 rounded-md p-2">
-          <strong>- {"{}"} represents the selected text (not required). </strong>
-          <strong>- {`{[[Note Title]]}`} represents a note. </strong>
-          <strong>- {`{activeNote}`} represents the active note. </strong>
-          <strong>- {`{FolderPath}`} represents a folder of notes. </strong>
-          <strong>
-            - {`{#tag1, #tag2}`} represents ALL notes with ANY of the specified tags in their
-            property (an OR operation).{" "}
-          </strong>
-          <div className="mt-1">
-            <span className="text-muted">
-              Tip: turn on debug mode to show the processed prompt in the chat window.
-            </span>
-          </div>
-        </div>
+        <CustomPromptSyntaxInstruction />
 
         <Textarea
           value={prompt}
