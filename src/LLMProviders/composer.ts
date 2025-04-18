@@ -66,18 +66,36 @@ export class Composer {
     Your task is to generate one or more markdown notes:
     1. For editing existing notes - Return the updated markdown note content and the original note path.
     2. For creating new notes - Return the new markdown note content and the new note path based on user's request.
-    3. If user's request is not clear, such as the note path is not provided, return an error message.
-    4. Do no include the title to the note content.
-    5. You can return multiple notes if the user's request involves creating multiple notes.
+    3. Do not include the title to the note content.
+    4. You can return multiple notes if the user's request involves creating multiple notes.
 
-    # Important JSON Formatting Rules
-    1. All newlines in string values must be escaped as \\n
-    2. The response must be valid JSON that can be parsed
+    # Initial Checks - IMPORTANT
+    Before generating any note content, carefully check:
+    1. Is the target note clearly identified in the user's request? If not, return an error message asking for clarification.
+    2. Is it clear where to edit the target note (whole note vs. specific section)? If not, return an error message asking for clarification.
+    3. Do not generate new note content if either of these checks fails.
+
+    Examples of unclear requests that should fail the checks:
+    - "Summarize [[Latest Robotics News]]" - This is unclear whether the user wants to edit the existing note or create a summary elsewhere.
+    - "Add information about X" - Without specifying which note to add the information to and also without specifying the section to add the information to.
+
+    For these examples, return an error message asking for clarification rather than generating content.
 
     Below is the chat history the user and the previous assistant have had. You should continue the conversation if necessary but respond in a different format.
     <CHAT_HISTORY>
     ${chatHistory.map((entry) => `${entry.role}: ${entry.content}`).join("\n")}
-    </CHAT_HISTORY>`;
+    </CHAT_HISTORY>
+
+    # Output Format
+    Return the output in JSON format with the following fields:
+    - notes: an array of notes. Each note has the following fields:
+      - note_path: the path of the note
+      - note_content: the content of the note
+    - error: an error message if the note content was not created successfully or if clarification is needed
+
+    # Important JSON Formatting Rules
+    1. All newlines in string values must be escaped as \\n
+    `;
 
     // Define the schema for the output
     const schema = z.object({
@@ -173,7 +191,7 @@ Return the markdown blocks above directly and add a brief summary of the changes
     } else {
       return `User message: ${originalMessage}
 
-The user is calling @composer tool to generate note content. However, the note content was not created successfully. Below is the output
+The user is calling @composer tool to generate note content. However, the note content was not created successfully. You create a user-friendly error message to inform the user. Below is the output
 
 ${composerOutput.error}`;
     }
