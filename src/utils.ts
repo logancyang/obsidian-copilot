@@ -710,12 +710,12 @@ export async function checkLatestVersion(): Promise<{
 
 export function isOSeriesModel(model: BaseChatModel | string): boolean {
   if (typeof model === "string") {
-    return model.startsWith("o1") || model.startsWith("o3");
+    return model.startsWith("o1") || model.startsWith("o3") || model.startsWith("o4");
   }
 
   // For BaseChatModel instances
   const modelName = (model as any).modelName || (model as any).model || "";
-  return modelName.startsWith("o1") || modelName.startsWith("o3");
+  return modelName.startsWith("o1") || modelName.startsWith("o3") || modelName.startsWith("o4");
 }
 
 export function getMessageRole(
