@@ -15,7 +15,7 @@ import {
 } from "@/imageProcessing/imageProcessor";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logInfo } from "@/logger";
-import { getSystemPrompt } from "@/settings/model";
+import { getSettings, getSystemPrompt } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { ToolManager } from "@/tools/toolManager";
 import {
@@ -345,6 +345,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
   ): Promise<MessageContent[]> {
     const failureMessages: string[] = [];
     const successfulImages: ImageContent[] = [];
+    const settings = getSettings();
 
     // Collect all image sources
     const imageSources: { urls: string[]; type: string }[] = [];
@@ -355,10 +356,12 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       imageSources.push({ urls: contextUrls, type: "context" });
     }
 
-    // Process embedded images
-    const embeddedImages = await this.extractEmbeddedImages(textContent);
-    if (embeddedImages.length > 0) {
-      imageSources.push({ urls: embeddedImages, type: "embedded" });
+    // Process embedded images only if setting is enabled
+    if (settings.passMarkdownImages) {
+      const embeddedImages = await this.extractEmbeddedImages(textContent);
+      if (embeddedImages.length > 0) {
+        imageSources.push({ urls: embeddedImages, type: "embedded" });
+      }
     }
 
     // Process all image sources
