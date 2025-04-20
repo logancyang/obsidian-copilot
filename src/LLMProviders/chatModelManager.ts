@@ -19,6 +19,7 @@ import { ChatGroq } from "@langchain/groq";
 import { ChatMistralAI } from "@langchain/mistralai";
 import { ChatOllama } from "@langchain/ollama";
 import { ChatOpenAI } from "@langchain/openai";
+import { ChatXAI } from "@langchain/xai";
 import { Notice } from "obsidian";
 
 type ChatConstructorType = {
@@ -31,6 +32,7 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.ANTHROPIC]: ChatAnthropic,
   [ChatModelProviders.COHEREAI]: ChatCohere,
   [ChatModelProviders.GOOGLE]: ChatGoogleGenerativeAI,
+  [ChatModelProviders.XAI]: ChatXAI,
   [ChatModelProviders.OPENROUTERAI]: ChatOpenAI,
   [ChatModelProviders.OLLAMA]: ChatOllama,
   [ChatModelProviders.LM_STUDIO]: ChatOpenAI,
@@ -63,6 +65,7 @@ export default class ChatModelManager {
     [ChatModelProviders.COHEREAI]: () => getSettings().cohereApiKey,
     [ChatModelProviders.OPENROUTERAI]: () => getSettings().openRouterAiApiKey,
     [ChatModelProviders.GROQ]: () => getSettings().groqApiKey,
+    [ChatModelProviders.XAI]: () => getSettings().xaiApiKey,
     [ChatModelProviders.OLLAMA]: () => "default-key",
     [ChatModelProviders.LM_STUDIO]: () => "default-key",
     [ChatModelProviders.OPENAI_FORMAT]: () => "default-key",
@@ -166,6 +169,11 @@ export default class ChatModelManager {
           },
         ],
         baseUrl: customModel.baseUrl,
+      },
+      [ChatModelProviders.XAI]: {
+        apiKey: await getDecryptedKey(customModel.apiKey || settings.xaiApiKey),
+        model: modelName,
+        // This langchainjs XAI client does not support baseURL override
       },
       [ChatModelProviders.OPENROUTERAI]: {
         modelName: modelName,

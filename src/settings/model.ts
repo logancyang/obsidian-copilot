@@ -51,6 +51,7 @@ export interface CopilotSettings {
   azureOpenAIApiEmbeddingDeploymentName: string;
   googleApiKey: string;
   openRouterAiApiKey: string;
+  xaiApiKey: string;
   mistralApiKey: string;
   deepseekApiKey: string;
   defaultChainType: ChainType;

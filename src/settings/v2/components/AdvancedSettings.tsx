@@ -21,7 +21,7 @@ export const AdvancedSettings: React.FC = () => {
         <div className="space-y-4">
           <SettingItem
             type="switch"
-            title="Pass Images in Markdown (Plus)"
+            title="Images in Markdown (Plus)"
             description="Pass embedded images in markdown to the AI along with the text. Only works with multimodal models (plus only)."
             checked={settings.passMarkdownImages}
             onCheckedChange={(checked) => {
