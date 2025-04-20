@@ -1,8 +1,8 @@
 import { CustomModel } from "@/aiParams";
 import { DEFAULT_INLINE_EDIT_COMMANDS } from "@/commands/constants";
 import { type CopilotSettings } from "@/settings/model";
-import { ChainType } from "./chainFactory";
 import { v4 as uuidv4 } from "uuid";
+import { ChainType } from "./chainFactory";
 
 export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
 export const CHAT_VIEWTYPE = "copilot-chat-view";
@@ -524,6 +524,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   defaultConversationNoteName: "{$topic}@{$date}_{$time}",
   inlineEditCommands: DEFAULT_INLINE_EDIT_COMMANDS,
   lastDismissedVersion: null,
+  passMarkdownImages: true,
 };
 
 export const EVENT_NAMES = {
