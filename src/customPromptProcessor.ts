@@ -9,7 +9,7 @@ import {
   getNotesFromTags,
   processVariableNameForNotePath,
 } from "@/utils";
-import { normalizePath, TFile, Vault } from "obsidian";
+import { normalizePath, Notice, TFile, Vault } from "obsidian";
 
 export interface CustomPrompt {
   title: string;
@@ -44,6 +44,8 @@ async function extractVariablesFromPrompt(
         if (content) {
           notes.push({ name: getFileName(activeNote), content });
         }
+      } else {
+        new Notice("No active note found.");
       }
     } else if (variableName.startsWith("#")) {
       // Handle tag-based variable for multiple tags
