@@ -9,7 +9,7 @@ import {
   getNotesFromTags,
   processVariableNameForNotePath,
 } from "@/utils";
-import { normalizePath, Notice, TFile, Vault } from "obsidian";
+import { normalizePath, TFile, Vault } from "obsidian";
 
 export interface CustomPrompt {
   title: string;
@@ -44,8 +44,6 @@ async function extractVariablesFromPrompt(
         if (content) {
           notes.push({ name: getFileName(activeNote), content });
         }
-      } else {
-        new Notice("No active note found.");
       }
     } else if (variableName.startsWith("#")) {
       // Handle tag-based variable for multiple tags
@@ -76,7 +74,8 @@ async function extractVariablesFromPrompt(
         .map((note) => `## ${note.name}\n\n${note.content}`)
         .join("\n\n");
       variablesMap.set(variableName, markdownContent);
-    } else {
+    } else if (variableName.toLowerCase() !== "activenote") {
+      // Only log warning for non-activeNote variables
       console.warn(`No notes found for variable: ${variableName}`);
     }
   }
@@ -93,6 +92,11 @@ export async function processPrompt(
   vault: Vault,
   activeNote?: TFile | null
 ): Promise<string> {
+  const settings = getSettings();
+  if (!settings.enableCustomPromptTemplating) {
+    return customPrompt;
+  }
+
   const variablesMap = await extractVariablesFromPrompt(customPrompt, vault, activeNote);
   let processedPrompt = customPrompt;
 

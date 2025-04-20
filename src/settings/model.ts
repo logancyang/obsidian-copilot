@@ -95,6 +95,7 @@ export interface CopilotSettings {
   isPlusUser: boolean | undefined;
   inlineEditCommands: InlineEditCommandSettings[] | undefined;
   passMarkdownImages: boolean;
+  enableCustomPromptTemplating: boolean;
 }
 
 export const settingsStore = createStore();
@@ -215,6 +216,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure passMarkdownImages has a default value
   if (typeof sanitizedSettings.passMarkdownImages !== "boolean") {
     sanitizedSettings.passMarkdownImages = DEFAULT_SETTINGS.passMarkdownImages;
+  }
+
+  // Ensure enableCustomPromptTemplating has a default value
+  if (typeof sanitizedSettings.enableCustomPromptTemplating !== "boolean") {
+    sanitizedSettings.enableCustomPromptTemplating = DEFAULT_SETTINGS.enableCustomPromptTemplating;
   }
 
   return sanitizedSettings;

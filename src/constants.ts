@@ -550,6 +550,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   inlineEditCommands: DEFAULT_INLINE_EDIT_COMMANDS,
   lastDismissedVersion: null,
   passMarkdownImages: true,
+  enableCustomPromptTemplating: true,
 };
 
 export const EVENT_NAMES = {
