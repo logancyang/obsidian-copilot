@@ -135,7 +135,7 @@ export class CanvasLoader {
 
     description += "\nWhen describing this canvas, please:\n";
     description += "- Use the actual titles/names of elements instead of their IDs\n";
-    description += "- Focus on the content and relationships between elements\n";
+    description += "- Pay attention to the content and relationships between elements\n";
     description +=
       "- Describe files by their names, links by their URLs, and text nodes by their content\n";
 
