@@ -268,7 +268,7 @@ export function stringToFormattedDateTime(timestamp: string): FormattedDateTime 
 }
 
 export async function getFileContent(file: TFile, vault: Vault): Promise<string | null> {
-  if (file.extension != "md") return null;
+  if (file.extension != "md" && file.extension != "canvas") return null;
   return await vault.cachedRead(file);
 }
 
