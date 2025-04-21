@@ -72,7 +72,7 @@ async function extractVariablesFromPrompt(
           variableResult.files.push(file);
         }
       }
-      variableResult.content = notesContent.join("\\n\\n");
+      variableResult.content = notesContent.join("\n\n");
     } else {
       const processedVariableName = processVariableNameForNotePath(variableName);
       const noteFiles = await getNotesFromPath(vault, processedVariableName);
@@ -84,7 +84,7 @@ async function extractVariablesFromPrompt(
           variableResult.files.push(file);
         }
       }
-      variableResult.content = notesContent.join("\\n\\n");
+      variableResult.content = notesContent.join("\n\n");
     }
 
     if (variableResult.content) {
@@ -125,7 +125,7 @@ export async function processPrompt(
       includedFiles.add(activeNote);
     }
     return {
-      processedPrompt: customPrompt,
+      processedPrompt: customPrompt + "\n\n",
       includedFiles: Array.from(includedFiles),
     };
   }
@@ -145,14 +145,14 @@ export async function processPrompt(
   if (processedPrompt.includes("{}")) {
     processedPrompt = processedPrompt.replace(/\{\}/g, "{selectedText}");
     if (selectedText) {
-      additionalInfo += `selectedText:\\n\\n${selectedText}`;
+      additionalInfo += `selectedText:\n\n${selectedText}`;
       // Note: selectedText doesn't directly correspond to a file inclusion here
     } else if (activeNote) {
       activeNoteContent = await getFileContent(activeNote, vault);
-      additionalInfo += `selectedText (entire active note):\\n\\n${activeNoteContent}`;
+      additionalInfo += `selectedText (entire active note):\n\n${activeNoteContent}`;
       includedFiles.add(activeNote); // Ensure active note is tracked if used for {}
     } else {
-      additionalInfo += `selectedText:\\n\\n(No selected text or active note available)`;
+      additionalInfo += `selectedText:\n\n(No selected text or active note available)`;
     }
   }
 
@@ -163,7 +163,11 @@ export async function processPrompt(
       // Content already added via {} handling, but file tracking is done.
       continue;
     }
-    additionalInfo += `\\n\\n${varName}:\\n\\n${content}`;
+    if (additionalInfo) {
+      additionalInfo += `\n\n${varName}:\n\n${content}`;
+    } else {
+      additionalInfo += `${varName}:\n\n${content}`;
+    }
   }
 
   // Process [[note title]] syntax
@@ -174,14 +178,20 @@ export async function processPrompt(
     if (!includedFiles.has(noteFile)) {
       const noteContent = await getFileContent(noteFile, vault);
       if (noteContent) {
-        additionalInfo += `\\n\\nTitle: [[${noteFile.basename}]]\\nPath: ${noteFile.path}\\n\\n${noteContent}`;
+        if (additionalInfo) {
+          additionalInfo += `\n\nTitle: [[${noteFile.basename}]]\nPath: ${noteFile.path}\n\n${noteContent}`;
+        } else {
+          additionalInfo += `Title: [[${noteFile.basename}]]\nPath: ${noteFile.path}\n\n${noteContent}`;
+        }
         includedFiles.add(noteFile); // Track files included via [[links]]
       }
     }
   }
 
   return {
-    processedPrompt: processedPrompt + "\\n\\n" + additionalInfo,
+    processedPrompt: additionalInfo
+      ? `${processedPrompt}\n\n${additionalInfo}`
+      : `${processedPrompt}\n\n`,
     includedFiles: Array.from(includedFiles),
   };
 }
