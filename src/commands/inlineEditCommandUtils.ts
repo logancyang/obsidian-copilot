@@ -62,12 +62,14 @@ export async function processCommandPrompt(
   selectedText: string,
   skipAppendingSelectedText = false
 ) {
-  const processedPrompt = await processPrompt(
+  const result = await processPrompt(
     prompt,
     selectedText,
     app.vault,
     app.workspace.getActiveFile()
   );
+
+  const processedPrompt = result.processedPrompt;
 
   if (processedPrompt.includes("{selectedText}") || skipAppendingSelectedText) {
     // Containing {selectedText} means the prompt was using the custom prompt

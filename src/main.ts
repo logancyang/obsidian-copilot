@@ -68,7 +68,7 @@ export default class CopilotPlugin extends Plugin {
     this.chainManager = new ChainManager(this.app, this.vectorStoreManager);
 
     // Initialize FileParserManager early with other core services
-    this.fileParserManager = new FileParserManager(this.brevilabsClient);
+    this.fileParserManager = new FileParserManager(this.brevilabsClient, this.app.vault);
 
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
 

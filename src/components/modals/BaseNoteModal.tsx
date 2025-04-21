@@ -17,7 +17,7 @@ export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
       .filter(
         (file): file is TFile =>
           file instanceof TFile &&
-          (file.extension === "md" || file.extension === "pdf") &&
+          (file.extension === "md" || file.extension === "pdf" || file.extension === "canvas") &&
           !excludeNotePaths.includes(file.path) &&
           file.path !== this.activeNote?.path
       );
@@ -25,7 +25,9 @@ export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
     // Get all other files that weren't recently opened
     const allFiles = this.app.vault
       .getFiles()
-      .filter((file) => file.extension === "md" || file.extension === "pdf");
+      .filter(
+        (file) => file.extension === "md" || file.extension === "pdf" || file.extension === "canvas"
+      );
 
     const otherFiles = allFiles.filter(
       (file) =>
@@ -45,6 +47,8 @@ export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
     }
     if (extension === "pdf") {
       title += " (PDF)";
+    } else if (extension === "canvas") {
+      title += " (Canvas)";
     }
     return title;
   }

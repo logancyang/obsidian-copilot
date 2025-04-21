@@ -24,25 +24,35 @@ export interface CustomPrompt {
 const VARIABLE_REGEX = /\{(?!copilot-selection\})([^}]+)\}/g;
 
 /**
- * Extract variables from a custom prompt and get their content.
+ * Represents the result of processing a custom prompt variable.
+ */
+interface VariableProcessingResult {
+  content: string;
+  files: TFile[];
+}
+
+/**
+ * Extract variables from a custom prompt and get their content and associated files.
  */
 async function extractVariablesFromPrompt(
   customPrompt: string,
   vault: Vault,
   activeNote?: TFile | null
-): Promise<Map<string, string>> {
+): Promise<{ variablesMap: Map<string, string>; includedFiles: Set<TFile> }> {
   const variablesMap = new Map<string, string>();
+  const includedFiles = new Set<TFile>();
   let match;
 
   while ((match = VARIABLE_REGEX.exec(customPrompt)) !== null) {
     const variableName = match[1].trim();
-    const notes = [];
+    const variableResult: VariableProcessingResult = { content: "", files: [] };
 
     if (variableName.toLowerCase() === "activenote") {
       if (activeNote) {
         const content = await getFileContent(activeNote, vault);
         if (content) {
-          notes.push({ name: getFileName(activeNote), content });
+          variableResult.content = `## ${getFileName(activeNote)}\n\n${content}`;
+          variableResult.files.push(activeNote);
         }
       } else {
         new Notice("No active note found.");
@@ -54,54 +64,81 @@ async function extractVariablesFromPrompt(
         .split(",")
         .map((tag) => tag.trim());
       const noteFiles = await getNotesFromTags(vault, tagNames);
+      const notesContent: string[] = [];
       for (const file of noteFiles) {
         const content = await getFileContent(file, vault);
         if (content) {
-          notes.push({ name: getFileName(file), content });
+          notesContent.push(`## ${getFileName(file)}\n\n${content}`);
+          variableResult.files.push(file);
         }
       }
+      variableResult.content = notesContent.join("\n\n");
     } else {
       const processedVariableName = processVariableNameForNotePath(variableName);
       const noteFiles = await getNotesFromPath(vault, processedVariableName);
+      const notesContent: string[] = [];
       for (const file of noteFiles) {
         const content = await getFileContent(file, vault);
         if (content) {
-          notes.push({ name: getFileName(file), content });
+          notesContent.push(`## ${getFileName(file)}\n\n${content}`);
+          variableResult.files.push(file);
         }
       }
+      variableResult.content = notesContent.join("\n\n");
     }
 
-    if (notes.length > 0) {
-      const markdownContent = notes
-        .map((note) => `## ${note.name}\n\n${note.content}`)
-        .join("\n\n");
-      variablesMap.set(variableName, markdownContent);
+    if (variableResult.content) {
+      variablesMap.set(variableName, variableResult.content);
+      variableResult.files.forEach((file) => includedFiles.add(file));
     } else if (variableName.toLowerCase() !== "activenote") {
-      // Only log warning for non-activeNote variables
       console.warn(`No notes found for variable: ${variableName}`);
     }
   }
 
-  return variablesMap;
+  return { variablesMap, includedFiles };
+}
+
+/**
+ * Represents the result of processing a custom prompt.
+ */
+export interface ProcessedPromptResult {
+  processedPrompt: string;
+  includedFiles: TFile[];
 }
 
 /**
  * Process a custom prompt by replacing variables and adding note contents.
+ * Returns the processed prompt string and a list of files included in the processing.
  */
 export async function processPrompt(
   customPrompt: string,
   selectedText: string,
   vault: Vault,
   activeNote?: TFile | null
-): Promise<string> {
+): Promise<ProcessedPromptResult> {
   const settings = getSettings();
+  const includedFiles = new Set<TFile>();
+
   if (!settings.enableCustomPromptTemplating) {
-    return customPrompt;
+    // If templating is disabled, check if activeNote should be included for {}
+    if (customPrompt.includes("{}") && !selectedText && activeNote) {
+      includedFiles.add(activeNote);
+    }
+    return {
+      processedPrompt: customPrompt + "\n\n",
+      includedFiles: Array.from(includedFiles),
+    };
   }
 
-  const variablesMap = await extractVariablesFromPrompt(customPrompt, vault, activeNote);
-  let processedPrompt = customPrompt;
+  // Extract variables and track files included through them
+  const { variablesMap, includedFiles: variableFiles } = await extractVariablesFromPrompt(
+    customPrompt,
+    vault,
+    activeNote
+  );
+  variableFiles.forEach((file) => includedFiles.add(file));
 
+  let processedPrompt = customPrompt;
   let additionalInfo = "";
   let activeNoteContent: string | null = null;
 
@@ -109,37 +146,54 @@ export async function processPrompt(
     processedPrompt = processedPrompt.replace(/\{\}/g, "{selectedText}");
     if (selectedText) {
       additionalInfo += `selectedText:\n\n${selectedText}`;
+      // Note: selectedText doesn't directly correspond to a file inclusion here
     } else if (activeNote) {
       activeNoteContent = await getFileContent(activeNote, vault);
       additionalInfo += `selectedText (entire active note):\n\n${activeNoteContent}`;
+      includedFiles.add(activeNote); // Ensure active note is tracked if used for {}
     } else {
       additionalInfo += `selectedText:\n\n(No selected text or active note available)`;
     }
   }
 
   // Add variable contents to the additional info
+  // The files are already tracked via includedFiles set
   for (const [varName, content] of variablesMap.entries()) {
-    if (varName.toLowerCase() === "activenote" && activeNoteContent) {
-      // Skip adding activeNote content if it's already added as selectedText
+    if (varName.toLowerCase() === "activenote" && activeNoteContent !== null) {
+      // Content already added via {} handling, but file tracking is done.
       continue;
     }
-    additionalInfo += `\n\n${varName}:\n\n${content}`;
+    if (additionalInfo) {
+      additionalInfo += `\n\n${varName}:\n\n${content}`;
+    } else {
+      additionalInfo += `${varName}:\n\n${content}`;
+    }
   }
 
-  // Process [[note title]] syntax with new reference system
-  const noteFiles = extractNoteFiles(processedPrompt, vault);
-  for (const noteFile of noteFiles) {
-    // Check if this note wasn't already processed in extractVariablesFromPrompt
-    const noteName = `[[${noteFile.basename}]]`;
-    if (!variablesMap.has(noteName)) {
+  // Process [[note title]] syntax
+  const noteLinkFiles = extractNoteFiles(processedPrompt, vault);
+  for (const noteFile of noteLinkFiles) {
+    // Check if this note wasn't already included via a variable
+    // We use the Set's reference equality which works for TFile objects
+    if (!includedFiles.has(noteFile)) {
       const noteContent = await getFileContent(noteFile, vault);
       if (noteContent) {
-        additionalInfo += `\n\nTitle: ${noteName}\nPath: ${noteFile.path}\n\n${noteContent}`;
+        if (additionalInfo) {
+          additionalInfo += `\n\nTitle: [[${noteFile.basename}]]\nPath: ${noteFile.path}\n\n${noteContent}`;
+        } else {
+          additionalInfo += `Title: [[${noteFile.basename}]]\nPath: ${noteFile.path}\n\n${noteContent}`;
+        }
+        includedFiles.add(noteFile); // Track files included via [[links]]
       }
     }
   }
 
-  return processedPrompt + "\n\n" + additionalInfo;
+  return {
+    processedPrompt: additionalInfo
+      ? `${processedPrompt}\n\n${additionalInfo}`
+      : `${processedPrompt}\n\n`,
+    includedFiles: Array.from(includedFiles),
+  };
 }
 
 export class CustomPromptProcessor {
@@ -242,64 +296,21 @@ export class CustomPromptProcessor {
   }
 
   /**
-   * Extract variables from a custom prompt and get their content.
-   * This is a wrapper around the module-level extractVariablesFromPrompt function.
+   * Process a custom prompt by replacing variables, adding note contents,
+   * and tracking which files were included.
    *
-   * @param {string} customPrompt - the custom prompt to process
-   * @param {TFile} [activeNote] - the currently active note (optional)
-   * @return {Promise<Map<string, string>>} map of variable name to content
-   */
-  public async extractVariablesFromPrompt(
-    customPrompt: string,
-    activeNote?: TFile
-  ): Promise<Map<string, string>> {
-    return extractVariablesFromPrompt(customPrompt, this.vault, activeNote);
-  }
-
-  /**
-   * Process a custom prompt by tracking it and delegating to the module-level function.
-   * This method updates the lastProcessedPrompt property before processing.
-   *
-   * @param {string} customPrompt - the custom prompt to process
+   * @param {string} customPrompt - the custom prompt template
    * @param {string} selectedText - the text selected by the user
    * @param {TFile} [activeNote] - the currently active note (optional)
-   * @return {Promise<string>} the processed prompt with all variables replaced
+   * @return {Promise<ProcessedPromptResult>} An object containing the processed prompt string
+   *                                         and an array of TFile objects included.
    */
   async processCustomPrompt(
     customPrompt: string,
     selectedText: string,
     activeNote?: TFile
-  ): Promise<string> {
-    this.lastProcessedPrompt = customPrompt;
+  ): Promise<ProcessedPromptResult> {
+    // Remove dependency on lastProcessedPrompt state
     return processPrompt(customPrompt, selectedText, this.vault, activeNote);
   }
-
-  /**
-   * Get a set of all variables that were processed in the last prompt.
-   * @return {Promise<Set<string>>} A set of variable names that were processed
-   * @deprecated
-   */
-  async getProcessedVariables(): Promise<Set<string>> {
-    const processedVars = new Set<string>();
-
-    if (this.lastProcessedPrompt) {
-      // Extract variables using the same method as in processing
-      const variablesMap = await extractVariablesFromPrompt(this.lastProcessedPrompt, this.vault);
-
-      // Add all variable names from the map
-      for (const varName of variablesMap.keys()) {
-        processedVars.add(varName);
-      }
-
-      // Add explicitly referenced note titles
-      const noteFiles = extractNoteFiles(this.lastProcessedPrompt, this.vault);
-      for (const file of noteFiles) {
-        processedVars.add(`[[${file.basename}]]`);
-      }
-    }
-
-    return processedVars;
-  }
-
-  private lastProcessedPrompt: string | null = null;
 }
