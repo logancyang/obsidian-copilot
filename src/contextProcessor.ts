@@ -1,5 +1,4 @@
 import { ChainType } from "@/chainFactory";
-import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { TFile, Vault } from "obsidian";
 
@@ -43,8 +42,20 @@ export class ContextProcessor {
     return content;
   }
 
+  /**
+   * Processes context notes, excluding any already handled by custom prompts.
+   *
+   * @param excludedNotePaths A set of file paths that should be skipped.
+   * @param fileParserManager
+   * @param vault
+   * @param contextNotes
+   * @param includeActiveNote
+   * @param activeNote
+   * @param currentChain
+   * @returns The combined content string of the processed context notes.
+   */
   async processContextNotes(
-    customPromptProcessor: CustomPromptProcessor,
+    excludedNotePaths: Set<string>,
     fileParserManager: FileParserManager,
     vault: Vault,
     contextNotes: TFile[],
@@ -52,33 +63,43 @@ export class ContextProcessor {
     activeNote: TFile | null,
     currentChain: ChainType
   ): Promise<string> {
-    const processedVars = await customPromptProcessor.getProcessedVariables();
     let additionalContext = "";
 
     const processNote = async (note: TFile) => {
       try {
-        // Skip if this note was already processed by processCustomPrompt
-        const noteRef = `[[${note.basename}]]`;
-        if (processedVars.has(noteRef)) {
+        // Check if this note was already processed (via custom prompt)
+        if (excludedNotePaths.has(note.path)) {
+          console.log(`Skipping note ${note.path} as it was included via custom prompt.`);
           return;
         }
 
-        if (currentChain !== ChainType.COPILOT_PLUS_CHAIN && note.extension !== "md") {
-          if (!fileParserManager.supportsExtension(note.extension)) {
-            console.warn(`Unsupported file type: ${note.extension}`);
-          } else {
-            console.warn(`File type ${note.extension} only supported in Copilot Plus mode`);
-          }
-          return;
-        }
+        console.log(
+          `Processing note: ${note.path}, extension: ${note.extension}, chain: ${currentChain}`
+        );
 
+        // 1. Check if the file extension is supported by any parser
         if (!fileParserManager.supportsExtension(note.extension)) {
           console.warn(`Unsupported file type: ${note.extension}`);
           return;
         }
 
+        // 2. Apply chain restrictions only to supported files that are NOT md or canvas
+        if (
+          currentChain !== ChainType.COPILOT_PLUS_CHAIN &&
+          note.extension !== "md" &&
+          note.extension !== "canvas"
+        ) {
+          // This file type is supported, but requires Plus mode (e.g., PDF)
+          console.warn(
+            `File type ${note.extension} requires Copilot Plus mode for context processing.`
+          );
+          return;
+        }
+
+        // 3. If we reach here, parse the file (md, canvas, or other supported type in Plus mode)
         let content = await fileParserManager.parseFile(note, vault);
 
+        // Special handling for embedded PDFs within markdown (only in Plus mode)
         if (note.extension === "md" && currentChain === ChainType.COPILOT_PLUS_CHAIN) {
           content = await this.processEmbeddedPDFs(content, vault, fileParserManager);
         }
@@ -92,11 +113,7 @@ export class ContextProcessor {
 
     // Process active note if included
     if (includeActiveNote && activeNote) {
-      const activeNoteVar = `activeNote`;
-      const activeNotePath = `[[${activeNote.basename}]]`;
-      if (!processedVars.has(activeNoteVar) && !processedVars.has(activeNotePath)) {
-        await processNote(activeNote);
-      }
+      await processNote(activeNote);
     }
 
     // Process context notes
