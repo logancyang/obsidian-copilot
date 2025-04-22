@@ -40,18 +40,10 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
 }) => {
   return (
     <div
-      className={cn("flex", {
+      className={cn("flex gap-1", {
         "group-hover:opacity-100 opacity-0": !Platform.isMobile,
       })}
     >
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button variant="ghost2" size="fit" onClick={onCopy} title="Copy">
-            {isCopied ? <Check className="size-4" /> : <Copy className="size-4" />}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Copy</TooltipContent>
-      </Tooltip>
       {message.sender === USER_SENDER ? (
         <>
           <Tooltip>
@@ -95,6 +87,14 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
               </Button>
             </TooltipTrigger>
             <TooltipContent>Insert / Replace at cursor</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost2" size="fit" onClick={onCopy} title="Copy">
+                {isCopied ? <Check className="size-4" /> : <Copy className="size-4" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Copy</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
