@@ -36,89 +36,145 @@ export class ImageProcessor {
 
   static async isImageUrl(url: string, vault: Vault): Promise<boolean> {
     try {
-      // Extract extension from the URL or file path
-      const extension = url.split(".").pop()?.toLowerCase();
-      if (extension) {
-        // Check if the extension is supported
-        const isSupported = this.IMAGE_EXTENSIONS.some(
-          (ext) => ext.toLowerCase() === `.${extension}`
-        );
+      let potentialExtension: string | undefined = undefined;
+      let isPotentiallyVaultPath = false;
 
-        if (!isSupported) {
-          const msg = `Unsupported image format: .${extension}. Supported formats: ${this.IMAGE_EXTENSIONS.join(", ")}`;
-          logError(msg);
-          new Notice(msg);
-          return false;
-        }
-      }
-
-      // First check if it's an Obsidian vault image path
-      if (this.IMAGE_EXTENSIONS.some((ext) => url.toLowerCase().endsWith(ext))) {
-        // Verify the file exists and is accessible
-        const file = vault.getAbstractFileByPath(url);
-        if (!file || !(file instanceof TFile)) {
-          logError(`File not found in vault: ${url}`);
-          return false;
-        }
-
-        // Check file size
-        if (file.stat.size > this.MAX_IMAGE_SIZE) {
-          logError(`File too large: ${file.stat.size} bytes`);
-          return false;
-        }
-
-        return true;
-      }
-
-      // Then check if it's a valid URL
-      const urlObj = new URL(url);
-
-      // First check: URL path ends with image extension
-      if (this.IMAGE_EXTENSIONS.some((ext) => urlObj.pathname.toLowerCase().endsWith(ext))) {
-        return true;
-      }
-
-      // Second check: Try HEAD request to check content-type
       try {
-        const response = await safeFetch(url, {
-          method: "HEAD",
-          headers: {}, // Explicitly set empty headers
-        });
-
-        const contentType = response.headers.get("content-type");
-        if (contentType?.startsWith("image/")) {
-          return true;
+        // Try parsing as a URL first to handle web URLs correctly
+        const urlObj = new URL(url);
+        const pathname = urlObj.pathname;
+        const lastDotIndex = pathname.lastIndexOf(".");
+        const lastSlashIndex = pathname.lastIndexOf("/");
+        if (lastDotIndex > lastSlashIndex && lastDotIndex > -1) {
+          potentialExtension = pathname.substring(lastDotIndex + 1).toLowerCase();
         }
-      } catch (error) {
-        logError(`Error checking content-type for URL: ${url}`, error);
+
+        // Check if extension from URL path is supported
+        if (potentialExtension) {
+          const isSupported = this.IMAGE_EXTENSIONS.some(
+            (ext) => ext.toLowerCase() === `.${potentialExtension}`
+          );
+          if (!isSupported) {
+            // If extension is present but not supported, it's definitively not a supported image URL
+            logError(
+              `Unsupported image format from URL path: .${potentialExtension}. Supported formats: ${this.IMAGE_EXTENSIONS.join(", ")}`,
+              url
+            );
+            // Don't show Notice here, let caller decide based on overall result
+            return false;
+          }
+          // If supported, proceed to HEAD check for confirmation
+        }
+
+        // Perform HEAD request to check Content-Type
+        try {
+          const response = await safeFetch(url, {
+            method: "HEAD",
+            headers: {}, // Explicitly set empty headers
+          });
+
+          const contentType = response.headers.get("content-type");
+          if (contentType?.startsWith("image/")) {
+            return true; // Confirmed image via Content-Type
+          } else {
+            // HEAD succeeded, but Content-Type is not image/*
+            // Trust the explicit Content-Type over heuristics
+            console.warn(
+              `HEAD request succeeded for ${url} but Content-Type (${contentType}) is not image/*.`
+            );
+            return false; // Return false immediately
+          }
+          // If Content-Type is present but not image/*, proceed to heuristic check
+        } catch (headError) {
+          // HEAD request might fail (e.g., CORS, network issue, server doesn't support HEAD, 404)
+          // Log as warning, as this is handled by falling back to heuristics.
+          console.warn(
+            `HEAD request failed for URL: ${url}. Proceeding to heuristic check.`,
+            headError
+          );
+          // Proceed to heuristic check ONLY if HEAD failed
+          const searchParams = urlObj.searchParams;
+          const imageIndicators = [
+            // Image dimensions
+            searchParams.has("w") || searchParams.has("width"),
+            searchParams.has("h") || searchParams.has("height"),
+            // Image processing
+            searchParams.has("format"),
+            searchParams.has("fit"),
+            // Image quality - Be careful with generic terms like 'q'
+            // searchParams.has("q"), // Removed 'q' as it's too common (e.g., search queries)
+            searchParams.has("quality"),
+            // Common CDN image path patterns
+            urlObj.pathname.includes("/image/"),
+            urlObj.pathname.includes("/images/"),
+            urlObj.pathname.includes("/img/"),
+            // Common image processing parameters
+            searchParams.has("auto"),
+            searchParams.has("crop"),
+          ];
+          const imageIndicatorCount = imageIndicators.filter(Boolean).length;
+          if (imageIndicatorCount >= 2) {
+            logError(
+              `Identified as image based on URL heuristics (indicator count: ${imageIndicatorCount}): ${url}`
+            );
+            return true; // Assume image based on heuristics
+          }
+
+          // If HEAD didn't confirm, and heuristics didn't match, assume not an image URL
+          return false;
+        }
+      } catch {
+        // If new URL(url) fails, it's likely not a standard web URL. Treat as potential vault path.
+        isPotentiallyVaultPath = true;
+        const lastDotIndex = url.lastIndexOf(".");
+        if (lastDotIndex > -1) {
+          potentialExtension = url.substring(lastDotIndex + 1).toLowerCase();
+        } else {
+          // No extension found on potential vault path
+          return false;
+        }
       }
 
-      // Final check: Analyze URL patterns that commonly indicate image content
-      const searchParams = urlObj.searchParams;
-      const imageIndicators = [
-        // Image dimensions
-        searchParams.has("w") || searchParams.has("width"),
-        searchParams.has("h") || searchParams.has("height"),
-        // Image processing
-        searchParams.has("format"),
-        searchParams.has("fit"),
-        // Image quality
-        searchParams.has("q") || searchParams.has("quality"),
-        // Common CDN image path patterns
-        urlObj.pathname.includes("/image/"),
-        urlObj.pathname.includes("/images/"),
-        urlObj.pathname.includes("/img/"),
-        // Common image processing parameters
-        searchParams.has("auto"),
-        searchParams.has("crop"),
-      ];
+      // --- Handling for potential vault paths ---
+      if (isPotentiallyVaultPath) {
+        if (
+          potentialExtension &&
+          this.IMAGE_EXTENSIONS.some((ext) => ext.toLowerCase() === `.${potentialExtension}`)
+        ) {
+          // Verify the file exists and is accessible in the vault
+          const file = vault.getAbstractFileByPath(url);
+          if (file instanceof TFile) {
+            // Check file size
+            if (file.stat.size > this.MAX_IMAGE_SIZE) {
+              logError(`Vault file too large: ${file.stat.size} bytes for path: ${url}`);
+              return false;
+            }
+            return true; // It's a valid vault image file
+          } else {
+            // Has image extension but not found in vault
+            logError(`File with image extension not found in vault: ${url}.`);
+            // Do not assume it's an image if it's not in the vault
+            return false;
+          }
+        } else {
+          // Potential vault path but doesn't have a supported image extension
+          if (potentialExtension) {
+            logError(
+              `Unsupported image format for potential vault path: .${potentialExtension}. Supported formats: ${this.IMAGE_EXTENSIONS.join(", ")}`,
+              url
+            );
+          }
+          return false;
+        }
+      }
 
-      // If multiple image-related indicators are present, likely an image URL
-      const imageIndicatorCount = imageIndicators.filter(Boolean).length;
-      return imageIndicatorCount >= 2; // Require at least 2 indicators to consider it an image URL
-    } catch {
-      // If URL construction fails, it might still be a valid Obsidian vault image path
-      return this.IMAGE_EXTENSIONS.some((ext) => url.toLowerCase().endsWith(ext));
+      // If it reached here, something unexpected happened or logic didn't cover the case
+      logError(`Could not determine image status for URL/path: ${url}`);
+      return false;
+    } catch (e) {
+      // Catch any unexpected errors during the process
+      logError(`Unexpected error in isImageUrl for "${url}":`, e);
+      return false; // Assume not an image if any unexpected error occurs
     }
   }
 
@@ -229,6 +285,19 @@ export class ImageProcessor {
       return imageUrl;
     }
 
+    // Check for and handle Obsidian resource URLs (attachment: protocol)
+    if (imageUrl.startsWith("attachment:")) {
+      // Remove the 'attachment:' prefix to get the real file path
+      const filePath = imageUrl.substring(11); // "attachment:".length === 11
+      const file = vault.getAbstractFileByPath(filePath);
+      if (file instanceof TFile) {
+        return await this.handleVaultImage(file, vault);
+      } else {
+        console.warn(`Could not find attachment file in vault: ${filePath}`);
+        return null;
+      }
+    }
+
     // Check if it's a local vault image
     if (imageUrl.startsWith("app://")) {
       return await this.handleLocalImage(imageUrl, vault);
@@ -317,7 +386,7 @@ export class ImageBatchProcessor {
   ): Promise<ImageContent | null> {
     try {
       if (!(await ImageProcessor.isImageUrl(url, vault))) {
-        failedImages.push(url);
+        // If it's not an image URL, just return null. Don't treat it as a failure.
         return null;
       }
 
