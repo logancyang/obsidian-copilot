@@ -111,9 +111,14 @@ export class BrevilabsClient {
     endpoint: string,
     body: any,
     method = "POST",
-    excludeAuthHeader = false
+    excludeAuthHeader = false,
+    skipLicenseCheck = false
   ): Promise<{ data: T | null; error?: Error }> {
-    this.checkLicenseKey();
+    if (!skipLicenseCheck) {
+      this.checkLicenseKey();
+    }
+
+    body.user_id = getSettings().userId;
 
     const url = new URL(`${BREVILABS_API_BASE_URL}${endpoint}`);
     if (method === "GET") {
@@ -162,6 +167,7 @@ export class BrevilabsClient {
         license_key: await getDecryptedKey(getSettings().plusLicenseKey),
       },
       "POST",
+      true,
       true
     );
     if (error) {

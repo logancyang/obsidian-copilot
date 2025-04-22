@@ -1,5 +1,6 @@
 import { CustomModel, ProjectConfig } from "@/aiParams";
 import { atom, createStore, useAtomValue } from "jotai";
+import { v4 as uuidv4 } from "uuid";
 
 import { type ChainType } from "@/chainFactory";
 import {
@@ -36,6 +37,7 @@ export interface InlineEditCommandSettings {
 }
 
 export interface CopilotSettings {
+  userId: string;
   plusLicenseKey: string;
   openAIApiKey: string;
   openAIOrgId: string;
@@ -49,6 +51,7 @@ export interface CopilotSettings {
   azureOpenAIApiEmbeddingDeploymentName: string;
   googleApiKey: string;
   openRouterAiApiKey: string;
+  xaiApiKey: string;
   mistralApiKey: string;
   deepseekApiKey: string;
   defaultChainType: ChainType;
@@ -57,6 +60,7 @@ export interface CopilotSettings {
   temperature: number;
   maxTokens: number;
   contextTurns: number;
+  lastDismissedVersion: string | null;
   // Do not use this directly, use getSystemPrompt() instead
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;
@@ -90,9 +94,10 @@ export interface CopilotSettings {
   // undefined means never checked
   isPlusUser: boolean | undefined;
   inlineEditCommands: InlineEditCommandSettings[] | undefined;
-  // Autocomplete settings
   enableAutocomplete: boolean;
   projectList: Array<ProjectConfig>;
+  passMarkdownImages: boolean;
+  enableCustomPromptTemplating: boolean;
 }
 
 export const settingsStore = createStore();
@@ -166,6 +171,10 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // If settings is null/undefined, use DEFAULT_SETTINGS
   const settingsToSanitize = settings || DEFAULT_SETTINGS;
 
+  if (!settingsToSanitize.userId) {
+    settingsToSanitize.userId = uuidv4();
+  }
+
   // fix: Maintain consistency between EmbeddingModelProviders.AZURE_OPENAI and ChatModelProviders.AZURE_OPENAI,
   // where it was 'azure_openai' before EmbeddingModelProviders.AZURE_OPENAI.
   if (!settingsToSanitize.activeEmbeddingModels) {
@@ -205,6 +214,16 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   sanitizedSettings.embeddingBatchSize = isNaN(embeddingBatchSize)
     ? DEFAULT_SETTINGS.embeddingBatchSize
     : embeddingBatchSize;
+
+  // Ensure passMarkdownImages has a default value
+  if (typeof sanitizedSettings.passMarkdownImages !== "boolean") {
+    sanitizedSettings.passMarkdownImages = DEFAULT_SETTINGS.passMarkdownImages;
+  }
+
+  // Ensure enableCustomPromptTemplating has a default value
+  if (typeof sanitizedSettings.enableCustomPromptTemplating !== "boolean") {
+    sanitizedSettings.enableCustomPromptTemplating = DEFAULT_SETTINGS.enableCustomPromptTemplating;
+  }
 
   return sanitizedSettings;
 }

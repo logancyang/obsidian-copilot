@@ -1,7 +1,5 @@
 import { getCurrentProject } from "@/aiParams";
 import { getStandaloneQuestion } from "@/chainUtils";
-import { Composer } from "./composer";
-import { getSystemPrompt } from "@/settings/model";
 import {
   ABORT_REASON,
   AI_SENDER,
@@ -10,8 +8,15 @@ import {
   MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT,
   ModelCapability,
 } from "@/constants";
+import {
+  ImageBatchProcessor,
+  ImageContent,
+  ImageProcessingResult,
+  MessageContent,
+} from "@/imageProcessing/imageProcessor";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import { logError } from "@/logger";
+import { logInfo } from "@/logger";
+import { getSettings, getSystemPrompt } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { ToolManager } from "@/tools/toolManager";
 import {
@@ -22,13 +27,11 @@ import {
   formatDateTime,
   getApiErrorMessage,
   getMessageRole,
-  ImageContent,
-  ImageProcessor,
-  MessageContent,
 } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { Notice } from "obsidian";
 import ChainManager from "./chainManager";
+import { Composer } from "./composer";
 import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "./intentAnalyzer";
 import ProjectManager from "./projectManager";
 
@@ -314,58 +317,26 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     return hasYoutubeCommand && youtubeUrl !== null && words.length === 1;
   }
 
-  private async processImageUrls(urls: string[]): Promise<ImageContent[]> {
-    try {
-      const imageUrls = await Promise.all(
-        urls.map(async (url) => {
-          if (await ImageProcessor.isImageUrl(url, this.chainManager.app.vault)) {
-            const imageContent = await ImageProcessor.convertToBase64(
-              url,
-              this.chainManager.app.vault
-            );
-            if (!imageContent) {
-              logError(`Failed to process image: ${url}`);
-              return null;
-            }
-            return imageContent;
-          }
-          return null;
-        })
-      );
-
-      // Filter out null values and return valid image URLs
-      const validImages = imageUrls.filter((item): item is ImageContent => item !== null);
-      return validImages;
-    } catch (error) {
-      logError("Error processing image URLs:", error);
-      return [];
-    }
+  private async processImageUrls(urls: string[]): Promise<ImageProcessingResult> {
+    const failedImages: string[] = [];
+    const processedImages = await ImageBatchProcessor.processUrlBatch(
+      urls,
+      failedImages,
+      this.chainManager.app.vault
+    );
+    ImageBatchProcessor.showFailedImagesNotice(failedImages);
+    return processedImages;
   }
 
-  private async processExistingImages(content: MessageContent[]): Promise<ImageContent[]> {
-    try {
-      const imageContent = await Promise.all(
-        content
-          .filter(
-            (item): item is ImageContent => item.type === "image_url" && !!item.image_url?.url
-          )
-          .map(async (item) => {
-            const processedContent = await ImageProcessor.convertToBase64(
-              item.image_url.url,
-              this.chainManager.app.vault
-            );
-            if (!processedContent) {
-              logError(`Failed to process existing image: ${item.image_url.url}`);
-              return null;
-            }
-            return processedContent;
-          })
-      );
-      return imageContent.filter((item): item is ImageContent => item !== null);
-    } catch (error) {
-      logError("Error processing images:", error);
-      return [];
-    }
+  private async processChatInputImages(content: MessageContent[]): Promise<ImageProcessingResult> {
+    const failedImages: string[] = [];
+    const processedImages = await ImageBatchProcessor.processChatImageBatch(
+      content,
+      failedImages,
+      this.chainManager.app.vault
+    );
+    ImageBatchProcessor.showFailedImagesNotice(failedImages);
+    return processedImages;
   }
 
   private async extractEmbeddedImages(content: string): Promise<string[]> {
@@ -379,33 +350,61 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     textContent: string,
     userMessage: ChatMessage
   ): Promise<MessageContent[]> {
-    const content: MessageContent[] = [
+    const failureMessages: string[] = [];
+    const successfulImages: ImageContent[] = [];
+    const settings = getSettings();
+
+    // Collect all image sources
+    const imageSources: { urls: string[]; type: string }[] = [];
+
+    // Safely check and add context URLs
+    const contextUrls = userMessage.context?.urls;
+    if (contextUrls && contextUrls.length > 0) {
+      imageSources.push({ urls: contextUrls, type: "context" });
+    }
+
+    // Process embedded images only if setting is enabled
+    if (settings.passMarkdownImages) {
+      const embeddedImages = await this.extractEmbeddedImages(textContent);
+      if (embeddedImages.length > 0) {
+        imageSources.push({ urls: embeddedImages, type: "embedded" });
+      }
+    }
+
+    // Process all image sources
+    for (const source of imageSources) {
+      const result = await this.processImageUrls(source.urls);
+      successfulImages.push(...result.successfulImages);
+      failureMessages.push(...result.failureDescriptions);
+    }
+
+    // Process existing chat content images if present
+    const existingContent = userMessage.content;
+    if (existingContent && existingContent.length > 0) {
+      const result = await this.processChatInputImages(existingContent);
+      successfulImages.push(...result.successfulImages);
+      failureMessages.push(...result.failureDescriptions);
+    }
+
+    // Let the LLM know about the image processing failures
+    let finalText = textContent;
+    if (failureMessages.length > 0) {
+      finalText = `${textContent}\n\nNote: \n${failureMessages.join("\n")}\n`;
+    }
+
+    const messageContent: MessageContent[] = [
       {
         type: "text",
-        text: textContent,
+        text: finalText,
       },
     ];
 
-    // Process URLs in the message to identify images
-    if (userMessage.context?.urls && userMessage.context.urls.length > 0) {
-      const imageContents = await this.processImageUrls(userMessage.context.urls);
-      content.push(...imageContents);
+    // Add successful images after the text content
+    if (successfulImages.length > 0) {
+      messageContent.push(...successfulImages);
     }
 
-    // Process embedded images from the text content
-    const embeddedImages = await this.extractEmbeddedImages(textContent);
-    if (embeddedImages.length > 0) {
-      const imageContents = await this.processImageUrls(embeddedImages);
-      content.push(...imageContents);
-    }
-
-    // Add existing image content if present
-    if (userMessage.content && userMessage.content.length > 0) {
-      const imageContents = await this.processExistingImages(userMessage.content);
-      content.push(...imageContents);
-    }
-
-    return content;
+    return messageContent;
   }
 
   private hasCapability(model: BaseChatModel, capability: ModelCapability): boolean {
@@ -473,11 +472,9 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       content,
     });
 
-    // Add debug logging for final request
-    if (debug) {
-      console.log("==== Final Request to AI ====\n", messages);
-    }
-
+    const enhancedUserMessage = content instanceof Array ? (content[0] as any).text : content;
+    logInfo("Enhanced user message: ", enhancedUserMessage);
+    logInfo("==== Final Request to AI ====\n", messages);
     const streamer = new ThinkBlockStreamer(updateCurrentAiMessage);
     const chatStream = await this.chainManager.chatModelManager.getChatModel().stream(messages);
 
@@ -620,10 +617,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         // Enhance with tool outputs.
         let enhancedUserMessage = this.prepareEnhancedUserMessage(cleanedUserMessage, toolOutputs);
         // If no results, default to LLM Chain
-        if (debug) {
-          console.log("No local search results. Using standard LLM Chain.");
-          console.log("Enhanced user message:", enhancedUserMessage);
-        }
+        logInfo("No local search results. Using standard LLM Chain.");
 
         // Enhance with composer output.
         if (messageForAnalysis.includes("@composer")) {
@@ -733,7 +727,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
             .join("\n\n");
       }
     }
-    return `User message: ${userMessage}${context}`;
+    return `${userMessage}${context}`;
   }
 
   private getTimeExpression(toolCalls: any[]): string {

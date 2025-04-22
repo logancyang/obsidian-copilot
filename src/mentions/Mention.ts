@@ -1,5 +1,6 @@
+import { ImageProcessor } from "@/imageProcessing/imageProcessor";
 import { BrevilabsClient, Url4llmResponse } from "@/LLMProviders/brevilabsClient";
-import { ImageProcessor, isYoutubeUrl } from "@/utils";
+import { isYoutubeUrl } from "@/utils";
 
 export interface MentionData {
   type: string;

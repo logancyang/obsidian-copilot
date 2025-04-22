@@ -1,6 +1,7 @@
-import { TFolder } from "obsidian";
-import { createGetFileTreeTool, buildFileTree } from "./FileTreeTools";
 import * as searchUtils from "@/search/searchUtils";
+import { ToolManager } from "@/tools/toolManager";
+import { TFolder } from "obsidian";
+import { buildFileTree, createGetFileTreeTool } from "./FileTreeTools";
 
 // Mock the searchUtils functions
 jest.mock("@/search/searchUtils", () => ({
@@ -129,7 +130,7 @@ describe("FileTreeTools", () => {
 
     // Also test the tool to ensure it uses buildFileTree correctly
     const tool = createGetFileTreeTool(root);
-    const result = await tool.invoke({});
+    const result = await ToolManager.callTool(tool, {});
 
     // Extract JSON part after the prompt
     const jsonPart = result.substring(result.indexOf("{"));

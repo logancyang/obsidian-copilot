@@ -2,6 +2,7 @@ import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { PDFCache } from "@/cache/pdfCache";
 import { logError, logInfo } from "@/logger";
 import { TFile, Vault } from "obsidian";
+import { CanvasLoader } from "./CanvasLoader";
 
 interface FileParser {
   supportedExtensions: string[];
@@ -55,6 +56,24 @@ export class PDFParser implements FileParser {
   }
 }
 
+export class CanvasParser implements FileParser {
+  supportedExtensions = ["canvas"];
+
+  async parseFile(file: TFile, vault: Vault): Promise<string> {
+    try {
+      logInfo("Parsing Canvas file:", file.path);
+      const canvasLoader = new CanvasLoader(vault);
+      const canvasData = await canvasLoader.load(file);
+
+      // Use the specialized buildPrompt method to create LLM-friendly format
+      return canvasLoader.buildPrompt(canvasData);
+    } catch (error) {
+      logError(`Error parsing Canvas file ${file.path}:`, error);
+      return `[Error: Could not parse Canvas file ${file.basename}]`;
+    }
+  }
+}
+
 // Future parsers can be added like this:
 /*
 class DocxParser implements FileParser {
@@ -69,10 +88,11 @@ class DocxParser implements FileParser {
 export class FileParserManager {
   private parsers: Map<string, FileParser> = new Map();
 
-  constructor(brevilabsClient: BrevilabsClient) {
-    // Register more parsers here
+  constructor(brevilabsClient: BrevilabsClient, vault: Vault) {
+    // Register parsers
     this.registerParser(new MarkdownParser());
     this.registerParser(new PDFParser(brevilabsClient));
+    this.registerParser(new CanvasParser());
   }
 
   registerParser(parser: FileParser) {

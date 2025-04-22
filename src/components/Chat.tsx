@@ -10,6 +10,7 @@ import { updateChatMemory } from "@/chatUtils";
 import { ChatControls } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
+import { NewVersionBanner } from "@/components/chat-components/NewVersionBanner";
 import { ProjectList } from "@/components/chat-components/ProjectList";
 import { ABORT_REASON, COMMAND_IDS, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
@@ -88,26 +89,10 @@ const Chat: React.FC<ChatProps> = ({
   const appContext = useContext(AppContext);
   const app = plugin.app || appContext;
 
-  const processContextNotes = async (
-    customPromptProcessor: CustomPromptProcessor,
-    fileParserManager: FileParserManager
-  ) => {
-    const activeNote = app.workspace.getActiveFile();
-    return await contextProcessor.processContextNotes(
-      customPromptProcessor,
-      fileParserManager,
-      app.vault,
-      contextNotes,
-      includeActiveNote,
-      activeNote,
-      currentChain
-    );
-  };
-
   const handleSendMessage = async ({
     toolCalls,
     urls,
-    contextNotes,
+    contextNotes: passedContextNotes, // Rename to avoid shadowing
   }: {
     toolCalls?: string[];
     urls?: string[];
@@ -140,7 +125,7 @@ const Chat: React.FC<ChatProps> = ({
       });
     }
 
-    const notes = [...(contextNotes || [])];
+    const notes = [...(passedContextNotes || [])];
     const activeNote = app.workspace.getActiveFile();
     if (includeActiveNote && activeNote && !notes.some((note) => note.path === activeNote.path)) {
       notes.push(activeNote);
@@ -170,11 +155,12 @@ const Chat: React.FC<ChatProps> = ({
 
     // First, process the original user message for custom prompts
     const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
-    let processedUserMessage = await customPromptProcessor.processCustomPrompt(
-      inputMessage || "",
-      "",
-      app.workspace.getActiveFile() as TFile | undefined
-    );
+    const { processedPrompt: processedUserMessage, includedFiles } =
+      await customPromptProcessor.processCustomPrompt(
+        inputMessage || "",
+        "",
+        app.workspace.getActiveFile() as TFile | undefined
+      );
 
     // Extract Mentions (such as URLs) from original input message only if using Copilot Plus chain
     const urlContextAddition =
@@ -182,11 +168,22 @@ const Chat: React.FC<ChatProps> = ({
         ? await mention.processUrls(inputMessage || "")
         : { urlContext: "", imageUrls: [] };
 
-    // Add context notes
-    const noteContextAddition = await processContextNotes(customPromptProcessor, fileParserManager);
+    // Create set of file paths that were included in the custom prompt
+    const excludedNotePaths = new Set(includedFiles.map((file) => file.path));
+
+    // Add context notes, excluding those already processed by custom prompt
+    const noteContextAddition = await contextProcessor.processContextNotes(
+      excludedNotePaths,
+      fileParserManager,
+      app.vault,
+      notes,
+      includeActiveNote,
+      activeNote,
+      currentChain
+    );
 
     // Combine everything
-    processedUserMessage =
+    const finalProcessedMessage =
       processedUserMessage + urlContextAddition.urlContext + noteContextAddition;
 
     let messageWithToolCalls = inputMessage;
@@ -196,7 +193,7 @@ const Chat: React.FC<ChatProps> = ({
     }
 
     const promptMessageHidden: ChatMessage = {
-      message: processedUserMessage,
+      message: finalProcessedMessage,
       originalMessage: messageWithToolCalls,
       sender: USER_SENDER,
       isVisible: false,
@@ -504,11 +501,12 @@ ${chatContent}`;
       if (!customPrompt) {
         return selectedText;
       }
-      return await customPromptProcessor.processCustomPrompt(
+      const result = await customPromptProcessor.processCustomPrompt(
         customPrompt,
         selectedText,
         app.workspace.getActiveFile() ?? undefined
       );
+      return result.processedPrompt; // Extract just the processed prompt string
     }),
     []
   );
@@ -518,11 +516,12 @@ ${chatContent}`;
       if (!customPrompt) {
         return selectedText;
       }
-      return await customPromptProcessor.processCustomPrompt(
+      const result = await customPromptProcessor.processCustomPrompt(
         customPrompt,
         selectedText,
         app.workspace.getActiveFile() as TFile | undefined
       );
+      return result.processedPrompt; // Extract just the processed prompt string
     }),
     []
   );
@@ -613,7 +612,8 @@ ${chatContent}`;
 
   const renderChatComponents = () => (
     <>
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex flex-col size-full overflow-hidden">
+        <NewVersionBanner currentVersion={plugin.manifest.version} />
         <ChatMessages
           chatHistory={chatHistory}
           currentAiMessage={currentAiMessage}
@@ -627,8 +627,6 @@ ${chatContent}`;
           onReplaceChat={setInputMessage}
           showHelperComponents={mode !== "project"}
         />
-      </div>
-      <div className="flex flex-col items-center justify-end w-full flex-none box-border sticky bottom-0 border-t border-border">
         <ChatControls
           onNewChat={handleNewChat}
           onSaveAsNote={() => handleSaveAsNote(true)}

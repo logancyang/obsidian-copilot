@@ -1,6 +1,7 @@
 import { CustomModel } from "@/aiParams";
 import { DEFAULT_INLINE_EDIT_COMMANDS } from "@/commands/constants";
 import { type CopilotSettings } from "@/settings/model";
+import { v4 as uuidv4 } from "uuid";
 import { ChainType } from "./chainFactory";
 
 export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
@@ -43,10 +44,10 @@ export type PlusUtmMedium = (typeof PLUS_UTM_MEDIUMS)[keyof typeof PLUS_UTM_MEDI
 
 export enum ChatModels {
   COPILOT_PLUS_FLASH = "copilot-plus-flash",
-  GPT_4o = "gpt-4o",
-  GPT_4o_mini = "gpt-4o-mini",
-  O1_mini = "o1-mini",
-  O3_mini = "o3-mini",
+  GPT_41 = "gpt-4.1",
+  GPT_41_mini = "gpt-4.1-mini",
+  GPT_41_nano = "gpt-4.1-nano",
+  O4_mini = "o4-mini",
   AZURE_OPENAI = "azure-openai",
   GEMINI_PRO = "gemini-2.0-pro-exp",
   GEMINI_FLASH = "gemini-2.0-flash",
@@ -54,6 +55,8 @@ export enum ChatModels {
   GEMINI_15_FLASH = "gemini-1.5-flash-001", // TODO(logan): Project should use 2.0 flash once it supports context caching
   CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest",
   CLAUDE_3_5_HAIKU = "claude-3-5-haiku-latest",
+  GROK3 = "grok-3-beta",
+  GROK3_MINI = "grok-3-mini-beta",
   COMMAND_R = "command-r",
   COMMAND_R_PLUS = "command-r-plus",
   OPENROUTER_GPT_4o = "openai/chatgpt-4o-latest",
@@ -71,6 +74,7 @@ export enum ChatModelProviders {
   ANTHROPIC = "anthropic",
   COHEREAI = "cohereai",
   GOOGLE = "google",
+  XAI = "xai",
   OPENROUTERAI = "openrouterai",
   GROQ = "groq",
   OLLAMA = "ollama",
@@ -103,7 +107,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     capabilities: [ModelCapability.VISION],
   },
   {
-    name: ChatModels.GPT_4o,
+    name: ChatModels.GPT_41,
     provider: ChatModelProviders.OPENAI,
     enabled: true,
     isBuiltIn: true,
@@ -111,7 +115,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     capabilities: [ModelCapability.VISION],
   },
   {
-    name: ChatModels.GPT_4o_mini,
+    name: ChatModels.GPT_41_mini,
     provider: ChatModelProviders.OPENAI,
     enabled: true,
     isBuiltIn: true,
@@ -120,17 +124,19 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     capabilities: [ModelCapability.VISION],
   },
   {
-    name: ChatModels.O1_mini,
+    name: ChatModels.GPT_41_nano,
     provider: ChatModelProviders.OPENAI,
     enabled: true,
     isBuiltIn: true,
-    capabilities: [ModelCapability.REASONING],
+    core: true,
+    capabilities: [ModelCapability.VISION],
   },
   {
-    name: ChatModels.O3_mini,
+    name: ChatModels.O4_mini,
     provider: ChatModelProviders.OPENAI,
     enabled: true,
     isBuiltIn: true,
+    core: true,
     capabilities: [ModelCapability.REASONING],
   },
   {
@@ -144,6 +150,18 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.CLAUDE_3_5_HAIKU,
     provider: ChatModelProviders.ANTHROPIC,
+    enabled: true,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.GROK3,
+    provider: ChatModelProviders.XAI,
+    enabled: true,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.GROK3_MINI,
+    provider: ChatModelProviders.XAI,
     enabled: true,
     isBuiltIn: true,
   },
@@ -332,7 +350,7 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     label: "OpenAI",
     host: "https://api.openai.com",
     keyManagementURL: "https://platform.openai.com/api-keys",
-    testModel: ChatModels.GPT_4o,
+    testModel: ChatModels.GPT_41,
   },
   [ChatModelProviders.AZURE_OPENAI]: {
     label: "Azure OpenAI",
@@ -357,6 +375,12 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     host: "https://generativelanguage.googleapis.com",
     keyManagementURL: "https://makersuite.google.com/app/apikey",
     testModel: ChatModels.GEMINI_FLASH,
+  },
+  [ChatModelProviders.XAI]: {
+    label: "XAI",
+    host: "https://api.x.ai/v1",
+    keyManagementURL: "https://console.x.ai",
+    testModel: ChatModels.GROK3,
   },
   [ChatModelProviders.OPENROUTERAI]: {
     label: "OpenRouter",
@@ -418,6 +442,7 @@ export const ProviderSettingsKeyMap: Record<SettingKeyProviders, keyof CopilotSe
   groq: "groqApiKey",
   openrouterai: "openRouterAiApiKey",
   cohereai: "cohereApiKey",
+  xai: "xaiApiKey",
   "copilot-plus": "plusLicenseKey",
   mistralai: "mistralApiKey",
   deepseek: "deepseekApiKey",
@@ -502,6 +527,7 @@ export const AUTOCOMPLETE_CONFIG = {
 } as const;
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
+  userId: uuidv4(),
   isPlusUser: false,
   plusLicenseKey: "",
   openAIApiKey: "",
@@ -516,10 +542,11 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   azureOpenAIApiEmbeddingDeploymentName: "",
   googleApiKey: "",
   openRouterAiApiKey: "",
+  xaiApiKey: "",
   mistralApiKey: "",
   deepseekApiKey: "",
   defaultChainType: ChainType.LLM_CHAIN,
-  defaultModelKey: ChatModels.GPT_4o + "|" + ChatModelProviders.OPENAI,
+  defaultModelKey: ChatModels.GPT_41 + "|" + ChatModelProviders.OPENAI,
   embeddingModelKey: EmbeddingModels.OPENAI_EMBEDDING_SMALL + "|" + EmbeddingModelProviders.OPENAI,
   temperature: 0.1,
   maxTokens: 1000,
@@ -556,6 +583,9 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   inlineEditCommands: DEFAULT_INLINE_EDIT_COMMANDS,
   projectList: [],
   enableAutocomplete: true,
+  lastDismissedVersion: null,
+  passMarkdownImages: true,
+  enableCustomPromptTemplating: true,
 };
 
 export enum ABORT_REASON {

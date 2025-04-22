@@ -292,10 +292,14 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       }
 
       if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        onSendMessage(false);
-        setHistoryIndex(-1);
-        setTempInput("");
+        // Only prevent default and send message on non-mobile platforms
+        if (!Platform.isMobile) {
+          e.preventDefault();
+          onSendMessage(false);
+          setHistoryIndex(-1);
+          setTempInput("");
+        }
+        // On mobile, do nothing here, allowing the default newline behavior
       } else if (e.key === "ArrowUp") {
         if (currentLineIndex > 0 || selectionStart > 0) {
           // Allow normal cursor movement within multi-line input

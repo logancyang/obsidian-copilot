@@ -1,6 +1,6 @@
-import React from "react";
 import { SettingItem } from "@/components/ui/setting-item";
 import { updateSetting, useSettingsValue } from "@/settings/model";
+import React from "react";
 
 export const AdvancedSettings: React.FC = () => {
   const settings = useSettingsValue();
@@ -19,6 +19,26 @@ export const AdvancedSettings: React.FC = () => {
         />
 
         <div className="space-y-4">
+          <SettingItem
+            type="switch"
+            title="Custom Prompt Templating"
+            description="Enable templating to process variables like {activenote}, {foldername} or {#tag} in prompts. Disable to use raw prompts without any processing."
+            checked={settings.enableCustomPromptTemplating}
+            onCheckedChange={(checked) => {
+              updateSetting("enableCustomPromptTemplating", checked);
+            }}
+          />
+
+          <SettingItem
+            type="switch"
+            title="Images in Markdown (Plus)"
+            description="Pass embedded images in markdown to the AI along with the text. Only works with multimodal models (plus only)."
+            checked={settings.passMarkdownImages}
+            onCheckedChange={(checked) => {
+              updateSetting("passMarkdownImages", checked);
+            }}
+          />
+
           <SettingItem
             type="switch"
             title="Enable Encryption"

@@ -1,12 +1,14 @@
-import React, { useState } from "react";
-import { SettingItem } from "@/components/ui/setting-item";
-import { setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import { CustomModel } from "@/aiParams";
+import { SettingItem } from "@/components/ui/setting-item";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
-import { ModelAddDialog } from "@/settings/v2/components/ModelAddDialog";
-import { ModelTable } from "@/settings/v2/components/ModelTable";
-import { ModelEditDialog } from "@/settings/v2/components/ModelEditDialog";
 import ProjectManager from "@/LLMProviders/projectManager";
+import { logError } from "@/logger";
+import { setSettings, updateSetting, useSettingsValue } from "@/settings/model";
+import { ModelAddDialog } from "@/settings/v2/components/ModelAddDialog";
+import { ModelEditDialog } from "@/settings/v2/components/ModelEditDialog";
+import { ModelTable } from "@/settings/v2/components/ModelTable";
+import { Notice } from "obsidian";
+import React, { useState } from "react";
 
 export const ModelSettings: React.FC = () => {
   const settings = useSettingsValue();
@@ -34,7 +36,22 @@ export const ModelSettings: React.FC = () => {
     });
   };
 
-  const handleModelUpdate = (updatedModel: CustomModel) => {
+  const handleModelUpdate = (originalModel: CustomModel, updatedModel: CustomModel) => {
+    const modelIndex = settings.activeModels.findIndex(
+      (m) => m.name === originalModel.name && m.provider === originalModel.provider
+    );
+    if (modelIndex !== -1) {
+      const updatedModels = [...settings.activeModels];
+      updatedModels[modelIndex] = updatedModel;
+      updateSetting("activeModels", updatedModels);
+    } else {
+      new Notice("Could not find model to update");
+      logError("Could not find model to update:", originalModel);
+    }
+  };
+
+  // Handler for updates originating from the ModelTable itself (e.g., checkbox toggles)
+  const handleTableUpdate = (updatedModel: CustomModel) => {
     const updatedModels = settings.activeModels.map((m) =>
       m.name === updatedModel.name && m.provider === updatedModel.provider ? updatedModel : m
     );
@@ -73,7 +90,7 @@ export const ModelSettings: React.FC = () => {
           onEdit={setEditingModel}
           onDelete={onDeleteModel}
           onAdd={() => setShowAddDialog(true)}
-          onUpdateModel={handleModelUpdate}
+          onUpdateModel={handleTableUpdate}
           onReorderModels={handleModelReorder}
           title="Chat Model"
         />
