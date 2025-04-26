@@ -1,10 +1,10 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Eye, EyeOff } from "lucide-react";
 import { getDecryptedKey } from "@/encryptionService";
 import { logError } from "@/logger";
-import { err2String } from "@/utils";
+import { err2String, debounce } from "@/utils";
 
 export function PasswordInput({
   value,
@@ -22,6 +22,14 @@ export function PasswordInput({
   const [showPassword, setShowPassword] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const isFirstLoad = useRef(true);
+
+  // Add debounced onChange function
+  const debouncedOnChange = useMemo(() => {
+    if (!onChange) return;
+    return debounce((value: string) => {
+      onChange(value);
+    }, 300);
+  }, [onChange]);
 
   // Initialize the input value on first load
   useEffect(() => {
@@ -49,7 +57,7 @@ export function PasswordInput({
       <Input
         ref={inputRef}
         type={showPassword ? "text" : "password"}
-        onChange={(e) => onChange?.(e.target.value)}
+        onChange={(e) => debouncedOnChange?.(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
         className={cn("![padding-right:1.75rem] w-full")}
