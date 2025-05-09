@@ -439,7 +439,7 @@ export const ModelTable: React.FC<ModelTableProps> = ({
 
   // Mobile view rendering
   const renderMobileView = () => (
-    <div className="md:hidden relative">
+    <div className="copilot-model-table-mobile relative">
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -470,7 +470,7 @@ export const ModelTable: React.FC<ModelTableProps> = ({
   return (
     <div className="mb-4">
       {/* Desktop view */}
-      <div className="hidden md:block">
+      <div className="copilot-model-table-desktop">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
