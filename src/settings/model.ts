@@ -96,6 +96,45 @@ export interface CopilotSettings {
   inlineEditCommands: InlineEditCommandSettings[] | undefined;
   passMarkdownImages: boolean;
   enableCustomPromptTemplating: boolean;
+  systemPrompts?: {
+    default: string;
+    custom?: Record<string, string>;
+    characterPresets?: CharacterPreset[];
+    presets?: CharacterPresetItem[]; // 新增presets数组
+    activePresetId?: string | null;
+    activeTraits?: CharacterTrait;
+    checkedItems?: CheckedItems;
+    selectedValues?: SelectedValues;
+  };
+}
+
+// 用于人设列表
+interface CharacterPresetItem {
+  id: string;
+  name: string;
+  prompt: string;
+  isActive: boolean;
+}
+
+interface CheckedItems {
+  [key: string]: boolean | undefined; // key为选项ID，value表示是否被勾选
+}
+
+interface SelectedValues {
+  // 新增类型定义
+  [key: string]: string | undefined;
+}
+
+// 新增类型定义
+interface CharacterTrait {
+  [key: string]: string;
+}
+
+interface CharacterPreset {
+  id: string;
+  name: string;
+  prompt: string;
+  traits: CharacterTrait;
 }
 
 export const settingsStore = createStore();

@@ -12,8 +12,9 @@ import { AdvancedSettings } from "./components/AdvancedSettings";
 import { BasicSettings } from "./components/BasicSettings";
 import { ModelSettings } from "./components/ModelSettings";
 import { QASettings } from "./components/QASettings";
+import { SystemPromptsSection } from "./components/SystemPromptsSection";
 
-const TAB_IDS = ["basic", "model", "QA", "command", "advanced"] as const;
+const TAB_IDS = ["basic", "model", "QA", "command", "advanced", "systemPrompts"] as const;
 type TabId = (typeof TAB_IDS)[number];
 
 // tab icons
@@ -23,6 +24,7 @@ const icons: Record<TabId, JSX.Element> = {
   QA: <Database className="w-5 h-5" />,
   command: <Command className="w-5 h-5" />,
   advanced: <Wrench className="w-5 h-5" />,
+  systemPrompts: <Cog className="w-5 h-5" />,
 };
 
 // tab components
@@ -32,6 +34,7 @@ const components: Record<TabId, React.FC> = {
   QA: () => <QASettings />,
   command: () => <CommandSettings />,
   advanced: () => <AdvancedSettings />,
+  systemPrompts: () => <SystemPromptsSection />,
 };
 
 // tabs
