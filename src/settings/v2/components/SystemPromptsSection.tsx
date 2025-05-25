@@ -261,7 +261,7 @@ export function SystemPromptsSection() {
               {" "}
               {/* 修改 mt-4 为 mt-2 */}
               <Button onClick={applyCharacterSettings} disabled={!presetName.trim()}>
-                应用人设
+                添加人设
               </Button>
               <input
                 placeholder="名称"
