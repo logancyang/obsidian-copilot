@@ -319,6 +319,11 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
 
       if (newValues.length > 0) {
         // 更新 traits 数据
+        const updatedTraits = {
+          ...traits,
+          [key]: newValues.join("|"),
+        };
+        // 更新 traits 数据
         onTraitsChange({
           ...traits,
           [key]: newValues.join("|"),
@@ -330,6 +335,8 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
             ...selectedValues,
             [key]: newValues[0],
           },
+          // 确保更新 traits 状态
+          activeTraits: updatedTraits,
         });
       } else {
         // 如果删除后没有值了，删除整个特征
@@ -347,6 +354,8 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
             ...checkedItems,
             [key]: undefined,
           },
+          // 确保更新 traits 状态
+          activeTraits: newTraits,
         });
       }
     }
