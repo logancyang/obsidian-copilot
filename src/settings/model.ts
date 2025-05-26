@@ -105,6 +105,7 @@ export interface CopilotSettings {
     activeTraits?: CharacterTrait;
     checkedItems?: CheckedItems;
     selectedValues?: SelectedValues;
+    traitOrder?: string[]; // 新增特征顺序数组
   };
 }
 

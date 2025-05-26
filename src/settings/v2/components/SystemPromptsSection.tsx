@@ -15,6 +15,12 @@ interface CharacterPreset {
   isActive: boolean;
 }
 
+// 在组件顶部添加
+// type OrderedTrait = {
+//   key: string;
+//   values: string[];
+// };
+
 // 1. 首先修改 DynamicTraitEditor 的 props 类型
 interface DynamicTraitEditorProps {
   traits: CharacterTrait;
@@ -40,10 +46,12 @@ export function SystemPromptsSection() {
     const traits = settings.systemPrompts?.activeTraits || {};
     const checkedItems = settings.systemPrompts?.checkedItems || {};
     const selectedValues = settings.systemPrompts?.selectedValues || {};
+    const traitOrder = settings.systemPrompts?.traitOrder || Object.keys(traits);
 
-    const promptText = Object.entries(traits)
-      .filter(([key]) => checkedItems[key] === true)
-      .map(([key]) => {
+    // 按保存的顺序拼接提示词
+    const promptText = traitOrder
+      .filter((key) => checkedItems[key] === true)
+      .map((key) => {
         const selectedValue = selectedValues[key];
         const firstValue = traits[key]?.split("|")[0] || "";
         return `${key}: ${selectedValue || firstValue}`;
@@ -155,10 +163,18 @@ export function SystemPromptsSection() {
       }
     });
 
+    // 获取当前所有key作为新的order（保持现有顺序，添加新key到末尾）
+    const currentKeys = Object.keys(traits);
+    const newOrder = [
+      ...(settings.systemPrompts?.traitOrder || []).filter((key) => currentKeys.includes(key)),
+      ...currentKeys.filter((key) => !(settings.systemPrompts?.traitOrder || []).includes(key)),
+    ];
+
     updateSystemPrompts({
       activeTraits: traits,
       checkedItems: newCheckedItems,
       selectedValues: newSelectedValues,
+      traitOrder: newOrder, // 新增：同步更新traitOrder
     });
   };
 
@@ -289,7 +305,20 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
 
   const checkedItems = settings.systemPrompts?.checkedItems || {};
   const selectedValues = settings.systemPrompts?.selectedValues || {};
+  const [order, setOrder] = useState<string[]>(
+    settings.systemPrompts?.traitOrder || Object.keys(traits) // 安全回退
+  );
 
+  useEffect(() => {
+    const currentKeys = Object.keys(traits);
+    setOrder((prev) => {
+      // 保留现有顺序，添加新key到末尾，移除不存在的key
+      return [
+        ...prev.filter((key) => currentKeys.includes(key)),
+        ...currentKeys.filter((key) => !prev.includes(key)),
+      ];
+    });
+  }, [traits]); // 依赖traits的变化
   // 保持原有处理函数不变，现在可以正常使用 updateSystemPrompts
   const handleValueSelectChange = (key: string, value: string) => {
     updateSystemPrompts({
@@ -364,8 +393,23 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
   const handleAddTrait = () => {
     if (!newKey.trim() || !newValue.trim()) return;
 
-    // 初始化新特征的状态
+    // 更新 traits 数据
+    const currentValues = traits[newKey] ? traits[newKey].split("|") : [];
+    currentValues.push(newValue);
+    const updatedTraits = {
+      ...traits,
+      [newKey]: currentValues.join("|"),
+    };
+
+    // 更新order，将新key添加到末尾
+    const newOrder = [...order];
+    if (!newOrder.includes(newKey)) {
+      newOrder.push(newKey);
+    }
+
+    // 更新所有状态
     updateSystemPrompts({
+      activeTraits: updatedTraits,
       selectedValues: {
         ...selectedValues,
         [newKey]: newValue,
@@ -374,27 +418,60 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
         ...checkedItems,
         [newKey]: true,
       },
+      traitOrder: newOrder, // 新增：同步更新traitOrder
     });
 
-    // 更新 traits 数据
-    const currentValues = traits[newKey] ? traits[newKey].split("|") : [];
-    currentValues.push(newValue);
-    onTraitsChange({
-      ...traits,
-      [newKey]: currentValues.join("|"),
-    });
-
+    // 通知父组件
+    onTraitsChange(updatedTraits);
     setNewKey("");
     setNewValue("");
   };
 
+  const moveTraitUp = (key: string) => {
+    const index = order.indexOf(key);
+    if (index <= 0) return;
+
+    const newOrder = [...order];
+    [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+    setOrder(newOrder);
+
+    // 保存排序到设置
+    updateSystemPrompts({
+      traitOrder: newOrder,
+    });
+  };
+
+  const moveTraitDown = (key: string) => {
+    const index = order.indexOf(key);
+    if (index >= order.length - 1) return;
+
+    const newOrder = [...order];
+    [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+    setOrder(newOrder);
+    // 保存排序到设置
+    updateSystemPrompts({
+      traitOrder: newOrder,
+    });
+  };
+
   return (
     <div className="space-y-4">
-      {Object.entries(traits).map(([key, value]) => {
+      {order.map((key) => {
+        const value = traits[key];
+        if (!value) return null; // 跳过不存在的key
         const values = value.split("|");
         return (
           <div key={key} className="space-y-2">
             <div className="flex items-center gap-2">
+              {/* 新增排序按钮 */}
+              <div className="flex flex-col gap-1">
+                <Button variant="ghost" size="sm" onClick={() => moveTraitUp(key)}>
+                  <ChevronUp className="h-3 w-3" />
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => moveTraitDown(key)}>
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+              </div>
               <input
                 type="checkbox"
                 checked={checkedItems[key] || false}
