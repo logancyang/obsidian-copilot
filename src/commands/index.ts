@@ -64,9 +64,14 @@ export function addCheckCommand(
  * Process an inline edit command and display a modal with the processed prompt.
  */
 async function processInlineEditCommand(editor: Editor, commandId: string) {
-  const selectedText = editor.getSelection().trim();
-  if (!selectedText) {
-    return;
+  let selectedText = editor.getSelection();
+  if (!selectedText.trim()) {
+    const activeFile = app.workspace.getActiveFile();
+    if (!activeFile) {
+      new Notice("No active note found.");
+      return;
+    }
+    selectedText = await app.vault.cachedRead(activeFile);
   }
 
   const command = getCommandById(commandId);

@@ -219,8 +219,9 @@ export const CommandSettings: React.FC = () => {
         <div className="flex flex-col mb-4 gap-2">
           <div className="text-xl font-bold">Custom Commands</div>
           <div className="text-sm text-muted">
-            To trigger a custom command, highlight text in the editor and select it from the command
-            palette, or right-click and choose it from the context menu if configured.
+            To trigger a custom command, select it from the command palette or right-click and
+            choose it from the context menu if configured. When no text is highlighted, the entire
+            note will be used.
           </div>
         </div>
         {!hasModifiedCommand() && (
