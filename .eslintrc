@@ -27,7 +27,7 @@
     "tailwindcss/enforces-shorthand": "error",
     "tailwindcss/migration-from-tailwind-2": "error",
     "tailwindcss/no-arbitrary-value": "off",
-    "tailwindcss/no-custom-classname": ["error", { "whitelist": ["tw-.*"] }],
+    "tailwindcss/no-custom-classname": ["error"],
     "tailwindcss/no-contradicting-classname": "error",
   },
   "overrides": [
