@@ -61,7 +61,7 @@ function SimilarityBadge({ score }: { score: number }) {
   let text = "🔴";
   if (category === 2) text = "🟠";
   if (category === 3) text = "🟢";
-  return <span className="text-sm">{text}</span>;
+  return <span className="tw-text-sm">{text}</span>;
 }
 
 function RelevantNote({
@@ -106,24 +106,24 @@ function RelevantNote({
     <Collapsible
       open={isOpen}
       onOpenChange={setIsOpen}
-      className="rounded-md border border-border border-solid"
+      className="tw-rounded-md tw-border tw-border-border tw-border-solid"
     >
-      <div className={cn("flex gap-2 p-2 justify-between items-center")}>
-        <Button variant="ghost2" size="icon" className="shrink-0" asChild>
+      <div className={cn("tw-flex tw-gap-2 tw-p-2 tw-justify-between tw-items-center")}>
+        <Button variant="ghost2" size="icon" className="tw-shrink-0" asChild>
           <CollapsibleTrigger>
             <ChevronRight
-              className={cn("size-4 transition-transform duration-200", {
+              className={cn("tw-size-4 tw-transition-transform tw-duration-200", {
                 "transform rotate-90": isOpen,
               })}
             />
           </CollapsibleTrigger>
         </Button>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="tw-flex tw-items-center tw-gap-2 tw-shrink-0">
           <SimilarityBadge score={note.metadata.similarityScore ?? 0} />
         </div>
 
-        <div className="flex-1 overflow-hidden">
+        <div className="tw-flex-1 tw-overflow-hidden">
           <a
             onClick={(e) => {
               e.preventDefault();
@@ -137,7 +137,7 @@ function RelevantNote({
                 onNavigateToNote(true);
               }
             }}
-            className="text-sm text-normal font-bold text-ellipsis overflow-hidden whitespace-nowrap w-full block"
+            className="tw-text-sm tw-text-normal tw-font-bold tw-text-ellipsis tw-overflow-hidden tw-whitespace-nowrap tw-w-full tw-block"
           >
             {note.document.title}
           </a>
@@ -145,8 +145,8 @@ function RelevantNote({
 
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost2" size="icon" onClick={onAddToChat} className="shrink-0">
-              <PlusCircle className="size-4" />
+            <Button variant="ghost2" size="icon" onClick={onAddToChat} className="tw-shrink-0">
+              <PlusCircle className="tw-size-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Add to Chat</TooltipContent>
@@ -154,32 +154,32 @@ function RelevantNote({
       </div>
 
       <CollapsibleContent>
-        <div className="px-4 py-2 border-[0px] border-t border-border border-solid">
-          <div className="text-xs text-muted text-wrap opacity-75 break-all whitespace-pre-wrap">
+        <div className="tw-px-4 tw-py-2 tw-border-[0px] tw-border-t tw-border-border tw-border-solid">
+          <div className="tw-text-xs tw-text-muted tw-text-wrap tw-opacity-75 tw-break-all tw-whitespace-pre-wrap">
             {note.document.path}
           </div>
           {fileContent && (
-            <div className="text-xs text-normal whitespace-pre-wrap pt-2 pb-4 border-t border-border overflow-hidden">
+            <div className="tw-text-xs tw-text-normal tw-whitespace-pre-wrap tw-pt-2 tw-pb-4 tw-border-t tw-border-border tw-overflow-hidden">
               {fileContent}
             </div>
           )}
         </div>
 
-        <div className="flex item-center gap-4 px-4 py-2 border-[0px] border-t border-solid border-border text-xs text-muted">
+        <div className="tw-flex tw-item-center tw-gap-4 tw-px-4 tw-py-2 tw-border-[0px] tw-border-t tw-border-solid tw-border-border tw-text-xs tw-text-muted">
           {note.metadata.similarityScore != null && (
-            <div className="flex items-center gap-1">
+            <div className="tw-flex tw-items-center tw-gap-1">
               <span>Similarity: {(note.metadata.similarityScore * 100).toFixed(1)}%</span>
             </div>
           )}
           {note.metadata.hasOutgoingLinks && (
-            <div className="flex items-center gap-1">
-              <FileOutput className="size-4" />
+            <div className="tw-flex tw-items-center tw-gap-1">
+              <FileOutput className="tw-size-4" />
               <span>Outgoing links</span>
             </div>
           )}
           {note.metadata.hasBacklinks && (
-            <div className="flex items-center gap-1">
-              <FileInput className="size-4" />
+            <div className="tw-flex tw-items-center tw-gap-1">
+              <FileInput className="tw-size-4" />
               <span>Backlinks</span>
             </div>
           )}
@@ -203,24 +203,24 @@ function RelevantNotePopover({
   return (
     <Popover key={note.document.path}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="flex flex-col gap-2 overflow-hidden w-fit min-w-72 max-w-96">
-        <span className="text-sm text-normal">{note.document.title}</span>
-        <span className="text-xs text-muted">{note.document.path}</span>
-        <div className="flex gap-2">
+      <PopoverContent className="tw-flex tw-flex-col tw-gap-2 tw-overflow-hidden tw-w-fit tw-min-w-72 tw-max-w-96">
+        <span className="tw-text-sm tw-text-normal">{note.document.title}</span>
+        <span className="tw-text-xs tw-text-muted">{note.document.path}</span>
+        <div className="tw-flex tw-gap-2">
           <button
             onClick={onAddToChat}
-            className="!bg-transparent inline-flex items-center gap-2 border border-border border-solid !shadow-none hover:!bg-interactive-hover"
+            className="tw-!bg-transparent tw-inline-flex tw-items-center tw-gap-2 tw-border tw-border-border tw-border-solid tw-!shadow-none tw-hover:!bg-interactive-hover"
           >
-            Add to Chat <PlusCircle className="size-4" />
+            Add to Chat <PlusCircle className="tw-size-4" />
           </button>
           <button
             onClick={(e) => {
               const openInNewLeaf = e.metaKey || e.ctrlKey;
               onNavigateToNote(openInNewLeaf);
             }}
-            className="!bg-transparent inline-flex items-center gap-2 border border-border border-solid !shadow-none hover:!bg-interactive-hover"
+            className="tw-!bg-transparent tw-inline-flex tw-items-center tw-gap-2 tw-border tw-border-border tw-border-solid tw-!shadow-none tw-hover:!bg-interactive-hover"
           >
-            Navigate to Note <ArrowRight className="size-4" />
+            Navigate to Note <ArrowRight className="tw-size-4" />
           </button>
         </div>
       </PopoverContent>
@@ -268,14 +268,14 @@ export const RelevantNotes = memo(
         )}
       >
         <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-          <div className="flex justify-between items-center pl-1 pb-2">
-            <div className="flex gap-2 items-center flex-1">
-              <span className="font-semibold text-normal">Relevant Notes</span>
+          <div className="tw-flex tw-justify-between tw-items-center tw-pl-1 tw-pb-2">
+            <div className="tw-flex tw-gap-2 tw-items-center tw-flex-1">
+              <span className="tw-font-semibold tw-text-normal">Relevant Notes</span>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Info className="size-4 text-muted" />
+                  <Info className="tw-size-4 tw-text-muted" />
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="w-64">
+                <TooltipContent side="bottom" className="tw-w-64">
                   Relevance is a combination of semantic similarity and links.
                 </TooltipContent>
               </Tooltip>
@@ -283,17 +283,17 @@ export const RelevantNotes = memo(
               {!hasIndex && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <TriangleAlert className="size-4 text-warning" />
+                    <TriangleAlert className="tw-size-4 tw-text-warning" />
                   </TooltipTrigger>
                   <TooltipContent side="bottom">Note has not been indexed</TooltipContent>
                 </Tooltip>
               )}
             </div>
-            <div className="flex items-center">
+            <div className="tw-flex tw-items-center">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="ghost2" size="icon" onClick={refreshIndex}>
-                    <RefreshCcw className="size-4" />
+                    <RefreshCcw className="tw-size-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">Reindex Current Note</TooltipContent>
@@ -301,19 +301,23 @@ export const RelevantNotes = memo(
               {relevantNotes.length > 0 && (
                 <CollapsibleTrigger asChild>
                   <Button variant="ghost2" size="icon">
-                    {isOpen ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
+                    {isOpen ? (
+                      <ChevronUp className="tw-size-5" />
+                    ) : (
+                      <ChevronDown className="tw-size-5" />
+                    )}
                   </Button>
                 </CollapsibleTrigger>
               )}
             </div>
           </div>
           {relevantNotes.length === 0 && (
-            <div className="flex flex-wrap gap-x-2 gap-y-1 max-h-12 overflow-y-hidden px-1">
-              <span className="text-xs text-muted">No relevant notes found</span>
+            <div className="tw-flex tw-flex-wrap tw-gap-x-2 tw-gap-y-1 tw-max-h-12 tw-overflow-y-hidden tw-px-1">
+              <span className="tw-text-xs tw-text-muted">No relevant notes found</span>
             </div>
           )}
           {!isOpen && relevantNotes.length > 0 && (
-            <div className="flex flex-wrap gap-x-2 gap-y-1 max-h-6 overflow-y-hidden px-1">
+            <div className="tw-flex tw-flex-wrap tw-gap-x-2 tw-gap-y-1 tw-max-h-6 tw-overflow-y-hidden tw-px-1">
               {relevantNotes.map((note) => (
                 <RelevantNotePopover
                   key={note.document.path}
@@ -326,9 +330,9 @@ export const RelevantNotes = memo(
                   <Badge
                     variant="outline"
                     key={note.document.path}
-                    className="text-xs max-w-40 text-muted hover:cursor-pointer hover:bg-interactive-hover"
+                    className="tw-text-xs tw-max-w-40 tw-text-muted tw-hover:cursor-pointer tw-hover:bg-interactive-hover"
                   >
-                    <span className="text-ellipsis overflow-hidden whitespace-nowrap">
+                    <span className="tw-text-ellipsis tw-overflow-hidden tw-whitespace-nowrap">
                       {note.document.title}
                     </span>
                   </Badge>
@@ -337,7 +341,7 @@ export const RelevantNotes = memo(
             </div>
           )}
           <CollapsibleContent>
-            <div className="px-1 py-2 max-h-screen overflow-y-auto flex flex-col gap-2">
+            <div className="tw-px-1 tw-py-2 tw-max-h-screen tw-overflow-y-auto tw-flex tw-flex-col tw-gap-2">
               {relevantNotes.map((note) => (
                 <RelevantNote
                   note={note}

@@ -346,18 +346,18 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
       <Collapsible
         open={isOpen}
         onOpenChange={setIsOpen}
-        className="space-y-2 border rounded-lg pt-4"
+        className="tw-space-y-2 tw-border tw-rounded-lg tw-pt-4"
       >
-        <div className="flex items-center justify-between">
+        <div className="tw-flex tw-items-center tw-justify-between">
           <Label>Additional {getProviderLabel(model.provider)} Settings</Label>
           <CollapsibleTrigger asChild>
-            <Button variant="ghost" size="sm" className="w-9 p-0">
-              <ChevronDown className="h-4 w-4" />
-              <span className="sr-only">Toggle</span>
+            <Button variant="ghost" size="sm" className="tw-w-9 tw-p-0">
+              <ChevronDown className="tw-h-4 tw-w-4" />
+              <span className="tw-sr-only">Toggle</span>
             </Button>
           </CollapsibleTrigger>
         </div>
-        <CollapsibleContent className="space-y-4 max-h-[200px] overflow-y-auto pl-0.5 pr-2 pb-0.5">
+        <CollapsibleContent className="tw-space-y-4 tw-max-h-[200px] tw-overflow-y-auto tw-pl-0.5 tw-pr-2 tw-pb-0.5">
           {content}
         </CollapsibleContent>
       </Collapsible>
@@ -388,7 +388,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="sm:max-w-[425px]"
+        className="tw-sm:max-w-[425px]"
         container={modalContainer}
         ref={(el) => setDialogElement(el)}
       >
@@ -397,7 +397,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
           <DialogDescription>Add a new model to your collection.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
+        <div className="tw-space-y-3">
           <FormField
             label="Model Name"
             required
@@ -419,18 +419,18 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
 
           <FormField
             label={
-              <div className="flex items-center gap-1.5">
-                <span className="leading-none">Display Name</span>
+              <div className="tw-flex tw-items-center tw-gap-1.5">
+                <span className="tw-leading-none">Display Name</span>
                 <TooltipProvider delayDuration={0}>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <HelpCircle className="size-4" />
+                      <HelpCircle className="tw-size-4" />
                     </TooltipTrigger>
-                    <TooltipContent align="start" className="max-w-96" side="bottom">
-                      <div className="text-sm text-muted flex flex-col gap-0.5">
-                        <div className="text-[12px] font-bold">Suggested format:</div>
-                        <div className="text-accent">[Source]-[Payment]:[Pretty Model Name]</div>
-                        <div className="text-[12px]">
+                    <TooltipContent align="start" className="tw-max-w-96" side="bottom">
+                      <div className="tw-text-sm tw-text-muted tw-flex tw-flex-col tw-gap-0.5">
+                        <div className="tw-text-[12px] tw-font-bold">Suggested format:</div>
+                        <div className="tw-text-accent">[Source]-[Payment]:[Pretty Model Name]</div>
+                        <div className="tw-text-[12px]">
                           Example:
                           <li>Direct-Paid:Ds-r1</li>
                           <li>OpenRouter-Paid:Ds-r1</li>
@@ -488,7 +488,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
               onChange={(value) => setModel({ ...model, apiKey: value })}
             />
             {providerInfo.keyManagementURL && (
-              <p className="text-xs text-muted">
+              <p className="tw-text-xs tw-text-muted">
                 <a href={providerInfo.keyManagementURL} target="_blank" rel="noopener noreferrer">
                   Get {providerInfo.label} API Key
                 </a>
@@ -498,15 +498,15 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
 
           <FormField
             label={
-              <div className="flex items-center gap-1.5">
-                <span className="leading-none">Model Capabilities</span>
+              <div className="tw-flex tw-items-center tw-gap-1.5">
+                <span className="tw-leading-none">Model Capabilities</span>
                 <TooltipProvider delayDuration={0}>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <HelpCircle className="size-4" />
+                      <HelpCircle className="tw-size-4" />
                     </TooltipTrigger>
-                    <TooltipContent align="start" className="max-w-96" side="bottom">
-                      <div className="text-sm text-muted">
+                    <TooltipContent align="start" className="tw-max-w-96" side="bottom">
+                      <div className="tw-text-sm tw-text-muted">
                         Only used to display model capabilities, does not affect model functionality
                       </div>
                     </TooltipContent>
@@ -515,9 +515,9 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
               </div>
             }
           >
-            <div className="flex gap-4 items-center">
+            <div className="tw-flex tw-gap-4 tw-items-center">
               {capabilityOptions.map(({ id, label, description }) => (
-                <div key={id} className="flex items-center gap-2">
+                <div key={id} className="tw-flex tw-items-center tw-gap-2">
                   <Checkbox
                     id={id}
                     checked={model.capabilities?.includes(id)}
@@ -531,7 +531,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
                       });
                     }}
                   />
-                  <Label htmlFor={id} className="text-sm">
+                  <Label htmlFor={id} className="tw-text-sm">
                     <TooltipProvider delayDuration={0}>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -549,23 +549,23 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
           {renderProviderSpecificFields()}
         </div>
 
-        <div className="flex justify-end gap-4 items-center">
-          <div className="flex items-center gap-2">
+        <div className="tw-flex tw-justify-end tw-gap-4 tw-items-center">
+          <div className="tw-flex tw-items-center tw-gap-2">
             <Checkbox
               id="enable-cors"
               checked={model.enableCors || false}
               onCheckedChange={(checked: boolean) => setModel({ ...model, enableCors: checked })}
             />
-            <Label htmlFor="enable-cors" className="text-sm">
-              <div className="flex items-center gap-1.5">
+            <Label htmlFor="enable-cors" className="tw-text-sm">
+              <div className="tw-flex tw-items-center tw-gap-1.5">
                 <span>Enable CORS</span>
                 <TooltipProvider delayDuration={0}>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <HelpCircle className="size-4" />
+                      <HelpCircle className="tw-size-4" />
                     </TooltipTrigger>
-                    <TooltipContent align="start" className="max-w-96" side="bottom">
-                      <div className="text-sm text-muted">
+                    <TooltipContent align="start" className="tw-max-w-96" side="bottom">
+                      <div className="tw-text-sm tw-text-muted">
                         Only check this option when prompted that CORS is needed
                       </div>
                     </TooltipContent>
@@ -574,14 +574,14 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
               </div>
             </Label>
           </div>
-          <div className="flex gap-2">
+          <div className="tw-flex tw-gap-2">
             <Button variant="secondary" onClick={handleAdd} disabled={isButtonDisabled()}>
               Add Model
             </Button>
             <Button variant="secondary" onClick={handleVerify} disabled={isButtonDisabled()}>
               {isVerifying ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="tw-mr-2 tw-h-4 tw-w-4 tw-animate-spin" />
                   Verify
                 </>
               ) : (

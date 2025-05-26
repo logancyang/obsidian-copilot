@@ -77,8 +77,8 @@ function InlineEditCommandSettingsModalContent({
   };
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <div className="flex flex-col gap-2">
+    <div className="tw-flex tw-flex-col tw-gap-4 tw-p-4">
+      <div className="tw-flex tw-flex-col tw-gap-2">
         <Label htmlFor="name">Name</Label>
         <Input
           id="name"
@@ -86,10 +86,10 @@ function InlineEditCommandSettingsModalContent({
           onChange={(e) => handleUpdate("name", e.target.value)}
           placeholder="Enter command name"
         />
-        {errors.name && <div className="text-error text-sm">{errors.name}</div>}
+        {errors.name && <div className="tw-text-error tw-text-sm">{errors.name}</div>}
       </div>
 
-      <div className="flex flex-col gap-2">
+      <div className="tw-flex tw-flex-col tw-gap-2">
         <Label htmlFor="prompt">Prompt</Label>
         <CustomPromptSyntaxInstruction />
         <Textarea
@@ -97,14 +97,14 @@ function InlineEditCommandSettingsModalContent({
           value={command.prompt}
           onChange={(e) => handleUpdate("prompt", e.target.value)}
           placeholder="Enter command prompt"
-          className="min-h-[200px]"
+          className="tw-min-h-[200px]"
         />
-        {errors.prompt && <div className="text-error text-sm">{errors.prompt}</div>}
+        {errors.prompt && <div className="tw-text-error tw-text-sm">{errors.prompt}</div>}
       </div>
 
-      <div className="flex flex-col gap-2">
+      <div className="tw-flex tw-flex-col tw-gap-2">
         <Label htmlFor="modelKey">Model (Optional)</Label>
-        <div className="relative w-full group">
+        <div className="tw-relative tw-w-full tw-group">
           <select
             value={command.modelKey}
             onChange={(e) => {
@@ -143,12 +143,12 @@ function InlineEditCommandSettingsModalContent({
               "transition-colors group-hover:[&>svg]:text-normal"
             )}
           >
-            <ChevronDown className="h-4 w-4" />
+            <ChevronDown className="tw-h-4 tw-w-4" />
           </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="tw-flex tw-items-center tw-gap-2">
         <Checkbox
           id="showInContextMenu"
           checked={command.showInContextMenu}
@@ -157,7 +157,7 @@ function InlineEditCommandSettingsModalContent({
         <Label htmlFor="showInContextMenu">Show in context menu</Label>
       </div>
 
-      <div className="flex justify-end gap-2">
+      <div className="tw-flex tw-justify-end tw-gap-2">
         <Button variant="secondary" onClick={onCancel}>
           Cancel
         </Button>

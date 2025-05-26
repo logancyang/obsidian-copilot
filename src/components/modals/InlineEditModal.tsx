@@ -243,43 +243,45 @@ function InlineEditModalContent({
   const showFollowupSubmit = !generating && followupInstruction.trim().length > 0;
 
   return (
-    <div className="flex flex-col gap-4" onKeyDown={handleKeyDown}>
-      <div className="max-h-60 overflow-y-auto text-muted whitespace-pre-wrap">{originalText}</div>
-      <div className="flex flex-col gap-2">
+    <div className="tw-flex tw-flex-col tw-gap-4" onKeyDown={handleKeyDown}>
+      <div className="tw-max-h-60 tw-overflow-y-auto tw-text-muted tw-whitespace-pre-wrap">
+        {originalText}
+      </div>
+      <div className="tw-flex tw-flex-col tw-gap-2">
         {commandName && (
-          <div className="text-normal flex items-center gap-2 font-bold">
-            <PenLine className="w-4 h-4" />
+          <div className="tw-text-normal tw-flex tw-items-center tw-gap-2 tw-font-bold">
+            <PenLine className="tw-w-4 tw-h-4" />
             {commandName}
           </div>
         )}
       </div>
-      <div className="relative group">
+      <div className="tw-relative tw-group">
         <textarea
           ref={textareaRef}
-          className="w-full h-60 text-text peer"
+          className="tw-w-full tw-h-60 tw-text-text tw-peer"
           value={processedMessage ?? aiCurrentMessage ?? "loading..."}
           disabled={processedMessage == null}
           onChange={(e) => setProcessedMessage(e.target.value)}
         />
         {processedMessage && (
           <button
-            className="absolute top-2 right-2 opacity-0 peer-focus-visible:!opacity-0 group-hover:opacity-100 transition-opacity"
+            className="tw-absolute tw-top-2 tw-right-2 tw-opacity-0 tw-peer-focus-visible:!opacity-0 tw-group-hover:opacity-100 tw-transition-opacity"
             onClick={() => {
               navigator.clipboard.writeText(processedMessage);
               new Notice("Copied to clipboard");
             }}
           >
-            <Copy className="w-4 h-4 text-muted-foreground hover:text-accent" />
+            <Copy className="tw-w-4 tw-h-4 tw-text-muted-foreground tw-hover:text-accent" />
           </button>
         )}
       </div>
 
       {!generating && processedMessage && (
-        <div className="flex flex-col gap-2">
+        <div className="tw-flex tw-flex-col tw-gap-2">
           <textarea
             autoFocus
             ref={followupRef}
-            className="w-full h-20 text-text"
+            className="tw-w-full tw-h-20 tw-text-text"
             placeholder="Enter follow-up instructions..."
             value={followupInstruction}
             onChange={(e) => setFollowupInstruction(e.target.value)}
@@ -287,12 +289,12 @@ function InlineEditModalContent({
         </div>
       )}
 
-      <div className="flex justify-between gap-2">
-        <div className="text-faint text-xs flex items-center gap-2 font-bold">
-          <Bot className="w-4 h-4" />
+      <div className="tw-flex tw-justify-between tw-gap-2">
+        <div className="tw-text-faint tw-text-xs tw-flex tw-items-center tw-gap-2 tw-font-bold">
+          <Bot className="tw-w-4 tw-h-4" />
           {getModelDisplayText(selectedModel)}
         </div>
-        <div className="flex gap-2">
+        <div className="tw-flex tw-gap-2">
           {generating ? (
             // When generating, show Stop button
             <Button variant="secondary" onClick={handleStopGeneration}>
@@ -300,49 +302,49 @@ function InlineEditModalContent({
             </Button>
           ) : showFollowupSubmit ? (
             // When follow-up instruction has content, show Submit button with Enter shortcut
-            <Button onClick={handleFollowupSubmit} className="flex items-center gap-1">
+            <Button onClick={handleFollowupSubmit} className="tw-flex tw-items-center tw-gap-1">
               <span>Submit</span>
-              <CornerDownLeft className="size-3" />
+              <CornerDownLeft className="tw-size-3" />
             </Button>
           ) : (
             // Otherwise, show Insert and Replace buttons with shortcut indicators
             <>
               <Button
                 onClick={() => onInsert(processedMessage ?? "")}
-                className="flex items-center gap-1"
+                className="tw-flex tw-items-center tw-gap-1"
               >
                 <span>Insert</span>
-                <div className="flex items-center text-xs text-muted">
+                <div className="tw-flex tw-items-center tw-text-xs tw-text-muted">
                   {Platform.isMacOS ? (
                     <>
-                      <Command className="size-3" />
-                      <ArrowBigUp className="size-3" />
-                      <CornerDownLeft className="size-3" />
+                      <Command className="tw-size-3" />
+                      <ArrowBigUp className="tw-size-3" />
+                      <CornerDownLeft className="tw-size-3" />
                     </>
                   ) : (
                     <>
-                      <span className="text-xs">Ctrl</span>
-                      <ArrowBigUp className="size-3" />
-                      <CornerDownLeft className="size-3" />
+                      <span className="tw-text-xs">Ctrl</span>
+                      <ArrowBigUp className="tw-size-3" />
+                      <CornerDownLeft className="tw-size-3" />
                     </>
                   )}
                 </div>
               </Button>
               <Button
                 onClick={() => onReplace(processedMessage ?? "")}
-                className="flex items-center gap-1"
+                className="tw-flex tw-items-center tw-gap-1"
               >
                 <span>Replace</span>
-                <div className="flex items-center text-xs text-muted">
+                <div className="tw-flex tw-items-center tw-text-xs tw-text-muted">
                   {Platform.isMacOS ? (
                     <>
-                      <Command className="size-3" />
-                      <CornerDownLeft className="size-3" />
+                      <Command className="tw-size-3" />
+                      <CornerDownLeft className="tw-size-3" />
                     </>
                   ) : (
                     <>
-                      <span className="text-xs">Ctrl</span>
-                      <CornerDownLeft className="size-3" />
+                      <span className="tw-text-xs">Ctrl</span>
+                      <CornerDownLeft className="tw-size-3" />
                     </>
                   )}
                 </div>

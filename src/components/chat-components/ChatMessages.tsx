@@ -87,7 +87,7 @@ const ChatMessages = memo(
       <div className="flex flex-col flex-1 h-full overflow-hidden">
         {showHelperComponents && settings.showRelevantNotes && (
           <RelevantNotes
-            className="mb-4"
+            className="tw-mb-4"
             onInsertToChat={onInsertToChat}
             defaultOpen={false}
             key="relevant-notes-in-chat"
@@ -95,7 +95,7 @@ const ChatMessages = memo(
         )}
         <div
           data-testid="chat-messages"
-          className="flex flex-col items-start justify-start flex-1 overflow-y-auto w-full break-words text-[calc(var(--font-text-size)_-_2px)] box-border scroll-smooth mt-auto select-text"
+          className="tw-flex tw-flex-col tw-items-start tw-justify-start tw-flex-1 tw-overflow-y-auto tw-w-full tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-box-border tw-scroll-smooth tw-mt-auto tw-select-text"
         >
           {chatHistory.map(
             (message, index) =>

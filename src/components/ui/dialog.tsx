@@ -45,9 +45,9 @@ const DialogContent = React.forwardRef<
       {...props}
     >
       {children}
-      <DialogPrimitive.Close className="absolute border-none right-4 top-4 text-faint clickable-icon bg-transparent hover:bg-opacity-100 hover:text-normal hover:bg-transparent outline-none focus-visible:outline-none focus-visible:text-normal focus-visible:ring-0">
-        <X className="h-4 w-4" />
-        <span className="sr-only">Close</span>
+      <DialogPrimitive.Close className="tw-absolute tw-border-none tw-right-4 tw-top-4 tw-text-faint tw-clickable-icon tw-bg-transparent tw-hover:bg-opacity-100 tw-hover:text-normal tw-hover:bg-transparent tw-outline-none tw-focus-visible:outline-none tw-focus-visible:text-normal tw-focus-visible:ring-0">
+        <X className="tw-h-4 tw-w-4" />
+        <span className="tw-sr-only">Close</span>
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPortal>
@@ -55,13 +55,19 @@ const DialogContent = React.forwardRef<
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn("flex flex-col space-y-0.5 text-center sm:text-left", className)} {...props} />
+  <div
+    className={cn("tw-flex tw-flex-col tw-space-y-0.5 tw-text-center tw-sm:text-left", className)}
+    {...props}
+  />
 );
 DialogHeader.displayName = "DialogHeader";
 
 const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
-    className={cn("flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2", className)}
+    className={cn(
+      "tw-flex tw-flex-col-reverse tw-sm:flex-row tw-sm:justify-end tw-sm:space-x-2",
+      className
+    )}
     {...props}
   />
 );
@@ -73,7 +79,10 @@ const DialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn("text-lg font-semibold leading-none tracking-tight mt-0", className)}
+    className={cn(
+      "tw-text-lg tw-font-semibold tw-leading-none tw-tracking-tight tw-mt-0",
+      className
+    )}
     {...props}
   />
 ));
@@ -85,7 +94,7 @@ const DialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
-    className={cn("text-sm text-muted", className)}
+    className={cn("tw-text-sm tw-text-muted", className)}
     {...props}
   />
 ));

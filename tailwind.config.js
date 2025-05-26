@@ -7,6 +7,7 @@ import containerQueries from "@tailwindcss/container-queries";
 
 /** @type {import("tailwindcss").Config} */
 module.exports = {
+  prefix: "tw-",
   content: ["./src/**/*.{js,ts,jsx,tsx}", "./src/styles/tailwind.css"],
   darkMode: ["class"],
   plugins: [tailwindcssAnimate, colorOpacityPlugin, containerQueries],

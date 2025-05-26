@@ -289,23 +289,23 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
                       disabled={verifyingProviders.has(item.provider)}
                     />
                   </div>
-                  <div className="w-[72px]">
+                  <div className="tw-w-[72px]">
                     {!item.isVerified ? (
                       <Button
                         onClick={() => verifyApiKey(item.provider, item.apiKey)}
                         disabled={!item.apiKey || verifyingProviders.size > 0}
                         variant="secondary"
                         size="sm"
-                        className="w-full whitespace-nowrap"
+                        className="tw-w-full tw-whitespace-nowrap"
                       >
                         {verifyingProviders.has(item.provider) ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          <Loader2 className="tw-mr-2 tw-h-4 tw-w-4 tw-animate-spin" />
                         ) : (
                           "Verify"
                         )}
                       </Button>
                     ) : (
-                      <span className="text-success text-sm flex items-center justify-center h-9">
+                      <span className="tw-text-success tw-text-sm tw-flex tw-items-center tw-justify-center tw-h-9">
                         Verified
                       </span>
                     )}

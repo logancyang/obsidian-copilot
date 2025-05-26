@@ -21,8 +21,8 @@ function CustomPatternInputModalContent({
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-4">
+    <div className="tw-flex tw-flex-col tw-gap-4">
+      <div className="tw-flex tw-flex-col tw-gap-4">
         <div>
           Comma separated list of paths, tags, note titles or file extension e.g. folder1,
           folder1/folder2, #tag1, #tag2, [[note1]], [[note2]], *.jpg, *.excallidraw.md
@@ -34,7 +34,7 @@ function CustomPatternInputModalContent({
           onKeyDown={handleKeyDown}
         />
       </div>
-      <div className="flex justify-end gap-2">
+      <div className="tw-flex tw-justify-end tw-gap-2">
         <Button variant="secondary" onClick={onCancel}>
           Cancel
         </Button>

@@ -432,7 +432,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
     return (
       <div
-        className="flex flex-col gap-0.5 w-full border border-border border-solid rounded-md pt-2 pb-1 px-1 @container/chat-input"
+        className="tw-flex tw-flex-col tw-gap-0.5 tw-w-full tw-border tw-border-border tw-border-solid tw-rounded-md tw-pt-2 tw-pb-1 tw-px-1 tw-@container/chat-input"
         ref={containerRef}
       >
         <ContextControl
@@ -448,20 +448,20 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         />
 
         {selectedImages.length > 0 && (
-          <div className="selected-images">
+          <div className="tw-selected-images">
             {selectedImages.map((file, index) => (
-              <div key={index} className="image-preview-container">
+              <div key={index} className="tw-image-preview-container">
                 <img
                   src={URL.createObjectURL(file)}
                   alt={file.name}
-                  className="selected-image-preview"
+                  className="tw-selected-image-preview"
                 />
                 <button
-                  className="remove-image-button"
+                  className="tw-remove-image-button"
                   onClick={() => setSelectedImages((prev) => prev.filter((_, i) => i !== index))}
                   title="Remove image"
                 >
-                  <X className="size-4" />
+                  <X className="tw-size-4" />
                 </button>
               </div>
             ))}
@@ -479,7 +479,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           )}
           <textarea
             ref={textAreaRef}
-            className="w-full bg-transparent focus-visible:ring-0 border-none min-h-[60px] max-h-40 overflow-y-auto resize-none px-2 rounded-md text-sm text-normal"
+            className="tw-w-full tw-bg-transparent tw-focus-visible:ring-0 tw-border-none tw-min-h-[60px] tw-max-h-40 tw-overflow-y-auto tw-resize-none tw-px-2 tw-rounded-md tw-text-sm tw-text-normal"
             placeholder={
               "Ask anything. [[ for notes. / for custom prompts. " +
               (isCopilotPlus ? "@ for tools." : "")
@@ -495,18 +495,18 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
               <input {...getInputProps()} />
               {/* Overlay that appears when dragging */}
               {isDragActive && (
-                <div className="absolute inset-0 bg-primary border border-dashed border-primary rounded-md flex items-center justify-center">
-                  <span className="text-primary">Drop images here...</span>
+                <div className="tw-absolute tw-inset-0 tw-bg-primary tw-border tw-border-dashed tw-border-primary tw-rounded-md tw-flex tw-items-center tw-justify-center">
+                  <span className="tw-text-primary">Drop images here...</span>
                 </div>
               )}
             </>
           )}
         </div>
 
-        <div className="flex gap-1 justify-between px-1 h-6">
+        <div className="tw-flex tw-gap-1 tw-justify-between tw-px-1 tw-h-6">
           {isGenerating ? (
-            <div className="flex items-center gap-1 px-1 text-faint text-sm">
-              <Loader2 className="size-3 animate-spin" />
+            <div className="tw-flex tw-items-center tw-gap-1 tw-px-1 tw-text-faint tw-text-sm">
+              <Loader2 className="tw-size-3 tw-animate-spin" />
               <span>Generating...</span>
             </div>
           ) : (
@@ -514,11 +514,11 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost2" size="fit" disabled={disableModelSwitch}>
                   {modelError ? (
-                    <span className="text-error">Model Load Failed</span>
+                    <span className="tw-text-error">Model Load Failed</span>
                   ) : settings.activeModels.find(
-                    (model) =>
-                      model.enabled && getModelKeyFromModel(model) === getDisplayModelKey()
-                  ) ? (
+                      (model) =>
+                        model.enabled && getModelKeyFromModel(model) === getDisplayModelKey()
+                    ) ? (
                     <ModelDisplay
                       model={
                         settings.activeModels.find(
@@ -577,15 +577,15 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
             </DropdownMenu>
           )}
 
-          <div className="flex items-center gap-1">
+          <div className="tw-flex tw-items-center tw-gap-1">
             {isGenerating ? (
               <Button
                 variant="ghost2"
                 size="fit"
-                className="text-muted"
+                className="tw-text-muted"
                 onClick={() => onStopGenerating()}
               >
-                <StopCircle className="size-4" />
+                <StopCircle className="tw-size-4" />
                 Stop
               </Button>
             ) : (
@@ -598,16 +598,16 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                       new AddImageModal(app, onAddImage).open();
                     }}
                   >
-                    <Image className="w-4 h-4" />
+                    <Image className="tw-w-4 tw-h-4" />
                   </Button>
                 )}
                 <Button
                   variant="ghost2"
                   size="fit"
-                  className="text-muted"
+                  className="tw-text-muted"
                   onClick={() => onSendMessage(false)}
                 >
-                  <CornerDownLeft className="!size-3" />
+                  <CornerDownLeft className="tw-!size-3" />
                   <span>chat</span>
                 </Button>
 
@@ -615,21 +615,21 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                   <Button
                     variant="ghost2"
                     size="fit"
-                    className="text-muted @xs/chat-input:inline-flex hidden"
+                    className="tw-text-muted tw-@xs/chat-input:inline-flex tw-hidden"
                     onClick={() => onSendMessage(true)}
                   >
-                    <div className="flex items-center gap-1">
+                    <div className="tw-flex tw-items-center tw-gap-1">
                       {Platform.isMacOS ? (
-                        <div className="flex items-center">
-                          <Command className="!size-3" />
-                          <ArrowBigUp className="!size-3" />
-                          <CornerDownLeft className="!size-3" />
+                        <div className="tw-flex tw-items-center">
+                          <Command className="tw-!size-3" />
+                          <ArrowBigUp className="tw-!size-3" />
+                          <CornerDownLeft className="tw-!size-3" />
                         </div>
                       ) : (
-                        <div className="flex items-center">
+                        <div className="tw-flex tw-items-center">
                           <span>Ctrl</span>
-                          <ArrowBigUp className="size-4" />
-                          <CornerDownLeft className="!size-3" />
+                          <ArrowBigUp className="tw-size-4" />
+                          <CornerDownLeft className="tw-!size-3" />
                         </div>
                       )}
                       <span>vault</span>

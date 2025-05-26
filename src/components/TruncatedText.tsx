@@ -91,7 +91,7 @@ export const TruncatedText = ({
             {children}
           </div>
         </TooltipTrigger>
-        <TooltipContent className="max-w-64 text-wrap break-words text-body-normal">
+        <TooltipContent className="tw-max-w-64 tw-text-wrap tw-break-words tw-text-body-normal">
           {tooltipContent ?? children}
         </TooltipContent>
       </Tooltip>

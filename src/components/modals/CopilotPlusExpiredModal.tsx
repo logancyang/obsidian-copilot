@@ -14,20 +14,20 @@ function CopilotPlusExpiredModalContent({ onCancel }: { onCancel: () => void }) 
     isPlusModel(settings.defaultModelKey) && isPlusModel(settings.embeddingModelKey);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
+    <div className="tw-flex tw-flex-col tw-gap-4">
+      <div className="tw-flex tw-flex-col tw-gap-2">
         <div>
           Your Copilot Plus license key is no longer valid. Please renew your subscription to
           continue using Copilot Plus.
         </div>
         {isUsingPlusModels && (
-          <div className="text-sm text-warning">
+          <div className="tw-text-sm tw-text-warning">
             The Copilot Plus exclusive models will stop working. You can switch to the default
             models in the Settings.
           </div>
         )}
       </div>
-      <div className="flex gap-2 justify-end w-full">
+      <div className="tw-flex tw-gap-2 tw-justify-end tw-w-full">
         <Button variant="ghost" onClick={onCancel}>
           Close
         </Button>
@@ -37,7 +37,7 @@ function CopilotPlusExpiredModalContent({ onCancel }: { onCancel: () => void }) 
             navigateToPlusPage(PLUS_UTM_MEDIUMS.EXPIRED_MODAL);
           }}
         >
-          Renew Now <ExternalLink className="size-4" />
+          Renew Now <ExternalLink className="tw-size-4" />
         </Button>
       </div>
     </div>

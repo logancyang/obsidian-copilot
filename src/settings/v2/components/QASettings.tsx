@@ -23,43 +23,49 @@ export const QASettings: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="tw-space-y-4">
       <section>
-        <div className="space-y-4">
+        <div className="tw-space-y-4">
           {/* Auto-Index Strategy */}
           <SettingItem
             type="select"
             title="Auto-Index Strategy"
             description={
-              <div className="flex items-center gap-1.5">
-                <span className="leading-none">Decide when you want the vault to be indexed.</span>
+              <div className="tw-flex tw-items-center tw-gap-1.5">
+                <span className="tw-leading-none">
+                  Decide when you want the vault to be indexed.
+                </span>
                 <TooltipProvider delayDuration={0}>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <HelpCircle className="size-4" />
+                      <HelpCircle className="tw-size-4" />
                     </TooltipTrigger>
                     <TooltipContent>
-                      <div className="space-y-2 py-2">
-                        <div className="space-y-1">
-                          <div className="text-muted text-sm">Choose when to index your vault:</div>
-                          <ul className="space-y-1 pl-2 list-disc text-sm">
+                      <div className="tw-space-y-2 tw-py-2">
+                        <div className="tw-space-y-1">
+                          <div className="tw-text-muted tw-text-sm">
+                            Choose when to index your vault:
+                          </div>
+                          <ul className="tw-space-y-1 tw-pl-2 tw-list-disc tw-text-sm">
                             <li>
-                              <div className="flex items-center gap-1">
-                                <strong className="inline-block whitespace-nowrap">NEVER:</strong>
+                              <div className="tw-flex tw-items-center tw-gap-1">
+                                <strong className="tw-inline-block tw-whitespace-nowrap">
+                                  NEVER:
+                                </strong>
                                 <span>Manual indexing via command or refresh only</span>
                               </div>
                             </li>
                             <li>
-                              <div className="flex items-center gap-1">
-                                <strong className="inline-block whitespace-nowrap">
+                              <div className="tw-flex tw-items-center tw-gap-1">
+                                <strong className="tw-inline-block tw-whitespace-nowrap">
                                   ON STARTUP:
                                 </strong>
                                 <span>Index updates when plugin loads or reloads</span>
                               </div>
                             </li>
                             <li>
-                              <div className="flex items-center gap-1">
-                                <strong className="inline-block whitespace-nowrap">
+                              <div className="tw-flex tw-items-center tw-gap-1">
+                                <strong className="tw-inline-block tw-whitespace-nowrap">
                                   ON MODE SWITCH:
                                 </strong>
                                 <span>Updates when entering QA mode (Recommended)</span>
@@ -67,7 +73,7 @@ export const QASettings: React.FC = () => {
                             </li>
                           </ul>
                         </div>
-                        <p className="text-callout-warning text-sm">
+                        <p className="tw-text-callout-warning tw-text-sm">
                           Warning: Cost implications for large vaults with paid models
                         </p>
                       </div>

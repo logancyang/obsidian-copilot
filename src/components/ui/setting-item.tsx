@@ -134,7 +134,7 @@ export function SettingItem(props: SettingItemProps) {
             }}
             placeholder={props.placeholder}
             disabled={disabled}
-            className="w-full sm:w-[200px]"
+            className="tw-w-full tw-sm:w-[200px]"
           />
         );
 
@@ -147,7 +147,7 @@ export function SettingItem(props: SettingItemProps) {
             }}
             placeholder={props.placeholder}
             disabled={disabled}
-            className="w-full sm:w-[200px]"
+            className="tw-w-full tw-sm:w-[200px]"
           />
         );
 
@@ -161,7 +161,7 @@ export function SettingItem(props: SettingItemProps) {
             placeholder={props.placeholder}
             rows={props.rows || 3}
             disabled={disabled}
-            className="w-full sm:w-[300px] min-h-[80px]"
+            className="tw-w-full tw-sm:w-[300px] tw-min-h-[80px]"
           />
         );
 
@@ -176,7 +176,7 @@ export function SettingItem(props: SettingItemProps) {
 
       case "select":
         return (
-          <div className="relative w-full sm:w-[200px] group">
+          <div className="tw-relative tw-w-full tw-sm:w-[200px] tw-group">
             <select
               value={props.value?.toString()}
               onChange={(e) => props.onChange?.(e.target.value)}
@@ -208,7 +208,7 @@ export function SettingItem(props: SettingItemProps) {
                 disabled && "opacity-50"
               )}
             >
-              <ChevronDown className="h-4 w-4" />
+              <ChevronDown className="tw-h-4 tw-w-4" />
             </div>
           </div>
         );
@@ -222,7 +222,7 @@ export function SettingItem(props: SettingItemProps) {
             max={props.max}
             step={props.step}
             disabled={disabled}
-            className="w-full sm:w-[300px]"
+            className="tw-w-full tw-sm:w-[300px]"
           />
         );
 
@@ -257,11 +257,11 @@ export function SettingItem(props: SettingItemProps) {
         className
       )}
     >
-      <div className="space-y-1.5 w-full sm:w-[300px]">
-        <div className="text-sm font-medium leading-none">{title}</div>
-        {description && <div className="text-xs text-muted">{description}</div>}
+      <div className="tw-space-y-1.5 tw-w-full tw-sm:w-[300px]">
+        <div className="tw-text-sm tw-font-medium tw-leading-none">{title}</div>
+        {description && <div className="tw-text-xs tw-text-muted">{description}</div>}
       </div>
-      <div className="flex-1 w-full sm:flex sm:justify-end">{renderControl()}</div>
+      <div className="tw-flex-1 tw-w-full tw-sm:flex tw-sm:justify-end">{renderControl()}</div>
     </div>
   );
 }

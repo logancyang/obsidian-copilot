@@ -21,7 +21,7 @@ function CopilotPlusWelcomeModalContent({
 }) {
   const settings = getSettings();
   return (
-    <div className="flex flex-col gap-4">
+    <div className="tw-flex tw-flex-col tw-gap-4">
       <div>
         <p>
           Thanks for purchasing <b>Copilot Plus</b>! You have unlocked the full power of Copilot,
@@ -32,27 +32,28 @@ function CopilotPlusWelcomeModalContent({
           Would you like to apply the Copilot Plus settings now? You can always change this later in
           Settings.
         </p>
-        <ul className="pl-4">
+        <ul className="tw-pl-4">
           <li>
-            Default mode: <b className="text-accent">Copilot Plus</b>
+            Default mode: <b className="tw-text-accent">Copilot Plus</b>
           </li>
           <li>
-            Chat model: <b className="text-accent">{DEFAULT_COPILOT_PLUS_CHAT_MODEL}</b>
+            Chat model: <b className="tw-text-accent">{DEFAULT_COPILOT_PLUS_CHAT_MODEL}</b>
           </li>
           <li>
             <div>
-              Embedding model: <b className="text-accent">{DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL}</b>
+              Embedding model:{" "}
+              <b className="tw-text-accent">{DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL}</b>
             </div>
             {settings.embeddingModelKey !== DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY && (
-              <div className="text-sm text-warning flex items-center gap-1">
-                <TriangleAlert className="size-4" /> It will rebuild your embeddings for the entire
-                vault
+              <div className="tw-text-sm tw-text-warning tw-flex tw-items-center tw-gap-1">
+                <TriangleAlert className="tw-size-4" /> It will rebuild your embeddings for the
+                entire vault
               </div>
             )}
           </li>
         </ul>
       </div>
-      <div className="flex gap-2 justify-end w-full">
+      <div className="tw-flex tw-gap-2 tw-justify-end tw-w-full">
         <Button variant="ghost" onClick={onCancel}>
           Apply Later
         </Button>

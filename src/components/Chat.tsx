@@ -275,11 +275,11 @@ const Chat: React.FC<ChatProps> = ({
       // Get the first 10 words from the first user message and sanitize them
       const firstTenWords = firstUserMessage
         ? firstUserMessage.message
-          .split(/\s+/)
-          .slice(0, 10)
-          .join(" ")
-          .replace(/[\\/:*?"<>|]/g, "") // Remove invalid filename characters
-          .trim()
+            .split(/\s+/)
+            .slice(0, 10)
+            .join(" ")
+            .replace(/[\\/:*?"<>|]/g, "") // Remove invalid filename characters
+            .trim()
         : "Untitled Chat";
 
       // Parse the custom format and replace variables

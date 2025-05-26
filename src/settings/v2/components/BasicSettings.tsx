@@ -97,33 +97,33 @@ export const BasicSettings: React.FC = () => {
     }));
 
   return (
-    <div className="space-y-4">
+    <div className="tw-space-y-4">
       <PlusSettings />
 
       {/* General Section */}
       <section>
-        <div className="text-xl font-bold mb-3">General</div>
-        <div className="space-y-4">
-          <div className="space-y-4">
+        <div className="tw-text-xl tw-font-bold tw-mb-3">General</div>
+        <div className="tw-space-y-4">
+          <div className="tw-space-y-4">
             {/* API Key Section */}
             <SettingItem
               type="custom"
               title="API Keys"
               description={
-                <div className="flex items-center gap-1.5">
-                  <span className="leading-none">
+                <div className="tw-flex tw-items-center tw-gap-1.5">
+                  <span className="tw-leading-none">
                     Configure API keys for different AI providers
                   </span>
                   <TooltipProvider delayDuration={0}>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <HelpCircle className="size-4" />
+                        <HelpCircle className="tw-size-4" />
                       </TooltipTrigger>
-                      <TooltipContent className="max-w-96 flex flex-col gap-2 py-4">
-                        <div className="text-sm font-medium text-accent">
+                      <TooltipContent className="tw-max-w-96 tw-flex tw-flex-col tw-gap-2 tw-py-4">
+                        <div className="tw-text-sm tw-font-medium tw-text-accent">
                           API key required for chat and QA features
                         </div>
-                        <div className="text-xs text-muted">
+                        <div className="tw-text-xs tw-text-muted">
                           To enable chat and QA functionality, please provide an API key from your
                           selected provider.
                         </div>
@@ -138,10 +138,10 @@ export const BasicSettings: React.FC = () => {
                   new ApiKeyDialog(app).open();
                 }}
                 variant="secondary"
-                className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start"
+                className="tw-flex tw-items-center tw-gap-2 tw-w-full tw-sm:w-auto tw-justify-center tw-sm:justify-start"
               >
                 Set Keys
-                <Key className="h-4 w-4" />
+                <Key className="tw-h-4 tw-w-4" />
               </Button>
             </SettingItem>
           </div>
@@ -175,22 +175,22 @@ export const BasicSettings: React.FC = () => {
             type="select"
             title="Embedding Model"
             description={
-              <div className="space-y-2">
-                <div className="flex items-center gap-1.5">
-                  <span className="leading-none font-medium text-accent">
+              <div className="tw-space-y-2">
+                <div className="tw-flex tw-items-center tw-gap-1.5">
+                  <span className="tw-leading-none tw-font-medium tw-text-accent">
                     Core Feature: Powers Semantic Search & QA
                   </span>
                   <TooltipProvider delayDuration={0}>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <HelpCircle className="size-4" />
+                        <HelpCircle className="tw-size-4" />
                       </TooltipTrigger>
-                      <TooltipContent className="max-w-96 flex flex-col gap-2">
-                        <div className="text-sm text-muted pt-2">
+                      <TooltipContent className="tw-max-w-96 tw-flex tw-flex-col tw-gap-2">
+                        <div className="tw-text-sm tw-text-muted tw-pt-2">
                           This model converts text into vector representations, essential for
                           semantic search and QA functionality. Changing the embedding model will:
                         </div>
-                        <ul className="text-sm text-muted pl-4">
+                        <ul className="tw-text-sm tw-text-muted tw-pl-4">
                           <li>Require rebuilding your vault&#39;s vector index</li>
                           <li>Affect semantic search quality</li>
                           <li>Impact QA feature performance</li>
@@ -215,15 +215,15 @@ export const BasicSettings: React.FC = () => {
             type="select"
             title="Default Mode"
             description={
-              <div className="flex items-center gap-1.5">
-                <span className="leading-none">Select the default chat mode</span>
+              <div className="tw-flex tw-items-center tw-gap-1.5">
+                <span className="tw-leading-none">Select the default chat mode</span>
                 <TooltipProvider delayDuration={0}>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <HelpCircle className="size-4" />
+                      <HelpCircle className="tw-size-4" />
                     </TooltipTrigger>
-                    <TooltipContent className="max-w-96 flex flex-col gap-2">
-                      <ul className="text-sm text-muted pl-4">
+                    <TooltipContent className="tw-max-w-96 tw-flex tw-flex-col tw-gap-2">
+                      <ul className="tw-text-sm tw-text-muted tw-pl-4">
                         <li>
                           <strong>Chat:</strong> Regular chat mode for general conversations and
                           tasks. <i>Free to use with your own API key.</i>
@@ -240,7 +240,7 @@ export const BasicSettings: React.FC = () => {
                             href={createPlusPageUrl(PLUS_UTM_MEDIUMS.MODE_SELECT_TOOLTIP)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-accent hover:text-accent-hover"
+                            className="tw-text-accent tw-hover:text-accent-hover"
                           >
                             obsidiancopilot.com
                           </a>{" "}
@@ -303,22 +303,24 @@ export const BasicSettings: React.FC = () => {
             type="custom"
             title="Conversation Filename Template"
             description={
-              <div className="flex items-start gap-1.5 ">
-                <span className="leading-none">
+              <div className="tw-flex tw-items-start tw-gap-1.5 ">
+                <span className="tw-leading-none">
                   Customize the format of saved conversation note names.
                 </span>
                 <TooltipProvider delayDuration={0}>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <HelpCircle className="size-4" />
+                      <HelpCircle className="tw-size-4" />
                     </TooltipTrigger>
-                    <TooltipContent className="max-w-96 flex flex-col gap-2 py-4">
-                      <div className="text-sm font-medium text-accent">
+                    <TooltipContent className="tw-max-w-96 tw-flex tw-flex-col tw-gap-2 tw-py-4">
+                      <div className="tw-text-sm tw-font-medium tw-text-accent">
                         Note: All the following variables must be included in the template.
                       </div>
                       <div>
-                        <div className="text-sm font-medium text-muted">Available variables:</div>
-                        <ul className="text-sm text-muted pl-4">
+                        <div className="tw-text-sm tw-font-medium tw-text-muted">
+                          Available variables:
+                        </div>
+                        <ul className="tw-text-sm tw-text-muted tw-pl-4">
                           <li>
                             <strong>{"{$date}"}</strong>: Date in YYYYMMDD format
                           </li>
@@ -329,7 +331,7 @@ export const BasicSettings: React.FC = () => {
                             <strong>{"{$topic}"}</strong>: Chat conversation topic
                           </li>
                         </ul>
-                        <i className="text-sm text-muted mt-2">
+                        <i className="tw-text-sm tw-text-muted tw-mt-2">
                           Example: {"{$date}_{$time}__{$topic}"} →
                           20250114_153232__polish_this_article_[[Readme]]
                         </i>
@@ -340,7 +342,7 @@ export const BasicSettings: React.FC = () => {
               </div>
             }
           >
-            <div className="flex items-center gap-1.5 w-[320px]">
+            <div className="tw-flex tw-items-center tw-gap-1.5 tw-w-[320px]">
               <Input
                 type="text"
                 className={`transition-all duration-200 flex-grow min-w-[80px] ${isChecking ? "w-[80px]" : "w-[120px]"}`}
@@ -357,7 +359,7 @@ export const BasicSettings: React.FC = () => {
               >
                 {isChecking ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="tw-mr-2 tw-h-4 tw-w-4 tw-animate-spin" />
                     Apply
                   </>
                 ) : (

@@ -30,8 +30,8 @@ function ExtensionInputModalContent({
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
+    <div className="tw-flex tw-flex-col tw-gap-4">
+      <div className="tw-flex tw-flex-col tw-gap-2">
         <Input
           placeholder="Enter the extension (e.g. txt, excalidraw.md)"
           value={extension}
@@ -41,9 +41,9 @@ function ExtensionInputModalContent({
           }}
           onKeyDown={handleKeyDown}
         />
-        {error && <p className="text-error text-sm">{error}</p>}
+        {error && <p className="tw-text-error tw-text-sm">{error}</p>}
       </div>
-      <div className="flex justify-end gap-2">
+      <div className="tw-flex tw-justify-end tw-gap-2">
         <Button variant="secondary" onClick={onCancel}>
           Cancel
         </Button>

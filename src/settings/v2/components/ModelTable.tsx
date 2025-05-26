@@ -82,10 +82,10 @@ const CAPABILITY_ORDER = [
 const renderCapabilities = (model: CustomModel) => {
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="grid grid-cols-3 gap-1 w-16 mx-auto">
+      <div className="tw-grid tw-grid-cols-3 tw-gap-1 tw-w-16 tw-mx-auto">
         {CAPABILITY_ORDER.map((capability) => {
           const config = CAPABILITY_ICONS[capability];
-          if (!config) return <div key={capability} className="w-4" />;
+          if (!config) return <div key={capability} className="tw-w-4" />;
 
           const Icon = config.icon;
           const hasCapability = model.capabilities?.includes(capability);
@@ -93,15 +93,15 @@ const renderCapabilities = (model: CustomModel) => {
           return hasCapability ? (
             <Tooltip key={capability}>
               <TooltipTrigger asChild>
-                <div className="flex items-center justify-center">
+                <div className="tw-flex tw-items-center tw-justify-center">
                   <Icon className={`h-4 w-4 ${config.color}`} />
                 </div>
               </TooltipTrigger>
               <TooltipContent side="bottom">{config.tooltip}</TooltipContent>
             </Tooltip>
           ) : (
-            <div key={capability} className="flex items-center justify-center">
-              <div className="w-4 h-4" />
+            <div key={capability} className="tw-flex tw-items-center tw-justify-center">
+              <div className="tw-w-4 tw-h-4" />
             </div>
           );
         })}
@@ -162,36 +162,36 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
         !model.core && "touch-none"
       )}
     >
-      <CardHeader className="p-3">
-        <div className="flex items-center justify-between">
+      <CardHeader className="tw-p-3">
+        <div className="tw-flex tw-items-center tw-justify-between">
           {!model.core && (
             <div
-              className="mr-2 touch-none cursor-grab active:cursor-grabbing"
+              className="tw-mr-2 tw-touch-none tw-cursor-grab tw-active:cursor-grabbing"
               {...attributes}
               {...listeners}
             >
-              <GripVertical className="h-4 w-4 text-muted-foreground" />
+              <GripVertical className="tw-h-4 tw-w-4 tw-text-muted-foreground" />
             </div>
           )}
 
-          <div className="flex-1 cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 flex items-center justify-center">
+          <div className="tw-flex-1 tw-cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
+            <div className="tw-flex tw-items-center tw-gap-2">
+              <div className="tw-w-3 tw-h-3 tw-flex tw-items-center tw-justify-center">
                 {isExpanded ? (
-                  <ChevronDown className="h-3 w-3 stroke-[7]" />
+                  <ChevronDown className="tw-h-3 tw-w-3 tw-stroke-[7]" />
                 ) : (
-                  <ChevronRight className="h-3 w-3 stroke-[7]" />
+                  <ChevronRight className="tw-h-3 tw-w-3 tw-stroke-[7]" />
                 )}
               </div>
               <div>
-                <div className="flex items-center gap-1">
-                  <span className="font-medium">{model.displayName || model.name}</span>
+                <div className="tw-flex tw-items-center tw-gap-1">
+                  <span className="tw-font-medium">{model.displayName || model.name}</span>
                   {model.capabilities && model.capabilities.length > 0 && (
                     <ModelCapabilityIcons capabilities={model.capabilities} iconSize={14} />
                   )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted bg-secondary">
+                <div className="tw-flex tw-items-center tw-gap-2">
+                  <span className="tw-text-sm tw-text-muted tw-bg-secondary">
                     {getProviderLabel(model.provider, model)}
                   </span>
                 </div>
@@ -199,7 +199,7 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="tw-flex tw-items-center tw-gap-2">
             {onEdit && (
               <Button
                 variant="ghost"
@@ -209,7 +209,7 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
                   onEdit();
                 }}
               >
-                <Pencil className="h-4 w-4" />
+                <Pencil className="tw-h-4 tw-w-4" />
               </Button>
             )}
             {onDelete && !model.core && (
@@ -221,7 +221,7 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
                   onDelete();
                 }}
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="tw-h-4 tw-w-4" />
               </Button>
             )}
           </div>
@@ -233,11 +233,11 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
           isExpanded ? "max-h-20 opacity-100" : "max-h-0 opacity-0 overflow-hidden"
         )}
       >
-        <CardContent className="p-3 pt-0">
-          <div className="flex justify-around">
+        <CardContent className="tw-p-3 tw-pt-0">
+          <div className="tw-flex tw-justify-around">
             {!model.isEmbeddingModel && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm">Enabled</span>
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <span className="tw-text-sm">Enabled</span>
                 <Checkbox
                   checked={model.enabled}
                   onCheckedChange={(checked: boolean) =>
@@ -246,8 +246,8 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
                 />
               </div>
             )}
-            <div className="flex items-center gap-2">
-              <span className="text-sm">CORS</span>
+            <div className="tw-flex tw-items-center tw-gap-2">
+              <span className="tw-text-sm">CORS</span>
               <Checkbox
                 checked={model.enableCors}
                 onCheckedChange={(checked: boolean) =>
@@ -290,50 +290,52 @@ const SortableTableRow: React.FC<{
         !isDragging && "z-auto"
       )}
     >
-      <TableCell className="w-6 px-2">
+      <TableCell className="tw-w-6 tw-px-2">
         {!model.core && (
           <Button
             variant="ghost"
             size="icon"
-            className="cursor-grab touch-none hover:cursor-grab active:cursor-grabbing p-0 h-6 w-6"
+            className="tw-cursor-grab tw-touch-none tw-hover:cursor-grab tw-active:cursor-grabbing tw-p-0 tw-h-6 tw-w-6"
             {...attributes}
             {...listeners}
           >
-            <GripVertical className="h-4 w-4 text-muted-foreground hover:text-foreground transition-colors" />
+            <GripVertical className="tw-h-4 tw-w-4 tw-text-muted-foreground tw-hover:text-foreground tw-transition-colors" />
           </Button>
         )}
       </TableCell>
-      <TableCell className="pl-0">{model.displayName || model.name}</TableCell>
+      <TableCell className="tw-pl-0">{model.displayName || model.name}</TableCell>
       <TableCell>{getProviderLabel(model.provider, model)}</TableCell>
-      <TableCell className="text-center flex justify-center">{renderCapabilities(model)}</TableCell>
+      <TableCell className="tw-text-center tw-flex tw-justify-center">
+        {renderCapabilities(model)}
+      </TableCell>
       {!isEmbeddingModel && (
-        <TableCell className="text-center">
+        <TableCell className="tw-text-center">
           <Checkbox
             id={`${getModelKeyFromModel(model)}-enabled`}
             checked={model.enabled}
             onCheckedChange={(checked: boolean) => onUpdateModel({ ...model, enabled: checked })}
-            className="mx-auto"
+            className="tw-mx-auto"
           />
         </TableCell>
       )}
-      <TableCell className="text-center">
+      <TableCell className="tw-text-center">
         <Checkbox
           id={`${getModelKeyFromModel(model)}-enableCors`}
           checked={model.enableCors}
           onCheckedChange={(checked: boolean) => onUpdateModel({ ...model, enableCors: checked })}
-          className="mx-auto"
+          className="tw-mx-auto"
         />
       </TableCell>
-      <TableCell className="text-center">
-        <div className="flex justify-center gap-2">
+      <TableCell className="tw-text-center">
+        <div className="tw-flex tw-justify-center tw-gap-2">
           {onEdit && (
             <Button
               variant="ghost"
               size="icon"
               onClick={() => onEdit(model)}
-              className="shadow-sm hover:shadow-md transition-shadow"
+              className="tw-shadow-sm tw-hover:shadow-md tw-transition-shadow"
             >
-              <Pencil className="h-4 w-4" />
+              <Pencil className="tw-h-4 tw-w-4" />
             </Button>
           )}
           {!model.core && (
@@ -341,9 +343,9 @@ const SortableTableRow: React.FC<{
               variant="ghost"
               size="icon"
               onClick={() => onDelete(getModelKeyFromModel(model))}
-              className="shadow-sm hover:shadow-md transition-shadow"
+              className="tw-shadow-sm tw-hover:shadow-md tw-transition-shadow"
             >
-              <Trash2 className="h-4 w-4" />
+              <Trash2 className="tw-h-4 tw-w-4" />
             </Button>
           )}
         </div>
@@ -442,7 +444,7 @@ export const ModelTable: React.FC<ModelTableProps> = ({
 
   // Mobile view rendering
   const renderMobileView = () => (
-    <div className="copilot-model-table-mobile relative">
+    <div className="tw-copilot-model-table-mobile tw-relative">
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -453,7 +455,7 @@ export const ModelTable: React.FC<ModelTableProps> = ({
           items={models.map((model) => getModelKeyFromModel(model))}
           strategy={verticalListSortingStrategy}
         >
-          <div className="space-y-2 relative">
+          <div className="tw-space-y-2 tw-relative">
             {models.map((model) => (
               <ModelCard
                 key={getModelKeyFromModel(model)}
@@ -471,29 +473,29 @@ export const ModelTable: React.FC<ModelTableProps> = ({
   );
 
   return (
-    <div className="mb-4">
+    <div className="tw-mb-4">
       {/* Desktop view */}
-      <div className="copilot-model-table-desktop">
+      <div className="tw-copilot-model-table-desktop">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragEnd={handleDragEnd}
           modifiers={[createDragModifier(false)]}
         >
-          <div className="relative overflow-hidden">
+          <div className="tw-relative tw-overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-6 px-2"></TableHead>
-                  <TableHead className="pl-0">Model</TableHead>
+                  <TableHead className="tw-w-6 tw-px-2"></TableHead>
+                  <TableHead className="tw-pl-0">Model</TableHead>
                   <TableHead>Provider</TableHead>
-                  <TableHead className="text-center">Capabilities</TableHead>
-                  {!isEmbeddingModel && <TableHead className="text-center">Enable</TableHead>}
-                  <TableHead className="text-center">CORS</TableHead>
-                  <TableHead className="w-[100px] text-center">Actions</TableHead>
+                  <TableHead className="tw-text-center">Capabilities</TableHead>
+                  {!isEmbeddingModel && <TableHead className="tw-text-center">Enable</TableHead>}
+                  <TableHead className="tw-text-center">CORS</TableHead>
+                  <TableHead className="tw-w-[100px] tw-text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody className="relative">
+              <TableBody className="tw-relative">
                 <SortableContext
                   items={models.map((model) => getModelKeyFromModel(model))}
                   strategy={verticalListSortingStrategy}

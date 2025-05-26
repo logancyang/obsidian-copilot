@@ -45,14 +45,14 @@ export function PasswordInput({
   }, [value]);
 
   return (
-    <div className={cn("relative", className)}>
+    <div className={cn("tw-relative", className)}>
       <Input
         ref={inputRef}
         type={showPassword ? "text" : "password"}
         onChange={(e) => onChange?.(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
-        className={cn("![padding-right:1.75rem] w-full")}
+        className={cn("tw-![padding-right:1.75rem] tw-w-full")}
       />
       <div
         onClick={() => !disabled && setShowPassword(!showPassword)}

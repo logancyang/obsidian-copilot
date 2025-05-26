@@ -157,16 +157,16 @@ export function ChatControls({
   };
 
   return (
-    <div className="w-full py-1 flex justify-between items-center px-1">
-      <div className="flex-1">
+    <div className="tw-w-full tw-py-1 tw-flex tw-justify-between tw-items-center tw-px-1">
+      <div className="tw-flex-1">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost2" size="fit" className="ml-1">
+            <Button variant="ghost2" size="fit" className="tw-ml-1">
               {selectedChain === ChainType.LLM_CHAIN && "chat"}
               {selectedChain === ChainType.VAULT_QA_CHAIN && "vault QA"}
               {selectedChain === ChainType.COPILOT_PLUS_CHAIN && (
-                <div className="flex items-center gap-1">
-                  <Sparkles className="size-4" />
+                <div className="tw-flex tw-items-center tw-gap-1">
+                  <Sparkles className="tw-size-4" />
                   copilot plus (beta)
                 </div>
               )}
@@ -230,7 +230,7 @@ export function ChatControls({
                 }}
               >
                 copilot plus (beta)
-                <SquareArrowOutUpRight className="size-3" />
+                <SquareArrowOutUpRight className="tw-size-3" />
               </DropdownMenuItem>
             )}
           </DropdownMenuContent>
@@ -240,7 +240,7 @@ export function ChatControls({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="ghost2" size="icon" title="New Chat" onClick={onNewChat}>
-              <MessageCirclePlus className="size-4" />
+              <MessageCirclePlus className="tw-size-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>New Chat</TooltipContent>
@@ -267,32 +267,32 @@ export function ChatControls({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost2" size="icon" title="Advanced Settings">
-              <MoreHorizontal className="size-4" />
+              <MoreHorizontal className="tw-size-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-64">
+          <DropdownMenuContent align="end" className="tw-w-64">
             <DropdownMenuItem
-              className="flex justify-between"
+              className="tw-flex tw-justify-between"
               onSelect={(e) => {
                 e.preventDefault();
                 updateSetting("showSuggestedPrompts", !settings.showSuggestedPrompts);
               }}
             >
-              <div className="flex items-center gap-2">
-                <Sparkles className="size-4" />
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <Sparkles className="tw-size-4" />
                 Suggested Prompt
               </div>
               <SettingSwitch checked={settings.showSuggestedPrompts} />
             </DropdownMenuItem>
             <DropdownMenuItem
-              className="flex justify-between"
+              className="tw-flex tw-justify-between"
               onSelect={(e) => {
                 e.preventDefault();
                 updateSetting("showRelevantNotes", !settings.showRelevantNotes);
               }}
             >
-              <div className="flex items-center gap-2">
-                <FileText className="size-4" />
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <FileText className="tw-size-4" />
                 Relevant Note
               </div>
               <SettingSwitch checked={settings.showRelevantNotes} />
