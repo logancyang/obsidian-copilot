@@ -27,7 +27,7 @@
     "tailwindcss/enforces-shorthand": "error",
     "tailwindcss/migration-from-tailwind-2": "error",
     "tailwindcss/no-arbitrary-value": "off",
-    "tailwindcss/no-custom-classname": "error",
+    "tailwindcss/no-custom-classname": ["error", { "whitelist": ["tw-.*"] }],
     "tailwindcss/no-contradicting-classname": "error",
   },
   "overrides": [
@@ -47,7 +47,6 @@
       "callees": ["classnames", "clsx", "ctl", "cn", "cva"],
       "config": "./tailwind.config.js",
       "cssFiles": ["**/*.css", "!**/node_modules", "!**/.*", "!**/dist", "!**/build"],
-      "whitelist": ["tw-animate-*", "tw-fade-*", "tw-zoom-*", "tw-slide-*"],
     },
   },
 }
