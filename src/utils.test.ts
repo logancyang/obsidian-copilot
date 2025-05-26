@@ -2,6 +2,7 @@ import * as Obsidian from "obsidian";
 import { TFile } from "obsidian";
 import {
   extractNoteFiles,
+  extractNoteParagraphs,
   getNotesFromPath,
   getNotesFromTags,
   isFolderMatch,
@@ -376,5 +377,26 @@ describe("extractNoteFiles", () => {
     const result = extractNoteFiles(query, mockVault);
     const resultPaths = result.map((f) => f.path);
     expect(resultPaths).toEqual(["Note-1.md", "Note_2.md", "Note#3.md"]);
+  });
+
+  it("should not extract single note title with paragraphs", () => {
+    const query = "Please refer to [[Note1#1#2]] for more information.";
+    const result = extractNoteFiles(query, mockVault);
+    const resultPaths = result.map((f) => f.path);
+    expect(resultPaths).not.toEqual(["Note1.md"]);
+  });
+
+  it("should extract single note title with paragraphs", () => {
+    const query = "Please refer to [[Note1#1#2]] for more information.";
+    const result = extractNoteParagraphs(query, mockVault);
+    const resultPaths = result.map((f) => f.path);
+    expect(resultPaths).toEqual(["Note1.md"]);
+  });
+
+  it("should extract multiple note titles with paragraphs", () => {
+    const query = "Please refer to [[Note1#1]] and [[Note2#1#2]] for more information.";
+    const result = extractNoteParagraphs(query, mockVault);
+    const resultPaths = result.map((f) => f.path);
+    expect(resultPaths).toEqual(["Note1.md", "Note2.md"]);
   });
 });

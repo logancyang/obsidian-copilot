@@ -1,7 +1,9 @@
 import { CustomPrompt, CustomPromptProcessor } from "@/customPromptProcessor";
 import {
   extractNoteFiles,
+  extractNoteParagraphs,
   getFileContent,
+  getFileParagraphs,
   getFileName,
   getNotesFromPath,
   getNotesFromTags,
@@ -17,6 +19,8 @@ jest.mock("obsidian", () => ({
 
 // Mock the utility functions
 jest.mock("@/utils", () => ({
+  extractNoteParagraphs: jest.fn().mockReturnValue([]),
+  getFileParagraphs: jest.fn().mockReturnValue([]),
   extractNoteFiles: jest.fn().mockReturnValue([]),
   getFileContent: jest.fn(),
   getFileName: jest.fn(),
@@ -53,6 +57,9 @@ describe("CustomPromptProcessor", () => {
 
     // Set default implementations for critical mocks
     (extractNoteFiles as jest.Mock).mockReturnValue([]);
+
+    (extractNoteParagraphs as jest.Mock).mockReturnValue([]);
+    (getFileParagraphs as jest.Mock).mockReturnValue([]);
 
     // Create mock objects
     mockVault = {} as Vault;
