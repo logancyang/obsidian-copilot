@@ -465,6 +465,7 @@ export const COMMAND_IDS = {
   REMOVE_FILES_FROM_COPILOT_INDEX: "remove-files-from-copilot-index",
   SEARCH_ORAMA_DB: "copilot-search-orama-db",
   TOGGLE_COPILOT_CHAT_WINDOW: "chat-toggle-window",
+  ADD_PARAGRAPHS_TO_REFERENCE: "add-paragraphs-to-reference",
 } as const;
 
 export const COMMAND_NAMES: Record<CommandId, string> = {
@@ -489,6 +490,7 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.REMOVE_FILES_FROM_COPILOT_INDEX]: "Remove files from Copilot index (debug)",
   [COMMAND_IDS.SEARCH_ORAMA_DB]: "Search OramaDB (debug)",
   [COMMAND_IDS.TOGGLE_COPILOT_CHAT_WINDOW]: "Toggle Copilot Chat Window",
+  [COMMAND_IDS.ADD_PARAGRAPHS_TO_REFERENCE]: "Add paragraphs to reference",
 };
 
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];
@@ -556,6 +558,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
 export const EVENT_NAMES = {
   CHAT_IS_VISIBLE: "chat-is-visible",
   ACTIVE_LEAF_CHANGE: "active-leaf-change",
+  NEW_TEXT_TO_ADD: "new-text-to-add",
 };
 
 export enum ABORT_REASON {

@@ -66,9 +66,17 @@ const Chat: React.FC<ChatProps> = ({
     };
     eventTarget?.addEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
 
+    const addTextToChat = (event: CustomEvent) => {
+      const newText = event.detail.text;
+      setInputMessage((prev) => `${prev}${newText}`);
+    };
+
+    eventTarget?.addEventListener(EVENT_NAMES.NEW_TEXT_TO_ADD, addTextToChat);
+
     // Cleanup function
     return () => {
       eventTarget?.removeEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
+      eventTarget?.removeEventListener(EVENT_NAMES.NEW_TEXT_TO_ADD, addTextToChat);
     };
   }, [eventTarget]);
 
