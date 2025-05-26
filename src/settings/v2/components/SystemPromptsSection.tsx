@@ -163,10 +163,18 @@ export function SystemPromptsSection() {
       }
     });
 
+    // 获取当前所有key作为新的order（保持现有顺序，添加新key到末尾）
+    const currentKeys = Object.keys(traits);
+    const newOrder = [
+      ...(settings.systemPrompts?.traitOrder || []).filter((key) => currentKeys.includes(key)),
+      ...currentKeys.filter((key) => !(settings.systemPrompts?.traitOrder || []).includes(key)),
+    ];
+
     updateSystemPrompts({
       activeTraits: traits,
       checkedItems: newCheckedItems,
       selectedValues: newSelectedValues,
+      traitOrder: newOrder, // 新增：同步更新traitOrder
     });
   };
 
@@ -385,8 +393,23 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
   const handleAddTrait = () => {
     if (!newKey.trim() || !newValue.trim()) return;
 
-    // 初始化新特征的状态
+    // 更新 traits 数据
+    const currentValues = traits[newKey] ? traits[newKey].split("|") : [];
+    currentValues.push(newValue);
+    const updatedTraits = {
+      ...traits,
+      [newKey]: currentValues.join("|"),
+    };
+
+    // 更新order，将新key添加到末尾
+    const newOrder = [...order];
+    if (!newOrder.includes(newKey)) {
+      newOrder.push(newKey);
+    }
+
+    // 更新所有状态
     updateSystemPrompts({
+      activeTraits: updatedTraits,
       selectedValues: {
         ...selectedValues,
         [newKey]: newValue,
@@ -395,16 +418,11 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
         ...checkedItems,
         [newKey]: true,
       },
+      traitOrder: newOrder, // 新增：同步更新traitOrder
     });
 
-    // 更新 traits 数据
-    const currentValues = traits[newKey] ? traits[newKey].split("|") : [];
-    currentValues.push(newValue);
-    onTraitsChange({
-      ...traits,
-      [newKey]: currentValues.join("|"),
-    });
-
+    // 通知父组件
+    onTraitsChange(updatedTraits);
     setNewKey("");
     setNewValue("");
   };
