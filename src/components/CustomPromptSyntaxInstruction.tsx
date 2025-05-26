@@ -2,7 +2,7 @@ import React from "react";
 
 export function CustomPromptSyntaxInstruction() {
   return (
-    <ul className="tw-text-sm tw-px-4 tw-m-0">
+    <ul className="tw-m-0 tw-px-4 tw-text-sm">
       <li>
         <span className="tw-font-medium tw-text-accent">{"{}"}</span> represents the selected text.
       </li>

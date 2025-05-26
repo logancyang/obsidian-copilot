@@ -440,12 +440,6 @@ If your plugin does not need CSS, delete this file.
   margin: 10px;
 }
 
-.message-content-items {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
 .message-image-content {
   width: 100%;
   max-width: 400px;
@@ -853,24 +847,4 @@ If your plugin does not need CSS, delete this file.
 .model-delete-icon:hover {
   color: var(--text-error);
   opacity: 1;
-}
-
-/* Custom classes for ModelTable responsiveness */
-.copilot-model-table-desktop {
-  display: none;
-}
-
-.copilot-model-table-mobile {
-  display: block;
-}
-
-@media (min-width: 768px) {
-  /* md breakpoint */
-  .copilot-model-table-desktop {
-    display: block; /* Shown on medium screens and up */
-  }
-
-  .copilot-model-table-mobile {
-    display: none; /* Hidden on medium screens and up */
-  }
 }

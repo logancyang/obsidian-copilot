@@ -346,18 +346,18 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
       <Collapsible
         open={isOpen}
         onOpenChange={setIsOpen}
-        className="tw-space-y-2 tw-border tw-rounded-lg tw-pt-4"
+        className="tw-space-y-2 tw-rounded-lg tw-border tw-pt-4"
       >
         <div className="tw-flex tw-items-center tw-justify-between">
           <Label>Additional {getProviderLabel(model.provider)} Settings</Label>
           <CollapsibleTrigger asChild>
             <Button variant="ghost" size="sm" className="tw-w-9 tw-p-0">
-              <ChevronDown className="tw-h-4 tw-w-4" />
+              <ChevronDown className="tw-size-4" />
               <span className="tw-sr-only">Toggle</span>
             </Button>
           </CollapsibleTrigger>
         </div>
-        <CollapsibleContent className="tw-space-y-4 tw-max-h-[200px] tw-overflow-y-auto tw-pl-0.5 tw-pr-2 tw-pb-0.5">
+        <CollapsibleContent className="tw-max-h-[200px] tw-space-y-4 tw-overflow-y-auto tw-pb-0.5 tw-pl-0.5 tw-pr-2">
           {content}
         </CollapsibleContent>
       </Collapsible>
@@ -388,7 +388,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="tw-sm:max-w-[425px]"
+        className="sm:tw-max-w-[425px]"
         container={modalContainer}
         ref={(el) => setDialogElement(el)}
       >
@@ -427,7 +427,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
                       <HelpCircle className="tw-size-4" />
                     </TooltipTrigger>
                     <TooltipContent align="start" className="tw-max-w-96" side="bottom">
-                      <div className="tw-text-sm tw-text-muted tw-flex tw-flex-col tw-gap-0.5">
+                      <div className="tw-flex tw-flex-col tw-gap-0.5 tw-text-sm tw-text-muted">
                         <div className="tw-text-[12px] tw-font-bold">Suggested format:</div>
                         <div className="tw-text-accent">[Source]-[Payment]:[Pretty Model Name]</div>
                         <div className="tw-text-[12px]">
@@ -515,7 +515,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
               </div>
             }
           >
-            <div className="tw-flex tw-gap-4 tw-items-center">
+            <div className="tw-flex tw-items-center tw-gap-4">
               {capabilityOptions.map(({ id, label, description }) => (
                 <div key={id} className="tw-flex tw-items-center tw-gap-2">
                   <Checkbox
@@ -549,7 +549,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
           {renderProviderSpecificFields()}
         </div>
 
-        <div className="tw-flex tw-justify-end tw-gap-4 tw-items-center">
+        <div className="tw-flex tw-items-center tw-justify-end tw-gap-4">
           <div className="tw-flex tw-items-center tw-gap-2">
             <Checkbox
               id="enable-cors"
@@ -581,7 +581,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
             <Button variant="secondary" onClick={handleVerify} disabled={isButtonDisabled()}>
               {isVerifying ? (
                 <>
-                  <Loader2 className="tw-mr-2 tw-h-4 tw-w-4 tw-animate-spin" />
+                  <Loader2 className="tw-mr-2 tw-size-4 tw-animate-spin" />
                   Verify
                 </>
               ) : (

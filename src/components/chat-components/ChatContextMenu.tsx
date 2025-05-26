@@ -23,7 +23,7 @@ function ContextNote({
   onRemoveContext: (path: string) => void;
 }) {
   return (
-    <Badge className="tw-text-xs tw-pl-2 tw-pr-0.5 tw-py-0 tw-items-center">
+    <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
       <div className="tw-flex tw-items-center tw-gap-1">
         <span className="tw-max-w-40 tw-truncate">{note.basename}</span>
         {isActive && <span className="tw-text-xs tw-text-faint">Current</span>}
@@ -43,7 +43,7 @@ function ContextNote({
 
 function ContextUrl({ url, onRemoveUrl }: { url: string; onRemoveUrl: (url: string) => void }) {
   return (
-    <Badge className="tw-text-xs tw-pl-2 tw-pr-0.5 tw-py-0 tw-items-center">
+    <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
       <div className="tw-flex tw-items-center tw-gap-1">
         <span className="tw-max-w-40 tw-truncate">{url}</span>
         <span className="tw-text-xs tw-text-faint">Link</span>
@@ -87,19 +87,19 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   const hasContext = uniqueNotes.length > 0 || uniqueUrls.length > 0 || !!activeNote;
 
   return (
-    <div className="tw-flex tw-items-center tw-w-full tw-gap-1">
-      <div className="tw-flex tw-items-start tw-h-full">
+    <div className="tw-flex tw-w-full tw-items-center tw-gap-1">
+      <div className="tw-flex tw-h-full tw-items-start">
         <Button
           onClick={onAddContext}
           variant="ghost2"
           size="fit"
-          className="tw-border tw-border-border tw-border-solid tw-rounded-sm tw-ml-1"
+          className="tw-ml-1 tw-rounded-sm tw-border tw-border-solid tw-border-border"
         >
           <Plus className="tw-size-4" />
-          {!hasContext && <span className="tw-text-xs tw-leading-4 tw-pr-1">Add context</span>}
+          {!hasContext && <span className="tw-pr-1 tw-text-xs tw-leading-4">Add context</span>}
         </Button>
       </div>
-      <div className="tw-flex tw-gap-1 tw-flex-wrap tw-flex-1">
+      <div className="tw-flex tw-flex-1 tw-flex-wrap tw-gap-1">
         {activeNote && (
           <ContextNote
             key={activeNote.path}

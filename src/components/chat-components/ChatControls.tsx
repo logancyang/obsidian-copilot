@@ -157,7 +157,7 @@ export function ChatControls({
   };
 
   return (
-    <div className="tw-w-full tw-py-1 tw-flex tw-justify-between tw-items-center tw-px-1">
+    <div className="tw-flex tw-w-full tw-items-center tw-justify-between tw-p-1">
       <div className="tw-flex-1">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

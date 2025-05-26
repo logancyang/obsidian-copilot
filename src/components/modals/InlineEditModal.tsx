@@ -244,34 +244,34 @@ function InlineEditModalContent({
 
   return (
     <div className="tw-flex tw-flex-col tw-gap-4" onKeyDown={handleKeyDown}>
-      <div className="tw-max-h-60 tw-overflow-y-auto tw-text-muted tw-whitespace-pre-wrap">
+      <div className="tw-max-h-60 tw-overflow-y-auto tw-whitespace-pre-wrap tw-text-muted">
         {originalText}
       </div>
       <div className="tw-flex tw-flex-col tw-gap-2">
         {commandName && (
-          <div className="tw-text-normal tw-flex tw-items-center tw-gap-2 tw-font-bold">
-            <PenLine className="tw-w-4 tw-h-4" />
+          <div className="tw-flex tw-items-center tw-gap-2 tw-font-bold tw-text-normal">
+            <PenLine className="tw-size-4" />
             {commandName}
           </div>
         )}
       </div>
-      <div className="tw-relative tw-group">
+      <div className="tw-group tw-relative">
         <textarea
           ref={textareaRef}
-          className="tw-w-full tw-h-60 tw-text-text tw-peer"
+          className="tw-peer tw-h-60 tw-w-full tw-text-text"
           value={processedMessage ?? aiCurrentMessage ?? "loading..."}
           disabled={processedMessage == null}
           onChange={(e) => setProcessedMessage(e.target.value)}
         />
         {processedMessage && (
           <button
-            className="tw-absolute tw-top-2 tw-right-2 tw-opacity-0 tw-peer-focus-visible:!opacity-0 tw-group-hover:opacity-100 tw-transition-opacity"
+            className="tw-absolute tw-right-2 tw-top-2 tw-opacity-0 tw-transition-opacity group-hover:tw-opacity-100 peer-focus-visible:!tw-opacity-0"
             onClick={() => {
               navigator.clipboard.writeText(processedMessage);
               new Notice("Copied to clipboard");
             }}
           >
-            <Copy className="tw-w-4 tw-h-4 tw-text-muted-foreground tw-hover:text-accent" />
+            <Copy className="tw-size-4 hover:tw-text-accent" />
           </button>
         )}
       </div>
@@ -281,7 +281,7 @@ function InlineEditModalContent({
           <textarea
             autoFocus
             ref={followupRef}
-            className="tw-w-full tw-h-20 tw-text-text"
+            className="tw-h-20 tw-w-full tw-text-text"
             placeholder="Enter follow-up instructions..."
             value={followupInstruction}
             onChange={(e) => setFollowupInstruction(e.target.value)}
@@ -290,8 +290,8 @@ function InlineEditModalContent({
       )}
 
       <div className="tw-flex tw-justify-between tw-gap-2">
-        <div className="tw-text-faint tw-text-xs tw-flex tw-items-center tw-gap-2 tw-font-bold">
-          <Bot className="tw-w-4 tw-h-4" />
+        <div className="tw-flex tw-items-center tw-gap-2 tw-text-xs tw-font-bold tw-text-faint">
+          <Bot className="tw-size-4" />
           {getModelDisplayText(selectedModel)}
         </div>
         <div className="tw-flex tw-gap-2">

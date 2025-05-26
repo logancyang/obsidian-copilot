@@ -52,14 +52,14 @@ export function PasswordInput({
         onChange={(e) => onChange?.(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
-        className={cn("tw-![padding-right:1.75rem] tw-w-full")}
+        className={cn("!tw-[padding-right:1.75rem] tw-w-full")}
       />
       <div
         onClick={() => !disabled && setShowPassword(!showPassword)}
         className={cn(
-          "absolute right-2 top-0 bottom-0 flex items-center justify-center",
-          "cursor-pointer",
-          disabled && "opacity-50 cursor-not-allowed"
+          "tw-absolute tw-right-2 tw-top-0 tw-bottom-0 tw-flex tw-items-center tw-justify-center",
+          "tw-cursor-pointer",
+          disabled && "tw-opacity-50 tw-cursor-not-allowed"
         )}
         role="button"
         aria-label={showPassword ? "Hide password" : "Show password"}
@@ -67,17 +67,17 @@ export function PasswordInput({
         {showPassword ? (
           <EyeOff
             className={cn(
-              "h-3.5 w-3.5",
-              "text-muted/60 hover:text-accent",
-              "transition-colors duration-200"
+              "tw-h-3.5 tw-w-3.5",
+              "tw-text-muted/60 hover:tw-text-accent",
+              "tw-transition-colors tw-duration-200"
             )}
           />
         ) : (
           <Eye
             className={cn(
-              "h-3.5 w-3.5",
-              "text-muted/60 hover:text-accent",
-              "transition-colors duration-200"
+              "tw-h-3.5 tw-w-3.5",
+              "tw-text-muted/60 hover:tw-text-accent",
+              "tw-transition-colors tw-duration-200"
             )}
           />
         )}

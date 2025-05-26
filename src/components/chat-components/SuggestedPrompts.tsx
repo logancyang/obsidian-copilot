@@ -106,13 +106,13 @@ export const SuggestedPrompts: React.FC<SuggestedPromptsProps> = ({ onClick }) =
             {prompts.map((prompt, i) => (
               <div
                 key={i}
-                className="tw-flex tw-gap-2 tw-p-2 tw-justify-between tw-text-sm tw-rounded-md tw-border tw-border-border tw-border-solid"
+                className="tw-flex tw-justify-between tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2 tw-text-sm"
               >
                 <div className="tw-flex tw-flex-col tw-gap-1">
                   <div className="tw-text-muted">{prompt.title}</div>
                   <div>{prompt.text}</div>
                 </div>
-                <div className="tw-flex tw-items-start tw-h-full">
+                <div className="tw-flex tw-h-full tw-items-start">
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
@@ -133,14 +133,14 @@ export const SuggestedPrompts: React.FC<SuggestedPromptsProps> = ({ onClick }) =
         </CardContent>
       </Card>
       {chainType === ChainType.VAULT_QA_CHAIN && (
-        <div className="tw-text-sm tw-border tw-border-border tw-border-solid tw-p-2 tw-rounded-md">
+        <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2 tw-text-sm">
           Please note that this is a retrieval-based QA. Questions should contain keywords and
           concepts that exist literally in your vault
         </div>
       )}
       {chainType === ChainType.VAULT_QA_CHAIN &&
         indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.NEVER && (
-          <div className="tw-text-sm tw-border tw-border-border tw-border-solid tw-p-2 tw-rounded-md">
+          <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2 tw-text-sm">
             <div>
               <TriangleAlert className="tw-size-4" /> Your auto-index strategy is set to{" "}
               <b>NEVER</b>. Before proceeding, click the{" "}

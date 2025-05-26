@@ -33,11 +33,11 @@ function PatternListGroup({
   return (
     <div className="tw-grid tw-grid-cols-4 tw-gap-2">
       <div className="tw-font-bold">{title}</div>
-      <ul className="tw-list-disc tw-list-inside tw-pl-0 tw-m-0 tw-col-span-3 tw-flex tw-flex-col tw-gap-1">
+      <ul className="tw-col-span-3 tw-m-0 tw-flex tw-list-inside tw-list-disc tw-flex-col tw-gap-1 tw-pl-0">
         {patterns.map((pattern) => (
           <li
             key={pattern}
-            className="tw-flex tw-gap-2 tw-hover:bg-dropdown-hover tw-pl-2 tw-pr-1 tw-rounded-md"
+            className="tw-flex tw-gap-2 tw-rounded-md tw-pl-2 tw-pr-1 hover:tw-bg-dropdown-hover"
           >
             <TruncatedText className="tw-flex-1">{pattern}</TruncatedText>
             <Button variant="ghost2" size="fit" onClick={() => onRemove(pattern)}>
@@ -87,13 +87,9 @@ function PatternMatchingModalContent({
     notePatterns.length > 0;
 
   return (
-    <div className="tw-flex tw-flex-col tw-gap-4 tw-mt-2">
-      <div className="tw-flex tw-flex-col tw-gap-2 tw-p-4 tw-border tw-border-border tw-border-solid tw-rounded-md tw-max-h-[400px] tw-overflow-y-auto">
-        {!hasValue && (
-          <div className="tw-text-center tw-text-sm tw-text-muted-foreground">
-            No patterns specified
-          </div>
-        )}
+    <div className="tw-mt-2 tw-flex tw-flex-col tw-gap-4">
+      <div className="tw-flex tw-max-h-[400px] tw-flex-col tw-gap-2 tw-overflow-y-auto tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-4">
+        {!hasValue && <div className="tw-text-center tw-text-sm">No patterns specified</div>}
         {tagPatterns.length > 0 && (
           <PatternListGroup
             title="Tags"

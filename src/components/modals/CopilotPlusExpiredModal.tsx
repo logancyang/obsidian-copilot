@@ -27,7 +27,7 @@ function CopilotPlusExpiredModalContent({ onCancel }: { onCancel: () => void }) 
           </div>
         )}
       </div>
-      <div className="tw-flex tw-gap-2 tw-justify-end tw-w-full">
+      <div className="tw-flex tw-w-full tw-justify-end tw-gap-2">
         <Button variant="ghost" onClick={onCancel}>
           Close
         </Button>

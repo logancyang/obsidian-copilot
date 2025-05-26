@@ -266,6 +266,7 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
   };
 
   return (
+<<<<<<< HEAD
     <div className="sm:max-w-[500px] max-h-[600px] overflow-y-auto p-4">
       <div className="mb-4">
         <h2 className="text-xl font-bold">AI Provider Settings</h2>
@@ -282,6 +283,35 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
                 </div>
                 <div className="flex flex-row items-center gap-2">
                   <div className="flex-1">
+=======
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent container={modalContainer} className="sm:tw-max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle>AI Provider Settings</DialogTitle>
+          <DialogDescription>
+            Configure your AI providers by adding their API keys.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="tw-space-y-6 tw-py-4">
+          <div className="tw-space-y-4">
+            {providers.map((item: ProviderKeyItem) => (
+              <div key={item.provider} className="tw-flex tw-items-center tw-gap-2">
+                <div className="tw-w-[120px] tw-font-medium">
+                  <div className="tw-truncate">{getProviderLabel(item.provider)}</div>
+                  {getProviderInfo(item.provider).keyManagementURL && (
+                    <a
+                      href={getProviderInfo(item.provider).keyManagementURL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="tw-text-[10px] tw-text-accent hover:tw-text-accent-hover"
+                    >
+                      Get {getProviderLabel(item.provider)} Key
+                    </a>
+                  )}
+                </div>
+                <div className="tw-flex tw-flex-1 tw-items-center tw-gap-2">
+                  <div className="tw-flex-1 tw-pr-2">
+>>>>>>> 0035c48 (More classname fixes)
                     <PasswordInput
                       className="max-w-full"
                       value={item.apiKey}
@@ -299,13 +329,13 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
                         className="tw-w-full tw-whitespace-nowrap"
                       >
                         {verifyingProviders.has(item.provider) ? (
-                          <Loader2 className="tw-mr-2 tw-h-4 tw-w-4 tw-animate-spin" />
+                          <Loader2 className="tw-mr-2 tw-size-4 tw-animate-spin" />
                         ) : (
                           "Verify"
                         )}
                       </Button>
                     ) : (
-                      <span className="tw-text-success tw-text-sm tw-flex tw-items-center tw-justify-center tw-h-9">
+                      <span className="tw-flex tw-h-9 tw-items-center tw-justify-center tw-text-sm tw-text-success">
                         Verified
                       </span>
                     )}

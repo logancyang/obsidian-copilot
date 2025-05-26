@@ -113,7 +113,7 @@ export const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="tw-sm:max-w-[425px]" container={modalContainer}>
+      <DialogContent className="sm:tw-max-w-[425px]" container={modalContainer}>
         <DialogHeader>
           <DialogTitle>Model Settings - {localModel.name}</DialogTitle>
           <DialogDescription>Customize model parameters.</DialogDescription>
@@ -140,7 +140,7 @@ export const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
                       <HelpCircle className="tw-size-4" />
                     </TooltipTrigger>
                     <TooltipContent align="start" className="tw-max-w-96" side="bottom">
-                      <div className="tw-text-sm tw-text-muted tw-flex tw-flex-col tw-gap-0.5">
+                      <div className="tw-flex tw-flex-col tw-gap-0.5 tw-text-sm tw-text-muted">
                         <div className="tw-text-[12px] tw-font-bold">Suggested format:</div>
                         <div className="tw-text-accent">[Source]-[Payment]:[Pretty Model Name]</div>
                         <div className="tw-text-[12px]">
@@ -165,12 +165,7 @@ export const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
           </FormField>
 
           <FormField label="Provider">
-            <Input
-              type="text"
-              value={getProviderLabel(localModel.provider)}
-              disabled
-              className="tw-bg-muted"
-            />
+            <Input type="text" value={getProviderLabel(localModel.provider)} disabled />
           </FormField>
 
           <FormField label="Base URL" description="Leave it blank, unless you are using a proxy.">
@@ -216,7 +211,7 @@ export const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
               </div>
             }
           >
-            <div className="tw-flex tw-gap-4 tw-items-center">
+            <div className="tw-flex tw-items-center tw-gap-4">
               {capabilityOptions.map(({ id, label, description }) => (
                 <div key={id} className="tw-flex tw-items-center tw-gap-2">
                   <Checkbox

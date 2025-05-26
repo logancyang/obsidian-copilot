@@ -19,12 +19,20 @@ type TabId = (typeof TAB_IDS)[number];
 
 // tab icons
 const icons: Record<TabId, JSX.Element> = {
+<<<<<<< HEAD
   basic: <Cog className="w-5 h-5" />,
   model: <Cpu className="w-5 h-5" />,
   QA: <Database className="w-5 h-5" />,
   command: <Command className="w-5 h-5" />,
   plus: <Sparkles className="w-5 h-5" />,
   advanced: <Wrench className="w-5 h-5" />,
+=======
+  basic: <Cog className="tw-size-5" />,
+  model: <Cpu className="tw-size-5" />,
+  QA: <Database className="tw-size-5" />,
+  command: <Command className="tw-size-5" />,
+  advanced: <Wrench className="tw-size-5" />,
+>>>>>>> 0035c48 (More classname fixes)
 };
 
 // tab components
@@ -61,7 +69,7 @@ const SettingsContent: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
           />
         ))}
       </div>
-      <div className="tw-w-[100%] tw-border tw-border-solid" />
+      <div className="tw-w-full tw-border tw-border-solid" />
 
       <div>
         {TAB_IDS.map((id) => {
@@ -99,7 +107,7 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
     <TabProvider>
       <div>
         <div className="tw-flex tw-flex-col tw-gap-2">
-          <h1 className="tw-flex tw-flex-col tw-sm:flex-row tw-sm:items-center tw-sm:justify-between tw-gap-2">
+          <h1 className="tw-flex tw-flex-col tw-gap-2 sm:tw-flex-row sm:tw-items-center sm:tw-justify-between">
             <div className="tw-flex tw-items-center tw-gap-2">
               <span>Copilot Settings</span>
               <div className="tw-flex tw-items-center tw-gap-1">
@@ -111,7 +119,7 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
                         href="obsidian://show-plugin?id=copilot"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="tw-text-xs tw-text-accent tw-hover:underline"
+                        className="tw-text-xs tw-text-accent hover:tw-underline"
                       >
                         (Update to v{latestVersion})
                       </a>
@@ -122,7 +130,7 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
                 )}
               </div>
             </div>
-            <div className="tw-self-end tw-sm:self-auto">
+            <div className="tw-self-end sm:tw-self-auto">
               <Button variant="secondary" size="sm" onClick={handleReset}>
                 Reset Settings
               </Button>

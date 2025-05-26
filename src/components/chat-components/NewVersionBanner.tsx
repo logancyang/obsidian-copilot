@@ -44,7 +44,7 @@ export function NewVersionBanner({ currentVersion }: NewVersionBannerProps) {
           : "animate-out slide-out-to-top duration-300"
       )}
     >
-      <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-p-2 tw-pl-3 tw-mb-1 tw-text-xs tw-border tw-border-border tw-border-solid tw-rounded-md">
+      <div className="tw-mb-1 tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2 tw-pl-3 tw-text-xs">
         <div className="tw-flex tw-items-center tw-gap-2">
           <span className="tw-font-medium">Update available:</span>(
           <a
@@ -60,7 +60,7 @@ export function NewVersionBanner({ currentVersion }: NewVersionBannerProps) {
           <Button
             size="fit"
             variant="ghost2"
-            className="tw-text-accent tw-hover:text-accent-hover"
+            className="tw-text-accent hover:tw-text-accent-hover"
             onClick={() => {
               window.open(`obsidian://show-plugin?id=copilot`, "_blank");
               handleDismiss();

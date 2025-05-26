@@ -78,9 +78,9 @@ const SortableTableRow: React.FC<{
         <div
           {...attributes}
           {...listeners}
-          className="tw-flex tw-items-center tw-justify-center tw-cursor-grab"
+          className="tw-flex tw-cursor-grab tw-items-center tw-justify-center"
         >
-          <GripVertical className="tw-h-4 tw-w-4 tw-text-muted-foreground" />
+          <GripVertical className="tw-size-4" />
         </div>
       </TableCell>
       <TableCell>{command.name}</TableCell>
@@ -110,12 +110,12 @@ const SortableTableRow: React.FC<{
               ).open()
             }
           >
-            <PencilLine className="tw-h-4 tw-w-4" />
+            <PencilLine className="tw-size-4" />
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon">
-                <MoreVertical className="tw-h-4 tw-w-4" />
+                <MoreVertical className="tw-size-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" container={container}>
@@ -129,15 +129,15 @@ const SortableTableRow: React.FC<{
                   ).open()
                 }
               >
-                <PencilLine className="tw-h-4 tw-w-4 tw-mr-2" />
+                <PencilLine className="tw-mr-2 tw-size-4" />
                 Edit
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onDuplicate(command)}>
-                <Copy className="tw-h-4 tw-w-4 tw-mr-2" />
+                <Copy className="tw-mr-2 tw-size-4" />
                 Copy
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onRemove(command)} className="tw-text-error">
-                <Trash2 className="tw-h-4 tw-w-4 tw-mr-2" />
+                <Trash2 className="tw-mr-2 tw-size-4" />
                 Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -216,7 +216,7 @@ export const CommandSettings: React.FC = () => {
   return (
     <div className="tw-space-y-4">
       <section>
-        <div className="tw-flex tw-flex-col tw-mb-4 tw-gap-2">
+        <div className="tw-mb-4 tw-flex tw-flex-col tw-gap-2">
           <div className="tw-text-xl tw-font-bold">Custom Commands</div>
           <div className="tw-text-sm tw-text-muted">
             To trigger a custom command, highlight text in the editor and select it from the command
@@ -224,7 +224,7 @@ export const CommandSettings: React.FC = () => {
           </div>
         </div>
         {!hasModifiedCommand() && (
-          <div className="tw-border tw-border-border tw-border-solid tw-p-4 tw-rounded-md tw-text-muted tw-flex tw-items-start tw-gap-2">
+          <div className="tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-4 tw-text-muted">
             <Lightbulb className="tw-size-5" /> Take control of your inline edit commands! You can
             now create your own or edit built-in ones to tailor functionality to your needs.
           </div>
@@ -241,7 +241,7 @@ export const CommandSettings: React.FC = () => {
                 <TableRow>
                   <TableHead className="tw-w-10"></TableHead>
                   <TableHead>Name</TableHead>
-                  <TableHead className="tw-text-center tw-w-20">In Menu</TableHead>
+                  <TableHead className="tw-w-20 tw-text-center">In Menu</TableHead>
                   <TableHead className="tw-w-10"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -278,7 +278,7 @@ export const CommandSettings: React.FC = () => {
                 ).open()
               }
             >
-              <Plus className="tw-h-4 tw-w-4" /> Add Command
+              <Plus className="tw-size-4" /> Add Command
             </Button>
           </div>
         </div>

@@ -134,7 +134,7 @@ export function SettingItem(props: SettingItemProps) {
             }}
             placeholder={props.placeholder}
             disabled={disabled}
-            className="tw-w-full tw-sm:w-[200px]"
+            className="tw-w-full sm:tw-w-[200px]"
           />
         );
 
@@ -147,7 +147,7 @@ export function SettingItem(props: SettingItemProps) {
             }}
             placeholder={props.placeholder}
             disabled={disabled}
-            className="tw-w-full tw-sm:w-[200px]"
+            className="tw-w-full sm:tw-w-[200px]"
           />
         );
 
@@ -161,7 +161,7 @@ export function SettingItem(props: SettingItemProps) {
             placeholder={props.placeholder}
             rows={props.rows || 3}
             disabled={disabled}
-            className="tw-w-full tw-sm:w-[300px] tw-min-h-[80px]"
+            className="tw-min-h-[80px] tw-w-full sm:tw-w-[300px]"
           />
         );
 
@@ -176,18 +176,18 @@ export function SettingItem(props: SettingItemProps) {
 
       case "select":
         return (
-          <div className="tw-relative tw-w-full tw-sm:w-[200px] tw-group">
+          <div className="tw-group tw-relative tw-w-full sm:tw-w-[200px]">
             <select
               value={props.value?.toString()}
               onChange={(e) => props.onChange?.(e.target.value)}
               disabled={disabled}
               className={cn(
-                "w-full appearance-none",
-                "flex h-9 rounded-md border border-solid border-border bg-dropdown px-3 py-1 pr-8",
-                "text-sm !shadow transition-colors",
-                "focus:outline-none focus:ring-1 focus:ring-ring",
-                "disabled:cursor-not-allowed disabled:opacity-50",
-                "hover:bg-interactive-hover hover:text-normal"
+                "tw-w-full tw-appearance-none",
+                "tw-flex tw-h-9 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-dropdown tw-px-3 tw-py-1 tw-pr-8",
+                "tw-text-sm !tw-shadow tw-transition-colors",
+                "focus:tw-outline-none focus:tw-ring-1 focus:tw-ring-ring",
+                "disabled:tw-cursor-not-allowed disabled:tw-opacity-50",
+                "hover:tw-bg-interactive-hover hover:tw-text-normal"
               )}
             >
               {props.placeholder && (
@@ -203,12 +203,12 @@ export function SettingItem(props: SettingItemProps) {
             </select>
             <div
               className={cn(
-                "pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2",
-                "transition-colors group-hover:[&>svg]:text-normal",
-                disabled && "opacity-50"
+                "tw-pointer-events-none tw-absolute tw-inset-y-0 tw-right-0 tw-flex tw-items-center tw-pr-2",
+                "tw-transition-colors group-hover:[&>svg]:tw-text-normal",
+                disabled && "tw-opacity-50"
               )}
             >
-              <ChevronDown className="tw-h-4 tw-w-4" />
+              <ChevronDown className="tw-size-4" />
             </div>
           </div>
         );
@@ -222,7 +222,7 @@ export function SettingItem(props: SettingItemProps) {
             max={props.max}
             step={props.step}
             disabled={disabled}
-            className="tw-w-full tw-sm:w-[300px]"
+            className="tw-w-full sm:tw-w-[300px]"
           />
         );
 
@@ -252,16 +252,16 @@ export function SettingItem(props: SettingItemProps) {
   return (
     <div
       className={cn(
-        "flex flex-col sm:flex-row items-start sm:items-center justify-between py-4 gap-4",
-        "w-full",
+        "tw-flex tw-flex-col sm:tw-flex-row tw-items-start sm:tw-items-center tw-justify-between tw-py-4 tw-gap-4",
+        "tw-w-full",
         className
       )}
     >
-      <div className="tw-space-y-1.5 tw-w-full tw-sm:w-[300px]">
+      <div className="tw-w-full tw-space-y-1.5 sm:tw-w-[300px]">
         <div className="tw-text-sm tw-font-medium tw-leading-none">{title}</div>
         {description && <div className="tw-text-xs tw-text-muted">{description}</div>}
       </div>
-      <div className="tw-flex-1 tw-w-full tw-sm:flex tw-sm:justify-end">{renderControl()}</div>
+      <div className="tw-w-full tw-flex-1 sm:tw-flex sm:tw-justify-end">{renderControl()}</div>
     </div>
   );
 }

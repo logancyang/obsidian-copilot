@@ -19,8 +19,8 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-modal data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-      "bg-overlay/50", // custom style
+      "tw-fixed tw-inset-0 tw-z-modal data-[state=open]:tw-animate-in data-[state=closed]:tw-animate-out data-[state=closed]:tw-fade-out-0 data-[state=open]:tw-fade-in-0",
+      "tw-bg-overlay/50", // custom style
       className
     )}
     {...props}
@@ -39,14 +39,14 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-modal grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-primary p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+        "tw-fixed tw-left-[50%] tw-top-[50%] tw-z-modal tw-grid tw-w-full tw-max-w-lg tw-translate-x-[-50%] tw-translate-y-[-50%] tw-gap-4 tw-border tw-bg-primary tw-p-6 tw-shadow-lg tw-duration-200 data-[state=open]:tw-animate-in data-[state=closed]:tw-animate-out data-[state=closed]:tw-fade-out-0 data-[state=open]:tw-fade-in-0 data-[state=closed]:tw-zoom-out-95 data-[state=open]:tw-zoom-in-95 data-[state=closed]:tw-slide-out-to-left-1/2 data-[state=closed]:tw-slide-out-to-top-[48%] data-[state=open]:tw-slide-in-from-left-1/2 data-[state=open]:tw-slide-in-from-top-[48%] sm:tw-rounded-lg",
         className
       )}
       {...props}
     >
       {children}
-      <DialogPrimitive.Close className="tw-absolute tw-border-none tw-right-4 tw-top-4 tw-text-faint tw-clickable-icon tw-bg-transparent tw-hover:bg-opacity-100 tw-hover:text-normal tw-hover:bg-transparent tw-outline-none tw-focus-visible:outline-none tw-focus-visible:text-normal tw-focus-visible:ring-0">
-        <X className="tw-h-4 tw-w-4" />
+      <DialogPrimitive.Close className="clickable-icon tw-absolute tw-right-4 tw-top-4 tw-border-none tw-bg-transparent tw-text-faint tw-outline-none hover:tw-bg-transparent hover:tw-bg-opacity-100 hover:tw-text-normal focus-visible:tw-text-normal focus-visible:tw-outline-none focus-visible:tw-ring-0">
+        <X className="tw-size-4" />
         <span className="tw-sr-only">Close</span>
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
@@ -56,7 +56,7 @@ DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
-    className={cn("tw-flex tw-flex-col tw-space-y-0.5 tw-text-center tw-sm:text-left", className)}
+    className={cn("tw-flex tw-flex-col tw-space-y-0.5 tw-text-center sm:tw-text-left", className)}
     {...props}
   />
 );
@@ -65,7 +65,7 @@ DialogHeader.displayName = "DialogHeader";
 const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "tw-flex tw-flex-col-reverse tw-sm:flex-row tw-sm:justify-end tw-sm:space-x-2",
+      "tw-flex tw-flex-col-reverse sm:tw-flex-row sm:tw-justify-end sm:tw-space-x-2",
       className
     )}
     {...props}

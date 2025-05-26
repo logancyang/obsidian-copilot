@@ -33,10 +33,10 @@ const SettingSwitch = React.forwardRef<HTMLDivElement, SettingSwitchProps>(
         ref={ref}
         tabIndex={disabled ? -1 : 0}
         className={cn(
-          "relative inline-flex h-5.5 w-10 shrink-0 cursor-pointer items-center rounded-full transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-          checked ? "bg-interactive-accent" : "bg-[--background-modifier-border-hover]",
-          disabled && "cursor-not-allowed opacity-50",
+          "tw-relative tw-inline-flex tw-h-5.5 tw-w-10 tw-shrink-0 tw-cursor-pointer tw-items-center tw-rounded-full tw-transition-colors",
+          "focus-visible:tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-ring focus-visible:tw-ring-offset-2",
+          checked ? "tw-bg-interactive-accent" : "tw-bg-[--background-modifier-border-hover]",
+          disabled && "tw-cursor-not-allowed tw-opacity-50",
           className
         )}
         onClick={handleClick}
@@ -45,8 +45,8 @@ const SettingSwitch = React.forwardRef<HTMLDivElement, SettingSwitchProps>(
       >
         <div
           className={cn(
-            "pointer-events-none block h-4 w-4 rounded-full bg-toggle-thumb shadow-lg ring-0 transition-transform",
-            checked ? "translate-x-5.5" : "translate-x-0.5"
+            "tw-pointer-events-none tw-block tw-h-4 tw-w-4 tw-rounded-full tw-bg-toggle-thumb tw-shadow-lg tw-ring-0 tw-transition-transform",
+            checked ? "tw-translate-x-5.5" : "tw-translate-x-0.5"
           )}
         />
       </div>

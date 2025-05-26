@@ -41,7 +41,7 @@ function ExtensionInputModalContent({
           }}
           onKeyDown={handleKeyDown}
         />
-        {error && <p className="tw-text-error tw-text-sm">{error}</p>}
+        {error && <p className="tw-text-sm tw-text-error">{error}</p>}
       </div>
       <div className="tw-flex tw-justify-end tw-gap-2">
         <Button variant="secondary" onClick={onCancel}>

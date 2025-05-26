@@ -19,8 +19,8 @@ export function PlusSettings() {
   }, [settings.plusLicenseKey]);
 
   return (
-    <section className="tw-flex tw-flex-col tw-gap-4 tw-bg-secondary tw-p-4 tw-rounded-lg">
-      <div className="tw-text-xl tw-font-bold tw-flex tw-items-center tw-gap-2 tw-justify-between">
+    <section className="tw-flex tw-flex-col tw-gap-4 tw-rounded-lg tw-bg-secondary tw-p-4">
+      <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-text-xl tw-font-bold">
         <span>Copilot Plus (beta)</span>
         {isPlusUser && (
           <Badge variant="outline" className="tw-text-success">
@@ -28,7 +28,7 @@ export function PlusSettings() {
           </Badge>
         )}
       </div>
-      <div className="tw-text-sm tw-text-muted tw-flex tw-flex-col tw-gap-2">
+      <div className="tw-flex tw-flex-col tw-gap-2 tw-text-sm tw-text-muted">
         <div>
           Copilot Plus takes your Obsidian experience to the next level with cutting-edge AI
           capabilities. This premium tier unlocks advanced features, including chat context, PDF and
@@ -64,7 +64,7 @@ export function PlusSettings() {
           }}
           className="tw-min-w-20"
         >
-          {isChecking ? <Loader2 className="tw-h-4 tw-w-4 tw-animate-spin" /> : "Apply"}
+          {isChecking ? <Loader2 className="tw-size-4 tw-animate-spin" /> : "Apply"}
         </Button>
         <Button variant="secondary" onClick={() => navigateToPlusPage(PLUS_UTM_MEDIUMS.SETTINGS)}>
           Join Now <ExternalLink className="tw-size-4" />

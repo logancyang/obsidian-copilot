@@ -64,8 +64,13 @@ const ChatMessages = memo(
 
     if (!chatHistory.filter((message) => message.isVisible).length && !currentAiMessage) {
       return (
+<<<<<<< HEAD
         <div className="flex flex-col gap-2 overflow-y-auto w-full h-full">
           {showHelperComponents && settings.showRelevantNotes && (
+=======
+        <div className="tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto">
+          {settings.showRelevantNotes && (
+>>>>>>> 0035c48 (More classname fixes)
             <RelevantNotes
               onInsertToChat={onInsertToChat}
               defaultOpen={true}
@@ -84,8 +89,13 @@ const ChatMessages = memo(
     };
 
     return (
+<<<<<<< HEAD
       <div className="flex flex-col flex-1 h-full overflow-hidden">
         {showHelperComponents && settings.showRelevantNotes && (
+=======
+      <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
+        {settings.showRelevantNotes && (
+>>>>>>> 0035c48 (More classname fixes)
           <RelevantNotes
             className="tw-mb-4"
             onInsertToChat={onInsertToChat}
@@ -95,7 +105,7 @@ const ChatMessages = memo(
         )}
         <div
           data-testid="chat-messages"
-          className="tw-flex tw-flex-col tw-items-start tw-justify-start tw-flex-1 tw-overflow-y-auto tw-w-full tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-box-border tw-scroll-smooth tw-mt-auto tw-select-text"
+          className="tw-mt-auto tw-box-border tw-flex tw-w-full tw-flex-1 tw-select-text tw-flex-col tw-items-start tw-justify-start tw-overflow-y-auto tw-scroll-smooth tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)]"
         >
           {chatHistory.map(
             (message, index) =>

@@ -106,7 +106,7 @@ function RelevantNote({
     <Collapsible
       open={isOpen}
       onOpenChange={setIsOpen}
-      className="tw-rounded-md tw-border tw-border-border tw-border-solid"
+      className="tw-rounded-md tw-border tw-border-solid tw-border-border"
     >
       <div className={cn("tw-flex tw-gap-2 tw-p-2 tw-justify-between tw-items-center")}>
         <Button variant="ghost2" size="icon" className="tw-shrink-0" asChild>
@@ -119,7 +119,7 @@ function RelevantNote({
           </CollapsibleTrigger>
         </Button>
 
-        <div className="tw-flex tw-items-center tw-gap-2 tw-shrink-0">
+        <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-2">
           <SimilarityBadge score={note.metadata.similarityScore ?? 0} />
         </div>
 
@@ -137,7 +137,7 @@ function RelevantNote({
                 onNavigateToNote(true);
               }
             }}
-            className="tw-text-sm tw-text-normal tw-font-bold tw-text-ellipsis tw-overflow-hidden tw-whitespace-nowrap tw-w-full tw-block"
+            className="tw-block tw-w-full tw-truncate tw-text-sm tw-font-bold tw-text-normal"
           >
             {note.document.title}
           </a>
@@ -154,18 +154,18 @@ function RelevantNote({
       </div>
 
       <CollapsibleContent>
-        <div className="tw-px-4 tw-py-2 tw-border-[0px] tw-border-t tw-border-border tw-border-solid">
-          <div className="tw-text-xs tw-text-muted tw-text-wrap tw-opacity-75 tw-break-all tw-whitespace-pre-wrap">
+        <div className="tw-border-[0px] tw-border-t tw-border-solid tw-border-border tw-px-4 tw-py-2">
+          <div className="tw-whitespace-pre-wrap tw-text-wrap tw-break-all tw-text-xs tw-text-muted tw-opacity-75">
             {note.document.path}
           </div>
           {fileContent && (
-            <div className="tw-text-xs tw-text-normal tw-whitespace-pre-wrap tw-pt-2 tw-pb-4 tw-border-t tw-border-border tw-overflow-hidden">
+            <div className="tw-overflow-hidden tw-whitespace-pre-wrap tw-border-t tw-border-border tw-pb-4 tw-pt-2 tw-text-xs tw-text-normal">
               {fileContent}
             </div>
           )}
         </div>
 
-        <div className="tw-flex tw-item-center tw-gap-4 tw-px-4 tw-py-2 tw-border-[0px] tw-border-t tw-border-solid tw-border-border tw-text-xs tw-text-muted">
+        <div className="tw-flex tw-items-center tw-gap-4 tw-border-[0px] tw-border-t tw-border-solid tw-border-border tw-px-4 tw-py-2 tw-text-xs tw-text-muted">
           {note.metadata.similarityScore != null && (
             <div className="tw-flex tw-items-center tw-gap-1">
               <span>Similarity: {(note.metadata.similarityScore * 100).toFixed(1)}%</span>
@@ -203,13 +203,13 @@ function RelevantNotePopover({
   return (
     <Popover key={note.document.path}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="tw-flex tw-flex-col tw-gap-2 tw-overflow-hidden tw-w-fit tw-min-w-72 tw-max-w-96">
+      <PopoverContent className="tw-flex tw-w-fit tw-min-w-72 tw-max-w-96 tw-flex-col tw-gap-2 tw-overflow-hidden">
         <span className="tw-text-sm tw-text-normal">{note.document.title}</span>
         <span className="tw-text-xs tw-text-muted">{note.document.path}</span>
         <div className="tw-flex tw-gap-2">
           <button
             onClick={onAddToChat}
-            className="tw-!bg-transparent tw-inline-flex tw-items-center tw-gap-2 tw-border tw-border-border tw-border-solid tw-!shadow-none tw-hover:!bg-interactive-hover"
+            className="tw-inline-flex tw-items-center tw-gap-2 tw-border tw-border-solid tw-border-border !tw-bg-transparent !tw-shadow-none hover:!tw-bg-interactive-hover"
           >
             Add to Chat <PlusCircle className="tw-size-4" />
           </button>
@@ -218,7 +218,7 @@ function RelevantNotePopover({
               const openInNewLeaf = e.metaKey || e.ctrlKey;
               onNavigateToNote(openInNewLeaf);
             }}
-            className="tw-!bg-transparent tw-inline-flex tw-items-center tw-gap-2 tw-border tw-border-border tw-border-solid tw-!shadow-none tw-hover:!bg-interactive-hover"
+            className="tw-inline-flex tw-items-center tw-gap-2 tw-border tw-border-solid tw-border-border !tw-bg-transparent !tw-shadow-none hover:!tw-bg-interactive-hover"
           >
             Navigate to Note <ArrowRight className="tw-size-4" />
           </button>
@@ -268,8 +268,8 @@ export const RelevantNotes = memo(
         )}
       >
         <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-          <div className="tw-flex tw-justify-between tw-items-center tw-pl-1 tw-pb-2">
-            <div className="tw-flex tw-gap-2 tw-items-center tw-flex-1">
+          <div className="tw-flex tw-items-center tw-justify-between tw-pb-2 tw-pl-1">
+            <div className="tw-flex tw-flex-1 tw-items-center tw-gap-2">
               <span className="tw-font-semibold tw-text-normal">Relevant Notes</span>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -312,12 +312,12 @@ export const RelevantNotes = memo(
             </div>
           </div>
           {relevantNotes.length === 0 && (
-            <div className="tw-flex tw-flex-wrap tw-gap-x-2 tw-gap-y-1 tw-max-h-12 tw-overflow-y-hidden tw-px-1">
+            <div className="tw-flex tw-max-h-12 tw-flex-wrap tw-gap-x-2 tw-gap-y-1 tw-overflow-y-hidden tw-px-1">
               <span className="tw-text-xs tw-text-muted">No relevant notes found</span>
             </div>
           )}
           {!isOpen && relevantNotes.length > 0 && (
-            <div className="tw-flex tw-flex-wrap tw-gap-x-2 tw-gap-y-1 tw-max-h-6 tw-overflow-y-hidden tw-px-1">
+            <div className="tw-flex tw-max-h-6 tw-flex-wrap tw-gap-x-2 tw-gap-y-1 tw-overflow-y-hidden tw-px-1">
               {relevantNotes.map((note) => (
                 <RelevantNotePopover
                   key={note.document.path}
@@ -330,18 +330,16 @@ export const RelevantNotes = memo(
                   <Badge
                     variant="outline"
                     key={note.document.path}
-                    className="tw-text-xs tw-max-w-40 tw-text-muted tw-hover:cursor-pointer tw-hover:bg-interactive-hover"
+                    className="tw-max-w-40 tw-text-xs tw-text-muted hover:tw-cursor-pointer hover:tw-bg-interactive-hover"
                   >
-                    <span className="tw-text-ellipsis tw-overflow-hidden tw-whitespace-nowrap">
-                      {note.document.title}
-                    </span>
+                    <span className="tw-truncate">{note.document.title}</span>
                   </Badge>
                 </RelevantNotePopover>
               ))}
             </div>
           )}
           <CollapsibleContent>
-            <div className="tw-px-1 tw-py-2 tw-max-h-screen tw-overflow-y-auto tw-flex tw-flex-col tw-gap-2">
+            <div className="tw-flex tw-max-h-screen tw-flex-col tw-gap-2 tw-overflow-y-auto tw-px-1 tw-py-2">
               {relevantNotes.map((note) => (
                 <RelevantNote
                   note={note}

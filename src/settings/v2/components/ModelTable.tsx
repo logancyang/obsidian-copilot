@@ -58,17 +58,17 @@ const CAPABILITY_ICONS: Record<
 > = {
   [ModelCapability.REASONING]: {
     icon: Lightbulb,
-    color: "text-model-capabilities-blue",
+    color: "tw-text-model-capabilities-blue",
     tooltip: MODEL_CAPABILITIES.reasoning,
   },
   [ModelCapability.VISION]: {
     icon: Eye,
-    color: "text-model-capabilities-green",
+    color: "tw-text-model-capabilities-green",
     tooltip: MODEL_CAPABILITIES.vision,
   },
   [ModelCapability.WEB_SEARCH]: {
     icon: Globe,
-    color: "text-model-capabilities-blue",
+    color: "tw-text-model-capabilities-blue",
     tooltip: MODEL_CAPABILITIES.websearch,
   },
 } as const;
@@ -82,7 +82,7 @@ const CAPABILITY_ORDER = [
 const renderCapabilities = (model: CustomModel) => {
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="tw-grid tw-grid-cols-3 tw-gap-1 tw-w-16 tw-mx-auto">
+      <div className="tw-mx-auto tw-grid tw-w-16 tw-grid-cols-3 tw-gap-1">
         {CAPABILITY_ORDER.map((capability) => {
           const config = CAPABILITY_ICONS[capability];
           if (!config) return <div key={capability} className="tw-w-4" />;
@@ -94,14 +94,14 @@ const renderCapabilities = (model: CustomModel) => {
             <Tooltip key={capability}>
               <TooltipTrigger asChild>
                 <div className="tw-flex tw-items-center tw-justify-center">
-                  <Icon className={`h-4 w-4 ${config.color}`} />
+                  <Icon className={cn("tw-size-4", config.color)} />
                 </div>
               </TooltipTrigger>
               <TooltipContent side="bottom">{config.tooltip}</TooltipContent>
             </Tooltip>
           ) : (
             <div key={capability} className="tw-flex tw-items-center tw-justify-center">
-              <div className="tw-w-4 tw-h-4" />
+              <div className="tw-size-4" />
             </div>
           );
         })}
@@ -166,21 +166,21 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
         <div className="tw-flex tw-items-center tw-justify-between">
           {!model.core && (
             <div
-              className="tw-mr-2 tw-touch-none tw-cursor-grab tw-active:cursor-grabbing"
+              className="tw-mr-2 tw-cursor-grab tw-touch-none active:tw-cursor-grabbing"
               {...attributes}
               {...listeners}
             >
-              <GripVertical className="tw-h-4 tw-w-4 tw-text-muted-foreground" />
+              <GripVertical className="tw-size-4" />
             </div>
           )}
 
           <div className="tw-flex-1 tw-cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
             <div className="tw-flex tw-items-center tw-gap-2">
-              <div className="tw-w-3 tw-h-3 tw-flex tw-items-center tw-justify-center">
+              <div className="tw-flex tw-size-3 tw-items-center tw-justify-center">
                 {isExpanded ? (
-                  <ChevronDown className="tw-h-3 tw-w-3 tw-stroke-[7]" />
+                  <ChevronDown className="tw-size-3 tw-stroke-[7]" />
                 ) : (
-                  <ChevronRight className="tw-h-3 tw-w-3 tw-stroke-[7]" />
+                  <ChevronRight className="tw-size-3 tw-stroke-[7]" />
                 )}
               </div>
               <div>
@@ -191,7 +191,7 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
                   )}
                 </div>
                 <div className="tw-flex tw-items-center tw-gap-2">
-                  <span className="tw-text-sm tw-text-muted tw-bg-secondary">
+                  <span className="tw-bg-secondary tw-text-sm tw-text-muted">
                     {getProviderLabel(model.provider, model)}
                   </span>
                 </div>
@@ -209,7 +209,7 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
                   onEdit();
                 }}
               >
-                <Pencil className="tw-h-4 tw-w-4" />
+                <Pencil className="tw-size-4" />
               </Button>
             )}
             {onDelete && !model.core && (
@@ -221,7 +221,7 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
                   onDelete();
                 }}
               >
-                <Trash2 className="tw-h-4 tw-w-4" />
+                <Trash2 className="tw-size-4" />
               </Button>
             )}
           </div>
@@ -295,19 +295,17 @@ const SortableTableRow: React.FC<{
           <Button
             variant="ghost"
             size="icon"
-            className="tw-cursor-grab tw-touch-none tw-hover:cursor-grab tw-active:cursor-grabbing tw-p-0 tw-h-6 tw-w-6"
+            className="tw-size-6 tw-cursor-grab tw-touch-none tw-p-0 hover:tw-cursor-grab active:tw-cursor-grabbing"
             {...attributes}
             {...listeners}
           >
-            <GripVertical className="tw-h-4 tw-w-4 tw-text-muted-foreground tw-hover:text-foreground tw-transition-colors" />
+            <GripVertical className="tw-size-4 tw-transition-colors" />
           </Button>
         )}
       </TableCell>
       <TableCell className="tw-pl-0">{model.displayName || model.name}</TableCell>
       <TableCell>{getProviderLabel(model.provider, model)}</TableCell>
-      <TableCell className="tw-text-center tw-flex tw-justify-center">
-        {renderCapabilities(model)}
-      </TableCell>
+      <TableCell>{renderCapabilities(model)}</TableCell>
       {!isEmbeddingModel && (
         <TableCell className="tw-text-center">
           <Checkbox
@@ -333,9 +331,9 @@ const SortableTableRow: React.FC<{
               variant="ghost"
               size="icon"
               onClick={() => onEdit(model)}
-              className="tw-shadow-sm tw-hover:shadow-md tw-transition-shadow"
+              className="tw-shadow-sm tw-transition-shadow hover:tw-shadow-md"
             >
-              <Pencil className="tw-h-4 tw-w-4" />
+              <Pencil className="tw-size-4" />
             </Button>
           )}
           {!model.core && (
@@ -343,9 +341,9 @@ const SortableTableRow: React.FC<{
               variant="ghost"
               size="icon"
               onClick={() => onDelete(getModelKeyFromModel(model))}
-              className="tw-shadow-sm tw-hover:shadow-md tw-transition-shadow"
+              className="tw-shadow-sm tw-transition-shadow hover:tw-shadow-md"
             >
-              <Trash2 className="tw-h-4 tw-w-4" />
+              <Trash2 className="tw-size-4" />
             </Button>
           )}
         </div>
@@ -444,7 +442,7 @@ export const ModelTable: React.FC<ModelTableProps> = ({
 
   // Mobile view rendering
   const renderMobileView = () => (
-    <div className="tw-copilot-model-table-mobile tw-relative">
+    <div className="tw-relative md:tw-hidden">
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -455,7 +453,7 @@ export const ModelTable: React.FC<ModelTableProps> = ({
           items={models.map((model) => getModelKeyFromModel(model))}
           strategy={verticalListSortingStrategy}
         >
-          <div className="tw-space-y-2 tw-relative">
+          <div className="tw-relative tw-space-y-2">
             {models.map((model) => (
               <ModelCard
                 key={getModelKeyFromModel(model)}
@@ -475,7 +473,7 @@ export const ModelTable: React.FC<ModelTableProps> = ({
   return (
     <div className="tw-mb-4">
       {/* Desktop view */}
-      <div className="tw-copilot-model-table-desktop">
+      <div className="tw-hidden md:tw-block">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}

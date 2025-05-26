@@ -43,10 +43,10 @@ export const QASettings: React.FC = () => {
                     <TooltipContent>
                       <div className="tw-space-y-2 tw-py-2">
                         <div className="tw-space-y-1">
-                          <div className="tw-text-muted tw-text-sm">
+                          <div className="tw-text-sm tw-text-muted">
                             Choose when to index your vault:
                           </div>
-                          <ul className="tw-space-y-1 tw-pl-2 tw-list-disc tw-text-sm">
+                          <ul className="tw-list-disc tw-space-y-1 tw-pl-2 tw-text-sm">
                             <li>
                               <div className="tw-flex tw-items-center tw-gap-1">
                                 <strong className="tw-inline-block tw-whitespace-nowrap">
@@ -73,7 +73,7 @@ export const QASettings: React.FC = () => {
                             </li>
                           </ul>
                         </div>
-                        <p className="tw-text-callout-warning tw-text-sm">
+                        <p className="tw-text-sm tw-text-callout-warning">
                           Warning: Cost implications for large vaults with paid models
                         </p>
                       </div>

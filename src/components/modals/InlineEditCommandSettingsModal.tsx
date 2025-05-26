@@ -86,7 +86,7 @@ function InlineEditCommandSettingsModalContent({
           onChange={(e) => handleUpdate("name", e.target.value)}
           placeholder="Enter command name"
         />
-        {errors.name && <div className="tw-text-error tw-text-sm">{errors.name}</div>}
+        {errors.name && <div className="tw-text-sm tw-text-error">{errors.name}</div>}
       </div>
 
       <div className="tw-flex tw-flex-col tw-gap-2">
@@ -99,12 +99,12 @@ function InlineEditCommandSettingsModalContent({
           placeholder="Enter command prompt"
           className="tw-min-h-[200px]"
         />
-        {errors.prompt && <div className="tw-text-error tw-text-sm">{errors.prompt}</div>}
+        {errors.prompt && <div className="tw-text-sm tw-text-error">{errors.prompt}</div>}
       </div>
 
       <div className="tw-flex tw-flex-col tw-gap-2">
         <Label htmlFor="modelKey">Model (Optional)</Label>
-        <div className="tw-relative tw-w-full tw-group">
+        <div className="tw-group tw-relative tw-w-full">
           <select
             value={command.modelKey}
             onChange={(e) => {
@@ -143,7 +143,7 @@ function InlineEditCommandSettingsModalContent({
               "transition-colors group-hover:[&>svg]:text-normal"
             )}
           >
-            <ChevronDown className="tw-h-4 tw-w-4" />
+            <ChevronDown className="tw-size-4" />
           </div>
         </div>
       </div>

@@ -109,7 +109,7 @@ export const ModelSettings: React.FC = () => {
   return (
     <div className="tw-space-y-4">
       <section>
-        <div className="tw-text-xl tw-font-bold tw-mb-3">Chat Models</div>
+        <div className="tw-mb-3 tw-text-xl tw-font-bold">Chat Models</div>
         <ModelTable
           models={settings.activeModels}
           onEdit={setEditingModel}
@@ -189,7 +189,7 @@ export const ModelSettings: React.FC = () => {
       </section>
 
       <section>
-        <div className="tw-text-xl tw-font-bold tw-mb-3">Embedding Models</div>
+        <div className="tw-mb-3 tw-text-xl tw-font-bold">Embedding Models</div>
         <ModelTable
           models={settings.activeEmbeddingModels}
           onDelete={onDeleteEmbeddingModel}
