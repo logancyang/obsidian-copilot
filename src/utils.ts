@@ -284,7 +284,7 @@ export function sliceFileParagraphs(file: ExtendTFile, content: string): string 
     return content
       .split("\n")
       .slice(
-        isFinite(file.lineRange.start) ? file.lineRange.start : 0,
+        isFinite(file.lineRange.start) ? file.lineRange.start - 1 : 0,
         isFinite(file.lineRange.end) ? file.lineRange.end : undefined
       )
       .join("\n");

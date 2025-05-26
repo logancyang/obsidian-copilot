@@ -1,12 +1,14 @@
 import * as Obsidian from "obsidian";
 import { TFile } from "obsidian";
 import {
+  ExtendTFile,
   extractNoteFiles,
   extractNoteParagraphs,
   getNotesFromPath,
   getNotesFromTags,
   isFolderMatch,
   processVariableNameForNotePath,
+  sliceFileParagraphs,
 } from "./utils";
 
 // Mock Obsidian's TFile class
@@ -398,5 +400,15 @@ describe("extractNoteFiles", () => {
     const result = extractNoteParagraphs(query, mockVault);
     const resultPaths = result.map((f) => f.path);
     expect(resultPaths).toEqual(["Note1.md", "Note2.md"]);
+  });
+});
+
+describe("sliceFileParagraphs", () => {
+  it("should sliceFileParagraphs line range is good for human readability", () => {
+    const content = "first line\nsecond line\n third line";
+    const mockFile = new Obsidian.TFile() as ExtendTFile;
+    mockFile.lineRange = { start: 2, end: 2 };
+    const result = sliceFileParagraphs(mockFile, content);
+    expect(result).toEqual("second line");
   });
 });

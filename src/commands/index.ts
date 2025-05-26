@@ -139,7 +139,8 @@ export function registerCommands(
     const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view as CopilotView;
     chatView.eventTarget.dispatchEvent(
       new CustomEvent(EVENT_NAMES.NEW_TEXT_TO_ADD, {
-        detail: { text: `[[${fileName}#${startLine}#${endLine}]]` },
+        // for add lineNum + 1 is for human-readable
+        detail: { text: `[[${fileName}#${startLine + 1}#${endLine + 1}]]` },
       })
     );
   });
