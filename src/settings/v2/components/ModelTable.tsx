@@ -147,8 +147,9 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
       ref={setNodeRef}
       style={style}
       className={cn(
-        "mb-2",
+        "tw-mb-2",
         isDragging && [
+<<<<<<< HEAD
           "opacity-90",
           "shadow-lg",
           "border-2",
@@ -158,8 +159,18 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
           "bg-primary",
           "rounded-lg",
           "transform-gpu",
+=======
+          "tw-opacity-90",
+          "tw-shadow-lg",
+          "tw-border-accent/50",
+          "tw-relative",
+          "tw-z-[9999]",
+          "tw-bg-background",
+          "tw-rounded-lg",
+          "tw-transform-gpu",
+>>>>>>> f8c5f55 (More classname fixes)
         ],
-        !model.core && "touch-none"
+        !model.core && "tw-touch-none"
       )}
     >
       <CardHeader className="tw-p-3">
@@ -229,8 +240,8 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
       </CardHeader>
       <div
         className={cn(
-          "transition-all duration-300 ease-in-out",
-          isExpanded ? "max-h-20 opacity-100" : "max-h-0 opacity-0 overflow-hidden"
+          "tw-transition-all tw-duration-300 tw-ease-in-out",
+          isExpanded ? "tw-max-h-20 tw-opacity-100" : "tw-max-h-0 tw-overflow-hidden tw-opacity-0"
         )}
       >
         <CardContent className="tw-p-3 tw-pt-0">
@@ -284,10 +295,14 @@ const SortableTableRow: React.FC<{
       ref={setNodeRef}
       style={style}
       className={cn(
-        "hover:bg-interactive-accent/10 transition-colors duration-200",
+        "tw-transition-colors tw-duration-200 hover:tw-bg-interactive-accent/10",
         isDragging &&
+<<<<<<< HEAD
           "shadow-lg bg-primary/90 backdrop-blur-sm relative z-[100] cursor-grabbing border-2 border-accent/50",
         !isDragging && "z-auto"
+=======
+          "tw-relative tw-z-[100] tw-cursor-grabbing tw-shadow-lg tw-backdrop-blur-sm tw-border-accent/50 tw-bg-background/90"
+>>>>>>> f8c5f55 (More classname fixes)
       )}
     >
       <TableCell className="tw-w-6 tw-px-2">

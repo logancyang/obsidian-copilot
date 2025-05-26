@@ -38,10 +38,10 @@ export function NewVersionBanner({ currentVersion }: NewVersionBannerProps) {
   return (
     <div
       className={cn(
-        "min-h-14 overflow-hidden",
+        "tw-min-h-14 tw-overflow-hidden",
         isVisible
-          ? "animate-in slide-in-from-top duration-300"
-          : "animate-out slide-out-to-top duration-300"
+          ? "tw-duration-300 tw-animate-in tw-slide-in-from-top"
+          : "tw-duration-300 tw-animate-out tw-slide-out-to-top"
       )}
     >
       <div className="tw-mb-1 tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2 tw-pl-3 tw-text-xs">

@@ -32,17 +32,16 @@ export const TabItem: React.FC<TabItemProps> = ({ tab, isSelected, onClick, isFi
         "tw-overflow-hidden",
         "tw-whitespace-nowrap",
         "tw-text-sm",
-        "tw-border tw-border-border tw-border-solid",
-        "tw-rounded-t-md tw-rounded-b-[2px]",
+        "tw-border tw-border-solid tw-border-border",
+        "tw-rounded-b-[2px] tw-rounded-t-md",
         "tw-bg-primary",
         "tw-transition-all tw-duration-300 tw-ease-in-out",
-        "hover:tw-border-interactive-accent hover:tw-border-b-0",
+        "hover:tw-border-interactive-accent",
         isSelected && [
           "!tw-bg-interactive-accent",
           "tw-text-on-accent",
           "!tw-px-3",
           "!tw-max-w-full",
-          "tw-border-b-0",
           "tw-transition-all tw-duration-300 tw-ease-in-out",
           "tw-delay-200",
         ],
@@ -53,11 +52,11 @@ export const TabItem: React.FC<TabItemProps> = ({ tab, isSelected, onClick, isFi
       <div
         className={cn(
           "tw-flex tw-items-center tw-justify-center",
-          "tw-w-4 tw-h-4",
+          "tw-size-4",
           "tw-transition-transform tw-duration-200 tw-ease-in-out",
           isSelected
-            ? "tw-opacity-100 tw-max-w-[16px] tw-translate-x-0"
-            : "tw-opacity-0 tw-max-w-0 tw--translate-x-4"
+            ? "tw-max-w-[16px] tw-translate-x-0 tw-opacity-100"
+            : "tw-max-w-0 tw--translate-x-4 tw-opacity-0"
         )}
       >
         {tab.icon}
@@ -68,7 +67,7 @@ export const TabItem: React.FC<TabItemProps> = ({ tab, isSelected, onClick, isFi
           "tw-font-medium",
           "tw-transition-all tw-duration-200 tw-ease-in-out",
           "tw-overflow-hidden tw-whitespace-nowrap",
-          "tw-opacity-100 tw-max-w-[100px] tw-translate-x-0"
+          "tw-max-w-[100px] tw-translate-x-0 tw-opacity-100"
         )}
       >
         {tab.label}
@@ -94,7 +93,7 @@ export const TabContent: React.FC<TabContentProps> = ({ id, children, isSelected
       className={cn(
         "tw-pt-4",
         "tw-transition-all tw-duration-200 tw-ease-in-out",
-        isSelected ? "tw-opacity-100 tw-translate-y-0" : "tw-opacity-0 tw-translate-y-2"
+        isSelected ? "tw-translate-y-0 tw-opacity-100" : "tw-translate-y-2 tw-opacity-0"
       )}
     >
       {children}

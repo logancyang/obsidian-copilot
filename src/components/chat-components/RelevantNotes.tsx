@@ -108,12 +108,12 @@ function RelevantNote({
       onOpenChange={setIsOpen}
       className="tw-rounded-md tw-border tw-border-solid tw-border-border"
     >
-      <div className={cn("tw-flex tw-gap-2 tw-p-2 tw-justify-between tw-items-center")}>
+      <div className={cn("tw-flex tw-items-center tw-justify-between tw-gap-2 tw-p-2")}>
         <Button variant="ghost2" size="icon" className="tw-shrink-0" asChild>
           <CollapsibleTrigger>
             <ChevronRight
               className={cn("tw-size-4 tw-transition-transform tw-duration-200", {
-                "transform rotate-90": isOpen,
+                "rotate-90": isOpen,
               })}
             />
           </CollapsibleTrigger>
@@ -263,7 +263,7 @@ export const RelevantNotes = memo(
     return (
       <div
         className={cn(
-          "w-full border border-transparent border-b-border border-solid pb-2",
+          "tw-w-full tw-border tw-border-solid tw-border-transparent tw-border-b-border tw-pb-2",
           className
         )}
       >

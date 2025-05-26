@@ -122,12 +122,12 @@ function InlineEditCommandSettingsModalContent({
               handleUpdate("modelKey", e.target.value);
             }}
             className={cn(
-              "w-full appearance-none",
-              "flex h-9 rounded-md border border-solid border-border bg-dropdown px-3 py-1 pr-8",
-              "text-sm !shadow transition-colors",
-              "focus:outline-none focus:ring-1 focus:ring-ring",
-              "disabled:cursor-not-allowed disabled:opacity-50",
-              "hover:bg-interactive-hover hover:text-normal"
+              "tw-w-full tw-appearance-none",
+              "tw-flex tw-h-9 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-dropdown tw-px-3 tw-py-1 tw-pr-8",
+              "tw-text-sm !tw-shadow tw-transition-colors",
+              "focus:tw-outline-none focus:tw-ring-1 focus:tw-ring-ring",
+              "disabled:tw-cursor-not-allowed disabled:tw-opacity-50",
+              "hover:tw-bg-interactive-hover hover:tw-text-normal"
             )}
           >
             <option value="">Inherit from chat model</option>
@@ -139,8 +139,8 @@ function InlineEditCommandSettingsModalContent({
           </select>
           <div
             className={cn(
-              "pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2",
-              "transition-colors group-hover:[&>svg]:text-normal"
+              "tw-pointer-events-none tw-absolute tw-inset-y-0 tw-right-0 tw-flex tw-items-center tw-pr-2",
+              "tw-transition-colors group-hover:[&>svg]:tw-text-normal"
             )}
           >
             <ChevronDown className="tw-size-4" />

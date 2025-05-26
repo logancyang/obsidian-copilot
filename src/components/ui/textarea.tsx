@@ -38,8 +38,8 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, React.ComponentProps<"tex
     return (
       <textarea
         className={cn(
-          "tw-border-solid tw-resize-y tw-min-w-fit tw-overflow-auto",
-          "tw-flex tw-min-h-[60px] tw-max-h-[300px] tw-w-full tw-rounded-md tw-border tw-border-primary-alt tw-bg-transparent tw-px-3 tw-py-2 tw-text-base tw-shadow-sm placeholder:tw-text-muted focus-visible:tw-outline-none focus-visible:tw-ring-1 focus-visible:tw-ring-ring disabled:tw-cursor-not-allowed disabled:tw-opacity-50 md:tw-text-sm",
+          "tw-min-w-fit tw-resize-y tw-overflow-auto tw-border-solid",
+          "tw-flex tw-max-h-[300px] tw-min-h-[60px] tw-w-full tw-rounded-md tw-border tw-bg-transparent tw-px-3 tw-py-2 tw-text-base tw-shadow-sm placeholder:tw-text-muted focus-visible:tw-outline-none focus-visible:tw-ring-1 focus-visible:tw-ring-ring disabled:tw-cursor-not-allowed disabled:tw-opacity-50 md:tw-text-sm",
           className
         )}
         value={value}

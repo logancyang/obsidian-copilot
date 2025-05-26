@@ -356,7 +356,7 @@ export const BasicSettings: React.FC = () => {
               <Input
                 type="text"
                 className={cn(
-                  "tw-transition-all tw-duration-200 tw-grow tw-min-w-[80px]",
+                  "tw-min-w-[80px] tw-grow tw-transition-all tw-duration-200",
                   isChecking ? "tw-w-[80px]" : "tw-w-[120px]"
                 )}
                 placeholder="{$date}_{$time}__{$topic}"

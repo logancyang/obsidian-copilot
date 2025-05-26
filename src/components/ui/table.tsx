@@ -7,7 +7,7 @@ const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableE
     <div className="tw-relative tw-w-full tw-overflow-auto">
       <table
         ref={ref}
-        className={cn("tw-w-full tw-caption-bottom tw-text-sm tw-border-collapse", className)}
+        className={cn("tw-w-full tw-caption-bottom tw-border-collapse tw-text-sm", className)}
         {...props}
       />
     </div>
@@ -19,16 +19,14 @@ const TableHeader = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-  <thead ref={ref} className={cn("tw-[&_tr]:border-b", className)} {...props} />
+  <thead ref={ref} className={cn("[&_tr]:tw-border-b", className)} {...props} />
 ));
 TableHeader.displayName = "TableHeader";
 
 const TableBody = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
->(({ className, ...props }, ref) => (
-  <tbody ref={ref} className={cn("tw-[&_tr:last-child]:border-0", className)} {...props} />
-));
+>(({ className, ...props }, ref) => <tbody ref={ref} className={className} {...props} />);
 TableBody.displayName = "TableBody";
 
 const TableFooter = React.forwardRef<
@@ -37,10 +35,7 @@ const TableFooter = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <tfoot
     ref={ref}
-    className={cn(
-      "tw-border-t tw-bg-primary-alt/50 tw-font-medium tw-[&>tr]:last:border-b-0",
-      className
-    )}
+    className={cn("tw-border-t tw-font-medium tw-bg-primary-alt/50", className)}
     {...props}
   />
 ));

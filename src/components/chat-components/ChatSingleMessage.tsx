@@ -490,7 +490,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     <div className="tw-my-1 tw-flex tw-w-full tw-flex-col">
       <div
         className={cn(
-          "tw-mx-2 tw-flex tw-gap-2 tw-rounded-md tw-p-2 tw-group",
+          "tw-group tw-mx-2 tw-flex tw-gap-2 tw-rounded-md tw-p-2",
           message.sender === USER_SENDER && "tw-border tw-border-solid tw-border-border"
         )}
       >

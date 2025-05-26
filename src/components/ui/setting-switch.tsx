@@ -45,7 +45,7 @@ const SettingSwitch = React.forwardRef<HTMLDivElement, SettingSwitchProps>(
       >
         <div
           className={cn(
-            "tw-pointer-events-none tw-block tw-h-4 tw-w-4 tw-rounded-full tw-bg-toggle-thumb tw-shadow-lg tw-ring-0 tw-transition-transform",
+            "tw-pointer-events-none tw-block tw-size-4 tw-rounded-full tw-bg-toggle-thumb tw-shadow-lg tw-ring-0 tw-transition-transform",
             checked ? "tw-translate-x-5.5" : "tw-translate-x-0.5"
           )}
         />

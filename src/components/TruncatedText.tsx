@@ -23,9 +23,9 @@ export function isEllipsesActive(
 function getLineClampClass(lineClamp: number): string {
   switch (lineClamp) {
     case 2:
-      return "line-clamp-2";
+      return "tw-line-clamp-2";
     case 3:
-      return "line-clamp-3";
+      return "tw-line-clamp-3";
     default:
       return "";
   }
@@ -81,8 +81,8 @@ export const TruncatedText = ({
             {...props}
             ref={textRef}
             className={cn(
-              "max-w-full text-normal",
-              (!lineClamp || lineClamp <= 1) && "truncate",
+              "tw-max-w-full tw-text-normal",
+              (!lineClamp || lineClamp <= 1) && "tw-truncate",
               lineClamp && getLineClampClass(lineClamp),
               className
             )}
