@@ -3,8 +3,10 @@ import { TimestampUsageStrategy } from "@/promptUsageStrategy";
 import { getSettings } from "@/settings/model";
 import {
   extractNoteFiles,
+  extractNoteParagraphs,
   getFileContent,
   getFileName,
+  getFileParagraphs,
   getNotesFromPath,
   getNotesFromTags,
   processVariableNameForNotePath,
@@ -184,6 +186,21 @@ export async function processPrompt(
           additionalInfo += `Title: [[${noteFile.basename}]]\nPath: ${noteFile.path}\n\n${noteContent}`;
         }
         includedFiles.add(noteFile); // Track files included via [[links]]
+      }
+    }
+  }
+
+  // Process [[note title#1#2]] syntax
+  const noteParagraphs = extractNoteParagraphs(processedPrompt, vault);
+  for (const noteParagraph of noteParagraphs) {
+    // Check if this note wasn't already included via a variable
+    // We use the Set's reference equality which works for TFile objects
+    const noteContent = await getFileParagraphs(noteParagraph, vault);
+    if (noteContent) {
+      if (additionalInfo) {
+        additionalInfo += `\n\nTitle: [[${noteParagraph.basename}]]\nPath: ${noteParagraph.path}\n\n${noteContent}`;
+      } else {
+        additionalInfo += `Title: [[${noteParagraph.basename}]]\nPath: ${noteParagraph.path}\n\n${noteContent}`;
       }
     }
   }

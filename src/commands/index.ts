@@ -11,13 +11,14 @@ import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { CopilotSettings, InlineEditCommandSettings } from "@/settings/model";
 import { err2String } from "@/utils";
 import { Editor, Notice, TFile } from "obsidian";
-import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";
+import { CHAT_VIEWTYPE, COMMAND_IDS, COMMAND_NAMES, CommandId, EVENT_NAMES } from "../constants";
 import {
   getCommandById,
   getCommandId,
   getInlineEditCommands,
 } from "@/commands/inlineEditCommandUtils";
 import { logError } from "@/logger";
+import CopilotView from "@/components/CopilotView";
 
 /**
  * Add a command to the plugin.
@@ -126,6 +127,22 @@ export function registerCommands(
     const wordCount = selectedText.split(" ").length;
     const tokenCount = await plugin.chainManager.chatModelManager.countTokens(selectedText);
     new Notice(`Selected text contains ${wordCount} words and ${tokenCount} tokens.`);
+  });
+
+  addEditorCommand(plugin, COMMAND_IDS.ADD_PARAGRAPHS_TO_REFERENCE, async (editor: Editor) => {
+    const from = await editor.getCursor("from");
+    const to = await editor.getCursor("to");
+    const fileName = this.app.workspace.getActiveFile()?.basename;
+    const startLine = Math.min(from.line, to.line);
+    const endLine = Math.max(from.line, to.line);
+    plugin.activateView();
+    const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view as CopilotView;
+    chatView.eventTarget.dispatchEvent(
+      new CustomEvent(EVENT_NAMES.NEW_TEXT_TO_ADD, {
+        // for add lineNum + 1 is for human-readable
+        detail: { text: `[[${fileName}#${startLine + 1}#${endLine + 1}]]` },
+      })
+    );
   });
 
   addCommand(plugin, COMMAND_IDS.COUNT_TOTAL_VAULT_TOKENS, async () => {

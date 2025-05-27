@@ -21,6 +21,13 @@ import moment from "moment";
 import { MarkdownView, Notice, TFile, Vault, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
 
+export type ExtendTFile = TFile & {
+  lineRange?: {
+    start: number;
+    end: number;
+  };
+};
+
 // Add custom error type at the top of the file
 interface APIError extends Error {
   json?: any;
@@ -272,6 +279,25 @@ export async function getFileContent(file: TFile, vault: Vault): Promise<string 
   return await vault.cachedRead(file);
 }
 
+export function sliceFileParagraphs(file: ExtendTFile, content: string): string {
+  if (file.lineRange) {
+    return content
+      .split("\n")
+      .slice(
+        isFinite(file.lineRange.start) ? file.lineRange.start - 1 : 0,
+        isFinite(file.lineRange.end) ? file.lineRange.end : undefined
+      )
+      .join("\n");
+  }
+  return content;
+}
+
+export async function getFileParagraphs(file: ExtendTFile, vault: Vault): Promise<string | null> {
+  if (file.extension != "md" && file.extension != "canvas") return null;
+  const fileContent = await vault.cachedRead(file);
+  return sliceFileParagraphs(file, fileContent);
+}
+
 export function getFileName(file: TFile): string {
   return file.basename;
 }
@@ -386,6 +412,61 @@ export function extractNoteFiles(query: string, vault: Vault): TFile[] {
         // Try to find by title
         const files = vault.getMarkdownFiles();
         const matchingFiles = files.filter((f) => f.basename === inner);
+
+        if (matchingFiles.length > 0) {
+          if (isNoteTitleUnique(inner, vault)) {
+            // Only one file with this title, use it
+            uniqueFiles.set(matchingFiles[0].path, matchingFiles[0]);
+          } else {
+            // Multiple files with same title - this shouldn't happen
+            // as we should be using full paths for duplicate titles
+            console.warn(
+              `Found multiple files with title "${inner}". Expected a full path for duplicate titles.`
+            );
+          }
+        }
+      }
+    });
+  }
+
+  return Array.from(uniqueFiles.values());
+}
+
+export function extractNoteParagraphs(query: string, vault: Vault): TFile[] {
+  // Use a regular expression to extract note titles and paths wrapped in [[]]
+  const regex = /\[\[(.*?)(#([0-9])*){1,2}\]\]/g;
+  const matches = query.match(regex);
+  const uniqueFiles = new Map<string, TFile>();
+
+  if (matches) {
+    matches.forEach((match) => {
+      const referName = match.slice(2, -2);
+
+      // support format [[filename#0#100]]
+      const inner = referName.split("#")[0];
+
+      // First try to get file by full path
+      const file = vault.getAbstractFileByPath(inner);
+
+      if (file instanceof TFile) {
+        // Found by path, use it directly
+        uniqueFiles.set(file.path, file);
+      } else {
+        // Try to find by title
+        const files = vault.getMarkdownFiles();
+        const matchingFiles = files.filter((f) => f.basename === inner);
+
+        // support format [[filename#0#100]]
+        const rangeStart = referName.split("#")[1];
+        const rangeEnd = referName.split("#")[2];
+        if (rangeStart != "" || rangeEnd != "") {
+          files.forEach((f) => {
+            (f as ExtendTFile).lineRange = {
+              start: parseInt(rangeStart),
+              end: parseInt(rangeEnd),
+            };
+          });
+        }
 
         if (matchingFiles.length > 0) {
           if (isNoteTitleUnique(inner, vault)) {
