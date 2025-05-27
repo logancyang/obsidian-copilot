@@ -389,14 +389,14 @@ describe("extractNoteFiles", () => {
   });
 
   it("should extract single note title with paragraphs", () => {
-    const query = "Please refer to [[Note1#1#2]] for more information.";
+    const query = "Please refer to [[Note1#12#23]] for more information.";
     const result = extractNoteParagraphs(query, mockVault);
     const resultPaths = result.map((f) => f.path);
     expect(resultPaths).toEqual(["Note1.md"]);
   });
 
   it("should extract multiple note titles with paragraphs", () => {
-    const query = "Please refer to [[Note1#1]] and [[Note2#1#2]] for more information.";
+    const query = "Please refer to [[Note1#13]] and [[Note2#122#233]] for more information.";
     const result = extractNoteParagraphs(query, mockVault);
     const resultPaths = result.map((f) => f.path);
     expect(resultPaths).toEqual(["Note1.md", "Note2.md"]);
