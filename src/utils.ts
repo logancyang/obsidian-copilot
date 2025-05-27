@@ -434,7 +434,7 @@ export function extractNoteFiles(query: string, vault: Vault): TFile[] {
 
 export function extractNoteParagraphs(query: string, vault: Vault): TFile[] {
   // Use a regular expression to extract note titles and paths wrapped in [[]]
-  const regex = /\[\[(.*?)(#([0-9])?){1,2}\]\]/g;
+  const regex = /\[\[(.*?)(#([0-9])*){1,2}\]\]/g;
   const matches = query.match(regex);
   const uniqueFiles = new Map<string, TFile>();
 
