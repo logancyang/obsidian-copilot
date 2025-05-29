@@ -21,12 +21,31 @@ import moment from "moment";
 import { MarkdownView, Notice, TFile, Vault, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
 
-export type ExtendTFile = TFile & {
-  lineRange?: {
-    start: number;
-    end: number;
-  };
-};
+export class Paragraph extends TFile {
+  reference: string;
+  lineRange?: { start: number; end: number };
+  constructor(reference: string, file: TFile | Paragraph) {
+    // because TFile is having a private constructor, we need to use @ts-ignore
+    // @ts-ignore
+    super(file.vault, file.path);
+    this.reference = reference;
+    this.path = file.path;
+    this.name = file.name;
+    this.extension = file.extension;
+    this.basename = file.basename;
+    this.parent = file.parent;
+    this.vault = file.vault;
+    this.stat = file.stat;
+    if (file instanceof Paragraph) {
+      if (file.lineRange) {
+        this.lineRange = {
+          start: file.lineRange.start,
+          end: file.lineRange.end,
+        };
+      }
+    }
+  }
+}
 
 // Add custom error type at the top of the file
 interface APIError extends Error {
@@ -279,9 +298,10 @@ export async function getFileContent(file: TFile, vault: Vault): Promise<string 
   return await vault.cachedRead(file);
 }
 
-export function sliceFileParagraphs(file: ExtendTFile, content: string): string {
+export function sliceFileParagraphs(file: Paragraph, content: string): string {
+  let slicedContent = content.trim();
   if (file.lineRange) {
-    return content
+    slicedContent = content
       .split("\n")
       .slice(
         isFinite(file.lineRange.start) ? file.lineRange.start - 1 : 0,
@@ -289,10 +309,10 @@ export function sliceFileParagraphs(file: ExtendTFile, content: string): string 
       )
       .join("\n");
   }
-  return content;
+  return slicedContent;
 }
 
-export async function getFileParagraphs(file: ExtendTFile, vault: Vault): Promise<string | null> {
+export async function getFileParagraphs(file: Paragraph, vault: Vault): Promise<string | null> {
   if (file.extension != "md" && file.extension != "canvas") return null;
   const fileContent = await vault.cachedRead(file);
   return sliceFileParagraphs(file, fileContent);
@@ -432,11 +452,11 @@ export function extractNoteFiles(query: string, vault: Vault): TFile[] {
   return Array.from(uniqueFiles.values());
 }
 
-export function extractNoteParagraphs(query: string, vault: Vault): TFile[] {
+export function extractNoteParagraphs(query: string, vault: Vault): Paragraph[] {
   // Use a regular expression to extract note titles and paths wrapped in [[]]
   const regex = /\[\[(.*?)(#([0-9])*){1,2}\]\]/g;
   const matches = query.match(regex);
-  const uniqueFiles = new Map<string, TFile>();
+  const uniqueFiles = new Map<string, Paragraph>();
 
   if (matches) {
     matches.forEach((match) => {
@@ -446,22 +466,24 @@ export function extractNoteParagraphs(query: string, vault: Vault): TFile[] {
       const inner = referName.split("#")[0];
 
       // First try to get file by full path
-      const file = vault.getAbstractFileByPath(inner);
+      const file = vault.getAbstractFileByPath(referName);
 
       if (file instanceof TFile) {
         // Found by path, use it directly
-        uniqueFiles.set(file.path, file);
+        uniqueFiles.set(referName, new Paragraph(referName, file));
       } else {
         // Try to find by title
         const files = vault.getMarkdownFiles();
-        const matchingFiles = files.filter((f) => f.basename === inner);
+        const matchingFiles = files
+          .filter((f) => f.basename === inner)
+          .map((f) => new Paragraph(referName, f));
 
         // support format [[filename#0#100]]
         const rangeStart = referName.split("#")[1];
         const rangeEnd = referName.split("#")[2];
         if (rangeStart != "" || rangeEnd != "") {
-          files.forEach((f) => {
-            (f as ExtendTFile).lineRange = {
+          matchingFiles.forEach((f) => {
+            f.lineRange = {
               start: parseInt(rangeStart),
               end: parseInt(rangeEnd),
             };
@@ -471,7 +493,7 @@ export function extractNoteParagraphs(query: string, vault: Vault): TFile[] {
         if (matchingFiles.length > 0) {
           if (isNoteTitleUnique(inner, vault)) {
             // Only one file with this title, use it
-            uniqueFiles.set(matchingFiles[0].path, matchingFiles[0]);
+            uniqueFiles.set(referName, new Paragraph(referName, matchingFiles[0]));
           } else {
             // Multiple files with same title - this shouldn't happen
             // as we should be using full paths for duplicate titles

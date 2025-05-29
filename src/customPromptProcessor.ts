@@ -198,9 +198,9 @@ export async function processPrompt(
     const noteContent = await getFileParagraphs(noteParagraph, vault);
     if (noteContent) {
       if (additionalInfo) {
-        additionalInfo += `\n\nTitle: [[${noteParagraph.basename}]]\nPath: ${noteParagraph.path}\n\n${noteContent}`;
+        additionalInfo += `\n\nTitle: [[${noteParagraph.reference}]]\nPath: ${noteParagraph.path}\n\n${noteContent}`;
       } else {
-        additionalInfo += `Title: [[${noteParagraph.basename}]]\nPath: ${noteParagraph.path}\n\n${noteContent}`;
+        additionalInfo += `Title: [[${noteParagraph.reference}]]\nPath: ${noteParagraph.path}\n\n${noteContent}`;
       }
     }
   }

@@ -1,7 +1,7 @@
 import * as Obsidian from "obsidian";
 import { TFile } from "obsidian";
 import {
-  ExtendTFile,
+  Paragraph,
   extractNoteFiles,
   extractNoteParagraphs,
   getNotesFromPath,
@@ -401,12 +401,21 @@ describe("extractNoteFiles", () => {
     const resultPaths = result.map((f) => f.path);
     expect(resultPaths).toEqual(["Note1.md", "Note2.md"]);
   });
+
+  it("should extract one note titles with mutiple paragraphs", () => {
+    const query = "Please refer to [[Note1#13]] and [[Note1#122#233]] for more information.";
+    const result = extractNoteParagraphs(query, mockVault);
+    const resultPaths = result.map((f) => f.path);
+    const resultRefs = result.map((f) => f.reference);
+    expect(resultPaths).toEqual(["Note1.md", "Note1.md"]);
+    expect(resultRefs).toEqual(["Note1#13", "Note1#122#233"]);
+  });
 });
 
 describe("sliceFileParagraphs", () => {
   it("should sliceFileParagraphs line range is good for human readability", () => {
     const content = "first line\nsecond line\n third line";
-    const mockFile = new Obsidian.TFile() as ExtendTFile;
+    const mockFile = new Obsidian.TFile() as Paragraph;
     mockFile.lineRange = { start: 2, end: 2 };
     const result = sliceFileParagraphs(mockFile, content);
     expect(result).toEqual("second line");
