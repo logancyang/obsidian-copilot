@@ -631,14 +631,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   promptSortStrategy: PromptSortStrategy.TIMESTAMP,
   defaultConversationNoteName: "{$topic}@{$date}_{$time}",
   inlineEditCommands: DEFAULT_INLINE_EDIT_COMMANDS,
-  lastDismissedVersion: null,
-  passMarkdownImages: true,
-  enableCustomPromptTemplating: true,
-};
-
-export const EVENT_NAMES = {
-  CHAT_IS_VISIBLE: "chat-is-visible",
-  ACTIVE_LEAF_CHANGE: "active-leaf-change",
   projectList: [],
   enableAutocomplete: true,
   autocompleteAcceptKey: AUTOCOMPLETE_CONFIG.KEYBIND,
@@ -647,6 +639,11 @@ export const EVENT_NAMES = {
   lastDismissedVersion: null,
   passMarkdownImages: true,
   enableCustomPromptTemplating: true,
+};
+
+export const EVENT_NAMES = {
+  CHAT_IS_VISIBLE: "chat-is-visible",
+  ACTIVE_LEAF_CHANGE: "active-leaf-change",
 };
 
 export enum ABORT_REASON {

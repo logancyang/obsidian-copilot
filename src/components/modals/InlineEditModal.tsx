@@ -61,48 +61,6 @@ function useChatChain(selectedModel: CustomModel) {
   return { chatChain, chatMemory };
 }
 
-// Custom hook for managing chat chain
-function useChatChain(selectedModel: CustomModel) {
-  const [chatMemory] = useState<BaseChatMemory>(
-    new BufferMemory({ returnMessages: true, memoryKey: "history" })
-  );
-  const [chatChain, setChatChain] = useState<RunnableSequence | null>(null);
-
-  // Initialize chat chain
-  useEffect(() => {
-    async function initChatChain() {
-      const chatModel = await ChatModelManager.getInstance().createModelInstance(selectedModel);
-
-      const chatPrompt = ChatPromptTemplate.fromMessages([
-        SystemMessagePromptTemplate.fromTemplate(
-          "You are a helpful assistant. You'll help the user with their content editing needs."
-        ),
-        new MessagesPlaceholder("history"),
-        HumanMessagePromptTemplate.fromTemplate("{input}"),
-      ]);
-
-      const newChatChain = RunnableSequence.from([
-        {
-          input: (initialInput) => initialInput.input,
-          memory: () => chatMemory.loadMemoryVariables({}),
-        },
-        {
-          input: (previousOutput) => previousOutput.input,
-          history: (previousOutput) => previousOutput.memory.history,
-        },
-        chatPrompt,
-        chatModel,
-      ]);
-
-      setChatChain(newChatChain);
-    }
-
-    initChatChain();
-  }, [selectedModel, chatMemory]);
-
-  return { chatChain, chatMemory };
-}
-
 interface InlineEditModalContentProps {
   originalText: string;
   command: InlineEditCommandSettings;
