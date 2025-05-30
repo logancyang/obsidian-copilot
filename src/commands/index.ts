@@ -1,3 +1,10 @@
+import { FileCache } from "@/cache/fileCache";
+import { ProjectContextCache } from "@/cache/projectContextCache";
+import {
+  getCommandById,
+  getCommandId,
+  getInlineEditCommands,
+} from "@/commands/inlineEditCommandUtils";
 import { AddPromptModal } from "@/components/modals/AddPromptModal";
 import { AdhocPromptModal } from "@/components/modals/AdhocPromptModal";
 import { DebugSearchModal } from "@/components/modals/DebugSearchModal";
@@ -6,18 +13,18 @@ import { ListPromptModal } from "@/components/modals/ListPromptModal";
 import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
 import { RemoveFromIndexModal } from "@/components/modals/RemoveFromIndexModal";
 import { CustomPromptProcessor } from "@/customPromptProcessor";
+import { logError } from "@/logger";
 import CopilotPlugin from "@/main";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
-import { CopilotSettings, InlineEditCommandSettings } from "@/settings/model";
+import {
+  CopilotSettings,
+  InlineEditCommandSettings,
+  getSettings,
+  updateSetting,
+} from "@/settings/model";
 import { err2String } from "@/utils";
 import { Editor, Notice, TFile } from "obsidian";
 import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";
-import {
-  getCommandById,
-  getCommandId,
-  getInlineEditCommands,
-} from "@/commands/inlineEditCommandUtils";
-import { logError } from "@/logger";
 
 /**
  * Add a command to the plugin.
@@ -124,14 +131,18 @@ export function registerCommands(
   addEditorCommand(plugin, COMMAND_IDS.COUNT_WORD_AND_TOKENS_SELECTION, async (editor: Editor) => {
     const selectedText = await editor.getSelection();
     const wordCount = selectedText.split(" ").length;
-    const tokenCount = await plugin.chainManager.chatModelManager.countTokens(selectedText);
+    const tokenCount = await plugin.projectManager
+      .getCurrentChainManager()
+      .chatModelManager.countTokens(selectedText);
     new Notice(`Selected text contains ${wordCount} words and ${tokenCount} tokens.`);
   });
 
   addCommand(plugin, COMMAND_IDS.COUNT_TOTAL_VAULT_TOKENS, async () => {
     try {
       const allContent = await getAllQAMarkdownContent(plugin.app);
-      const totalTokens = await plugin.chainManager.chatModelManager.countTokens(allContent);
+      const totalTokens = await plugin.projectManager
+        .getCurrentChainManager()
+        .chatModelManager.countTokens(allContent);
       new Notice(`Total tokens in your vault: ${totalTokens}`);
     } catch (error) {
       console.error("Error counting tokens: ", error);
@@ -145,6 +156,10 @@ export function registerCommands(
 
   addCommand(plugin, COMMAND_IDS.OPEN_COPILOT_CHAT_WINDOW, () => {
     plugin.activateView();
+  });
+
+  addCommand(plugin, COMMAND_IDS.NEW_CHAT, () => {
+    plugin.newChat();
   });
 
   addCommand(plugin, COMMAND_IDS.ADD_CUSTOM_PROMPT, () => {
@@ -305,14 +320,6 @@ export function registerCommands(
     plugin.loadCopilotChatHistory();
   });
 
-  addCommand(plugin, COMMAND_IDS.INSPECT_COPILOT_INDEX_BY_NOTE_PATHS, () => {
-    new OramaSearchModal(plugin.app, plugin).open();
-  });
-
-  addCommand(plugin, COMMAND_IDS.SEARCH_ORAMA_DB, () => {
-    new DebugSearchModal(plugin.app, plugin).open();
-  });
-
   addCommand(plugin, COMMAND_IDS.LIST_INDEXED_FILES, async () => {
     try {
       const indexedFiles = await plugin.vectorStoreManager.getIndexedFiles();
@@ -398,30 +405,61 @@ export function registerCommands(
     }
   });
 
-  addCommand(plugin, COMMAND_IDS.REMOVE_FILES_FROM_COPILOT_INDEX, async () => {
-    new RemoveFromIndexModal(plugin.app, async (filePaths: string[]) => {
-      const dbOps = await plugin.vectorStoreManager.getDbOps();
-      try {
-        for (const path of filePaths) {
-          await dbOps.removeDocs(path);
+  // Debug commands (only when debug mode is enabled)
+  if (next.debug) {
+    addCommand(plugin, COMMAND_IDS.INSPECT_COPILOT_INDEX_BY_NOTE_PATHS, () => {
+      new OramaSearchModal(plugin.app, plugin).open();
+    });
+
+    addCommand(plugin, COMMAND_IDS.SEARCH_ORAMA_DB, () => {
+      new DebugSearchModal(plugin.app, plugin).open();
+    });
+
+    addCommand(plugin, COMMAND_IDS.REMOVE_FILES_FROM_COPILOT_INDEX, async () => {
+      new RemoveFromIndexModal(plugin.app, async (filePaths: string[]) => {
+        const dbOps = await plugin.vectorStoreManager.getDbOps();
+        try {
+          for (const path of filePaths) {
+            await dbOps.removeDocs(path);
+          }
+          await dbOps.saveDB();
+          new Notice(`Successfully removed ${filePaths.length} files from the index.`);
+        } catch (err) {
+          console.error("Error removing files from index:", err);
+          new Notice("An error occurred while removing files from the index.");
         }
-        await dbOps.saveDB();
-        new Notice(`Successfully removed ${filePaths.length} files from the index.`);
-      } catch (err) {
-        console.error("Error removing files from index:", err);
-        new Notice("An error occurred while removing files from the index.");
-      }
-    }).open();
-  });
+      }).open();
+    });
+  }
 
   // Add clear Copilot cache command
   addCommand(plugin, COMMAND_IDS.CLEAR_COPILOT_CACHE, async () => {
     try {
       await plugin.fileParserManager.clearPDFCache();
-      new Notice("Copilot cache cleared successfully");
+
+      // Clear project context cache
+      await ProjectContextCache.getInstance().clearAllCache();
+
+      // Clear file content cache (get FileCache instance and clear it)
+      const fileCache = FileCache.getInstance<string>();
+      await fileCache.clear();
+
+      // Clear autocomplete cache
+      const { AutocompleteCache } = await import("@/cache/autocompleteCache");
+      AutocompleteCache.getInstance().clear();
+
+      new Notice("All Copilot caches cleared successfully");
     } catch (error) {
-      console.error("Error clearing Copilot cache:", error);
-      new Notice("Failed to clear Copilot cache");
+      console.error("Error clearing Copilot caches:", error);
+      new Notice("Failed to clear Copilot caches");
     }
+  });
+
+  // Add toggle autocomplete command
+  addCommand(plugin, COMMAND_IDS.TOGGLE_AUTOCOMPLETE, () => {
+    const currentSettings = getSettings();
+    const newValue = !currentSettings.enableAutocomplete;
+    updateSetting("enableAutocomplete", newValue);
+    new Notice(`Copilot autocomplete ${newValue ? "enabled" : "disabled"}`);
   });
 }

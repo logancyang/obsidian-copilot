@@ -10,6 +10,8 @@ export const getToolDescription = (tool: string): string => {
       return "Get the transcript of a YouTube video. Example: @youtube <video_url>";
     case "@pomodoro":
       return "Start a pomodoro timer. Example: @pomodoro 25m";
+    case "@composer":
+      return "Edit existing notes or create new notes.";
     default:
       return "";
   }

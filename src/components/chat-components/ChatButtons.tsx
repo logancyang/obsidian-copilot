@@ -48,6 +48,14 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
         <>
           <Tooltip>
             <TooltipTrigger asChild>
+              <Button variant="ghost2" size="fit" onClick={onCopy} title="Copy">
+                {isCopied ? <Check className="size-4" /> : <Copy className="size-4" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Copy</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
               <Button onClick={onEdit} variant="ghost2" size="fit" title="Edit">
                 <PenSquare className="size-4" />
               </Button>

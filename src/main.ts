@@ -1,13 +1,17 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import ChainManager from "@/LLMProviders/chainManager";
-import { CustomModel } from "@/aiParams";
+import ProjectManager from "@/LLMProviders/projectManager";
+import { CustomModel, getCurrentProject } from "@/aiParams";
+import { AutocompleteService } from "@/autocomplete/autocompleteService";
 import { parseChatContent, updateChatMemory } from "@/chatUtils";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
+import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
+
 import { CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { registerContextMenu } from "@/contextMenu";
 import { encryptAllKeys } from "@/encryptionService";
+import { logInfo } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import VectorStoreManager from "@/search/vectorStoreManager";
@@ -37,12 +41,13 @@ export default class CopilotPlugin extends Plugin {
   // A chat history that stores the messages sent and received
   // Only reset when the user explicitly clicks "New Chat"
   sharedState: SharedState;
-  chainManager: ChainManager;
+  projectManager: ProjectManager;
   brevilabsClient: BrevilabsClient;
   userMessageHistory: string[] = [];
   vectorStoreManager: VectorStoreManager;
   fileParserManager: FileParserManager;
   settingsUnsubscriber?: () => void;
+  private autocompleteService: AutocompleteService;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -55,8 +60,9 @@ export default class CopilotPlugin extends Plugin {
       registerCommands(this, prev, next);
     });
     this.addSettingTab(new CopilotSettingTab(this.app, this));
-    // Always have one instance of sharedState and chainManager in the plugin
-    this.sharedState = new SharedState();
+
+    // Always have one instance of sharedState in the plugin
+    this.sharedState = new SharedState(this);
 
     this.vectorStoreManager = VectorStoreManager.getInstance();
 
@@ -65,12 +71,14 @@ export default class CopilotPlugin extends Plugin {
     this.brevilabsClient.setPluginVersion(this.manifest.version);
     checkIsPlusUser();
 
-    this.chainManager = new ChainManager(this.app, this.vectorStoreManager);
+    // Initialize ProjectManager
+    this.projectManager = ProjectManager.getInstance(this.app, this.vectorStoreManager, this);
 
     // Initialize FileParserManager early with other core services
     this.fileParserManager = new FileParserManager(this.brevilabsClient, this.app.vault);
 
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
+    this.registerView(APPLY_VIEW_TYPE, (leaf: WorkspaceLeaf) => new ApplyView(leaf));
 
     this.initActiveLeafChangeHandler();
 
@@ -108,6 +116,9 @@ export default class CopilotPlugin extends Plugin {
         }
       })
     );
+
+    // Initialize autocomplete service
+    this.autocompleteService = AutocompleteService.getInstance(this);
   }
 
   async onunload() {
@@ -115,9 +126,15 @@ export default class CopilotPlugin extends Plugin {
     if (this.vectorStoreManager) {
       this.vectorStoreManager.onunload();
     }
-    this.settingsUnsubscriber?.();
 
-    console.log("Copilot plugin unloaded");
+    if (this.projectManager) {
+      this.projectManager.onunload();
+    }
+
+    this.settingsUnsubscriber?.();
+    this.autocompleteService?.destroy();
+
+    logInfo("Copilot plugin unloaded");
   }
 
   updateUserMessageHistory(newMessage: string) {
@@ -289,8 +306,26 @@ export default class CopilotPlugin extends Plugin {
     if (!(folder instanceof TFolder)) {
       return [];
     }
+
     const files = await this.app.vault.getMarkdownFiles();
-    return files.filter((file) => file.path.startsWith(folder.path));
+    const folderFiles = files.filter((file) => file.path.startsWith(folder.path));
+
+    // Get current project ID if in a project
+    const currentProject = getCurrentProject();
+    const currentProjectId = currentProject?.id;
+
+    if (currentProjectId) {
+      // In project mode: return only files with this project's ID prefix
+      const projectPrefix = `${currentProjectId}__`;
+      return folderFiles.filter((file) => file.basename.startsWith(projectPrefix));
+    } else {
+      // In non-project mode: return only files without any project ID prefix
+      // This assumes project IDs always use the format projectId__ as prefix
+      return folderFiles.filter((file) => {
+        // Check if the filename has any projectId__ prefix pattern
+        return !file.basename.match(/^[a-zA-Z0-9-]+__/);
+      });
+    }
   }
 
   async loadChatHistory(file: TFile) {
@@ -300,7 +335,7 @@ export default class CopilotPlugin extends Plugin {
     messages.forEach((message) => this.sharedState.addMessage(message));
 
     // Update the chain's memory with the loaded messages
-    await updateChatMemory(messages, this.chainManager.memoryManager);
+    await updateChatMemory(messages, this.projectManager.getCurrentChainManager().memoryManager);
 
     // Check if the Copilot view is already active
     const existingView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0];
@@ -312,6 +347,35 @@ export default class CopilotPlugin extends Plugin {
       const copilotView = existingView.view as CopilotView;
       copilotView.updateView();
     }
+  }
+
+  async handleNewChat() {
+    // First autosave the current chat if the setting is enabled
+    await this.autosaveCurrentChat();
+
+    // Clear chat history
+    this.sharedState.clearChatHistory();
+
+    // Clear chain memory
+    this.projectManager.getCurrentChainManager().memoryManager.clearChatMemory();
+
+    // Update view if it exists
+    const existingView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0];
+    if (existingView) {
+      const copilotView = existingView.view as CopilotView;
+      copilotView.updateView();
+    } else {
+      // If view doesn't exist, open it
+      await this.activateView();
+    }
+
+    // Note: UI-specific state like includeActiveNote setting is handled in the Chat component
+    // This ensures proper separation of concerns between plugin logic and UI state
+  }
+
+  async newChat() {
+    // Just delegate to the shared method
+    await this.handleNewChat();
   }
 
   async customSearchDB(query: string, salientTerms: string[], textWeight: number): Promise<any[]> {

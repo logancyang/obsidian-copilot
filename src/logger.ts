@@ -11,3 +11,9 @@ export function logError(...args: any[]) {
     console.error(...args);
   }
 }
+
+export function logWarn(...args: any[]) {
+  if (getSettings().debug) {
+    console.warn(...args);
+  }
+}

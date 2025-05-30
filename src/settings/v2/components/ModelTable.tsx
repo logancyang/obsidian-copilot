@@ -2,6 +2,7 @@ import { CustomModel } from "@/aiParams";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ModelCapabilityIcons } from "@/components/ui/model-display";
 import {
   Table,
   TableBody,
@@ -10,30 +11,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { MODEL_CAPABILITIES, ModelCapability } from "@/constants";
 import { cn } from "@/lib/utils";
 import { getModelKeyFromModel } from "@/settings/model";
 import { getProviderLabel } from "@/utils";
 import {
-  Pencil,
-  Plus,
-  Trash2,
-  Lightbulb,
-  Eye,
-  Globe,
-  ChevronDown,
-  ChevronRight,
-  LucideProps,
-  GripVertical,
-} from "lucide-react";
-import React, { ForwardRefExoticComponent, RefAttributes } from "react";
-import {
-  DndContext,
   closestCenter,
+  DndContext,
+  DragEndEvent,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
-  DragEndEvent,
 } from "@dnd-kit/core";
 import {
   arrayMove,
@@ -43,9 +33,20 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ModelCapabilityIcons } from "@/components/ui/model-display";
-import { MODEL_CAPABILITIES, ModelCapability } from "@/constants";
+import {
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  Globe,
+  GripVertical,
+  Lightbulb,
+  LucideProps,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
+import React, { ForwardRefExoticComponent, RefAttributes } from "react";
 
 const CAPABILITY_ICONS: Record<
   ModelCapability,
@@ -116,6 +117,7 @@ interface ModelTableProps {
   onAdd: () => void;
   onUpdateModel: (model: CustomModel) => void;
   onReorderModels?: (newModels: CustomModel[]) => void;
+  onRefresh?: () => void;
   title: string;
 }
 
@@ -153,7 +155,7 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
           "border-accent/50",
           "relative",
           "z-[9999]",
-          "bg-background",
+          "bg-primary",
           "rounded-lg",
           "transform-gpu",
         ],
@@ -284,7 +286,7 @@ const SortableTableRow: React.FC<{
       className={cn(
         "hover:bg-interactive-accent/10 transition-colors duration-200",
         isDragging &&
-          "shadow-lg bg-background/90 backdrop-blur-sm relative z-[100] cursor-grabbing border-2 border-accent/50",
+          "shadow-lg bg-primary/90 backdrop-blur-sm relative z-[100] cursor-grabbing border-2 border-accent/50",
         !isDragging && "z-auto"
       )}
     >
@@ -357,6 +359,7 @@ export const ModelTable: React.FC<ModelTableProps> = ({
   onAdd,
   onUpdateModel,
   onReorderModels,
+  onRefresh,
   title,
 }) => {
   const isEmbeddingModel = !!(models.length > 0 && models[0].isEmbeddingModel);
@@ -515,7 +518,13 @@ export const ModelTable: React.FC<ModelTableProps> = ({
       {/* Mobile view */}
       {renderMobileView()}
 
-      <div className="mt-4 flex justify-end">
+      <div className="mt-4 flex justify-end gap-2">
+        {onRefresh && (
+          <Button onClick={onRefresh} variant="secondary" className="flex items-center gap-2">
+            <RefreshCw className="h-4 w-4" />
+            Refresh Built-in Models
+          </Button>
+        )}
         <Button onClick={onAdd} variant="secondary" className="flex items-center gap-2">
           <Plus className="h-4 w-4" />
           Add Custom Model

@@ -1,8 +1,10 @@
 import { CustomModel } from "@/aiParams";
+import { AcceptKeyOption } from "@/autocomplete/codemirrorIntegration";
 import { DEFAULT_INLINE_EDIT_COMMANDS } from "@/commands/constants";
 import { type CopilotSettings } from "@/settings/model";
 import { v4 as uuidv4 } from "uuid";
 import { ChainType } from "./chainFactory";
+import { PromptSortStrategy } from "./types";
 
 export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
 export const CHAT_VIEWTYPE = "copilot-chat-view";
@@ -20,7 +22,44 @@ export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assist
   9. When showing **web** image links, use ![link](url) format and do not wrap them in \` \`.
   10. When generating a table, use compact formatting without excessive whitespace.
   11. Always respond in the language of the user's query.
-  12. Do NOT mention the additional context provided such as getCurrentTime and getTimeRangeMs if it's irrelevant to the user message.`;
+  12. Do NOT mention the additional context provided such as getCurrentTime and getTimeRangeMs if it's irrelevant to the user message.
+  13. If the user mentions "tags", it most likely means tags in Obsidian note properties.`;
+
+export const COMPOSER_INSTRUCTIONS = `If the user explicitly requests to update or create markdown notes or canvases OR mentions "@composer", always return the new note content in a special JSON format.
+
+  # JSON Format
+  Provide the content in JSON format and wrap it in a code block with the following structure:
+
+  For a single markdown file:
+  \`\`\`json
+  {
+    "type": "composer",
+    "path": "path/to/file.md",
+    "content": "The FULL CONTENT of the md note goes here"
+  }
+  \`\`\`
+
+  For a canvas file:
+  \`\`\`json
+  {
+    "type": "composer",
+    "path": "path/to/file.canvas",
+    "canvas_json": {
+      "nodes": [
+        {
+          "id": "1",
+        "type": "text",
+        "text": "Hello, world!"
+      }
+    ]
+  }
+
+  # Important
+  * Properly escape all special characters in the content field, especially backticks and quotes
+  * Prefer to create new files in existing folders or root folder unless the user's request specifies otherwise
+  * File paths must end with a .md or .canvas extension.
+  * When generating changes on multiple files, output multiple JSON objects.`;
+
 export const EMPTY_INDEX_ERROR_MESSAGE =
   "Copilot index does not exist. Please index your vault first!\n\n1. Set a working embedding model in QA settings. If it's not a local model, don't forget to set the API key. \n\n2. Click 'Refresh Index for Vault' and wait for indexing to complete. If you encounter the rate limiting error, please turn your request per second down in QA setting.";
 export const CHUNK_SIZE = 6000;
@@ -49,9 +88,10 @@ export enum ChatModels {
   GPT_41_nano = "gpt-4.1-nano",
   O4_mini = "o4-mini",
   AZURE_OPENAI = "azure-openai",
-  GEMINI_PRO = "gemini-2.0-pro-exp",
-  GEMINI_FLASH = "gemini-2.0-flash",
+  GEMINI_PRO = "gemini-2.5-pro-preview-05-06", // TODO(logan): update this when it's GA
+  GEMINI_FLASH = "gemini-2.5-flash-preview-04-17", // TODO(logan): update this when it's GA
   CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest",
+  CLAUDE_3_7_SONNET = "claude-3-7-sonnet-latest",
   CLAUDE_3_5_HAIKU = "claude-3-5-haiku-latest",
   GROK3 = "grok-3-beta",
   GROK3_MINI = "grok-3-mini-beta",
@@ -102,6 +142,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     isBuiltIn: true,
     core: true,
     plusExclusive: true,
+    projectEnabled: false,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -110,6 +151,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     core: true,
+    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -118,6 +160,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     core: true,
+    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -135,6 +178,13 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     isBuiltIn: true,
     core: true,
     capabilities: [ModelCapability.REASONING],
+  },
+  {
+    name: ChatModels.CLAUDE_3_7_SONNET,
+    provider: ChatModelProviders.ANTHROPIC,
+    enabled: true,
+    isBuiltIn: true,
+    capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
   },
   {
     name: ChatModels.CLAUDE_3_5_SONNET,
@@ -163,6 +213,22 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     isBuiltIn: true,
   },
   {
+    name: ChatModels.GEMINI_FLASH,
+    provider: ChatModelProviders.GOOGLE,
+    enabled: true,
+    isBuiltIn: true,
+    projectEnabled: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
+    name: ChatModels.GEMINI_PRO,
+    provider: ChatModelProviders.GOOGLE,
+    enabled: true,
+    isBuiltIn: true,
+    projectEnabled: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
     name: ChatModels.COMMAND_R,
     provider: ChatModelProviders.COHEREAI,
     enabled: true,
@@ -173,20 +239,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.COHEREAI,
     enabled: true,
     isBuiltIn: true,
-  },
-  {
-    name: ChatModels.GEMINI_PRO,
-    provider: ChatModelProviders.GOOGLE,
-    enabled: true,
-    isBuiltIn: true,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.GEMINI_FLASH,
-    provider: ChatModelProviders.GOOGLE,
-    enabled: true,
-    isBuiltIn: true,
-    capabilities: [ModelCapability.VISION],
   },
   {
     name: ChatModels.AZURE_OPENAI,
@@ -320,6 +372,7 @@ export interface ProviderMetadata {
   label: string;
   host: string;
   keyManagementURL: string;
+  listModelURL: string;
   testModel?: ChatModels;
 }
 
@@ -329,86 +382,101 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     label: "OpenAI",
     host: "https://api.openai.com",
     keyManagementURL: "https://platform.openai.com/api-keys",
+    listModelURL: "https://api.openai.com/v1/models",
     testModel: ChatModels.GPT_41,
   },
   [ChatModelProviders.AZURE_OPENAI]: {
     label: "Azure OpenAI",
     host: "",
     keyManagementURL: "",
+    listModelURL: "",
     testModel: ChatModels.AZURE_OPENAI,
   },
   [ChatModelProviders.ANTHROPIC]: {
     label: "Anthropic",
     host: "https://api.anthropic.com/",
     keyManagementURL: "https://console.anthropic.com/settings/keys",
+    listModelURL: "https://api.anthropic.com/v1/models",
     testModel: ChatModels.CLAUDE_3_5_SONNET,
   },
   [ChatModelProviders.COHEREAI]: {
     label: "Cohere",
     host: "https://api.cohere.com",
     keyManagementURL: "https://dashboard.cohere.ai/api-keys",
+    listModelURL: "https://api.cohere.com/v1/models",
     testModel: ChatModels.COMMAND_R,
   },
   [ChatModelProviders.GOOGLE]: {
     label: "Gemini",
     host: "https://generativelanguage.googleapis.com",
     keyManagementURL: "https://makersuite.google.com/app/apikey",
+    listModelURL: "https://generativelanguage.googleapis.com/v1beta/models",
     testModel: ChatModels.GEMINI_FLASH,
   },
   [ChatModelProviders.XAI]: {
     label: "XAI",
     host: "https://api.x.ai/v1",
     keyManagementURL: "https://console.x.ai",
+    listModelURL: "https://api.x.ai/v1/models",
     testModel: ChatModels.GROK3,
   },
   [ChatModelProviders.OPENROUTERAI]: {
     label: "OpenRouter",
     host: "https://openrouter.ai/api/v1/",
     keyManagementURL: "https://openrouter.ai/keys",
+    listModelURL: "https://openrouter.ai/api/v1/models",
     testModel: ChatModels.OPENROUTER_GPT_4o,
   },
   [ChatModelProviders.GROQ]: {
     label: "Groq",
     host: "https://api.groq.com/openai",
     keyManagementURL: "https://console.groq.com/keys",
+    listModelURL: "https://api.groq.com/openai/v1/models",
     testModel: ChatModels.GROQ_LLAMA_8b,
   },
   [ChatModelProviders.OLLAMA]: {
     label: "Ollama",
     host: "http://localhost:11434/v1/",
     keyManagementURL: "",
+    listModelURL: "",
   },
   [ChatModelProviders.LM_STUDIO]: {
     label: "LM Studio",
     host: "http://localhost:1234/v1",
     keyManagementURL: "",
+    listModelURL: "",
   },
   [ChatModelProviders.OPENAI_FORMAT]: {
     label: "OpenAI Format",
     host: "https://api.example.com/v1",
     keyManagementURL: "",
+    listModelURL: "",
   },
   [ChatModelProviders.MISTRAL]: {
     label: "Mistral",
     host: "https://api.mistral.ai/v1",
     keyManagementURL: "https://console.mistral.ai/api-keys",
+    listModelURL: "https://api.mistral.ai/v1/models",
     testModel: ChatModels.MISTRAL_TINY,
   },
   [ChatModelProviders.DEEPSEEK]: {
     label: "DeepSeek",
     host: "https://api.deepseek.com/",
     keyManagementURL: "https://platform.deepseek.com/api-keys",
+    listModelURL: "https://api.deepseek.com/models",
     testModel: ChatModels.DEEPSEEK_CHAT,
   },
   [EmbeddingModelProviders.COPILOT_PLUS]: {
     label: "Copilot Plus",
     host: "https://api.brevilabs.com/v1",
     keyManagementURL: "",
+    listModelURL: "",
   },
   [EmbeddingModelProviders.COPILOT_PLUS_JINA]: {
     label: "Copilot Plus",
     host: "https://api.brevilabs.com/v1",
     keyManagementURL: "",
+    listModelURL: "",
   },
 };
 
@@ -452,6 +520,7 @@ export const COMMAND_IDS = {
   CLEAR_COPILOT_CACHE: "clear-copilot-cache",
   COUNT_WORD_AND_TOKENS_SELECTION: "count-word-and-tokens-selection",
   COUNT_TOTAL_VAULT_TOKENS: "count-total-vault-tokens",
+  DEBUG_WORD_COMPLETION: "debug-word-completion",
   DELETE_CUSTOM_PROMPT: "delete-custom-prompt",
   EDIT_CUSTOM_PROMPT: "edit-custom-prompt",
   FIND_RELEVANT_NOTES: "find-relevant-notes",
@@ -461,10 +530,12 @@ export const COMMAND_IDS = {
   INSPECT_COPILOT_INDEX_BY_NOTE_PATHS: "copilot-inspect-index-by-note-paths",
   LIST_INDEXED_FILES: "copilot-list-indexed-files",
   LOAD_COPILOT_CHAT_CONVERSATION: "load-copilot-chat-conversation",
+  NEW_CHAT: "new-chat",
   OPEN_COPILOT_CHAT_WINDOW: "chat-open-window",
   REMOVE_FILES_FROM_COPILOT_INDEX: "remove-files-from-copilot-index",
   SEARCH_ORAMA_DB: "copilot-search-orama-db",
   TOGGLE_COPILOT_CHAT_WINDOW: "chat-toggle-window",
+  TOGGLE_AUTOCOMPLETE: "toggle-autocomplete",
 } as const;
 
 export const COMMAND_NAMES: Record<CommandId, string> = {
@@ -475,6 +546,7 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.CLEAR_COPILOT_CACHE]: "Clear Copilot cache",
   [COMMAND_IDS.COUNT_TOTAL_VAULT_TOKENS]: "Count total tokens in your vault",
   [COMMAND_IDS.COUNT_WORD_AND_TOKENS_SELECTION]: "Count words and tokens in selection",
+  [COMMAND_IDS.DEBUG_WORD_COMPLETION]: "Word completion: Debug",
   [COMMAND_IDS.DELETE_CUSTOM_PROMPT]: "Delete custom prompt",
   [COMMAND_IDS.EDIT_CUSTOM_PROMPT]: "Edit custom prompt",
   [COMMAND_IDS.FIND_RELEVANT_NOTES]: "Find relevant notes",
@@ -485,13 +557,22 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.INSPECT_COPILOT_INDEX_BY_NOTE_PATHS]: "Inspect Copilot index by note paths (debug)",
   [COMMAND_IDS.LIST_INDEXED_FILES]: "List all indexed files (debug)",
   [COMMAND_IDS.LOAD_COPILOT_CHAT_CONVERSATION]: "Load Copilot chat conversation",
+  [COMMAND_IDS.NEW_CHAT]: "New Copilot Chat",
   [COMMAND_IDS.OPEN_COPILOT_CHAT_WINDOW]: "Open Copilot Chat Window",
   [COMMAND_IDS.REMOVE_FILES_FROM_COPILOT_INDEX]: "Remove files from Copilot index (debug)",
   [COMMAND_IDS.SEARCH_ORAMA_DB]: "Search OramaDB (debug)",
   [COMMAND_IDS.TOGGLE_COPILOT_CHAT_WINDOW]: "Toggle Copilot Chat Window",
+  [COMMAND_IDS.TOGGLE_AUTOCOMPLETE]: "Toggle autocomplete",
 };
 
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];
+
+export const AUTOCOMPLETE_CONFIG = {
+  DELAY_MS: 600,
+  MIN_TRIGGER_LENGTH: 3,
+  MAX_CONTEXT_LENGTH: 10000,
+  KEYBIND: "Tab" as AcceptKeyOption,
+} as const;
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
   userId: uuidv4(),
@@ -516,7 +597,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   defaultModelKey: ChatModels.GPT_41 + "|" + ChatModelProviders.OPENAI,
   embeddingModelKey: EmbeddingModels.OPENAI_EMBEDDING_SMALL + "|" + EmbeddingModelProviders.OPENAI,
   temperature: 0.1,
-  maxTokens: 1000,
+  maxTokens: 6000,
   contextTurns: 15,
   userSystemPrompt: "",
   openAIProxyBaseUrl: "",
@@ -525,6 +606,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   defaultSaveFolder: "copilot-conversations",
   defaultConversationTag: "copilot-conversation",
   autosaveChat: false,
+  includeActiveNoteAsContext: true,
   defaultOpenArea: DEFAULT_OPEN_AREA.VIEW,
   customPromptsFolder: "copilot-custom-prompts",
   indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH,
@@ -546,6 +628,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   showRelevantNotes: true,
   numPartitions: 1,
   promptUsageTimestamps: {},
+  promptSortStrategy: PromptSortStrategy.TIMESTAMP,
   defaultConversationNoteName: "{$topic}@{$date}_{$time}",
   inlineEditCommands: DEFAULT_INLINE_EDIT_COMMANDS,
   lastDismissedVersion: null,
@@ -556,6 +639,14 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
 export const EVENT_NAMES = {
   CHAT_IS_VISIBLE: "chat-is-visible",
   ACTIVE_LEAF_CHANGE: "active-leaf-change",
+  projectList: [],
+  enableAutocomplete: true,
+  autocompleteAcceptKey: AUTOCOMPLETE_CONFIG.KEYBIND,
+  allowAdditionalContext: true,
+  enableWordCompletion: false,
+  lastDismissedVersion: null,
+  passMarkdownImages: true,
+  enableCustomPromptTemplating: true,
 };
 
 export enum ABORT_REASON {

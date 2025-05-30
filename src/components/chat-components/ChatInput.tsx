@@ -1,4 +1,11 @@
-import { useChainType, useModelKey } from "@/aiParams";
+import {
+  ProjectConfig,
+  getCurrentProject,
+  subscribeToProjectChange,
+  useChainType,
+  useModelKey,
+  useProjectLoading,
+} from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
 import { AddImageModal } from "@/components/modals/AddImageModal";
@@ -24,9 +31,9 @@ import {
   Command,
   CornerDownLeft,
   Image,
+  Loader2,
   StopCircle,
   X,
-  Loader2,
 } from "lucide-react";
 import { App, Notice, Platform, TFile } from "obsidian";
 import React, {
@@ -52,7 +59,6 @@ interface ChatInputProps {
   isGenerating: boolean;
   onStopGenerating: () => void;
   app: App;
-  navigateHistory: (direction: "up" | "down") => string;
   contextNotes: TFile[];
   setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
   includeActiveNote: boolean;
@@ -61,6 +67,7 @@ interface ChatInputProps {
   selectedImages: File[];
   onAddImage: (files: File[]) => void;
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
+  disableModelSwitch?: boolean;
 }
 
 const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
@@ -72,7 +79,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       isGenerating,
       onStopGenerating,
       app,
-      navigateHistory,
       contextNotes,
       setContextNotes,
       includeActiveNote,
@@ -81,11 +87,10 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       selectedImages,
       onAddImage,
       setSelectedImages,
+      disableModelSwitch,
     },
     ref
   ) => {
-    const [historyIndex, setHistoryIndex] = useState(-1);
-    const [tempInput, setTempInput] = useState("");
     const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
     const [contextUrls, setContextUrls] = useState<string[]>([]);
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
@@ -93,17 +98,63 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const [currentModelKey, setCurrentModelKey] = useModelKey();
     const [modelError, setModelError] = useState<string | null>(null);
     const [currentChain] = useChainType();
+    const [isProjectLoading] = useProjectLoading();
     const [currentActiveNote, setCurrentActiveNote] = useState<TFile | null>(
       app.workspace.getActiveFile()
     );
+    const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
     const settings = useSettingsValue();
-    const isCopilotPlus = currentChain === ChainType.COPILOT_PLUS_CHAIN;
+    const isCopilotPlus =
+      currentChain === ChainType.COPILOT_PLUS_CHAIN || currentChain === ChainType.PROJECT_CHAIN;
+    const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+    const loadingMessages = [
+      "Loading the project context...",
+      "Processing context files...",
+      "If you have many files in context, this can take a while...",
+    ];
 
     useImperativeHandle(ref, () => ({
       focus: () => {
         textAreaRef.current?.focus();
       },
     }));
+
+    useEffect(() => {
+      if (currentChain === ChainType.PROJECT_CHAIN) {
+        setSelectedProject(getCurrentProject());
+
+        const unsubscribe = subscribeToProjectChange((project) => {
+          setSelectedProject(project);
+        });
+
+        return () => {
+          unsubscribe();
+        };
+      } else {
+        setSelectedProject(null);
+      }
+    }, [currentChain]);
+
+    useEffect(() => {
+      if (!isProjectLoading) return;
+
+      const interval = setInterval(() => {
+        setLoadingMessageIndex((prev) => (prev + 1) % loadingMessages.length);
+      }, 3000);
+
+      return () => clearInterval(interval);
+    }, [isProjectLoading, loadingMessages.length]);
+
+    const getDisplayModelKey = (): string => {
+      if (
+        selectedProject &&
+        currentChain === ChainType.PROJECT_CHAIN &&
+        selectedProject.projectModelKey
+      ) {
+        return selectedProject.projectModelKey;
+      }
+      return currentModelKey;
+    };
 
     const onSendMessage = (includeVault: boolean) => {
       if (!isCopilotPlus) {
@@ -234,74 +285,30 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.nativeEvent.isComposing) return;
 
-      const textarea = textAreaRef.current;
-      if (!textarea) return;
-
-      const { selectionStart, value } = textarea;
-      const lines = value.split("\n");
-      const currentLineIndex = value.substring(0, selectionStart).split("\n").length - 1;
-
       // Check for Cmd+Shift+Enter (Mac) or Ctrl+Shift+Enter (Windows)
       if (e.key === "Enter" && e.shiftKey && (Platform.isMacOS ? e.metaKey : e.ctrlKey)) {
         e.preventDefault();
         e.stopPropagation();
-
         onSendMessage(true);
-        setHistoryIndex(-1);
-        setTempInput("");
         return;
       }
 
-      if (e.key === "Enter" && !e.shiftKey) {
-        // Only prevent default and send message on non-mobile platforms
-        if (!Platform.isMobile) {
-          e.preventDefault();
-          onSendMessage(false);
-          setHistoryIndex(-1);
-          setTempInput("");
-        }
-        // On mobile, do nothing here, allowing the default newline behavior
-      } else if (e.key === "ArrowUp") {
-        if (currentLineIndex > 0 || selectionStart > 0) {
-          // Allow normal cursor movement within multi-line input
+      if (e.key === "Enter") {
+        /**
+         * send msg:
+         *         1. non-mobile platforms: only input Enter
+         *         2. mobile platforms: Shift+Enter
+         */
+        const shouldSendMessage =
+          (!e.shiftKey && !Platform.isMobile) || (e.shiftKey && Platform.isMobile);
+
+        if (!shouldSendMessage) {
+          // do nothing here, allowing the default newline behavior
           return;
         }
+
         e.preventDefault();
-        if (historyIndex === -1 && value.trim() !== "") {
-          setTempInput(value);
-        }
-        const newMessage = navigateHistory("up");
-        if (newMessage !== inputMessage) {
-          setHistoryIndex(historyIndex + 1);
-          setInputMessage(newMessage);
-          // Set cursor to beginning of input after update
-          setTimeout(() => {
-            if (textarea) {
-              textarea.selectionStart = textarea.selectionEnd = 0;
-            }
-          }, 0);
-        }
-      } else if (e.key === "ArrowDown") {
-        if (currentLineIndex < lines.length - 1 || selectionStart < value.length) {
-          // Allow normal cursor movement within multi-line input
-          return;
-        }
-        e.preventDefault();
-        if (historyIndex > -1) {
-          const newMessage = navigateHistory("down");
-          setHistoryIndex(historyIndex - 1);
-          if (historyIndex === 0) {
-            setInputMessage(tempInput);
-          } else {
-            setInputMessage(newMessage);
-          }
-          // Set cursor to beginning of input after update
-          setTimeout(() => {
-            if (textarea) {
-              textarea.selectionStart = textarea.selectionEnd = 0;
-            }
-          }, 0);
-        }
+        onSendMessage(false);
       }
     };
 
@@ -462,6 +469,14 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         )}
 
         <div className="relative" {...(isCopilotPlus ? getRootProps() : {})}>
+          {isProjectLoading && (
+            <div className="absolute inset-0 z-modal bg-background/80 backdrop-blur-sm flex items-center justify-center">
+              <div className="flex items-center gap-2">
+                <Loader2 className="size-4 animate-spin" />
+                <span className="text-sm">{loadingMessages[loadingMessageIndex]}</span>
+              </div>
+            </div>
+          )}
           <textarea
             ref={textAreaRef}
             className="w-full bg-transparent focus-visible:ring-0 border-none min-h-[60px] max-h-40 overflow-y-auto resize-none px-2 rounded-md text-sm text-normal"
@@ -473,6 +488,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
+            disabled={isProjectLoading}
           />
           {isCopilotPlus && (
             <>
@@ -496,17 +512,18 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           ) : (
             <DropdownMenu open={isModelDropdownOpen} onOpenChange={setIsModelDropdownOpen}>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost2" size="fit">
+                <Button variant="ghost2" size="fit" disabled={disableModelSwitch}>
                   {modelError ? (
                     <span className="text-error">Model Load Failed</span>
                   ) : settings.activeModels.find(
-                      (model) => model.enabled && getModelKeyFromModel(model) === currentModelKey
-                    ) ? (
+                    (model) =>
+                      model.enabled && getModelKeyFromModel(model) === getDisplayModelKey()
+                  ) ? (
                     <ModelDisplay
                       model={
                         settings.activeModels.find(
                           (model) =>
-                            model.enabled && getModelKeyFromModel(model) === currentModelKey
+                            model.enabled && getModelKeyFromModel(model) === getDisplayModelKey()
                         )!
                       }
                       iconSize={8}
@@ -514,47 +531,48 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                   ) : (
                     "Select Model"
                   )}
-                  <ChevronDown className="size-5 mt-0.5" />
+                  {!disableModelSwitch && <ChevronDown className="size-5 mt-0.5" />}
                 </Button>
               </DropdownMenuTrigger>
 
               <DropdownMenuContent align="start">
-                {settings.activeModels
-                  .filter((model) => model.enabled)
-                  .map((model) => {
-                    const { hasApiKey, errorNotice } = checkModelApiKey(model, settings);
-                    return (
-                      <DropdownMenuItem
-                        key={getModelKeyFromModel(model)}
-                        onSelect={async (event) => {
-                          if (!hasApiKey && errorNotice) {
-                            event.preventDefault();
-                            new Notice(errorNotice);
-                            return;
-                          }
-
-                          try {
-                            setModelError(null);
-                            setCurrentModelKey(getModelKeyFromModel(model));
-                          } catch (error) {
-                            const msg = `Model switch failed: ` + err2String(error);
-                            setModelError(msg);
-                            new Notice(msg);
-                            // Restore to the last valid model
-                            const lastValidModel = settings.activeModels.find(
-                              (m) => m.enabled && getModelKeyFromModel(m) === currentModelKey
-                            );
-                            if (lastValidModel) {
-                              setCurrentModelKey(getModelKeyFromModel(lastValidModel));
+                {!disableModelSwitch &&
+                  settings.activeModels
+                    .filter((model) => model.enabled)
+                    .map((model) => {
+                      const { hasApiKey, errorNotice } = checkModelApiKey(model, settings);
+                      return (
+                        <DropdownMenuItem
+                          key={getModelKeyFromModel(model)}
+                          onSelect={async (event) => {
+                            if (!hasApiKey && errorNotice) {
+                              event.preventDefault();
+                              new Notice(errorNotice);
+                              return;
                             }
-                          }
-                        }}
-                        className={!hasApiKey ? "opacity-50 cursor-not-allowed" : ""}
-                      >
-                        <ModelDisplay model={model} iconSize={12} />
-                      </DropdownMenuItem>
-                    );
-                  })}
+
+                            try {
+                              setModelError(null);
+                              setCurrentModelKey(getModelKeyFromModel(model));
+                            } catch (error) {
+                              const msg = `Model switch failed: ` + err2String(error);
+                              setModelError(msg);
+                              new Notice(msg);
+                              // Restore to the last valid model
+                              const lastValidModel = settings.activeModels.find(
+                                (m) => m.enabled && getModelKeyFromModel(m) === currentModelKey
+                              );
+                              if (lastValidModel) {
+                                setCurrentModelKey(getModelKeyFromModel(lastValidModel));
+                              }
+                            }
+                          }}
+                          className={!hasApiKey ? "opacity-50 cursor-not-allowed" : ""}
+                        >
+                          <ModelDisplay model={model} iconSize={12} />
+                        </DropdownMenuItem>
+                      );
+                    })}
               </DropdownMenuContent>
             </DropdownMenu>
           )}

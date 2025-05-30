@@ -1,6 +1,6 @@
 import { CustomError } from "@/error";
-import { TimestampUsageStrategy } from "@/promptUsageStrategy";
-import { getSettings } from "@/settings/model";
+import { createPromptUsageStrategy, PromptUsageStrategy } from "@/promptUsageStrategy";
+import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import {
   extractNoteFiles,
   getFileContent,
@@ -198,10 +198,14 @@ export async function processPrompt(
 
 export class CustomPromptProcessor {
   private static instance: CustomPromptProcessor;
-  private usageStrategy: TimestampUsageStrategy;
+  private usageStrategy: PromptUsageStrategy;
 
   private constructor(private vault: Vault) {
-    this.usageStrategy = new TimestampUsageStrategy();
+    this.usageStrategy = createPromptUsageStrategy();
+
+    subscribeToSettingsChange(() => {
+      this.usageStrategy = createPromptUsageStrategy();
+    });
   }
 
   get customPromptsFolder(): string {

@@ -1,17 +1,17 @@
 import {
   getChainType,
+  getCurrentProject,
   getModelKey,
   SetChainOptions,
   setChainType,
-  subscribeToChainTypeChange,
-  subscribeToModelKeyChange,
 } from "@/aiParams";
 import ChainFactory, { ChainType, Document } from "@/chainFactory";
-import { BUILTIN_CHAT_MODELS, USER_SENDER, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
+import { BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
 import {
   ChainRunner,
   CopilotPlusChainRunner,
   LLMChainRunner,
+  ProjectChainRunner,
   VaultQAChainRunner,
 } from "@/LLMProviders/chainRunner";
 import { logError, logInfo } from "@/logger";
@@ -32,17 +32,27 @@ import MemoryManager from "./memoryManager";
 import PromptManager from "./promptManager";
 
 export default class ChainManager {
-  private static chain: RunnableSequence;
-  private static retrievalChain: RunnableSequence;
+  private chain: RunnableSequence;
+  private retrievalChain: RunnableSequence;
+  private retrievedDocuments: Document[] = [];
+
+  public getRetrievedDocuments(): Document[] {
+    return this.retrievedDocuments;
+  }
 
   public app: App;
   public vectorStoreManager: VectorStoreManager;
   public chatModelManager: ChatModelManager;
   public memoryManager: MemoryManager;
   public promptManager: PromptManager;
-  public static retrievedDocuments: Document[] = [];
+
+  // A chat history that stores the messages sent and received
+  // Only reset when the user explicitly clicks "New Chat"
+  private chatMessages: ChatMessage[] = [];
 
   constructor(app: App, vectorStoreManager: VectorStoreManager) {
+    this.chatMessages = [];
+
     // Instantiate singletons
     this.app = app;
     this.vectorStoreManager = vectorStoreManager;
@@ -53,29 +63,21 @@ export default class ChainManager {
     // Initialize async operations
     this.initialize();
 
-    // Set up subscriptions
-    subscribeToModelKeyChange(async () => await this.createChainWithNewModel());
-    subscribeToChainTypeChange(() =>
-      this.setChain(getChainType(), {
-        refreshIndex:
-          getSettings().indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH &&
-          (getChainType() === ChainType.VAULT_QA_CHAIN ||
-            getChainType() === ChainType.COPILOT_PLUS_CHAIN),
-      })
-    );
-    subscribeToSettingsChange(async () => await this.createChainWithNewModel());
+    subscribeToSettingsChange(async () => {
+      await this.createChainWithNewModel();
+    });
   }
 
   private async initialize() {
     await this.createChainWithNewModel();
   }
 
-  static getChain(): RunnableSequence {
-    return ChainManager.chain;
+  public getChain(): RunnableSequence {
+    return this.chain;
   }
 
-  static getRetrievalChain(): RunnableSequence {
-    return ChainManager.retrievalChain;
+  public getRetrievalChain(): RunnableSequence {
+    return this.retrievalChain;
   }
 
   private validateChainType(chainType: ChainType): void {
@@ -92,35 +94,80 @@ export default class ChainManager {
   }
 
   private validateChainInitialization() {
-    if (!ChainManager.chain || !isSupportedChain(ChainManager.chain)) {
+    if (!this.chain || !isSupportedChain(this.chain)) {
       console.error("Chain is not initialized properly, re-initializing chain: ", getChainType());
-      this.setChain(getChainType());
+      this.createChainWithNewModel({}, false);
+      // this.setChain(getChainType());
     }
   }
 
-  static storeRetrieverDocuments(documents: Document[]) {
-    ChainManager.retrievedDocuments = documents;
+  public storeRetrieverDocuments(documents: Document[]) {
+    this.retrievedDocuments = documents;
   }
 
   /**
    * Update the active model and create a new chain with the specified model
    * name.
    */
-  async createChainWithNewModel(): Promise<void> {
-    let newModelKey = getModelKey();
+  async createChainWithNewModel(
+    options: SetChainOptions = {},
+    neededReInitChatMode: boolean = true
+  ): Promise<void> {
+    const chainType = getChainType();
+    const currentProject = getCurrentProject();
+
+    if (chainType === ChainType.PROJECT_CHAIN && !currentProject) {
+      return;
+    }
+
+    let newModelKey =
+      chainType === ChainType.PROJECT_CHAIN ? currentProject?.projectModelKey : getModelKey();
+
+    if (!newModelKey) {
+      new Notice("No model key found");
+      throw new Error("No model key found");
+    }
+
     try {
-      let customModel = findCustomModel(newModelKey, getSettings().activeModels);
-      if (!customModel) {
-        // Reset default model if no model is found
-        console.error("Resetting default model. No model configuration found for: ", newModelKey);
-        customModel = BUILTIN_CHAT_MODELS[0];
-        newModelKey = customModel.name + "|" + customModel.provider;
+      if (neededReInitChatMode) {
+        let customModel = findCustomModel(newModelKey, getSettings().activeModels);
+        if (!customModel) {
+          // Reset default model if no model is found
+          console.error("Resetting default model. No model configuration found for: ", newModelKey);
+          customModel = BUILTIN_CHAT_MODELS[0];
+          newModelKey = customModel.name + "|" + customModel.provider;
+        }
+
+        // Add validation for project mode
+        if (chainType === ChainType.PROJECT_CHAIN && !customModel.projectEnabled) {
+          // If the model is not project-enabled, find the first project-enabled model
+          const projectEnabledModel = getSettings().activeModels.find(
+            (m) => m.enabled && m.projectEnabled
+          );
+          if (projectEnabledModel) {
+            customModel = projectEnabledModel;
+            newModelKey = projectEnabledModel.name + "|" + projectEnabledModel.provider;
+            new Notice(
+              `Model ${customModel.name} is not available in project mode. Switching to ${projectEnabledModel.name}.`
+            );
+          } else {
+            throw new Error(
+              "No project-enabled models available. Please enable a model for project mode in settings."
+            );
+          }
+        }
+
+        const mergedModel = {
+          ...customModel,
+          ...currentProject?.modelConfigs,
+        };
+        await this.chatModelManager.setChatModel(mergedModel);
       }
-      await this.chatModelManager.setChatModel(customModel);
+
       // Must update the chatModel for chain because ChainFactory always
       // retrieves the old chain without the chatModel change if it exists!
       // Create a new chain with the new chatModel
-      this.setChain(getChainType());
+      this.setChain(chainType, options);
       logInfo(`Setting model to ${newModelKey}`);
     } catch (error) {
       logError(`createChainWithNewModel failed: ${error}`);
@@ -143,7 +190,7 @@ export default class ChainManager {
 
     switch (chainType) {
       case ChainType.LLM_CHAIN: {
-        ChainManager.chain = ChainFactory.createNewLLMChain({
+        this.chain = ChainFactory.createNewLLMChain({
           llm: chatModel,
           memory: memory,
           prompt: options.prompt || chatPrompt,
@@ -164,13 +211,13 @@ export default class ChainManager {
         });
 
         // Create new conversational retrieval chain
-        ChainManager.retrievalChain = ChainFactory.createConversationalRetrievalChain(
+        this.retrievalChain = ChainFactory.createConversationalRetrievalChain(
           {
             llm: chatModel,
             retriever: retriever,
             systemMessage: getSystemPrompt(),
           },
-          ChainManager.storeRetrieverDocuments.bind(ChainManager),
+          this.storeRetrieverDocuments.bind(this),
           getSettings().debug
         );
 
@@ -185,7 +232,7 @@ export default class ChainManager {
       case ChainType.COPILOT_PLUS_CHAIN: {
         // For initial load of the plugin
         await this.initializeQAChain(options);
-        ChainManager.chain = ChainFactory.createNewLLMChain({
+        this.chain = ChainFactory.createNewLLMChain({
           llm: chatModel,
           memory: memory,
           prompt: options.prompt || chatPrompt,
@@ -193,6 +240,19 @@ export default class ChainManager {
         }) as RunnableSequence;
 
         setChainType(ChainType.COPILOT_PLUS_CHAIN);
+        break;
+      }
+
+      case ChainType.PROJECT_CHAIN: {
+        // For initial load of the plugin
+        await this.initializeQAChain(options);
+        this.chain = ChainFactory.createNewLLMChain({
+          llm: chatModel,
+          memory: memory,
+          prompt: options.prompt || chatPrompt,
+          abortController: options.abortController,
+        }) as RunnableSequence;
+        setChainType(ChainType.PROJECT_CHAIN);
         break;
       }
 
@@ -211,6 +271,8 @@ export default class ChainManager {
         return new VaultQAChainRunner(this);
       case ChainType.COPILOT_PLUS_CHAIN:
         return new CopilotPlusChainRunner(this);
+      case ChainType.PROJECT_CHAIN:
+        return new ProjectChainRunner(this);
       default:
         throw new Error(`Unsupported chain type: ${chainType}`);
     }
@@ -259,9 +321,10 @@ export default class ChainManager {
         ]);
       }
 
-      this.setChain(getChainType(), {
+      this.createChainWithNewModel({ prompt: effectivePrompt }, false);
+      /*this.setChain(getChainType(), {
         prompt: effectivePrompt,
-      });
+      });*/
     }
 
     const chainRunner = this.getChainRunner();
@@ -285,5 +348,21 @@ export default class ChainManager {
           .saveContext({ input: userMsg.message }, { output: aiMsg.message });
       }
     }
+  }
+
+  public clearHistory() {
+    this.chatMessages = [];
+  }
+
+  public getChatMessages(): ChatMessage[] {
+    return this.chatMessages;
+  }
+
+  public setChatMessages(messages: ChatMessage[]) {
+    this.chatMessages = [...messages];
+  }
+
+  public addChatMessage(message: ChatMessage) {
+    this.chatMessages.push(message);
   }
 }
