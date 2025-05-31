@@ -48,17 +48,39 @@ export const COMPOSER_INSTRUCTIONS = `If the user explicitly requests to update 
       "nodes": [
         {
           "id": "1",
-        "type": "text",
-        "text": "Hello, world!"
-      }
-    ]
+          "type": "text",
+          "text": "Hello, world!",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 50
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1-2",
+          "fromNode": "1",
+          "toNode": "2",
+          "label": "connects to"
+        }
+      ]
+    }
   }
+  \`\`\`
 
   # Important
+  * ALL JSON objects must be complete and valid - ensure all arrays and objects have matching closing brackets
+  * For canvas files, both 'nodes' and 'edges' arrays must be properly closed with ]
   * Properly escape all special characters in the content field, especially backticks and quotes
   * Prefer to create new files in existing folders or root folder unless the user's request specifies otherwise
-  * File paths must end with a .md or .canvas extension.
-  * When generating changes on multiple files, output multiple JSON objects.`;
+  * File paths must end with a .md or .canvas extension
+  * When generating changes on multiple files, output multiple JSON objects
+  * Each JSON object must be parseable independently
+  * For canvas files:
+    - Every node must have: id, type, x, y, width, height
+    - Every edge must have: id, fromNode, toNode
+    - All IDs must be unique
+    - Edge fromNode and toNode must reference existing node IDs`;
 
 export const EMPTY_INDEX_ERROR_MESSAGE =
   "Copilot index does not exist. Please index your vault first!\n\n1. Set a working embedding model in QA settings. If it's not a local model, don't forget to set the API key. \n\n2. Click 'Refresh Index for Vault' and wait for indexing to complete. If you encounter the rate limiting error, please turn your request per second down in QA setting.";
