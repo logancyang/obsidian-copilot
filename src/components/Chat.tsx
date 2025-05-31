@@ -644,7 +644,7 @@ ${chatContent}`;
 
   const renderChatComponents = () => (
     <>
-      <div className="flex flex-col size-full overflow-hidden">
+      <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
         <NewVersionBanner currentVersion={plugin.manifest.version} />
         <ChatMessages
           chatHistory={chatHistory}
@@ -694,11 +694,11 @@ ${chatContent}`;
   );
 
   return (
-    <div className="w-full h-full flex flex-col overflow-hidden">
-      <div className="h-full">
-        <div className="flex flex-col h-full relative">
+    <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
+      <div className="tw-h-full">
+        <div className="tw-relative tw-flex tw-h-full tw-flex-col">
           {selectedChain === ChainType.PROJECT_CHAIN && (
-            <div className={`${selectedChain === ChainType.PROJECT_CHAIN ? "z-modal" : ""}`}>
+            <div className={`${selectedChain === ChainType.PROJECT_CHAIN ? "tw-z-modal" : ""}`}>
               <ProjectList
                 projects={settings.projectList || []}
                 defaultOpen={true}

@@ -5,33 +5,20 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-<<<<<<< HEAD
-  "inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:shrink-0",
-=======
-  "tw-inline-flex tw-items-center tw-justify-center tw-gap-2 tw-whitespace-nowrap tw-rounded-md tw-text-sm tw-font-medium tw-transition-colors focus-visible:tw-outline-none focus-visible:tw-ring-1 focus-visible:tw-ring-ring disabled:tw-pointer-events-none disabled:tw-opacity-50 [&_svg]:tw-shrink-0",
->>>>>>> 0035c48 (More classname fixes)
+  "tw-inline-flex tw-items-center tw-justify-center tw-gap-1 tw-whitespace-nowrap tw-rounded-md tw-text-sm tw-font-medium tw-transition-colors focus-visible:tw-outline-none focus-visible:tw-ring-1 focus-visible:tw-ring-ring disabled:tw-pointer-events-none disabled:tw-opacity-50 [&_svg]:tw-shrink-0",
   {
     variants: {
       variant: {
         default:
-<<<<<<< HEAD
-          "mod-cta bg-interactive-accent text-on-accent shadow hover:bg-interactive-accent-hover",
-        destructive:
-          "clickable-icon bg-modifier-error text-on-accent hover:bg-modifier-error hover:text-on-accent",
-        secondary: "bg-secondary text-normal shadow-sm hover:bg-interactive-hover",
-        ghost: "clickable-icon bg-transparent hover:bg-interactive-accent hover:text-on-accent",
-        link: "text-accent underline-offset-4 hover:underline",
-        success:
-          "clickable-icon bg-modifier-success text-on-accent hover:bg-modifier-success hover:text-on-accent",
-=======
           "mod-cta tw-bg-interactive-accent tw-text-on-accent tw-shadow hover:tw-bg-interactive-accent-hover",
         destructive:
-          "tw-bg-modifier-error tw-text-normal tw-shadow-sm hover:tw-bg-modifier-error/90",
+          "clickable-icon tw-bg-modifier-error tw-text-on-accent hover:tw-bg-modifier-error hover:tw-text-on-accent",
         secondary: "tw-bg-secondary tw-text-normal tw-shadow-sm hover:tw-bg-interactive-hover",
         ghost:
           "clickable-icon tw-bg-transparent hover:tw-bg-interactive-accent hover:tw-text-on-accent",
         link: "tw-text-accent tw-underline-offset-4 hover:tw-underline",
->>>>>>> 0035c48 (More classname fixes)
+        success:
+          "clickable-icon tw-bg-modifier-success tw-text-on-accent hover:tw-bg-modifier-success hover:tw-text-on-accent",
         ghost2:
           "clickable-icon tw-bg-transparent tw-text-faint tw-outline-none hover:tw-bg-transparent hover:tw-bg-opacity-100 hover:tw-text-normal focus-visible:tw-text-normal focus-visible:tw-outline-none focus-visible:tw-ring-0",
       },

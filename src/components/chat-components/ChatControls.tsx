@@ -171,7 +171,7 @@ export function ChatControls({
                 </div>
               )}
               {selectedChain === ChainType.PROJECT_CHAIN && "projects (alpha)"}
-              <ChevronDown className="size-5 mt-0.5" />
+              <ChevronDown className="tw-mt-0.5 tw-size-5" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
@@ -195,8 +195,8 @@ export function ChatControls({
                   handleModeChange(ChainType.COPILOT_PLUS_CHAIN);
                 }}
               >
-                <div className="flex items-center gap-1">
-                  <Sparkles className="size-4" />
+                <div className="tw-flex tw-items-center tw-gap-1">
+                  <Sparkles className="tw-size-4" />
                   copilot plus (beta)
                 </div>
               </DropdownMenuItem>
@@ -208,18 +208,18 @@ export function ChatControls({
                 }}
               >
                 copilot plus (beta)
-                <SquareArrowOutUpRight className="size-3" />
+                <SquareArrowOutUpRight className="tw-size-3" />
               </DropdownMenuItem>
             )}
 
             {isPlusUser ? (
               <DropdownMenuItem
-                className="flex items-center gap-1"
+                className="tw-flex tw-items-center tw-gap-1"
                 onSelect={() => {
                   handleModeChange(ChainType.PROJECT_CHAIN);
                 }}
               >
-                <LibraryBig className="size-4" />
+                <LibraryBig className="tw-size-4" />
                 projects (alpha)
               </DropdownMenuItem>
             ) : (
@@ -249,7 +249,7 @@ export function ChatControls({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost2" size="icon" title="Save Chat as Note" onClick={onSaveAsNote}>
-                <Download className="size-4" />
+                <Download className="tw-size-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Save Chat as Note</TooltipContent>
@@ -258,7 +258,7 @@ export function ChatControls({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="ghost2" size="icon" title="Chat History" onClick={onLoadHistory}>
-              <History className="size-4" />
+              <History className="tw-size-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Chat History</TooltipContent>
@@ -300,31 +300,31 @@ export function ChatControls({
             {selectedChain === ChainType.PROJECT_CHAIN ? (
               <>
                 <DropdownMenuItem
-                  className="flex items-center gap-2"
+                  className="tw-flex tw-items-center tw-gap-2"
                   onSelect={() => reloadCurrentProject()}
                 >
-                  <RefreshCw className="size-4" />
+                  <RefreshCw className="tw-size-4" />
                   Reload Current Project
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  className="flex items-center gap-2 text-destructive"
+                  className="tw-flex tw-items-center tw-gap-2"
                   onSelect={() => forceRebuildCurrentProjectContext()}
                 >
-                  <AlertTriangle className="size-4" />
+                  <AlertTriangle className="tw-size-4" />
                   Force Rebuild Context
                 </DropdownMenuItem>
               </>
             ) : (
               <>
                 <DropdownMenuItem
-                  className="flex items-center gap-2"
+                  className="tw-flex tw-items-center tw-gap-2"
                   onSelect={() => refreshVaultIndex()}
                 >
-                  <RefreshCw className="size-4" />
+                  <RefreshCw className="tw-size-4" />
                   Refresh Vault Index
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  className="flex items-center gap-2"
+                  className="tw-flex tw-items-center tw-gap-2"
                   onSelect={() => {
                     const modal = new ConfirmModal(
                       app,
@@ -335,7 +335,7 @@ export function ChatControls({
                     modal.open();
                   }}
                 >
-                  <AlertTriangle className="size-4" />
+                  <AlertTriangle className="tw-size-4" />
                   Force Reindex Vault
                 </DropdownMenuItem>
               </>

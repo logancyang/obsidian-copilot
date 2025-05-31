@@ -96,9 +96,9 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   if (!state || !state.changes) {
     logError("Invalid state:", state);
     return (
-      <div className="flex flex-col h-full items-center justify-center">
-        <div className="text-error">Error: Invalid state - missing changes</div>
-        <Button onClick={close} className="mt-4">
+      <div className="tw-flex tw-h-full tw-flex-col tw-items-center tw-justify-center">
+        <div className="tw-text-error">Error: Invalid state - missing changes</div>
+        <Button onClick={close} className="tw-mt-4">
           Close
         </Button>
       </div>
@@ -237,22 +237,22 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   };
 
   return (
-    <div className="flex flex-col h-full relative">
-      <div className="flex z-[1] gap-2 fixed bottom-2 left-1/2 -translate-x-1/2 p-2 border border-solid border-border rounded-md bg-secondary">
+    <div className="tw-relative tw-flex tw-h-full tw-flex-col">
+      <div className="tw-fixed tw-bottom-2 tw-left-1/2 tw-z-[1] tw-flex tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary tw-p-2">
         <Button variant="destructive" size="sm" onClick={handleReject}>
-          <XIcon className="size-4" />
+          <XIcon className="tw-size-4" />
           Reject
         </Button>
         <Button variant="success" size="sm" onClick={handleAccept}>
-          <Check className="size-4" />
+          <Check className="tw-size-4" />
           Accept
         </Button>
       </div>
-      <div className="flex items-center p-2 border-[0px] border-solid border-b border-border text-sm font-medium">
+      <div className="tw-flex tw-items-center tw-border-b tw-border-solid tw-border-border tw-p-2 tw-text-sm tw-font-medium">
         {state.path}
       </div>
 
-      <div className="flex-1 overflow-auto p-2">
+      <div className="tw-flex-1 tw-overflow-auto tw-p-2">
         {changeBlocks?.map((block, blockIndex) => {
           // Check if this block contains any changes (added or removed)
           const hasChanges = block.some((change) => change.added || change.removed);
@@ -277,13 +277,16 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
             <div
               key={blockIndex}
               ref={(el) => (blockRefs.current[blockIndex] = el)}
-              className={cn("mb-4 border rounded-md overflow-hidden border-border", {
-                "border-solid": blockStatus !== "unchanged",
-              })}
+              className={cn(
+                "tw-mb-4 tw-overflow-hidden tw-rounded-md tw-border tw-border-solid tw-border-border",
+                {
+                  "tw-border-solid": blockStatus !== "unchanged",
+                }
+              )}
             >
               {blockStatus === "accepted" ? (
                 // Show only the accepted version
-                <div className="flex-1 font-mono text-sm whitespace-pre-wrap py-1 px-2 text-text-normal">
+                <div className="tw-flex-1 tw-whitespace-pre-wrap tw-px-2 tw-py-1 tw-font-mono tw-text-sm tw-text-normal">
                   {block
                     .filter((change) => !change.removed)
                     .map((change, idx) => (
@@ -292,7 +295,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                 </div>
               ) : blockStatus === "rejected" ? (
                 // Show only the original version
-                <div className="flex-1 font-mono text-sm whitespace-pre-wrap py-1 px-2 text-text-normal">
+                <div className="tw-flex-1 tw-whitespace-pre-wrap tw-px-2 tw-py-1 tw-font-mono tw-text-sm tw-text-normal">
                   {block
                     .filter((change) => !change.added)
                     .map((change, idx) => (
@@ -304,12 +307,12 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                 block.map((change, changeIndex) => (
                   <div
                     key={`${blockIndex}-${changeIndex}`}
-                    className={cn("flex relative border-l-3", {
-                      "bg-success border-l-green": change.added,
-                      "bg-error border-l-red": change.removed,
+                    className={cn("tw-relative", {
+                      "tw-bg-success tw-border-l-green": change.added,
+                      "tw-bg-error tw-border-l-red": change.removed,
                     })}
                   >
-                    <div className="flex-1 font-mono text-sm whitespace-pre-wrap py-1 px-2 text-text-normal">
+                    <div className="tw-flex-1 tw-whitespace-pre-wrap tw-px-2 tw-py-1 tw-font-mono tw-text-sm tw-text-normal">
                       {change.value}
                     </div>
                   </div>
@@ -318,14 +321,14 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
 
               {/* Only show accept/reject buttons for blocks with changes that are undecided */}
               {hasChanges && blockStatus === "undecided" && (
-                <div className="flex items-center justify-end p-2 border-[0px] border-solid border-t border-border">
-                  <div className="flex items-center gap-2">
+                <div className="tw-flex tw-items-center tw-justify-end tw-border-[0px] tw-border-t tw-border-solid tw-border-border tw-p-2">
+                  <div className="tw-flex tw-items-center tw-gap-2">
                     <Button variant="destructive" size="sm" onClick={() => rejectBlock(blockIndex)}>
-                      <XIcon className="size-4" />
+                      <XIcon className="tw-size-4" />
                       Reject
                     </Button>
                     <Button variant="success" size="sm" onClick={() => acceptBlock(blockIndex)}>
-                      <Check className="size-4" />
+                      <Check className="tw-size-4" />
                       Accept
                     </Button>
                   </div>
@@ -334,17 +337,17 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
 
               {/* Show status for decided blocks with revert option */}
               {hasChanges && (blockStatus === "accepted" || blockStatus === "rejected") && (
-                <div className="flex items-center justify-end p-2 border-[0px] border-solid border-t border-border">
-                  <div className="flex items-center gap-2">
-                    <div className="text-sm font-medium mr-2">
+                <div className="tw-flex tw-items-center tw-justify-end tw-border-[0px] tw-border-t tw-border-solid tw-border-border tw-p-2">
+                  <div className="tw-flex tw-items-center tw-gap-2">
+                    <div className="tw-mr-2 tw-text-sm tw-font-medium">
                       {blockStatus === "accepted" ? (
-                        <div className="flex items-center gap-1 text-success">
-                          <Check className="size-4" />
+                        <div className="tw-flex tw-items-center tw-gap-1 tw-text-success">
+                          <Check className="tw-size-4" />
                           <div>Accepted</div>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1 text-error">
-                          <XIcon className="size-4" />
+                        <div className="tw-flex tw-items-center tw-gap-1 tw-text-error">
+                          <XIcon className="tw-size-4" />
                           <div>Rejected</div>
                         </div>
                       )}

@@ -41,37 +41,36 @@ function ProjectItem({
 }) {
   return (
     <div
-      className="flex gap-2 p-3 justify-between items-center rounded-lg bg-secondary/40 border border-border border-solid group transition-all duration-200 hover:border-interactive-accent/30 hover:bg-interactive-accent/5 hover:shadow-[0_2px_12px_rgba(0,0,0,0.1)] active:scale-[0.98] cursor-pointer"
+      className="tw-group tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-border-border tw-p-3 tw-transition-all tw-duration-200 tw-bg-secondary/40 hover:tw-border-interactive-accent hover:tw-text-accent hover:tw-shadow-[0_2px_12px_rgba(0,0,0,0.1)] active:tw-scale-[0.98]"
       onClick={() => loadContext(project)}
     >
-      <div className="flex items-center gap-2 flex-1 overflow-hidden">
-        <div className="text-blue-400">
-          <Folder className="size-4" />
+      <div className="tw-flex tw-flex-1 tw-items-center tw-gap-2 tw-overflow-hidden">
+        <div className="tw-text-accent">
+          <Folder className="tw-size-4" />
         </div>
-        <div className="flex flex-col gap-1.5 flex-1 overflow-hidden">
-          <span className="text-[13px] font-medium text-normal text-ellipsis overflow-hidden whitespace-nowrap w-full">
+        <div className="tw-flex tw-flex-1 tw-flex-col tw-gap-1.5 tw-overflow-hidden">
+          <span className="tw-w-full tw-truncate tw-text-[13px] tw-font-medium tw-text-normal">
             {project.name}
           </span>
           {project.description && (
-            <span className="text-[12px] text-muted/80 text-ellipsis overflow-hidden whitespace-nowrap w-full">
+            <span className="tw-w-full tw-truncate tw-text-[12px] tw-text-muted/80">
               {project.description}
             </span>
           )}
         </div>
       </div>
-      <div className="flex flex-row gap-1 opacity-100 transition-opacity duration-200">
+      <div className="tw-flex tw-flex-row tw-items-center tw-gap-1 tw-opacity-100 tw-transition-opacity tw-duration-200">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost2"
               size="icon"
-              className="h-6 w-6 hover:bg-accent/10 hover:text-accent-foreground"
               onClick={(e) => {
                 e.stopPropagation();
                 onEdit(project);
               }}
             >
-              <Edit2 className="h-3.5 w-3.5" />
+              <Edit2 className="tw-size-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">Edit Project</TooltipContent>
@@ -81,13 +80,12 @@ function ProjectItem({
             <Button
               variant="ghost2"
               size="icon"
-              className="h-6 w-6 hover:bg-accent/10 hover:text-accent-foreground"
               onClick={(e) => {
                 e.stopPropagation();
                 loadContext(project);
               }}
             >
-              <MessageSquare className="h-3.5 w-3.5" />
+              <MessageSquare className="tw-size-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">Start Chat</TooltipContent>
@@ -97,7 +95,6 @@ function ProjectItem({
             <Button
               variant="ghost2"
               size="icon"
-              className="h-6 w-6 hover:bg-destructive/10 hover:text-destructive"
               onClick={(e) => {
                 e.stopPropagation();
                 const modal = new ConfirmModal(
@@ -109,7 +106,7 @@ function ProjectItem({
                 modal.open();
               }}
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <Trash2 className="tw-size-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">Delete Project</TooltipContent>
@@ -223,13 +220,13 @@ export const ProjectList = memo(
     };
 
     return (
-      <div className={cn("flex flex-col", className)}>
-        <div className="overflow-y-auto">
-          <div className="flex flex-col">
+      <div className={cn("tw-flex tw-flex-col", className)}>
+        <div className="tw-overflow-y-auto">
+          <div className="tw-flex tw-flex-col">
             {showChatInput && selectedProject ? (
-              <div className="flex justify-between items-center px-2 py-3">
-                <div className="flex gap-2 items-center">
-                  <span className="font-semibold text-normal">Projects</span>
+              <div className="tw-flex tw-items-center tw-justify-between tw-px-2 tw-py-3">
+                <div className="tw-flex tw-items-center tw-gap-2">
+                  <span className="tw-font-semibold tw-text-normal">Projects</span>
                   <Select
                     value={selectedProject.name}
                     onValueChange={(value) => {
@@ -239,52 +236,50 @@ export const ProjectList = memo(
                       }
                     }}
                   >
-                    <SelectTrigger className="w-[200px]">
+                    <SelectTrigger className="tw-w-[200px]">
                       <SelectValue>
-                        <div className="flex items-center gap-2">
-                          <Folder className="size-4 text-accent/70" />
+                        <div className="tw-flex tw-items-center tw-gap-2">
+                          <Folder className="tw-size-4 tw-text-accent/70" />
                           <span>{selectedProject.name}</span>
                         </div>
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {projects.map((project) => (
-                        <SelectItem key={project.name} value={project.name}>
-                          <div className="flex items-center gap-2">
-                            <Folder className="size-4" />
-                            <span>{project.name}</span>
+                        <SelectItem
+                          key={project.name}
+                          value={project.name}
+                          className="tw-flex tw-items-center tw-gap-2"
+                        >
+                          <div className="tw-flex tw-items-center tw-gap-2">
+                            <Folder className="tw-size-4" />
+                            {project.name}
                           </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="tw-flex tw-items-center tw-gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() => handleEditProject(selectedProject)}
+                    className="hover:tw-text-on-accent hover:tw-bg-accent/50"
+                  >
+                    <Edit2 className="tw-mr-1 tw-size-4" />
+                    Edit
+                  </Button>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
-                        size="fit"
                         variant="ghost2"
-                        onClick={() => handleEditProject(selectedProject)}
-                        className="hover:bg-accent/50 hover:text-on-accent"
-                      >
-                        <Edit2 className="size-4 mr-1" />
-                        Edit
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">Edit Current Project</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="secondary"
                         size="icon"
                         onClick={() => {
                           enableOrDisableProject(false);
                         }}
                         aria-label="Close Current Project"
                       >
-                        <X className="size-4" />
+                        <X className="tw-size-4" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent side="bottom">Close Current Project</TooltipContent>
@@ -295,37 +290,32 @@ export const ProjectList = memo(
               <Collapsible
                 open={isOpen}
                 onOpenChange={setIsOpen}
-                className="transition-all duration-200 ease-in-out"
+                className="tw-transition-all tw-duration-200 tw-ease-in-out"
               >
-                <div className="flex justify-between items-center px-4 py-3">
-                  <div className="flex gap-2 items-center flex-1">
-                    <span className="font-semibold text-normal">Projects</span>
+                <div className="tw-flex tw-items-center tw-justify-between tw-px-4 tw-py-3">
+                  <div className="tw-flex tw-flex-1 tw-items-center tw-gap-2">
+                    <span className="tw-font-semibold tw-text-normal">Projects</span>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Info className="size-4 text-muted" />
+                        <Info className="tw-size-4 tw-text-muted" />
                       </TooltipTrigger>
-                      <TooltipContent side="bottom" className="w-64">
+                      <TooltipContent side="bottom" className="tw-w-64">
                         Manage your projects with different contexts and configurations.
                       </TooltipContent>
                     </Tooltip>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button size="fit" className="px-2" onClick={handleAddProject}>
-                          Create
-                          <Plus className="size-3" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">Add New Project</TooltipContent>
-                    </Tooltip>
+                  <div className="tw-flex tw-items-center tw-gap-2">
+                    <Button className="tw-px-2" variant="secondary" onClick={handleAddProject}>
+                      Create
+                      <Plus className="tw-size-3" />
+                    </Button>
                     {projects.length > 0 && (
                       <CollapsibleTrigger asChild>
                         <Button variant="ghost2" size="icon">
                           {isOpen ? (
-                            <ChevronUp className="size-5" />
+                            <ChevronUp className="tw-size-5" />
                           ) : (
-                            <ChevronDown className="size-5" />
+                            <ChevronDown className="tw-size-5" />
                           )}
                         </Button>
                       </CollapsibleTrigger>
@@ -333,12 +323,12 @@ export const ProjectList = memo(
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
-                          variant="secondary"
+                          variant="ghost2"
                           size="icon"
                           onClick={() => onClose()}
                           aria-label="close project mode"
                         >
-                          <X className="size-4" />
+                          <X className="tw-size-4" />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="bottom">Close Project Mode</TooltipContent>
@@ -346,14 +336,14 @@ export const ProjectList = memo(
                   </div>
                 </div>
                 {projects.length === 0 && (
-                  <div className="px-4 py-2 text-xs text-muted bg-secondary/30">
+                  <div className="tw-px-4 tw-py-2 tw-text-xs tw-text-muted tw-bg-secondary/30">
                     No projects available
                   </div>
                 )}
-                <CollapsibleContent className="transition-all duration-200 ease-in-out">
-                  <div className="relative bg-secondary/30">
-                    <div className="px-4 pt-3 pb-6 max-h-[calc(3*5.7rem)] overflow-y-auto">
-                      <div className="flex flex-col gap-2 @2xl:grid @2xl:grid-cols-2 @4xl:grid-cols-3">
+                <CollapsibleContent className="tw-transition-all tw-duration-200 tw-ease-in-out">
+                  <div className="tw-relative tw-bg-secondary/30">
+                    <div className="tw-max-h-[calc(3*5.7rem)] tw-overflow-y-auto tw-px-4 tw-pb-6 tw-pt-3">
+                      <div className="tw-flex tw-flex-col tw-gap-2 @2xl:tw-grid @2xl:tw-grid-cols-2 @4xl:tw-grid-cols-3">
                         {projects.map((project) => (
                           <ProjectItem
                             key={project.name}
@@ -366,12 +356,7 @@ export const ProjectList = memo(
                       </div>
                     </div>
                     {projects.length > 0 && (
-                      <div
-                        className="absolute bottom-0 left-0 right-0 h-6"
-                        style={{
-                          background: "linear-gradient(transparent, var(--background-primary) 75%)",
-                        }}
-                      />
+                      <div className="tw-pointer-events-none tw-absolute tw-inset-x-0 tw-bottom-0 tw-h-8 tw-bg-[linear-gradient(to_top,var(--background-primary)_0%,var(--background-primary)_30%,transparent_100%)]" />
                     )}
                   </div>
                 </CollapsibleContent>
@@ -380,15 +365,15 @@ export const ProjectList = memo(
           </div>
 
           {!showChatInput && (
-            <div className="flex flex-col gap-4 items-center justify-center p-8 text-muted bg-secondary/30">
-              <div className="max-w-[600px] space-y-4">
-                <p className="text-base text-center">
+            <div className="tw-flex tw-flex-col tw-items-center tw-justify-center tw-gap-4 tw-p-8 tw-text-muted tw-bg-secondary/30">
+              <div className="tw-max-w-[600px] tw-space-y-4">
+                <p className="tw-text-center tw-text-base">
                   Create your project-based AI assistants with custom instructions, context, and
                   model configurations.
                 </p>
-                <div className="flex flex-col gap-3 text-sm">
-                  <div className="flex items-center gap-2">
-                    <MessageSquare className="size-4" />
+                <div className="tw-flex tw-flex-col tw-gap-3 tw-text-sm">
+                  <div className="tw-flex tw-items-center tw-gap-2">
+                    <MessageSquare className="tw-size-4" />
                     <span>Click a project card to start chatting</span>
                   </div>
                 </div>

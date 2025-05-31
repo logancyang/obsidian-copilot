@@ -19,20 +19,12 @@ type TabId = (typeof TAB_IDS)[number];
 
 // tab icons
 const icons: Record<TabId, JSX.Element> = {
-<<<<<<< HEAD
-  basic: <Cog className="w-5 h-5" />,
-  model: <Cpu className="w-5 h-5" />,
-  QA: <Database className="w-5 h-5" />,
-  command: <Command className="w-5 h-5" />,
-  plus: <Sparkles className="w-5 h-5" />,
-  advanced: <Wrench className="w-5 h-5" />,
-=======
   basic: <Cog className="tw-size-5" />,
   model: <Cpu className="tw-size-5" />,
   QA: <Database className="tw-size-5" />,
   command: <Command className="tw-size-5" />,
+  plus: <Sparkles className="tw-size-5" />,
   advanced: <Wrench className="tw-size-5" />,
->>>>>>> 0035c48 (More classname fixes)
 };
 
 // tab components

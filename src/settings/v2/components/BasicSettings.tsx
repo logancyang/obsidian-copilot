@@ -14,17 +14,8 @@ import { checkModelApiKey, formatDateTime } from "@/utils";
 import { HelpCircle, Key, Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useState } from "react";
-<<<<<<< HEAD
 import { ApiKeyDialog } from "./ApiKeyDialog";
-=======
-import ApiKeyDialog from "./ApiKeyDialog";
-import { PlusSettings } from "@/settings/v2/components/PlusSettings";
-import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { createPlusPageUrl } from "@/plusUtils";
-import { getModelDisplayWithIcons } from "@/components/ui/model-display";
-import VectorStoreManager from "@/search/vectorStoreManager";
 import { cn } from "@/lib/utils";
->>>>>>> 0035c48 (More classname fixes)
 
 const ChainType2Label: Record<ChainType, string> = {
   [ChainType.LLM_CHAIN]: "Chat",

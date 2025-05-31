@@ -149,26 +149,14 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
       className={cn(
         "tw-mb-2",
         isDragging && [
-<<<<<<< HEAD
-          "opacity-90",
-          "shadow-lg",
-          "border-2",
-          "border-accent/50",
-          "relative",
-          "z-[9999]",
-          "bg-primary",
-          "rounded-lg",
-          "transform-gpu",
-=======
           "tw-opacity-90",
           "tw-shadow-lg",
           "tw-border-accent/50",
           "tw-relative",
           "tw-z-[9999]",
-          "tw-bg-background",
+          "tw-bg-primary",
           "tw-rounded-lg",
           "tw-transform-gpu",
->>>>>>> f8c5f55 (More classname fixes)
         ],
         !model.core && "tw-touch-none"
       )}
@@ -297,12 +285,7 @@ const SortableTableRow: React.FC<{
       className={cn(
         "tw-transition-colors tw-duration-200 hover:tw-bg-interactive-accent/10",
         isDragging &&
-<<<<<<< HEAD
-          "shadow-lg bg-primary/90 backdrop-blur-sm relative z-[100] cursor-grabbing border-2 border-accent/50",
-        !isDragging && "z-auto"
-=======
-          "tw-relative tw-z-[100] tw-cursor-grabbing tw-shadow-lg tw-backdrop-blur-sm tw-border-accent/50 tw-bg-background/90"
->>>>>>> f8c5f55 (More classname fixes)
+          "tw-relative tw-z-[100] tw-cursor-grabbing tw-shadow-lg tw-backdrop-blur-sm tw-border-accent/50 tw-bg-primary/90"
       )}
     >
       <TableCell className="tw-w-6 tw-px-2">
@@ -533,15 +516,19 @@ export const ModelTable: React.FC<ModelTableProps> = ({
       {/* Mobile view */}
       {renderMobileView()}
 
-      <div className="mt-4 flex justify-end gap-2">
+      <div className="tw-mt-4 tw-flex tw-justify-end tw-gap-2">
         {onRefresh && (
-          <Button onClick={onRefresh} variant="secondary" className="flex items-center gap-2">
-            <RefreshCw className="h-4 w-4" />
+          <Button
+            onClick={onRefresh}
+            variant="secondary"
+            className="tw-flex tw-items-center tw-gap-2"
+          >
+            <RefreshCw className="tw-size-4" />
             Refresh Built-in Models
           </Button>
         )}
-        <Button onClick={onAdd} variant="secondary" className="flex items-center gap-2">
-          <Plus className="h-4 w-4" />
+        <Button onClick={onAdd} variant="secondary" className="tw-flex tw-items-center tw-gap-2">
+          <Plus className="tw-size-4" />
           Add Custom Model
         </Button>
       </div>

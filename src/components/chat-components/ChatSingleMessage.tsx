@@ -494,15 +494,10 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           message.sender === USER_SENDER && "tw-border tw-border-solid tw-border-border"
         )}
       >
-<<<<<<< HEAD
-        <div className="w-6 shrink-0">{message.sender === USER_SENDER ? <User /> : <Bot />}</div>
-        <div className="flex flex-col flex-grow max-w-full gap-2 overflow-hidden">
-=======
         <div className="tw-w-6 tw-shrink-0">
           {message.sender === USER_SENDER ? <User /> : <Bot />}
         </div>
-        <div className="tw-flex tw-max-w-full tw-grow tw-flex-col tw-gap-2">
->>>>>>> 0035c48 (More classname fixes)
+        <div className="tw-flex tw-max-w-full tw-grow tw-flex-col tw-gap-2 tw-overflow-hidden">
           {!isEditing && <MessageContext context={message.context} />}
           <div className="message-content">{renderMessageContent()}</div>
 

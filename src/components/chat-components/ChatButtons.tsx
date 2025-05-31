@@ -49,7 +49,7 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost2" size="fit" onClick={onCopy} title="Copy">
-                {isCopied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                {isCopied ? <Check className="tw-size-4" /> : <Copy className="tw-size-4" />}
               </Button>
             </TooltipTrigger>
             <TooltipContent>Copy</TooltipContent>

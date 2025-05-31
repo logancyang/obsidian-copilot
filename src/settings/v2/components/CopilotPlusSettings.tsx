@@ -1,5 +1,6 @@
 import { AcceptKeyOption } from "@/autocomplete/codemirrorIntegration";
 import { WordCompletionManager } from "@/autocomplete/wordCompletion";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -11,6 +12,7 @@ import {
 import { SettingItem } from "@/components/ui/setting-item";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AUTOCOMPLETE_CONFIG } from "@/constants";
+import { cn } from "@/lib/utils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { HelpCircle, RefreshCw } from "lucide-react";
 import { Notice } from "obsidian";
@@ -67,14 +69,14 @@ export const CopilotPlusSettings: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <section className="flex flex-col gap-4">
-        <div className="flex items-center py-4">
-          <span className="rounded-full bg-accent/90 px-3 py-1 text-sm font-semibold text-accent-foreground">
-            Plus required
-          </span>
+    <div className="tw-flex tw-flex-col tw-gap-4">
+      <section className="tw-flex tw-flex-col tw-gap-4">
+        <div className="tw-flex tw-items-center tw-py-4">
+          <Badge variant="secondary" className="tw-text-accent">
+            Plus Required
+          </Badge>
         </div>
-        <div className="flex flex-col gap-6">
+        <div className="tw-flex tw-flex-col tw-gap-4">
           <SettingItem
             type="switch"
             title="Include Current Note in Context Menu"
@@ -95,14 +97,14 @@ export const CopilotPlusSettings: React.FC = () => {
             }}
           />
 
-          <h2 className="text-lg font-semibold pt-4">Autocomplete</h2>
+          <div className="tw-pt-4 tw-text-xl tw-font-semibold">Autocomplete</div>
 
           <SettingItem
             type="switch"
             title="Sentence Autocomplete"
             description={
-              <div className="flex items-center gap-1.5">
-                <span className="leading-none">
+              <div className="tw-flex tw-items-center tw-gap-1.5">
+                <span className="tw-leading-none">
                   Enable AI-powered sentence autocomplete suggestions while typing
                 </span>
               </div>
@@ -129,9 +131,9 @@ export const CopilotPlusSettings: React.FC = () => {
             <Button
               onClick={handleRefreshWordIndex}
               disabled={isRefreshing}
-              className="flex items-center gap-2"
+              className="tw-flex tw-items-center tw-gap-2"
             >
-              <RefreshCw className={`size-4 ${isRefreshing ? "animate-spin" : ""}`} />
+              <RefreshCw className={cn("tw-size-4", isRefreshing && "tw-animate-spin")} />
               {isRefreshing ? "Rebuilding..." : "Refresh Word Index"}
             </Button>
           </SettingItem>
@@ -140,17 +142,17 @@ export const CopilotPlusSettings: React.FC = () => {
             type="custom"
             title="Autocomplete Accept Suggestion Key"
             description={
-              <div className="flex items-center gap-1.5">
-                <span className="leading-none">
+              <div className="tw-flex tw-items-center tw-gap-1.5">
+                <span className="tw-leading-none">
                   The key used to accept autocomplete suggestions
                 </span>
                 <TooltipProvider delayDuration={0}>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <HelpCircle className="size-4" />
+                      <HelpCircle className="tw-size-4" />
                     </TooltipTrigger>
-                    <TooltipContent className="max-w-96 flex flex-col gap-2">
-                      <div className="text-sm text-muted pt-2">
+                    <TooltipContent className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
+                      <div className="tw-text-sm tw-text-muted">
                         Select the key you want to use for accepting suggestions. Default is
                         &quot;Tab&quot;.
                       </div>
@@ -160,9 +162,9 @@ export const CopilotPlusSettings: React.FC = () => {
               </div>
             }
           >
-            <div className="flex items-center gap-2">
+            <div className="tw-flex tw-items-center tw-gap-2">
               <Select value={currentShortcut} onValueChange={handleKeyChange}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="tw-w-[180px]">
                   <SelectValue placeholder="Select key" />
                 </SelectTrigger>
                 <SelectContent>
@@ -175,7 +177,7 @@ export const CopilotPlusSettings: React.FC = () => {
               </Select>
 
               {currentShortcut && currentShortcut !== AUTOCOMPLETE_CONFIG.KEYBIND && (
-                <Button variant="ghost" onClick={resetToDefault} className="text-xs h-8">
+                <Button variant="ghost" onClick={resetToDefault} className="tw-h-8 tw-text-xs">
                   Reset to Default
                 </Button>
               )}

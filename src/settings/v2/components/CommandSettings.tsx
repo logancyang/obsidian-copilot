@@ -71,7 +71,7 @@ const SortableTableRow: React.FC<{
       className={cn(
         "tw-transition-colors",
         isDragging &&
-          "tw-relative tw-z-[100] tw-cursor-grabbing tw-shadow-lg tw-backdrop-blur-sm tw-border-accent/50 tw-bg-background/90"
+          "tw-relative tw-z-[100] tw-cursor-grabbing tw-shadow-lg tw-backdrop-blur-sm tw-border-accent/50"
       )}
     >
       <TableCell className="tw-w-10">

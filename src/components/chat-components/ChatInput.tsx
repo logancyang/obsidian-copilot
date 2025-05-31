@@ -468,12 +468,12 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           </div>
         )}
 
-        <div className="relative" {...(isCopilotPlus ? getRootProps() : {})}>
+        <div className="tw-relative" {...(isCopilotPlus ? getRootProps() : {})}>
           {isProjectLoading && (
-            <div className="absolute inset-0 z-modal bg-background/80 backdrop-blur-sm flex items-center justify-center">
-              <div className="flex items-center gap-2">
-                <Loader2 className="size-4 animate-spin" />
-                <span className="text-sm">{loadingMessages[loadingMessageIndex]}</span>
+            <div className="tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-bg-primary tw-opacity-80 tw-backdrop-blur-sm">
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <Loader2 className="tw-size-4 tw-animate-spin" />
+                <span className="tw-text-sm">{loadingMessages[loadingMessageIndex]}</span>
               </div>
             </div>
           )}
@@ -531,11 +531,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                   ) : (
                     "Select Model"
                   )}
-<<<<<<< HEAD
-                  {!disableModelSwitch && <ChevronDown className="size-5 mt-0.5" />}
-=======
-                  <ChevronDown className="tw-mt-0.5 tw-size-5" />
->>>>>>> 0035c48 (More classname fixes)
+                  {!disableModelSwitch && <ChevronDown className="tw-mt-0.5 tw-size-5" />}
                 </Button>
               </DropdownMenuTrigger>
 
@@ -554,7 +550,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                               new Notice(errorNotice);
                               return;
                             }
-<<<<<<< HEAD
 
                             try {
                               setModelError(null);
@@ -572,22 +567,12 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                               }
                             }
                           }}
-                          className={!hasApiKey ? "opacity-50 cursor-not-allowed" : ""}
+                          className={!hasApiKey ? "tw-cursor-not-allowed tw-opacity-50" : ""}
                         >
                           <ModelDisplay model={model} iconSize={12} />
                         </DropdownMenuItem>
                       );
                     })}
-=======
-                          }
-                        }}
-                        className={!hasApiKey ? "tw-cursor-not-allowed tw-opacity-50" : ""}
-                      >
-                        <ModelDisplay model={model} iconSize={12} />
-                      </DropdownMenuItem>
-                    );
-                  })}
->>>>>>> 0035c48 (More classname fixes)
               </DropdownMenuContent>
             </DropdownMenu>
           )}

@@ -64,13 +64,8 @@ const ChatMessages = memo(
 
     if (!chatHistory.filter((message) => message.isVisible).length && !currentAiMessage) {
       return (
-<<<<<<< HEAD
-        <div className="flex flex-col gap-2 overflow-y-auto w-full h-full">
-          {showHelperComponents && settings.showRelevantNotes && (
-=======
         <div className="tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto">
-          {settings.showRelevantNotes && (
->>>>>>> 0035c48 (More classname fixes)
+          {showHelperComponents && settings.showRelevantNotes && (
             <RelevantNotes
               onInsertToChat={onInsertToChat}
               defaultOpen={true}
@@ -89,13 +84,8 @@ const ChatMessages = memo(
     };
 
     return (
-<<<<<<< HEAD
-      <div className="flex flex-col flex-1 h-full overflow-hidden">
-        {showHelperComponents && settings.showRelevantNotes && (
-=======
       <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
-        {settings.showRelevantNotes && (
->>>>>>> 0035c48 (More classname fixes)
+        {showHelperComponents && settings.showRelevantNotes && (
           <RelevantNotes
             className="tw-mb-4"
             onInsertToChat={onInsertToChat}

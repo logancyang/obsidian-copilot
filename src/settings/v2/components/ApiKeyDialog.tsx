@@ -266,54 +266,26 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
   };
 
   return (
-<<<<<<< HEAD
-    <div className="sm:max-w-[500px] max-h-[600px] overflow-y-auto p-4">
-      <div className="mb-4">
-        <h2 className="text-xl font-bold">AI Provider Settings</h2>
-        <p className="text-sm text-muted">Configure your AI providers by adding their API keys.</p>
+    <div className="tw-max-h-[600px] tw-overflow-y-auto tw-p-4 sm:tw-max-w-[500px]">
+      <div className="tw-mb-4">
+        <h2 className="tw-text-xl tw-font-bold">AI Provider Settings</h2>
+        <p className="tw-text-sm tw-text-muted">
+          Configure your AI providers by adding their API keys.
+        </p>
       </div>
 
-      <div className="space-y-6 py-4">
-        <div className="space-y-4">
+      <div className="tw-space-y-6 tw-py-4">
+        <div className="tw-space-y-4">
           {providers.map((item: ProviderKeyItem) => (
             <React.Fragment key={item.provider}>
-              <div className="flex flex-col gap-2">
-                <div className="flex items-end gap-2 font-medium">
-                  <div className="truncate">{getProviderLabel(item.provider)}</div>
-                </div>
-                <div className="flex flex-row items-center gap-2">
-                  <div className="flex-1">
-=======
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent container={modalContainer} className="sm:tw-max-w-[480px]">
-        <DialogHeader>
-          <DialogTitle>AI Provider Settings</DialogTitle>
-          <DialogDescription>
-            Configure your AI providers by adding their API keys.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="tw-space-y-6 tw-py-4">
-          <div className="tw-space-y-4">
-            {providers.map((item: ProviderKeyItem) => (
-              <div key={item.provider} className="tw-flex tw-items-center tw-gap-2">
-                <div className="tw-w-[120px] tw-font-medium">
+              <div className="tw-flex tw-flex-col tw-gap-2">
+                <div className="tw-flex tw-items-end tw-gap-2 tw-font-medium">
                   <div className="tw-truncate">{getProviderLabel(item.provider)}</div>
-                  {getProviderInfo(item.provider).keyManagementURL && (
-                    <a
-                      href={getProviderInfo(item.provider).keyManagementURL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="tw-text-[10px] tw-text-accent hover:tw-text-accent-hover"
-                    >
-                      Get {getProviderLabel(item.provider)} Key
-                    </a>
-                  )}
                 </div>
-                <div className="tw-flex tw-flex-1 tw-items-center tw-gap-2">
-                  <div className="tw-flex-1 tw-pr-2">
->>>>>>> 0035c48 (More classname fixes)
+                <div className="tw-flex tw-flex-row tw-items-center tw-gap-2">
+                  <div className="tw-flex-1">
                     <PasswordInput
-                      className="max-w-full"
+                      className="tw-max-w-full"
                       value={item.apiKey}
                       onChange={(v) => handleApiKeyChange(item.provider, v)}
                       disabled={verifyingProviders.has(item.provider)}
@@ -359,13 +331,13 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
                       disabled={!item.apiKey || verifyingProviders.size > 0}
                       variant="secondary"
                       size="sm"
-                      className="w-full whitespace-nowrap px-0.5 py-0.5 flex items-center justify-center gap-1"
+                      className="tw-flex tw-w-full tw-items-center tw-justify-center tw-gap-1 tw-whitespace-nowrap tw-p-0.5"
                     >
                       Add Model
                       {expandedProvider === item.provider ? (
-                        <ChevronUp className="h-4 w-4 ml-1" />
+                        <ChevronUp className="tw-ml-1 tw-size-4" />
                       ) : (
-                        <ChevronDown className="h-4 w-4 ml-1" />
+                        <ChevronDown className="tw-ml-1 tw-size-4" />
                       )}
                     </Button>
                   </div>
@@ -376,23 +348,23 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
                       href={getProviderInfo(item.provider).keyManagementURL}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-[10px] sm:text-xs text-accent hover:text-accent-hover"
+                      className="tw-text-[10px] tw-text-accent hover:tw-text-accent-hover sm:tw-text-xs"
                     >
                       Get {getProviderLabel(item.provider)} Key
                     </a>
                   )}
                 </div>
               </div>
-              <Collapsible open={expandedProvider === item.provider} className="mt-2">
-                <CollapsibleContent className="p-3 rounded-md">
-                  <div className="flex flex-col gap-2">
+              <Collapsible open={expandedProvider === item.provider} className="tw-mt-2">
+                <CollapsibleContent className="tw-rounded-md tw-p-3">
+                  <div className="tw-flex tw-flex-col tw-gap-2">
                     <FormField
                       label="Model"
                       description="Add the currently selected model to model List. After adding, please check the Model Tab."
                     >
                       <div>
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1">
+                        <div className="tw-flex tw-items-center tw-gap-2">
+                          <div className="tw-flex-1">
                             <ObsidianNativeSelect
                               options={
                                 modelsByProvider[item.provider]
@@ -437,7 +409,7 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
                               }
                             />
                           </div>
-                          <div className="w-[72px]">
+                          <div className="tw-w-[72px]">
                             <Button
                               onClick={verifyModel}
                               disabled={
@@ -447,22 +419,22 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
                               }
                               variant="secondary"
                               size="sm"
-                              className="w-full whitespace-nowrap"
+                              className="tw-w-full tw-whitespace-nowrap"
                             >
                               {verifyingModel ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                <Loader2 className="tw-mr-2 tw-size-4 tw-animate-spin" />
                               ) : (
                                 "Add"
                               )}
                             </Button>
                           </div>
                         </div>
-                        <div className="mt-1 text-xs">
+                        <div className="tw-mt-1 tw-text-xs">
                           {loadingProvider === item.provider && (
-                            <div className="text-muted p-1">Loading models...</div>
+                            <div className="tw-p-1 tw-text-muted">Loading models...</div>
                           )}
                           {errorProvider === item.provider && (
-                            <div className="text-error p-1">
+                            <div className="tw-p-1 tw-text-error">
                               Failed to load models.
                               {modelsByProvider[item.provider] === null &&
                                 " Check API Key or network."}
@@ -470,14 +442,14 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
                           )}
                           {modelsByProvider[item.provider] &&
                             modelsByProvider[item.provider]!.length === 0 && (
-                              <div className="text-muted p-1">
+                              <div className="tw-p-1 tw-text-muted">
                                 No models available for this provider.
                               </div>
                             )}
                           {modelsByProvider[item.provider] === undefined &&
                             errorProvider !== item.provider &&
                             loadingProvider !== item.provider && (
-                              <div className="text-muted p-1">
+                              <div className="tw-p-1 tw-text-muted">
                                 Click to load models or expand to try again if API key was changed.
                               </div>
                             )}
@@ -492,7 +464,7 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
         </div>
       </div>
 
-      <div className="flex justify-end mt-4">
+      <div className="tw-mt-4 tw-flex tw-justify-end">
         <Button onClick={onClose}>Close</Button>
       </div>
     </div>
