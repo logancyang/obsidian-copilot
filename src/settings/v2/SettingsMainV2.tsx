@@ -2,18 +2,19 @@ import { ResetSettingsConfirmModal } from "@/components/modals/ResetSettingsConf
 import { Button } from "@/components/ui/button";
 import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/ui/setting-tabs";
 import { TabProvider, useTab } from "@/contexts/TabContext";
+import { useLatestVersion } from "@/hooks/useLatestVersion";
 import CopilotPlugin from "@/main";
 import { resetSettings } from "@/settings/model";
 import { CommandSettings } from "@/settings/v2/components/CommandSettings";
-import { useLatestVersion } from "@/hooks/useLatestVersion";
-import { Cog, Command, Cpu, Database, Wrench } from "lucide-react";
+import { Cog, Command, Cpu, Database, Sparkles, Wrench } from "lucide-react";
 import React from "react";
 import { AdvancedSettings } from "./components/AdvancedSettings";
 import { BasicSettings } from "./components/BasicSettings";
+import { CopilotPlusSettings } from "./components/CopilotPlusSettings";
 import { ModelSettings } from "./components/ModelSettings";
 import { QASettings } from "./components/QASettings";
 
-const TAB_IDS = ["basic", "model", "QA", "command", "advanced"] as const;
+const TAB_IDS = ["basic", "model", "QA", "command", "plus", "advanced"] as const;
 type TabId = (typeof TAB_IDS)[number];
 
 // tab icons
@@ -22,6 +23,7 @@ const icons: Record<TabId, JSX.Element> = {
   model: <Cpu className="w-5 h-5" />,
   QA: <Database className="w-5 h-5" />,
   command: <Command className="w-5 h-5" />,
+  plus: <Sparkles className="w-5 h-5" />,
   advanced: <Wrench className="w-5 h-5" />,
 };
 
@@ -31,6 +33,7 @@ const components: Record<TabId, React.FC> = {
   model: () => <ModelSettings />,
   QA: () => <QASettings />,
   command: () => <CommandSettings />,
+  plus: () => <CopilotPlusSettings />,
   advanced: () => <AdvancedSettings />,
 };
 

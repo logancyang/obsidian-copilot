@@ -11,11 +11,12 @@ import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools";
 import { ToolManager } from "@/tools/toolManager";
 import { extractChatHistory, extractYoutubeUrl } from "@/utils";
 import { BrevilabsClient } from "./brevilabsClient";
-import MemoryManager from "./memoryManager";
 import { Vault } from "obsidian";
+import ProjectManager from "@/LLMProviders/projectManager";
+import { isProjectMode } from "@/aiParams";
 
 // TODO: Add @index with explicit pdf files in chat context menu
-export const COPILOT_TOOL_NAMES = ["@vault", "@web", "@youtube", "@pomodoro"];
+export const COPILOT_TOOL_NAMES = ["@vault", "@composer", "@web", "@youtube", "@pomodoro"];
 
 type ToolCall = {
   tool: any;
@@ -43,7 +44,10 @@ export class IntentAnalyzer {
 
   static async analyzeIntent(originalMessage: string): Promise<ToolCall[]> {
     try {
-      const brocaResponse = await BrevilabsClient.getInstance().broca(originalMessage);
+      const brocaResponse = await BrevilabsClient.getInstance().broca(
+        originalMessage,
+        isProjectMode()
+      );
 
       // Check if the response is successful and has the expected structure
       if (!brocaResponse?.response) {
@@ -112,7 +116,7 @@ export class IntentAnalyzer {
     // Handle @web command
     if (message.includes("@web")) {
       const cleanQuery = this.removeAtCommands(originalMessage);
-      const memory = MemoryManager.getInstance().getMemory();
+      const memory = ProjectManager.instance.getCurrentChainManager().memoryManager.getMemory();
       const memoryVariables = await memory.loadMemoryVariables({});
       const chatHistory = extractChatHistory(memoryVariables);
 

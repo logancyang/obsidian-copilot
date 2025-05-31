@@ -1,10 +1,10 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import ChatModelManager from "@/LLMProviders/chatModelManager";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
+import ProjectManager from "@/LLMProviders/projectManager";
 import { logInfo } from "@/logger";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings } from "@/settings/model";
-import { extractNoteFiles, removeThinkTags } from "@/utils";
+import { extractNoteFiles, removeThinkTags, withSuppressedTokenWarnings } from "@/utils";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
 import { BaseChatModelCallOptions } from "@langchain/core/language_models/chat_models";
@@ -40,110 +40,119 @@ export class HybridRetriever extends BaseRetriever {
     query: string,
     config?: BaseCallbackConfig
   ): Promise<Document[]> {
-    // Extract note TFiles wrapped in [[]] from the query
-    const noteFiles = extractNoteFiles(query, app.vault);
-    // Add note titles to salient terms
-    const noteTitles = noteFiles.map((file) => file.basename);
-    // Use Set to ensure uniqueness when combining terms
-    const enhancedSalientTerms = [...new Set([...this.options.salientTerms, ...noteTitles])];
+    // Wrap the entire function in token warning suppression
+    return withSuppressedTokenWarnings(async () => {
+      // Extract note TFiles wrapped in [[]] from the query
+      const noteFiles = extractNoteFiles(query, app.vault);
+      // Add note titles to salient terms
+      const noteTitles = noteFiles.map((file) => file.basename);
+      // Use Set to ensure uniqueness when combining terms
+      const enhancedSalientTerms = [...new Set([...this.options.salientTerms, ...noteTitles])];
 
-    // Retrieve chunks for explicitly mentioned note files
-    const explicitChunks = await this.getExplicitChunks(noteFiles);
-    let rewrittenQuery = query;
-    if (config?.runName !== "no_hyde") {
-      // Use config to determine if HyDE should be used
-      // Generate a hypothetical answer passage
-      rewrittenQuery = await this.rewriteQuery(query);
-    }
-    // Pass enhanced salient terms to include titles
-    const oramaChunks = await this.getOramaChunks(
-      rewrittenQuery,
-      enhancedSalientTerms,
-      this.options.textWeight
-    );
-
-    const combinedChunks = this.filterAndFormatChunks(oramaChunks, explicitChunks);
-
-    let finalChunks = combinedChunks;
-
-    // Add check for empty array
-    if (combinedChunks.length === 0) {
-      if (getSettings().debug) {
-        console.log("No chunks found for query:", query);
+      // Retrieve chunks for explicitly mentioned note files
+      const explicitChunks = await this.getExplicitChunks(noteFiles);
+      let rewrittenQuery = query;
+      if (config?.runName !== "no_hyde") {
+        // Use config to determine if HyDE should be used
+        // Generate a hypothetical answer passage
+        rewrittenQuery = await this.rewriteQuery(query);
       }
-      return finalChunks;
-    }
-
-    const maxOramaScore = combinedChunks.reduce((max, chunk) => {
-      const score = chunk.metadata.score;
-      const isValidScore = typeof score === "number" && !isNaN(score);
-      return isValidScore ? Math.max(max, score) : max;
-    }, 0);
-
-    const allScoresAreNaN = combinedChunks.every(
-      (chunk) => typeof chunk.metadata.score !== "number" || isNaN(chunk.metadata.score)
-    );
-
-    const shouldRerank =
-      this.options.useRerankerThreshold &&
-      (maxOramaScore < this.options.useRerankerThreshold || allScoresAreNaN);
-    // Apply reranking if max score is below the threshold or all scores are NaN
-    if (shouldRerank) {
-      const rerankResponse = await BrevilabsClient.getInstance().rerank(
-        query,
-        // Limit the context length to 3000 characters to avoid overflowing the reranker
-        combinedChunks.map((doc) => doc.pageContent.slice(0, 3000))
+      // Pass enhanced salient terms to include titles
+      const oramaChunks = await this.getOramaChunks(
+        rewrittenQuery,
+        enhancedSalientTerms,
+        this.options.textWeight
       );
 
-      // Map chunks based on reranked scores and include rerank_score in metadata
-      finalChunks = rerankResponse.response.data.map((item) => ({
-        ...combinedChunks[item.index],
-        metadata: {
-          ...combinedChunks[item.index].metadata,
-          rerank_score: item.relevance_score,
-        },
-      }));
-    }
+      const combinedChunks = this.filterAndFormatChunks(oramaChunks, explicitChunks);
 
-    if (getSettings().debug) {
-      console.log("*** HYBRID RETRIEVER DEBUG INFO: ***");
+      let finalChunks = combinedChunks;
 
-      if (config?.runName !== "no_hyde") {
-        console.log("\nOriginal Query: ", query);
-        console.log("Rewritten Query: ", rewrittenQuery);
+      // Add check for empty array
+      if (combinedChunks.length === 0) {
+        if (getSettings().debug) {
+          console.log("No chunks found for query:", query);
+        }
+        return finalChunks;
       }
 
-      console.log("\nExplicit Chunks: ", explicitChunks);
-      console.log("Orama Chunks: ", oramaChunks);
-      console.log("Combined Chunks: ", combinedChunks);
-      console.log("Max Orama Score: ", maxOramaScore);
+      const maxOramaScore = combinedChunks.reduce((max, chunk) => {
+        const score = chunk.metadata.score;
+        const isValidScore = typeof score === "number" && !isNaN(score);
+        return isValidScore ? Math.max(max, score) : max;
+      }, 0);
+
+      const allScoresAreNaN = combinedChunks.every(
+        (chunk) => typeof chunk.metadata.score !== "number" || isNaN(chunk.metadata.score)
+      );
+
+      const shouldRerank =
+        this.options.useRerankerThreshold &&
+        (maxOramaScore < this.options.useRerankerThreshold || allScoresAreNaN);
+      // Apply reranking if max score is below the threshold or all scores are NaN
       if (shouldRerank) {
-        console.log("Reranked Chunks: ", finalChunks);
-      } else {
-        console.log("No reranking applied.");
-      }
-    }
+        const rerankResponse = await BrevilabsClient.getInstance().rerank(
+          query,
+          // Limit the context length to 3000 characters to avoid overflowing the reranker
+          combinedChunks.map((doc) => doc.pageContent.slice(0, 3000))
+        );
 
-    return finalChunks;
+        // Map chunks based on reranked scores and include rerank_score in metadata
+        finalChunks = rerankResponse.response.data.map((item) => ({
+          ...combinedChunks[item.index],
+          metadata: {
+            ...combinedChunks[item.index].metadata,
+            rerank_score: item.relevance_score,
+          },
+        }));
+      }
+
+      if (getSettings().debug) {
+        console.log("*** HYBRID RETRIEVER DEBUG INFO: ***");
+
+        if (config?.runName !== "no_hyde") {
+          console.log("\nOriginal Query: ", query);
+          console.log("Rewritten Query: ", rewrittenQuery);
+        }
+
+        console.log("\nExplicit Chunks: ", explicitChunks);
+        console.log("Orama Chunks: ", oramaChunks);
+        console.log("Combined Chunks: ", combinedChunks);
+        console.log("Max Orama Score: ", maxOramaScore);
+        if (shouldRerank) {
+          console.log("Reranked Chunks: ", finalChunks);
+        } else {
+          console.log("No reranking applied.");
+        }
+      }
+
+      return finalChunks;
+    });
   }
 
   private async rewriteQuery(query: string): Promise<string> {
     try {
       const promptResult = await this.queryRewritePrompt.format({ question: query });
-      const chatModel = ChatModelManager.getInstance()
-        .getChatModel()
-        .bind({ temperature: 0 } as BaseChatModelCallOptions);
-      const rewrittenQueryObject = await chatModel.invoke(promptResult);
 
-      // Directly return the content assuming it's structured as expected
+      // Execute model invocation with warnings suppressed
+      const rewrittenQueryObject = await withSuppressedTokenWarnings(() => {
+        const chatModel = ProjectManager.instance
+          .getCurrentChainManager()
+          .chatModelManager.getChatModel()
+          .bind({ temperature: 0 } as BaseChatModelCallOptions);
+
+        return chatModel.invoke(promptResult);
+      });
+
+      // Process the result
       if (rewrittenQueryObject && "content" in rewrittenQueryObject) {
         return removeThinkTags(rewrittenQueryObject.content as string);
       }
+
       console.warn("Unexpected rewrittenQuery format. Falling back to original query.");
       return query;
     } catch (error) {
       console.error("Error in rewriteQuery:", error);
-      // If there's an error, return the original query
       return query;
     }
   }

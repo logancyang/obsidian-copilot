@@ -1,24 +1,23 @@
-import { useModelKey } from "@/aiParams";
+import { CustomModel, useModelKey } from "@/aiParams";
 import { processCommandPrompt } from "@/commands/inlineEditCommandUtils";
 import { Button } from "@/components/ui/button";
 import { getModelDisplayText } from "@/components/ui/model-display";
 import ChatModelManager from "@/LLMProviders/chatModelManager";
+import { logError } from "@/logger";
 import { InlineEditCommandSettings, useSettingsValue } from "@/settings/model";
 import { findCustomModel, insertIntoEditor } from "@/utils";
-import { Bot, Copy, PenLine, CornerDownLeft, Command, ArrowBigUp } from "lucide-react";
-import { App, Modal, Notice, Platform } from "obsidian";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createRoot, Root } from "react-dom/client";
 import {
   ChatPromptTemplate,
   HumanMessagePromptTemplate,
   MessagesPlaceholder,
   SystemMessagePromptTemplate,
 } from "@langchain/core/prompts";
-import { BaseChatMemory, BufferMemory } from "langchain/memory";
 import { RunnableSequence } from "@langchain/core/runnables";
-import { CustomModel } from "@/aiParams";
-import { logError } from "@/logger";
+import { BaseChatMemory, BufferMemory } from "langchain/memory";
+import { ArrowBigUp, Bot, Command, Copy, CornerDownLeft, PenLine } from "lucide-react";
+import { App, Modal, Notice, Platform } from "obsidian";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createRoot, Root } from "react-dom/client";
 
 // Custom hook for managing chat chain
 function useChatChain(selectedModel: CustomModel) {

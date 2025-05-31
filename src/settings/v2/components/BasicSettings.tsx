@@ -2,31 +2,29 @@ import { ChainType } from "@/chainFactory";
 import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { SettingItem } from "@/components/ui/setting-item";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DEFAULT_OPEN_AREA, PLUS_UTM_MEDIUMS } from "@/constants";
-import { useTab } from "@/contexts/TabContext";
+import { createPlusPageUrl } from "@/plusUtils";
+import VectorStoreManager from "@/search/vectorStoreManager";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
-import { formatDateTime, checkModelApiKey } from "@/utils";
+import { PlusSettings } from "@/settings/v2/components/PlusSettings";
+import { checkModelApiKey, formatDateTime } from "@/utils";
 import { HelpCircle, Key, Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useState } from "react";
-import ApiKeyDialog from "./ApiKeyDialog";
-import { PlusSettings } from "@/settings/v2/components/PlusSettings";
-import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { createPlusPageUrl } from "@/plusUtils";
-import { getModelDisplayWithIcons } from "@/components/ui/model-display";
-import VectorStoreManager from "@/search/vectorStoreManager";
+import { ApiKeyDialog } from "./ApiKeyDialog";
 
 const ChainType2Label: Record<ChainType, string> = {
   [ChainType.LLM_CHAIN]: "Chat",
   [ChainType.VAULT_QA_CHAIN]: "Vault QA (Basic)",
   [ChainType.COPILOT_PLUS_CHAIN]: "Copilot Plus (beta)",
+  [ChainType.PROJECT_CHAIN]: "Projects (alpha)",
 };
 
 export const BasicSettings: React.FC = () => {
-  const { modalContainer } = useTab();
   const settings = useSettingsValue();
-  const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
   const [conversationNoteName, setConversationNoteName] = useState(
     settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}"
@@ -136,7 +134,9 @@ export const BasicSettings: React.FC = () => {
               }
             >
               <Button
-                onClick={() => setIsApiKeyDialogOpen(true)}
+                onClick={() => {
+                  new ApiKeyDialog(app).open();
+                }}
                 variant="secondary"
                 className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start"
               >
@@ -144,15 +144,6 @@ export const BasicSettings: React.FC = () => {
                 <Key className="h-4 w-4" />
               </Button>
             </SettingItem>
-
-            {/* API Key Dialog */}
-            <ApiKeyDialog
-              open={isApiKeyDialogOpen}
-              onOpenChange={setIsApiKeyDialogOpen}
-              settings={settings}
-              updateSetting={updateSetting}
-              modalContainer={modalContainer}
-            />
           </div>
           <SettingItem
             type="select"

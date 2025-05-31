@@ -1,5 +1,6 @@
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { BaseChatMemory, BufferWindowMemory } from "langchain/memory";
+import { BaseChatMessageHistory } from "@langchain/core/chat_history";
 
 export default class MemoryManager {
   private static instance: MemoryManager;
@@ -8,7 +9,11 @@ export default class MemoryManager {
 
   private constructor() {
     this.initMemory();
-    subscribeToSettingsChange(() => this.initMemory());
+    subscribeToSettingsChange(() => {
+      // keep pre history
+      const history = this.memory?.chatHistory;
+      this.initMemory(history);
+    });
   }
 
   static getInstance(): MemoryManager {
@@ -18,13 +23,14 @@ export default class MemoryManager {
     return MemoryManager.instance;
   }
 
-  private initMemory(): void {
+  private initMemory(chatHistory?: BaseChatMessageHistory): void {
     const chatContextTurns = getSettings().contextTurns;
     this.memory = new BufferWindowMemory({
       k: chatContextTurns * 2,
       memoryKey: "history",
       inputKey: "input",
       returnMessages: true,
+      chatHistory: chatHistory,
     });
     if (this.debug) {
       console.log("Memory initialized with context turns:", chatContextTurns);

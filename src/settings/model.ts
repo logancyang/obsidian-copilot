@@ -1,11 +1,13 @@
-import { CustomModel } from "@/aiParams";
+import { CustomModel, ProjectConfig } from "@/aiParams";
 import { atom, createStore, useAtomValue } from "jotai";
 import { v4 as uuidv4 } from "uuid";
 
+import { AcceptKeyOption } from "@/autocomplete/codemirrorIntegration";
 import { type ChainType } from "@/chainFactory";
 import {
   BUILTIN_CHAT_MODELS,
   BUILTIN_EMBEDDING_MODELS,
+  COMPOSER_INSTRUCTIONS,
   DEFAULT_OPEN_AREA,
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
@@ -69,6 +71,7 @@ export interface CopilotSettings {
   defaultSaveFolder: string;
   defaultConversationTag: string;
   autosaveChat: boolean;
+  includeActiveNoteAsContext: boolean;
   customPromptsFolder: string;
   indexVaultToVectorStore: string;
   chatNoteContextPath: string;
@@ -83,6 +86,7 @@ export interface CopilotSettings {
   activeModels: Array<CustomModel>;
   activeEmbeddingModels: Array<CustomModel>;
   promptUsageTimestamps: Record<string, number>;
+  promptSortStrategy: string;
   embeddingRequestsPerMin: number;
   embeddingBatchSize: number;
   defaultOpenArea: DEFAULT_OPEN_AREA;
@@ -94,6 +98,11 @@ export interface CopilotSettings {
   // undefined means never checked
   isPlusUser: boolean | undefined;
   inlineEditCommands: InlineEditCommandSettings[] | undefined;
+  enableAutocomplete: boolean;
+  autocompleteAcceptKey: AcceptKeyOption;
+  allowAdditionalContext: boolean;
+  enableWordCompletion: boolean;
+  projectList: Array<ProjectConfig>;
   passMarkdownImages: boolean;
   enableCustomPromptTemplating: boolean;
 }
@@ -213,6 +222,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     ? DEFAULT_SETTINGS.embeddingBatchSize
     : embeddingBatchSize;
 
+  // Ensure includeActiveNoteAsContext has a default value
+  if (typeof sanitizedSettings.includeActiveNoteAsContext !== "boolean") {
+    sanitizedSettings.includeActiveNoteAsContext = DEFAULT_SETTINGS.includeActiveNoteAsContext;
+  }
+
   // Ensure passMarkdownImages has a default value
   if (typeof sanitizedSettings.passMarkdownImages !== "boolean") {
     sanitizedSettings.passMarkdownImages = DEFAULT_SETTINGS.passMarkdownImages;
@@ -223,12 +237,43 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.enableCustomPromptTemplating = DEFAULT_SETTINGS.enableCustomPromptTemplating;
   }
 
+  // Ensure allowAdditionalContext has a default value
+  if (typeof sanitizedSettings.allowAdditionalContext !== "boolean") {
+    sanitizedSettings.allowAdditionalContext = DEFAULT_SETTINGS.allowAdditionalContext;
+  }
+
+  // Ensure enableWordCompletion has a default value
+  if (typeof sanitizedSettings.enableWordCompletion !== "boolean") {
+    sanitizedSettings.enableWordCompletion = DEFAULT_SETTINGS.enableWordCompletion;
+  }
+
   return sanitizedSettings;
+}
+
+export function getComposerPrompt(): string {
+  const isPlusUser = getSettings().isPlusUser;
+
+  if (isPlusUser) {
+    return COMPOSER_INSTRUCTIONS;
+  }
+
+  return "";
 }
 
 export function getSystemPrompt(): string {
   const userPrompt = getSettings().userSystemPrompt;
-  return userPrompt ? `${DEFAULT_SYSTEM_PROMPT}\n\n${userPrompt}` : DEFAULT_SYSTEM_PROMPT;
+  let basePrompt = DEFAULT_SYSTEM_PROMPT;
+
+  // Add composer instructions for plus users
+  basePrompt = `${basePrompt}\n\n${getComposerPrompt()}`;
+
+  if (userPrompt) {
+    return `${basePrompt}
+<user_custom_instructions>
+${userPrompt}
+</user_custom_instructions>`;
+  }
+  return basePrompt;
 }
 
 function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {

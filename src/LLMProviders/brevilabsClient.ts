@@ -50,6 +50,11 @@ export interface Pdf4llmResponse {
   elapsed_time_ms: number;
 }
 
+export interface Docs4llmResponse {
+  response: any;
+  elapsed_time_ms: number;
+}
+
 export interface WebSearchResponse {
   response: {
     choices: [
@@ -71,9 +76,23 @@ export interface Youtube4llmResponse {
   elapsed_time_ms: number;
 }
 
-interface LicenseResponse {
+export interface LicenseResponse {
   is_valid: boolean;
   plan: string;
+}
+
+export interface AutocompleteResponse {
+  response: {
+    completion: string;
+  };
+  elapsed_time_ms: number;
+}
+
+export interface WordCompleteResponse {
+  response: {
+    selected_word: string;
+  };
+  elapsed_time_ms: number;
 }
 
 export class BrevilabsClient {
@@ -148,6 +167,49 @@ export class BrevilabsClient {
     return { data };
   }
 
+  private async makeFormDataRequest<T>(
+    endpoint: string,
+    formData: FormData,
+    skipLicenseCheck = false
+  ): Promise<{ data: T | null; error?: Error }> {
+    if (!skipLicenseCheck) {
+      this.checkLicenseKey();
+    }
+
+    // Add user_id to FormData
+    formData.append("user_id", getSettings().userId);
+
+    const url = new URL(`${BREVILABS_API_BASE_URL}${endpoint}`);
+
+    try {
+      const response = await fetch(url.toString(), {
+        method: "POST",
+        headers: {
+          // No Content-Type header - browser will set it automatically with boundary
+          Authorization: `Bearer ${await getDecryptedKey(getSettings().plusLicenseKey)}`,
+          "X-Client-Version": this.pluginVersion,
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        try {
+          const errorDetail = data.detail;
+          const error = new Error(errorDetail.reason);
+          error.name = errorDetail.error;
+          return { data: null, error };
+        } catch {
+          return { data: null, error: new Error(`HTTP error: ${response.status}`) };
+        }
+      }
+      logInfo(`==== ${endpoint} FormData request ====:`, data);
+      return { data };
+    } catch (error) {
+      return { data: null, error: error instanceof Error ? error : new Error(String(error)) };
+    }
+  }
+
   /**
    * Validate the license key and update the isPlusUser setting.
    * @returns true if the license key is valid, false if the license key is invalid, and undefined if
@@ -175,9 +237,10 @@ export class BrevilabsClient {
     return { isValid: true, plan: data?.plan };
   }
 
-  async broca(userMessage: string): Promise<BrocaResponse> {
+  async broca(userMessage: string, isProjectMode: boolean): Promise<BrocaResponse> {
     const { data, error } = await this.makeRequest<BrocaResponse>("/broca", {
       message: userMessage,
+      is_project_mode: isProjectMode,
     });
     if (error) {
       throw error;
@@ -234,6 +297,77 @@ export class BrevilabsClient {
     return data;
   }
 
+  async docs4llm(binaryContent: ArrayBuffer, fileType: string): Promise<Docs4llmResponse> {
+    // Create a FormData object
+    const formData = new FormData();
+
+    // Convert ArrayBuffer to Blob with appropriate mime type
+    const mimeType = this.getMimeTypeFromExtension(fileType);
+    const blob = new Blob([binaryContent], { type: mimeType });
+
+    // Create a File object with a filename including the extension
+    const fileName = `file.${fileType}`;
+    const file = new File([blob], fileName, { type: mimeType });
+
+    // Append the file to FormData
+    formData.append("files", file);
+
+    // Add file_type as a regular field
+    formData.append("file_type", fileType);
+
+    const { data, error } = await this.makeFormDataRequest<Docs4llmResponse>("/docs4llm", formData);
+
+    if (error) {
+      throw error;
+    }
+    if (!data) {
+      throw new Error("No data returned from docs4llm");
+    }
+
+    return data;
+  }
+
+  private getMimeTypeFromExtension(extension: string): string {
+    const mimeMap: Record<string, string> = {
+      // Documents
+      pdf: "application/pdf",
+      doc: "application/msword",
+      docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ppt: "application/vnd.ms-powerpoint",
+      pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      epub: "application/epub+zip",
+      txt: "text/plain",
+      rtf: "application/rtf",
+
+      // Images
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png",
+      gif: "image/gif",
+      bmp: "image/bmp",
+      svg: "image/svg+xml",
+      tiff: "image/tiff",
+      webp: "image/webp",
+
+      // Web
+      html: "text/html",
+      htm: "text/html",
+
+      // Spreadsheets
+      xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      xls: "application/vnd.ms-excel",
+      csv: "text/csv",
+
+      // Audio
+      mp3: "audio/mpeg",
+      mp4: "video/mp4",
+      wav: "audio/wav",
+      webm: "video/webm",
+    };
+
+    return mimeMap[extension.toLowerCase()] || "application/octet-stream";
+  }
+
   async webSearch(query: string): Promise<WebSearchResponse> {
     const { data, error } = await this.makeRequest<WebSearchResponse>("/websearch", { query });
     if (error) {
@@ -255,6 +389,45 @@ export class BrevilabsClient {
       throw new Error("No data returned from youtube4llm");
     }
 
+    return data;
+  }
+
+  async autocomplete(
+    prefix: string,
+    noteContext: string = "",
+    relevant_notes: string = ""
+  ): Promise<AutocompleteResponse> {
+    const { data, error } = await this.makeRequest<AutocompleteResponse>("/autocomplete", {
+      prompt: prefix,
+      note_context: noteContext,
+      relevant_notes: relevant_notes,
+      max_tokens: 64,
+    });
+    if (error) {
+      throw error;
+    }
+    if (!data) {
+      throw new Error("No data returned from autocomplete");
+    }
+    return data;
+  }
+
+  async wordcomplete(
+    prefix: string,
+    suffix: string = "",
+    suggestions: string[]
+  ): Promise<WordCompleteResponse> {
+    const { data, error } = await this.makeRequest<WordCompleteResponse>("/wordcomplete", {
+      prefix: prefix,
+      suffix: suffix,
+      suggestions: suggestions,
+    });
+    if (error) {
+      throw error;
+    }
+    if (!data) {
+      throw new Error("No data returned from wordcomplete");
+    }
     return data;
   }
 }

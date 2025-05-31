@@ -5,9 +5,9 @@ name: Node.js CI
 
 on:
   push:
-    branches: ["master"]
+    branches: ["master", "main"]
   pull_request:
-    branches: ["master"]
+    branches: ["master", "main"]
 
 jobs:
   build:
@@ -29,3 +29,7 @@ jobs:
       - run: npm run lint
       - run: npm run build --if-present
       - run: npm test
+      - name: Run Integration tests
+        env:
+          GEMINI_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        run: npm run test:integration

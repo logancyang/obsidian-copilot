@@ -5,16 +5,19 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         default:
           "mod-cta bg-interactive-accent text-on-accent shadow hover:bg-interactive-accent-hover",
-        destructive: "bg-modifier-error text-normal shadow-sm hover:bg-modifier-error/90",
+        destructive:
+          "clickable-icon bg-modifier-error text-on-accent hover:bg-modifier-error hover:text-on-accent",
         secondary: "bg-secondary text-normal shadow-sm hover:bg-interactive-hover",
         ghost: "clickable-icon bg-transparent hover:bg-interactive-accent hover:text-on-accent",
         link: "text-accent underline-offset-4 hover:underline",
+        success:
+          "clickable-icon bg-modifier-success text-on-accent hover:bg-modifier-success hover:text-on-accent",
         ghost2:
           "text-faint clickable-icon bg-transparent hover:bg-opacity-100 hover:text-normal hover:bg-transparent outline-none focus-visible:outline-none focus-visible:text-normal focus-visible:ring-0",
       },

@@ -29,8 +29,11 @@ export class LoadChatHistoryModal extends FuzzySuggestModal<TFile> {
   }
 
   getItemText(file: TFile): string {
+    // First, remove project ID prefix if it exists (format: projectId__)
+    const basename = file.basename.replace(/^[a-zA-Z0-9-]+__/, "");
+
     // Remove {$date} and {$time} parts from the filename
-    const title = file.basename
+    const title = basename
       .replace(/\{\$date}|\d{8}/g, "") // Remove {$date} or date in format YYYYMMDD
       .replace(/\{\$time}|\d{6}/g, "") // Remove {$time} or time in format HHMMSS
       .replace(/[@_]/g, " ") // Replace @ and _ with spaces

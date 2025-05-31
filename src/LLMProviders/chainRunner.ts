@@ -1,3 +1,4 @@
+import { getCurrentProject } from "@/aiParams";
 import { getStandaloneQuestion } from "@/chainUtils";
 import {
   ABORT_REASON,
@@ -26,11 +27,13 @@ import {
   formatDateTime,
   getApiErrorMessage,
   getMessageRole,
+  withSuppressedTokenWarnings,
 } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { Notice } from "obsidian";
 import ChainManager from "./chainManager";
 import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "./intentAnalyzer";
+import ProjectManager from "./projectManager";
 
 class ThinkBlockStreamer {
   private hasOpenThinkBlock = false;
@@ -38,19 +41,60 @@ class ThinkBlockStreamer {
 
   constructor(private updateCurrentAiMessage: (message: string) => void) {}
 
-  processChunk(chunk: any) {
-    this.fullResponse += chunk.content;
+  private handleClaude37Chunk(content: any[]) {
+    let textContent = "";
+    for (const item of content) {
+      switch (item.type) {
+        case "text":
+          textContent += item.text;
+          break;
+        case "thinking":
+          if (!this.hasOpenThinkBlock) {
+            this.fullResponse += "\n<think>";
+            this.hasOpenThinkBlock = true;
+          }
+          this.fullResponse += item.thinking;
+          this.updateCurrentAiMessage(this.fullResponse);
+          return true; // Indicate we handled a thinking chunk
+      }
+    }
+    if (textContent) {
+      this.fullResponse += textContent;
+    }
+    return false; // No thinking chunk handled
+  }
 
+  private handleDeepseekChunk(chunk: any) {
+    // Handle standard string content
+    if (typeof chunk.content === "string") {
+      this.fullResponse += chunk.content;
+    }
+
+    // Handle deepseek reasoning/thinking content
     if (chunk.additional_kwargs?.reasoning_content) {
-      // If we don't have an open think block, add one
       if (!this.hasOpenThinkBlock) {
         this.fullResponse += "\n<think>";
         this.hasOpenThinkBlock = true;
       }
-      // Add the new reasoning content
       this.fullResponse += chunk.additional_kwargs.reasoning_content;
-    } else if (this.hasOpenThinkBlock) {
-      // If we have an open think block but no more reasoning content, close it
+      return true; // Indicate we handled a thinking chunk
+    }
+    return false; // No thinking chunk handled
+  }
+
+  processChunk(chunk: any) {
+    let handledThinking = false;
+
+    // Handle Claude 3.7 array-based content
+    if (Array.isArray(chunk.content)) {
+      handledThinking = this.handleClaude37Chunk(chunk.content);
+    } else {
+      // Handle deepseek format
+      handledThinking = this.handleDeepseekChunk(chunk);
+    }
+
+    // Close think block if we have one open and didn't handle thinking content
+    if (this.hasOpenThinkBlock && !handledThinking) {
       this.fullResponse += "</think>";
       this.hasOpenThinkBlock = false;
     }
@@ -83,7 +127,11 @@ export interface ChainRunner {
 }
 
 abstract class BaseChainRunner implements ChainRunner {
-  constructor(protected chainManager: ChainManager) {}
+  protected chainManager: ChainManager;
+
+  constructor(chainManager: ChainManager) {
+    this.chainManager = chainManager;
+  }
 
   abstract run(
     userMessage: ChatMessage,
@@ -204,7 +252,7 @@ class LLMChainRunner extends BaseChainRunner {
     const streamer = new ThinkBlockStreamer(updateCurrentAiMessage);
 
     try {
-      const chain = ChainManager.getChain();
+      const chain = this.chainManager.getChain();
       const chatStream = await chain.stream({
         input: userMessage.message,
       } as any);
@@ -260,7 +308,7 @@ class VaultQAChainRunner extends BaseChainRunner {
       const memory = this.chainManager.memoryManager.getMemory();
       const memoryVariables = await memory.loadMemoryVariables({});
       const chatHistory = extractChatHistory(memoryVariables);
-      const qaStream = await ChainManager.getRetrievalChain().stream({
+      const qaStream = await this.chainManager.getRetrievalChain().stream({
         question: userMessage.message,
         chat_history: chatHistory,
       } as any);
@@ -287,7 +335,7 @@ class VaultQAChainRunner extends BaseChainRunner {
   }
 
   private addSourcestoResponse(response: string): string {
-    const docTitles = extractUniqueTitlesFromDocs(ChainManager.retrievedDocuments);
+    const docTitles = extractUniqueTitlesFromDocs(this.chainManager.getRetrievedDocuments());
     if (docTitles.length > 0) {
       const links = docTitles.map((title) => `- [[${title}]]`).join("\n");
       response += "\n\n#### Sources:\n\n" + links;
@@ -426,7 +474,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     const messages: any[] = [];
 
     // Add system message if available
-    let fullSystemMessage = getSystemPrompt();
+    let fullSystemMessage = await this.getSystemPrompt();
 
     // Add chat history context to system message if exists
     if (chatHistory.length > 0) {
@@ -446,9 +494,8 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     }
 
     // Add chat history
-    for (const [human, ai] of chatHistory) {
-      messages.push({ role: "user", content: human });
-      messages.push({ role: "assistant", content: ai });
+    for (const entry of chatHistory) {
+      messages.push({ role: entry.role, content: entry.content });
     }
 
     // Get the current chat model
@@ -470,7 +517,11 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     logInfo("Enhanced user message: ", enhancedUserMessage);
     logInfo("==== Final Request to AI ====\n", messages);
     const streamer = new ThinkBlockStreamer(updateCurrentAiMessage);
-    const chatStream = await this.chainManager.chatModelManager.getChatModel().stream(messages);
+
+    // Wrap the stream call with warning suppression
+    const chatStream = await withSuppressedTokenWarnings(() =>
+      this.chainManager.chatModelManager.getChatModel().stream(messages)
+    );
 
     for await (const chunk of chatStream) {
       if (abortController.signal.aborted) break;
@@ -539,9 +590,9 @@ class CopilotPlusChainRunner extends BaseChainRunner {
 
       if (debug) console.log("==== Step 1: Analyzing intent ====");
       let toolCalls;
+      // Use the original message for intent analysis
+      const messageForAnalysis = userMessage.originalMessage || userMessage.message;
       try {
-        // Use the original message for intent analysis
-        const messageForAnalysis = userMessage.originalMessage || userMessage.message;
         toolCalls = await IntentAnalyzer.analyzeIntent(messageForAnalysis);
       } catch (error: any) {
         return this.handleResponse(
@@ -566,14 +617,14 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         (output) => output.tool === "localSearch" && output.output && output.output.length > 0
       );
 
+      // Format chat history from memory
+      const memory = this.chainManager.memoryManager.getMemory();
+      const memoryVariables = await memory.loadMemoryVariables({});
+      const chatHistory = extractChatHistory(memoryVariables);
+
       if (localSearchResult) {
         if (debug) console.log("==== Step 2: Processing local search results ====");
         const documents = JSON.parse(localSearchResult.output);
-
-        // Format chat history from memory
-        const memory = this.chainManager.memoryManager.getMemory();
-        const memoryVariables = await memory.loadMemoryVariables({});
-        const chatHistory = extractChatHistory(memoryVariables);
 
         if (debug) console.log("==== Step 3: Condensing Question ====");
         const standaloneQuestion = await getStandaloneQuestion(cleanedUserMessage, chatHistory);
@@ -593,7 +644,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         if (debug) console.log("==== Step 5: Invoking QA Chain ====");
         const qaPrompt = await this.chainManager.promptManager.getQAPrompt({
           question: enhancedQuestion,
-          context: context,
+          context,
           systemMessage: "", // System prompt is added separately in streamMultimodalResponse
         });
 
@@ -608,6 +659,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         // Append sources to the response
         sources = this.getSources(documents);
       } else {
+        // Enhance with tool outputs.
         const enhancedUserMessage = this.prepareEnhancedUserMessage(
           cleanedUserMessage,
           toolOutputs
@@ -748,6 +800,31 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       ? `Local Search Result for ${timeExpression}:\n${formattedDocs}`
       : `Local Search Result:\n${formattedDocs}`;
   }
+
+  protected async getSystemPrompt(): Promise<string> {
+    return getSystemPrompt();
+  }
 }
 
-export { CopilotPlusChainRunner, LLMChainRunner, VaultQAChainRunner };
+class ProjectChainRunner extends CopilotPlusChainRunner {
+  protected async getSystemPrompt(): Promise<string> {
+    let finalPrompt = getSystemPrompt();
+    const projectConfig = getCurrentProject();
+    if (!projectConfig) {
+      return finalPrompt;
+    }
+
+    // Get context asynchronously
+    const context = await ProjectManager.instance.getProjectContext(projectConfig.id);
+    finalPrompt = `${finalPrompt}\n\n<project_system_prompt>\n${projectConfig.systemPrompt}\n</project_system_prompt>`;
+
+    // TODO: Move project context out of the system prompt and into the user prompt.
+    if (context) {
+      finalPrompt = `${finalPrompt}\n\n <project_context>\n${context}\n</project_context>`;
+    }
+
+    return finalPrompt;
+  }
+}
+
+export { CopilotPlusChainRunner, LLMChainRunner, ProjectChainRunner, VaultQAChainRunner };
