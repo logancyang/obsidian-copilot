@@ -116,7 +116,7 @@ export const ComposerCodeBlock: React.FC<ComposerCodeBlockProps> = ({
             </Button>
             <Button className="tw-text-muted" variant="ghost2" size="fit" onClick={handlePreview}>
               <Check className="tw-size-4" />
-              Preview
+              {!app.vault.getAbstractFileByPath(note_path) ? "Apply" : "Preview"}
             </Button>
           </div>
         </div>
