@@ -31,14 +31,17 @@ function PatternListGroup({
   onRemove: (pattern: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-4 gap-2">
-      <div className="font-bold">{title}</div>
-      <ul className="list-disc list-inside pl-0 m-0 col-span-3 flex flex-col gap-1">
+    <div className="tw-grid tw-grid-cols-4 tw-gap-2">
+      <div className="tw-font-bold">{title}</div>
+      <ul className="tw-col-span-3 tw-m-0 tw-flex tw-list-inside tw-list-disc tw-flex-col tw-gap-1 tw-pl-0">
         {patterns.map((pattern) => (
-          <li key={pattern} className="flex gap-2 hover:bg-dropdown-hover pl-2 pr-1 rounded-md">
-            <TruncatedText className="flex-1">{pattern}</TruncatedText>
+          <li
+            key={pattern}
+            className="tw-flex tw-gap-2 tw-rounded-md tw-pl-2 tw-pr-1 hover:tw-bg-dropdown-hover"
+          >
+            <TruncatedText className="tw-flex-1">{pattern}</TruncatedText>
             <Button variant="ghost2" size="fit" onClick={() => onRemove(pattern)}>
-              <X className="size-4" />
+              <X className="tw-size-4" />
             </Button>
           </li>
         ))}
@@ -84,11 +87,9 @@ function PatternMatchingModalContent({
     notePatterns.length > 0;
 
   return (
-    <div className="flex flex-col gap-4 mt-2">
-      <div className="flex flex-col gap-2 p-4 border border-border border-solid rounded-md max-h-[400px] overflow-y-auto">
-        {!hasValue && (
-          <div className="text-center text-sm text-muted-foreground">No patterns specified</div>
-        )}
+    <div className="tw-mt-2 tw-flex tw-flex-col tw-gap-4">
+      <div className="tw-flex tw-max-h-[400px] tw-flex-col tw-gap-2 tw-overflow-y-auto tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-4">
+        {!hasValue && <div className="tw-text-center tw-text-sm">No patterns specified</div>}
         {tagPatterns.length > 0 && (
           <PatternListGroup
             title="Tags"
@@ -138,7 +139,7 @@ function PatternMatchingModalContent({
           />
         )}
       </div>
-      <div className="flex justify-end gap-2">
+      <div className="tw-flex tw-justify-end tw-gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="secondary">Add...</Button>
@@ -157,8 +158,8 @@ function PatternMatchingModalContent({
                 }).open();
               }}
             >
-              <div className="flex items-center gap-2">
-                <Tag className="size-4" />
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <Tag className="tw-size-4" />
                 Tag
               </div>
             </DropdownMenuItem>
@@ -174,8 +175,8 @@ function PatternMatchingModalContent({
                 }).open();
               }}
             >
-              <div className="flex items-center gap-2">
-                <Folder className="size-4" />
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <Folder className="tw-size-4" />
                 Folder
               </div>
             </DropdownMenuItem>
@@ -197,8 +198,8 @@ function PatternMatchingModalContent({
                 }).open();
               }}
             >
-              <div className="flex items-center gap-2">
-                <FileText className="size-4" />
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <FileText className="tw-size-4" />
                 Note
               </div>
             </DropdownMenuItem>
@@ -215,8 +216,8 @@ function PatternMatchingModalContent({
                 }).open();
               }}
             >
-              <div className="flex items-center gap-2">
-                <File className="size-4" />
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <File className="tw-size-4" />
                 Extension
               </div>
             </DropdownMenuItem>
@@ -239,8 +240,8 @@ function PatternMatchingModalContent({
                 }).open();
               }}
             >
-              <div className="flex items-center gap-2">
-                <Wrench className="size-4" />
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <Wrench className="tw-size-4" />
                 Custom
               </div>
             </DropdownMenuItem>

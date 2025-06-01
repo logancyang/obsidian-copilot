@@ -19,12 +19,12 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
   }
 
   return (
-    <div className="flex gap-2 flex-wrap">
+    <div className="tw-flex tw-flex-wrap tw-gap-2">
       {context.notes.map((note) => (
         <Tooltip key={note.path}>
           <TooltipTrigger asChild>
             <Badge variant="secondary">
-              <span className="max-w-40 truncate">{note.basename}</span>
+              <span className="tw-max-w-40 tw-truncate">{note.basename}</span>
             </Badge>
           </TooltipTrigger>
           <TooltipContent>{note.path}</TooltipContent>
@@ -34,7 +34,7 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
         <Tooltip key={url}>
           <TooltipTrigger asChild>
             <Badge variant="secondary">
-              <span className="max-w-40 truncate">{url}</span>
+              <span className="tw-max-w-40 tw-truncate">{url}</span>
             </Badge>
           </TooltipTrigger>
           <TooltipContent>{url}</TooltipContent>
@@ -101,7 +101,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           content = content.replace(/<think>([\s\S]*?)<\/think>/g, (match, thinkContent) => {
             return `<details style="${detailsStyle}">
               <summary style="${summaryStyle}">Thought for a second</summary>
-              <div class="text-muted" style="${contentStyle}">${thinkContent.trim()}</div>
+              <div class="tw-text-muted" style="${contentStyle}">${thinkContent.trim()}</div>
             </details>\n\n`;
           });
 
@@ -110,7 +110,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             /<think>([\s\S]*)$/,
             (match, partialContent) => `<div style="${detailsStyle}">
               <div style="${summaryStyle}">Thinking...</div>
-              <div class="text-muted" style="${contentStyle}">${partialContent.trim()}</div>
+              <div class="tw-text-muted" style="${contentStyle}">${partialContent.trim()}</div>
             </div>`
           );
           return content;
@@ -121,7 +121,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         return content.replace(thinkRegex, (match, thinkContent) => {
           return `<details style="${detailsStyle}">
             <summary style="${summaryStyle}">Thought for a second</summary>
-            <div class="text-muted" style="${contentStyle}">${thinkContent.trim()}</div>
+            <div class="tw-text-muted" style="${contentStyle}">${thinkContent.trim()}</div>
           </details>\n\n`;
         });
       };
@@ -422,11 +422,11 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   const renderMessageContent = () => {
     if (message.content) {
       return (
-        <div className="message-content-items">
+        <div className="tw-flex tw-flex-col tw-gap-3">
           {message.content.map((item, index) => {
             if (item.type === "text") {
               return (
-                <div key={index} className="message-text-content">
+                <div key={index}>
                   {message.sender === USER_SENDER && isEditing ? (
                     <textarea
                       ref={textareaRef}
@@ -438,13 +438,13 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                       className="edit-textarea"
                     />
                   ) : message.sender === USER_SENDER ? (
-                    <div className="whitespace-pre-wrap break-words font-normal text-[calc(var(--font-text-size)_-_2px)]">
+                    <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
                       {message.message}
                     </div>
                   ) : (
                     <div
                       ref={contentRef}
-                      className={message.isErrorMessage ? "text-error" : ""}
+                      className={message.isErrorMessage ? "tw-text-error" : ""}
                     ></div>
                   )}
                 </div>
@@ -478,30 +478,32 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         className="edit-textarea"
       />
     ) : message.sender === USER_SENDER ? (
-      <div className="whitespace-pre-wrap break-words font-normal text-[calc(var(--font-text-size)_-_2px)]">
+      <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
         {message.message}
       </div>
     ) : (
-      <div ref={contentRef} className={message.isErrorMessage ? "text-error" : ""}></div>
+      <div ref={contentRef} className={message.isErrorMessage ? "tw-text-error" : ""}></div>
     );
   };
 
   return (
-    <div className="flex flex-col w-full my-1">
+    <div className="tw-my-1 tw-flex tw-w-full tw-flex-col">
       <div
         className={cn(
-          "flex rounded-md p-2 mx-2 gap-2 group",
-          message.sender === USER_SENDER && "border border-border border-solid"
+          "tw-group tw-mx-2 tw-flex tw-gap-2 tw-rounded-md tw-p-2",
+          message.sender === USER_SENDER && "tw-border tw-border-solid tw-border-border"
         )}
       >
-        <div className="w-6 shrink-0">{message.sender === USER_SENDER ? <User /> : <Bot />}</div>
-        <div className="flex flex-col flex-grow max-w-full gap-2 overflow-hidden">
+        <div className="tw-w-6 tw-shrink-0">
+          {message.sender === USER_SENDER ? <User /> : <Bot />}
+        </div>
+        <div className="tw-flex tw-max-w-full tw-grow tw-flex-col tw-gap-2 tw-overflow-hidden">
           {!isEditing && <MessageContext context={message.context} />}
           <div className="message-content">{renderMessageContent()}</div>
 
           {!isStreaming && (
-            <div className="flex justify-between items-center">
-              <div className="text-faint text-xs">{message.timestamp?.display}</div>
+            <div className="tw-flex tw-items-center tw-justify-between">
+              <div className="tw-text-xs tw-text-faint">{message.timestamp?.display}</div>
               <ChatButtons
                 message={message}
                 onCopy={copyToClipboard}

@@ -1,15 +1,17 @@
 // tailwind.config.js
 
-import tailwindcssAnimate from "tailwindcss-animate";
 import { colorOpacityPlugin } from "./src/lib/plugins/colorOpacityPlugin";
 import colors from "tailwindcss/colors";
 import containerQueries from "@tailwindcss/container-queries";
 
 /** @type {import("tailwindcss").Config} */
 module.exports = {
+  prefix: "tw-",
   content: ["./src/**/*.{js,ts,jsx,tsx}", "./src/styles/tailwind.css"],
   darkMode: ["class"],
-  plugins: [tailwindcssAnimate, colorOpacityPlugin, containerQueries],
+  // tailwindcss-animate doesn't work with linter when using import statement.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  plugins: [require("tailwindcss-animate"), colorOpacityPlugin, containerQueries],
   corePlugins: {
     preflight: false,
   },

@@ -105,23 +105,23 @@ export const ComposerCodeBlock: React.FC<ComposerCodeBlockProps> = ({
   };
 
   return (
-    <div className="border border-border border-solid rounded-md my-2 flex flex-col overflow-hidden">
+    <div className="tw-my-2 tw-flex tw-flex-col tw-overflow-hidden tw-rounded-md tw-border tw-border-solid tw-border-border">
       {note_path && (
-        <div className="flex justify-between items-center border-[0px] border-b border-border border-solid gap-2 p-2 overflow-hidden">
-          <div className="text-xs p-1 text-muted-foreground truncate flex-1">{note_path}</div>
-          <div className="flex gap-2">
-            <Button className="text-muted" variant="ghost2" size="fit" onClick={handleCopy}>
-              <Clipboard className="h-4 w-4" />
+        <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-overflow-hidden tw-border-[0px] tw-border-b tw-border-solid tw-border-border tw-p-2">
+          <div className="tw-flex-1 tw-truncate tw-p-1 tw-text-xs tw-text-muted">{note_path}</div>
+          <div className="tw-flex tw-gap-2">
+            <Button className="tw-text-muted" variant="ghost2" size="fit" onClick={handleCopy}>
+              <Clipboard className="tw-size-4" />
               Copy
             </Button>
-            <Button className="text-muted" variant="ghost2" size="fit" onClick={handlePreview}>
-              <Check className="h-4 w-4" />
+            <Button className="tw-text-muted" variant="ghost2" size="fit" onClick={handlePreview}>
+              <Check className="tw-size-4" />
               Preview
             </Button>
           </div>
         </div>
       )}
-      <pre className="m-0 border-none">
+      <pre className="tw-m-0 tw-border-none">
         <code>
           {note_changes.length > 0
             ? getRelevantChangesMarkdown(getChangeBlocks(note_changes))

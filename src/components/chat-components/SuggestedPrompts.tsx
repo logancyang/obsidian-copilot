@@ -96,32 +96,32 @@ export const SuggestedPrompts: React.FC<SuggestedPromptsProps> = ({ onClick }) =
   const indexVaultToVectorStore = settings.indexVaultToVectorStore as VAULT_VECTOR_STORE_STRATEGY;
 
   return (
-    <div className="flex flex-col gap-4">
-      <Card className="w-full bg-transparent">
-        <CardHeader className="px-2">
+    <div className="tw-flex tw-flex-col tw-gap-4">
+      <Card className="tw-w-full tw-bg-transparent">
+        <CardHeader className="tw-px-2">
           <CardTitle>Suggested Prompts</CardTitle>
         </CardHeader>
-        <CardContent className="p-2 pt-0">
-          <div className="flex flex-col gap-2">
+        <CardContent className="tw-p-2 tw-pt-0">
+          <div className="tw-flex tw-flex-col tw-gap-2">
             {prompts.map((prompt, i) => (
               <div
                 key={i}
-                className="flex gap-2 p-2 justify-between text-sm rounded-md border border-border border-solid"
+                className="tw-flex tw-justify-between tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2 tw-text-sm"
               >
-                <div className="flex flex-col gap-1">
-                  <div className="text-muted">{prompt.title}</div>
+                <div className="tw-flex tw-flex-col tw-gap-1">
+                  <div className="tw-text-muted">{prompt.title}</div>
                   <div>{prompt.text}</div>
                 </div>
-                <div className="flex items-start h-full">
+                <div className="tw-flex tw-h-full tw-items-start">
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         variant="ghost2"
                         size="fit"
-                        className="text-muted"
+                        className="tw-text-muted"
                         onClick={() => onClick(prompt.text)}
                       >
-                        <PlusCircle className="size-4" />
+                        <PlusCircle className="tw-size-4" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>Add to Chat</TooltipContent>
@@ -133,20 +133,20 @@ export const SuggestedPrompts: React.FC<SuggestedPromptsProps> = ({ onClick }) =
         </CardContent>
       </Card>
       {chainType === ChainType.VAULT_QA_CHAIN && (
-        <div className="text-sm border border-border border-solid p-2 rounded-md">
+        <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2 tw-text-sm">
           Please note that this is a retrieval-based QA. Questions should contain keywords and
           concepts that exist literally in your vault
         </div>
       )}
       {chainType === ChainType.VAULT_QA_CHAIN &&
         indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.NEVER && (
-          <div className="text-sm border border-border border-solid p-2 rounded-md">
+          <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2 tw-text-sm">
             <div>
-              <TriangleAlert className="size-4" /> Your auto-index strategy is set to <b>NEVER</b>.
-              Before proceeding, click the <span className="text-accent">Refresh Index</span> button
-              below or run the{" "}
-              <span className="text-accent">Copilot command: Index (refresh) vault for QA</span> to
-              update the index.
+              <TriangleAlert className="tw-size-4" /> Your auto-index strategy is set to{" "}
+              <b>NEVER</b>. Before proceeding, click the{" "}
+              <span className="tw-text-accent">Refresh Index</span> button below or run the{" "}
+              <span className="tw-text-accent">Copilot command: Index (refresh) vault for QA</span>{" "}
+              to update the index.
             </div>
           </div>
         )}

@@ -19,12 +19,12 @@ type TabId = (typeof TAB_IDS)[number];
 
 // tab icons
 const icons: Record<TabId, JSX.Element> = {
-  basic: <Cog className="w-5 h-5" />,
-  model: <Cpu className="w-5 h-5" />,
-  QA: <Database className="w-5 h-5" />,
-  command: <Command className="w-5 h-5" />,
-  plus: <Sparkles className="w-5 h-5" />,
-  advanced: <Wrench className="w-5 h-5" />,
+  basic: <Cog className="tw-size-5" />,
+  model: <Cpu className="tw-size-5" />,
+  QA: <Database className="tw-size-5" />,
+  command: <Command className="tw-size-5" />,
+  plus: <Sparkles className="tw-size-5" />,
+  advanced: <Wrench className="tw-size-5" />,
 };
 
 // tab components
@@ -48,8 +48,8 @@ const SettingsContent: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
   const { selectedTab, setSelectedTab } = useTab();
 
   return (
-    <div className="flex flex-col">
-      <div className="inline-flex rounded-lg">
+    <div className="tw-flex tw-flex-col">
+      <div className="tw-inline-flex tw-rounded-lg">
         {tabs.map((tab, index) => (
           <TabItem
             key={tab.id}
@@ -61,7 +61,7 @@ const SettingsContent: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
           />
         ))}
       </div>
-      <div className="w-[100%] border border-solid" />
+      <div className="tw-w-full tw-border tw-border-solid" />
 
       <div>
         {TAB_IDS.map((id) => {
@@ -98,12 +98,12 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
   return (
     <TabProvider>
       <div>
-        <div className="flex flex-col gap-2">
-          <h1 className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <div className="flex items-center gap-2">
+        <div className="tw-flex tw-flex-col tw-gap-2">
+          <h1 className="tw-flex tw-flex-col tw-gap-2 sm:tw-flex-row sm:tw-items-center sm:tw-justify-between">
+            <div className="tw-flex tw-items-center tw-gap-2">
               <span>Copilot Settings</span>
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-muted">v{plugin.manifest.version}</span>
+              <div className="tw-flex tw-items-center tw-gap-1">
+                <span className="tw-text-xs tw-text-muted">v{plugin.manifest.version}</span>
                 {latestVersion && (
                   <>
                     {hasUpdate ? (
@@ -111,18 +111,18 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
                         href="obsidian://show-plugin?id=copilot"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-accent hover:underline"
+                        className="tw-text-xs tw-text-accent hover:tw-underline"
                       >
                         (Update to v{latestVersion})
                       </a>
                     ) : (
-                      <span className="text-xs text-normal"> (up to date)</span>
+                      <span className="tw-text-xs tw-text-normal"> (up to date)</span>
                     )}
                   </>
                 )}
               </div>
             </div>
-            <div className="self-end sm:self-auto">
+            <div className="tw-self-end sm:tw-self-auto">
               <Button variant="secondary" size="sm" onClick={handleReset}>
                 Reset Settings
               </Button>

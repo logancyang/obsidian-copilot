@@ -107,9 +107,9 @@ export const ModelSettings: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="tw-space-y-4">
       <section>
-        <div className="text-xl font-bold mb-3">Chat Models</div>
+        <div className="tw-mb-3 tw-text-xl tw-font-bold">Chat Models</div>
         <ModelTable
           models={settings.activeModels}
           onEdit={setEditingModel}
@@ -142,7 +142,7 @@ export const ModelSettings: React.FC = () => {
           }
         />
 
-        <div className="space-y-4">
+        <div className="tw-space-y-4">
           <SettingItem
             type="slider"
             title="Temperature"
@@ -189,7 +189,7 @@ export const ModelSettings: React.FC = () => {
       </section>
 
       <section>
-        <div className="text-xl font-bold mb-3">Embedding Models</div>
+        <div className="tw-mb-3 tw-text-xl tw-font-bold">Embedding Models</div>
         <ModelTable
           models={settings.activeEmbeddingModels}
           onDelete={onDeleteEmbeddingModel}

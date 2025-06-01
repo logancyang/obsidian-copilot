@@ -7,7 +7,7 @@ export const AdvancedSettings: React.FC = () => {
   const settings = useSettingsValue();
 
   return (
-    <div className="space-y-4">
+    <div className="tw-space-y-4">
       {/* Privacy Settings Section */}
       <section>
         <SettingItem
@@ -19,7 +19,7 @@ export const AdvancedSettings: React.FC = () => {
           placeholder="Enter your system prompt here..."
         />
 
-        <div className="space-y-4">
+        <div className="tw-space-y-4">
           <SettingItem
             type="switch"
             title="Custom Prompt Templating"

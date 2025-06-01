@@ -19,13 +19,13 @@ export const FormField: React.FC<FormFieldProps> = ({
   children,
 }) => {
   return (
-    <div className="space-y-2">
-      <Label className={error ? "text-error" : ""}>
-        {label} {required && <span className="text-error">*</span>}
+    <div className="tw-space-y-2">
+      <Label className={error ? "tw-text-error" : ""}>
+        {label} {required && <span className="tw-text-error">*</span>}
       </Label>
       {children}
-      {error && <p className="text-xs text-error">{errorMessage}</p>}
-      {description && <p className="text-sm text-muted">{description}</p>}
+      {error && <p className="tw-text-xs tw-text-error">{errorMessage}</p>}
+      {description && <p className="tw-text-sm tw-text-muted">{description}</p>}
     </div>
   );
 };

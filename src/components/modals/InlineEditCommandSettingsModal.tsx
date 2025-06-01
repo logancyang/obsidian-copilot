@@ -77,8 +77,8 @@ function InlineEditCommandSettingsModalContent({
   };
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <div className="flex flex-col gap-2">
+    <div className="tw-flex tw-flex-col tw-gap-4 tw-p-4">
+      <div className="tw-flex tw-flex-col tw-gap-2">
         <Label htmlFor="name">Name</Label>
         <Input
           id="name"
@@ -86,10 +86,10 @@ function InlineEditCommandSettingsModalContent({
           onChange={(e) => handleUpdate("name", e.target.value)}
           placeholder="Enter command name"
         />
-        {errors.name && <div className="text-error text-sm">{errors.name}</div>}
+        {errors.name && <div className="tw-text-sm tw-text-error">{errors.name}</div>}
       </div>
 
-      <div className="flex flex-col gap-2">
+      <div className="tw-flex tw-flex-col tw-gap-2">
         <Label htmlFor="prompt">Prompt</Label>
         <CustomPromptSyntaxInstruction />
         <Textarea
@@ -97,14 +97,14 @@ function InlineEditCommandSettingsModalContent({
           value={command.prompt}
           onChange={(e) => handleUpdate("prompt", e.target.value)}
           placeholder="Enter command prompt"
-          className="min-h-[200px]"
+          className="tw-min-h-[200px]"
         />
-        {errors.prompt && <div className="text-error text-sm">{errors.prompt}</div>}
+        {errors.prompt && <div className="tw-text-sm tw-text-error">{errors.prompt}</div>}
       </div>
 
-      <div className="flex flex-col gap-2">
+      <div className="tw-flex tw-flex-col tw-gap-2">
         <Label htmlFor="modelKey">Model (Optional)</Label>
-        <div className="relative w-full group">
+        <div className="tw-group tw-relative tw-w-full">
           <select
             value={command.modelKey}
             onChange={(e) => {
@@ -122,12 +122,12 @@ function InlineEditCommandSettingsModalContent({
               handleUpdate("modelKey", e.target.value);
             }}
             className={cn(
-              "w-full appearance-none",
-              "flex h-9 rounded-md border border-solid border-border bg-dropdown px-3 py-1 pr-8",
-              "text-sm !shadow transition-colors",
-              "focus:outline-none focus:ring-1 focus:ring-ring",
-              "disabled:cursor-not-allowed disabled:opacity-50",
-              "hover:bg-interactive-hover hover:text-normal"
+              "tw-w-full tw-appearance-none",
+              "tw-flex tw-h-9 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-dropdown tw-px-3 tw-py-1 tw-pr-8",
+              "tw-text-sm !tw-shadow tw-transition-colors",
+              "focus:tw-outline-none focus:tw-ring-1 focus:tw-ring-ring",
+              "disabled:tw-cursor-not-allowed disabled:tw-opacity-50",
+              "hover:tw-bg-interactive-hover hover:tw-text-normal"
             )}
           >
             <option value="">Inherit from chat model</option>
@@ -139,16 +139,16 @@ function InlineEditCommandSettingsModalContent({
           </select>
           <div
             className={cn(
-              "pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2",
-              "transition-colors group-hover:[&>svg]:text-normal"
+              "tw-pointer-events-none tw-absolute tw-inset-y-0 tw-right-0 tw-flex tw-items-center tw-pr-2",
+              "tw-transition-colors group-hover:[&>svg]:tw-text-normal"
             )}
           >
-            <ChevronDown className="h-4 w-4" />
+            <ChevronDown className="tw-size-4" />
           </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="tw-flex tw-items-center tw-gap-2">
         <Checkbox
           id="showInContextMenu"
           checked={command.showInContextMenu}
@@ -157,7 +157,7 @@ function InlineEditCommandSettingsModalContent({
         <Label htmlFor="showInContextMenu">Show in context menu</Label>
       </div>
 
-      <div className="flex justify-end gap-2">
+      <div className="tw-flex tw-justify-end tw-gap-2">
         <Button variant="secondary" onClick={onCancel}>
           Cancel
         </Button>

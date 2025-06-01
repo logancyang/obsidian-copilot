@@ -129,10 +129,10 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
   };
 
   return (
-    <div className="flex flex-col gap-2 p-4">
-      <div className="text-xl font-bold text-normal mb-2">Add New Project</div>
+    <div className="tw-flex tw-flex-col tw-gap-2 tw-p-4">
+      <div className="tw-mb-2 tw-text-xl tw-font-bold tw-text-normal">Add New Project</div>
 
-      <div className="flex flex-col gap-2">
+      <div className="tw-flex tw-flex-col tw-gap-2">
         <FormField
           label="Project Name"
           required
@@ -144,7 +144,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
             value={formData.name}
             onChange={(e) => handleInputChange("name", e.target.value)}
             onBlur={() => setTouched((prev) => ({ ...prev, name: true }))}
-            className="w-full"
+            className="tw-w-full"
           />
         </FormField>
 
@@ -156,7 +156,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
             type="text"
             value={formData.description}
             onChange={(e) => handleInputChange("description", e.target.value)}
-            className="w-full"
+            className="tw-w-full"
           />
         </FormField>
 
@@ -168,7 +168,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
             value={formData.systemPrompt}
             onChange={(e) => handleInputChange("systemPrompt", e.target.value)}
             onBlur={() => setTouched((prev) => ({ ...prev, systemPrompt: true }))}
-            className="min-h-[8rem]"
+            className="tw-min-h-32"
           />
         </FormField>
 
@@ -205,9 +205,9 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
           />
         </FormField>
 
-        <div className="space-y-4">
-          <div className="text-base font-medium">Model Configuration</div>
-          <div className="grid grid-cols-1 gap-4">
+        <div className="tw-space-y-4">
+          <div className="tw-text-base tw-font-medium">Model Configuration</div>
+          <div className="tw-grid tw-grid-cols-1 tw-gap-4">
             <FormField label="Temperature">
               <SettingSlider
                 value={formData.modelConfigs?.temperature ?? 1}
@@ -215,7 +215,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
                 min={0}
                 max={2}
                 step={0.01}
-                className="w-full"
+                className="tw-w-full"
               />
             </FormField>
             <FormField label="Token Limit">
@@ -225,25 +225,25 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
                 min={1}
                 max={16000}
                 step={1}
-                className="w-full"
+                className="tw-w-full"
               />
             </FormField>
           </div>
         </div>
 
-        <div className="space-y-4">
-          <div className="text-base font-medium">Context Sources</div>
+        <div className="tw-space-y-4">
+          <div className="tw-text-base tw-font-medium">Context Sources</div>
           <FormField
             label={
-              <div className="flex items-center gap-2">
+              <div className="tw-flex tw-items-center tw-gap-2">
                 <span>Inclusions</span>
                 <TooltipProvider delayDuration={0}>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <HelpCircle className="size-4 text-muted" />
+                      <HelpCircle className="tw-size-4 tw-text-muted" />
                     </TooltipTrigger>
                     <TooltipContent>
-                      <div className="max-w-80">
+                      <div className="tw-max-w-80">
                         <strong>Supported File Types:</strong>
                         <br />
                         <strong>• Documents:</strong> pdf, doc, docx, ppt, pptx, epub, txt, rtf and
@@ -260,8 +260,8 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
             }
             description="Define patterns to include specific files or folders in the project context"
           >
-            <div className="flex items-center gap-2">
-              <div className="flex-1 text-xs text-muted">
+            <div className="tw-flex tw-items-center tw-gap-2">
+              <div className="tw-flex-1 tw-text-xs tw-text-muted">
                 {formData.contextSource?.inclusions?.trim()
                   ? "Patterns configured"
                   : "No patterns configured"}
@@ -288,8 +288,8 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
             label="Exclusions"
             description="Exclude specific files or patterns from the included folders above"
           >
-            <div className="flex items-center gap-2">
-              <div className="flex-1 text-xs text-muted">
+            <div className="tw-flex tw-items-center tw-gap-2">
+              <div className="tw-flex-1 tw-text-xs tw-text-muted">
                 {formData.contextSource?.exclusions?.trim()
                   ? "Patterns configured"
                   : "No patterns configured"}
@@ -332,7 +332,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
                 handleInputChange("contextSource.webUrls", processedUrls.join("\n"));
               }}
               placeholder="Enter web URLs, one per line"
-              className="min-h-[80px] w-full"
+              className="tw-min-h-20 tw-w-full"
             />
           </FormField>
 
@@ -362,13 +362,13 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
                 handleInputChange("contextSource.youtubeUrls", processedUrls.join("\n"));
               }}
               placeholder="Enter YouTube URLs, one per line"
-              className="min-h-[80px] w-full"
+              className="tw-min-h-20 tw-w-full"
             />
           </FormField>
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-2 mt-4">
+      <div className="tw-mt-4 tw-flex tw-items-center tw-justify-end tw-gap-2">
         <Button variant="ghost" onClick={onCancel} disabled={isSubmitting}>
           Cancel
         </Button>

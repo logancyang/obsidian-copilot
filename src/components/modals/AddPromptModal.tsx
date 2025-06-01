@@ -58,17 +58,17 @@ function AddPromptModalContent({
   const isValid = title.trim() !== "" && prompt.trim() !== "" && !hasInvalidChars;
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <div className="text-xl font-bold text-normal mb-2">User Custom Prompt</div>
+    <div className="tw-flex tw-flex-col tw-gap-4 tw-p-4">
+      <div className="tw-mb-2 tw-text-xl tw-font-bold tw-text-normal">User Custom Prompt</div>
 
-      <div className="flex flex-col">
-        <div className="flex items-center gap-1">
-          <div className="text-base font-medium text-normal">Title</div>
-          <span className="text-error">*</span>
+      <div className="tw-flex tw-flex-col">
+        <div className="tw-flex tw-items-center tw-gap-1">
+          <div className="tw-text-base tw-font-medium tw-text-normal">Title</div>
+          <span className="tw-text-error">*</span>
         </div>
-        <div className="flex flex-col gap-1">
-          <div className="text-sm text-muted">The title of the prompt, must be unique.</div>
-          <div className="text-xs text-warning">
+        <div className="tw-flex tw-flex-col tw-gap-1">
+          <div className="tw-text-sm tw-text-muted">The title of the prompt, must be unique.</div>
+          <div className="tw-text-xs tw-text-warning">
             Note: Title will be used as filename. Avoid using: {'< > : " / \\ | ? *'}
           </div>
         </div>
@@ -81,22 +81,26 @@ function AddPromptModalContent({
           }}
           onBlur={() => setTouched((prev) => ({ ...prev, title: true }))}
           disabled={disabledTitle}
-          className={`w-full mt-1`}
+          className="tw-mt-1 tw-w-full"
           required
         />
-        {showTitleError && <div className="text-error text-xs mt-1">Title is required</div>}
+        {showTitleError && (
+          <div className="tw-mt-1 tw-text-xs tw-text-error">Title is required</div>
+        )}
         {hasInvalidChars && (
-          <div className="text-error text-xs mt-1">Title contains invalid characters</div>
+          <div className="tw-mt-1 tw-text-xs tw-text-error">Title contains invalid characters</div>
         )}
       </div>
 
-      <div className="flex flex-col gap-1">
-        <div className="space-y-2">
-          <div className="flex items-center gap-1">
-            <div className="text-base font-medium text-normal">Prompt</div>
-            <span className="text-error">*</span>
+      <div className="tw-flex tw-flex-col tw-gap-1">
+        <div className="tw-space-y-2">
+          <div className="tw-flex tw-items-center tw-gap-1">
+            <div className="tw-text-base tw-font-medium tw-text-normal">Prompt</div>
+            <span className="tw-text-error">*</span>
           </div>
-          <div className="text-sm text-muted -mt-1">Use the following syntax in your prompt:</div>
+          <div className="tw--mt-1 tw-text-sm tw-text-muted">
+            Use the following syntax in your prompt:
+          </div>
         </div>
         <CustomPromptSyntaxInstruction />
 
@@ -107,12 +111,14 @@ function AddPromptModalContent({
             if (!touched.prompt) setTouched((prev) => ({ ...prev, prompt: true }));
           }}
           onBlur={() => setTouched((prev) => ({ ...prev, prompt: true }))}
-          className={`!min-h-[8rem] mt-1`}
+          className="tw-mt-1 !tw-min-h-32"
           required
         />
-        {showPromptError && <div className="text-error text-xs mt-1">Prompt is required</div>}
+        {showPromptError && (
+          <div className="tw-mt-1 tw-text-xs tw-text-error">Prompt is required</div>
+        )}
 
-        <div className="flex flex-col text-xs text-muted gap-2 mt-2">
+        <div className="tw-mt-2 tw-flex tw-flex-col tw-gap-2 tw-text-xs tw-text-muted">
           <div>
             Save the prompt to the local prompt library. You can then use it with the Copilot
             command: <strong>Apply custom prompt to selection.</strong>
@@ -122,7 +128,7 @@ function AddPromptModalContent({
             <a
               href="https://github.com/f/awesome-chatgpt-prompts"
               target="_blank"
-              className="text-accent hover:text-accent-hover"
+              className="tw-text-accent hover:tw-text-accent-hover"
               rel="noreferrer"
             >
               awesome chatGPT prompts
@@ -132,7 +138,7 @@ function AddPromptModalContent({
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-2">
+      <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
         <Button variant="secondary" onClick={onCancel} disabled={isSubmitting}>
           Cancel
         </Button>

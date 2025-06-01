@@ -30,7 +30,7 @@ export function SettingSlider({
   }, [initialValue]);
 
   return (
-    <div className={cn("flex items-center gap-4", className)}>
+    <div className={cn("tw-flex tw-items-center tw-gap-4", className)}>
       <Slider
         value={[localValue]}
         onValueChange={([value]) => setLocalValue(value)}
@@ -39,9 +39,9 @@ export function SettingSlider({
         max={max}
         step={step}
         disabled={disabled}
-        className="flex-1"
+        className="tw-flex-1"
       />
-      <div className="min-w-[40px] text-sm text-right">{localValue}</div>
+      <div className="tw-min-w-[40px] tw-text-right tw-text-sm">{localValue}</div>
     </div>
   );
 }

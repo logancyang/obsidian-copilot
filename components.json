@@ -8,7 +8,7 @@
     "css": "src/styles/tailwind.css",
     "baseColor": "zinc",
     "cssVariables": true,
-    "prefix": ""
+    "prefix": "tw"
   },
   "aliases": {
     "components": "@/components",

@@ -24,49 +24,50 @@ export const TabItem: React.FC<TabItemProps> = ({ tab, isSelected, onClick, isFi
       aria-selected={isSelected}
       onClick={onClick}
       className={cn(
-        "flex flex-row items-center",
-        "h-8",
-        "px-2 py-1",
-        "gap-1.5",
-        "cursor-pointer",
-        "overflow-hidden",
-        "whitespace-nowrap",
-        "text-sm",
-        "border border-border border-solid",
-        "rounded-t-md rounded-b-[2px]",
-        "bg-primary",
-        "transition-all duration-300 ease-in-out",
-        "hover:border-interactive-accent hover:border-b-0",
+        "tw-flex tw-flex-row tw-items-center",
+        "tw-h-8",
+        "tw-px-2 tw-py-1",
+        "tw-gap-1.5",
+        "tw-cursor-pointer",
+        "tw-overflow-hidden",
+        "tw-whitespace-nowrap",
+        "tw-text-sm",
+        "tw-border tw-border-solid tw-border-border",
+        "tw-rounded-b-[2px] tw-rounded-t-md",
+        "tw-bg-primary",
+        "tw-transition-all tw-duration-300 tw-ease-in-out",
+        "hover:tw-border-interactive-accent",
         isSelected && [
-          "!bg-interactive-accent",
-          "text-on-accent",
-          "!px-3",
-          "!max-w-full",
-          "border-b-0",
-          "transition-all duration-300 ease-in-out",
-          "delay-200",
+          "!tw-bg-interactive-accent",
+          "tw-text-on-accent",
+          "!tw-px-3",
+          "!tw-max-w-full",
+          "tw-transition-all tw-duration-300 tw-ease-in-out",
+          "tw-delay-200",
         ],
-        "lg:max-w-32",
-        "md:max-w-32"
+        "lg:tw-max-w-32",
+        "md:tw-max-w-32"
       )}
     >
       <div
         className={cn(
-          "flex items-center justify-center",
-          "w-4 h-4",
-          "transition-transform duration-200 ease-in-out",
-          isSelected ? "opacity-100 max-w-[16px] translate-x-0" : "opacity-0 max-w-0 -translate-x-4"
+          "tw-flex tw-items-center tw-justify-center",
+          "tw-size-4",
+          "tw-transition-transform tw-duration-200 tw-ease-in-out",
+          isSelected
+            ? "tw-max-w-[16px] tw-translate-x-0 tw-opacity-100"
+            : "tw-max-w-0 tw--translate-x-4 tw-opacity-0"
         )}
       >
         {tab.icon}
       </div>
       <span
         className={cn(
-          "text-sm",
-          "font-medium",
-          "transition-all duration-200 ease-in-out",
-          "overflow-hidden whitespace-nowrap",
-          "opacity-100 max-w-[100px] translate-x-0"
+          "tw-text-sm",
+          "tw-font-medium",
+          "tw-transition-all tw-duration-200 tw-ease-in-out",
+          "tw-overflow-hidden tw-whitespace-nowrap",
+          "tw-max-w-[100px] tw-translate-x-0 tw-opacity-100"
         )}
       >
         {tab.label}
@@ -90,9 +91,9 @@ export const TabContent: React.FC<TabContentProps> = ({ id, children, isSelected
       id={`tabpanel-${id}`}
       aria-labelledby={`tab-${id}`}
       className={cn(
-        "pt-4",
-        "transition-all duration-200 ease-in-out",
-        isSelected ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
+        "tw-pt-4",
+        "tw-transition-all tw-duration-200 tw-ease-in-out",
+        isSelected ? "tw-translate-y-0 tw-opacity-100" : "tw-translate-y-2 tw-opacity-0"
       )}
     >
       {children}

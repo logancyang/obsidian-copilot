@@ -432,7 +432,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
     return (
       <div
-        className="flex flex-col gap-0.5 w-full border border-border border-solid rounded-md pt-2 pb-1 px-1 @container/chat-input"
+        className="tw-flex tw-w-full tw-flex-col tw-gap-0.5 tw-rounded-md tw-border tw-border-solid tw-border-border tw-px-1 tw-pb-1 tw-pt-2 tw-@container/chat-input"
         ref={containerRef}
       >
         <ContextControl
@@ -461,25 +461,25 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                   onClick={() => setSelectedImages((prev) => prev.filter((_, i) => i !== index))}
                   title="Remove image"
                 >
-                  <X className="size-4" />
+                  <X className="tw-size-4" />
                 </button>
               </div>
             ))}
           </div>
         )}
 
-        <div className="relative" {...(isCopilotPlus ? getRootProps() : {})}>
+        <div className="tw-relative" {...(isCopilotPlus ? getRootProps() : {})}>
           {isProjectLoading && (
-            <div className="absolute inset-0 z-modal bg-background/80 backdrop-blur-sm flex items-center justify-center">
-              <div className="flex items-center gap-2">
-                <Loader2 className="size-4 animate-spin" />
-                <span className="text-sm">{loadingMessages[loadingMessageIndex]}</span>
+            <div className="tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-bg-primary tw-opacity-80 tw-backdrop-blur-sm">
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <Loader2 className="tw-size-4 tw-animate-spin" />
+                <span className="tw-text-sm">{loadingMessages[loadingMessageIndex]}</span>
               </div>
             </div>
           )}
           <textarea
             ref={textAreaRef}
-            className="w-full bg-transparent focus-visible:ring-0 border-none min-h-[60px] max-h-40 overflow-y-auto resize-none px-2 rounded-md text-sm text-normal"
+            className="tw-max-h-40 tw-min-h-[60px] tw-w-full tw-resize-none tw-overflow-y-auto tw-rounded-md tw-border-none tw-bg-transparent tw-px-2 tw-text-sm tw-text-normal focus-visible:tw-ring-0"
             placeholder={
               "Ask anything. [[ for notes. / for custom prompts. " +
               (isCopilotPlus ? "@ for tools." : "")
@@ -495,18 +495,18 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
               <input {...getInputProps()} />
               {/* Overlay that appears when dragging */}
               {isDragActive && (
-                <div className="absolute inset-0 bg-primary border border-dashed border-primary rounded-md flex items-center justify-center">
-                  <span className="text-primary">Drop images here...</span>
+                <div className="tw-absolute tw-inset-0 tw-flex tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-dashed tw-bg-primary">
+                  <span>Drop images here...</span>
                 </div>
               )}
             </>
           )}
         </div>
 
-        <div className="flex gap-1 justify-between px-1 h-6">
+        <div className="tw-flex tw-h-6 tw-justify-between tw-gap-1 tw-px-1">
           {isGenerating ? (
-            <div className="flex items-center gap-1 px-1 text-faint text-sm">
-              <Loader2 className="size-3 animate-spin" />
+            <div className="tw-flex tw-items-center tw-gap-1 tw-px-1 tw-text-sm tw-text-faint">
+              <Loader2 className="tw-size-3 tw-animate-spin" />
               <span>Generating...</span>
             </div>
           ) : (
@@ -514,11 +514,11 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost2" size="fit" disabled={disableModelSwitch}>
                   {modelError ? (
-                    <span className="text-error">Model Load Failed</span>
+                    <span className="tw-text-error">Model Load Failed</span>
                   ) : settings.activeModels.find(
-                    (model) =>
-                      model.enabled && getModelKeyFromModel(model) === getDisplayModelKey()
-                  ) ? (
+                      (model) =>
+                        model.enabled && getModelKeyFromModel(model) === getDisplayModelKey()
+                    ) ? (
                     <ModelDisplay
                       model={
                         settings.activeModels.find(
@@ -531,7 +531,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                   ) : (
                     "Select Model"
                   )}
-                  {!disableModelSwitch && <ChevronDown className="size-5 mt-0.5" />}
+                  {!disableModelSwitch && <ChevronDown className="tw-mt-0.5 tw-size-5" />}
                 </Button>
               </DropdownMenuTrigger>
 
@@ -567,7 +567,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                               }
                             }
                           }}
-                          className={!hasApiKey ? "opacity-50 cursor-not-allowed" : ""}
+                          className={!hasApiKey ? "tw-cursor-not-allowed tw-opacity-50" : ""}
                         >
                           <ModelDisplay model={model} iconSize={12} />
                         </DropdownMenuItem>
@@ -577,15 +577,15 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
             </DropdownMenu>
           )}
 
-          <div className="flex items-center gap-1">
+          <div className="tw-flex tw-items-center tw-gap-1">
             {isGenerating ? (
               <Button
                 variant="ghost2"
                 size="fit"
-                className="text-muted"
+                className="tw-text-muted"
                 onClick={() => onStopGenerating()}
               >
-                <StopCircle className="size-4" />
+                <StopCircle className="tw-size-4" />
                 Stop
               </Button>
             ) : (
@@ -598,16 +598,16 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                       new AddImageModal(app, onAddImage).open();
                     }}
                   >
-                    <Image className="w-4 h-4" />
+                    <Image className="tw-size-4" />
                   </Button>
                 )}
                 <Button
                   variant="ghost2"
                   size="fit"
-                  className="text-muted"
+                  className="tw-text-muted"
                   onClick={() => onSendMessage(false)}
                 >
-                  <CornerDownLeft className="!size-3" />
+                  <CornerDownLeft className="!tw-size-3" />
                   <span>chat</span>
                 </Button>
 
@@ -615,21 +615,21 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                   <Button
                     variant="ghost2"
                     size="fit"
-                    className="text-muted @xs/chat-input:inline-flex hidden"
+                    className="tw-hidden tw-text-muted @xs/chat-input:tw-inline-flex"
                     onClick={() => onSendMessage(true)}
                   >
-                    <div className="flex items-center gap-1">
+                    <div className="tw-flex tw-items-center tw-gap-1">
                       {Platform.isMacOS ? (
-                        <div className="flex items-center">
-                          <Command className="!size-3" />
-                          <ArrowBigUp className="!size-3" />
-                          <CornerDownLeft className="!size-3" />
+                        <div className="tw-flex tw-items-center">
+                          <Command className="!tw-size-3" />
+                          <ArrowBigUp className="!tw-size-3" />
+                          <CornerDownLeft className="!tw-size-3" />
                         </div>
                       ) : (
-                        <div className="flex items-center">
+                        <div className="tw-flex tw-items-center">
                           <span>Ctrl</span>
-                          <ArrowBigUp className="size-4" />
-                          <CornerDownLeft className="!size-3" />
+                          <ArrowBigUp className="tw-size-4" />
+                          <CornerDownLeft className="!tw-size-3" />
                         </div>
                       )}
                       <span>vault</span>

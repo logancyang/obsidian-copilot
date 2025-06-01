@@ -69,22 +69,22 @@ const SortableTableRow: React.FC<{
       ref={setNodeRef}
       style={style}
       className={cn(
-        "transition-colors",
+        "tw-transition-colors",
         isDragging &&
-          "shadow-lg bg-background/90 backdrop-blur-sm relative z-[100] cursor-grabbing border-2 border-accent/50"
+          "tw-relative tw-z-[100] tw-cursor-grabbing tw-shadow-lg tw-backdrop-blur-sm tw-border-accent/50"
       )}
     >
-      <TableCell className="w-10">
+      <TableCell className="tw-w-10">
         <div
           {...attributes}
           {...listeners}
-          className="flex items-center justify-center cursor-grab"
+          className="tw-flex tw-cursor-grab tw-items-center tw-justify-center"
         >
-          <GripVertical className="h-4 w-4 text-muted-foreground" />
+          <GripVertical className="tw-size-4" />
         </div>
       </TableCell>
       <TableCell>{command.name}</TableCell>
-      <TableCell className="text-center">
+      <TableCell className="tw-text-center">
         <Checkbox
           checked={command.showInContextMenu}
           onCheckedChange={(checked) =>
@@ -93,11 +93,11 @@ const SortableTableRow: React.FC<{
               showInContextMenu: checked === true,
             })
           }
-          className="mx-auto"
+          className="tw-mx-auto"
         />
       </TableCell>
-      <TableCell className="text-center">
-        <div className="flex justify-center space-x-1">
+      <TableCell className="tw-text-center">
+        <div className="tw-flex tw-justify-center tw-space-x-1">
           <Button
             variant="ghost"
             size="icon"
@@ -110,12 +110,12 @@ const SortableTableRow: React.FC<{
               ).open()
             }
           >
-            <PencilLine className="h-4 w-4" />
+            <PencilLine className="tw-size-4" />
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon">
-                <MoreVertical className="h-4 w-4" />
+                <MoreVertical className="tw-size-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" container={container}>
@@ -129,15 +129,15 @@ const SortableTableRow: React.FC<{
                   ).open()
                 }
               >
-                <PencilLine className="h-4 w-4 mr-2" />
+                <PencilLine className="tw-mr-2 tw-size-4" />
                 Edit
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onDuplicate(command)}>
-                <Copy className="h-4 w-4 mr-2" />
+                <Copy className="tw-mr-2 tw-size-4" />
                 Copy
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onRemove(command)} className="text-error">
-                <Trash2 className="h-4 w-4 mr-2" />
+              <DropdownMenuItem onClick={() => onRemove(command)} className="tw-text-error">
+                <Trash2 className="tw-mr-2 tw-size-4" />
                 Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -214,23 +214,23 @@ export const CommandSettings: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="tw-space-y-4">
       <section>
-        <div className="flex flex-col mb-4 gap-2">
-          <div className="text-xl font-bold">Custom Commands</div>
-          <div className="text-sm text-muted">
+        <div className="tw-mb-4 tw-flex tw-flex-col tw-gap-2">
+          <div className="tw-text-xl tw-font-bold">Custom Commands</div>
+          <div className="tw-text-sm tw-text-muted">
             To trigger a custom command, highlight text in the editor and select it from the command
             palette, or right-click and choose it from the context menu if configured.
           </div>
         </div>
         {!hasModifiedCommand() && (
-          <div className="border border-border border-solid p-4 rounded-md text-muted flex items-start gap-2">
-            <Lightbulb className="size-5" /> Take control of your inline edit commands! You can now
-            create your own or edit built-in ones to tailor functionality to your needs.
+          <div className="tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-4 tw-text-muted">
+            <Lightbulb className="tw-size-5" /> Take control of your inline edit commands! You can
+            now create your own or edit built-in ones to tailor functionality to your needs.
           </div>
         )}
 
-        <div className="flex flex-col gap-4">
+        <div className="tw-flex tw-flex-col tw-gap-4">
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -239,10 +239,10 @@ export const CommandSettings: React.FC = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-10"></TableHead>
+                  <TableHead className="tw-w-10"></TableHead>
                   <TableHead>Name</TableHead>
-                  <TableHead className="text-center w-20">In Menu</TableHead>
-                  <TableHead className="w-10"></TableHead>
+                  <TableHead className="tw-w-20 tw-text-center">In Menu</TableHead>
+                  <TableHead className="tw-w-10"></TableHead>
                 </TableRow>
               </TableHeader>
               <SortableContext
@@ -263,7 +263,7 @@ export const CommandSettings: React.FC = () => {
               </SortableContext>
             </Table>
           </DndContext>
-          <div className="flex w-full justify-end">
+          <div className="tw-flex tw-w-full tw-justify-end">
             <Button
               variant="secondary"
               onClick={() =>
@@ -278,7 +278,7 @@ export const CommandSettings: React.FC = () => {
                 ).open()
               }
             >
-              <Plus className="h-4 w-4" /> Add Command
+              <Plus className="tw-size-4" /> Add Command
             </Button>
           </div>
         </div>

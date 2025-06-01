@@ -28,7 +28,7 @@ export const ModelCapabilityIcons: React.FC<ModelCapabilityIconsProps> = ({
               return (
                 <Lightbulb
                   key={index}
-                  className="text-model-capabilities-blue"
+                  className="tw-text-model-capabilities-blue"
                   style={{ width: iconSize, height: iconSize }}
                 />
               );
@@ -36,7 +36,7 @@ export const ModelCapabilityIcons: React.FC<ModelCapabilityIconsProps> = ({
               return (
                 <Eye
                   key={index}
-                  className="text-model-capabilities-green"
+                  className="tw-text-model-capabilities-green"
                   style={{ width: iconSize, height: iconSize }}
                 />
               );
@@ -44,7 +44,7 @@ export const ModelCapabilityIcons: React.FC<ModelCapabilityIconsProps> = ({
               return (
                 <Globe
                   key={index}
-                  className="text-model-capabilities-blue"
+                  className="tw-text-model-capabilities-blue"
                   style={{ width: iconSize, height: iconSize }}
                 />
               );
@@ -59,10 +59,10 @@ export const ModelCapabilityIcons: React.FC<ModelCapabilityIconsProps> = ({
 export const ModelDisplay: React.FC<ModelDisplayProps> = ({ model, iconSize = 14 }) => {
   const displayName = model.displayName || model.name;
   return (
-    <div className="flex items-center gap-1">
+    <div className="tw-flex tw-items-center tw-gap-1">
       <span>{displayName}</span>
       {model.capabilities && model.capabilities.length > 0 && (
-        <div className="flex gap-0.5 items-center">
+        <div className="tw-flex tw-items-center tw-gap-0.5">
           <ModelCapabilityIcons capabilities={model.capabilities} iconSize={iconSize} />
         </div>
       )}
