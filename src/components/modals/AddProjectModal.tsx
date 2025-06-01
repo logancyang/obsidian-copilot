@@ -64,8 +64,8 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
     setFormData((prev) => {
       // Handle text input
       if (typeof value === "string") {
-        // Only trim for specific fields that shouldn't have whitespace
-        if (field === "name" || field === "projectModelKey") {
+        // Only trim for model key which shouldn't have whitespace
+        if (field === "projectModelKey") {
           value = value.trim();
         }
       }
@@ -97,6 +97,11 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
   };
 
   const handleSave = async () => {
+    // Trim the project name before validation and saving
+    if (formData.name) {
+      formData.name = formData.name.trim();
+    }
+
     const requiredFields = ["name", "projectModelKey"];
     const missingFields = requiredFields.filter((field) => !formData[field as keyof ProjectConfig]);
 
