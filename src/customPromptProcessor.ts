@@ -21,7 +21,7 @@ export interface CustomPrompt {
  * be skipped when processing custom prompts because it's handled differently
  * by the custom command prompt processor.
  */
-const VARIABLE_REGEX = /\{(?!copilot-selection\})([^}]+)\}/g;
+const VARIABLE_REGEX = /\{(?!copilot-selection\})([^\n}]+)\}/g;
 
 /**
  * Represents the result of processing a custom prompt variable.

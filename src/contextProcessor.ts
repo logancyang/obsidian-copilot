@@ -104,10 +104,10 @@ export class ContextProcessor {
           content = await this.processEmbeddedPDFs(content, vault, fileParserManager);
         }
 
-        additionalContext += `\n\nTitle: [[${note.basename}]]\nPath: ${note.path}\n\n${content}`;
+        additionalContext += `\n\n <note_in_context> \n Title: [[${note.basename}]]\nPath: ${note.path}\n\n${content}\n</note_in_context>`;
       } catch (error) {
         console.error(`Error processing file ${note.path}:`, error);
-        additionalContext += `\n\nTitle: [[${note.basename}]]\nPath: ${note.path}\n\n[Error: Could not process file]`;
+        additionalContext += `\n\n <note_in_context_error> \n Title: [[${note.basename}]]\nPath: ${note.path}\n\n[Error: Could not process file]\n</note_in_context_error>`;
       }
     };
 
@@ -116,9 +116,14 @@ export class ContextProcessor {
       await processNote(activeNote);
     }
 
+    const includedFilePaths = new Set<string>();
     // Process context notes
     for (const note of contextNotes) {
+      if (includedFilePaths.has(note.path)) {
+        continue;
+      }
       await processNote(note);
+      includedFilePaths.add(note.path);
     }
 
     return additionalContext;

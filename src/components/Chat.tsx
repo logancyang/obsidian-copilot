@@ -21,7 +21,12 @@ import ChainManager from "@/LLMProviders/chainManager";
 import CopilotPlugin from "@/main";
 import { Mention } from "@/mentions/Mention";
 import { useIsPlusUser } from "@/plusUtils";
-import { getSettings, updateSetting, useSettingsValue } from "@/settings/model";
+import {
+  getComposerOutputPrompt,
+  getSettings,
+  updateSetting,
+  useSettingsValue,
+} from "@/settings/model";
 import SharedState, { ChatMessage, useSharedState } from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { err2String, formatDateTime } from "@/utils";
@@ -160,11 +165,18 @@ const Chat: React.FC<ChatProps> = ({
     setLoading(true);
     setLoadingMessage(LOADING_MESSAGES.DEFAULT);
 
-    // First, process the original user message for custom prompts
+    // First, add composer instruction if necessary
+    let processedInputMessage = inputMessage;
+    const composerPrompt = await getComposerOutputPrompt();
+    if (inputMessage.includes("@composer") && composerPrompt != "") {
+      processedInputMessage =
+        inputMessage + "\n\n<output_format>\n" + composerPrompt + "\n</output_format>";
+    }
+    // process the original user message for custom prompts
     const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
     const { processedPrompt: processedUserMessage, includedFiles } =
       await customPromptProcessor.processCustomPrompt(
-        inputMessage || "",
+        processedInputMessage || "",
         "",
         app.workspace.getActiveFile() as TFile | undefined
       );
