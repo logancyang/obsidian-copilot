@@ -168,7 +168,7 @@ const Chat: React.FC<ChatProps> = ({
     // First, add composer instruction if necessary
     let processedInputMessage = inputMessage;
     const composerPrompt = await getComposerOutputPrompt();
-    if (inputMessage.includes("@composer") && composerPrompt != "") {
+    if (inputMessage.includes("@composer") && composerPrompt !== "") {
       processedInputMessage =
         inputMessage + "\n\n<output_format>\n" + composerPrompt + "\n</output_format>";
     }
