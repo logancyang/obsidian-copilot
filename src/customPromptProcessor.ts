@@ -21,7 +21,7 @@ export interface CustomPrompt {
  * be skipped when processing custom prompts because it's handled differently
  * by the custom command prompt processor.
  */
-const VARIABLE_REGEX = /\{(?!copilot-selection\})([^\n}]+)\}/g;
+const VARIABLE_REGEX = /\{(?!copilot-selection\})([^}]+)\}/g;
 
 /**
  * Represents the result of processing a custom prompt variable.
@@ -91,7 +91,11 @@ async function extractVariablesFromPrompt(
       variablesMap.set(variableName, variableResult.content);
       variableResult.files.forEach((file) => includedFiles.add(file));
     } else if (variableName.toLowerCase() !== "activenote") {
-      console.warn(`No notes found for variable: ${variableName}`);
+      if (variableName.startsWith('"')) {
+        // DO NOTHING as the user probably wants to write a JSON object
+      } else {
+        console.warn(`No notes found for variable: ${variableName}`);
+      }
     }
   }
 
