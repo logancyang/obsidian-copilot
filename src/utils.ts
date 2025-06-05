@@ -808,6 +808,20 @@ export function removeThinkTags(text: any): string {
   return plainText.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
 }
 
+/**
+ * Removes any <errorChunk> tags and their content from the text.
+ * This is used to clean model outputs before using them for RAG.
+ * Handles both string content and array-based content (Claude 3.7 format)
+ * @param text - The text or content array to remove error tags from
+ * @returns The text with error tags removed
+ */
+export function removeErrorTags(text: any): string {
+  // First convert any content format to plain text
+  const plainText = extractTextFromChunk(text);
+  // Then remove error tags
+  return plainText.replace(/<errorChunk>[\s\S]*?<\/errorChunk>/g, "").trim();
+}
+
 export function randomUUID() {
   return crypto.randomUUID();
 }

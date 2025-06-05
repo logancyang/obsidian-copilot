@@ -15,7 +15,7 @@ import {
   MessageContent,
 } from "@/imageProcessing/imageProcessor";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import { logInfo } from "@/logger";
+import { logError, logInfo } from "@/logger";
 import { getSettings, getSystemPrompt } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { ToolManager } from "@/tools/toolManager";
@@ -30,7 +30,6 @@ import {
   withSuppressedTokenWarnings,
 } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { Notice } from "obsidian";
 import ChainManager from "./chainManager";
 import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "./intentAnalyzer";
 import ProjectManager from "./projectManager";
@@ -38,6 +37,7 @@ import ProjectManager from "./projectManager";
 class ThinkBlockStreamer {
   private hasOpenThinkBlock = false;
   private fullResponse = "";
+  private errorResponse = "";
 
   constructor(private updateCurrentAiMessage: (message: string) => void) {}
 
@@ -102,12 +102,21 @@ class ThinkBlockStreamer {
     this.updateCurrentAiMessage(this.fullResponse);
   }
 
+  processErrorChunk(errorMessage: string) {
+    this.errorResponse = "\n<errorChunk>" + errorMessage + "</errorChunk>";
+  }
+
   close() {
     // Make sure to close any open think block at the end
     if (this.hasOpenThinkBlock) {
       this.fullResponse += "</think>";
-      this.updateCurrentAiMessage(this.fullResponse);
     }
+
+    if (this.errorResponse) {
+      this.fullResponse += this.errorResponse;
+    }
+
+    this.updateCurrentAiMessage(this.fullResponse);
     return this.fullResponse;
   }
 }
@@ -180,14 +189,9 @@ abstract class BaseChainRunner implements ChainRunner {
     return fullAIResponse;
   }
 
-  protected async handleError(
-    error: any,
-    debug: boolean,
-    addMessage?: (message: ChatMessage) => void,
-    updateCurrentAiMessage?: (message: string) => void
-  ) {
+  protected async handleError(error: any, processErrorChunk: (message: string) => void) {
     const msg = err2String(error);
-    if (debug) console.error("Error during LLM invocation:", msg);
+    logError("Error during LLM invocation:", msg);
     const errorData = error?.response?.data?.error || msg;
     const errorCode = errorData?.code || msg;
     let errorMessage = "";
@@ -203,36 +207,24 @@ abstract class BaseChainRunner implements ChainRunner {
     }
 
     console.error(errorData);
+    processErrorChunk(this.enhancedErrorMsg(errorMessage, msg));
+  }
 
-    if (addMessage && updateCurrentAiMessage) {
-      updateCurrentAiMessage("");
+  private enhancedErrorMsg(errorMessage: string, msg: string) {
+    // remove langchain troubleshooting URL from error message
+    const ignoreEndIndex = errorMessage.search("Troubleshooting URL");
+    errorMessage = ignoreEndIndex !== -1 ? errorMessage.slice(0, ignoreEndIndex) : errorMessage;
 
-      // remove langchain troubleshooting URL from error message
-      const ignoreEndIndex = errorMessage.search("Troubleshooting URL");
-      errorMessage = ignoreEndIndex !== -1 ? errorMessage.slice(0, ignoreEndIndex) : errorMessage;
-
-      // add more user guide for invalid API key
-      if (msg.search(/401|invalid|not valid/gi) !== -1) {
-        errorMessage =
-          "Something went wrong. Please check if you have set your API key." +
-          "\nPath: Settings > copilot plugin > Basic Tab > Set Keys." +
-          "\nOr check model config" +
-          "\nError Details: " +
-          errorMessage;
-      }
-
-      addMessage({
-        message: errorMessage,
-        isErrorMessage: true,
-        sender: AI_SENDER,
-        isVisible: true,
-        timestamp: formatDateTime(new Date()),
-      });
-    } else {
-      // Fallback to Notice if message handlers aren't provided
-      new Notice(errorMessage);
-      console.error(errorData);
+    // add more user guide for invalid API key
+    if (msg.search(/401|invalid|not valid/gi) !== -1) {
+      errorMessage =
+        "Something went wrong. Please check if you have set your API key." +
+        "\nPath: Settings > copilot plugin > Basic Tab > Set Keys." +
+        "\nOr check model config" +
+        "\nError Details: " +
+        errorMessage;
     }
+    return errorMessage;
   }
 }
 
@@ -262,7 +254,7 @@ class LLMChainRunner extends BaseChainRunner {
         streamer.processChunk(chunk);
       }
     } catch (error) {
-      await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
+      await this.handleError(error, streamer.processErrorChunk.bind(streamer));
     }
 
     return this.handleResponse(
@@ -289,7 +281,7 @@ class VaultQAChainRunner extends BaseChainRunner {
     }
   ): Promise<string> {
     const { debug = false } = options;
-    let fullAIResponse = "";
+    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage);
 
     try {
       // Add check for empty index
@@ -315,23 +307,36 @@ class VaultQAChainRunner extends BaseChainRunner {
 
       for await (const chunk of qaStream) {
         if (abortController.signal.aborted) break;
-        fullAIResponse += chunk.content;
-        updateCurrentAiMessage(fullAIResponse);
+        // Use streamer to process chunks for consistent handling
+        streamer.processChunk({ content: chunk.content });
       }
 
-      fullAIResponse = this.addSourcestoResponse(fullAIResponse);
-    } catch (error) {
-      await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
-    }
+      // Add sources to the streamer's response
+      const currentResponse = streamer.close();
+      const responseWithSources = this.addSourcestoResponse(currentResponse);
 
-    return this.handleResponse(
-      fullAIResponse,
-      userMessage,
-      abortController,
-      addMessage,
-      updateCurrentAiMessage,
-      debug
-    );
+      // Update the current AI message with sources
+      updateCurrentAiMessage(responseWithSources);
+
+      return this.handleResponse(
+        responseWithSources,
+        userMessage,
+        abortController,
+        addMessage,
+        updateCurrentAiMessage,
+        debug
+      );
+    } catch (error) {
+      await this.handleError(error, streamer.processErrorChunk.bind(streamer));
+      return this.handleResponse(
+        streamer.close(),
+        userMessage,
+        abortController,
+        addMessage,
+        updateCurrentAiMessage,
+        debug
+      );
+    }
   }
 
   private addSourcestoResponse(response: string): string {
@@ -462,9 +467,9 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     textContent: string,
     userMessage: ChatMessage,
     abortController: AbortController,
-    updateCurrentAiMessage: (message: string) => void,
+    streamer: ThinkBlockStreamer,
     debug: boolean
-  ): Promise<string> {
+  ): Promise<void> {
     // Get chat history
     const memory = this.chainManager.memoryManager.getMemory();
     const memoryVariables = await memory.loadMemoryVariables({});
@@ -516,7 +521,6 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     const enhancedUserMessage = content instanceof Array ? (content[0] as any).text : content;
     logInfo("Enhanced user message: ", enhancedUserMessage);
     logInfo("==== Final Request to AI ====\n", messages);
-    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage);
 
     // Wrap the stream call with warning suppression
     const chatStream = await withSuppressedTokenWarnings(() =>
@@ -527,8 +531,6 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       if (abortController.signal.aborted) break;
       streamer.processChunk(chunk);
     }
-
-    return streamer.close();
   }
 
   async run(
@@ -544,7 +546,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     }
   ): Promise<string> {
     const { debug = false, updateLoadingMessage } = options;
-    let fullAIResponse = "";
+    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage);
     let sources: { title: string; score: number }[] = [];
 
     try {
@@ -648,11 +650,11 @@ class CopilotPlusChainRunner extends BaseChainRunner {
           systemMessage: "", // System prompt is added separately in streamMultimodalResponse
         });
 
-        fullAIResponse = await this.streamMultimodalResponse(
+        await this.streamMultimodalResponse(
           qaPrompt,
           userMessage,
           abortController,
-          updateCurrentAiMessage,
+          streamer,
           debug
         );
 
@@ -667,22 +669,22 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         // If no results, default to LLM Chain
         logInfo("No local search results. Using standard LLM Chain.");
 
-        fullAIResponse = await this.streamMultimodalResponse(
+        await this.streamMultimodalResponse(
           enhancedUserMessage,
           userMessage,
           abortController,
-          updateCurrentAiMessage,
+          streamer,
           debug
         );
       }
     } catch (error) {
       // Reset loading message to default
       updateLoadingMessage?.(LOADING_MESSAGES.DEFAULT);
-      await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
+      await this.handleError(error, streamer.processErrorChunk.bind(streamer));
     }
 
     return this.handleResponse(
-      fullAIResponse,
+      streamer.close(),
       userMessage,
       abortController,
       addMessage,
