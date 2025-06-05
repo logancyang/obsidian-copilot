@@ -13,6 +13,19 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { ComposerCodeBlock } from "./ComposerCodeBlock";
 
+interface ErrorBlockProps {
+  errorContent: string;
+}
+
+export const ErrorBlock: React.FC<ErrorBlockProps> = ({ errorContent }) => {
+  return (
+    <div className="tw-my-2 tw-mb-6 tw-max-h-[180px] tw-overflow-y-scroll tw-rounded-xl tw-bg-modifier-error-rgb/5 tw-p-3">
+      <div className="tw-mb-2 tw-text-sm tw-font-semibold tw-text-error">⚠️ Error occurred</div>
+      <div className="tw-text-xs tw-text-error">{errorContent.trim()}</div>
+    </div>
+  );
+};
+
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
   if (!context || (context.notes.length === 0 && context.urls.length === 0)) {
     return null;
@@ -126,6 +139,17 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         });
       };
 
+      // Process error chunks - remove them from content during preprocessing
+      const processErrorChunks = (text: string): string => {
+        // If we find errorChunk tags, it means streaming has stopped due to error
+        // Remove errorChunk content from the processed message since we'll handle it separately
+        if (text.includes("<errorChunk>")) {
+          // Remove all errorChunk content from the text that will be rendered
+          text = text.replace(/<errorChunk>[\s\S]*?<\/errorChunk>/g, "");
+        }
+        return text;
+      };
+
       // Showing loading placeholders for composer output during streaming
       const processComposerCodeBlocks = (text: string): string => {
         // Helper function to create the loading placeholder
@@ -182,8 +206,11 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         .replace(/\\\(\s*/g, "$")
         .replace(/\s*\\\)/g, "$");
 
+      // Process error chunks first - remove them from content
+      const errorProcessed = processErrorChunks(latexProcessed);
+
       // Process code blocks first for streaming case
-      const codeBlocksProcessed = processComposerCodeBlocks(latexProcessed);
+      const codeBlocksProcessed = processComposerCodeBlocks(errorProcessed);
 
       // Process only Obsidian internal images (starting with ![[)
       const noteImageProcessed = replaceLinks(
@@ -235,6 +262,35 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     );
   };
 
+  const errorPostProcessor = useCallback(
+    (originMessage: string, isUnmounting: boolean, roots: Root[]) => {
+      const errorChunkRegex = /<errorChunk>([\s\S]*?)<\/errorChunk>/g;
+
+      const errorMatches = [...originMessage.matchAll(errorChunkRegex)];
+
+      if (errorMatches.length > 0) {
+        errorMatches.forEach((match) => {
+          if (isUnmounting) return;
+
+          const errorContent = match[1];
+
+          // Create a container for the ErrorBlock component
+          const container = document.createElement("div");
+          contentRef.current?.appendChild(container);
+
+          // Create a root and render the ErrorBlock component
+          const root = createRoot(container);
+          roots.push(root);
+
+          if (!isUnmounting) {
+            root.render(<ErrorBlock errorContent={errorContent} />);
+          }
+        });
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     const roots: Root[] = [];
     let isUnmounting = false;
@@ -247,7 +303,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         componentRef.current = new Component();
       }
 
-      const processedMessage = preprocess(message.message);
+      const originMessage = message.message;
+      const processedMessage = preprocess(originMessage);
 
       if (!isUnmounting) {
         // Use Obsidian's MarkdownRenderer to render the message
@@ -257,6 +314,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           "", // Empty string for sourcePath as we don't have a specific source file
           componentRef.current
         );
+
+        // ===== Post Processors ====
 
         // Only process code blocks with file paths after streaming is complete
         if (!isStreaming) {
@@ -343,6 +402,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             });
           }
         }
+
+        // Process error blocks from original message
+        errorPostProcessor(originMessage, isUnmounting, roots);
       }
     }
 
@@ -366,7 +428,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         });
       }, 0);
     };
-  }, [message, app, componentRef, isStreaming, preprocess]);
+  }, [message, app, componentRef, isStreaming, preprocess, errorPostProcessor]);
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
