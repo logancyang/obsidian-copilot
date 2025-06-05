@@ -69,6 +69,11 @@ export class IntentAnalyzer {
           if (tool.name === "getTimeRangeMs") {
             timeRange = await ToolManager.callTool(tool, args);
           }
+          if (tool.name == "getFileTree" && isProjectMode()) {
+            // Skip file tree tool call in project mode so when user asks "what files do I have?",
+            // we return files in the project context instead of the vault.
+            continue;
+          }
 
           processedToolCalls.push({ tool, args });
         }
