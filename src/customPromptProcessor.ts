@@ -91,7 +91,11 @@ async function extractVariablesFromPrompt(
       variablesMap.set(variableName, variableResult.content);
       variableResult.files.forEach((file) => includedFiles.add(file));
     } else if (variableName.toLowerCase() !== "activenote") {
-      console.warn(`No notes found for variable: ${variableName}`);
+      if (variableName.startsWith('"')) {
+        // DO NOTHING as the user probably wants to write a JSON object
+      } else {
+        console.warn(`No notes found for variable: ${variableName}`);
+      }
     }
   }
 

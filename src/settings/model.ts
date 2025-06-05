@@ -7,7 +7,7 @@ import { type ChainType } from "@/chainFactory";
 import {
   BUILTIN_CHAT_MODELS,
   BUILTIN_EMBEDDING_MODELS,
-  COMPOSER_INSTRUCTIONS,
+  COMPOSER_OUTPUT_INSTRUCTIONS,
   DEFAULT_OPEN_AREA,
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
@@ -250,22 +250,15 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   return sanitizedSettings;
 }
 
-export function getComposerPrompt(): string {
+export function getComposerOutputPrompt(): string {
   const isPlusUser = getSettings().isPlusUser;
 
-  if (isPlusUser) {
-    return COMPOSER_INSTRUCTIONS;
-  }
-
-  return "";
+  return isPlusUser ? COMPOSER_OUTPUT_INSTRUCTIONS : "";
 }
 
 export function getSystemPrompt(): string {
   const userPrompt = getSettings().userSystemPrompt;
-  let basePrompt = DEFAULT_SYSTEM_PROMPT;
-
-  // Add composer instructions for plus users
-  basePrompt = `${basePrompt}\n\n${getComposerPrompt()}`;
+  const basePrompt = DEFAULT_SYSTEM_PROMPT;
 
   if (userPrompt) {
     return `${basePrompt}

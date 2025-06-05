@@ -1,4 +1,4 @@
-import { DEFAULT_SYSTEM_PROMPT, COMPOSER_INSTRUCTIONS } from "../constants";
+import { DEFAULT_SYSTEM_PROMPT, COMPOSER_OUTPUT_INSTRUCTIONS } from "../constants";
 import * as dotenv from "dotenv";
 import { jest } from "@jest/globals";
 import {
@@ -55,7 +55,7 @@ describe("Composer Instructions - Integration Tests", () => {
         temperature: 0.1,
         maxOutputTokens: 1000,
       },
-      systemInstruction: `${DEFAULT_SYSTEM_PROMPT}\n\n${COMPOSER_INSTRUCTIONS}`,
+      systemInstruction: DEFAULT_SYSTEM_PROMPT,
       safetySettings: [
         {
           category: HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -87,7 +87,9 @@ describe("Composer Instructions - Integration Tests", () => {
       try {
         // Create chat session and send message
         const chat = model.startChat();
-        const result = await chat.sendMessage(userPrompt);
+        const result = await chat.sendMessage(
+          userPrompt + "\n\n<output_format>\n" + COMPOSER_OUTPUT_INSTRUCTIONS + "\n</output_format>"
+        );
         const content = result.response.text();
         if (expectedBlocks == 0) {
           expect(content).not.toContain('"type": "composer"');
@@ -137,7 +139,10 @@ describe("Composer Instructions - Integration Tests", () => {
   };
 
   // Run tests with different prompts
-  testComposerResponse("Composer: create a new note", "Create a new note about climate change?");
+  testComposerResponse(
+    "Composer: create a new note",
+    "@composer Create a new note about climate change?"
+  );
 
   testComposerResponse(
     "Composer: add content to a note",
@@ -150,7 +155,7 @@ describe("Composer Instructions - Integration Tests", () => {
 
   testComposerResponse(
     "Composer: rewrite a note",
-    `Rewrite the note [[atom]] to be more concise.
+    `@composer Rewrite the note [[atom]] to be more concise.
 
      Title: [[atom]] 
      Path: atom.md
@@ -159,7 +164,7 @@ describe("Composer Instructions - Integration Tests", () => {
 
   testComposerResponse(
     "Composer: remove content from a note",
-    `Remove the second paragraph.
+    `@composer Remove the second paragraph.
 
      Title: [[atom]] 
      Path: atom.md
@@ -168,15 +173,19 @@ describe("Composer Instructions - Integration Tests", () => {
 
   testComposerResponse(
     "Composer: update multiple notes",
-    "Create two notes on the topic of Earth and Mars separately",
+    "@composer Create two notes on the topic of Earth and Mars separately",
     2
   );
 
-  testComposerResponse("Composer: create a canvas", "Create a canvas about water cycle", 1);
+  testComposerResponse(
+    "Composer: create a canvas",
+    "@composer Create a canvas about water cycle",
+    1
+  );
 
   testComposerResponse(
     "Composer: not triggered on summarization",
-    "Summarize the note [[atom]]",
+    "@composer Summarize the note [[atom]]",
     0
   );
 });

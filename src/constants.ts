@@ -25,7 +25,7 @@ export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assist
   12. Do NOT mention the additional context provided such as getCurrentTime and getTimeRangeMs if it's irrelevant to the user message.
   13. If the user mentions "tags", it most likely means tags in Obsidian note properties.`;
 
-export const COMPOSER_INSTRUCTIONS = `If the user explicitly requests to update or create markdown notes or canvases OR mentions "@composer", always return the new note content in a special JSON format.
+export const COMPOSER_OUTPUT_INSTRUCTIONS = `Return the new note content or canvas JSON in a special JSON format.
 
   # JSON Format
   Provide the content in JSON format and wrap it in a code block with the following structure:
