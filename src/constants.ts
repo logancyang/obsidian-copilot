@@ -110,7 +110,7 @@ export enum ChatModels {
   GPT_41_nano = "gpt-4.1-nano",
   O4_mini = "o4-mini",
   AZURE_OPENAI = "azure-openai",
-  GEMINI_PRO = "gemini-2.5-pro-preview-05-06", // TODO(logan): update this when it's GA
+  GEMINI_PRO = "gemini-2.5-pro-preview-06-05", // TODO(logan): update this when it's GA
   GEMINI_FLASH = "gemini-2.5-flash-preview-04-17", // TODO(logan): update this when it's GA
   CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest",
   CLAUDE_3_7_SONNET = "claude-3-7-sonnet-latest",
