@@ -27,6 +27,11 @@ export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assist
 
 export const COMPOSER_OUTPUT_INSTRUCTIONS = `Return the new note content or canvas JSON in a special JSON format.
 
+  # Steps to find the the target notes
+  1. Extract the target note information from user message and find out the note path from the context below.
+  2. If target note is not specified, use the <active_note> as the target note.
+  3. If still failed to find the target note or the note path, ask the user to specify the target note.
+
   # JSON Format
   Provide the content in JSON format and wrap it in a code block with the following structure:
 
@@ -82,6 +87,7 @@ export const COMPOSER_OUTPUT_INSTRUCTIONS = `Return the new note content or canv
     - All IDs must be unique
     - Edge fromNode and toNode must reference existing node IDs`;
 
+export const NOTE_CONTEXT_PROMPT_TAG = "note_context";
 export const EMPTY_INDEX_ERROR_MESSAGE =
   "Copilot index does not exist. Please index your vault first!\n\n1. Set a working embedding model in QA settings. If it's not a local model, don't forget to set the API key. \n\n2. Click 'Refresh Index for Vault' and wait for indexing to complete. If you encounter the rate limiting error, please turn your request per second down in QA setting.";
 export const CHUNK_SIZE = 6000;
