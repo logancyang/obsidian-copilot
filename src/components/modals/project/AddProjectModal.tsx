@@ -236,7 +236,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
           <FormField
             label={
               <div className="tw-flex tw-items-center tw-gap-2">
-                <span>Inclusions</span>
+                <span>Files</span>
                 <TooltipProvider delayDuration={0}>
                   <Tooltip>
                     <TooltipTrigger asChild>

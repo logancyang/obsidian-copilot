@@ -1,5 +1,5 @@
 import { ProjectConfig, setCurrentProject } from "@/aiParams";
-import { AddProjectModal } from "@/components/modals/AddProjectModal";
+import { AddProjectModal } from "@/components/modals/project/AddProjectModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
