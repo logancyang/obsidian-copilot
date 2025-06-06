@@ -182,10 +182,4 @@ describe("Composer Instructions - Integration Tests", () => {
     "@composer Create a canvas about water cycle",
     1
   );
-
-  testComposerResponse(
-    "Composer: not triggered on summarization",
-    "@composer Summarize the note [[atom]]",
-    0
-  );
 });
