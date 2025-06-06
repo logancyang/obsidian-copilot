@@ -3,6 +3,7 @@ import { getStandaloneQuestion } from "@/chainUtils";
 import {
   ABORT_REASON,
   AI_SENDER,
+  COMPOSER_OUTPUT_INSTRUCTIONS,
   EMPTY_INDEX_ERROR_MESSAGE,
   LOADING_MESSAGES,
   MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT,
@@ -611,7 +612,6 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         .filter((word) => !COPILOT_TOOL_NAMES.includes(word.toLowerCase()))
         .join(" ")
         .trim();
-
       const toolOutputs = await this.executeToolCalls(toolCalls, debug, updateLoadingMessage);
       const localSearchResult = toolOutputs.find(
         (output) => output.tool === "localSearch" && output.output && output.output.length > 0
@@ -642,10 +642,15 @@ class CopilotPlusChainRunner extends BaseChainRunner {
 
         if (debug) console.log(context);
         if (debug) console.log("==== Step 5: Invoking QA Chain ====");
+
+        let systemMessage = "";
+        if (userMessage.message.includes("@composer ")) {
+          systemMessage = `\n<output_format> \n ${COMPOSER_OUTPUT_INSTRUCTIONS} \n </output_format>`;
+        }
         const qaPrompt = await this.chainManager.promptManager.getQAPrompt({
           question: enhancedQuestion,
           context,
-          systemMessage: "", // System prompt is added separately in streamMultimodalResponse
+          systemMessage: systemMessage,
         });
 
         fullAIResponse = await this.streamMultimodalResponse(
