@@ -329,6 +329,9 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async loadChatHistory(file: TFile) {
+    // First autosave the current chat if the setting is enabled
+    await this.autosaveCurrentChat();
+
     const content = await this.app.vault.read(file);
     const messages = parseChatContent(content);
     this.sharedState.clearChatHistory();
