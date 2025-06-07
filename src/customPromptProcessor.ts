@@ -10,6 +10,7 @@ import {
   processVariableNameForNotePath,
 } from "@/utils";
 import { normalizePath, Notice, TFile, Vault } from "obsidian";
+import { NOTE_CONTEXT_PROMPT_TAG } from "./constants";
 
 export interface CustomPrompt {
   title: string;
@@ -182,11 +183,11 @@ export async function processPrompt(
     if (!includedFiles.has(noteFile)) {
       const noteContent = await getFileContent(noteFile, vault);
       if (noteContent) {
+        const noteContext = `<${NOTE_CONTEXT_PROMPT_TAG}> \n Title: [[${noteFile.basename}]]\nPath: ${noteFile.path}\n\n${noteContent}\n</${NOTE_CONTEXT_PROMPT_TAG}>`;
         if (additionalInfo) {
-          additionalInfo += `\n\nTitle: [[${noteFile.basename}]]\nPath: ${noteFile.path}\n\n${noteContent}`;
-        } else {
-          additionalInfo += `Title: [[${noteFile.basename}]]\nPath: ${noteFile.path}\n\n${noteContent}`;
+          additionalInfo += `\n\n`;
         }
+        additionalInfo += `${noteContext}`;
         includedFiles.add(noteFile); // Track files included via [[links]]
       }
     }

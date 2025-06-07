@@ -1,6 +1,7 @@
 import { ChainType } from "@/chainFactory";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { TFile, Vault } from "obsidian";
+import { NOTE_CONTEXT_PROMPT_TAG } from "./constants";
 
 export class ContextProcessor {
   private static instance: ContextProcessor;
@@ -65,7 +66,7 @@ export class ContextProcessor {
   ): Promise<string> {
     let additionalContext = "";
 
-    const processNote = async (note: TFile) => {
+    const processNote = async (note: TFile, prompt_tag: string = NOTE_CONTEXT_PROMPT_TAG) => {
       try {
         // Check if this note was already processed (via custom prompt)
         if (excludedNotePaths.has(note.path)) {
@@ -104,19 +105,21 @@ export class ContextProcessor {
           content = await this.processEmbeddedPDFs(content, vault, fileParserManager);
         }
 
-        additionalContext += `\n\n <note_in_context> \n Title: [[${note.basename}]]\nPath: ${note.path}\n\n${content}\n</note_in_context>`;
+        additionalContext += `\n\n <${prompt_tag}> \n Title: [[${note.basename}]]\nPath: ${note.path}\n\n${content}\n</${prompt_tag}>`;
       } catch (error) {
         console.error(`Error processing file ${note.path}:`, error);
-        additionalContext += `\n\n <note_in_context_error> \n Title: [[${note.basename}]]\nPath: ${note.path}\n\n[Error: Could not process file]\n</note_in_context_error>`;
+        additionalContext += `\n\n <${prompt_tag}_error> \n Title: [[${note.basename}]]\nPath: ${note.path}\n\n[Error: Could not process file]\n</${prompt_tag}_error>`;
       }
     };
 
+    const includedFilePaths = new Set<string>();
+
     // Process active note if included
     if (includeActiveNote && activeNote) {
-      await processNote(activeNote);
+      await processNote(activeNote, "active_note");
+      includedFilePaths.add(activeNote.path);
     }
 
-    const includedFilePaths = new Set<string>();
     // Process context notes
     for (const note of contextNotes) {
       if (includedFilePaths.has(note.path)) {

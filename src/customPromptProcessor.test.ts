@@ -346,8 +346,9 @@ describe("CustomPromptProcessor", () => {
 
     const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
 
-    expect(result.processedPrompt).toBe(
-      "Content of [[Test Note]] is important.\n\nTitle: [[Test Note]]\nPath: Test Note.md\n\nTest note content"
+    expect(result.processedPrompt).toContain("Content of [[Test Note]] is important");
+    expect(result.processedPrompt).toContain(
+      "Title: [[Test Note]]\nPath: Test Note.md\n\nTest note content"
     );
     expect(result.includedFiles).toContain(mockTestNote);
   });
@@ -432,9 +433,11 @@ describe("CustomPromptProcessor", () => {
 
     const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
 
-    expect(result.processedPrompt).toBe(
-      "{[[Note1]]} content and [[Note2]] are both important.\n\n[[Note1]]:\n\n## Note1\n\nNote1 content\n\nTitle: [[Note2]]\nPath: Note2.md\n\nNote2 content"
+    expect(result.processedPrompt).toContain(
+      "{[[Note1]]} content and [[Note2]] are both important"
     );
+    expect(result.processedPrompt).toContain("## Note1\n\nNote1 content");
+    expect(result.processedPrompt).toContain("Title: [[Note2]]\nPath: Note2.md\n\nNote2 content");
     // Note2 is added via [[Note2]] processing
     expect(result.includedFiles).toEqual(expect.arrayContaining([mockNote1, mockNote2]));
     expect(result.includedFiles.length).toBe(2);
@@ -470,9 +473,10 @@ describe("CustomPromptProcessor", () => {
 
     const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
 
-    expect(result.processedPrompt).toBe(
-      "[[Note1]] is related to [[Note2]] and [[Note3]].\n\nTitle: [[Note1]]\nPath: Note1.md\n\nNote1 content\n\nTitle: [[Note2]]\nPath: Note2.md\n\nNote2 content\n\nTitle: [[Note3]]\nPath: Note3.md\n\nNote3 content"
-    );
+    expect(result.processedPrompt).toContain("[[Note1]] is related to [[Note2]] and [[Note3]].");
+    expect(result.processedPrompt).toContain("Title: [[Note1]]\nPath: Note1.md\n\nNote1 content");
+    expect(result.processedPrompt).toContain("Title: [[Note2]]\nPath: Note2.md\n\nNote2 content");
+    expect(result.processedPrompt).toContain("Title: [[Note3]]\nPath: Note3.md\n\nNote3 content");
     expect(result.includedFiles).toEqual(expect.arrayContaining([mockNote1, mockNote2, mockNote3]));
     expect(result.includedFiles.length).toBe(3);
   });
