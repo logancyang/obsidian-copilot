@@ -114,6 +114,7 @@ export enum ChatModels {
   GEMINI_FLASH = "gemini-2.5-flash-preview-04-17", // TODO(logan): update this when it's GA
   CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest",
   CLAUDE_3_7_SONNET = "claude-3-7-sonnet-latest",
+  CLAUDE_4_SONNET = "claude-sonnet-4-20250514",
   CLAUDE_3_5_HAIKU = "claude-3-5-haiku-latest",
   GROK3 = "grok-3-beta",
   GROK3_MINI = "grok-3-mini-beta",
@@ -200,6 +201,13 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     isBuiltIn: true,
     core: true,
     capabilities: [ModelCapability.REASONING],
+  },
+  {
+    name: ChatModels.CLAUDE_4_SONNET,
+    provider: ChatModelProviders.ANTHROPIC,
+    enabled: true,
+    isBuiltIn: true,
+    capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
   },
   {
     name: ChatModels.CLAUDE_3_7_SONNET,

@@ -1,6 +1,5 @@
-import React, { useEffect, useState, useMemo, useCallback } from "react";
-import { useTab } from "@/contexts/TabContext";
 import { CustomModel } from "@/aiParams";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -8,12 +7,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { HelpCircle } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { FormField } from "@/components/ui/form-field";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/password-input";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   MODEL_CAPABILITIES,
   ModelCapability,
@@ -22,10 +20,11 @@ import {
   ProviderSettingsKeyMap,
   SettingKeyProviders,
 } from "@/constants";
-import { getProviderInfo, getProviderLabel } from "@/utils";
-import { PasswordInput } from "@/components/ui/password-input";
+import { useTab } from "@/contexts/TabContext";
 import { getSettings } from "@/settings/model";
-import { debounce } from "@/utils";
+import { debounce, getProviderInfo, getProviderLabel } from "@/utils";
+import { HelpCircle } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 interface ModelEditDialogProps {
   open: boolean;
@@ -286,7 +285,7 @@ export const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
               <SettingSlider
                 value={localModel.context ?? 1000}
                 onChange={(value) => handleLocalUpdate("context", value)}
-                max={16000}
+                max={65000}
                 min={0}
                 step={100}
               />
