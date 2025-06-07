@@ -94,7 +94,8 @@ export default class ChatModelManager {
 
     const modelName = customModel.name;
     const isOSeries = isOSeriesModel(modelName);
-    const isThinkingEnabled = modelName.startsWith("claude-3-7-sonnet");
+    const isThinkingEnabled =
+      modelName.startsWith("claude-3-7-sonnet") || modelName.startsWith("claude-sonnet-4");
 
     // Base config without temperature when thinking is enabled
     const baseConfig: Omit<ModelConfig, "maxTokens" | "maxCompletionTokens" | "temperature"> = {

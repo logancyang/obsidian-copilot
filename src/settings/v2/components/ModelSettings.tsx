@@ -171,7 +171,7 @@ export const ModelSettings: React.FC = () => {
             value={settings.maxTokens}
             onChange={(value) => updateSetting("maxTokens", value)}
             min={0}
-            max={16000}
+            max={65000}
             step={100}
           />
 

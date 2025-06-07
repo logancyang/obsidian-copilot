@@ -223,7 +223,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
                 value={formData.modelConfigs?.maxTokens ?? 1000}
                 onChange={(value) => handleInputChange("modelConfigs.maxTokens", value)}
                 min={1}
-                max={16000}
+                max={65000}
                 step={1}
                 className="tw-w-full"
               />
