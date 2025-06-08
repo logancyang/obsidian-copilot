@@ -674,7 +674,7 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
                     e.target.style.height = "auto";
                     e.target.style.height = e.target.scrollHeight + "px";
                   }}
-                  className="w-full min-w-[300px] max-w-[600px] p-2 border rounded"
+                  className="w-full min-w-[300px] max-w-[650px] p-2 border rounded"
                   style={{
                     minHeight: "80px",
                     resize: "none", // 禁止手动调整
