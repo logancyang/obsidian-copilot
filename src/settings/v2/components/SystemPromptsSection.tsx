@@ -422,16 +422,18 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
             placeholder="输入内容"
             value={dialogState.value}
             onChange={(e) => setDialogState((prev) => ({ ...prev, value: e.target.value }))}
-            className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full min-h-[150px] p-2 border rounded resize-y" // 增大初始高度，添加resize-y允许垂直调整
             autoFocus
-            rows={4}
             style={{
-              direction: "ltr", // 明确指定文本方向
-              userSelect: "text", // 确保文本可选
+              minHeight: "150px",
+              maxHeight: "400px", // 设置最大高度限制
+              height: "auto", // 高度自适应
+              overflowY: "hidden", // 防止出现滚动条
             }}
-            onCompositionStart={(e) => e.preventDefault()} // 修复中文输入
-            onCompositionEnd={(e: React.CompositionEvent<HTMLTextAreaElement>) => {
-              setDialogState((prev) => ({ ...prev, value: e.currentTarget.value }));
+            onInput={(e) => {
+              // 自动调整高度
+              e.currentTarget.style.height = "auto";
+              e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
             }}
           />
           <div className="flex justify-end gap-2">
