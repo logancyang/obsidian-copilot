@@ -425,6 +425,14 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
             className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             autoFocus
             rows={4}
+            style={{
+              direction: "ltr", // 明确指定文本方向
+              userSelect: "text", // 确保文本可选
+            }}
+            onCompositionStart={(e) => e.preventDefault()} // 修复中文输入
+            onCompositionEnd={(e: React.CompositionEvent<HTMLTextAreaElement>) => {
+              setDialogState((prev) => ({ ...prev, value: e.currentTarget.value }));
+            }}
           />
           <div className="flex justify-end gap-2">
             <Button
