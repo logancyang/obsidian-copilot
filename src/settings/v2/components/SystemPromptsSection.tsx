@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { CopilotSettings, updateSetting, useSettingsValue } from "@/settings/model";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type CharacterTrait = Record<string, string>;
 type SelectedValues = Record<string, string | undefined>;
@@ -315,16 +314,14 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
   );
 
   // 1. 修改状态定义
-  const [dialogState, setDialogState] = useState<{
-    mode: "add" | "edit";
+  const [editingState, setEditingState] = useState<{
     key: string;
+    mode: "add" | "edit" | null;
     value: string;
-    isOpen: boolean;
   }>({
-    mode: "add",
     key: "",
+    mode: null, // null 表示不在编辑状态
     value: "",
-    isOpen: false,
   });
 
   const [error, setError] = useState<string | null>(null);
@@ -340,115 +337,90 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
     });
   }, [traits]); // 依赖traits的变化
 
+  // 替换原来的 editingState 定义
+  const [activeAddButton, setActiveAddButton] = useState<string | null>(null);
+  const [activeEditButton, setActiveEditButton] = useState<string | null>(null);
   // 2. 合并点击处理函数
-  const handleDialogOpen = (mode: "add" | "edit", key: string, initialValue = "") => {
-    setDialogState({
-      mode,
+  // 修改 startEditing 函数
+  const startEditing = (mode: "add" | "edit", key: string, initialValue = "") => {
+    if (mode === "add") {
+      if (activeAddButton === key) {
+        setActiveAddButton(null); // 关闭新增文本框
+        setEditingState({ key: "", mode: null, value: "" });
+        return;
+      }
+      setActiveAddButton(key);
+      setActiveEditButton(null); // 确保编辑按钮关闭
+    } else {
+      if (activeEditButton === key) {
+        setActiveEditButton(null); // 关闭编辑文本框
+        setEditingState({ key: "", mode: null, value: "" });
+        return;
+      }
+      setActiveEditButton(key);
+      setActiveAddButton(null); // 确保新增按钮关闭
+    }
+
+    setEditingState({
       key,
-      value: initialValue,
-      isOpen: true,
+      mode,
+      value: mode === "edit" ? selectedValues[key] || initialValue : initialValue,
     });
   };
 
   // 3. 合并保存处理函数
-  const handleSaveValue = () => {
-    const { mode, key, value } = dialogState;
-    if (!key || !value.trim()) return;
+  const handleSave = () => {
+    if (!editingState.key || !editingState.value.trim()) return;
+
+    const { key, value, mode } = editingState;
+    const currentValues = traits[key]?.split("|") || [];
 
     if (mode === "add") {
-      // 处理添加新值逻辑
-      const currentValues = traits[key]?.split("|") || [];
-      currentValues.push(value.trim());
+      // 添加新值
       const updatedTraits = {
         ...traits,
-        [key]: currentValues.join("|"),
+        [key]: [...currentValues, value.trim()].join("|"),
       };
 
       onTraitsChange(updatedTraits);
-
       updateSystemPrompts({
         selectedValues: {
           ...selectedValues,
-          [key]: value.trim(),
+          [key]: value.trim(), // 选中新添加的值
         },
         activeTraits: updatedTraits,
       });
     } else {
-      // 修改编辑逻辑：删除旧值，添加新值
-      const currentValues = traits[key]?.split("|") || [];
+      // 编辑现有值
       const selectedValue = selectedValues[key];
-
-      // 1. 过滤掉要编辑的原始值
-      const filteredValues = currentValues.filter((v) => v !== selectedValue);
-
-      // 2. 添加编辑后的新值
-      const updatedValues = [...filteredValues, value.trim()];
+      const newValues = currentValues.map((v) => (v === selectedValue ? value.trim() : v));
 
       const updatedTraits = {
         ...traits,
-        [key]: updatedValues.join("|"),
+        [key]: newValues.join("|"),
       };
 
       onTraitsChange(updatedTraits);
-      // 3. 更新状态，确保选中新编辑的值
       updateSystemPrompts({
         selectedValues: {
           ...selectedValues,
-          [key]: value.trim(), // 强制选中新编辑的值
+          [key]: value.trim(), // 更新选中值
         },
         activeTraits: updatedTraits,
       });
     }
 
-    setDialogState((prev) => ({ ...prev, isOpen: false, value: "" }));
+    // 保存后重置所有按钮状态
+    setActiveAddButton(null);
+    setActiveEditButton(null);
+    setEditingState({ key: "", mode: null, value: "" });
   };
 
-  // 4. 统一对话框组件
-  const renderDialog = () => (
-    <Dialog
-      open={dialogState.isOpen}
-      onOpenChange={(open) => setDialogState((prev) => ({ ...prev, isOpen: open }))}
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
-            {dialogState.mode === "add"
-              ? `为 ${dialogState.key} 添加新值`
-              : `编辑 ${dialogState.key} 的内容`}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <textarea
-            placeholder="输入内容"
-            value={dialogState.value}
-            onChange={(e) => setDialogState((prev) => ({ ...prev, value: e.target.value }))}
-            className="w-full min-h-[150px] p-2 border rounded resize-y" // 增大初始高度，添加resize-y允许垂直调整
-            autoFocus
-            style={{
-              minHeight: "150px",
-              maxHeight: "400px", // 设置最大高度限制
-              height: "auto", // 高度自适应
-              overflowY: "hidden", // 防止出现滚动条
-            }}
-            onInput={(e) => {
-              // 自动调整高度
-              e.currentTarget.style.height = "auto";
-              e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
-            }}
-          />
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => setDialogState((prev) => ({ ...prev, isOpen: false }))}
-            >
-              取消
-            </Button>
-            <Button onClick={handleSaveValue}>保存</Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
+  const handleCancel = () => {
+    setActiveAddButton(null);
+    setActiveEditButton(null);
+    setEditingState({ key: "", mode: null, value: "" });
+  };
 
   // 保持原有处理函数不变，现在可以正常使用 updateSystemPrompts
   const handleValueSelectChange = (key: string, value: string) => {
@@ -586,8 +558,6 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* 加入这行 ↓ */}
-      {renderDialog()}
       {order.map((key) => {
         const value = traits[key];
         if (!value) return null; // 跳过不存在的key
@@ -645,24 +615,30 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
                 ))}
               </select>
 
-              {/* // 修改后的新增按钮和对话框部分 */}
-              {/* // 5. 修改按钮调用方式
-              // 添加按钮改为: */}
+              {/* 新增按钮 */}
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => handleDialogOpen("add", key)}
-                className="h-8 w-8 p-0"
+                onClick={() => startEditing("add", key)}
+                className={`h-8 w-8 p-0 ${
+                  activeAddButton === key
+                    ? "bg-[var(--interactive-accent)] text-[var(--text-on-accent)]"
+                    : ""
+                }`}
               >
                 <Plus className="h-4 w-4" />
               </Button>
 
-              {/* // 编辑按钮改为: */}
+              {/* 编辑按钮 */}
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => handleDialogOpen("edit", key, selectedValues[key] || "")}
-                className="h-8 w-8 p-0"
+                onClick={() => startEditing("edit", key, selectedValues[key])}
+                className={`h-8 w-8 p-0 ${
+                  activeEditButton === key
+                    ? "bg-[var(--interactive-accent)] text-[var(--text-on-accent)]"
+                    : ""
+                }`}
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -684,6 +660,35 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>
+            {/* 编辑区域 */}
+            {editingState.mode && editingState.key === key && (
+              <div className="ml-10 pl-2 border-l-2 border-blue-200">
+                <textarea
+                  value={editingState.value}
+                  onChange={(e) => {
+                    setEditingState((prev) => ({
+                      ...prev,
+                      value: e.target.value,
+                    }));
+                    // 自动调整高度
+                    e.target.style.height = "auto";
+                    e.target.style.height = e.target.scrollHeight + "px";
+                  }}
+                  className="w-full min-w-[300px] max-w-[600px] p-2 border rounded"
+                  style={{
+                    minHeight: "80px",
+                    resize: "none", // 禁止手动调整
+                    overflow: "hidden", // 隐藏滚动条
+                  }}
+                />
+                <div className="flex gap-2 mt-2">
+                  <Button onClick={handleSave}>保存</Button>
+                  <Button variant="secondary" onClick={handleCancel}>
+                    取消
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         );
       })}
