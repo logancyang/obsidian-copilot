@@ -46,7 +46,7 @@ export function NewVersionBanner({ currentVersion }: NewVersionBannerProps) {
     >
       <div className="tw-mb-1 tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2 tw-pl-3 tw-text-xs">
         <div className="tw-flex tw-items-center tw-gap-2">
-          <span className="tw-font-medium">Update available:</span>(
+          <span className="tw-font-medium">Update available:</span>
           <a
             href={`https://github.com/logancyang/obsidian-copilot/releases/latest`}
             target="_blank"
