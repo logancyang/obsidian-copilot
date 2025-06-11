@@ -135,7 +135,15 @@ const SortableTableRow: React.FC<{
 };
 
 export const CommandSettings: React.FC = () => {
-  const { commands, updateContextMenuSetting } = useCustomPromptCommands();
+  const { commands, updateContextMenuSetting, updateOrder, reloadCommands } =
+    useCustomPromptCommands();
+  const [localCommands, setLocalCommands] = React.useState<CustomPromptCommand[]>(commands);
+
+  // Sync local state when commands from hook change
+  React.useEffect(() => {
+    setLocalCommands(commands);
+  }, [commands]);
+
   const settings = getSettings();
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -154,6 +162,16 @@ export const CommandSettings: React.FC = () => {
   ) => {
     // Update the context menu setting in the markdown file
     if (prevCommand.showInContextMenu !== newCommand.showInContextMenu) {
+      // Optimistically update local state
+      setLocalCommands((prev) =>
+        prev.map((cmd) =>
+          cmd.filePath === newCommand.filePath
+            ? { ...cmd, showInContextMenu: newCommand.showInContextMenu }
+            : cmd
+        )
+      );
+
+      // Update backend in background
       await updateContextMenuSetting(newCommand.filePath, newCommand.showInContextMenu);
     }
   };
@@ -168,10 +186,49 @@ export const CommandSettings: React.FC = () => {
     console.log("Remove command:", command);
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    // Note: Drag reordering not implemented for file-based commands
-    // as the order is determined by file system or alphabetical sorting
-    console.log("Drag end:", event);
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    const activeIndex = localCommands.findIndex((command) => command.name === active.id);
+    const overIndex = localCommands.findIndex((command) => command.name === over.id);
+
+    if (activeIndex === -1 || overIndex === -1) {
+      return;
+    }
+
+    // Optimistically update local state immediately
+    const newCommands = [...localCommands];
+    const [movedCommand] = newCommands.splice(activeIndex, 1);
+    newCommands.splice(overIndex, 0, movedCommand);
+
+    // Update the order values for the optimistic state
+    const updatedCommands = newCommands.map((command, index) => ({
+      ...command,
+      order: index * 10,
+    }));
+
+    setLocalCommands(updatedCommands);
+
+    // Update backend in background
+    // Use increments of 10 to allow for future insertions between items
+    try {
+      const updatePromises = newCommands.map(
+        (command, index) => updateOrder(command.filePath, index * 10, true) // Skip reload for batch operations
+      );
+
+      await Promise.all(updatePromises);
+
+      // Reload commands only once after all updates complete
+      await reloadCommands();
+    } catch (error) {
+      console.error("Failed to update command order:", error);
+      // On error, revert to the original commands from the hook
+      setLocalCommands(commands);
+    }
   };
 
   return (
@@ -190,12 +247,7 @@ export const CommandSettings: React.FC = () => {
         <div className="tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-4 tw-text-muted">
           <Lightbulb className="tw-size-5" /> Commands are automatically loaded from .md files in
           your custom prompts folder, including nested folders. Create or edit .md files in that
-          folder to manage your commands. Use the &quot;In Menu&quot; checkbox to toggle context
-          menu availability, which updates the{" "}
-          <code className="tw-rounded tw-bg-secondary tw-px-1">
-            copilot-command-context-menu-enabled
-          </code>{" "}
-          frontmatter property in each file.
+          folder to manage your commands.
         </div>
 
         <div className="tw-flex tw-flex-col tw-gap-4">
@@ -214,11 +266,11 @@ export const CommandSettings: React.FC = () => {
                 </TableRow>
               </TableHeader>
               <SortableContext
-                items={commands.map((command) => command.name)}
+                items={localCommands.map((command) => command.name)}
                 strategy={verticalListSortingStrategy}
               >
                 <TableBody>
-                  {commands.length === 0 ? (
+                  {localCommands.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={4} className="tw-py-8 tw-text-center tw-text-muted">
                         No custom prompt files found in &quot;{settings.customPromptsFolder}&quot;.
@@ -226,7 +278,7 @@ export const CommandSettings: React.FC = () => {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    commands.map((command) => (
+                    localCommands.map((command) => (
                       <SortableTableRow
                         key={command.name}
                         command={command}
