@@ -15,6 +15,8 @@ import { NOTE_CONTEXT_PROMPT_TAG } from "./constants";
 export interface CustomPrompt {
   title: string;
   content: string;
+  showInContextMenu: boolean;
+  filePath: string; // Add file path to enable updates
 }
 
 /**
@@ -237,9 +239,15 @@ export class CustomPromptProcessor {
     const prompts: CustomPrompt[] = [];
     for (const file of files) {
       const content = await this.vault.read(file);
+      const metadata = app.metadataCache.getFileCache(file);
+      const showInContextMenu =
+        metadata?.frontmatter?.["copilot-command-context-menu-enabled"] ?? false;
+
       prompts.push({
         title: file.basename,
-        content: content,
+        content,
+        showInContextMenu,
+        filePath: file.path,
       });
     }
 
@@ -254,7 +262,16 @@ export class CustomPromptProcessor {
     const file = this.vault.getAbstractFileByPath(filePath);
     if (file instanceof TFile) {
       const content = await this.vault.read(file);
-      return { title, content };
+      const metadata = app.metadataCache.getFileCache(file);
+      const showInContextMenu =
+        metadata?.frontmatter?.["copilot-command-context-menu-enabled"] ?? false;
+
+      return {
+        title: file.basename,
+        content: content,
+        showInContextMenu: showInContextMenu,
+        filePath: file.path,
+      };
     }
     return null;
   }
@@ -302,6 +319,21 @@ export class CustomPromptProcessor {
       this.usageStrategy.removeUnusedPrompts([title]);
       await this.vault.delete(file);
     }
+  }
+
+  async updatePromptContextMenuSetting(
+    filePath: string,
+    showInContextMenu: boolean
+  ): Promise<void> {
+    const file = this.vault.getAbstractFileByPath(filePath);
+    if (!(file instanceof TFile)) {
+      throw new Error(`File not found: ${filePath}`);
+    }
+
+    await app.fileManager.processFrontMatter(file, (frontmatter) => {
+      // Update the enabled property directly
+      frontmatter["copilot-command-context-menu-enabled"] = showInContextMenu;
+    });
   }
 
   /**
