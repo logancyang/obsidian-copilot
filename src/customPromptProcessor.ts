@@ -17,6 +17,7 @@ export interface CustomPrompt {
   content: string;
   showInContextMenu: boolean;
   filePath: string; // Add file path to enable updates
+  order: number; // Order for display in context menu and settings
 }
 
 /**
@@ -242,19 +243,29 @@ export class CustomPromptProcessor {
       const metadata = app.metadataCache.getFileCache(file);
       const showInContextMenu =
         metadata?.frontmatter?.["copilot-command-context-menu-enabled"] ?? false;
+      const order =
+        metadata?.frontmatter?.["copilot-command-context-menu-order"] ?? Number.MAX_SAFE_INTEGER;
 
       prompts.push({
         title: file.basename,
         content,
         showInContextMenu,
         filePath: file.path,
+        order: typeof order === "number" ? order : Number.MAX_SAFE_INTEGER,
       });
     }
 
     // Clean up promptUsageTimestamps
     this.usageStrategy.removeUnusedPrompts(prompts.map((prompt) => prompt.title));
 
-    return prompts.sort((a, b) => this.usageStrategy.compare(b.title, a.title) || 0);
+    // return prompts.sort((a, b) => this.usageStrategy.compare(b.title, a.title) || 0);
+    // Sort by order first, then alphabetically by title for items with same order
+    return prompts.sort((a, b) => {
+      if (a.order !== b.order) {
+        return a.order - b.order;
+      }
+      return a.title.localeCompare(b.title);
+    });
   }
 
   async getPrompt(title: string): Promise<CustomPrompt | null> {
@@ -265,12 +276,15 @@ export class CustomPromptProcessor {
       const metadata = app.metadataCache.getFileCache(file);
       const showInContextMenu =
         metadata?.frontmatter?.["copilot-command-context-menu-enabled"] ?? false;
+      const order =
+        metadata?.frontmatter?.["copilot-command-context-menu-order"] ?? Number.MAX_SAFE_INTEGER;
 
       return {
         title: file.basename,
         content: content,
         showInContextMenu: showInContextMenu,
         filePath: file.path,
+        order: typeof order === "number" ? order : Number.MAX_SAFE_INTEGER,
       };
     }
     return null;
@@ -333,6 +347,17 @@ export class CustomPromptProcessor {
     await app.fileManager.processFrontMatter(file, (frontmatter) => {
       // Update the enabled property directly
       frontmatter["copilot-command-context-menu-enabled"] = showInContextMenu;
+    });
+  }
+
+  async updatePromptOrder(filePath: string, order: number): Promise<void> {
+    const file = this.vault.getAbstractFileByPath(filePath);
+    if (!(file instanceof TFile)) {
+      throw new Error(`File not found: ${filePath}`);
+    }
+
+    await app.fileManager.processFrontMatter(file, (frontmatter) => {
+      frontmatter["copilot-command-context-menu-order"] = order;
     });
   }
 

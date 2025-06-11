@@ -7,11 +7,14 @@ export interface CustomPromptCommand {
   prompt: string;
   showInContextMenu: boolean;
   filePath: string;
+  order: number;
 }
 
 export function useCustomPromptCommands(): {
   commands: CustomPromptCommand[];
   updateContextMenuSetting: (filePath: string, enabled: boolean) => Promise<void>;
+  updateOrder: (filePath: string, order: number, skipReload?: boolean) => Promise<void>;
+  reloadCommands: () => Promise<void>;
 } {
   const [commands, setCommands] = useState<CustomPromptCommand[]>([]);
 
@@ -27,6 +30,7 @@ export function useCustomPromptCommands(): {
         prompt: prompt.content,
         showInContextMenu: prompt.showInContextMenu,
         filePath: prompt.filePath,
+        order: prompt.order,
       }));
 
       setCommands(commandsFromPrompts);
@@ -34,6 +38,34 @@ export function useCustomPromptCommands(): {
       console.error("Failed to load custom prompt commands:", error);
       setCommands([]);
     }
+  };
+
+  // Helper function to wait for metadata cache to update with expected value
+  const waitForMetadataUpdate = async (
+    filePath: string,
+    propertyName: string,
+    expectedValue: any
+  ): Promise<void> => {
+    return new Promise((resolve) => {
+      const checkCache = () => {
+        const file = app.vault.getAbstractFileByPath(filePath);
+        if (file instanceof TFile) {
+          const metadata = app.metadataCache.getFileCache(file);
+          const currentValue = metadata?.frontmatter?.[propertyName];
+
+          // Check if the cache has been updated with the new value
+          if (currentValue === expectedValue) {
+            resolve(undefined);
+            return;
+          }
+        }
+
+        // If not updated yet, check again in a short time
+        setTimeout(checkCache, 50);
+      };
+
+      checkCache();
+    });
   };
 
   const updateContextMenuSetting = async (filePath: string, enabled: boolean) => {
@@ -44,26 +76,7 @@ export function useCustomPromptCommands(): {
       await customPromptProcessor.updatePromptContextMenuSetting(filePath, enabled);
 
       // Wait for metadata cache to update before reloading commands
-      await new Promise((resolve) => {
-        const checkCache = () => {
-          const file = app.vault.getAbstractFileByPath(filePath);
-          if (file instanceof TFile) {
-            const metadata = app.metadataCache.getFileCache(file);
-            const currentValue = metadata?.frontmatter?.["copilot-command-context-menu-enabled"];
-
-            // Check if the cache has been updated with the new value
-            if (currentValue === enabled) {
-              resolve(undefined);
-              return;
-            }
-          }
-
-          // If not updated yet, check again in a short time
-          setTimeout(checkCache, 50);
-        };
-
-        checkCache();
-      });
+      await waitForMetadataUpdate(filePath, "copilot-command-context-menu-enabled", enabled);
 
       // Reload commands to reflect the change
       await loadCommands();
@@ -72,9 +85,28 @@ export function useCustomPromptCommands(): {
     }
   };
 
+  const updateOrder = async (filePath: string, order: number, skipReload?: boolean) => {
+    try {
+      if (!app?.vault) return;
+
+      const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
+      await customPromptProcessor.updatePromptOrder(filePath, order);
+
+      // Wait for metadata cache to update before reloading commands
+      await waitForMetadataUpdate(filePath, "copilot-command-context-menu-order", order);
+
+      // Reload commands to reflect the change (unless skipped for batch operations)
+      if (!skipReload) {
+        await loadCommands();
+      }
+    } catch (error) {
+      console.error("Failed to update command order:", error);
+    }
+  };
+
   useEffect(() => {
     loadCommands();
   }, []);
 
-  return { commands, updateContextMenuSetting };
+  return { commands, updateContextMenuSetting, updateOrder, reloadCommands: loadCommands };
 }
