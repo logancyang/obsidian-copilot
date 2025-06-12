@@ -12,10 +12,16 @@ import {
 import { normalizePath, Notice, TFile, Vault } from "obsidian";
 import { NOTE_CONTEXT_PROMPT_TAG } from "./constants";
 
+// Custom prompt frontmatter property constants
+export const COPILOT_COMMAND_CONTEXT_MENU_ENABLED = "copilot-command-context-menu-enabled";
+export const COPILOT_COMMAND_SLASH_ENABLED = "copilot-command-slash-enabled";
+export const COPILOT_COMMAND_CONTEXT_MENU_ORDER = "copilot-command-context-menu-order";
+
 export interface CustomPrompt {
   title: string;
   content: string;
   showInContextMenu: boolean;
+  slashCommandEnabled: boolean;
   filePath: string; // Add file path to enable updates
   order: number; // Order for display in context menu and settings
 }
@@ -242,14 +248,16 @@ export class CustomPromptProcessor {
       const content = await this.vault.read(file);
       const metadata = app.metadataCache.getFileCache(file);
       const showInContextMenu =
-        metadata?.frontmatter?.["copilot-command-context-menu-enabled"] ?? false;
+        metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] ?? false;
+      const slashCommandEnabled = metadata?.frontmatter?.[COPILOT_COMMAND_SLASH_ENABLED] ?? false;
       const order =
-        metadata?.frontmatter?.["copilot-command-context-menu-order"] ?? Number.MAX_SAFE_INTEGER;
+        metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ORDER] ?? Number.MAX_SAFE_INTEGER;
 
       prompts.push({
         title: file.basename,
         content,
         showInContextMenu,
+        slashCommandEnabled,
         filePath: file.path,
         order: typeof order === "number" ? order : Number.MAX_SAFE_INTEGER,
       });
@@ -275,14 +283,16 @@ export class CustomPromptProcessor {
       const content = await this.vault.read(file);
       const metadata = app.metadataCache.getFileCache(file);
       const showInContextMenu =
-        metadata?.frontmatter?.["copilot-command-context-menu-enabled"] ?? false;
+        metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] ?? false;
+      const slashCommandEnabled = metadata?.frontmatter?.[COPILOT_COMMAND_SLASH_ENABLED] ?? false;
       const order =
-        metadata?.frontmatter?.["copilot-command-context-menu-order"] ?? Number.MAX_SAFE_INTEGER;
+        metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ORDER] ?? Number.MAX_SAFE_INTEGER;
 
       return {
         title: file.basename,
-        content: content,
-        showInContextMenu: showInContextMenu,
+        content,
+        showInContextMenu,
+        slashCommandEnabled,
         filePath: file.path,
         order: typeof order === "number" ? order : Number.MAX_SAFE_INTEGER,
       };
@@ -346,7 +356,21 @@ export class CustomPromptProcessor {
 
     await app.fileManager.processFrontMatter(file, (frontmatter) => {
       // Update the enabled property directly
-      frontmatter["copilot-command-context-menu-enabled"] = showInContextMenu;
+      frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = showInContextMenu;
+    });
+  }
+
+  async updatePromptSlashCommandSetting(
+    filePath: string,
+    slashCommandEnabled: boolean
+  ): Promise<void> {
+    const file = this.vault.getAbstractFileByPath(filePath);
+    if (!(file instanceof TFile)) {
+      throw new Error(`File not found: ${filePath}`);
+    }
+
+    await app.fileManager.processFrontMatter(file, (frontmatter) => {
+      frontmatter[COPILOT_COMMAND_SLASH_ENABLED] = slashCommandEnabled;
     });
   }
 
@@ -357,7 +381,7 @@ export class CustomPromptProcessor {
     }
 
     await app.fileManager.processFrontMatter(file, (frontmatter) => {
-      frontmatter["copilot-command-context-menu-order"] = order;
+      frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] = order;
     });
   }
 

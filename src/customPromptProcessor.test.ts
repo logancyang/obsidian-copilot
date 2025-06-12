@@ -75,6 +75,7 @@ describe("CustomPromptProcessor", () => {
       title: "test-prompt",
       content: "This is a {variable} and {}.",
       showInContextMenu: false,
+      slashCommandEnabled: false,
       filePath: "test-prompt.md",
       order: 0,
     };
@@ -108,6 +109,7 @@ describe("CustomPromptProcessor", () => {
       title: "test-prompt",
       content: "This is a {variable1} and {variable2}.",
       showInContextMenu: false,
+      slashCommandEnabled: false,
       filePath: "test-prompt.md",
       order: 0,
     };
@@ -154,6 +156,7 @@ describe("CustomPromptProcessor", () => {
       title: "test-prompt",
       content: "Rewrite the following text {}",
       showInContextMenu: false,
+      slashCommandEnabled: false,
       filePath: "test-prompt.md",
       order: 0,
     };
@@ -180,6 +183,7 @@ describe("CustomPromptProcessor", () => {
       title: "test-prompt",
       content: "This is the active note: {activenote}",
       showInContextMenu: false,
+      slashCommandEnabled: false,
       filePath: "test-prompt.md",
       order: 0,
     };
@@ -212,6 +216,7 @@ describe("CustomPromptProcessor", () => {
       title: "test-prompt",
       content: "This is the active note: {activeNote}",
       showInContextMenu: false,
+      slashCommandEnabled: false,
       filePath: "test-prompt.md",
       order: 0,
     };
@@ -237,6 +242,7 @@ describe("CustomPromptProcessor", () => {
       title: "test-prompt",
       content: "This is a test prompt with no variables.",
       showInContextMenu: false,
+      slashCommandEnabled: false,
       filePath: "test-prompt.md",
       order: 0,
     };
@@ -525,6 +531,7 @@ describe("CustomPromptProcessor", () => {
       title: "test-prompt",
       content: "This is the active note: {activeNote}. And again: {activeNote}",
       showInContextMenu: false,
+      slashCommandEnabled: false,
       filePath: "test-prompt.md",
       order: 0,
     };
@@ -560,6 +567,7 @@ describe("CustomPromptProcessor", () => {
       title: "test-prompt",
       content: "Summarize this: {}",
       showInContextMenu: false,
+      slashCommandEnabled: false,
       filePath: "test-prompt.md",
       order: 0,
     };
@@ -589,6 +597,7 @@ describe("CustomPromptProcessor", () => {
       title: "test-prompt",
       content: "Summarize this: {}. Additional info: {activeNote}",
       showInContextMenu: false,
+      slashCommandEnabled: false,
       filePath: "test-prompt.md",
       order: 0,
     };
@@ -625,6 +634,7 @@ describe("CustomPromptProcessor", () => {
       title: "test-prompt",
       content: "Analyze this: {}",
       showInContextMenu: false,
+      slashCommandEnabled: false,
       filePath: "test-prompt.md",
       order: 0,
     };
@@ -654,6 +664,7 @@ describe("CustomPromptProcessor", () => {
       title: "test-prompt",
       content: "This is a test prompt with {invalidVariable} name and {activeNote}",
       showInContextMenu: false,
+      slashCommandEnabled: false,
       filePath: "test-prompt.md",
       order: 0,
     };
