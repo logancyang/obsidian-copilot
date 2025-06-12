@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
-import { Change } from "diff";
+import { Change, diffWords } from "diff";
 import { Check, X as XIcon } from "lucide-react";
 import { App, ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import React, { useRef } from "react";
@@ -76,6 +76,28 @@ interface ApplyViewRootProps {
   app: App;
   state: ApplyViewState;
   close: () => void;
+}
+
+// Helper to render word-level diff between two lines
+function renderWordDiff(oldLine: string, newLine: string) {
+  const wordDiff = diffWords(oldLine, newLine);
+  return wordDiff.map((part, idx) => {
+    if (part.added) {
+      return (
+        <span key={idx} className="tw-text-success">
+          {part.value}
+        </span>
+      );
+    }
+    if (part.removed) {
+      return (
+        <span key={idx} className="tw-text-error" style={{ textDecoration: "line-through" }}>
+          {part.value}
+        </span>
+      );
+    }
+    return <span key={idx}>{part.value}</span>;
+  });
 }
 
 const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
@@ -304,19 +326,52 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                 </div>
               ) : (
                 // Show the diff view for undecided blocks
-                block.map((change, changeIndex) => (
-                  <div
-                    key={`${blockIndex}-${changeIndex}`}
-                    className={cn("tw-relative", {
-                      "tw-bg-success tw-border-l-green": change.added,
-                      "tw-bg-error tw-border-l-red": change.removed,
-                    })}
-                  >
-                    <div className="tw-flex-1 tw-whitespace-pre-wrap tw-px-2 tw-py-1 tw-font-mono tw-text-sm tw-text-normal">
-                      {change.value}
+                block.map((change, changeIndex) => {
+                  // Try to find a corresponding added/removed pair for word-level diff
+                  if (change.added || change.removed) {
+                    // Only render word diff for the added line in a pair
+                    if (change.added) {
+                      // Find the closest removed line in this block
+                      const removedIdx = block.findIndex((c, i) => c.removed && i !== changeIndex);
+                      if (removedIdx !== -1) {
+                        const removedLine = block[removedIdx].value;
+                        return (
+                          <div key={`${blockIndex}-${changeIndex}`} className="tw-relative">
+                            <div className="tw-flex-1 tw-whitespace-pre-wrap tw-px-2 tw-py-1 tw-font-mono tw-text-sm">
+                              {renderWordDiff(removedLine, change.value)}
+                            </div>
+                          </div>
+                        );
+                      }
+                    }
+                    // Only render word diff for the removed line in a pair if no added line exists
+                    if (change.removed) {
+                      const addedIdx = block.findIndex((c, i) => c.added && i !== changeIndex);
+                      if (addedIdx !== -1) {
+                        // Skip rendering removed line, since it's shown in the added line
+                        return null;
+                      }
+                    }
+                  }
+                  // Render all other cases
+                  return (
+                    <div key={`${blockIndex}-${changeIndex}`} className="tw-relative">
+                      <div
+                        className={cn(
+                          "tw-flex-1 tw-whitespace-pre-wrap tw-px-2 tw-py-1 tw-font-mono tw-text-sm",
+                          {
+                            "tw-text-success": change.added,
+                            "tw-text-error": change.removed,
+                            "tw-text-normal": !change.added && !change.removed,
+                          }
+                        )}
+                        style={change.removed ? { textDecoration: "line-through" } : undefined}
+                      >
+                        {change.value}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
 
               {/* Only show accept/reject buttons for blocks with changes that are undecided */}
