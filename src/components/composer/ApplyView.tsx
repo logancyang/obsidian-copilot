@@ -325,13 +325,11 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                     ))}
                 </div>
               ) : (
-                // Show the diff view for undecided blocks
+                // Render the block
                 block.map((change, changeIndex) => {
                   // Try to find a corresponding added/removed pair for word-level diff
                   if (change.added || change.removed) {
-                    // Only render word diff for the added line in a pair
                     if (change.added) {
-                      // Find the closest removed line in this block
                       const removedIdx = block.findIndex((c, i) => c.removed && i !== changeIndex);
                       if (removedIdx !== -1) {
                         const removedLine = block[removedIdx].value;
@@ -344,7 +342,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                         );
                       }
                     }
-                    // Only render word diff for the removed line in a pair if no added line exists
+                    // Skip rendering removed line if it is already paired with an added line.
                     if (change.removed) {
                       const addedIdx = block.findIndex((c, i) => c.added && i !== changeIndex);
                       if (addedIdx !== -1) {
@@ -353,7 +351,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                       }
                     }
                   }
-                  // Render all other cases
+                  // No pair found, render the line as is.
                   return (
                     <div key={`${blockIndex}-${changeIndex}`} className="tw-relative">
                       <div
