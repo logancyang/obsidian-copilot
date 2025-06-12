@@ -1,11 +1,18 @@
 import { useState, useEffect } from "react";
-import { CustomPromptProcessor, CustomPrompt } from "@/customPromptProcessor";
+import {
+  CustomPromptProcessor,
+  CustomPrompt,
+  COPILOT_COMMAND_CONTEXT_MENU_ENABLED,
+  COPILOT_COMMAND_SLASH_ENABLED,
+  COPILOT_COMMAND_CONTEXT_MENU_ORDER,
+} from "@/customPromptProcessor";
 import { TFile } from "obsidian";
 
 export interface CustomPromptCommand {
   name: string;
   prompt: string;
   showInContextMenu: boolean;
+  slashCommandEnabled: boolean;
   filePath: string;
   order: number;
 }
@@ -13,6 +20,7 @@ export interface CustomPromptCommand {
 export function useCustomPromptCommands(): {
   commands: CustomPromptCommand[];
   updateContextMenuSetting: (filePath: string, enabled: boolean) => Promise<void>;
+  updateSlashCommandSetting: (filePath: string, enabled: boolean) => Promise<void>;
   updateOrder: (filePath: string, order: number, skipReload?: boolean) => Promise<void>;
   reloadCommands: () => Promise<void>;
 } {
@@ -29,6 +37,7 @@ export function useCustomPromptCommands(): {
         name: prompt.title,
         prompt: prompt.content,
         showInContextMenu: prompt.showInContextMenu,
+        slashCommandEnabled: prompt.slashCommandEnabled,
         filePath: prompt.filePath,
         order: prompt.order,
       }));
@@ -75,13 +84,26 @@ export function useCustomPromptCommands(): {
       const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
       await customPromptProcessor.updatePromptContextMenuSetting(filePath, enabled);
 
-      // Wait for metadata cache to update before reloading commands
-      await waitForMetadataUpdate(filePath, "copilot-command-context-menu-enabled", enabled);
+      await waitForMetadataUpdate(filePath, COPILOT_COMMAND_CONTEXT_MENU_ENABLED, enabled);
 
-      // Reload commands to reflect the change
       await loadCommands();
     } catch (error) {
       console.error("Failed to update context menu setting:", error);
+    }
+  };
+
+  const updateSlashCommandSetting = async (filePath: string, enabled: boolean) => {
+    try {
+      if (!app?.vault) return;
+
+      const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
+      await customPromptProcessor.updatePromptSlashCommandSetting(filePath, enabled);
+
+      await waitForMetadataUpdate(filePath, COPILOT_COMMAND_SLASH_ENABLED, enabled);
+
+      await loadCommands();
+    } catch (error) {
+      console.error("Failed to update slash command setting:", error);
     }
   };
 
@@ -93,7 +115,7 @@ export function useCustomPromptCommands(): {
       await customPromptProcessor.updatePromptOrder(filePath, order);
 
       // Wait for metadata cache to update before reloading commands
-      await waitForMetadataUpdate(filePath, "copilot-command-context-menu-order", order);
+      await waitForMetadataUpdate(filePath, COPILOT_COMMAND_CONTEXT_MENU_ORDER, order);
 
       // Reload commands to reflect the change (unless skipped for batch operations)
       if (!skipReload) {
@@ -108,5 +130,11 @@ export function useCustomPromptCommands(): {
     loadCommands();
   }, []);
 
-  return { commands, updateContextMenuSetting, updateOrder, reloadCommands: loadCommands };
+  return {
+    commands,
+    updateContextMenuSetting,
+    updateSlashCommandSetting,
+    updateOrder,
+    reloadCommands: loadCommands,
+  };
 }

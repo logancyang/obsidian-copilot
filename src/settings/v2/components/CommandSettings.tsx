@@ -4,7 +4,7 @@ import {
   useCustomPromptCommands,
   CustomPromptCommand,
 } from "@/settings/v2/hooks/useCustomPromptCommands";
-import { Lightbulb, GripVertical, PencilLine, MoreVertical, Copy, Trash2 } from "lucide-react";
+import { Lightbulb, GripVertical, PencilLine, Trash2, Plus, Info } from "lucide-react";
 
 import {
   Table,
@@ -34,19 +34,52 @@ import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 import { getSettings } from "@/settings/model";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useContainerContext } from "@/settings/v2/components/ContainerContext";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
+import { CustomPromptProcessor } from "@/customPromptProcessor";
+import { Notice } from "obsidian";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
+const validateCommandName = (
+  name: string,
+  commands: CustomPromptCommand[],
+  currentCommandName?: string
+) => {
+  const trimmedName = name.trim();
+
+  if (currentCommandName && trimmedName === currentCommandName) {
+    return null; // No change is allowed
+  }
+
+  // eslint-disable-next-line no-control-regex
+  const invalidChars = /[<>:"/\\|?*\x00-\x1F]/g;
+  if (invalidChars.test(trimmedName)) {
+    return 'Command name contains invalid characters. Avoid using: < > : " / \\ | ? *';
+  }
+
+  if (commands.some((cmd) => cmd.name.toLowerCase() === trimmedName.toLowerCase())) {
+    return "A command with this name already exists";
+  }
+
+  return null;
+};
 
 const SortableTableRow: React.FC<{
   command: CustomPromptCommand;
+  commands: CustomPromptCommand[];
   onUpdate: (prevCommand: CustomPromptCommand, newCommand: CustomPromptCommand) => void;
   onRemove: (command: CustomPromptCommand) => void;
-  onDuplicate: (command: CustomPromptCommand) => void;
-}> = ({ command, onUpdate, onRemove, onDuplicate }) => {
+  onRename: (command: CustomPromptCommand, newName: string) => void;
+}> = ({ command, commands, onUpdate, onRemove, onRename }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: command.name,
   });
@@ -57,6 +90,45 @@ const SortableTableRow: React.FC<{
   };
 
   const container = useContainerContext();
+
+  // Rename state
+  const [isRenameOpen, setIsRenameOpen] = React.useState(false);
+  const [newName, setNewName] = React.useState("");
+  const [isRenaming, setIsRenaming] = React.useState(false);
+
+  // Delete state
+  const [isDeleteOpen, setIsDeleteOpen] = React.useState(false);
+  const [isDeleting, setIsDeleting] = React.useState(false);
+
+  const validationError = validateCommandName(newName, commands, command.name);
+  const canRename = !validationError && newName.trim() !== "";
+
+  const handleRename = async () => {
+    if (!canRename) return;
+
+    try {
+      setIsRenaming(true);
+      await onRename(command, newName.trim());
+      setNewName("");
+      setIsRenameOpen(false);
+    } catch (error) {
+      console.error("Failed to rename command:", error);
+    } finally {
+      setIsRenaming(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      setIsDeleting(true);
+      await onRemove(command);
+      setIsDeleteOpen(false);
+    } catch (error) {
+      console.error("Failed to delete command:", error);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <TableRow
@@ -91,43 +163,98 @@ const SortableTableRow: React.FC<{
         />
       </TableCell>
       <TableCell className="tw-text-center">
+        <Checkbox
+          checked={command.slashCommandEnabled}
+          onCheckedChange={(checked) =>
+            onUpdate(command, {
+              ...command,
+              slashCommandEnabled: checked === true,
+            })
+          }
+          className="tw-mx-auto"
+        />
+      </TableCell>
+      <TableCell className="tw-text-center">
         <div className="tw-flex tw-justify-center tw-space-x-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              // No-op for now - editing would require file system operations
-              console.log("Edit command:", command);
-            }}
-          >
-            <PencilLine className="tw-size-4" />
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <MoreVertical className="tw-size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" container={container}>
-              <DropdownMenuItem
+          <Popover open={isRenameOpen} onOpenChange={setIsRenameOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => {
-                  // No-op for now - editing would require file system operations
-                  console.log("Edit command:", command);
+                  setNewName(command.name);
+                  setIsRenameOpen(true);
                 }}
               >
-                <PencilLine className="tw-mr-2 tw-size-4" />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onDuplicate(command)}>
-                <Copy className="tw-mr-2 tw-size-4" />
-                Copy
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onRemove(command)} className="tw-text-error">
-                <Trash2 className="tw-mr-2 tw-size-4" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <PencilLine className="tw-size-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent container={container} className="tw-w-80" align="end">
+              <div className="tw-flex tw-flex-col tw-gap-4">
+                <div className="tw-space-y-2">
+                  <div className="tw-text-lg tw-font-medium tw-leading-none">Rename Command</div>
+                  <p className="tw-text-sm tw-text-muted">Enter a new name for this command.</p>
+                </div>
+                <div className="tw-space-y-2">
+                  <Input
+                    placeholder="Command name"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && canRename && !isRenaming) {
+                        handleRename();
+                      }
+                    }}
+                  />
+                  {validationError && <p className="tw-text-sm tw-text-error">{validationError}</p>}
+                </div>
+                <div className="tw-flex tw-justify-end tw-gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setIsRenameOpen(false);
+                      setNewName("");
+                    }}
+                    disabled={isRenaming}
+                  >
+                    Cancel
+                  </Button>
+                  <Button size="sm" onClick={handleRename} disabled={!canRename || isRenaming}>
+                    {isRenaming ? "Renaming..." : "Rename"}
+                  </Button>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+          <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+            <DialogTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <Trash2 className="tw-size-4" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent container={container}>
+              <DialogHeader>
+                <DialogTitle>Delete Command</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to delete the command &quot;{command.name}&quot;? This will
+                  permanently remove the command file and cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsDeleteOpen(false)}
+                  disabled={isDeleting}
+                >
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+                  {isDeleting ? "Deleting..." : "Delete"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </TableCell>
     </TableRow>
@@ -135,9 +262,19 @@ const SortableTableRow: React.FC<{
 };
 
 export const CommandSettings: React.FC = () => {
-  const { commands, updateContextMenuSetting, updateOrder, reloadCommands } =
-    useCustomPromptCommands();
+  const {
+    commands,
+    updateContextMenuSetting,
+    updateSlashCommandSetting,
+    updateOrder,
+    reloadCommands,
+  } = useCustomPromptCommands();
   const [localCommands, setLocalCommands] = React.useState<CustomPromptCommand[]>(commands);
+
+  // Add Command popover state
+  const [isAddCommandOpen, setIsAddCommandOpen] = React.useState(false);
+  const [newCommandName, setNewCommandName] = React.useState("");
+  const [isCreating, setIsCreating] = React.useState(false);
 
   // Sync local state when commands from hook change
   React.useEffect(() => {
@@ -156,34 +293,94 @@ export const CommandSettings: React.FC = () => {
     })
   );
 
+  const validationError = validateCommandName(newCommandName, localCommands);
+  const canCreate = !validationError && newCommandName.trim() !== "";
+
+  const handleCreateCommand = async () => {
+    if (!canCreate) return;
+
+    try {
+      setIsCreating(true);
+      const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
+
+      await customPromptProcessor.savePrompt(newCommandName.trim(), "");
+      await reloadCommands();
+
+      setNewCommandName("");
+      setIsAddCommandOpen(false);
+
+      new Notice(`Command "${newCommandName.trim()}" created successfully!`);
+    } catch (error) {
+      console.error("Failed to create command:", error);
+      new Notice("Failed to create command. Please try again.");
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
   const handleUpdate = async (
     prevCommand: CustomPromptCommand,
     newCommand: CustomPromptCommand
   ) => {
-    // Update the context menu setting in the markdown file
-    if (prevCommand.showInContextMenu !== newCommand.showInContextMenu) {
-      // Optimistically update local state
-      setLocalCommands((prev) =>
-        prev.map((cmd) =>
-          cmd.filePath === newCommand.filePath
-            ? { ...cmd, showInContextMenu: newCommand.showInContextMenu }
-            : cmd
-        )
-      );
+    // Optimistically update local state
+    setLocalCommands((prev) =>
+      prev.map((cmd) =>
+        cmd.filePath === newCommand.filePath
+          ? {
+              ...cmd,
+              showInContextMenu: newCommand.showInContextMenu,
+              slashCommandEnabled: newCommand.slashCommandEnabled,
+            }
+          : cmd
+      )
+    );
 
-      // Update backend in background
+    // Update backend in background
+    if (prevCommand.showInContextMenu !== newCommand.showInContextMenu) {
       await updateContextMenuSetting(newCommand.filePath, newCommand.showInContextMenu);
+    }
+
+    if (prevCommand.slashCommandEnabled !== newCommand.slashCommandEnabled) {
+      await updateSlashCommandSetting(newCommand.filePath, newCommand.slashCommandEnabled);
     }
   };
 
-  const handleDuplicate = (command: CustomPromptCommand) => {
-    // No-op for now - duplicating would require file system operations
-    console.log("Duplicate command:", command);
+  const handleRename = async (command: CustomPromptCommand, newName: string) => {
+    try {
+      const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
+
+      // Get the current content to preserve it
+      const currentPrompt = await customPromptProcessor.getPrompt(command.name);
+      if (!currentPrompt) {
+        throw new Error("Command not found");
+      }
+
+      // Rename the file using updatePrompt
+      await customPromptProcessor.updatePrompt(command.name, newName, currentPrompt.content);
+      await reloadCommands();
+
+      new Notice(`Command renamed to "${newName}" successfully!`);
+    } catch (error) {
+      console.error("Failed to rename command:", error);
+      new Notice("Failed to rename command. Please try again.");
+      throw error;
+    }
   };
 
-  const handleRemove = (command: CustomPromptCommand) => {
-    // No-op for now - removing would require file system operations
-    console.log("Remove command:", command);
+  const handleRemove = async (command: CustomPromptCommand) => {
+    try {
+      const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
+
+      // Delete the file using the command name (not filePath)
+      await customPromptProcessor.deletePrompt(command.name);
+      await reloadCommands();
+
+      new Notice(`Command "${command.name}" deleted successfully!`);
+    } catch (error) {
+      console.error("Failed to delete command:", error);
+      new Notice("Failed to delete command. Please try again.");
+      throw error;
+    }
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
@@ -230,6 +427,7 @@ export const CommandSettings: React.FC = () => {
       setLocalCommands(commands);
     }
   };
+  const container = useContainerContext();
 
   return (
     <div className="tw-space-y-4">
@@ -261,7 +459,38 @@ export const CommandSettings: React.FC = () => {
                 <TableRow>
                   <TableHead className="tw-w-10"></TableHead>
                   <TableHead>Name</TableHead>
-                  <TableHead className="tw-w-20 tw-text-center">In Menu</TableHead>
+                  <TableHead className="tw-w-24 tw-text-center">
+                    <div className="tw-flex tw-items-center tw-justify-center tw-gap-1">
+                      In Menu
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="tw-size-4" />
+                          </TooltipTrigger>
+                          <TooltipContent className="tw-max-w-xs tw-text-xs">
+                            If enabled, the command will be available in the context menu when you
+                            right-click in the editor.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  </TableHead>
+                  <TableHead className="tw-w-28 tw-text-center">
+                    <div className="tw-flex tw-items-center tw-justify-center tw-gap-1">
+                      Slash Cmd
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="tw-size-4" />
+                          </TooltipTrigger>
+                          <TooltipContent className="tw-max-w-xs tw-text-xs">
+                            If enabled, the command will be available as a slash command in the
+                            chat.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  </TableHead>
                   <TableHead className="tw-w-32 tw-text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -272,7 +501,7 @@ export const CommandSettings: React.FC = () => {
                 <TableBody>
                   {localCommands.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="tw-py-8 tw-text-center tw-text-muted">
+                      <TableCell colSpan={5} className="tw-py-8 tw-text-center tw-text-muted">
                         No custom prompt files found in &quot;{settings.customPromptsFolder}&quot;.
                         Create .md files in that folder to add commands.
                       </TableCell>
@@ -282,9 +511,10 @@ export const CommandSettings: React.FC = () => {
                       <SortableTableRow
                         key={command.name}
                         command={command}
+                        commands={localCommands}
                         onUpdate={handleUpdate}
                         onRemove={handleRemove}
-                        onDuplicate={handleDuplicate}
+                        onRename={handleRename}
                       />
                     ))
                   )}
@@ -293,9 +523,62 @@ export const CommandSettings: React.FC = () => {
             </Table>
           </DndContext>
           <div className="tw-flex tw-w-full tw-justify-end">
-            <div className="tw-text-sm tw-text-muted">
-              Add new commands by creating .md files in your custom prompts folder
-            </div>
+            <Popover open={isAddCommandOpen} onOpenChange={setIsAddCommandOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="secondary" className="tw-gap-2">
+                  <Plus className="tw-size-4" />
+                  Add Command
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent container={container} className="tw-w-80" align="end">
+                <div className="tw-flex tw-flex-col tw-gap-4">
+                  <div className="tw-space-y-2">
+                    <div className="tw-text-lg tw-font-medium tw-leading-none">
+                      Create New Command
+                    </div>
+                    <p className="tw-text-sm tw-text-muted">
+                      Enter a name for your new custom command. A markdown file will be created in
+                      your custom prompts folder.
+                    </p>
+                  </div>
+                  <div className="tw-space-y-2">
+                    <Input
+                      placeholder="Command name"
+                      value={newCommandName}
+                      onChange={(e) => setNewCommandName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && canCreate && !isCreating) {
+                          handleCreateCommand();
+                        }
+                      }}
+                    />
+                    {validationError && (
+                      <p className="tw-text-sm tw-text-error">{validationError}</p>
+                    )}
+                  </div>
+                  <div className="tw-flex tw-justify-end tw-gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setIsAddCommandOpen(false);
+                        setNewCommandName("");
+                      }}
+                      disabled={isCreating}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleCreateCommand}
+                      disabled={!canCreate || isCreating}
+                    >
+                      {isCreating ? "Creating..." : "Create"}
+                    </Button>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
       </section>
