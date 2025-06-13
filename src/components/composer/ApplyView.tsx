@@ -299,12 +299,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
             <div
               key={blockIndex}
               ref={(el) => (blockRefs.current[blockIndex] = el)}
-              className={cn(
-                "tw-mb-4 tw-overflow-hidden tw-rounded-md tw-border tw-border-solid tw-border-border",
-                {
-                  "tw-border-solid": blockStatus !== "unchanged",
-                }
-              )}
+              className={cn("tw-mb-4 tw-overflow-hidden tw-rounded-md")}
             >
               {blockStatus === "accepted" ? (
                 // Show only the accepted version
