@@ -4,8 +4,11 @@ import React, { useState } from "react";
 import { createRoot, Root } from "react-dom/client";
 import {
   categorizePatterns,
-  getDecodedPatterns,
   createPatternSettingsValue,
+  getDecodedPatterns,
+  getExtensionPattern,
+  getFilePattern,
+  getTagPattern,
 } from "@/search/searchUtils";
 import { File, FileText, Folder, Tag, Wrench, X } from "lucide-react";
 import {
@@ -148,7 +151,7 @@ function PatternMatchingModalContent({
             <DropdownMenuItem
               onSelect={() => {
                 new TagSearchModal(app, (tag) => {
-                  const tagPattern = `#${tag}`;
+                  const tagPattern = getTagPattern(tag);
                   if (tagPatterns.includes(tagPattern)) {
                     return;
                   }
@@ -185,7 +188,7 @@ function PatternMatchingModalContent({
                 new AddContextNoteModal({
                   app,
                   onNoteSelect: (note) => {
-                    const notePattern = `[[${note.basename}]]`;
+                    const notePattern = getFilePattern(note);
                     if (notePatterns.includes(notePattern)) {
                       return;
                     }
@@ -206,7 +209,7 @@ function PatternMatchingModalContent({
             <DropdownMenuItem
               onSelect={() => {
                 new ExtensionInputModal(app, (extension) => {
-                  const extensionPattern = `*.${extension}`;
+                  const extensionPattern = getExtensionPattern(extension);
                   if (extensionPatterns.includes(extensionPattern)) {
                     return;
                   }

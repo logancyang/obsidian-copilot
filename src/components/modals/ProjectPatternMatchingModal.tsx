@@ -10,6 +10,9 @@ import {
   categorizePatterns,
   createPatternSettingsValue,
   getDecodedPatterns,
+  getExtensionPattern,
+  getFilePattern,
+  getTagPattern,
 } from "@/search/searchUtils";
 import { File, FileText, Folder, Tag, Wrench, X } from "lucide-react";
 import { App, Modal, TFile } from "obsidian";
@@ -148,7 +151,7 @@ function ProjectPatternMatchingModalContent({
             <DropdownMenuItem
               onSelect={() => {
                 new TagSearchModal(app, (tag) => {
-                  const tagPattern = `#${tag}`;
+                  const tagPattern = getTagPattern(tag);
                   if (tagPatterns.includes(tagPattern)) {
                     return;
                   }
@@ -185,7 +188,7 @@ function ProjectPatternMatchingModalContent({
                 new ProjectFileSelectModal({
                   app,
                   onFileSelect: (file: TFile) => {
-                    const filePattern = `[[${file.basename}]]`;
+                    const filePattern = getFilePattern(file);
                     if (notePatterns.includes(filePattern)) {
                       return;
                     }
@@ -206,7 +209,7 @@ function ProjectPatternMatchingModalContent({
             <DropdownMenuItem
               onSelect={() => {
                 new ExtensionInputModal(app, (extension) => {
-                  const extensionPattern = `*.${extension}`;
+                  const extensionPattern = getExtensionPattern(extension);
                   if (extensionPatterns.includes(extensionPattern)) {
                     return;
                   }
