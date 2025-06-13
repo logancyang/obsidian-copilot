@@ -433,13 +433,13 @@ export default class ChatModelManager {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { streaming, maxTokens, maxCompletionTokens, ...pingConfig } = modelConfig;
       const isOSeries = isOSeriesModel(modelToTest.name);
-      const tokenConfig = this.handleOpenAIExtraArgs(isOSeries, 10, modelConfig.temperature);
+      const tokenConfig = this.handleOpenAIExtraArgs(isOSeries, 30, modelConfig.temperature);
       const testModel = new (this.getProviderConstructor(modelToTest))({
         ...pingConfig,
         ...tokenConfig,
       });
       await testModel.invoke([{ role: "user", content: "hello" }], {
-        timeout: 3000,
+        timeout: 8000,
       });
     };
 
