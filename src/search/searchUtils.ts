@@ -5,7 +5,7 @@ import { getTagsFromNote, stripHash } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
 import { App, TFile } from "obsidian";
 
-interface PatternCategory {
+export interface PatternCategory {
   tagPatterns?: string[];
   extensionPatterns?: string[];
   folderPatterns?: string[];
@@ -330,4 +330,16 @@ export function extractAppIgnoreSettings(app: App): string[] {
   }
 
   return appIgnoreFolders;
+}
+
+export function getTagPattern(tag: string): string {
+  return `#${tag}`;
+}
+
+export function getFilePattern(file: TFile): string {
+  return `[[${file.basename}]]`;
+}
+
+export function getExtensionPattern(extension: string): string {
+  return `*.${extension}`;
 }
