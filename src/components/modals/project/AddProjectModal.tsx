@@ -1,5 +1,4 @@
 import { ProjectConfig } from "@/aiParams";
-import { ProjectPatternMatchingModal } from "@/components/modals/ProjectPatternMatchingModal";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
@@ -14,6 +13,9 @@ import { HelpCircle } from "lucide-react";
 import { App, Modal, Notice } from "obsidian";
 import React, { useState } from "react";
 import { createRoot, Root } from "react-dom/client";
+import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
+import { TruncatedText } from "@/components/TruncatedText";
+import { getDecodedPatterns } from "@/search/searchUtils";
 
 interface AddProjectModalContentProps {
   initialProject?: ProjectConfig;
@@ -31,7 +33,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
     inclusions: false,
   });
 
-  const [formData, setFormData] = useState<Partial<ProjectConfig>>(
+  const [formData, setFormData] = useState<ProjectConfig>(
     initialProject || {
       id: randomUUID(),
       name: "",
@@ -52,6 +54,23 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
       UsageTimestamps: Date.now(),
     }
   );
+
+  const showContext = getDecodedPatterns(
+    formData.contextSource.inclusions || formData.contextSource.exclusions || "nothing"
+  )
+    .reverse()
+    .join(",");
+
+  const handleEditProjectContext = (originP: ProjectConfig) => {
+    const modal = new ContextManageModal(
+      app,
+      async (updatedProject: ProjectConfig) => {
+        setFormData(updatedProject);
+      },
+      originP
+    );
+    modal.open();
+  };
 
   const isFormValid = () => {
     return formData.name && formData.projectModelKey;
@@ -130,7 +149,9 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
 
   return (
     <div className="tw-flex tw-flex-col tw-gap-2 tw-p-4">
-      <div className="tw-mb-2 tw-text-xl tw-font-bold tw-text-normal">Add New Project</div>
+      <div className="tw-mb-2 tw-text-xl tw-font-bold tw-text-normal">
+        {initialProject ? "Edit Project" : "New Project"}
+      </div>
 
       <div className="tw-flex tw-flex-col tw-gap-2">
         <FormField
@@ -236,7 +257,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
           <FormField
             label={
               <div className="tw-flex tw-items-center tw-gap-2">
-                <span>Inclusions</span>
+                <span>Project Context</span>
                 <TooltipProvider delayDuration={0}>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -261,53 +282,19 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
             description="Define patterns to include specific files or folders in the project context"
           >
             <div className="tw-flex tw-items-center tw-gap-2">
-              <div className="tw-flex-1 tw-text-xs tw-text-muted">
-                {formData.contextSource?.inclusions?.trim()
-                  ? "Patterns configured"
-                  : "No patterns configured"}
+              <div className="tw-flex tw-flex-1 tw-flex-row">
+                <span className="tw-text-sm">Patterns configure：</span>
+                <TruncatedText className="tw-max-w-[100px] tw-text-sm tw-text-accent">
+                  {showContext}
+                </TruncatedText>
               </div>
               <Button
                 variant="secondary"
-                onClick={() =>
-                  new ProjectPatternMatchingModal(
-                    app,
-                    (value: string) => {
-                      handleInputChange("contextSource.inclusions", value);
-                    },
-                    formData.contextSource?.inclusions || "",
-                    "Manage Inclusions"
-                  ).open()
-                }
+                onClick={() => {
+                  handleEditProjectContext(formData);
+                }}
               >
-                Manage Patterns
-              </Button>
-            </div>
-          </FormField>
-
-          <FormField
-            label="Exclusions"
-            description="Exclude specific files or patterns from the included folders above"
-          >
-            <div className="tw-flex tw-items-center tw-gap-2">
-              <div className="tw-flex-1 tw-text-xs tw-text-muted">
-                {formData.contextSource?.exclusions?.trim()
-                  ? "Patterns configured"
-                  : "No patterns configured"}
-              </div>
-              <Button
-                variant="secondary"
-                onClick={() =>
-                  new ProjectPatternMatchingModal(
-                    app,
-                    (value: string) => {
-                      handleInputChange("contextSource.exclusions", value);
-                    },
-                    formData.contextSource?.exclusions || "",
-                    "Manage Exclusions"
-                  ).open()
-                }
-              >
-                Manage Patterns
+                Manage Context
               </Button>
             </div>
           </FormField>
