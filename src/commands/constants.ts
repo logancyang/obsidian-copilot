@@ -1,8 +1,22 @@
+import { CustomCommand } from "@/commands/type";
 import { InlineEditCommandSettings } from "@/settings/model";
 
 export const SELECTED_TEXT_PLACEHOLDER = "{copilot-selection}";
 export const COMMAND_NAME_MAX_LENGTH = 50;
+export const EMPTY_COMMAND: CustomCommand = {
+  title: "",
+  content: "",
+  showInContextMenu: false,
+  slashCommandEnabled: false,
+  order: Number.MAX_SAFE_INTEGER,
+  modelKey: "",
+};
 
+// Custom command frontmatter property constants
+export const COPILOT_COMMAND_CONTEXT_MENU_ENABLED = "copilot-command-context-menu-enabled";
+export const COPILOT_COMMAND_SLASH_ENABLED = "copilot-command-slash-enabled";
+export const COPILOT_COMMAND_CONTEXT_MENU_ORDER = "copilot-command-context-menu-order";
+export const COPILOT_COMMAND_MODEL_KEY = "copilot-command-model-key";
 export const DEFAULT_INLINE_EDIT_COMMANDS: InlineEditCommandSettings[] = [
   {
     name: "Fix grammar and spelling",

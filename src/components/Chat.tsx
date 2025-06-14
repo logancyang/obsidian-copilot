@@ -15,7 +15,7 @@ import { ProjectList } from "@/components/chat-components/ProjectList";
 import { ABORT_REASON, COMMAND_IDS, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
 import { ContextProcessor } from "@/contextProcessor";
-import { CustomPromptProcessor } from "@/customPromptProcessor";
+import { CustomCommandManager } from "@/commands/customCommandManager";
 import { getAIResponse } from "@/langchainStream";
 import ChainManager from "@/LLMProviders/chainManager";
 import CopilotPlugin from "@/main";
@@ -173,7 +173,7 @@ const Chat: React.FC<ChatProps> = ({
         inputMessage + "\n\n<output_format>\n" + composerPrompt + "\n</output_format>";
     }
     // process the original user message for custom prompts
-    const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
+    const customPromptProcessor = CustomCommandManager.getInstance(app.vault);
     const { processedPrompt: processedUserMessage, includedFiles } =
       await customPromptProcessor.processCustomPrompt(
         processedInputMessage || "",
@@ -496,22 +496,8 @@ ${chatContent}`;
     };
   };
 
-  const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(
-    createEffect(COMMAND_IDS.APPLY_CUSTOM_PROMPT, async (selectedText, customPrompt) => {
-      if (!customPrompt) {
-        return selectedText;
-      }
-      const result = await customPromptProcessor.processCustomPrompt(
-        customPrompt,
-        selectedText,
-        app.workspace.getActiveFile() ?? undefined
-      );
-      return result.processedPrompt; // Extract just the processed prompt string
-    }),
-    []
-  );
+  const customPromptProcessor = CustomCommandManager.getInstance(app.vault);
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(
     createEffect(COMMAND_IDS.APPLY_ADHOC_PROMPT, async (selectedText, customPrompt) => {

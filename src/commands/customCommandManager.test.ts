@@ -1,4 +1,4 @@
-import { CustomPrompt, CustomPromptProcessor } from "@/customPromptProcessor";
+import { CustomPrompt, CustomCommandManager } from "@/commands/customCommandManager";
 import {
   extractNoteFiles,
   getFileContent,
@@ -36,7 +36,7 @@ jest.mock("@/customPromptProcessor", () => {
 });
 
 describe("CustomPromptProcessor", () => {
-  let processor: CustomPromptProcessor;
+  let processor: CustomCommandManager;
   let mockVault: Vault;
   let mockActiveNote: TFile;
   let originalConsoleWarn: typeof console.warn;
@@ -62,7 +62,7 @@ describe("CustomPromptProcessor", () => {
     } as TFile;
 
     // Create an instance of CustomPromptProcessor with mocked dependencies
-    processor = CustomPromptProcessor.getInstance(mockVault);
+    processor = CustomCommandManager.getInstance(mockVault);
   });
 
   afterEach(() => {

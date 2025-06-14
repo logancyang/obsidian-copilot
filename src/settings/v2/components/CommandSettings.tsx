@@ -1,10 +1,7 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
-import {
-  useCustomPromptCommands,
-  CustomPromptCommand,
-} from "@/settings/v2/hooks/useCustomPromptCommands";
-import { Lightbulb, GripVertical, PencilLine, Trash2, Plus, Info } from "lucide-react";
+import { useCustomCommands } from "@/commands/state";
+import { Lightbulb, GripVertical, Trash2, Plus, Info, PenLine } from "lucide-react";
 
 import {
   Table,
@@ -45,43 +42,20 @@ import {
 import { useContainerContext } from "@/settings/v2/components/ContainerContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { Notice } from "obsidian";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-
-const validateCommandName = (
-  name: string,
-  commands: CustomPromptCommand[],
-  currentCommandName?: string
-) => {
-  const trimmedName = name.trim();
-
-  if (currentCommandName && trimmedName === currentCommandName) {
-    return null; // No change is allowed
-  }
-
-  // eslint-disable-next-line no-control-regex
-  const invalidChars = /[<>:"/\\|?*\x00-\x1F]/g;
-  if (invalidChars.test(trimmedName)) {
-    return 'Command name contains invalid characters. Avoid using: < > : " / \\ | ? *';
-  }
-
-  if (commands.some((cmd) => cmd.name.toLowerCase() === trimmedName.toLowerCase())) {
-    return "A command with this name already exists";
-  }
-
-  return null;
-};
+import { CustomCommand } from "@/commands/type";
+import { validateCommandName } from "@/commands/customCommandUtils";
+import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
 
 const SortableTableRow: React.FC<{
-  command: CustomPromptCommand;
-  commands: CustomPromptCommand[];
-  onUpdate: (prevCommand: CustomPromptCommand, newCommand: CustomPromptCommand) => void;
-  onRemove: (command: CustomPromptCommand) => void;
-  onRename: (command: CustomPromptCommand, newName: string) => void;
-}> = ({ command, commands, onUpdate, onRemove, onRename }) => {
+  command: CustomCommand;
+  commands: CustomCommand[];
+  onUpdate: (prevCommand: CustomCommand, newCommand: CustomCommand) => void;
+  onRemove: (command: CustomCommand) => void;
+}> = ({ command, commands, onUpdate, onRemove }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: command.name,
+    id: command.title,
   });
 
   const style = {
@@ -91,32 +65,9 @@ const SortableTableRow: React.FC<{
 
   const container = useContainerContext();
 
-  // Rename state
-  const [isRenameOpen, setIsRenameOpen] = React.useState(false);
-  const [newName, setNewName] = React.useState("");
-  const [isRenaming, setIsRenaming] = React.useState(false);
-
   // Delete state
   const [isDeleteOpen, setIsDeleteOpen] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
-
-  const validationError = validateCommandName(newName, commands, command.name);
-  const canRename = !validationError && newName.trim() !== "";
-
-  const handleRename = async () => {
-    if (!canRename) return;
-
-    try {
-      setIsRenaming(true);
-      await onRename(command, newName.trim());
-      setNewName("");
-      setIsRenameOpen(false);
-    } catch (error) {
-      console.error("Failed to rename command:", error);
-    } finally {
-      setIsRenaming(false);
-    }
-  };
 
   const handleDelete = async () => {
     try {
@@ -149,16 +100,19 @@ const SortableTableRow: React.FC<{
           <GripVertical className="tw-size-4" />
         </div>
       </TableCell>
-      <TableCell>{command.name}</TableCell>
+      <TableCell>{command.title}</TableCell>
       <TableCell className="tw-text-center">
         <Checkbox
           checked={command.showInContextMenu}
-          onCheckedChange={(checked) =>
-            onUpdate(command, {
-              ...command,
-              showInContextMenu: checked === true,
-            })
-          }
+          onCheckedChange={(checked) => {
+            onUpdate(
+              {
+                ...command,
+                showInContextMenu: checked === true,
+              },
+              command
+            );
+          }}
           className="tw-mx-auto"
         />
       </TableCell>
@@ -166,67 +120,36 @@ const SortableTableRow: React.FC<{
         <Checkbox
           checked={command.slashCommandEnabled}
           onCheckedChange={(checked) =>
-            onUpdate(command, {
-              ...command,
-              slashCommandEnabled: checked === true,
-            })
+            onUpdate(
+              {
+                ...command,
+                slashCommandEnabled: checked === true,
+              },
+              command
+            )
           }
           className="tw-mx-auto"
         />
       </TableCell>
       <TableCell className="tw-text-center">
         <div className="tw-flex tw-justify-center tw-space-x-1">
-          <Popover open={isRenameOpen} onOpenChange={setIsRenameOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  setNewName(command.name);
-                  setIsRenameOpen(true);
-                }}
-              >
-                <PencilLine className="tw-size-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent container={container} className="tw-w-80" align="end">
-              <div className="tw-flex tw-flex-col tw-gap-4">
-                <div className="tw-space-y-2">
-                  <div className="tw-text-lg tw-font-medium tw-leading-none">Rename Command</div>
-                  <p className="tw-text-sm tw-text-muted">Enter a new name for this command.</p>
-                </div>
-                <div className="tw-space-y-2">
-                  <Input
-                    placeholder="Command name"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && canRename && !isRenaming) {
-                        handleRename();
-                      }
-                    }}
-                  />
-                  {validationError && <p className="tw-text-sm tw-text-error">{validationError}</p>}
-                </div>
-                <div className="tw-flex tw-justify-end tw-gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      setIsRenameOpen(false);
-                      setNewName("");
-                    }}
-                    disabled={isRenaming}
-                  >
-                    Cancel
-                  </Button>
-                  <Button size="sm" onClick={handleRename} disabled={!canRename || isRenaming}>
-                    {isRenaming ? "Renaming..." : "Rename"}
-                  </Button>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              const modal = new CustomCommandSettingsModal(
+                app,
+                commands,
+                command,
+                async (updatedCommand) => {
+                  await onUpdate(updatedCommand, command);
+                }
+              );
+              modal.open();
+            }}
+          >
+            <PenLine className="tw-size-4" />
+          </Button>
           <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
             <DialogTrigger asChild>
               <Button variant="ghost" size="icon">
@@ -237,7 +160,7 @@ const SortableTableRow: React.FC<{
               <DialogHeader>
                 <DialogTitle>Delete Command</DialogTitle>
                 <DialogDescription>
-                  Are you sure you want to delete the command &quot;{command.name}&quot;? This will
+                  Are you sure you want to delete the command &quot;{command.title}&quot;? This will
                   permanently remove the command file and cannot be undone.
                 </DialogDescription>
               </DialogHeader>
@@ -262,24 +185,13 @@ const SortableTableRow: React.FC<{
 };
 
 export const CommandSettings: React.FC = () => {
-  const {
-    commands,
-    updateContextMenuSetting,
-    updateSlashCommandSetting,
-    updateOrder,
-    reloadCommands,
-  } = useCustomPromptCommands();
-  const [localCommands, setLocalCommands] = React.useState<CustomPromptCommand[]>(commands);
+  const { commands, updateCommand, updateCommands, addCommand, deleteCommand } =
+    useCustomCommands();
 
   // Add Command popover state
   const [isAddCommandOpen, setIsAddCommandOpen] = React.useState(false);
   const [newCommandName, setNewCommandName] = React.useState("");
   const [isCreating, setIsCreating] = React.useState(false);
-
-  // Sync local state when commands from hook change
-  React.useEffect(() => {
-    setLocalCommands(commands);
-  }, [commands]);
 
   const settings = getSettings();
   const sensors = useSensors(
@@ -293,7 +205,7 @@ export const CommandSettings: React.FC = () => {
     })
   );
 
-  const validationError = validateCommandName(newCommandName, localCommands);
+  const validationError = validateCommandName(newCommandName, commands);
   const canCreate = !validationError && newCommandName.trim() !== "";
 
   const handleCreateCommand = async () => {
@@ -301,10 +213,7 @@ export const CommandSettings: React.FC = () => {
 
     try {
       setIsCreating(true);
-      const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
-
-      await customPromptProcessor.savePrompt(newCommandName.trim(), "");
-      await reloadCommands();
+      await addCommand(newCommandName.trim());
 
       setNewCommandName("");
       setIsAddCommandOpen(false);
@@ -318,64 +227,15 @@ export const CommandSettings: React.FC = () => {
     }
   };
 
-  const handleUpdate = async (
-    prevCommand: CustomPromptCommand,
-    newCommand: CustomPromptCommand
-  ) => {
-    // Optimistically update local state
-    setLocalCommands((prev) =>
-      prev.map((cmd) =>
-        cmd.filePath === newCommand.filePath
-          ? {
-              ...cmd,
-              showInContextMenu: newCommand.showInContextMenu,
-              slashCommandEnabled: newCommand.slashCommandEnabled,
-            }
-          : cmd
-      )
-    );
-
-    // Update backend in background
-    if (prevCommand.showInContextMenu !== newCommand.showInContextMenu) {
-      await updateContextMenuSetting(newCommand.filePath, newCommand.showInContextMenu);
-    }
-
-    if (prevCommand.slashCommandEnabled !== newCommand.slashCommandEnabled) {
-      await updateSlashCommandSetting(newCommand.filePath, newCommand.slashCommandEnabled);
-    }
+  const handleUpdate = async (newCommand: CustomCommand, prevCommand: CustomCommand) => {
+    await updateCommand(newCommand, prevCommand);
   };
 
-  const handleRename = async (command: CustomPromptCommand, newName: string) => {
+  const handleRemove = async (command: CustomCommand) => {
     try {
-      const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
+      await deleteCommand(command);
 
-      // Get the current content to preserve it
-      const currentPrompt = await customPromptProcessor.getPrompt(command.name);
-      if (!currentPrompt) {
-        throw new Error("Command not found");
-      }
-
-      // Rename the file using updatePrompt
-      await customPromptProcessor.updatePrompt(command.name, newName, currentPrompt.content);
-      await reloadCommands();
-
-      new Notice(`Command renamed to "${newName}" successfully!`);
-    } catch (error) {
-      console.error("Failed to rename command:", error);
-      new Notice("Failed to rename command. Please try again.");
-      throw error;
-    }
-  };
-
-  const handleRemove = async (command: CustomPromptCommand) => {
-    try {
-      const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
-
-      // Delete the file using the command name (not filePath)
-      await customPromptProcessor.deletePrompt(command.name);
-      await reloadCommands();
-
-      new Notice(`Command "${command.name}" deleted successfully!`);
+      new Notice(`Command "${command.title}" deleted successfully!`);
     } catch (error) {
       console.error("Failed to delete command:", error);
       new Notice("Failed to delete command. Please try again.");
@@ -390,43 +250,25 @@ export const CommandSettings: React.FC = () => {
       return;
     }
 
-    const activeIndex = localCommands.findIndex((command) => command.name === active.id);
-    const overIndex = localCommands.findIndex((command) => command.name === over.id);
+    const activeIndex = commands.findIndex((command) => command.title === active.id);
+    const overIndex = commands.findIndex((command) => command.title === over.id);
 
     if (activeIndex === -1 || overIndex === -1) {
       return;
     }
 
-    // Optimistically update local state immediately
-    const newCommands = [...localCommands];
+    // Create new order
+    const newCommands = [...commands];
     const [movedCommand] = newCommands.splice(activeIndex, 1);
     newCommands.splice(overIndex, 0, movedCommand);
 
-    // Update the order values for the optimistic state
-    const updatedCommands = newCommands.map((command, index) => ({
-      ...command,
-      order: index * 10,
-    }));
-
-    setLocalCommands(updatedCommands);
-
-    // Update backend in background
-    // Use increments of 10 to allow for future insertions between items
-    try {
-      const updatePromises = newCommands.map(
-        (command, index) => updateOrder(command.filePath, index * 10, true) // Skip reload for batch operations
-      );
-
-      await Promise.all(updatePromises);
-
-      // Reload commands only once after all updates complete
-      await reloadCommands();
-    } catch (error) {
-      console.error("Failed to update command order:", error);
-      // On error, revert to the original commands from the hook
-      setLocalCommands(commands);
+    for (let i = 0; i < newCommands.length; i++) {
+      newCommands[i] = { ...newCommands[i], order: i * 10 };
     }
+
+    await updateCommands(newCommands);
   };
+
   const container = useContainerContext();
 
   return (
@@ -495,11 +337,11 @@ export const CommandSettings: React.FC = () => {
                 </TableRow>
               </TableHeader>
               <SortableContext
-                items={localCommands.map((command) => command.name)}
+                items={commands.map((command) => command.title)}
                 strategy={verticalListSortingStrategy}
               >
                 <TableBody>
-                  {localCommands.length === 0 ? (
+                  {commands.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={5} className="tw-py-8 tw-text-center tw-text-muted">
                         No custom prompt files found in &quot;{settings.customPromptsFolder}&quot;.
@@ -507,14 +349,13 @@ export const CommandSettings: React.FC = () => {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    localCommands.map((command) => (
+                    commands.map((command) => (
                       <SortableTableRow
-                        key={command.name}
+                        key={command.title}
                         command={command}
-                        commands={localCommands}
+                        commands={commands}
                         onUpdate={handleUpdate}
                         onRemove={handleRemove}
-                        onRename={handleRename}
                       />
                     ))
                   )}

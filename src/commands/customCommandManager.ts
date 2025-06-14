@@ -1,4 +1,3 @@
-import { CustomError } from "@/error";
 import { createPromptUsageStrategy, PromptUsageStrategy } from "@/promptUsageStrategy";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import {
@@ -9,24 +8,20 @@ import {
   getNotesFromTags,
   processVariableNameForNotePath,
 } from "@/utils";
-import { normalizePath, Notice, TFile, Vault } from "obsidian";
-import { NOTE_CONTEXT_PROMPT_TAG } from "./constants";
-
-// Custom prompt frontmatter property constants
-export const COPILOT_COMMAND_CONTEXT_MENU_ENABLED = "copilot-command-context-menu-enabled";
-export const COPILOT_COMMAND_SLASH_ENABLED = "copilot-command-slash-enabled";
-export const COPILOT_COMMAND_CONTEXT_MENU_ORDER = "copilot-command-context-menu-order";
-
-export interface CustomPrompt {
-  title: string;
-  content: string;
-  showInContextMenu: boolean;
-  slashCommandEnabled: boolean;
-  filePath: string; // Add file path to enable updates
-  order: number; // Order for display in context menu and settings
-}
+import { Notice, TFile, Vault } from "obsidian";
+import { NOTE_CONTEXT_PROMPT_TAG } from "../constants";
+import { getCommandFilePath, getCustomCommandsFolder } from "@/commands/customCommandUtils";
+import { CustomCommand } from "@/commands/type";
+import { CustomError } from "@/error";
+import {
+  COPILOT_COMMAND_CONTEXT_MENU_ENABLED,
+  COPILOT_COMMAND_CONTEXT_MENU_ORDER,
+  COPILOT_COMMAND_MODEL_KEY,
+  COPILOT_COMMAND_SLASH_ENABLED,
+} from "@/commands/constants";
 
 /**
+ * Find all variables between {} in a custom command prompt.
  * {copilot-selection} is the legacy custom command special placeholder. It must
  * be skipped when processing custom prompts because it's handled differently
  * by the custom command prompt processor.
@@ -42,7 +37,8 @@ interface VariableProcessingResult {
 }
 
 /**
- * Extract variables from a custom prompt and get their content and associated files.
+ * Extract variables from a custom prompt and get their content and associated
+ * files.
  */
 async function extractVariablesFromPrompt(
   customPrompt: string,
@@ -51,7 +47,7 @@ async function extractVariablesFromPrompt(
 ): Promise<{ variablesMap: Map<string, string>; includedFiles: Set<TFile> }> {
   const variablesMap = new Map<string, string>();
   const includedFiles = new Set<TFile>();
-  let match;
+  let match: RegExpExecArray | null;
 
   while ((match = VARIABLE_REGEX.exec(customPrompt)) !== null) {
     const variableName = match[1].trim();
@@ -210,11 +206,11 @@ export async function processPrompt(
   };
 }
 
-export class CustomPromptProcessor {
-  private static instance: CustomPromptProcessor;
+export class CustomCommandManager {
+  private static instance: CustomCommandManager;
   private usageStrategy: PromptUsageStrategy;
 
-  private constructor(private vault: Vault) {
+  private constructor() {
     this.usageStrategy = createPromptUsageStrategy();
 
     subscribeToSettingsChange(() => {
@@ -222,167 +218,109 @@ export class CustomPromptProcessor {
     });
   }
 
-  get customPromptsFolder(): string {
-    return getSettings().customPromptsFolder;
-  }
-
-  static getInstance(vault: Vault): CustomPromptProcessor {
-    if (!CustomPromptProcessor.instance) {
-      CustomPromptProcessor.instance = new CustomPromptProcessor(vault);
+  static getInstance(): CustomCommandManager {
+    if (!CustomCommandManager.instance) {
+      CustomCommandManager.instance = new CustomCommandManager();
     }
-    return CustomPromptProcessor.instance;
+    return CustomCommandManager.instance;
   }
 
   recordPromptUsage(title: string) {
     this.usageStrategy.recordUsage(title);
   }
 
-  async getAllPrompts(): Promise<CustomPrompt[]> {
-    const folder = this.customPromptsFolder;
-    const files = this.vault
-      .getFiles()
-      .filter((file) => file.path.startsWith(folder) && file.extension === "md");
+  // async getAllPrompts(): Promise<CustomPrompt[]> {
+  //   const folder = this.customPromptsFolder;
+  //   const files = this.vault
+  //     .getFiles()
+  //     .filter((file) => file.path.startsWith(folder) && file.extension === "md");
 
-    const prompts: CustomPrompt[] = [];
-    for (const file of files) {
-      const content = await this.vault.read(file);
-      const metadata = app.metadataCache.getFileCache(file);
-      const showInContextMenu =
-        metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] ?? false;
-      const slashCommandEnabled = metadata?.frontmatter?.[COPILOT_COMMAND_SLASH_ENABLED] ?? false;
-      const order =
-        metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ORDER] ?? Number.MAX_SAFE_INTEGER;
+  //   const prompts: CustomPrompt[] = [];
+  //   for (const file of files) {
+  //     const content = await this.vault.read(file);
+  //     const metadata = app.metadataCache.getFileCache(file);
+  //     const showInContextMenu =
+  //       metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] ?? false;
+  //     const slashCommandEnabled = metadata?.frontmatter?.[COPILOT_COMMAND_SLASH_ENABLED] ?? false;
+  //     const order =
+  //       metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ORDER] ?? Number.MAX_SAFE_INTEGER;
 
-      prompts.push({
-        title: file.basename,
-        content,
-        showInContextMenu,
-        slashCommandEnabled,
-        filePath: file.path,
-        order: typeof order === "number" ? order : Number.MAX_SAFE_INTEGER,
-      });
-    }
+  //     prompts.push({
+  //       title: file.basename,
+  //       content,
+  //       showInContextMenu,
+  //       slashCommandEnabled,
+  //       filePath: file.path,
+  //       order: typeof order === "number" ? order : Number.MAX_SAFE_INTEGER,
+  //     });
+  //   }
 
-    // Clean up promptUsageTimestamps
-    this.usageStrategy.removeUnusedPrompts(prompts.map((prompt) => prompt.title));
+  //   // Clean up promptUsageTimestamps
+  //   this.usageStrategy.removeUnusedPrompts(prompts.map((prompt) => prompt.title));
 
-    // return prompts.sort((a, b) => this.usageStrategy.compare(b.title, a.title) || 0);
-    // Sort by order first, then alphabetically by title for items with same order
-    return prompts.sort((a, b) => {
-      if (a.order !== b.order) {
-        return a.order - b.order;
-      }
-      return a.title.localeCompare(b.title);
-    });
-  }
+  //   // return prompts.sort((a, b) => this.usageStrategy.compare(b.title, a.title) || 0);
+  //   // Sort by order first, then alphabetically by title for items with same order
+  //   return prompts.sort((a, b) => {
+  //     if (a.order !== b.order) {
+  //       return a.order - b.order;
+  //     }
+  //     return a.title.localeCompare(b.title);
+  //   });
+  // }
 
-  async getPrompt(title: string): Promise<CustomPrompt | null> {
-    const filePath = `${this.customPromptsFolder}/${title}.md`;
-    const file = this.vault.getAbstractFileByPath(filePath);
-    if (file instanceof TFile) {
-      const content = await this.vault.read(file);
-      const metadata = app.metadataCache.getFileCache(file);
-      const showInContextMenu =
-        metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] ?? false;
-      const slashCommandEnabled = metadata?.frontmatter?.[COPILOT_COMMAND_SLASH_ENABLED] ?? false;
-      const order =
-        metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ORDER] ?? Number.MAX_SAFE_INTEGER;
-
-      return {
-        title: file.basename,
-        content,
-        showInContextMenu,
-        slashCommandEnabled,
-        filePath: file.path,
-        order: typeof order === "number" ? order : Number.MAX_SAFE_INTEGER,
-      };
-    }
-    return null;
-  }
-
-  async savePrompt(title: string, content: string): Promise<void> {
-    const folderPath = normalizePath(this.customPromptsFolder);
-    const filePath = `${folderPath}/${title}.md`;
+  async createCommand(title: string, content: string): Promise<void> {
+    const folderPath = getCustomCommandsFolder();
+    const filePath = getCommandFilePath(title);
 
     // Check if the folder exists and create it if it doesn't
-    const folderExists = await this.vault.adapter.exists(folderPath);
+    const folderExists = await app.vault.adapter.exists(folderPath);
     if (!folderExists) {
-      await this.vault.createFolder(folderPath);
+      await app.vault.createFolder(folderPath);
     }
 
-    // Create the file
-    await this.vault.create(filePath, content);
+    await app.vault.create(filePath, content);
   }
 
-  async updatePrompt(originTitle: string, newTitle: string, content: string): Promise<void> {
-    const filePath = `${this.customPromptsFolder}/${originTitle}.md`;
-    const file = this.vault.getAbstractFileByPath(filePath);
-
-    if (file instanceof TFile) {
-      if (originTitle !== newTitle) {
-        const newFilePath = `${this.customPromptsFolder}/${newTitle}.md`;
-        const newFileExists = this.vault.getAbstractFileByPath(newFilePath);
-
-        if (newFileExists) {
-          throw new CustomError(
-            "Error saving custom prompt. Please check if the title already exists."
-          );
-        }
-
-        this.usageStrategy.updateUsage(originTitle, newTitle);
-        await this.vault.rename(file, newFilePath);
+  async updateCommand(command: CustomCommand, prevCommand?: CustomCommand) {
+    let commandFile = app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
+    // Verify whether the title has changed to decide whether to rename the file
+    if (prevCommand && command.title !== prevCommand.title) {
+      const newFilePath = getCommandFilePath(command.title);
+      const newFileExists = app.vault.getAbstractFileByPath(newFilePath);
+      if (newFileExists) {
+        throw new CustomError(
+          "Error saving custom prompt. Please check if the title already exists."
+        );
       }
-      await this.vault.modify(file, content);
+      const prevFilePath = getCommandFilePath(prevCommand.title);
+      const prevCommandFile = app.vault.getAbstractFileByPath(prevFilePath);
+      if (prevCommandFile instanceof TFile) {
+        await app.vault.rename(prevCommandFile, newFilePath); // Rename the file
+        commandFile = prevCommandFile;
+      }
+    }
+
+    if (commandFile instanceof TFile) {
+      await app.vault.modify(commandFile, command.content);
+      await app.fileManager.processFrontMatter(commandFile, (frontmatter) => {
+        frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = command.showInContextMenu;
+        frontmatter[COPILOT_COMMAND_SLASH_ENABLED] = command.slashCommandEnabled;
+        frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] = command.order;
+        frontmatter[COPILOT_COMMAND_MODEL_KEY] = command.modelKey;
+      });
     }
   }
 
-  async deletePrompt(title: string): Promise<void> {
-    const filePath = `${this.customPromptsFolder}/${title}.md`;
-    const file = this.vault.getAbstractFileByPath(filePath);
+  async updateCommands(commands: CustomCommand[]) {
+    await Promise.all(commands.map((command) => this.updateCommand(command)));
+  }
+
+  async deleteCommand(command: CustomCommand) {
+    const file = app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
     if (file instanceof TFile) {
-      this.usageStrategy.removeUnusedPrompts([title]);
-      await this.vault.delete(file);
+      this.usageStrategy.removeUnusedPrompts([command.title]);
+      await app.vault.delete(file);
     }
-  }
-
-  async updatePromptContextMenuSetting(
-    filePath: string,
-    showInContextMenu: boolean
-  ): Promise<void> {
-    const file = this.vault.getAbstractFileByPath(filePath);
-    if (!(file instanceof TFile)) {
-      throw new Error(`File not found: ${filePath}`);
-    }
-
-    await app.fileManager.processFrontMatter(file, (frontmatter) => {
-      // Update the enabled property directly
-      frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = showInContextMenu;
-    });
-  }
-
-  async updatePromptSlashCommandSetting(
-    filePath: string,
-    slashCommandEnabled: boolean
-  ): Promise<void> {
-    const file = this.vault.getAbstractFileByPath(filePath);
-    if (!(file instanceof TFile)) {
-      throw new Error(`File not found: ${filePath}`);
-    }
-
-    await app.fileManager.processFrontMatter(file, (frontmatter) => {
-      frontmatter[COPILOT_COMMAND_SLASH_ENABLED] = slashCommandEnabled;
-    });
-  }
-
-  async updatePromptOrder(filePath: string, order: number): Promise<void> {
-    const file = this.vault.getAbstractFileByPath(filePath);
-    if (!(file instanceof TFile)) {
-      throw new Error(`File not found: ${filePath}`);
-    }
-
-    await app.fileManager.processFrontMatter(file, (frontmatter) => {
-      frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] = order;
-    });
   }
 
   /**
@@ -401,6 +339,6 @@ export class CustomPromptProcessor {
     activeNote?: TFile
   ): Promise<ProcessedPromptResult> {
     // Remove dependency on lastProcessedPrompt state
-    return processPrompt(customPrompt, selectedText, this.vault, activeNote);
+    return processPrompt(customPrompt, selectedText, app.vault, activeNote);
   }
 }
