@@ -16,7 +16,7 @@ import ProjectManager from "@/LLMProviders/projectManager";
 import { isProjectMode } from "@/aiParams";
 
 // TODO: Add @index with explicit pdf files in chat context menu
-export const COPILOT_TOOL_NAMES = ["@vault", "@composer", "@web", "@youtube", "@pomodoro"];
+export const COPILOT_TOOL_NAMES = ["@vault", "@composer", "@websearch", "@youtube", "@pomodoro"];
 
 type ToolCall = {
   tool: any;
@@ -118,8 +118,8 @@ export class IntentAnalyzer {
       });
     }
 
-    // Handle @web command
-    if (message.includes("@web")) {
+    // Handle @websearch command and also support @web for backward compatibility
+    if (message.includes("@websearch") || message.includes("@web")) {
       const cleanQuery = this.removeAtCommands(originalMessage);
       const memory = ProjectManager.instance.getCurrentChainManager().memoryManager.getMemory();
       const memoryVariables = await memory.loadMemoryVariables({});
