@@ -5,8 +5,7 @@ import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import { getSettings } from "@/settings/model";
 import { MD5 } from "crypto-js";
 import { TAbstractFile, TFile, Vault } from "obsidian";
-
-const DEBOUNCE_DELAY = 5000; // 5 seconds
+import debounce from "lodash.debounce";
 
 export interface ContextCache {
   // Markdown context
@@ -37,8 +36,8 @@ export class ProjectContextCache {
   private cacheDir: string = ".copilot/project-context-cache";
   private memoryCache: Map<string, ContextCache> = new Map();
   private vault: Vault;
-  private debounceTimer: number | null = null;
   private fileCache: FileCache<string>;
+  private static readonly DEBOUNCE_DELAY = 5000; // 5 seconds
 
   private constructor() {
     this.vault = app.vault;
@@ -61,10 +60,7 @@ export class ProjectContextCache {
    * Clean up resources used by the cache
    */
   public cleanup() {
-    if (this.debounceTimer !== null) {
-      window.clearTimeout(this.debounceTimer);
-    }
-
+    this.debouncedHandleFileChange.cancel();
     this.vault.off("create", this.handleFileEvent);
     this.vault.off("modify", this.handleFileEvent);
     this.vault.off("delete", this.handleFileEvent);
@@ -85,18 +81,7 @@ export class ProjectContextCache {
     }
   };
 
-  private debouncedHandleFileChange = (file: TFile) => {
-    if (this.debounceTimer !== null) {
-      window.clearTimeout(this.debounceTimer);
-    }
-
-    this.debounceTimer = window.setTimeout(() => {
-      this.handleFileChange(file);
-      this.debounceTimer = null;
-    }, DEBOUNCE_DELAY);
-  };
-
-  private async handleFileChange(file: TFile) {
+  private handleFileChange = async (file: TFile) => {
     try {
       // Only process markdown files
       if (file.extension !== "md") {
@@ -125,7 +110,18 @@ export class ProjectContextCache {
     } catch (error) {
       logError("Error handling file change for project context cache:", error);
     }
-  }
+  };
+
+  private debouncedHandleFileChange = debounce(
+    (file: TFile) => {
+      void this.handleFileChange(file);
+    },
+    ProjectContextCache.DEBOUNCE_DELAY,
+    {
+      leading: true,
+      trailing: true,
+    }
+  );
 
   //===========================================================================
   // BASE CACHE OPERATIONS

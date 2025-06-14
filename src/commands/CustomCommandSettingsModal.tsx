@@ -6,31 +6,30 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import React, { useState } from "react";
 import { createRoot, Root } from "react-dom/client";
-import {
-  getModelKeyFromModel,
-  InlineEditCommandSettings,
-  useSettingsValue,
-} from "@/settings/model";
-import { validateCommandName } from "@/commands/inlineEditCommandUtils";
+import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { getModelDisplayText } from "@/components/ui/model-display";
 import { cn } from "@/lib/utils";
 import { ChevronDown } from "lucide-react";
 import { logError } from "@/logger";
 import { CustomPromptSyntaxInstruction } from "@/components/CustomPromptSyntaxInstruction";
+import { CustomCommand } from "@/commands/type";
+import { validateCommandName } from "@/commands/customCommandUtils";
 
 type FormErrors = {
-  name?: string;
-  prompt?: string;
+  title?: string;
+  content?: string;
 };
 
-function InlineEditCommandSettingsModalContent({
+function CustomCommandSettingsModalContent({
+  commands,
   command: initialCommand,
   onConfirm,
   onCancel,
   onRemove,
 }: {
-  command: InlineEditCommandSettings;
-  onConfirm: (command: InlineEditCommandSettings) => void;
+  commands: CustomCommand[];
+  command: CustomCommand;
+  onConfirm: (command: CustomCommand) => void;
   onCancel: () => void;
   onRemove?: () => void;
 }) {
@@ -44,7 +43,7 @@ function InlineEditCommandSettingsModalContent({
   const [command, setCommand] = useState(initialCommand);
   const [errors, setErrors] = useState<FormErrors>({});
 
-  const handleUpdate = (field: keyof InlineEditCommandSettings, value: any) => {
+  const handleUpdate = (field: keyof CustomCommand, value: any) => {
     setCommand((prev) => ({
       ...prev,
       [field]: value,
@@ -59,13 +58,13 @@ function InlineEditCommandSettingsModalContent({
     const newErrors: FormErrors = {};
 
     try {
-      validateCommandName(command.name, initialCommand.name);
+      validateCommandName(command.title, commands, initialCommand.title);
     } catch (e) {
-      newErrors.name = e.message;
+      newErrors.title = e.message;
     }
 
-    if (!command.prompt.trim()) {
-      newErrors.prompt = "Prompt is required";
+    if (!command.content.trim()) {
+      newErrors.content = "Prompt is required";
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -79,27 +78,27 @@ function InlineEditCommandSettingsModalContent({
   return (
     <div className="tw-flex tw-flex-col tw-gap-4 tw-p-4">
       <div className="tw-flex tw-flex-col tw-gap-2">
-        <Label htmlFor="name">Name</Label>
+        <Label htmlFor="title">Name</Label>
         <Input
-          id="name"
-          value={command.name}
-          onChange={(e) => handleUpdate("name", e.target.value)}
+          id="title"
+          value={command.title}
+          onChange={(e) => handleUpdate("title", e.target.value)}
           placeholder="Enter command name"
         />
-        {errors.name && <div className="tw-text-sm tw-text-error">{errors.name}</div>}
+        {errors.title && <div className="tw-text-sm tw-text-error">{errors.title}</div>}
       </div>
 
       <div className="tw-flex tw-flex-col tw-gap-2">
-        <Label htmlFor="prompt">Prompt</Label>
+        <Label htmlFor="content">Prompt</Label>
         <CustomPromptSyntaxInstruction />
         <Textarea
-          id="prompt"
-          value={command.prompt}
-          onChange={(e) => handleUpdate("prompt", e.target.value)}
+          id="content"
+          value={command.content}
+          onChange={(e) => handleUpdate("content", e.target.value)}
           placeholder="Enter command prompt"
           className="tw-min-h-[200px]"
         />
-        {errors.prompt && <div className="tw-text-sm tw-text-error">{errors.prompt}</div>}
+        {errors.content && <div className="tw-text-sm tw-text-error">{errors.content}</div>}
       </div>
 
       <div className="tw-flex tw-flex-col tw-gap-2">
@@ -169,13 +168,14 @@ function InlineEditCommandSettingsModalContent({
   );
 }
 
-export class InlineEditCommandSettingsModal extends Modal {
+export class CustomCommandSettingsModal extends Modal {
   private root: Root;
 
   constructor(
     app: App,
-    private command: InlineEditCommandSettings,
-    private onUpdate: (command: InlineEditCommandSettings) => void,
+    private commands: CustomCommand[],
+    private command: CustomCommand,
+    private onUpdate: (command: CustomCommand) => void,
     private onRemove?: () => void
   ) {
     super(app);
@@ -188,7 +188,7 @@ export class InlineEditCommandSettingsModal extends Modal {
     const { contentEl } = this;
     this.root = createRoot(contentEl);
 
-    const handleConfirm = (command: InlineEditCommandSettings) => {
+    const handleConfirm = (command: CustomCommand) => {
       this.onUpdate(command);
       this.close();
     };
@@ -199,7 +199,8 @@ export class InlineEditCommandSettingsModal extends Modal {
     };
 
     this.root.render(
-      <InlineEditCommandSettingsModalContent
+      <CustomCommandSettingsModalContent
+        commands={this.commands}
         command={this.command}
         onConfirm={handleConfirm}
         onCancel={() => this.close()}

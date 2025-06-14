@@ -44,7 +44,7 @@ const tabs: TabItemType[] = TAB_IDS.map((id) => ({
   label: id.charAt(0).toUpperCase() + id.slice(1),
 }));
 
-const SettingsContent: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
+const SettingsContent: React.FC = () => {
   const { selectedTab, setSelectedTab } = useTab();
 
   return (
@@ -130,7 +130,7 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
           </h1>
         </div>
         {/* Add the key prop to force re-render */}
-        <SettingsContent key={resetKey} plugin={plugin} />
+        <SettingsContent key={resetKey} />
       </div>
     </TabProvider>
   );
