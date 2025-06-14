@@ -15,19 +15,13 @@ interface CharacterPreset {
   isActive: boolean;
 }
 
-// 在组件顶部添加
-// type OrderedTrait = {
-//   key: string;
-//   values: string[];
-// };
-
-// 1. 首先修改 DynamicTraitEditor 的 props 类型
+// 修改 DynamicTraitEditor 组件 props 类型
 interface DynamicTraitEditorProps {
   traits: CharacterTrait;
   onTraitsChange: (traits: CharacterTrait) => void;
   updateSystemPrompts: (updates: Partial<CopilotSettings["systemPrompts"]>) => void;
+  selectedValues: SelectedValues; // 新增 prop
 }
-
 export function SystemPromptsSection() {
   const settings = useSettingsValue();
   const [isExpanded, setIsExpanded] = useState(true);
@@ -149,54 +143,116 @@ export function SystemPromptsSection() {
       ...updates,
     });
   };
-  // 修改后的 handleTraitsChange
-  const handleTraitsChange = (traits: CharacterTrait) => {
-    // 初始化 checkedItems 和 selectedValues
-    const newCheckedItems: CheckedItems = {};
-    const newSelectedValues: SelectedValues = {};
+  // 修改 handleTraitsChange 函数
+  const handleTraitsChange = (newTraits: CharacterTrait) => {
+    // 修改 handleTraitsChange 函数中的相关代码
+    const currentSettings = settings.systemPrompts || {
+      checkedItems: {},
+      selectedValues: {},
+      traitOrder: [],
+    };
 
-    Object.entries(traits).forEach(([key, value]) => {
-      const values = value.split("|");
-      if (values.length > 0) {
-        newCheckedItems[key] = true;
-        newSelectedValues[key] = values[0];
+    // 保留现有的 checkedItems 和 selectedValues
+    const newCheckedItems: CheckedItems = { ...(currentSettings?.checkedItems || {}) };
+    const newSelectedValues: SelectedValues = { ...(currentSettings?.selectedValues || {}) };
+
+    // 只初始化新增特征的 checkedItems 和 selectedValues
+    Object.entries(newTraits).forEach(([key, value]) => {
+      if (!(key in newCheckedItems)) {
+        newCheckedItems[key] = true; // 默认选中新增特征
+      }
+      if (!(key in newSelectedValues)) {
+        const values = value.split("|");
+        if (values.length > 0) {
+          newSelectedValues[key] = values[0]; // 默认选择第一个值
+        }
       }
     });
 
-    // 获取当前所有key作为新的order（保持现有顺序，添加新key到末尾）
-    const currentKeys = Object.keys(traits);
+    // 移除已删除特征的 checkedItems 和 selectedValues
+    Object.keys(newCheckedItems).forEach((key) => {
+      if (!(key in newTraits)) {
+        delete newCheckedItems[key];
+      }
+    });
+    Object.keys(newSelectedValues).forEach((key) => {
+      if (!(key in newTraits)) {
+        delete newSelectedValues[key];
+      }
+    });
+
+    // 更新 order，保留现有顺序，添加新key到末尾
+    const currentKeys = Object.keys(newTraits);
     const newOrder = [
-      ...(settings.systemPrompts?.traitOrder || []).filter((key) => currentKeys.includes(key)),
-      ...currentKeys.filter((key) => !(settings.systemPrompts?.traitOrder || []).includes(key)),
+      ...(currentSettings.traitOrder || []).filter((key) => currentKeys.includes(key)),
+      ...currentKeys.filter((key) => !(currentSettings.traitOrder || []).includes(key)),
     ];
 
     updateSystemPrompts({
-      activeTraits: traits,
+      activeTraits: newTraits,
       checkedItems: newCheckedItems,
       selectedValues: newSelectedValues,
-      traitOrder: newOrder, // 新增：同步更新traitOrder
+      traitOrder: newOrder,
     });
   };
 
   return (
     <div className="space-y-4 border border-red-500">
-      {/* <SettingItem
-      type="textarea"
-      title="Default System Prompt"
-      description="Initial instructions for the AI assistant"
-      value={localPrompt}
-      onChange={(value) => {
-        setLocalPrompt(value);
-        updateSetting("userSystemPrompt", value);
-      }}
-      placeholder="You are a helpful assistant..."
-      rows={4}
-      className="w-full"
-    /> */}
+      {/* 可折叠的高级管理区域 - 仅保留人设调试板 */}
+      <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
+        <div className="flex items-center justify-between">
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="sm" className="text-muted-foreground text-base">
+              {isExpanded ? (
+                <>
+                  <ChevronUp className="mr-2 h-4 w-4" />
+                  隐藏调试板
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="mr-2 h-4 w-4" />
+                  打开调试板
+                </>
+              )}
+            </Button>
+          </CollapsibleTrigger>
+        </div>
 
+        {/* 修改 CollapsibleContent 部分的代码 */}
+        <CollapsibleContent className="space-y-2">
+          {/* 人设调试板 */}
+          <div className="border-t pt-2">
+            <h3 className="text-lg font-medium mb-2">人设调试板</h3>
+
+            {/* 修改应用按钮区域 - 将添加人设按钮移到前面 */}
+            <div className="flex gap-2 items-center mb-4">
+              {" "}
+              {/* 添加 mb-4 下边距 */}
+              <input
+                placeholder="人设名称（用于人设列表中标识系统提示词）"
+                value={presetName}
+                onChange={(e) => setPresetName(e.target.value)}
+                className="w-[300px] p-2 border rounded"
+              />
+              <Button onClick={applyCharacterSettings} disabled={!presetName.trim()}>
+                添加人设
+              </Button>
+            </div>
+            {/* 添加分隔线 */}
+            <div className="border-b border-blue-400/50 pt-2"></div>
+
+            <DynamicTraitEditor
+              traits={settings.systemPrompts?.activeTraits || {}}
+              onTraitsChange={handleTraitsChange}
+              updateSystemPrompts={updateSystemPrompts}
+              selectedValues={settings.systemPrompts?.selectedValues || {}}
+            />
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
       {/* 人设列表 - 移出可折叠区域 */}
       <div className="border-t pt-6">
-        <h3 className="text-lg font-medium mb-2">人设列表(用于配置系统提示词)</h3>
+        <h3 className="text-lg font-medium mb-2">人设列表(展示已配置的系统提示词)</h3>
         {presets.length > 0 ? (
           <div className="space-y-2">
             {" "}
@@ -234,61 +290,9 @@ export function SystemPromptsSection() {
             ))}
           </div>
         ) : (
-          <div className="text-muted-foreground">尚未创建任何人设</div>
+          <div className="text-muted-foreground">尚未创建任何人设,请在调试板进行配置。</div>
         )}
       </div>
-
-      {/* 可折叠的高级管理区域 - 仅保留人设调试板 */}
-      <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-        <div className="flex items-center justify-between">
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost" size="sm" className="text-muted-foreground">
-              {isExpanded ? (
-                <>
-                  <ChevronUp className="mr-2 h-2 w-4" />
-                  隐藏调试板
-                </>
-              ) : (
-                <>
-                  <ChevronDown className="mr-2 h-2 w-4" />
-                  打开调试板
-                </>
-              )}
-            </Button>
-          </CollapsibleTrigger>
-        </div>
-
-        {/* 修改 CollapsibleContent 部分的代码 */}
-        <CollapsibleContent className="space-y-2 mt-1">
-          {" "}
-          {/* 修改为 space-y-2 和 mt-1 */}
-          {/* 人设调试板 */}
-          <div className="border-t pt-4">
-            {" "}
-            {/* 修改 pt-6 为 pt-4 */}
-            <h3 className="text-lg font-medium mb-2">人设调试板</h3> {/* 修改 mb-4 为 mb-2 */}
-            <DynamicTraitEditor
-              traits={settings.systemPrompts?.activeTraits || {}}
-              onTraitsChange={handleTraitsChange}
-              updateSystemPrompts={updateSystemPrompts}
-            />
-            {/* 修改应用按钮区域 */}
-            <div className="flex gap-2 items-center mt-2">
-              {" "}
-              {/* 修改 mt-4 为 mt-2 */}
-              <Button onClick={applyCharacterSettings} disabled={!presetName.trim()}>
-                添加人设
-              </Button>
-              <input
-                placeholder="名称"
-                value={presetName}
-                onChange={(e) => setPresetName(e.target.value)}
-                className="flex-1 p-2 border rounded"
-              />
-            </div>
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
     </div>
   );
 }
@@ -298,16 +302,29 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
   traits,
   onTraitsChange,
   updateSystemPrompts,
+  selectedValues, // 直接使用从 props 传入的值
 }) => {
   const settings = useSettingsValue();
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
 
   const checkedItems = settings.systemPrompts?.checkedItems || {};
-  const selectedValues = settings.systemPrompts?.selectedValues || {};
   const [order, setOrder] = useState<string[]>(
     settings.systemPrompts?.traitOrder || Object.keys(traits) // 安全回退
   );
+
+  // 1. 修改状态定义
+  const [editingState, setEditingState] = useState<{
+    key: string;
+    mode: "add" | "edit" | null;
+    value: string;
+  }>({
+    key: "",
+    mode: null, // null 表示不在编辑状态
+    value: "",
+  });
+
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const currentKeys = Object.keys(traits);
@@ -319,6 +336,92 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
       ];
     });
   }, [traits]); // 依赖traits的变化
+
+  // 替换原来的 editingState 定义
+  const [activeAddButton, setActiveAddButton] = useState<string | null>(null);
+  const [activeEditButton, setActiveEditButton] = useState<string | null>(null);
+  // 2. 合并点击处理函数
+  // 修改 startEditing 函数
+  const startEditing = (mode: "add" | "edit", key: string, initialValue = "") => {
+    if (mode === "add") {
+      if (activeAddButton === key) {
+        setActiveAddButton(null); // 关闭新增文本框
+        setEditingState({ key: "", mode: null, value: "" });
+        return;
+      }
+      setActiveAddButton(key);
+      setActiveEditButton(null); // 确保编辑按钮关闭
+    } else {
+      if (activeEditButton === key) {
+        setActiveEditButton(null); // 关闭编辑文本框
+        setEditingState({ key: "", mode: null, value: "" });
+        return;
+      }
+      setActiveEditButton(key);
+      setActiveAddButton(null); // 确保新增按钮关闭
+    }
+
+    setEditingState({
+      key,
+      mode,
+      value: mode === "edit" ? selectedValues[key] || initialValue : initialValue,
+    });
+  };
+
+  // 3. 合并保存处理函数
+  const handleSave = () => {
+    if (!editingState.key || !editingState.value.trim()) return;
+
+    const { key, value, mode } = editingState;
+    const currentValues = traits[key]?.split("|") || [];
+
+    if (mode === "add") {
+      // 添加新值
+      const updatedTraits = {
+        ...traits,
+        [key]: [...currentValues, value.trim()].join("|"),
+      };
+
+      onTraitsChange(updatedTraits);
+      updateSystemPrompts({
+        selectedValues: {
+          ...selectedValues,
+          [key]: value.trim(), // 选中新添加的值
+        },
+        activeTraits: updatedTraits,
+      });
+    } else {
+      // 编辑现有值
+      const selectedValue = selectedValues[key];
+      const newValues = currentValues.map((v) => (v === selectedValue ? value.trim() : v));
+
+      const updatedTraits = {
+        ...traits,
+        [key]: newValues.join("|"),
+      };
+
+      onTraitsChange(updatedTraits);
+      updateSystemPrompts({
+        selectedValues: {
+          ...selectedValues,
+          [key]: value.trim(), // 更新选中值
+        },
+        activeTraits: updatedTraits,
+      });
+    }
+
+    // 保存后重置所有按钮状态
+    setActiveAddButton(null);
+    setActiveEditButton(null);
+    setEditingState({ key: "", mode: null, value: "" });
+  };
+
+  const handleCancel = () => {
+    setActiveAddButton(null);
+    setActiveEditButton(null);
+    setEditingState({ key: "", mode: null, value: "" });
+  };
+
   // 保持原有处理函数不变，现在可以正常使用 updateSystemPrompts
   const handleValueSelectChange = (key: string, value: string) => {
     updateSystemPrompts({
@@ -390,41 +493,39 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
     }
   };
 
-  const handleAddTrait = () => {
-    if (!newKey.trim() || !newValue.trim()) return;
+  const handleAddTrait = (key: string, value: string = "(空值)") => {
+    if (!key.trim()) return;
 
     // 更新 traits 数据
-    const currentValues = traits[newKey] ? traits[newKey].split("|") : [];
-    currentValues.push(newValue);
+    const currentValues = value.trim() === "" ? ["(空值)"] : [value.trim()];
+
     const updatedTraits = {
       ...traits,
-      [newKey]: currentValues.join("|"),
+      [key]: currentValues.join("|"),
     };
 
     // 更新order，将新key添加到末尾
-    const newOrder = [...order];
-    if (!newOrder.includes(newKey)) {
-      newOrder.push(newKey);
-    }
+    const newOrder = [...order, key];
 
-    // 更新所有状态
+    // 修改：仅更新新添加特征的 selectedValues 和 checkedItems，保留其他特征的状态
     updateSystemPrompts({
       activeTraits: updatedTraits,
       selectedValues: {
-        ...selectedValues,
-        [newKey]: newValue,
+        ...selectedValues, // 保留现有的 selectedValues
+        [key]: currentValues[0], // 只更新新特征的 selectedValue
       },
       checkedItems: {
-        ...checkedItems,
-        [newKey]: true,
+        ...checkedItems, // 保留现有的 checkedItems
+        [key]: true, // 只更新新特征的 checkedItems
       },
-      traitOrder: newOrder, // 新增：同步更新traitOrder
+      traitOrder: newOrder,
     });
 
     // 通知父组件
     onTraitsChange(updatedTraits);
     setNewKey("");
     setNewValue("");
+    setError(null); // 成功添加后清除错误
   };
 
   const moveTraitUp = (key: string) => {
@@ -443,7 +544,8 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
 
   const moveTraitDown = (key: string) => {
     const index = order.indexOf(key);
-    if (index >= order.length - 1) return;
+    // 修改条件判断，明确最后一项不应有任何操作
+    if (index === -1 || index >= order.length - 1) return;
 
     const newOrder = [...order];
     [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
@@ -478,63 +580,167 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
                 onChange={(e) => handleCheckboxChange(key, e.target.checked)}
                 className="h-4 w-4"
               />
-              <span className="font-medium">{key}:</span>
+              <span className="font-medium inline-block w-[100px] truncate" title={key}>
+                {key} :
+              </span>
+              {/* 调整后的下拉框 */}
               <select
-                value={selectedValues[key] || values[0] || ""}
+                value={selectedValues[key] || ""}
                 onChange={(e) => handleValueSelectChange(key, e.target.value)}
-                className="flex-1 p-2 border rounded"
+                className="flex-1 p-2 border rounded max-w-xs" // 使用 max-w-xs 代替固定宽度
+                style={{
+                  textOverflow: "ellipsis",
+                  maxWidth: "400px", // 增加最大宽度
+                  paddingTop: "6px", // 增加上内边距
+                  paddingBottom: "6px", // 增加下内边距
+                  lineHeight: "1.5", // 可选：增加行高以提升垂直间距
+                }}
+                title={selectedValues[key] || ""}
               >
                 {values.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
+                  <option
+                    key={v}
+                    value={v}
+                    title={v}
+                    style={{
+                      maxWidth: "400px", // 同步增加选项最大宽度
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      padding: "8px 0",
+                    }}
+                  >
+                    {/* // 显示更多字符(50) */}
+                    {v.length > 50 ? `${v.substring(0, 50)}...` : v}
                   </option>
                 ))}
               </select>
+
+              {/* 新增按钮 */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => startEditing("add", key)}
+                className={`h-8 w-8 p-0 ${
+                  activeAddButton === key
+                    ? "bg-[var(--interactive-accent)] text-[var(--text-on-accent)]"
+                    : ""
+                }`}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+
+              {/* 编辑按钮 */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => startEditing("edit", key, selectedValues[key])}
+                className={`h-8 w-8 p-0 ${
+                  activeEditButton === key
+                    ? "bg-[var(--interactive-accent)] text-[var(--text-on-accent)]"
+                    : ""
+                }`}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+              </Button>
+
               <Button variant="ghost" size="sm" onClick={() => handleRemoveValue(key)}>
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>
-            <div className="flex gap-2">
-              <input
-                placeholder={`添加新的${key}值`}
-                value={newKey === key ? newValue : ""}
-                onChange={(e) => {
-                  setNewKey(key);
-                  setNewValue(e.target.value);
-                }}
-                className="flex-1 p-2 border rounded"
-              />
-              <Button
-                onClick={() => {
-                  setNewKey(key);
-                  handleAddTrait();
-                }}
-                disabled={!newValue.trim()}
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
+            {/* 编辑区域 */}
+            {editingState.mode && editingState.key === key && (
+              <div className="ml-10 pl-2 border-l-2 border-blue-200">
+                <textarea
+                  value={editingState.value}
+                  onChange={(e) => {
+                    setEditingState((prev) => ({
+                      ...prev,
+                      value: e.target.value,
+                    }));
+                    // 自动调整高度
+                    e.target.style.height = "auto";
+                    e.target.style.height = e.target.scrollHeight + "px";
+                  }}
+                  className="w-full min-w-[300px] max-w-[650px] p-2 border rounded"
+                  style={{
+                    minHeight: "80px",
+                    resize: "none", // 禁止手动调整
+                    overflow: "hidden", // 隐藏滚动条
+                  }}
+                />
+                <div className="flex gap-2 mt-2">
+                  <Button onClick={handleSave}>保存</Button>
+                  <Button variant="secondary" onClick={handleCancel}>
+                    取消
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         );
       })}
 
       {/* 添加新特征的输入区域 */}
       <div className="border-t pt-4">
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-start">
+          {" "}
+          {/* 添加 items-start 对齐 */}
+          {/* 标签名称输入框容器 */}
+          <div className="relative w-[180px]">
+            {" "}
+            {/* 添加 relative 定位 */}
+            <input
+              placeholder="*标签名称 (如: 角色)"
+              value={newKey}
+              onChange={(e) => {
+                setNewKey(e.target.value);
+                setError(null);
+              }}
+              className={`w-full p-2 border rounded ${error ? "border-red-500" : ""}`}
+            />
+            {/* 绝对定位的错误提示 */}
+            {error && (
+              <p className="text-red-500 text-xs mt-1 absolute left-0 top-full font-medium">
+                {error}
+              </p>
+            )}
+          </div>
+          {/* 标签内容输入框 - 保持固定高度 */}
           <input
-            placeholder="特征名称 (如: 角色)"
-            value={newKey}
-            onChange={(e) => setNewKey(e.target.value)}
-            className="flex-1 p-2 border rounded"
-          />
-          <input
-            placeholder="特征值 (如: 哲学家)"
+            placeholder="标签内容 (如: 哲学家)，默认为空值"
             value={newValue}
             onChange={(e) => setNewValue(e.target.value)}
-            className="flex-1 p-2 border rounded"
+            className="flex-1 p-2 border rounded h-[32px]" /* 添加固定高度 h-[42px] */
           />
-          <Button onClick={handleAddTrait} disabled={!newKey.trim() || !newValue.trim()}>
+          {/* 新增标签按钮 - 保持固定高度 */}
+          <Button
+            variant="secondary"
+            className="h-[32px]" /* 添加固定高度与输入框对齐 */
+            onClick={() => {
+              if (traits[newKey]) {
+                setError("已有相同标签名称，请勿重复添加");
+                return;
+              }
+              const valueToAdd = newValue.trim() === "" ? "(空值)" : newValue;
+              handleAddTrait(newKey, valueToAdd);
+            }}
+            disabled={!newKey.trim()}
+          >
             <Plus className="h-4 w-4" />
+            新增标签
           </Button>
         </div>
       </div>
