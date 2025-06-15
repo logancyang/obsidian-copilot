@@ -4,7 +4,7 @@ export const getToolDescription = (tool: string): string => {
   switch (tool) {
     case "@vault":
       return "Search through your vault for relevant information";
-    case "@web":
+    case "@websearch":
       return "Search the web for information";
     case "@youtube":
       return "Get the transcript of a YouTube video. Example: @youtube <video_url>";

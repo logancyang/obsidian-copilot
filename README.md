@@ -9,7 +9,6 @@ The Ultimate AI Assistant for Your Second Brain
   <img src="https://img.shields.io/badge/dynamic/json?logo=obsidian&color=%23483699&label=downloads&query=%24%5B%22copilot%22%5D.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json&style=for-the-badge" alt="Obsidian Downloads">
 </p>
 
-
 <p align="center">
   <a href="https://www.obsidiancopilot.com/en/docs">Documentation</a> |
   <a href="https://www.youtube.com/@loganhallucinates">Youtube</a> |
@@ -23,8 +22,8 @@ The Ultimate AI Assistant for Your Second Brain
   </a>
 </p>
 
+Copilot for Obsidian is your best in‑vault AI assistant, designed to listen, act at the speed of thought, and keep you creating in flow—all within Obsidian’s integrated, tab‑free workspace.
 
-Copilot for Obsidian is your best in‑vault AI assistant, designed to listen, act at the speed of thought, and keep you creating in flow—all within Obsidian’s integrated, tab‑free workspace. 
 - **🔒 Your data is 100% yours**: Local storage, no ads, and full control of your API keys.
 - **🧠 Elevate your second brain**: Tap any OpenAI-compatible or local model to uncover insights, spark connections, and create powerful content.
 - **🌐 Instant multimedia understanding**: Drop in webpages, YouTube videos, images, PDFs, or real-time web search for quick insights and summaries.
@@ -37,13 +36,11 @@ Copilot for Obsidian is your best in‑vault AI assistant, designed to listen, a
   <img src="./images/product-UI-screenshot.png" alt="Product UI screenshot" width="800"/>
 </p>
 
-
 ## Why People Love It ❤️
 
 - *"Copilot is the missing link that turns Obsidian into a true second brain. I use it to draft investment memos with text, code, and visuals—all in one place. It’s the first tool that truly unifies how I search, process, organize, and retrieve knowledge without ever leaving Obsidian. With AI-powered search, organization, and reasoning built into my notes, it unlocks insights I’d otherwise miss. My workflow is faster, deeper, and more connected than ever—I can’t imagine working without it."* - @jasonzhangb, Investor & Research Analyst
 - *"Since discovering Copilot, my writing process has been completely transformed. Conversing with my own articles and thoughts is the most refreshing experience I’ve had in decades.”* - Mat QV, Writer
 - *"Copilot has transformed our family—not just as a productivity assistant, but as a therapist. I introduced it to my non‑technical wife, Mania, who was stressed about our daughter’s upcoming exam; within an hour, she gained clarity on her mindset and next steps, finding calm and confidence."* - @screenfluent, A Loving Husband
-
 
 ## **Get Started in 5 Minutes**
 
@@ -53,7 +50,7 @@ Copilot for Obsidian is your best in‑vault AI assistant, designed to listen, a
 
 **🔑 Set Up Your AI Model (API Key)**
 
--  To start using Copilot AI features, you'll need access to an AI model of your choice.
+- To start using Copilot AI features, you'll need access to an AI model of your choice.
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=mzMbiamzOqM" target="_blank">
@@ -62,13 +59,12 @@ Copilot for Obsidian is your best in‑vault AI assistant, designed to listen, a
   <em>Click the image to watch the video on YouTube</em>
 </p>
 
-
 **📖** **Chat Mode: Summarize Specific Notes**
 
 - 🧠 **Use When:** You want to reference specific notes or folders, generate content, or talk through ideas with Copilot like a knowledgeable thought partner.
 
 - 💭 **In `Chat` mode, ask Copilot:**
-  > *"Summarize [[Meeting Notes – March]] and create a follow-up task list based on notes in {projects}."*
+  > _"Summarize [[Meeting Notes – March]] and create a follow-up task list based on notes in {projects}."_
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=idit7nCqEs0" target="_blank">
@@ -77,15 +73,15 @@ Copilot for Obsidian is your best in‑vault AI assistant, designed to listen, a
   <em>Click the image to watch the video on YouTube</em>
 </p>
 
-
-**📖** **Vault QA Mode: Chat With Your Entire Vault** 
+**📖** **Vault QA Mode: Chat With Your Entire Vault**
 
 - 🧠 **Use When:** You want to search your vault for patterns, ideas, or facts without knowing exactly where the information is stored.
 
 - 💭 **In `Vault QA` mode, ask Copilot:**
-  > *"What insights can I gather about the benefits of journaling from all of my notes?"*
 
-- 💡 **Tip:** Replace *the benefits of journaling* with any topic mentioned in your notes to get more precise results.
+  > _"What insights can I gather about the benefits of journaling from all of my notes?"_
+
+- 💡 **Tip:** Replace _the benefits of journaling_ with any topic mentioned in your notes to get more precise results.
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=hBLMWE8WRFU" target="_blank">
@@ -94,14 +90,13 @@ Copilot for Obsidian is your best in‑vault AI assistant, designed to listen, a
   <em>Click the image to watch the video on YouTube</em>
 </p>
 
-
 **📖 Edit and Apply with One Click**
 
 - 🧠 **Use When:** You want to quickly fix grammar, spelling or wording directly in your notes—without switching tabs or manually rewriting.
 
 - 💭 **Select the text** and **edit with one RIGHT click**
 
-- 💡 **Tip:** Set up and customize your right-click menu with common actions you use often, like *"Summarize"*, *"Simplify Language"*, or *"Translate to Formal Tone"*—so you can apply them effortlessly while you write.
+- 💡 **Tip:** Set up and customize your right-click menu with common actions you use often, like _"Summarize"_, _"Simplify Language"_, or _"Translate to Formal Tone"_—so you can apply them effortlessly while you write.
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=hSmRnmEVoec" target="_blank">
@@ -110,14 +105,13 @@ Copilot for Obsidian is your best in‑vault AI assistant, designed to listen, a
   <em>Click the image to watch the video on YouTube</em>
 </p>
 
-
 **📖 Automate your workflow with the Copilot Prompt Palette**
 
 - 🧠 **Use When:** You want to speed up repetitive tasks like summarizing, rewriting, or translating without typing full prompts every time.
 
 - 💭 Type / to use Prompt Palette
 
-- 💡 **Tip:** Create shortcuts for your most-used actions—like *"Translate to Spanish"* or *"Draft a blog post outline"*—and trigger them instantly with typing / !
+- 💡 **Tip:** Create shortcuts for your most-used actions—like _"Translate to Spanish"_ or _"Draft a blog post outline"_—and trigger them instantly with typing / !
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=9YzY2OJ54wM" target="_blank">
@@ -125,7 +119,6 @@ Copilot for Obsidian is your best in‑vault AI assistant, designed to listen, a
   </a><br>
   <em>Click the image to watch the video on YouTube</em>
 </p>
-
 
 **📖 Stay in flow with the Relevant Notes**
 
@@ -142,7 +135,6 @@ Copilot for Obsidian is your best in‑vault AI assistant, designed to listen, a
   <em>Click the image to watch the video on YouTube</em>
 </p>
 
-
 ### Level Up with Copilot Plus and Beyond
 
 Copilot Plus brings powerful AI agentic capabilities, context-aware actions and seamless tool integration—built to elevate your knowledge work in Obsidian.
@@ -158,12 +150,11 @@ First, go to https://www.obsidiancopilot.com/en to subscribe to Copilot Plus. Th
   <em>Click the image to watch the video on YouTube</em>
 </p>
 
-
 ❔Community is at the heart of everything we build. Join us on Discord for updates, priority support, and a voice in shaping the best AI products for your experience.
+
 <p align="center">
   <img src="./images/discord-support.png" alt="Discord support screenshot" width="700"/>
 </p>
-
 
 **📖 Get Precision Insights From a Specific Time Window**
 
@@ -171,9 +162,9 @@ First, go to https://www.obsidiancopilot.com/en to subscribe to Copilot Plus. Th
 
 - 💭 **In Chat mode, ask Copilot:**
 
-  > *"Give me a recap of everything I captured last week."*
+  > _"Give me a recap of everything I captured last week."_
 
-- 💡 **Tip:** Try variations like *"Summarize my highlights from August 11 through August 22"* for even more insights.
+- 💡 **Tip:** Try variations like _"Summarize my highlights from August 11 through August 22"_ for even more insights.
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=sXP2sjvrqtI" target="_blank">
@@ -182,7 +173,6 @@ First, go to https://www.obsidiancopilot.com/en to subscribe to Copilot Plus. Th
   <em>Click the image to watch the video on YouTube</em>
 </p>
 
-
 **📖 One Prompt, Every Source—Instant Summaries from PDFs, Videos, and Web**
 
 - 🧠 **Use When:** You want to combine information from multiple formats—documents, videos, web pages, and images—into one concise, actionable summary.
@@ -190,17 +180,17 @@ First, go to https://www.obsidiancopilot.com/en to subscribe to Copilot Plus. Th
 - 💭 **In PLUS mode, ask Copilot:**
 
   > "Please write a short intro of Kiwi birds based on the following information I collected about this animal.
-  
+
   > @youtube Summarize [](https://www.youtube.com/watch?v=tZ2jm_UPc6c&t=417s)[https://www.youtube.com/watch?v=tZ2jm_UPc6c&t=417s](https://www.youtube.com/watch?v=ABTfc5wUT1U)
   > in a short paragraph.
-  
-  > @web where can I find Kiwi birds?
-  
+
+  > @websearch where can I find Kiwi birds?
+
   > Summarize https://www.doc.govt.nz/nature/native-animals/birds/birds-a-z/kiwi/ in 300 words.“
 
 - 🛠️ **Add PDFs and Images as Context to Enrich Your Learning**
 
-- 💡 *Tip: For large PDFs, reference specific sections to focus the AI's attention.*
+- 💡 _Tip: For large PDFs, reference specific sections to focus the AI's attention._
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=WXoOZmMSHVE" target="_blank">
@@ -208,37 +198,38 @@ First, go to https://www.obsidiancopilot.com/en to subscribe to Copilot Plus. Th
   </a><br>
   <em>Click the image to watch the video on YouTube</em>
 </p>
- 
+
 
 # **💡 Need Help?**
 
 - Check the [documentation](https://www.obsidiancopilot.com/en/docs) for setup guides, how-tos, and advanced features.
 - Watch [Youtube](https://www.youtube.com/@loganhallucinates) for walkthroughs.
 - If you're experiencing a bug or have a feature idea, please follow the steps below to help us help you faster:
-    - 🐛 Bug Report Checklist
-        - ☑️Use the [bug report template](https://github.com/logancyang/obsidian-copilot/issues/new?template=bug_report.md) when reporting an issue
-        - ☑️Enable Debug Mode in Copilot Settings → Advanced for more detailed logs
-        - ☑️Open the dev console to collect error messages:
-            - Mac: Cmd + Option + I
-            - Windows: Ctrl + Shift + I
-        - ☑️Turn off all other plugins, keeping only Copilot enabled
-        - ☑️Attach relevant console logs to your report
-        - ☑️Submit your bug report [here](https://github.com/logancyang/obsidian-copilot/issues/new?template=bug_report.md)
-    - 💡 Feature Request Checklist
-        - ☑️Use the [feature request template](https://github.com/logancyang/obsidian-copilot/issues/new?template=feature_request.md) for requesting a new feature
-        - ☑️Clearly describe the feature, why it matters, and how it would help
-        - ☑️Submit your feature request [here](https://github.com/logancyang/obsidian-copilot/issues/new?template=feature_request.md)
-     
+  - 🐛 Bug Report Checklist
+    - ☑️Use the [bug report template](https://github.com/logancyang/obsidian-copilot/issues/new?template=bug_report.md) when reporting an issue
+    - ☑️Enable Debug Mode in Copilot Settings → Advanced for more detailed logs
+    - ☑️Open the dev console to collect error messages:
+      - Mac: Cmd + Option + I
+      - Windows: Ctrl + Shift + I
+    - ☑️Turn off all other plugins, keeping only Copilot enabled
+    - ☑️Attach relevant console logs to your report
+    - ☑️Submit your bug report [here](https://github.com/logancyang/obsidian-copilot/issues/new?template=bug_report.md)
+  - 💡 Feature Request Checklist
+    - ☑️Use the [feature request template](https://github.com/logancyang/obsidian-copilot/issues/new?template=feature_request.md) for requesting a new feature
+    - ☑️Clearly describe the feature, why it matters, and how it would help
+    - ☑️Submit your feature request [here](https://github.com/logancyang/obsidian-copilot/issues/new?template=feature_request.md)
 
 # **🙋‍♂️ FAQ**
+
 <details>
   <summary><strong>Why isn’t Vault search finding my notes?</strong></summary>
 
-  If you're using the Vault QA mode (or the tool <code>@vault</code> in Plus), try the following:
-  - Ensure you have a working embedding model from your AI model's provider (e.g. OpenAI). Watch this video: [AI Model Setup (API Key)](https://www.youtube.com/watch?v=mzMbiamzOqM)
-  - Ensure your Copilot indexing is up-to-date. Watch this video: [Vault Mode](https://www.youtube.com/watch?v=hBLMWE8WRFU)
-  - If issues persist, run <strong>Force Re-Index</strong> or use <strong>List Indexed Files</strong> from the Command Palette to inspect what's included in the index.
-  - ⚠️ <strong>Don’t switch embedding models after indexing</strong>—it can break the results.
+If you're using the Vault QA mode (or the tool <code>@vault</code> in Plus), try the following:
+
+- Ensure you have a working embedding model from your AI model's provider (e.g. OpenAI). Watch this video: [AI Model Setup (API Key)](https://www.youtube.com/watch?v=mzMbiamzOqM)
+- Ensure your Copilot indexing is up-to-date. Watch this video: [Vault Mode](https://www.youtube.com/watch?v=hBLMWE8WRFU)
+- If issues persist, run <strong>Force Re-Index</strong> or use <strong>List Indexed Files</strong> from the Command Palette to inspect what's included in the index.
+- ⚠️ <strong>Don’t switch embedding models after indexing</strong>—it can break the results.
 </details>
 
 <details>
@@ -252,50 +243,49 @@ Most likely this is happening because you haven’t configured billing with your
 - 📊 Check your usage dashboard for any quota or limit warnings
 
 If you’re using a different provider, please refer to their documentation and billing policies for the equivalent steps.
-</details>
 
+</details>
 
 <details>
   <summary><strong>Why am I getting a token limit error?</strong></summary>
 
-  Please refer to your model provider’s documentation for the context window size.
+Please refer to your model provider’s documentation for the context window size.
 
-  ⚠️ If you set a large <strong>max token limit</strong> in your Copilot settings, you may encounter this error.  
-  - <strong>Max tokens</strong> refers to <em>completion tokens</em>, not input tokens.  
-  - A higher output token limit means less room for input!
+⚠️ If you set a large <strong>max token limit</strong> in your Copilot settings, you may encounter this error.
 
-  🧠 Behind-the-scenes prompts for Copilot commands also consume tokens, so:
-  - Keep your message length short
-  - Set a reasonable max token value to avoid hitting the cap
+- <strong>Max tokens</strong> refers to <em>completion tokens</em>, not input tokens.
+- A higher output token limit means less room for input!
 
-  💡 For QA with unlimited context, switch to the <strong>Vault QA</strong> mode in the dropdown (Copilot v2.1.0+ required).
+🧠 Behind-the-scenes prompts for Copilot commands also consume tokens, so:
+
+- Keep your message length short
+- Set a reasonable max token value to avoid hitting the cap
+
+💡 For QA with unlimited context, switch to the <strong>Vault QA</strong> mode in the dropdown (Copilot v2.1.0+ required).
+
 </details>
-
-
-
 
 # **💎 Choose the Copilot Plan That’s Right for You**
 
-| **Feature** | **Free Plan ✅** | **Plus Plan 💎** | **Believer Plan 🛡️** |
-| --- | --- | --- | --- |
-| No credit card or sign-up required | ✅  | ❌  | ❌  |
-| All open-source features | ✅  | ✅  | ✅  |
-| Bring your own API key | ✅  | ✅  | ✅  |
-| Best-in-class AI chat in Obsidian | ✅  | ✅  | ✅  |
-| Local data store for Vault QA | ✅  | ✅  | ✅  |
-| Support | ✅ Essential | ✅ Pro | ✅  Elite |
-| AI agent capabilities | ❌ | ✅  | ✅  |
-| Image and PDF support | ❌  | ✅  | ✅   |
-| Enhanced chat UI (context menu) | ❌  | ✅  | ✅   |
-| State-of-the-art embedding models included | ❌  | ✅  | ✅   |
-| Exclusive @AI tools (e.g., web, YouTube) | ❌  | ✅  | ✅   |
-| Exclusive chat model included in plan | ❌  | ✅  | ✅  |
-| Access to exclusive Discord channel | ❌  | ✅  | ✅  |
-| Lifetime access | ❌  | ❌ | ✅   |
-| Priority access to new features | ❌  | ❌ | ✅  |
-| Prioritized feature requests | ❌  | ❌ | ✅   |
-| Exclusive access to next-gen chat & embedding models (coming soon) | ❌  | ❌  | ✅   |
-
+| **Feature**                                                        | **Free Plan ✅** | **Plus Plan 💎** | **Believer Plan 🛡️** |
+| ------------------------------------------------------------------ | ---------------- | ---------------- | -------------------- |
+| No credit card or sign-up required                                 | ✅               | ❌               | ❌                   |
+| All open-source features                                           | ✅               | ✅               | ✅                   |
+| Bring your own API key                                             | ✅               | ✅               | ✅                   |
+| Best-in-class AI chat in Obsidian                                  | ✅               | ✅               | ✅                   |
+| Local data store for Vault QA                                      | ✅               | ✅               | ✅                   |
+| Support                                                            | ✅ Essential     | ✅ Pro           | ✅ Elite             |
+| AI agent capabilities                                              | ❌               | ✅               | ✅                   |
+| Image and PDF support                                              | ❌               | ✅               | ✅                   |
+| Enhanced chat UI (context menu)                                    | ❌               | ✅               | ✅                   |
+| State-of-the-art embedding models included                         | ❌               | ✅               | ✅                   |
+| Exclusive @AI tools (e.g., web, YouTube)                           | ❌               | ✅               | ✅                   |
+| Exclusive chat model included in plan                              | ❌               | ✅               | ✅                   |
+| Access to exclusive Discord channel                                | ❌               | ✅               | ✅                   |
+| Lifetime access                                                    | ❌               | ❌               | ✅                   |
+| Priority access to new features                                    | ❌               | ❌               | ✅                   |
+| Prioritized feature requests                                       | ❌               | ❌               | ✅                   |
+| Exclusive access to next-gen chat & embedding models (coming soon) | ❌               | ❌               | ✅                   |
 
 ## **🙏 Thank You**
 
@@ -304,8 +294,6 @@ If you share the vision of building the most powerful AI agent for our second br
 <p align="center">
   <img src="https://camo.githubusercontent.com/7b8f7343bfc6e3c65c7901846637b603fd812f1a5f768d8b0572558bde859eb9/68747470733a2f2f63646e2e6275796d6561636f666665652e636f6d2f627574746f6e732f76322f64656661756c742d79656c6c6f772e706e67" alt="BuyMeACoffee" width="200">
 </p>
-
-
 
 **Acknowledgments**
 
