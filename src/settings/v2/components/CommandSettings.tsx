@@ -29,7 +29,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
-import { getSettings } from "@/settings/model";
+import { useSettingsValue } from "@/settings/model";
 import { updateSetting } from "@/settings/model";
 import { PromptSortStrategy } from "@/types";
 import {
@@ -50,6 +50,7 @@ import { CustomCommand } from "@/commands/type";
 import { loadAllCustomCommands, validateCommandName } from "@/commands/customCommandUtils";
 import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
 import { SettingItem } from "@/components/ui/setting-item";
+import { CustomCommandManager } from "@/commands/customCommandManager";
 
 const SortableTableRow: React.FC<{
   command: CustomCommand;
@@ -188,15 +189,14 @@ const SortableTableRow: React.FC<{
 };
 
 export const CommandSettings: React.FC = () => {
-  const { commands, updateCommand, updateCommands, addCommand, deleteCommand } =
-    useCustomCommands();
+  const commands = useCustomCommands();
 
   // Add Command popover state
   const [isAddCommandOpen, setIsAddCommandOpen] = React.useState(false);
   const [newCommandName, setNewCommandName] = React.useState("");
   const [isCreating, setIsCreating] = React.useState(false);
 
-  const settings = getSettings();
+  const settings = useSettingsValue();
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -216,7 +216,7 @@ export const CommandSettings: React.FC = () => {
 
     try {
       setIsCreating(true);
-      await addCommand(newCommandName.trim());
+      await CustomCommandManager.getInstance().createCommand(newCommandName.trim(), "");
 
       setNewCommandName("");
       setIsAddCommandOpen(false);
@@ -231,12 +231,12 @@ export const CommandSettings: React.FC = () => {
   };
 
   const handleUpdate = async (newCommand: CustomCommand, prevCommandTitle: string) => {
-    await updateCommand(newCommand, prevCommandTitle);
+    await CustomCommandManager.getInstance().updateCommand(newCommand, prevCommandTitle);
   };
 
   const handleRemove = async (command: CustomCommand) => {
     try {
-      await deleteCommand(command);
+      await CustomCommandManager.getInstance().deleteCommand(command);
 
       new Notice(`Command "${command.title}" deleted successfully!`);
     } catch (error) {
@@ -269,7 +269,7 @@ export const CommandSettings: React.FC = () => {
       newCommands[i] = { ...newCommands[i], order: i * 10 };
     }
 
-    await updateCommands(newCommands);
+    await CustomCommandManager.getInstance().updateCommands(newCommands);
   };
 
   const container = useContainerContext();
@@ -315,6 +315,7 @@ export const CommandSettings: React.FC = () => {
           options={[
             { label: "Recency", value: PromptSortStrategy.TIMESTAMP },
             { label: "Alphabetical", value: PromptSortStrategy.ALPHABETICAL },
+            { label: "Manual", value: PromptSortStrategy.MANUAL },
           ]}
         />
 

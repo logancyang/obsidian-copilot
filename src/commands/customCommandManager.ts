@@ -1,5 +1,4 @@
-import { createPromptUsageStrategy, PromptUsageStrategy } from "@/promptUsageStrategy";
-import { getSettings, subscribeToSettingsChange } from "@/settings/model";
+import { getSettings } from "@/settings/model";
 import {
   extractNoteFiles,
   getFileContent,
@@ -16,6 +15,7 @@ import { CustomError } from "@/error";
 import {
   COPILOT_COMMAND_CONTEXT_MENU_ENABLED,
   COPILOT_COMMAND_CONTEXT_MENU_ORDER,
+  COPILOT_COMMAND_LAST_USED,
   COPILOT_COMMAND_MODEL_KEY,
   COPILOT_COMMAND_SLASH_ENABLED,
 } from "@/commands/constants";
@@ -215,25 +215,12 @@ export async function processPrompt(
 
 export class CustomCommandManager {
   private static instance: CustomCommandManager;
-  private usageStrategy: PromptUsageStrategy;
-
-  private constructor() {
-    this.usageStrategy = createPromptUsageStrategy();
-
-    subscribeToSettingsChange(() => {
-      this.usageStrategy = createPromptUsageStrategy();
-    });
-  }
 
   static getInstance(): CustomCommandManager {
     if (!CustomCommandManager.instance) {
       CustomCommandManager.instance = new CustomCommandManager();
     }
     return CustomCommandManager.instance;
-  }
-
-  recordPromptUsage(title: string) {
-    this.usageStrategy.recordUsage(title);
   }
 
   async createCommand(title: string, content: string): Promise<void> {
@@ -247,7 +234,18 @@ export class CustomCommandManager {
       await app.vault.createFolder(folderPath);
     }
 
-    await app.vault.create(filePath, content);
+    const file = await app.vault.create(filePath, content);
+    await app.fileManager.processFrontMatter(file, (frontmatter) => {
+      frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = false;
+      frontmatter[COPILOT_COMMAND_SLASH_ENABLED] = false;
+      frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] = Number.MAX_SAFE_INTEGER;
+      frontmatter[COPILOT_COMMAND_MODEL_KEY] = "";
+      frontmatter[COPILOT_COMMAND_LAST_USED] = 0;
+    });
+  }
+
+  async recordUsage(command: CustomCommand) {
+    this.updateCommand({ ...command, lastUsedMs: Date.now() }, command.title);
   }
 
   async updateCommand(command: CustomCommand, prevCommandTitle: string, skipStoreUpdate = false) {
@@ -285,6 +283,7 @@ export class CustomCommandManager {
         frontmatter[COPILOT_COMMAND_SLASH_ENABLED] = command.showInSlashMenu;
         frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] = command.order;
         frontmatter[COPILOT_COMMAND_MODEL_KEY] = command.modelKey;
+        frontmatter[COPILOT_COMMAND_LAST_USED] = command.lastUsedMs;
       });
     }
   }
@@ -298,7 +297,6 @@ export class CustomCommandManager {
     deleteCommandFromStore(command.title);
     const file = app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
     if (file instanceof TFile) {
-      this.usageStrategy.removeUnusedPrompts([command.title]);
       await app.vault.delete(file);
     }
   }

@@ -28,4 +28,9 @@ export interface CustomCommand {
    * Model key to use for the custom command
    */
   modelKey: string;
+
+  /**
+   * Timestamp of the last time the custom command was used
+   */
+  lastUsedMs: number;
 }

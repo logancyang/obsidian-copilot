@@ -1,6 +1,7 @@
 import {
   COPILOT_COMMAND_CONTEXT_MENU_ENABLED,
   COPILOT_COMMAND_CONTEXT_MENU_ORDER,
+  COPILOT_COMMAND_LAST_USED,
   COPILOT_COMMAND_MODEL_KEY,
   COPILOT_COMMAND_SLASH_ENABLED,
   SELECTED_TEXT_PLACEHOLDER as LEGACY_SELECTED_TEXT_PLACEHOLDER,
@@ -10,6 +11,7 @@ import { processPrompt } from "@/commands/customCommandManager";
 import { normalizePath, TAbstractFile, TFile } from "obsidian";
 import { getSettings } from "@/settings/model";
 import { customCommandsAtom, customCommandsStore } from "./state";
+import { PromptSortStrategy } from "@/types";
 
 export function validateCommandName(
   name: string,
@@ -87,6 +89,7 @@ export async function parseCustomCommandFile(file: TFile): Promise<CustomCommand
   const metadata = app.metadataCache.getFileCache(file);
   const showInContextMenu = metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] ?? false;
   const slashCommandEnabled = metadata?.frontmatter?.[COPILOT_COMMAND_SLASH_ENABLED] ?? false;
+  const lastUsedMs = metadata?.frontmatter?.[COPILOT_COMMAND_LAST_USED] ?? 0;
   const order =
     metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ORDER] ?? Number.MAX_SAFE_INTEGER;
   const modelKey = metadata?.frontmatter?.[COPILOT_COMMAND_MODEL_KEY];
@@ -98,6 +101,7 @@ export async function parseCustomCommandFile(file: TFile): Promise<CustomCommand
     showInContextMenu,
     showInSlashMenu: slashCommandEnabled,
     order: typeof order === "number" ? order : Number.MAX_SAFE_INTEGER,
+    lastUsedMs,
   };
 }
 
@@ -117,9 +121,34 @@ export function sortCommandsByOrder(commands: CustomCommand[]): CustomCommand[] 
   });
 }
 
-export function sortCommandsByUsage(commands: CustomCommand[]): CustomCommand[] {
-  // Not implemented yet, return the input as is
-  return commands;
+export function sortCommandsByRecency(commands: CustomCommand[]): CustomCommand[] {
+  return [...commands].sort((a, b) => {
+    if (a.lastUsedMs === b.lastUsedMs) {
+      return a.title.localeCompare(b.title);
+    }
+    return b.lastUsedMs - a.lastUsedMs;
+  });
+}
+
+export function sortCommandsByAlphabetical(commands: CustomCommand[]): CustomCommand[] {
+  return [...commands].sort((a, b) => a.title.localeCompare(b.title));
+}
+
+/**
+ * Sort prompts of the slash commands based on the sort strategy.
+ */
+export function sortSlashCommands(commands: CustomCommand[]): CustomCommand[] {
+  const sortStrategy = getSettings().promptSortStrategy;
+  switch (sortStrategy) {
+    case PromptSortStrategy.TIMESTAMP:
+      return sortCommandsByRecency(commands);
+    case PromptSortStrategy.ALPHABETICAL:
+      return sortCommandsByAlphabetical(commands);
+    case PromptSortStrategy.MANUAL:
+      return sortCommandsByOrder(commands);
+    default:
+      return commands;
+  }
 }
 
 /**
@@ -154,8 +183,8 @@ export async function processCommandPrompt(
   // Also, selected text is required for custom commands. If neither `{}` nor
   // `{copilot-selection}` is found, append the selected text to the prompt.
   const index = processedPrompt.indexOf(LEGACY_SELECTED_TEXT_PLACEHOLDER);
-  if (index === -1) {
-    return processedPrompt + "\n\n" + selectedText;
+  if (index === -1 && selectedText.trim()) {
+    return processedPrompt + "\n\n<selectedText>" + selectedText + "</selectedText>";
   }
   return (
     processedPrompt.slice(0, index) +

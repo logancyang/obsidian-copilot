@@ -8,11 +8,8 @@ import { Editor, Plugin, TFile, Vault } from "obsidian";
 import { CustomCommandChatModal } from "@/commands/CustomCommandChatModal";
 import debounce from "lodash.debounce";
 import { CustomCommand } from "@/commands/type";
-import {
-  createCommandInStore,
-  deleteCommandFromStore,
-  updateCommandInStore,
-} from "@/commands/state";
+import { deleteCommandFromStore, updateCommandInStore } from "@/commands/state";
+import { CustomCommandManager } from "@/commands/customCommandManager";
 
 /** This manager is used to register custom commands as obsidian commands */
 export class CustomCommandRegister {
@@ -91,7 +88,6 @@ export class CustomCommandRegister {
     if (isCustomCommandFile(file)) {
       const customCommand = await parseCustomCommandFile(file);
       await this.registerCommand(customCommand);
-      createCommandInStore(customCommand.title);
       updateCommandInStore(customCommand, customCommand.title);
     }
   };
@@ -133,6 +129,7 @@ export class CustomCommandRegister {
           selectedText: editor.getSelection(),
           command: customCommand,
         }).open();
+        CustomCommandManager.getInstance().recordUsage(customCommand);
       },
     });
     this.registeredCommandIds.add(commandId);

@@ -47,8 +47,8 @@ import React, {
 } from "react";
 import { useDropzone } from "react-dropzone";
 import ContextControl from "./ContextControl";
-import { useAtomValue } from "jotai";
-import { customCommandsAtom, customCommandsStore } from "@/commands/state";
+import { useCustomCommands } from "@/commands/state";
+import { sortSlashCommands } from "@/commands/customCommandUtils";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -115,7 +115,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       "If you have many files in context, this can take a while...",
     ];
 
-    const commands = useAtomValue(customCommandsAtom, { store: customCommandsStore });
+    const commands = useCustomCommands();
 
     useImperativeHandle(ref, () => ({
       focus: () => {
@@ -255,14 +255,16 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     };
 
     const showCustomPromptModal = () => {
-      const customPromptProcessor = CustomCommandManager.getInstance();
-      const slashCommands = commands.filter((command) => command.showInSlashMenu);
+      const commandManager = CustomCommandManager.getInstance();
+      const slashCommands = sortSlashCommands(
+        commands.filter((command) => command.showInSlashMenu)
+      );
       const commandTitles = slashCommands.map((command) => command.title);
 
       const modal = new ListPromptModal(app, commandTitles, (commandTitle: string) => {
         const selectedCommand = slashCommands.find((command) => command.title === commandTitle);
         if (selectedCommand) {
-          customPromptProcessor.recordPromptUsage(selectedCommand.title);
+          commandManager.recordUsage(selectedCommand);
           setInputMessage(selectedCommand.content);
         }
       });
