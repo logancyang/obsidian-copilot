@@ -25,13 +25,11 @@ function CustomCommandSettingsModalContent({
   command: initialCommand,
   onConfirm,
   onCancel,
-  onRemove,
 }: {
   commands: CustomCommand[];
   command: CustomCommand;
   onConfirm: (command: CustomCommand) => void;
   onCancel: () => void;
-  onRemove?: () => void;
 }) {
   const settings = useSettingsValue();
   const activeModels = settings.activeModels
@@ -57,10 +55,9 @@ function CustomCommandSettingsModalContent({
   const handleSubmit = () => {
     const newErrors: FormErrors = {};
 
-    try {
-      validateCommandName(command.title, commands, initialCommand.title);
-    } catch (e) {
-      newErrors.title = e.message;
+    const nameError = validateCommandName(command.title, commands, initialCommand.title);
+    if (nameError) {
+      newErrors.title = nameError;
     }
 
     if (!command.content.trim()) {
@@ -154,6 +151,15 @@ function CustomCommandSettingsModalContent({
           onCheckedChange={(checked) => handleUpdate("showInContextMenu", checked)}
         />
         <Label htmlFor="showInContextMenu">Show in context menu</Label>
+      </div>
+
+      <div className="tw-flex tw-items-center tw-gap-2">
+        <Checkbox
+          id="showInSlashMenu"
+          checked={command.showInSlashMenu}
+          onCheckedChange={(checked) => handleUpdate("showInSlashMenu", checked)}
+        />
+        <Label htmlFor="showInSlashMenu">Show in slash menu</Label>
       </div>
 
       <div className="tw-flex tw-justify-end tw-gap-2">

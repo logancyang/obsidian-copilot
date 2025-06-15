@@ -256,7 +256,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
     const showCustomPromptModal = () => {
       const customPromptProcessor = CustomCommandManager.getInstance();
-      const slashCommands = commands.filter((command) => command.slashCommandEnabled);
+      const slashCommands = commands.filter((command) => command.showInSlashMenu);
       const commandTitles = slashCommands.map((command) => command.title);
 
       const modal = new ListPromptModal(app, commandTitles, (commandTitle: string) => {

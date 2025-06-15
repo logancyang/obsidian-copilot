@@ -19,6 +19,13 @@ import {
   COPILOT_COMMAND_MODEL_KEY,
   COPILOT_COMMAND_SLASH_ENABLED,
 } from "@/commands/constants";
+import {
+  createCommandInStore,
+  customCommandsAtom,
+  customCommandsStore,
+  deleteCommandFromStore,
+  updateCommandInStore,
+} from "./state";
 
 /**
  * Find all variables between {} in a custom command prompt.
@@ -229,46 +236,8 @@ export class CustomCommandManager {
     this.usageStrategy.recordUsage(title);
   }
 
-  // async getAllPrompts(): Promise<CustomPrompt[]> {
-  //   const folder = this.customPromptsFolder;
-  //   const files = this.vault
-  //     .getFiles()
-  //     .filter((file) => file.path.startsWith(folder) && file.extension === "md");
-
-  //   const prompts: CustomPrompt[] = [];
-  //   for (const file of files) {
-  //     const content = await this.vault.read(file);
-  //     const metadata = app.metadataCache.getFileCache(file);
-  //     const showInContextMenu =
-  //       metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] ?? false;
-  //     const slashCommandEnabled = metadata?.frontmatter?.[COPILOT_COMMAND_SLASH_ENABLED] ?? false;
-  //     const order =
-  //       metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ORDER] ?? Number.MAX_SAFE_INTEGER;
-
-  //     prompts.push({
-  //       title: file.basename,
-  //       content,
-  //       showInContextMenu,
-  //       slashCommandEnabled,
-  //       filePath: file.path,
-  //       order: typeof order === "number" ? order : Number.MAX_SAFE_INTEGER,
-  //     });
-  //   }
-
-  //   // Clean up promptUsageTimestamps
-  //   this.usageStrategy.removeUnusedPrompts(prompts.map((prompt) => prompt.title));
-
-  //   // return prompts.sort((a, b) => this.usageStrategy.compare(b.title, a.title) || 0);
-  //   // Sort by order first, then alphabetically by title for items with same order
-  //   return prompts.sort((a, b) => {
-  //     if (a.order !== b.order) {
-  //       return a.order - b.order;
-  //     }
-  //     return a.title.localeCompare(b.title);
-  //   });
-  // }
-
   async createCommand(title: string, content: string): Promise<void> {
+    createCommandInStore(title);
     const folderPath = getCustomCommandsFolder();
     const filePath = getCommandFilePath(title);
 
@@ -281,10 +250,14 @@ export class CustomCommandManager {
     await app.vault.create(filePath, content);
   }
 
-  async updateCommand(command: CustomCommand, prevCommand?: CustomCommand) {
+  async updateCommand(command: CustomCommand, prevCommandTitle: string, skipStoreUpdate = false) {
+    if (!skipStoreUpdate) {
+      updateCommandInStore(command, prevCommandTitle);
+    }
+
     let commandFile = app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
     // Verify whether the title has changed to decide whether to rename the file
-    if (prevCommand && command.title !== prevCommand.title) {
+    if (command.title !== prevCommandTitle) {
       const newFilePath = getCommandFilePath(command.title);
       const newFileExists = app.vault.getAbstractFileByPath(newFilePath);
       if (newFileExists) {
@@ -292,19 +265,24 @@ export class CustomCommandManager {
           "Error saving custom prompt. Please check if the title already exists."
         );
       }
-      const prevFilePath = getCommandFilePath(prevCommand.title);
+      const prevFilePath = getCommandFilePath(prevCommandTitle);
       const prevCommandFile = app.vault.getAbstractFileByPath(prevFilePath);
       if (prevCommandFile instanceof TFile) {
-        await app.vault.rename(prevCommandFile, newFilePath); // Rename the file
+        await app.vault.rename(prevCommandFile, newFilePath);
         commandFile = prevCommandFile;
       }
+    }
+
+    if (!commandFile) {
+      await this.createCommand(command.title, command.content);
+      commandFile = app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
     }
 
     if (commandFile instanceof TFile) {
       await app.vault.modify(commandFile, command.content);
       await app.fileManager.processFrontMatter(commandFile, (frontmatter) => {
         frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = command.showInContextMenu;
-        frontmatter[COPILOT_COMMAND_SLASH_ENABLED] = command.slashCommandEnabled;
+        frontmatter[COPILOT_COMMAND_SLASH_ENABLED] = command.showInSlashMenu;
         frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] = command.order;
         frontmatter[COPILOT_COMMAND_MODEL_KEY] = command.modelKey;
       });
@@ -312,10 +290,12 @@ export class CustomCommandManager {
   }
 
   async updateCommands(commands: CustomCommand[]) {
-    await Promise.all(commands.map((command) => this.updateCommand(command)));
+    customCommandsStore.set(customCommandsAtom, commands);
+    await Promise.all(commands.map((command) => this.updateCommand(command, command.title, true)));
   }
 
   async deleteCommand(command: CustomCommand) {
+    deleteCommandFromStore(command.title);
     const file = app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
     if (file instanceof TFile) {
       this.usageStrategy.removeUnusedPrompts([command.title]);
@@ -327,11 +307,10 @@ export class CustomCommandManager {
    * Process a custom prompt by replacing variables, adding note contents,
    * and tracking which files were included.
    *
-   * @param {string} customPrompt - the custom prompt template
-   * @param {string} selectedText - the text selected by the user
-   * @param {TFile} [activeNote] - the currently active note (optional)
-   * @return {Promise<ProcessedPromptResult>} An object containing the processed prompt string
-   *                                         and an array of TFile objects included.
+   * @param customPrompt - the custom prompt template
+   * @param selectedText - the text selected by the user
+   * @param activeNote - the currently active note (optional)
+   * @return An object containing the processed prompt string and an array of TFile objects included.
    */
   async processCustomPrompt(
     customPrompt: string,

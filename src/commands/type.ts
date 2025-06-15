@@ -15,9 +15,9 @@ export interface CustomCommand {
   showInContextMenu: boolean;
 
   /**
-   * Whether the custom command is enabled as a slash command
+   * Whether the custom command is enabled as a slash menu item
    */
-  slashCommandEnabled: boolean;
+  showInSlashMenu: boolean;
 
   /**
    * Order for display in context menu and settings

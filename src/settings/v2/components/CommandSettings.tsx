@@ -51,7 +51,7 @@ import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModa
 const SortableTableRow: React.FC<{
   command: CustomCommand;
   commands: CustomCommand[];
-  onUpdate: (prevCommand: CustomCommand, newCommand: CustomCommand) => void;
+  onUpdate: (newCommand: CustomCommand, prevCommandTitle: string) => void;
   onRemove: (command: CustomCommand) => void;
 }> = ({ command, commands, onUpdate, onRemove }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -110,7 +110,7 @@ const SortableTableRow: React.FC<{
                 ...command,
                 showInContextMenu: checked === true,
               },
-              command
+              command.title
             );
           }}
           className="tw-mx-auto"
@@ -118,14 +118,14 @@ const SortableTableRow: React.FC<{
       </TableCell>
       <TableCell className="tw-text-center">
         <Checkbox
-          checked={command.slashCommandEnabled}
+          checked={command.showInSlashMenu}
           onCheckedChange={(checked) =>
             onUpdate(
               {
                 ...command,
-                slashCommandEnabled: checked === true,
+                showInSlashMenu: checked === true,
               },
-              command
+              command.title
             )
           }
           className="tw-mx-auto"
@@ -142,7 +142,7 @@ const SortableTableRow: React.FC<{
                 commands,
                 command,
                 async (updatedCommand) => {
-                  await onUpdate(updatedCommand, command);
+                  await onUpdate(updatedCommand, command.title);
                 }
               );
               modal.open();
@@ -227,8 +227,8 @@ export const CommandSettings: React.FC = () => {
     }
   };
 
-  const handleUpdate = async (newCommand: CustomCommand, prevCommand: CustomCommand) => {
-    await updateCommand(newCommand, prevCommand);
+  const handleUpdate = async (newCommand: CustomCommand, prevCommandTitle: string) => {
+    await updateCommand(newCommand, prevCommandTitle);
   };
 
   const handleRemove = async (command: CustomCommand) => {
