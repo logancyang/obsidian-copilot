@@ -7,7 +7,7 @@ export const EMPTY_COMMAND: CustomCommand = {
   title: "",
   content: "",
   showInContextMenu: false,
-  slashCommandEnabled: false,
+  showInSlashMenu: false,
   order: Number.MAX_SAFE_INTEGER,
   modelKey: "",
 };

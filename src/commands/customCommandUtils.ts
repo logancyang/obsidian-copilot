@@ -23,9 +23,9 @@ export function validateCommandName(
   }
 
   // eslint-disable-next-line no-control-regex
-  const invalidChars = /[<>:"/\\|?*\x00-\x1F]/g;
+  const invalidChars = /[#<>:"/\\|?*[\]^\x00-\x1F]/g;
   if (invalidChars.test(trimmedName)) {
-    return 'Command name contains invalid characters. Avoid using: < > : " / \\ | ? *';
+    return 'Command name contains invalid characters. Avoid using: < > : " / \\ | ? * [ ] ^';
   }
 
   if (commands.some((cmd) => cmd.title.toLowerCase() === trimmedName.toLowerCase())) {
@@ -66,11 +66,24 @@ export function isCustomCommandFile(file: TAbstractFile): boolean {
 }
 
 /**
+ * Utility to strip YAML frontmatter from markdown content.
+ */
+function stripFrontmatter(content: string): string {
+  if (content.startsWith("---")) {
+    const end = content.indexOf("---", 3);
+    if (end !== -1) {
+      return content.slice(end + 3).trimStart();
+    }
+  }
+  return content;
+}
+
+/**
  * Parse a TFile as a CustomCommand by reading its content and extracting frontmatter.
  */
 export async function parseCustomCommandFile(file: TFile): Promise<CustomCommand> {
-  // TODO(zero): Remove the frontmatter
-  const content = await app.vault.read(file);
+  const rawContent = await app.vault.read(file);
+  const content = stripFrontmatter(rawContent);
   const metadata = app.metadataCache.getFileCache(file);
   const showInContextMenu = metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] ?? false;
   const slashCommandEnabled = metadata?.frontmatter?.[COPILOT_COMMAND_SLASH_ENABLED] ?? false;
@@ -83,15 +96,16 @@ export async function parseCustomCommandFile(file: TFile): Promise<CustomCommand
     modelKey,
     content,
     showInContextMenu,
-    slashCommandEnabled,
+    showInSlashMenu: slashCommandEnabled,
     order: typeof order === "number" ? order : Number.MAX_SAFE_INTEGER,
   };
 }
 
-export async function loadAllCustomCommands(): Promise<void> {
+export async function loadAllCustomCommands(): Promise<CustomCommand[]> {
   const files = app.vault.getFiles().filter((file) => isCustomCommandFile(file));
   const commands: CustomCommand[] = await Promise.all(files.map(parseCustomCommandFile));
   customCommandsStore.set(customCommandsAtom, commands);
+  return commands;
 }
 
 export function sortCommandsByOrder(commands: CustomCommand[]): CustomCommand[] {
@@ -104,12 +118,8 @@ export function sortCommandsByOrder(commands: CustomCommand[]): CustomCommand[] 
 }
 
 export function sortCommandsByUsage(commands: CustomCommand[]): CustomCommand[] {
-  // return commands.sort((a, b) => {
-  //   if (a.usage === b.usage) {
-  //     return a.title.localeCompare(b.title);
-  //   }
-  //   return b.usage - a.usage;
-  // });
+  // Not implemented yet, return the input as is
+  return commands;
 }
 
 /**

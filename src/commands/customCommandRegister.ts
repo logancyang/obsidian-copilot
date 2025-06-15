@@ -7,6 +7,12 @@ import {
 import { Editor, Plugin, TFile, Vault } from "obsidian";
 import { CustomCommandChatModal } from "@/commands/CustomCommandChatModal";
 import debounce from "lodash.debounce";
+import { CustomCommand } from "@/commands/type";
+import {
+  createCommandInStore,
+  deleteCommandFromStore,
+  updateCommandInStore,
+} from "@/commands/state";
 
 /** This manager is used to register custom commands as obsidian commands */
 export class CustomCommandRegister {
@@ -35,7 +41,12 @@ export class CustomCommandRegister {
     this.registeredCommandIds.clear();
 
     const files = this.vault.getFiles().filter((file) => isCustomCommandFile(file));
-    await Promise.all(files.map((file) => this.registerCommandForFile(file)));
+    await Promise.all(
+      files.map(async (file) => {
+        const customCommand = await parseCustomCommandFile(file);
+        await this.registerCommand(customCommand);
+      })
+    );
   }
 
   /**
@@ -62,46 +73,56 @@ export class CustomCommandRegister {
   private handleFileModify = debounce(
     async (file: TFile) => {
       if (isCustomCommandFile(file)) {
-        await this.registerCommandForFile(file);
+        const customCommand = await parseCustomCommandFile(file);
+        await this.registerCommand(customCommand);
+        updateCommandInStore(customCommand, customCommand.title);
       }
     },
-    5000,
+    3000,
     {
-      leading: true,
+      // We cannot use leading: true because frontmatter is not updated
+      // immediately when modify event is triggered.
+      leading: false,
       trailing: true,
     }
   );
 
   private handleFileCreation = async (file: TFile) => {
     if (isCustomCommandFile(file)) {
-      await this.registerCommandForFile(file);
+      const customCommand = await parseCustomCommandFile(file);
+      await this.registerCommand(customCommand);
+      createCommandInStore(customCommand.title);
+      updateCommandInStore(customCommand, customCommand.title);
     }
   };
 
-  private handleFileDeletion = (file: TFile) => {
+  private handleFileDeletion = async (file: TFile) => {
     if (isCustomCommandFile(file)) {
       const commandId = getCommandId(file.basename);
       (this.plugin as any).removeCommand(commandId);
       this.registeredCommandIds.delete(commandId);
+      deleteCommandFromStore(file.basename);
     }
   };
 
-  private handleFileRename = (file: TFile, oldPath: string) => {
+  private handleFileRename = async (file: TFile, oldPath: string) => {
     // Remove the old command
     const oldFilename = oldPath.split("/").pop()?.replace(/\.md$/, "");
     if (oldFilename) {
       const oldCommandId = getCommandId(oldFilename);
       (this.plugin as any).removeCommand(oldCommandId);
       this.registeredCommandIds.delete(oldCommandId);
+      deleteCommandFromStore(oldFilename);
     }
     // Register the new command if it's still a custom command file
     if (isCustomCommandFile(file)) {
-      this.registerCommandForFile(file);
+      const customCommand = await parseCustomCommandFile(file);
+      await this.registerCommand(customCommand);
+      updateCommandInStore(customCommand, customCommand.title);
     }
   };
 
-  private async registerCommandForFile(file: TFile) {
-    const customCommand = await parseCustomCommandFile(file);
+  private async registerCommand(customCommand: CustomCommand) {
     const commandId = getCommandId(customCommand.title);
     (this.plugin as any).removeCommand(commandId);
     this.plugin.addCommand({
