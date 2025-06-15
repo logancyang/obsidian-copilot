@@ -30,6 +30,8 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 import { getSettings } from "@/settings/model";
+import { updateSetting } from "@/settings/model";
+import { PromptSortStrategy } from "@/types";
 import {
   Dialog,
   DialogContent,
@@ -45,8 +47,9 @@ import { Input } from "@/components/ui/input";
 import { Notice } from "obsidian";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CustomCommand } from "@/commands/type";
-import { validateCommandName } from "@/commands/customCommandUtils";
+import { loadAllCustomCommands, validateCommandName } from "@/commands/customCommandUtils";
 import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
+import { SettingItem } from "@/components/ui/setting-item";
 
 const SortableTableRow: React.FC<{
   command: CustomCommand;
@@ -277,17 +280,51 @@ export const CommandSettings: React.FC = () => {
         <div className="tw-mb-4 tw-flex tw-flex-col tw-gap-2">
           <div className="tw-text-xl tw-font-bold">Custom Commands</div>
           <div className="tw-text-sm tw-text-muted">
-            Commands are loaded from your custom prompts folder:{" "}
-            <strong>{settings.customPromptsFolder}</strong>. To trigger a custom command, highlight
-            text in the editor and select it from the command palette, or right-click and choose it
-            from the context menu if configured.
+            Custom commands are preset prompts that you can trigger in the editor by right-clicking
+            and selecting them from the context menu or by using a <code>/</code> command in the
+            chat to load them into your chat input.
           </div>
         </div>
 
+        <SettingItem
+          type="text"
+          title="Custom Prompts Folder Name"
+          description="Folder where custom prompts are stored"
+          value={settings.customPromptsFolder}
+          onChange={(value) => {
+            updateSetting("customPromptsFolder", value);
+            loadAllCustomCommands();
+          }}
+          placeholder="copilot-custom-prompts"
+        />
+        <SettingItem
+          type="switch"
+          title="Custom Prompt Templating"
+          description="Process variables like {activenote}, {foldername}, or {#tag} in prompts. Disable for raw prompts."
+          checked={settings.enableCustomPromptTemplating}
+          onCheckedChange={(checked) => {
+            updateSetting("enableCustomPromptTemplating", checked);
+          }}
+        />
+        <SettingItem
+          type="select"
+          title="Custom Prompts Sort Strategy"
+          description="Sort order for slash command menu prompts"
+          value={settings.promptSortStrategy}
+          onChange={(value) => updateSetting("promptSortStrategy", value)}
+          options={[
+            { label: "Recency", value: PromptSortStrategy.TIMESTAMP },
+            { label: "Alphabetical", value: PromptSortStrategy.ALPHABETICAL },
+          ]}
+        />
+
         <div className="tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-4 tw-text-muted">
-          <Lightbulb className="tw-size-5" /> Commands are automatically loaded from .md files in
-          your custom prompts folder, including nested folders. Create or edit .md files in that
-          folder to manage your commands.
+          <Lightbulb className="tw-size-5" />{" "}
+          <div>
+            Commands are automatically loaded from .md files in your custom prompts folder{" "}
+            <strong>{settings.customPromptsFolder}</strong>. Modifying the files will also update
+            the command settings.
+          </div>
         </div>
 
         <div className="tw-flex tw-flex-col tw-gap-4">

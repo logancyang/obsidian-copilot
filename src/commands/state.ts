@@ -31,7 +31,6 @@ export function updateCommandInStore(command: CustomCommand, prevCommandTitle: s
     updatedCommands = [...commands, command];
   }
   customCommandsStore.set(customCommandsAtom, updatedCommands);
-  console.log("updateCommandInStore", updatedCommands);
 }
 
 export interface UseCustomCommandsResult {
