@@ -439,7 +439,7 @@ export default class ChatModelManager {
         ...tokenConfig,
       });
       await testModel.invoke([{ role: "user", content: "hello" }], {
-        timeout: 3000,
+        timeout: 8000,
       });
     };
 
