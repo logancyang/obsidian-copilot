@@ -4,10 +4,11 @@ import {
   COPILOT_COMMAND_LAST_USED,
   COPILOT_COMMAND_MODEL_KEY,
   COPILOT_COMMAND_SLASH_ENABLED,
-  SELECTED_TEXT_PLACEHOLDER as LEGACY_SELECTED_TEXT_PLACEHOLDER,
+  DEFAULT_COMMANDS,
+  LEGACY_SELECTED_TEXT_PLACEHOLDER,
 } from "@/commands/constants";
 import { CustomCommand } from "@/commands/type";
-import { processPrompt } from "@/commands/customCommandManager";
+import { CustomCommandManager, processPrompt } from "@/commands/customCommandManager";
 import { normalizePath, TAbstractFile, TFile } from "obsidian";
 import { getSettings } from "@/settings/model";
 import { customCommandsAtom, customCommandsStore } from "./state";
@@ -191,4 +192,13 @@ export async function processCommandPrompt(
     selectedText +
     processedPrompt.slice(index + LEGACY_SELECTED_TEXT_PLACEHOLDER.length)
   );
+}
+
+export async function generateDefaultCommands(): Promise<void> {
+  const existingCommands = await loadAllCustomCommands();
+  const defaultCommands = DEFAULT_COMMANDS.filter(
+    (command) => !existingCommands.some((c) => c.title === command.title)
+  );
+  const newCommands = [...existingCommands, ...defaultCommands];
+  return CustomCommandManager.getInstance().updateCommands(newCommands);
 }

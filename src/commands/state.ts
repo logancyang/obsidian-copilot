@@ -8,6 +8,9 @@ export const customCommandsAtom = atom<CustomCommand[]>([]);
 
 export function createCommandInStore(title: string) {
   const commands = customCommandsStore.get(customCommandsAtom);
+  if (commands.some((command) => command.title === title)) {
+    return;
+  }
   customCommandsStore.set(customCommandsAtom, [...commands, { ...EMPTY_COMMAND, title }]);
 }
 

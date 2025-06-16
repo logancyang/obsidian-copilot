@@ -1,6 +1,5 @@
 import { CustomModel } from "@/aiParams";
 import { AcceptKeyOption } from "@/autocomplete/codemirrorIntegration";
-import { DEFAULT_INLINE_EDIT_COMMANDS } from "@/commands/constants";
 import { type CopilotSettings } from "@/settings/model";
 import { v4 as uuidv4 } from "uuid";
 import { ChainType } from "./chainFactory";
@@ -656,7 +655,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   promptUsageTimestamps: {},
   promptSortStrategy: PromptSortStrategy.TIMESTAMP,
   defaultConversationNoteName: "{$topic}@{$date}_{$time}",
-  inlineEditCommands: DEFAULT_INLINE_EDIT_COMMANDS,
+  /** @deprecated */
+  inlineEditCommands: [],
   projectList: [],
   enableAutocomplete: true,
   autocompleteAcceptKey: AUTOCOMPLETE_CONFIG.KEYBIND,

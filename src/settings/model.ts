@@ -14,7 +14,12 @@ import {
   EmbeddingModelProviders,
 } from "@/constants";
 
-export interface InlineEditCommandSettings {
+/**
+ * We used to store commands in the settings.json file with the following interface.
+ * It has been migrated to CustomCommand. This interface is needed to migrate
+ * the legacy commands to the new format.
+ */
+export interface LegacyCommandSettings {
   /**
    * The name of the command. The name will be turned into id by replacing
    * spaces with underscores.
@@ -97,7 +102,7 @@ export interface CopilotSettings {
   defaultConversationNoteName: string;
   // undefined means never checked
   isPlusUser: boolean | undefined;
-  inlineEditCommands: InlineEditCommandSettings[] | undefined;
+  inlineEditCommands: LegacyCommandSettings[] | undefined;
   enableAutocomplete: boolean;
   autocompleteAcceptKey: AcceptKeyOption;
   allowAdditionalContext: boolean;
