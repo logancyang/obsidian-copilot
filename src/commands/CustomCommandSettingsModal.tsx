@@ -181,8 +181,7 @@ export class CustomCommandSettingsModal extends Modal {
     app: App,
     private commands: CustomCommand[],
     private command: CustomCommand,
-    private onUpdate: (command: CustomCommand) => void,
-    private onRemove?: () => void
+    private onUpdate: (command: CustomCommand) => void
   ) {
     super(app);
     // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
@@ -199,18 +198,12 @@ export class CustomCommandSettingsModal extends Modal {
       this.close();
     };
 
-    const handleRemove = () => {
-      this.onRemove?.();
-      this.close();
-    };
-
     this.root.render(
       <CustomCommandSettingsModalContent
         commands={this.commands}
         command={this.command}
         onConfirm={handleConfirm}
         onCancel={() => this.close()}
-        onRemove={this.onRemove ? handleRemove : undefined}
       />
     );
   }

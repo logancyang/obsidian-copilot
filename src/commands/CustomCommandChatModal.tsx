@@ -358,7 +358,6 @@ function CustomCommandChatModalContent({
   );
 }
 
-// TODO(zero): To update
 export class CustomCommandChatModal extends Modal {
   private root: Root;
 
