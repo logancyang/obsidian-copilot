@@ -110,6 +110,8 @@ export interface CopilotSettings {
   projectList: Array<ProjectConfig>;
   passMarkdownImages: boolean;
   enableCustomPromptTemplating: boolean;
+  /** Whether we have suggested built-in default commands to the user once. */
+  suggestedDefaultCommands: boolean;
 }
 
 export const settingsStore = createStore();

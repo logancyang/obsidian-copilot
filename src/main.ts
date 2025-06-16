@@ -38,6 +38,7 @@ import {
 import { IntentAnalyzer } from "./LLMProviders/intentAnalyzer";
 import { CustomCommandRegister } from "@/commands/customCommandRegister";
 import { migrateCommands } from "@/commands/migrator";
+import { suggestDefaultCommands } from "@/commands/customCommandUtils";
 
 export default class CopilotPlugin extends Plugin {
   // A chat history that stores the messages sent and received
@@ -121,8 +122,7 @@ export default class CopilotPlugin extends Plugin {
     this.autocompleteService = AutocompleteService.getInstance(this);
     this.customCommandRegister = new CustomCommandRegister(this, this.app.vault);
     this.app.workspace.onLayoutReady(() => {
-      this.customCommandRegister.initialize();
-      migrateCommands();
+      this.customCommandRegister.initialize().then(migrateCommands).then(suggestDefaultCommands);
     });
   }
 

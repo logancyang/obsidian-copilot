@@ -665,6 +665,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   lastDismissedVersion: null,
   passMarkdownImages: true,
   enableCustomPromptTemplating: true,
+  suggestedDefaultCommands: false,
 };
 
 export const EVENT_NAMES = {

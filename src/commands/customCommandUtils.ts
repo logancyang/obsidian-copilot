@@ -10,9 +10,10 @@ import {
 import { CustomCommand } from "@/commands/type";
 import { CustomCommandManager, processPrompt } from "@/commands/customCommandManager";
 import { normalizePath, TAbstractFile, TFile } from "obsidian";
-import { getSettings } from "@/settings/model";
+import { getSettings, updateSetting } from "@/settings/model";
 import { customCommandsAtom, customCommandsStore } from "./state";
 import { PromptSortStrategy } from "@/types";
+import { ConfirmModal } from "@/components/modals/ConfirmModal";
 
 export function validateCommandName(
   name: string,
@@ -195,10 +196,31 @@ export async function processCommandPrompt(
 }
 
 export async function generateDefaultCommands(): Promise<void> {
-  const existingCommands = await loadAllCustomCommands();
+  const existingCommands = customCommandsStore.get(customCommandsAtom);
   const defaultCommands = DEFAULT_COMMANDS.filter(
     (command) => !existingCommands.some((c) => c.title === command.title)
   );
   const newCommands = [...existingCommands, ...defaultCommands];
-  return CustomCommandManager.getInstance().updateCommands(newCommands);
+  CustomCommandManager.getInstance().updateCommands(newCommands);
+}
+
+export async function suggestDefaultCommands(): Promise<void> {
+  const suggestedCommand = getSettings().suggestedDefaultCommands;
+  if (suggestedCommand) {
+    return;
+  }
+  const existingCommands = customCommandsStore.get(customCommandsAtom);
+  if (existingCommands.length === 0) {
+    new ConfirmModal(
+      app,
+      () => {
+        generateDefaultCommands();
+      },
+      "Would you like to create some helpful default commands in your custom prompts folder? These commands will be available through the right-click context menu and slash commands in chat.",
+      "Welcome to Copilot",
+      "Create Commands",
+      "Skip"
+    ).open();
+    updateSetting("suggestedDefaultCommands", true);
+  }
 }
