@@ -11,6 +11,7 @@ import { CustomCommand } from "@/commands/type";
 import {
   createCommandInStore,
   deleteCommandFromStore,
+  getCachedCustomCommands,
   updateCommandInStore,
 } from "@/commands/state";
 import { CustomCommandManager } from "@/commands/customCommandManager";
@@ -19,7 +20,6 @@ import { CustomCommandManager } from "@/commands/customCommandManager";
 export class CustomCommandRegister {
   private plugin: Plugin;
   private vault: Vault;
-  private registeredCommandIds: Set<string> = new Set();
 
   constructor(plugin: Plugin, vault: Vault) {
     this.plugin = plugin;
@@ -36,18 +36,10 @@ export class CustomCommandRegister {
    * Register all custom commands found in the custom commands folder.
    */
   private async registerCommands() {
-    for (const id of this.registeredCommandIds) {
-      (this.plugin as any).removeCommand(id);
-    }
-    this.registeredCommandIds.clear();
-
-    const files = this.vault.getFiles().filter((file) => isCustomCommandFile(file));
-    await Promise.all(
-      files.map(async (file) => {
-        const customCommand = await parseCustomCommandFile(file);
-        await this.registerCommand(customCommand);
-      })
-    );
+    const commands = getCachedCustomCommands();
+    commands.forEach((command) => {
+      this.registerCommand(command);
+    });
   }
 
   /**
@@ -58,10 +50,6 @@ export class CustomCommandRegister {
     this.vault.off("delete", this.handleFileDeletion);
     this.vault.off("rename", this.handleFileRename);
     this.vault.off("modify", this.handleFileModify);
-    for (const id of this.registeredCommandIds) {
-      (this.plugin as any).removeCommand(id);
-    }
-    this.registeredCommandIds.clear();
   }
 
   private initializeEventListeners() {
@@ -100,7 +88,6 @@ export class CustomCommandRegister {
     if (isCustomCommandFile(file)) {
       const commandId = getCommandId(file.basename);
       (this.plugin as any).removeCommand(commandId);
-      this.registeredCommandIds.delete(commandId);
       deleteCommandFromStore(file.basename);
     }
   };
@@ -111,7 +98,6 @@ export class CustomCommandRegister {
     if (oldFilename) {
       const oldCommandId = getCommandId(oldFilename);
       (this.plugin as any).removeCommand(oldCommandId);
-      this.registeredCommandIds.delete(oldCommandId);
       deleteCommandFromStore(oldFilename);
     }
     // Register the new command if it's still a custom command file
@@ -122,7 +108,7 @@ export class CustomCommandRegister {
     }
   };
 
-  private async registerCommand(customCommand: CustomCommand) {
+  private registerCommand(customCommand: CustomCommand) {
     const commandId = getCommandId(customCommand.title);
     (this.plugin as any).removeCommand(commandId);
     this.plugin.addCommand({
@@ -136,6 +122,5 @@ export class CustomCommandRegister {
         CustomCommandManager.getInstance().recordUsage(customCommand);
       },
     });
-    this.registeredCommandIds.add(commandId);
   }
 }

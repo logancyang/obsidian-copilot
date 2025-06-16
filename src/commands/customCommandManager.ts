@@ -11,10 +11,9 @@ import {
 } from "@/commands/constants";
 import {
   createCommandInStore,
-  customCommandsAtom,
-  customCommandsStore,
   deleteCommandFromStore,
   updateCommandInStore,
+  updateCommandsInStore,
 } from "./state";
 
 export class CustomCommandManager {
@@ -95,7 +94,7 @@ export class CustomCommandManager {
   }
 
   async updateCommands(commands: CustomCommand[]) {
-    customCommandsStore.set(customCommandsAtom, commands);
+    updateCommandsInStore(commands);
     await Promise.all(commands.map((command) => this.updateCommand(command, command.title, true)));
   }
 
