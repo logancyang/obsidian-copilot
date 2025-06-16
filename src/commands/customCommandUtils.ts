@@ -4,16 +4,13 @@ import {
   COPILOT_COMMAND_LAST_USED,
   COPILOT_COMMAND_MODEL_KEY,
   COPILOT_COMMAND_SLASH_ENABLED,
-  DEFAULT_COMMANDS,
   LEGACY_SELECTED_TEXT_PLACEHOLDER,
 } from "@/commands/constants";
 import { CustomCommand } from "@/commands/type";
-import { CustomCommandManager } from "@/commands/customCommandManager";
 import { normalizePath, Notice, TAbstractFile, TFile, Vault } from "obsidian";
-import { getSettings, updateSetting } from "@/settings/model";
+import { getSettings } from "@/settings/model";
 import { customCommandsAtom, customCommandsStore } from "./state";
 import { PromptSortStrategy } from "@/types";
-import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import {
   extractNoteFiles,
   getFileContent,
@@ -202,36 +199,6 @@ export async function processCommandPrompt(
     selectedText +
     processedPrompt.slice(index + LEGACY_SELECTED_TEXT_PLACEHOLDER.length)
   );
-}
-
-export async function generateDefaultCommands(): Promise<void> {
-  const existingCommands = customCommandsStore.get(customCommandsAtom);
-  const defaultCommands = DEFAULT_COMMANDS.filter(
-    (command) => !existingCommands.some((c) => c.title === command.title)
-  );
-  const newCommands = [...existingCommands, ...defaultCommands];
-  CustomCommandManager.getInstance().updateCommands(newCommands);
-}
-
-export async function suggestDefaultCommands(): Promise<void> {
-  const suggestedCommand = getSettings().suggestedDefaultCommands;
-  if (suggestedCommand) {
-    return;
-  }
-  const existingCommands = customCommandsStore.get(customCommandsAtom);
-  if (existingCommands.length === 0) {
-    new ConfirmModal(
-      app,
-      () => {
-        generateDefaultCommands();
-      },
-      "Would you like to create some helpful default commands in your custom prompts folder? These commands will be available through the right-click context menu and slash commands in chat.",
-      "Welcome to Copilot",
-      "Create Commands",
-      "Skip"
-    ).open();
-    updateSetting("suggestedDefaultCommands", true);
-  }
 }
 
 /**

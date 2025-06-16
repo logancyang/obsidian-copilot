@@ -48,7 +48,6 @@ import { Notice } from "obsidian";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CustomCommand } from "@/commands/type";
 import {
-  generateDefaultCommands,
   loadAllCustomCommands,
   sortCommandsByOrder,
   validateCommandName,
@@ -57,6 +56,7 @@ import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModa
 import { SettingItem } from "@/components/ui/setting-item";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
+import { generateDefaultCommands } from "@/commands/migrator";
 
 const SortableTableRow: React.FC<{
   command: CustomCommand;
