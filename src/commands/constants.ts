@@ -60,6 +60,19 @@ export const DEFAULT_COMMANDS: CustomCommand[] = [
     lastUsedMs: 0,
   },
   {
+    title: "Explain like I am 5",
+    content: `Explain {} in simple terms that a 5-year-old would understand:
+    1. Use basic vocabulary
+    2. Include simple analogies
+    3. Break down complex concepts
+    Return only the simplified explanation.`,
+    showInContextMenu: true,
+    showInSlashMenu: true,
+    order: 1040,
+    modelKey: "",
+    lastUsedMs: 0,
+  },
+  {
     title: "Emojify",
     content: `Add relevant emojis to enhance {}. Follow these rules:
     1. Insert emojis at natural breaks in the text
@@ -69,7 +82,7 @@ export const DEFAULT_COMMANDS: CustomCommand[] = [
     Return only the emojified text.`,
     showInContextMenu: true,
     showInSlashMenu: true,
-    order: 1040,
+    order: 1050,
     modelKey: "",
     lastUsedMs: 0,
   },
@@ -82,7 +95,7 @@ export const DEFAULT_COMMANDS: CustomCommand[] = [
     Return only the shortened text.`,
     showInContextMenu: true,
     showInSlashMenu: true,
-    order: 1050,
+    order: 1060,
     modelKey: "",
     lastUsedMs: 0,
   },
@@ -95,7 +108,7 @@ export const DEFAULT_COMMANDS: CustomCommand[] = [
     Return only the expanded text.`,
     showInContextMenu: true,
     showInSlashMenu: true,
-    order: 1060,
+    order: 1070,
     modelKey: "",
     lastUsedMs: 0,
   },
@@ -104,7 +117,7 @@ export const DEFAULT_COMMANDS: CustomCommand[] = [
     content: `Generate a hierarchical table of contents for {}. Use appropriate heading levels (H1, H2, H3, etc.). Include page numbers if present. Return only the table of contents.`,
     showInContextMenu: false,
     showInSlashMenu: false,
-    order: 1070,
+    order: 1080,
     modelKey: "",
     lastUsedMs: 0,
   },
@@ -113,7 +126,7 @@ export const DEFAULT_COMMANDS: CustomCommand[] = [
     content: `Create a glossary of important terms, concepts, and phrases from {}. Format each entry as "Term: Definition". Sort entries alphabetically. Return only the glossary.`,
     showInContextMenu: false,
     showInSlashMenu: false,
-    order: 1080,
+    order: 1090,
     modelKey: "",
     lastUsedMs: 0,
   },
@@ -122,7 +135,7 @@ export const DEFAULT_COMMANDS: CustomCommand[] = [
     content: `Remove all URLs from {}. Preserve all other content and formatting. URLs may be in various formats (http, https, www). Return only the text with URLs removed.`,
     showInContextMenu: false,
     showInSlashMenu: false,
-    order: 1090,
+    order: 1100,
     modelKey: "",
     lastUsedMs: 0,
   },
@@ -135,7 +148,7 @@ export const DEFAULT_COMMANDS: CustomCommand[] = [
     Return only the tweet text.`,
     showInContextMenu: false,
     showInSlashMenu: false,
-    order: 1100,
+    order: 1110,
     modelKey: "",
     lastUsedMs: 0,
   },
@@ -148,19 +161,6 @@ export const DEFAULT_COMMANDS: CustomCommand[] = [
     4. End with "THREAD END" on its own line
     5. Make content engaging and clear
     Return only the formatted thread.`,
-    showInContextMenu: false,
-    showInSlashMenu: false,
-    order: 1110,
-    modelKey: "",
-    lastUsedMs: 0,
-  },
-  {
-    title: "Explain like I am 5",
-    content: `Explain {} in simple terms that a 5-year-old would understand:
-    1. Use basic vocabulary
-    2. Include simple analogies
-    3. Break down complex concepts
-    Return only the simplified explanation.`,
     showInContextMenu: false,
     showInSlashMenu: false,
     order: 1120,
