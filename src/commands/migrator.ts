@@ -15,7 +15,7 @@ import {
 } from "@/commands/constants";
 import { COPILOT_COMMAND_CONTEXT_MENU_ENABLED } from "@/commands/constants";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
-import { customCommandsAtom, customCommandsStore } from "@/commands/state";
+import { getCachedCustomCommands } from "@/commands/state";
 
 function saveUnsupportedCommands(commands: CustomCommand[]) {
   const folderPath = getCustomCommandsFolder();
@@ -88,7 +88,7 @@ export async function migrateCommands() {
 }
 
 export async function generateDefaultCommands(): Promise<void> {
-  const existingCommands = customCommandsStore.get(customCommandsAtom);
+  const existingCommands = getCachedCustomCommands();
   const defaultCommands = DEFAULT_COMMANDS.filter(
     (command) => !existingCommands.some((c) => c.title === command.title)
   );
@@ -101,7 +101,7 @@ export async function suggestDefaultCommands(): Promise<void> {
   if (suggestedCommand) {
     return;
   }
-  const existingCommands = customCommandsStore.get(customCommandsAtom);
+  const existingCommands = getCachedCustomCommands();
   if (existingCommands.length === 0) {
     new ConfirmModal(
       app,

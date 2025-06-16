@@ -3,8 +3,8 @@ import { useAtomValue } from "jotai";
 import { CustomCommand } from "./type";
 import { EMPTY_COMMAND } from "@/commands/constants";
 
-export const customCommandsStore = createStore();
-export const customCommandsAtom = atom<CustomCommand[]>([]);
+const customCommandsStore = createStore();
+const customCommandsAtom = atom<CustomCommand[]>([]);
 
 export function createCommandInStore(title: string) {
   const commands = customCommandsStore.get(customCommandsAtom);
@@ -35,6 +35,14 @@ export function updateCommandInStore(command: CustomCommand, prevCommandTitle: s
   customCommandsStore.set(customCommandsAtom, updatedCommands);
 }
 
+export function updateCommandsInStore(commands: CustomCommand[]) {
+  customCommandsStore.set(customCommandsAtom, commands);
+}
+
 export function useCustomCommands(): CustomCommand[] {
   return useAtomValue(customCommandsAtom, { store: customCommandsStore });
+}
+
+export function getCachedCustomCommands(): CustomCommand[] {
+  return customCommandsStore.get(customCommandsAtom);
 }

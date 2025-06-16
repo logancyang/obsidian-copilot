@@ -1,10 +1,10 @@
 import { getCommandId, sortCommandsByOrder } from "@/commands/customCommandUtils";
 import { Menu } from "obsidian";
 import { CustomCommand } from "./type";
-import { customCommandsAtom, customCommandsStore } from "@/commands/state";
+import { getCachedCustomCommands } from "@/commands/state";
 
 export function registerContextMenu(menu: Menu) {
-  const commands = customCommandsStore.get(customCommandsAtom);
+  const commands = getCachedCustomCommands();
 
   sortCommandsByOrder(
     commands.filter((command: CustomCommand) => command.showInContextMenu)
