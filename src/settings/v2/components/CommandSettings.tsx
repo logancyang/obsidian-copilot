@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { useCustomCommands } from "@/commands/state";
 import { Lightbulb, GripVertical, Trash2, Plus, Info, PenLine } from "lucide-react";
@@ -50,6 +50,7 @@ import { CustomCommand } from "@/commands/type";
 import {
   generateDefaultCommands,
   loadAllCustomCommands,
+  sortCommandsByOrder,
   validateCommandName,
 } from "@/commands/customCommandUtils";
 import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
@@ -194,7 +195,10 @@ const SortableTableRow: React.FC<{
 };
 
 export const CommandSettings: React.FC = () => {
-  const commands = useCustomCommands();
+  const rawCommands = useCustomCommands();
+  const commands = useMemo(() => {
+    return sortCommandsByOrder([...rawCommands]);
+  }, [rawCommands]);
 
   // Add Command popover state
   const [isAddCommandOpen, setIsAddCommandOpen] = React.useState(false);
