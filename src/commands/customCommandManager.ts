@@ -10,10 +10,10 @@ import {
   COPILOT_COMMAND_SLASH_ENABLED,
 } from "@/commands/constants";
 import {
-  createCommandInStore,
-  deleteCommandFromStore,
-  updateCommandInStore,
-  updateCommandsInStore,
+  createCachedCommand,
+  deleteCachedCommand,
+  updateCachedCommand,
+  updateCachedCommands,
 } from "./state";
 
 export class CustomCommandManager {
@@ -28,7 +28,7 @@ export class CustomCommandManager {
 
   async createCommand(title: string, content: string, skipStoreUpdate = false): Promise<void> {
     if (!skipStoreUpdate) {
-      createCommandInStore(title);
+      createCachedCommand(title);
     }
     const folderPath = getCustomCommandsFolder();
     const filePath = getCommandFilePath(title);
@@ -55,7 +55,7 @@ export class CustomCommandManager {
 
   async updateCommand(command: CustomCommand, prevCommandTitle: string, skipStoreUpdate = false) {
     if (!skipStoreUpdate) {
-      updateCommandInStore(command, prevCommandTitle);
+      updateCachedCommand(command, prevCommandTitle);
     }
 
     let commandFile = app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
@@ -94,12 +94,12 @@ export class CustomCommandManager {
   }
 
   async updateCommands(commands: CustomCommand[]) {
-    updateCommandsInStore(commands);
+    updateCachedCommands(commands);
     await Promise.all(commands.map((command) => this.updateCommand(command, command.title, true)));
   }
 
   async deleteCommand(command: CustomCommand) {
-    deleteCommandFromStore(command.title);
+    deleteCachedCommand(command.title);
     const file = app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
     if (file instanceof TFile) {
       await app.vault.delete(file);
