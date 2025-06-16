@@ -37,8 +37,7 @@ import {
 } from "obsidian";
 import { IntentAnalyzer } from "./LLMProviders/intentAnalyzer";
 import { CustomCommandRegister } from "@/commands/customCommandRegister";
-import { migrateCommands } from "@/commands/migrator";
-import { suggestDefaultCommands } from "@/commands/customCommandUtils";
+import { migrateCommands, suggestDefaultCommands } from "@/commands/migrator";
 
 export default class CopilotPlugin extends Plugin {
   // A chat history that stores the messages sent and received
