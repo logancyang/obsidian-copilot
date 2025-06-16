@@ -47,10 +47,15 @@ import { Input } from "@/components/ui/input";
 import { Notice } from "obsidian";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CustomCommand } from "@/commands/type";
-import { loadAllCustomCommands, validateCommandName } from "@/commands/customCommandUtils";
+import {
+  generateDefaultCommands,
+  loadAllCustomCommands,
+  validateCommandName,
+} from "@/commands/customCommandUtils";
 import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
 import { SettingItem } from "@/components/ui/setting-item";
 import { CustomCommandManager } from "@/commands/customCommandManager";
+import { ConfirmModal } from "@/components/modals/ConfirmModal";
 
 const SortableTableRow: React.FC<{
   command: CustomCommand;
@@ -401,10 +406,25 @@ export const CommandSettings: React.FC = () => {
               </SortableContext>
             </Table>
           </DndContext>
-          <div className="tw-flex tw-w-full tw-justify-end">
+          <div className="tw-flex tw-w-full tw-justify-between">
+            <div>
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  new ConfirmModal(
+                    app,
+                    generateDefaultCommands,
+                    "This will add default commands to your custom prompts folder. Do you want to continue?",
+                    "Generate Default Commands"
+                  ).open()
+                }
+              >
+                Generate Default Commands
+              </Button>
+            </div>
             <Popover open={isAddCommandOpen} onOpenChange={setIsAddCommandOpen}>
               <PopoverTrigger asChild>
-                <Button variant="secondary" className="tw-gap-2">
+                <Button variant="default" className="tw-gap-2">
                   <Plus className="tw-size-4" />
                   Add Command
                 </Button>
