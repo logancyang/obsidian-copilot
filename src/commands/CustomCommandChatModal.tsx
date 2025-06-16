@@ -315,7 +315,7 @@ function CustomCommandChatModalContent({
                 className="tw-flex tw-items-center tw-gap-1"
               >
                 <span>Insert</span>
-                <div className="tw-flex tw-items-center tw-text-xs tw-text-muted">
+                <div className="tw-flex tw-items-center tw-text-xs tw-text-normal">
                   {Platform.isMacOS ? (
                     <>
                       <Command className="tw-size-3" />
@@ -336,7 +336,7 @@ function CustomCommandChatModalContent({
                 className="tw-flex tw-items-center tw-gap-1"
               >
                 <span>Replace</span>
-                <div className="tw-flex tw-items-center tw-text-xs tw-text-muted">
+                <div className="tw-flex tw-items-center tw-text-xs tw-text-normal">
                   {Platform.isMacOS ? (
                     <>
                       <Command className="tw-size-3" />
