@@ -4,6 +4,7 @@ import {
   COPILOT_COMMAND_LAST_USED,
   COPILOT_COMMAND_MODEL_KEY,
   COPILOT_COMMAND_SLASH_ENABLED,
+  EMPTY_COMMAND,
   LEGACY_SELECTED_TEXT_PLACEHOLDER,
 } from "@/commands/constants";
 import { CustomCommand } from "@/commands/type";
@@ -95,20 +96,22 @@ export async function parseCustomCommandFile(file: TFile): Promise<CustomCommand
   const rawContent = await app.vault.read(file);
   const content = stripFrontmatter(rawContent);
   const metadata = app.metadataCache.getFileCache(file);
-  const showInContextMenu = metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] ?? false;
-  const slashCommandEnabled = metadata?.frontmatter?.[COPILOT_COMMAND_SLASH_ENABLED] ?? false;
-  const lastUsedMs = metadata?.frontmatter?.[COPILOT_COMMAND_LAST_USED] ?? 0;
-  const order =
-    metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ORDER] ?? Number.MAX_SAFE_INTEGER;
-  const modelKey = metadata?.frontmatter?.[COPILOT_COMMAND_MODEL_KEY];
+  const showInContextMenu =
+    metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] ??
+    EMPTY_COMMAND.showInContextMenu;
+  const showInSlashMenu =
+    metadata?.frontmatter?.[COPILOT_COMMAND_SLASH_ENABLED] ?? EMPTY_COMMAND.showInSlashMenu;
+  const lastUsedMs = metadata?.frontmatter?.[COPILOT_COMMAND_LAST_USED] ?? EMPTY_COMMAND.lastUsedMs;
+  const order = metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ORDER] ?? EMPTY_COMMAND.order;
+  const modelKey = metadata?.frontmatter?.[COPILOT_COMMAND_MODEL_KEY] ?? EMPTY_COMMAND.modelKey;
 
   return {
     title: file.basename,
     modelKey,
     content,
     showInContextMenu,
-    showInSlashMenu: slashCommandEnabled,
-    order: typeof order === "number" ? order : Number.MAX_SAFE_INTEGER,
+    showInSlashMenu,
+    order,
     lastUsedMs,
   };
 }

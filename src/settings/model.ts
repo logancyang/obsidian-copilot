@@ -15,7 +15,7 @@ import {
 } from "@/constants";
 
 /**
- * We used to store commands in the settings.json file with the following interface.
+ * We used to store commands in the settings file with the following interface.
  * It has been migrated to CustomCommand. This interface is needed to migrate
  * the legacy commands to the new format.
  */

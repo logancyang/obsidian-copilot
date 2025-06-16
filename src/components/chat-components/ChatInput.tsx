@@ -47,7 +47,7 @@ import React, {
 } from "react";
 import { useDropzone } from "react-dropzone";
 import ContextControl from "./ContextControl";
-import { useCustomCommands } from "@/commands/state";
+import { getCachedCustomCommands } from "@/commands/state";
 import { sortSlashCommands } from "@/commands/customCommandUtils";
 
 interface ChatInputProps {
@@ -114,8 +114,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       "Processing context files...",
       "If you have many files in context, this can take a while...",
     ];
-
-    const commands = useCustomCommands();
 
     useImperativeHandle(ref, () => ({
       focus: () => {
@@ -256,6 +254,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
     const showCustomPromptModal = () => {
       const commandManager = CustomCommandManager.getInstance();
+      const commands = getCachedCustomCommands();
       const slashCommands = sortSlashCommands(
         commands.filter((command) => command.showInSlashMenu)
       );

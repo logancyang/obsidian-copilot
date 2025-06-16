@@ -32,17 +32,8 @@ import { cn } from "@/lib/utils";
 import { useSettingsValue } from "@/settings/model";
 import { updateSetting } from "@/settings/model";
 import { PromptSortStrategy } from "@/types";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { useContainerContext } from "@/settings/v2/components/ContainerContext";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Notice } from "obsidian";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -73,22 +64,8 @@ const SortableTableRow: React.FC<{
     transition,
   };
 
-  const container = useContainerContext();
-
-  // Delete state
-  const [isDeleteOpen, setIsDeleteOpen] = React.useState(false);
-  const [isDeleting, setIsDeleting] = React.useState(false);
-
-  const handleDelete = async () => {
-    try {
-      setIsDeleting(true);
-      await onRemove(command);
-      setIsDeleteOpen(false);
-    } catch (error) {
-      console.error("Failed to delete command:", error);
-    } finally {
-      setIsDeleting(false);
-    }
+  const handleDelete = () => {
+    onRemove(command);
   };
 
   return (
@@ -160,34 +137,22 @@ const SortableTableRow: React.FC<{
           >
             <PenLine className="tw-size-4" />
           </Button>
-          <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-            <DialogTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <Trash2 className="tw-size-4" />
-              </Button>
-            </DialogTrigger>
-            <DialogContent container={container}>
-              <DialogHeader>
-                <DialogTitle>Delete Command</DialogTitle>
-                <DialogDescription>
-                  Are you sure you want to delete the command &quot;{command.title}&quot;? This will
-                  permanently remove the command file and cannot be undone.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <Button
-                  variant="secondary"
-                  onClick={() => setIsDeleteOpen(false)}
-                  disabled={isDeleting}
-                >
-                  Cancel
-                </Button>
-                <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
-                  {isDeleting ? "Deleting..." : "Delete"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              new ConfirmModal(
+                app,
+                handleDelete,
+                `Are you sure you want to delete the command "${command.title}"? This will permanently remove the command file and cannot be undone.`,
+                "Delete Command",
+                "Delete",
+                "Cancel"
+              ).open();
+            }}
+          >
+            <Trash2 className="tw-size-4" />
+          </Button>
         </div>
       </TableCell>
     </TableRow>
@@ -200,10 +165,7 @@ export const CommandSettings: React.FC = () => {
     return sortCommandsByOrder([...rawCommands]);
   }, [rawCommands]);
 
-  // Add Command popover state
-  const [isAddCommandOpen, setIsAddCommandOpen] = React.useState(false);
   const [newCommandName, setNewCommandName] = React.useState("");
-  const [isCreating, setIsCreating] = React.useState(false);
 
   const settings = useSettingsValue();
   const sensors = useSensors(
@@ -224,18 +186,12 @@ export const CommandSettings: React.FC = () => {
     if (!canCreate) return;
 
     try {
-      setIsCreating(true);
       await CustomCommandManager.getInstance().createCommand(newCommandName.trim(), "");
-
       setNewCommandName("");
-      setIsAddCommandOpen(false);
-
       new Notice(`Command "${newCommandName.trim()}" created successfully!`);
     } catch (error) {
       console.error("Failed to create command:", error);
       new Notice("Failed to create command. Please try again.");
-    } finally {
-      setIsCreating(false);
     }
   };
 
@@ -425,7 +381,7 @@ export const CommandSettings: React.FC = () => {
                 Generate Default Commands
               </Button>
             </div>
-            <Popover open={isAddCommandOpen} onOpenChange={setIsAddCommandOpen}>
+            <Popover>
               <PopoverTrigger asChild>
                 <Button variant="default" className="tw-gap-2">
                   <Plus className="tw-size-4" />
@@ -449,7 +405,7 @@ export const CommandSettings: React.FC = () => {
                       value={newCommandName}
                       onChange={(e) => setNewCommandName(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && canCreate && !isCreating) {
+                        if (e.key === "Enter" && canCreate) {
                           handleCreateCommand();
                         }
                       }}
@@ -459,24 +415,22 @@ export const CommandSettings: React.FC = () => {
                     )}
                   </div>
                   <div className="tw-flex tw-justify-end tw-gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        setIsAddCommandOpen(false);
-                        setNewCommandName("");
-                      }}
-                      disabled={isCreating}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={handleCreateCommand}
-                      disabled={!canCreate || isCreating}
-                    >
-                      {isCreating ? "Creating..." : "Create"}
-                    </Button>
+                    <PopoverClose asChild>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          setNewCommandName("");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </PopoverClose>
+                    <PopoverClose asChild>
+                      <Button size="sm" onClick={handleCreateCommand} disabled={!canCreate}>
+                        Create
+                      </Button>
+                    </PopoverClose>
                   </div>
                 </div>
               </PopoverContent>
