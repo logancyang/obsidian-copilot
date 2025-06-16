@@ -1,4 +1,6 @@
-import { CustomPrompt, CustomCommandManager } from "@/commands/customCommandManager";
+import { CustomCommandManager } from "@/commands/customCommandManager";
+import { processPrompt } from "@/commands/customCommandUtils";
+import { CustomCommand } from "@/commands/type";
 import {
   extractNoteFiles,
   getFileContent,
@@ -62,7 +64,7 @@ describe("CustomPromptProcessor", () => {
     } as TFile;
 
     // Create an instance of CustomPromptProcessor with mocked dependencies
-    processor = CustomCommandManager.getInstance(mockVault);
+    processor = CustomCommandManager.getInstance();
   });
 
   afterEach(() => {
@@ -71,13 +73,14 @@ describe("CustomPromptProcessor", () => {
   });
 
   it("should add 1 context and selectedText", async () => {
-    const doc: CustomPrompt = {
+    const doc: CustomCommand = {
       title: "test-prompt",
       content: "This is a {variable} and {}.",
       showInContextMenu: false,
-      slashCommandEnabled: false,
-      filePath: "test-prompt.md",
+      showInSlashMenu: false,
       order: 0,
+      modelKey: "",
+      lastUsedMs: 0,
     };
     const selectedText = "here is some selected text 12345";
 
@@ -290,7 +293,7 @@ describe("CustomPromptProcessor", () => {
       includedFiles: new Set([mockNoteForTag]),
     });
 
-    const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
+    const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote);
 
     expect(result.processedPrompt).toBe(
       "Notes related to {#tag} are:\n\n#tag:\n\n## Tagged Note\n\nNote content for #tag"
@@ -368,7 +371,7 @@ describe("CustomPromptProcessor", () => {
       includedFiles: new Set(),
     });
 
-    const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
+    const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote);
 
     expect(result.processedPrompt).toContain("Content of [[Test Note]] is important");
     expect(result.processedPrompt).toContain(
@@ -405,7 +408,7 @@ describe("CustomPromptProcessor", () => {
       includedFiles: new Set([mockNoteFile]),
     });
 
-    const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
+    const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote);
 
     expect(result.processedPrompt).toBe(
       "Content of {[[Test Note]]} is important. Look at [[Test Note]].\n\n[[Test Note]]:\n\n## Test Note\n\nTest note content"
