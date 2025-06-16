@@ -1,6 +1,5 @@
 import { CustomModel } from "@/aiParams";
 import { AcceptKeyOption } from "@/autocomplete/codemirrorIntegration";
-import { DEFAULT_INLINE_EDIT_COMMANDS } from "@/commands/constants";
 import { type CopilotSettings } from "@/settings/model";
 import { v4 as uuidv4 } from "uuid";
 import { ChainType } from "./chainFactory";
@@ -549,17 +548,12 @@ export enum DEFAULT_OPEN_AREA {
 }
 
 export const COMMAND_IDS = {
-  ADD_CUSTOM_PROMPT: "add-custom-prompt",
   APPLY_ADHOC_PROMPT: "apply-adhoc-prompt",
-  APPLY_CUSTOM_PROMPT: "apply-custom-prompt",
   CLEAR_LOCAL_COPILOT_INDEX: "clear-local-copilot-index",
   CLEAR_COPILOT_CACHE: "clear-copilot-cache",
   COUNT_WORD_AND_TOKENS_SELECTION: "count-word-and-tokens-selection",
   COUNT_TOTAL_VAULT_TOKENS: "count-total-vault-tokens",
   DEBUG_WORD_COMPLETION: "debug-word-completion",
-  DELETE_CUSTOM_PROMPT: "delete-custom-prompt",
-  EDIT_CUSTOM_PROMPT: "edit-custom-prompt",
-  FIND_RELEVANT_NOTES: "find-relevant-notes",
   FORCE_REINDEX_VAULT_TO_COPILOT_INDEX: "force-reindex-vault-to-copilot-index",
   GARBAGE_COLLECT_COPILOT_INDEX: "garbage-collect-copilot-index",
   INDEX_VAULT_TO_COPILOT_INDEX: "index-vault-to-copilot-index",
@@ -575,17 +569,12 @@ export const COMMAND_IDS = {
 } as const;
 
 export const COMMAND_NAMES: Record<CommandId, string> = {
-  [COMMAND_IDS.ADD_CUSTOM_PROMPT]: "Add custom prompt",
   [COMMAND_IDS.APPLY_ADHOC_PROMPT]: "Apply ad-hoc custom prompt",
-  [COMMAND_IDS.APPLY_CUSTOM_PROMPT]: "Apply custom prompt",
   [COMMAND_IDS.CLEAR_LOCAL_COPILOT_INDEX]: "Clear local Copilot index",
   [COMMAND_IDS.CLEAR_COPILOT_CACHE]: "Clear Copilot cache",
   [COMMAND_IDS.COUNT_TOTAL_VAULT_TOKENS]: "Count total tokens in your vault",
   [COMMAND_IDS.COUNT_WORD_AND_TOKENS_SELECTION]: "Count words and tokens in selection",
   [COMMAND_IDS.DEBUG_WORD_COMPLETION]: "Word completion: Debug",
-  [COMMAND_IDS.DELETE_CUSTOM_PROMPT]: "Delete custom prompt",
-  [COMMAND_IDS.EDIT_CUSTOM_PROMPT]: "Edit custom prompt",
-  [COMMAND_IDS.FIND_RELEVANT_NOTES]: "Find relevant notes",
   [COMMAND_IDS.FORCE_REINDEX_VAULT_TO_COPILOT_INDEX]: "Force reindex vault",
   [COMMAND_IDS.GARBAGE_COLLECT_COPILOT_INDEX]:
     "Garbage collect Copilot index (remove files that no longer exist in vault)",
@@ -666,7 +655,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   promptUsageTimestamps: {},
   promptSortStrategy: PromptSortStrategy.TIMESTAMP,
   defaultConversationNoteName: "{$topic}@{$date}_{$time}",
-  inlineEditCommands: DEFAULT_INLINE_EDIT_COMMANDS,
+  /** @deprecated */
+  inlineEditCommands: [],
   projectList: [],
   enableAutocomplete: true,
   autocompleteAcceptKey: AUTOCOMPLETE_CONFIG.KEYBIND,
@@ -675,6 +665,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   lastDismissedVersion: null,
   passMarkdownImages: true,
   enableCustomPromptTemplating: true,
+  suggestedDefaultCommands: false,
 };
 
 export const EVENT_NAMES = {

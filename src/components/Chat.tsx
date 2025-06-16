@@ -15,7 +15,6 @@ import { ProjectList } from "@/components/chat-components/ProjectList";
 import { ABORT_REASON, COMMAND_IDS, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
 import { ContextProcessor } from "@/contextProcessor";
-import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { getAIResponse } from "@/langchainStream";
 import ChainManager from "@/LLMProviders/chainManager";
 import CopilotPlugin from "@/main";
@@ -33,6 +32,7 @@ import { err2String, formatDateTime } from "@/utils";
 import { Buffer } from "buffer";
 import { Notice, TFile } from "obsidian";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { processPrompt } from "@/commands/customCommandUtils";
 
 type ChatMode = "default" | "project";
 
@@ -173,13 +173,12 @@ const Chat: React.FC<ChatProps> = ({
         inputMessage + "\n\n<output_format>\n" + composerPrompt + "\n</output_format>";
     }
     // process the original user message for custom prompts
-    const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
-    const { processedPrompt: processedUserMessage, includedFiles } =
-      await customPromptProcessor.processCustomPrompt(
-        processedInputMessage || "",
-        "",
-        app.workspace.getActiveFile() as TFile | undefined
-      );
+    const { processedPrompt: processedUserMessage, includedFiles } = await processPrompt(
+      processedInputMessage || "",
+      "",
+      app.vault,
+      app.workspace.getActiveFile()
+    );
 
     // Extract Mentions (such as URLs) from original input message only if using Copilot Plus chain
     const urlContextAddition =
@@ -496,32 +495,17 @@ ${chatContent}`;
     };
   };
 
-  const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(
-    createEffect(COMMAND_IDS.APPLY_CUSTOM_PROMPT, async (selectedText, customPrompt) => {
-      if (!customPrompt) {
-        return selectedText;
-      }
-      const result = await customPromptProcessor.processCustomPrompt(
-        customPrompt,
-        selectedText,
-        app.workspace.getActiveFile() ?? undefined
-      );
-      return result.processedPrompt; // Extract just the processed prompt string
-    }),
-    []
-  );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(
     createEffect(COMMAND_IDS.APPLY_ADHOC_PROMPT, async (selectedText, customPrompt) => {
       if (!customPrompt) {
         return selectedText;
       }
-      const result = await customPromptProcessor.processCustomPrompt(
+      const result = await processPrompt(
         customPrompt,
         selectedText,
-        app.workspace.getActiveFile() as TFile | undefined
+        app.vault,
+        app.workspace.getActiveFile()
       );
       return result.processedPrompt; // Extract just the processed prompt string
     }),

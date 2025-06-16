@@ -9,7 +9,7 @@ import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 
 import { CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
-import { registerContextMenu } from "@/contextMenu";
+import { registerContextMenu } from "@/commands/contextMenu";
 import { encryptAllKeys } from "@/encryptionService";
 import { logInfo } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
@@ -36,6 +36,8 @@ import {
   WorkspaceLeaf,
 } from "obsidian";
 import { IntentAnalyzer } from "./LLMProviders/intentAnalyzer";
+import { CustomCommandRegister } from "@/commands/customCommandRegister";
+import { migrateCommands, suggestDefaultCommands } from "@/commands/migrator";
 
 export default class CopilotPlugin extends Plugin {
   // A chat history that stores the messages sent and received
@@ -46,6 +48,7 @@ export default class CopilotPlugin extends Plugin {
   userMessageHistory: string[] = [];
   vectorStoreManager: VectorStoreManager;
   fileParserManager: FileParserManager;
+  customCommandRegister: CustomCommandRegister;
   settingsUnsubscriber?: () => void;
   private autocompleteService: AutocompleteService;
 
@@ -91,11 +94,8 @@ export default class CopilotPlugin extends Plugin {
     IntentAnalyzer.initTools(this.app.vault);
 
     this.registerEvent(
-      this.app.workspace.on("editor-menu", (menu: Menu, editor: Editor) => {
-        const selectedText = editor.getSelection().trim();
-        if (selectedText) {
-          this.handleContextMenu(menu, editor);
-        }
+      this.app.workspace.on("editor-menu", (menu: Menu) => {
+        return registerContextMenu(menu);
       })
     );
 
@@ -119,10 +119,13 @@ export default class CopilotPlugin extends Plugin {
 
     // Initialize autocomplete service
     this.autocompleteService = AutocompleteService.getInstance(this);
+    this.customCommandRegister = new CustomCommandRegister(this, this.app.vault);
+    this.app.workspace.onLayoutReady(() => {
+      this.customCommandRegister.initialize().then(migrateCommands).then(suggestDefaultCommands);
+    });
   }
 
   async onunload() {
-    // Clean up VectorStoreManager
     if (this.vectorStoreManager) {
       this.vectorStoreManager.onunload();
     }
@@ -131,6 +134,7 @@ export default class CopilotPlugin extends Plugin {
       this.projectManager.onunload();
     }
 
+    this.customCommandRegister.cleanup();
     this.settingsUnsubscriber?.();
     this.autocompleteService?.destroy();
 
@@ -287,10 +291,6 @@ export default class CopilotPlugin extends Plugin {
 
     return Array.from(modelMap.values());
   }
-
-  handleContextMenu = (menu: Menu, editor: Editor): void => {
-    registerContextMenu(menu, editor, this);
-  };
 
   async loadCopilotChatHistory() {
     const chatFiles = await this.getChatHistoryFiles();

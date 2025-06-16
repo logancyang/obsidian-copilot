@@ -13,4 +13,5 @@ declare module "obsidian" {
 export enum PromptSortStrategy {
   TIMESTAMP = "timestamp",
   ALPHABETICAL = "alphabetical",
+  MANUAL = "manual",
 }

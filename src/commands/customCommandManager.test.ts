@@ -1,4 +1,6 @@
-import { CustomPrompt, CustomPromptProcessor } from "@/customPromptProcessor";
+import { CustomCommandManager } from "@/commands/customCommandManager";
+import { processPrompt } from "@/commands/customCommandUtils";
+import { CustomCommand } from "@/commands/type";
 import {
   extractNoteFiles,
   getFileContent,
@@ -36,7 +38,7 @@ jest.mock("@/customPromptProcessor", () => {
 });
 
 describe("CustomPromptProcessor", () => {
-  let processor: CustomPromptProcessor;
+  let processor: CustomCommandManager;
   let mockVault: Vault;
   let mockActiveNote: TFile;
   let originalConsoleWarn: typeof console.warn;
@@ -62,7 +64,7 @@ describe("CustomPromptProcessor", () => {
     } as TFile;
 
     // Create an instance of CustomPromptProcessor with mocked dependencies
-    processor = CustomPromptProcessor.getInstance(mockVault);
+    processor = CustomCommandManager.getInstance();
   });
 
   afterEach(() => {
@@ -71,9 +73,14 @@ describe("CustomPromptProcessor", () => {
   });
 
   it("should add 1 context and selectedText", async () => {
-    const doc: CustomPrompt = {
+    const doc: CustomCommand = {
       title: "test-prompt",
       content: "This is a {variable} and {}.",
+      showInContextMenu: false,
+      showInSlashMenu: false,
+      order: 0,
+      modelKey: "",
+      lastUsedMs: 0,
     };
     const selectedText = "here is some selected text 12345";
 
@@ -104,6 +111,10 @@ describe("CustomPromptProcessor", () => {
     const doc: CustomPrompt = {
       title: "test-prompt",
       content: "This is a {variable1} and {variable2}.",
+      showInContextMenu: false,
+      slashCommandEnabled: false,
+      filePath: "test-prompt.md",
+      order: 0,
     };
     const selectedText = "";
 
@@ -147,6 +158,10 @@ describe("CustomPromptProcessor", () => {
     const doc: CustomPrompt = {
       title: "test-prompt",
       content: "Rewrite the following text {}",
+      showInContextMenu: false,
+      slashCommandEnabled: false,
+      filePath: "test-prompt.md",
+      order: 0,
     };
     const selectedText = "here is some selected text 12345";
 
@@ -170,6 +185,10 @@ describe("CustomPromptProcessor", () => {
     const doc: CustomPrompt = {
       title: "test-prompt",
       content: "This is the active note: {activenote}",
+      showInContextMenu: false,
+      slashCommandEnabled: false,
+      filePath: "test-prompt.md",
+      order: 0,
     };
     const selectedText = "";
 
@@ -199,6 +218,10 @@ describe("CustomPromptProcessor", () => {
     const doc: CustomPrompt = {
       title: "test-prompt",
       content: "This is the active note: {activeNote}",
+      showInContextMenu: false,
+      slashCommandEnabled: false,
+      filePath: "test-prompt.md",
+      order: 0,
     };
     const selectedText = "";
 
@@ -221,6 +244,10 @@ describe("CustomPromptProcessor", () => {
     const doc: CustomPrompt = {
       title: "test-prompt",
       content: "This is a test prompt with no variables.",
+      showInContextMenu: false,
+      slashCommandEnabled: false,
+      filePath: "test-prompt.md",
+      order: 0,
     };
     const selectedText = "selected text";
 
@@ -266,7 +293,7 @@ describe("CustomPromptProcessor", () => {
       includedFiles: new Set([mockNoteForTag]),
     });
 
-    const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
+    const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote);
 
     expect(result.processedPrompt).toBe(
       "Notes related to {#tag} are:\n\n#tag:\n\n## Tagged Note\n\nNote content for #tag"
@@ -344,7 +371,7 @@ describe("CustomPromptProcessor", () => {
       includedFiles: new Set(),
     });
 
-    const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
+    const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote);
 
     expect(result.processedPrompt).toContain("Content of [[Test Note]] is important");
     expect(result.processedPrompt).toContain(
@@ -381,7 +408,7 @@ describe("CustomPromptProcessor", () => {
       includedFiles: new Set([mockNoteFile]),
     });
 
-    const result = await processor.processCustomPrompt(customPrompt, selectedText, mockActiveNote);
+    const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote);
 
     expect(result.processedPrompt).toBe(
       "Content of {[[Test Note]]} is important. Look at [[Test Note]].\n\n[[Test Note]]:\n\n## Test Note\n\nTest note content"
@@ -506,6 +533,10 @@ describe("CustomPromptProcessor", () => {
     const doc: CustomPrompt = {
       title: "test-prompt",
       content: "This is the active note: {activeNote}. And again: {activeNote}",
+      showInContextMenu: false,
+      slashCommandEnabled: false,
+      filePath: "test-prompt.md",
+      order: 0,
     };
     const selectedText = "";
 
@@ -538,6 +569,10 @@ describe("CustomPromptProcessor", () => {
     const doc: CustomPrompt = {
       title: "test-prompt",
       content: "Summarize this: {}",
+      showInContextMenu: false,
+      slashCommandEnabled: false,
+      filePath: "test-prompt.md",
+      order: 0,
     };
     const selectedText = "";
 
@@ -564,6 +599,10 @@ describe("CustomPromptProcessor", () => {
     const doc: CustomPrompt = {
       title: "test-prompt",
       content: "Summarize this: {}. Additional info: {activeNote}",
+      showInContextMenu: false,
+      slashCommandEnabled: false,
+      filePath: "test-prompt.md",
+      order: 0,
     };
     const selectedText = "";
 
@@ -597,6 +636,10 @@ describe("CustomPromptProcessor", () => {
     const doc: CustomPrompt = {
       title: "test-prompt",
       content: "Analyze this: {}",
+      showInContextMenu: false,
+      slashCommandEnabled: false,
+      filePath: "test-prompt.md",
+      order: 0,
     };
     const selectedText = "This is the selected text";
 
@@ -623,6 +666,10 @@ describe("CustomPromptProcessor", () => {
     const doc: CustomPrompt = {
       title: "test-prompt",
       content: "This is a test prompt with {invalidVariable} name and {activeNote}",
+      showInContextMenu: false,
+      slashCommandEnabled: false,
+      filePath: "test-prompt.md",
+      order: 0,
     };
 
     const selectedText = "";
