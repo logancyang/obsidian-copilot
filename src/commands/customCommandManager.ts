@@ -223,8 +223,10 @@ export class CustomCommandManager {
     return CustomCommandManager.instance;
   }
 
-  async createCommand(title: string, content: string): Promise<void> {
-    createCommandInStore(title);
+  async createCommand(title: string, content: string, skipStoreUpdate = false): Promise<void> {
+    if (!skipStoreUpdate) {
+      createCommandInStore(title);
+    }
     const folderPath = getCustomCommandsFolder();
     const filePath = getCommandFilePath(title);
 
@@ -272,7 +274,7 @@ export class CustomCommandManager {
     }
 
     if (!commandFile) {
-      await this.createCommand(command.title, command.content);
+      await this.createCommand(command.title, command.content, skipStoreUpdate);
       commandFile = app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
     }
 

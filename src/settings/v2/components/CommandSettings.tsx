@@ -387,8 +387,7 @@ export const CommandSettings: React.FC = () => {
                   {commands.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={5} className="tw-py-8 tw-text-center tw-text-muted">
-                        No custom prompt files found in &quot;{settings.customPromptsFolder}&quot;.
-                        Create .md files in that folder to add commands.
+                        No custom prompt files found.
                       </TableCell>
                     </TableRow>
                   ) : (
