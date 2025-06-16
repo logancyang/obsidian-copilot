@@ -163,7 +163,9 @@ export function sortSlashCommands(commands: CustomCommand[]): CustomCommand[] {
 }
 
 /**
- * Process the command prompt.
+ * Process the custom command prompt. In addition to the regular prompt processing,
+ * it handles legacy logic such as auto appending the selected text to the prompt
+ * if it's not already present.
  */
 export async function processCommandPrompt(
   prompt: string,
