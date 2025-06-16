@@ -9,10 +9,10 @@ import { CustomCommandChatModal } from "@/commands/CustomCommandChatModal";
 import debounce from "lodash.debounce";
 import { CustomCommand } from "@/commands/type";
 import {
-  createCommandInStore,
-  deleteCommandFromStore,
+  createCachedCommand,
+  deleteCachedCommand,
   getCachedCustomCommands,
-  updateCommandInStore,
+  updateCachedCommand,
 } from "@/commands/state";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 
@@ -63,8 +63,8 @@ export class CustomCommandRegister {
     async (file: TFile) => {
       if (isCustomCommandFile(file)) {
         const customCommand = await parseCustomCommandFile(file);
-        await this.registerCommand(customCommand);
-        updateCommandInStore(customCommand, customCommand.title);
+        this.registerCommand(customCommand);
+        updateCachedCommand(customCommand, customCommand.title);
       }
     },
     3000,
@@ -79,8 +79,8 @@ export class CustomCommandRegister {
   private handleFileCreation = async (file: TFile) => {
     if (isCustomCommandFile(file)) {
       const customCommand = await parseCustomCommandFile(file);
-      await this.registerCommand(customCommand);
-      createCommandInStore(customCommand.title);
+      this.registerCommand(customCommand);
+      createCachedCommand(customCommand.title);
     }
   };
 
@@ -88,7 +88,7 @@ export class CustomCommandRegister {
     if (isCustomCommandFile(file)) {
       const commandId = getCommandId(file.basename);
       (this.plugin as any).removeCommand(commandId);
-      deleteCommandFromStore(file.basename);
+      deleteCachedCommand(file.basename);
     }
   };
 
@@ -98,13 +98,13 @@ export class CustomCommandRegister {
     if (oldFilename) {
       const oldCommandId = getCommandId(oldFilename);
       (this.plugin as any).removeCommand(oldCommandId);
-      deleteCommandFromStore(oldFilename);
+      deleteCachedCommand(oldFilename);
     }
     // Register the new command if it's still a custom command file
     if (isCustomCommandFile(file)) {
       const customCommand = await parseCustomCommandFile(file);
-      await this.registerCommand(customCommand);
-      updateCommandInStore(customCommand, customCommand.title);
+      this.registerCommand(customCommand);
+      updateCachedCommand(customCommand, customCommand.title);
     }
   };
 

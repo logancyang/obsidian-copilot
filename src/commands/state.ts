@@ -6,7 +6,7 @@ import { EMPTY_COMMAND } from "@/commands/constants";
 const customCommandsStore = createStore();
 const customCommandsAtom = atom<CustomCommand[]>([]);
 
-export function createCommandInStore(title: string) {
+export function createCachedCommand(title: string) {
   const commands = customCommandsStore.get(customCommandsAtom);
   if (commands.some((command) => command.title === title)) {
     return;
@@ -14,7 +14,7 @@ export function createCommandInStore(title: string) {
   customCommandsStore.set(customCommandsAtom, [...commands, { ...EMPTY_COMMAND, title }]);
 }
 
-export function deleteCommandFromStore(title: string) {
+export function deleteCachedCommand(title: string) {
   const commands = customCommandsStore.get(customCommandsAtom);
   customCommandsStore.set(
     customCommandsAtom,
@@ -22,7 +22,7 @@ export function deleteCommandFromStore(title: string) {
   );
 }
 
-export function updateCommandInStore(command: CustomCommand, prevCommandTitle: string) {
+export function updateCachedCommand(command: CustomCommand, prevCommandTitle: string) {
   const commands = customCommandsStore.get(customCommandsAtom);
   let updatedCommands: CustomCommand[];
   const prevIndex = prevCommandTitle ? commands.findIndex((c) => c.title === prevCommandTitle) : -1;
@@ -35,7 +35,7 @@ export function updateCommandInStore(command: CustomCommand, prevCommandTitle: s
   customCommandsStore.set(customCommandsAtom, updatedCommands);
 }
 
-export function updateCommandsInStore(commands: CustomCommand[]) {
+export function updateCachedCommands(commands: CustomCommand[]) {
   customCommandsStore.set(customCommandsAtom, commands);
 }
 

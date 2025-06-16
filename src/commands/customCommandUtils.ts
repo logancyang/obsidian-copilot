@@ -9,7 +9,7 @@ import {
 import { CustomCommand } from "@/commands/type";
 import { normalizePath, Notice, TAbstractFile, TFile, Vault } from "obsidian";
 import { getSettings } from "@/settings/model";
-import { updateCommandsInStore } from "./state";
+import { updateCachedCommands } from "./state";
 import { PromptSortStrategy } from "@/types";
 import {
   extractNoteFiles,
@@ -116,7 +116,7 @@ export async function parseCustomCommandFile(file: TFile): Promise<CustomCommand
 export async function loadAllCustomCommands(): Promise<CustomCommand[]> {
   const files = app.vault.getFiles().filter((file) => isCustomCommandFile(file));
   const commands: CustomCommand[] = await Promise.all(files.map(parseCustomCommandFile));
-  updateCommandsInStore(commands);
+  updateCachedCommands(commands);
   return commands;
 }
 
