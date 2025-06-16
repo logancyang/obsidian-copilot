@@ -39,6 +39,7 @@ function saveUnsupportedCommands(commands: CustomCommand[]) {
   );
 }
 
+/** Migrates the legacy commands in data.json to the new note format. */
 export async function migrateCommands() {
   const legacyCommands = getSettings().inlineEditCommands;
   if (!legacyCommands || legacyCommands.length === 0) {
@@ -76,17 +77,18 @@ export async function migrateCommands() {
     ...commandsToMigrate,
   ]);
 
-  let message = `We have upgraded your commands to the new format. They are now stored as notes in ${getCustomCommandsFolder()}.`;
+  let message = `We have upgraded your commands to the new format. They are now also stored as notes in ${getCustomCommandsFolder()}.`;
   if (unsupportedCommands.length > 0) {
     await saveUnsupportedCommands(unsupportedCommands);
-    message += `\n\nWe have also saved ${unsupportedCommands.length} unsupported commands in ${getCustomCommandsFolder()}/unsupported.`;
+    message += `\n\nWe found ${unsupportedCommands.length} unsupported commands. They are saved in ${getCustomCommandsFolder()}/unsupported. To fix them, please resolve the errors and move the note file out of the unsupported folder.`;
   }
 
   updateSetting("inlineEditCommands", []);
 
-  new ConfirmModal(app, () => {}, message, "Commands migrated successfully", "OK", "").open();
+  new ConfirmModal(app, () => {}, message, "🚀 New Copilot Custom Commands", "OK", "").open();
 }
 
+/** Generates the default commands. */
 export async function generateDefaultCommands(): Promise<void> {
   const existingCommands = getCachedCustomCommands();
   const defaultCommands = DEFAULT_COMMANDS.filter(
@@ -96,9 +98,11 @@ export async function generateDefaultCommands(): Promise<void> {
   CustomCommandManager.getInstance().updateCommands(newCommands);
 }
 
+/** Suggests the default commands if the user has not created any commands yet. */
 export async function suggestDefaultCommands(): Promise<void> {
   const suggestedCommand = getSettings().suggestedDefaultCommands;
   if (suggestedCommand) {
+    // We only show the modal once
     return;
   }
   const existingCommands = getCachedCustomCommands();
@@ -108,9 +112,9 @@ export async function suggestDefaultCommands(): Promise<void> {
       () => {
         generateDefaultCommands();
       },
-      "Would you like to create some helpful default commands in your custom prompts folder? These commands will be available through the right-click context menu and slash commands in chat.",
+      "Would you like to add Copilot recommended commands in your custom prompts folder? These commands will be available through the right-click context menu and slash commands in chat.",
       "Welcome to Copilot",
-      "Create Commands",
+      "Confirm",
       "Skip"
     ).open();
     updateSetting("suggestedDefaultCommands", true);
