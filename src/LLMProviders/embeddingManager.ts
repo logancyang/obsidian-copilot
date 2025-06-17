@@ -52,7 +52,7 @@ export default class EmbeddingManager {
     [EmbeddingModelProviders.AZURE_OPENAI]: () => getSettings().azureOpenAIApiKey,
     [EmbeddingModelProviders.OLLAMA]: () => "default-key",
     [EmbeddingModelProviders.LM_STUDIO]: () => "default-key",
-    [EmbeddingModelProviders.OPENAI_FORMAT]: () => "",
+    [EmbeddingModelProviders.OPENAI_FORMAT]: () => "default-key",
   };
 
   private constructor() {
