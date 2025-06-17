@@ -1,14 +1,14 @@
 {
-  "id": "copilot",
-  "name": "Copilot",
-  "version": "2.8.9",
+  "id": "copilot-ai-learning-assistant",
+  "name": "Copilot (AI Learning Assistant)",
+  "version": "1.1",
   "minAppVersion": "0.15.0",
-  "description": "An AI Copilot in Obsidian.",
-  "author": "Logan Yang",
-  "authorUrl": "https://twitter.com/logancyang",
+  "description": "An AI Copilot in Obsidian. Development fork by AI Learning Assistant based on original work by Logan Yang.",
+  "author": "AI Learning Assistant Dev (based on Logan Yang's work)",
+  "authorUrl": "https://github.com/ai-learning-assistant-dev",
   "fundingUrl": {
-    "Buy Me a Coffee": "https://www.buymeacoffee.com/logancyang",
-    "GitHub Sponsor": "https://github.com/sponsors/logancyang"
-  },
-  "requiredPermissions": ["http://*/*", "https://*/*"]
+    "GitHub Repository": "https://github.com/ai-learning-assistant-dev/obsidian-copilot",
+    "Original Author - Buy Me a Coffee": "https://www.buymeacoffee.com/logancyang",
+    "Original Author - GitHub Sponsor": "https://github.com/sponsors/logancyang"
+  }
 }
