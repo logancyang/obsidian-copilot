@@ -9,5 +9,6 @@
   "fundingUrl": {
     "Buy Me a Coffee": "https://www.buymeacoffee.com/logancyang",
     "GitHub Sponsor": "https://github.com/sponsors/logancyang"
-  }
+  },
+  "requiredPermissions": ["http://*/*", "https://*/*"]
 }

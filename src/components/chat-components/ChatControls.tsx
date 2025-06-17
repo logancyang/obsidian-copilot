@@ -151,6 +151,28 @@ export function ChatControls({ onNewChat, onSaveAsNote }: ChatControlsProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64">
+            {/* 新增自动衍生问题开关 */}
+            <DropdownMenuItem
+              className="flex justify-between"
+              onSelect={(e) => {
+                e.preventDefault();
+                updateSetting("promptEnhancements", {
+                  ...settings.promptEnhancements,
+                  autoFollowUp: {
+                    enabled: !settings.promptEnhancements?.autoFollowUp?.enabled,
+                    prompt: settings.promptEnhancements?.autoFollowUp?.prompt || "",
+                  },
+                });
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <MessageCirclePlus className="size-4" />
+                自动衍生问题
+              </div>
+              <SettingSwitch
+                checked={settings.promptEnhancements?.autoFollowUp?.enabled || false}
+              />
+            </DropdownMenuItem>
             <DropdownMenuItem
               className="flex justify-between"
               onSelect={(e) => {
