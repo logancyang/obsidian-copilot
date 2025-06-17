@@ -3,7 +3,7 @@ import { logError } from "@/logger";
 import { Change, diffWords } from "diff";
 import { Check, X as XIcon } from "lucide-react";
 import { App, ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
-import React, { useRef } from "react";
+import React, { useRef, memo } from "react";
 import { createRoot } from "react-dom/client";
 import { Button } from "../ui/button";
 import { useState } from "react";
@@ -78,27 +78,33 @@ interface ApplyViewRootProps {
   close: () => void;
 }
 
-// Helper to render word-level diff between two lines
-function renderWordDiff(oldLine: string, newLine: string) {
+// Convert renderWordDiff to a React component
+const WordDiff = memo(({ oldLine, newLine }: { oldLine: string; newLine: string }) => {
   const wordDiff = diffWords(oldLine, newLine);
-  return wordDiff.map((part, idx) => {
-    if (part.added) {
-      return (
-        <span key={idx} className="tw-text-success">
-          {part.value}
-        </span>
-      );
-    }
-    if (part.removed) {
-      return (
-        <span key={idx} className="tw-text-error" style={{ textDecoration: "line-through" }}>
-          {part.value}
-        </span>
-      );
-    }
-    return <span key={idx}>{part.value}</span>;
-  });
-}
+  return (
+    <>
+      {wordDiff.map((part, idx) => {
+        if (part.added) {
+          return (
+            <span key={idx} className="tw-text-success">
+              {part.value}
+            </span>
+          );
+        }
+        if (part.removed) {
+          return (
+            <span key={idx} className="tw-text-error tw-line-through">
+              {part.value}
+            </span>
+          );
+        }
+        return <span key={idx}>{part.value}</span>;
+      })}
+    </>
+  );
+});
+
+WordDiff.displayName = "WordDiff";
 
 const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   const [diff, setDiff] = useState<ExtendedChange[]>(() => {
@@ -323,27 +329,25 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                 // Render the block
                 block.map((change, changeIndex) => {
                   // Try to find a corresponding added/removed pair for word-level diff
-                  if (change.added || change.removed) {
-                    if (change.added) {
-                      const removedIdx = block.findIndex((c, i) => c.removed && i !== changeIndex);
-                      if (removedIdx !== -1) {
-                        const removedLine = block[removedIdx].value;
-                        return (
-                          <div key={`${blockIndex}-${changeIndex}`} className="tw-relative">
-                            <div className="tw-flex-1 tw-whitespace-pre-wrap tw-px-2 tw-py-1 tw-font-mono tw-text-sm">
-                              {renderWordDiff(removedLine, change.value)}
-                            </div>
+                  if (change.added) {
+                    const removedIdx = block.findIndex((c, i) => c.removed && i !== changeIndex);
+                    if (removedIdx !== -1) {
+                      const removedLine = block[removedIdx].value;
+                      return (
+                        <div key={`${blockIndex}-${changeIndex}`} className="tw-relative">
+                          <div className="tw-flex-1 tw-whitespace-pre-wrap tw-px-2 tw-py-1 tw-font-mono tw-text-sm">
+                            <WordDiff oldLine={removedLine} newLine={change.value} />
                           </div>
-                        );
-                      }
+                        </div>
+                      );
                     }
-                    // Skip rendering removed line if it is already paired with an added line.
-                    if (change.removed) {
-                      const addedIdx = block.findIndex((c, i) => c.added && i !== changeIndex);
-                      if (addedIdx !== -1) {
-                        // Skip rendering removed line, since it's shown in the added line
-                        return null;
-                      }
+                  }
+                  // Skip rendering removed line if it is already paired with an added line.
+                  if (change.removed) {
+                    const addedIdx = block.findIndex((c, i) => c.added && i !== changeIndex);
+                    if (addedIdx !== -1) {
+                      // Skip rendering removed line, since it's shown in the added line
+                      return null;
                     }
                   }
                   // No pair found, render the line as is.
@@ -356,9 +360,9 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                             "tw-text-success": change.added,
                             "tw-text-error": change.removed,
                             "tw-text-normal": !change.added && !change.removed,
+                            "tw-line-through": change.removed,
                           }
                         )}
-                        style={change.removed ? { textDecoration: "line-through" } : undefined}
                       >
                         {change.value}
                       </div>
