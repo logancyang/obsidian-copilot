@@ -18,7 +18,7 @@ function ConfirmModalContent({
 }) {
   return (
     <div className="tw-flex tw-flex-col tw-gap-5">
-      <div>{content}</div>
+      <div className="tw-whitespace-pre-wrap">{content}</div>
       <div className="tw-flex tw-justify-end tw-gap-2">
         {cancelButtonText && (
           <Button variant="secondary" onClick={onCancel}>

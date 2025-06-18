@@ -1,9 +1,5 @@
 import { CustomCommandManager } from "@/commands/customCommandManager";
-import {
-  getCustomCommandsFolder,
-  loadAllCustomCommands,
-  validateCommandName,
-} from "@/commands/customCommandUtils";
+import { getCustomCommandsFolder, validateCommandName } from "@/commands/customCommandUtils";
 import { CustomCommand } from "@/commands/type";
 import { getSettings, updateSetting } from "@/settings/model";
 import {
@@ -47,7 +43,7 @@ export async function migrateCommands() {
   }
   const commandsToMigrate: CustomCommand[] = [];
   const unsupportedCommands: CustomCommand[] = [];
-  const existingCommands = await loadAllCustomCommands();
+  const existingCommands = getCachedCustomCommands();
 
   const commands = legacyCommands.map((command, index) => ({
     title: command.name,
@@ -73,7 +69,10 @@ export async function migrateCommands() {
   }
 
   await CustomCommandManager.getInstance().updateCommands([
-    ...existingCommands,
+    ...existingCommands.map((command) => ({
+      ...command,
+      showInSlashMenu: true,
+    })),
     ...commandsToMigrate,
   ]);
 
