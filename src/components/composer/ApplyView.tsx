@@ -1,9 +1,9 @@
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
-import { Change } from "diff";
+import { Change, diffWords } from "diff";
 import { Check, X as XIcon } from "lucide-react";
 import { App, ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
-import React, { useRef } from "react";
+import React, { useRef, memo } from "react";
 import { createRoot } from "react-dom/client";
 import { Button } from "../ui/button";
 import { useState } from "react";
@@ -77,6 +77,34 @@ interface ApplyViewRootProps {
   state: ApplyViewState;
   close: () => void;
 }
+
+// Convert renderWordDiff to a React component
+const WordDiff = memo(({ oldLine, newLine }: { oldLine: string; newLine: string }) => {
+  const wordDiff = diffWords(oldLine, newLine);
+  return (
+    <>
+      {wordDiff.map((part, idx) => {
+        if (part.added) {
+          return (
+            <span key={idx} className="tw-text-success">
+              {part.value}
+            </span>
+          );
+        }
+        if (part.removed) {
+          return (
+            <span key={idx} className="tw-text-error tw-line-through">
+              {part.value}
+            </span>
+          );
+        }
+        return <span key={idx}>{part.value}</span>;
+      })}
+    </>
+  );
+});
+
+WordDiff.displayName = "WordDiff";
 
 const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   const [diff, setDiff] = useState<ExtendedChange[]>(() => {
@@ -277,12 +305,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
             <div
               key={blockIndex}
               ref={(el) => (blockRefs.current[blockIndex] = el)}
-              className={cn(
-                "tw-mb-4 tw-overflow-hidden tw-rounded-md tw-border tw-border-solid tw-border-border",
-                {
-                  "tw-border-solid": blockStatus !== "unchanged",
-                }
-              )}
+              className={cn("tw-mb-4 tw-overflow-hidden tw-rounded-md")}
             >
               {blockStatus === "accepted" ? (
                 // Show only the accepted version
@@ -303,20 +326,49 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                     ))}
                 </div>
               ) : (
-                // Show the diff view for undecided blocks
-                block.map((change, changeIndex) => (
-                  <div
-                    key={`${blockIndex}-${changeIndex}`}
-                    className={cn("tw-relative", {
-                      "tw-bg-success tw-border-l-green": change.added,
-                      "tw-bg-error tw-border-l-red": change.removed,
-                    })}
-                  >
-                    <div className="tw-flex-1 tw-whitespace-pre-wrap tw-px-2 tw-py-1 tw-font-mono tw-text-sm tw-text-normal">
-                      {change.value}
+                // Render the block
+                block.map((change, changeIndex) => {
+                  // Try to find a corresponding added/removed pair for word-level diff
+                  if (change.added) {
+                    const removedIdx = block.findIndex((c, i) => c.removed && i !== changeIndex);
+                    if (removedIdx !== -1) {
+                      const removedLine = block[removedIdx].value;
+                      return (
+                        <div key={`${blockIndex}-${changeIndex}`} className="tw-relative">
+                          <div className="tw-flex-1 tw-whitespace-pre-wrap tw-px-2 tw-py-1 tw-font-mono tw-text-sm">
+                            <WordDiff oldLine={removedLine} newLine={change.value} />
+                          </div>
+                        </div>
+                      );
+                    }
+                  }
+                  // Skip rendering removed line if it is already paired with an added line.
+                  if (change.removed) {
+                    const addedIdx = block.findIndex((c, i) => c.added && i !== changeIndex);
+                    if (addedIdx !== -1) {
+                      // Skip rendering removed line, since it's shown in the added line
+                      return null;
+                    }
+                  }
+                  // No pair found, render the line as is.
+                  return (
+                    <div key={`${blockIndex}-${changeIndex}`} className="tw-relative">
+                      <div
+                        className={cn(
+                          "tw-flex-1 tw-whitespace-pre-wrap tw-px-2 tw-py-1 tw-font-mono tw-text-sm",
+                          {
+                            "tw-text-success": change.added,
+                            "tw-text-error": change.removed,
+                            "tw-text-normal": !change.added && !change.removed,
+                            "tw-line-through": change.removed,
+                          }
+                        )}
+                      >
+                        {change.value}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
 
               {/* Only show accept/reject buttons for blocks with changes that are undecided */}
