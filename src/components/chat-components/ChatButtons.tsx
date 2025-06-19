@@ -11,6 +11,7 @@ import {
   RotateCw,
   TextCursorInput,
   Trash2,
+  Volume2, // 新增TTS图标
 } from "lucide-react";
 import { Platform } from "obsidian";
 import React from "react";
@@ -25,6 +26,7 @@ interface ChatButtonsProps {
   onDelete: () => void;
   onShowSources?: () => void;
   hasSources: boolean;
+  onSpeak?: (textToSpeak?: string) => void; // 新增TTS回调
 }
 
 export const ChatButtons: React.FC<ChatButtonsProps> = ({
@@ -37,6 +39,7 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
   onDelete,
   onShowSources,
   hasSources,
+  onSpeak, // 新增
 }) => {
   return (
     <div
@@ -75,6 +78,20 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
               <TooltipContent>Show Sources</TooltipContent>
             </Tooltip>
           )}
+          {/* 新增TTS播放按钮 */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                onClick={() => onSpeak?.(message.message)} 
+                variant="ghost2" 
+                size="fit" 
+                title="Text-to-Speech"
+              >
+                <Volume2 className="size-4" /> {/* 需要从lucide-react导入Volume2图标 */}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Read Aloud</TooltipContent>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
