@@ -1,6 +1,6 @@
 // Inspired by
 // https://github.com/renehernandez/obsidian-readwise/blob/eee5676524962ebfa7eaf1084e018dafe3c2f394/src/status.ts
-export class StatusBar {
+export class StatusBarReadwise {
   private messages: StatusBarMessage[] = [];
   private currentMessage: StatusBarMessage | undefined;
   private statusBarEl: HTMLElement;

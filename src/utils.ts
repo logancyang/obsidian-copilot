@@ -885,7 +885,7 @@ import {
   WhisperASRResponse,
   WhisperASRSegment,
   WhisperASRWordTimestamp,
-} from "./types/whisper-asr";
+} from "./asr/types/whisper-asr";
 
 export const randomString = (length: number) =>
   Array(length + 1)
@@ -981,4 +981,14 @@ export function preprocessWhisperASRResponse(rawResponse: any): WhisperASRRespon
       return baseSegment;
     }),
   };
+}
+
+export function getBaseFileName(filePath: string) {
+  // Extract the file name including extension
+  const fileName = filePath.substring(filePath.lastIndexOf("/") + 1);
+
+  // Remove the extension from the file name
+  const baseFileName = fileName.substring(0, fileName.lastIndexOf("."));
+
+  return baseFileName;
 }

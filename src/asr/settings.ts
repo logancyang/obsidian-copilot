@@ -1,5 +1,6 @@
 import { App, PluginSettingTab, Setting, Notice } from "obsidian";
-import { Transcription } from "./main";
+import Whisper from "../main";
+import { WebSearchResponse } from "@/LLMProviders/brevilabsClient";
 
 interface TranscriptionSettings {
   timestamps: boolean;
@@ -145,9 +146,9 @@ const LANGUAGES = {
 };
 
 class TranscriptionSettingTab extends PluginSettingTab {
-  plugin: Transcription;
+  plugin: Whisper;
 
-  constructor(app: App, plugin: Transcription) {
+  constructor(app: App, plugin: Whisper) {
     super(app, plugin);
     this.plugin = plugin;
   }
@@ -174,15 +175,15 @@ class TranscriptionSettingTab extends PluginSettingTab {
         dropdown
           .addOption("swiftink", "Swiftink")
           .addOption("whisper_asr", "Whisper ASR")
-          .setValue(this.plugin.settings.transcriptionEngine)
+          .setValue(this.plugin.Transcriptionsettings.transcriptionEngine)
           .onChange(async (value) => {
-            this.plugin.settings.transcriptionEngine = value;
+            this.plugin.Transcriptionsettings.transcriptionEngine = value;
             await this.plugin.saveSettings();
             this.updateSettingVisibility(".swiftink-settings", value === "swiftink");
             this.updateSettingVisibility(".whisper-asr-settings", value === "whisper_asr");
             this.updateSettingVisibility(
               ".word-timestamps-setting",
-              value === "whisper_asr" && this.plugin.settings.timestamps
+              value === "whisper_asr" && this.plugin.Transcriptionsettings.timestamps
             );
           })
       );
@@ -198,9 +199,9 @@ class TranscriptionSettingTab extends PluginSettingTab {
           .addOption("0", "Silent")
           .addOption("1", "Normal")
           .addOption("2", "Verbose")
-          .setValue(this.plugin.settings.verbosity.toString())
+          .setValue(this.plugin.Transcriptionsettings.verbosity.toString())
           .onChange(async (value) => {
-            this.plugin.settings.verbosity = parseInt(value);
+            this.plugin.Transcriptionsettings.verbosity = parseInt(value);
             await this.plugin.saveSettings();
           })
       );
@@ -214,9 +215,9 @@ class TranscriptionSettingTab extends PluginSettingTab {
         for (const [key, value] of Object.entries(LANGUAGES)) {
           dropdown.addOption(value, key.charAt(0).toUpperCase() + key.slice(1).toLowerCase());
         }
-        dropdown.setValue(this.plugin.settings.language);
+        dropdown.setValue(this.plugin.Transcriptionsettings.language);
         dropdown.onChange(async (value) => {
-          this.plugin.settings.language = value;
+          this.plugin.Transcriptionsettings.language = value;
           await this.plugin.saveSettings();
         });
       });
@@ -228,9 +229,9 @@ class TranscriptionSettingTab extends PluginSettingTab {
       .addDropdown((dropdown) => {
         dropdown.addOption("multi", "Multi-line");
         dropdown.addOption("single", "Single-line");
-        dropdown.setValue(this.plugin.settings.lineSpacing);
+        dropdown.setValue(this.plugin.Transcriptionsettings.lineSpacing);
         dropdown.onChange(async (value) => {
-          this.plugin.settings.lineSpacing = value;
+          this.plugin.Transcriptionsettings.lineSpacing = value;
           await this.plugin.saveSettings();
         });
       });
@@ -239,13 +240,13 @@ class TranscriptionSettingTab extends PluginSettingTab {
       .setName("Enable timestamps")
       .setDesc("Add timestamps to the beginning of each line")
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.timestamps).onChange(async (value) => {
-          this.plugin.settings.timestamps = value;
+        toggle.setValue(this.plugin.Transcriptionsettings.timestamps).onChange(async (value) => {
+          this.plugin.Transcriptionsettings.timestamps = value;
           await this.plugin.saveSettings();
           this.updateSettingVisibility(".depends-on-timestamps", value);
           this.updateSettingVisibility(
             ".word-timestamps-setting",
-            this.plugin.settings.transcriptionEngine === "whisper_asr" && value
+            this.plugin.Transcriptionsettings.transcriptionEngine === "whisper_asr" && value
           );
         })
       );
@@ -262,9 +263,9 @@ class TranscriptionSettingTab extends PluginSettingTab {
           .addOption("HH:mm:ss", "HH:mm:ss")
           .addOption("mm:ss", "mm:ss")
           .addOption("ss", "ss")
-          .setValue(this.plugin.settings.timestampFormat)
+          .setValue(this.plugin.Transcriptionsettings.timestampFormat)
           .onChange(async (value) => {
-            this.plugin.settings.timestampFormat = value;
+            this.plugin.Transcriptionsettings.timestampFormat = value;
             await this.plugin.saveSettings();
           })
       );
@@ -282,9 +283,9 @@ class TranscriptionSettingTab extends PluginSettingTab {
           .addOption("20", "20")
           .addOption("30", "30")
           .addOption("60", "60")
-          .setValue(this.plugin.settings.timestampInterval)
+          .setValue(this.plugin.Transcriptionsettings.timestampInterval)
           .onChange(async (value) => {
-            this.plugin.settings.timestampInterval = value;
+            this.plugin.Transcriptionsettings.timestampInterval = value;
             await this.plugin.saveSettings();
           })
       );
@@ -330,8 +331,8 @@ class TranscriptionSettingTab extends PluginSettingTab {
         bt.onClick(async () => {
           await this.plugin.supabase.auth.signOut();
           this.plugin.user = null;
-          this.plugin.settings.swiftink_access_token = null;
-          this.plugin.settings.swiftink_refresh_token = null;
+          this.plugin.Transcriptionsettings.swiftink_access_token = null;
+          this.plugin.Transcriptionsettings.swiftink_refresh_token = null;
           await this.plugin.saveSettings();
           this.updateSettingVisibility(".swiftink-unauthed-only", true);
           this.updateSettingVisibility(".swiftink-authed-only", false);
@@ -353,8 +354,8 @@ class TranscriptionSettingTab extends PluginSettingTab {
       .setTooltip("This will only work if you have a Swiftink Pro account")
       .setClass("swiftink-settings")
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.embedSummary).onChange(async (value) => {
-          this.plugin.settings.embedSummary = value;
+        toggle.setValue(this.plugin.Transcriptionsettings.embedSummary).onChange(async (value) => {
+          this.plugin.Transcriptionsettings.embedSummary = value;
           await this.plugin.saveSettings();
         })
       );
@@ -365,8 +366,8 @@ class TranscriptionSettingTab extends PluginSettingTab {
       .setTooltip("This will only work if you have a Swiftink Pro account")
       .setClass("swiftink-settings")
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.embedOutline).onChange(async (value) => {
-          this.plugin.settings.embedOutline = value;
+        toggle.setValue(this.plugin.Transcriptionsettings.embedOutline).onChange(async (value) => {
+          this.plugin.Transcriptionsettings.embedOutline = value;
           await this.plugin.saveSettings();
         })
       );
@@ -377,8 +378,8 @@ class TranscriptionSettingTab extends PluginSettingTab {
       .setTooltip("This will only work if you have a Swiftink Pro account")
       .setClass("swiftink-settings")
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.embedKeywords).onChange(async (value) => {
-          this.plugin.settings.embedKeywords = value;
+        toggle.setValue(this.plugin.Transcriptionsettings.embedKeywords).onChange(async (value) => {
+          this.plugin.Transcriptionsettings.embedKeywords = value;
           await this.plugin.saveSettings();
         })
       );
@@ -394,9 +395,9 @@ class TranscriptionSettingTab extends PluginSettingTab {
       .setClass("swiftink-settings")
       .addToggle((toggle) =>
         toggle
-          .setValue(this.plugin.settings.embedAdditionalFunctionality)
+          .setValue(this.plugin.Transcriptionsettings.embedAdditionalFunctionality)
           .onChange(async (value) => {
-            this.plugin.settings.embedAdditionalFunctionality = value;
+            this.plugin.Transcriptionsettings.embedAdditionalFunctionality = value;
             await this.plugin.saveSettings();
           })
       );
@@ -415,9 +416,9 @@ class TranscriptionSettingTab extends PluginSettingTab {
       .addText((text) =>
         text
           .setPlaceholder(DEFAULT_SETTINGS.whisperASRUrls)
-          .setValue(this.plugin.settings.whisperASRUrls)
+          .setValue(this.plugin.Transcriptionsettings.whisperASRUrls)
           .onChange(async (value) => {
-            this.plugin.settings.whisperASRUrls = value;
+            this.plugin.Transcriptionsettings.whisperASRUrls = value;
             await this.plugin.saveSettings();
           })
       );
@@ -427,8 +428,8 @@ class TranscriptionSettingTab extends PluginSettingTab {
       .setDesc("Encode audio first through ffmpeg")
       .setClass("whisper-asr-settings")
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.encode).onChange(async (value) => {
-          this.plugin.settings.encode = value;
+        toggle.setValue(this.plugin.Transcriptionsettings.encode).onChange(async (value) => {
+          this.plugin.Transcriptionsettings.encode = value;
           await this.plugin.saveSettings();
         })
       );
@@ -442,9 +443,9 @@ class TranscriptionSettingTab extends PluginSettingTab {
       .addTextArea((text) =>
         text
           .setPlaceholder(DEFAULT_SETTINGS.initialPrompt)
-          .setValue(this.plugin.settings.initialPrompt)
+          .setValue(this.plugin.Transcriptionsettings.initialPrompt)
           .onChange(async (value) => {
-            this.plugin.settings.initialPrompt = value;
+            this.plugin.Transcriptionsettings.initialPrompt = value;
             await this.plugin.saveSettings();
           })
       );
@@ -456,10 +457,12 @@ class TranscriptionSettingTab extends PluginSettingTab {
       )
       .setClass("word-timestamps-setting")
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.wordTimestamps).onChange(async (value) => {
-          this.plugin.settings.wordTimestamps = value;
-          await this.plugin.saveSettings();
-        })
+        toggle
+          .setValue(this.plugin.Transcriptionsettings.wordTimestamps)
+          .onChange(async (value) => {
+            this.plugin.Transcriptionsettings.wordTimestamps = value;
+            await this.plugin.saveSettings();
+          })
       );
 
     new Setting(containerEl)
@@ -467,8 +470,8 @@ class TranscriptionSettingTab extends PluginSettingTab {
       .setDesc("Filter out silence from the audio")
       .setClass("whisper-asr-settings")
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.vadFilter).onChange(async (value) => {
-          this.plugin.settings.vadFilter = value;
+        toggle.setValue(this.plugin.Transcriptionsettings.vadFilter).onChange(async (value) => {
+          this.plugin.Transcriptionsettings.vadFilter = value;
           await this.plugin.saveSettings();
         })
       );
@@ -479,8 +482,8 @@ class TranscriptionSettingTab extends PluginSettingTab {
       .setName("Debug mode")
       .setDesc("Enable debug mode to see more console logs")
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.debug).onChange(async (value) => {
-          this.plugin.settings.debug = value;
+        toggle.setValue(this.plugin.Transcriptionsettings.debug).onChange(async (value) => {
+          this.plugin.Transcriptionsettings.debug = value;
           await this.plugin.saveSettings();
         })
       );
@@ -523,17 +526,21 @@ class TranscriptionSettingTab extends PluginSettingTab {
     // Logic! (the incredible true story)
     this.updateSettingVisibility(
       ".swiftink-settings",
-      this.plugin.settings.transcriptionEngine === "swiftink"
+      this.plugin.Transcriptionsettings.transcriptionEngine === "swiftink"
     );
     this.updateSettingVisibility(
       ".whisper-asr-settings",
-      this.plugin.settings.transcriptionEngine === "whisper_asr"
+      this.plugin.Transcriptionsettings.transcriptionEngine === "whisper_asr"
     );
 
-    this.updateSettingVisibility(".depends-on-timestamps", this.plugin.settings.timestamps);
+    this.updateSettingVisibility(
+      ".depends-on-timestamps",
+      this.plugin.Transcriptionsettings.timestamps
+    );
     this.updateSettingVisibility(
       ".word-timestamps-setting",
-      this.plugin.settings.transcriptionEngine === "whisper_asr" && this.plugin.settings.timestamps
+      this.plugin.Transcriptionsettings.transcriptionEngine === "whisper_asr" &&
+        this.plugin.Transcriptionsettings.timestamps
     );
 
     this.updateSettingVisibility(".swiftink-unauthed-only", this.plugin.user === null);

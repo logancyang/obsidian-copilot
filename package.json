@@ -33,7 +33,10 @@
   },
   "license": "AGPL-3.0",
   "devDependencies": {
+    "@commitlint/cli": "^17.6.5",
+    "@commitlint/config-conventional": "^17.6.5",
     "@langchain/ollama": "^0.2.0",
+    "@release-it/conventional-changelog": "^5.1.1",
     "@tailwindcss/container-queries": "^0.1.1",
     "@testing-library/jest-dom": "^5.16.5",
     "@testing-library/react": "^14.0.0",
@@ -51,6 +54,7 @@
     "@typescript-eslint/eslint-plugin": "^8.19.1",
     "@typescript-eslint/parser": "^8.19.1",
     "builtin-modules": "3.3.0",
+    "dotenv": "^16.3.1",
     "electron": "^27.3.2",
     "esbuild": "^0.25.0",
     "eslint": "^8.57.0",

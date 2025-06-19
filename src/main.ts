@@ -39,8 +39,8 @@ import {
 import { IntentAnalyzer } from "./LLMProviders/intentAnalyzer";
 
 import { ChildProcess } from "child_process";
-import { TranscriptionEngine } from "./transcribe";
-import { StatusBar } from "./status";
+import { TranscriptionEngine } from "./asr/transcribe";
+import { StatusBarReadwise } from "./asr/status";
 import { createClient, User } from "@supabase/supabase-js";
 import {
   TranscriptionSettings,
@@ -50,8 +50,15 @@ import {
   SUPABASE_URL,
   SUPABASE_KEY,
   IS_SWIFTINK,
-} from "./settings";
-import { FileLink } from "./fileLink";
+} from "./asr/settings";
+import { FileLink } from "./asr/fileLink";
+import { Timer } from "./asr/Timer";
+import { Controls } from "./asr/Controls";
+import { AudioHandler } from "./asr/AudioHandler";
+import { WhisperSettingsTab } from "./asr/WhisperSettingsTab";
+import { SettingsManager, WhisperSettings } from "./asr/SettingsManager";
+import { NativeAudioRecorder } from "./asr/AudioRecorder";
+import { RecordingStatus, StatusBarRecord } from "./asr/StatusBar";
 
 export default class CopilotPlugin extends Plugin {
   // A chat history that stores the messages sent and received
@@ -63,8 +70,15 @@ export default class CopilotPlugin extends Plugin {
   vectorStoreManager: VectorStoreManager;
   fileParserManager: FileParserManager;
   settingsUnsubscriber?: () => void;
-  settings: TranscriptionSettings;
-  statusBar: StatusBar;
+  Transcriptionsettings: TranscriptionSettings;
+  statusBarReadwise: StatusBarReadwise;
+  whisperSettings: WhisperSettings;
+  settingsManager: SettingsManager;
+  timer: Timer;
+  recorder: NativeAudioRecorder;
+  audioHandler: AudioHandler;
+  controls: Controls | null = null;
+  statusBarRecord: StatusBarRecord;
 
   public static plugin: Plugin;
   public static children: Array<ChildProcess> = [];
@@ -178,7 +192,7 @@ export default class CopilotPlugin extends Plugin {
         linkedFileExtension === undefined ||
         !CopilotPlugin.transcribeFileExtensions.includes(linkedFileExtension.toLowerCase())
       ) {
-        if (this.settings.debug)
+        if (this.Transcriptionsettings.debug)
           console.log(
             "Skipping " +
               linkedFilePath +
@@ -193,7 +207,7 @@ export default class CopilotPlugin extends Plugin {
       // Validate that we are dealing with a file and add it to the list of verified files to transcribe
       if (linkedFile instanceof TFile) filesToTranscribe.push(linkedFile);
       else {
-        if (this.settings.debug) console.log("Could not find file " + linkedFilePath);
+        if (this.Transcriptionsettings.debug) console.log("Could not find file " + linkedFilePath);
         continue;
       }
     }
@@ -206,7 +220,7 @@ export default class CopilotPlugin extends Plugin {
     abortController: AbortController | null
   ) {
     try {
-      if (this.settings.debug) console.log("Transcribing " + file.path);
+      if (this.Transcriptionsettings.debug) console.log("Transcribing " + file.path);
 
       const transcription = await this.transcriptionEngine.getTranscription(file);
 
@@ -217,7 +231,7 @@ export default class CopilotPlugin extends Plugin {
       const startReplacementIndex =
         fileText.indexOf(fileLinkStringTagged) + fileLinkStringTagged.length;
 
-      if (this.settings.lineSpacing === "single") {
+      if (this.Transcriptionsettings.lineSpacing === "single") {
         fileText = [
           fileText.slice(0, startReplacementIndex),
           `${transcription}`,
@@ -248,7 +262,7 @@ export default class CopilotPlugin extends Plugin {
           10 * 1000
         );
       } else {
-        if (this.settings.debug) console.log(error);
+        if (this.Transcriptionsettings.debug) console.log(error);
         new Notice(`Error transcribing file: ${error}`, 10 * 1000);
       }
     } finally {
@@ -324,32 +338,32 @@ export default class CopilotPlugin extends Plugin {
     await this.loadSettings();
     CopilotPlugin.plugin = this;
     console.log("Loading Obsidian Transcription");
-    if (this.settings.debug) console.log("Debug mode enabled");
+    if (this.Transcriptionsettings.debug) console.log("Debug mode enabled");
 
     this.transcriptionEngine = new TranscriptionEngine(
-      this.settings,
+      this.Transcriptionsettings,
       this.app.vault,
-      this.statusBar,
+      this.statusBarReadwise,
       this.supabase,
       this.app
     );
 
     // Prompt the user to sign in if the have Swiftink selected and are not signed in
-    if (this.settings.transcriptionEngine == "swiftink") {
+    if (this.Transcriptionsettings.transcriptionEngine == "swiftink") {
       this.user = await this.supabase.auth.getUser().then((res) => {
         return res.data.user || null;
       });
       if (this.user == null) {
         // First try setting the access token and refresh token from the settings
-        if (this.settings.debug)
+        if (this.Transcriptionsettings.debug)
           console.log("Trying to set access token and refresh token from settings");
         if (
-          this.settings.swiftink_access_token != null &&
-          this.settings.swiftink_refresh_token != null
+          this.Transcriptionsettings.swiftink_access_token != null &&
+          this.Transcriptionsettings.swiftink_refresh_token != null
         ) {
           await this.supabase.auth.setSession({
-            access_token: this.settings.swiftink_access_token,
-            refresh_token: this.settings.swiftink_refresh_token,
+            access_token: this.Transcriptionsettings.swiftink_access_token,
+            refresh_token: this.Transcriptionsettings.swiftink_refresh_token,
           });
           this.user = await this.supabase.auth.getUser().then((res) => {
             return res.data.user || null;
@@ -384,8 +398,8 @@ export default class CopilotPlugin extends Plugin {
     }
 
     if (!Platform.isMobileApp) {
-      this.statusBar = new StatusBar(this.addStatusBarItem());
-      this.registerInterval(window.setInterval(() => this.statusBar.display(), 1000));
+      this.statusBarReadwise = new StatusBarReadwise(this.addStatusBarItem());
+      this.registerInterval(window.setInterval(() => this.statusBarReadwise.display(), 1000));
     }
 
     // Register the file-menu event
@@ -475,7 +489,7 @@ export default class CopilotPlugin extends Plugin {
         const fileNames = filesToTranscribe.map((file) => file.name).join(", ");
         new Notice(`Files Selected: ${fileNames}`, 5 * 1000);
 
-        if (this.user == null && this.settings.transcriptionEngine == IS_SWIFTINK) {
+        if (this.user == null && this.Transcriptionsettings.transcriptionEngine == IS_SWIFTINK) {
           this.pendingCommand = {
             parentFile: view.file,
           };
@@ -526,7 +540,7 @@ export default class CopilotPlugin extends Plugin {
 
             if (
               this.transcriptionInstance.user == null &&
-              this.transcriptionInstance.settings.transcriptionEngine == IS_SWIFTINK
+              this.transcriptionInstance.Transcriptionsettings.transcriptionEngine == IS_SWIFTINK
             ) {
               this.transcriptionInstance.pendingCommand = {
                 file: file,
@@ -606,8 +620,8 @@ export default class CopilotPlugin extends Plugin {
       new Notice("Successfully authenticated with Swiftink.io");
 
       // Save to settings
-      this.settings.swiftink_access_token = access_token;
-      this.settings.swiftink_refresh_token = refresh_token;
+      this.Transcriptionsettings.swiftink_access_token = access_token;
+      this.Transcriptionsettings.swiftink_refresh_token = refresh_token;
       await this.saveSettings();
 
       // Show the settings for user auth/unauth based on whether the user is signed in
@@ -663,6 +677,80 @@ export default class CopilotPlugin extends Plugin {
 
       new SwiftinkTranscriptFunctionsModal(this.app).open();
     });
+
+    this.settingsManager = new SettingsManager(this);
+    this.whisperSettings = await this.settingsManager.loadSettings();
+
+    this.addRibbonIcon("activity", "Open recording controls", (evt) => {
+      this.openRecordingControls();
+    });
+
+    this.addSettingTab(new WhisperSettingsTab(this.app, this));
+
+    this.timer = new Timer();
+    this.audioHandler = new AudioHandler(this);
+    this.recorder = new NativeAudioRecorder();
+
+    this.statusBarRecord = new StatusBarRecord(this);
+    this.addCommand({
+      id: "start-stop-recording",
+      name: "Start/stop recording",
+      callback: async () => {
+        if (this.statusBarRecord.status !== RecordingStatus.Recording) {
+          this.statusBarRecord.updateStatus(RecordingStatus.Recording);
+          await this.recorder.startRecording();
+        } else {
+          this.statusBarRecord.updateStatus(RecordingStatus.Processing);
+          const audioBlob = await this.recorder.stopRecording();
+          const extension = this.recorder.getMimeType()?.split("/")[1];
+          const fileName = `${new Date().toISOString().replace(/[:.]/g, "-")}.${extension}`;
+          // Use audioBlob to send or save the recorded audio as needed
+          await this.audioHandler.sendAudioData(audioBlob, fileName);
+          this.statusBarRecord.updateStatus(RecordingStatus.Idle);
+        }
+      },
+      hotkeys: [
+        {
+          modifiers: ["Alt"],
+          key: "Q",
+        },
+      ],
+    });
+
+    this.addCommand({
+      id: "upload-audio-file",
+      name: "Upload audio file",
+      callback: () => {
+        // Create an input element for file selection
+        const fileInput = document.createElement("input");
+        fileInput.type = "file";
+        fileInput.accept = "audio/*"; // Accept only audio files
+
+        // Handle file selection
+        fileInput.onchange = async (event) => {
+          const files = (event.target as HTMLInputElement).files;
+          if (files && files.length > 0) {
+            const file = files[0];
+            const fileName = file.name;
+            const audioBlob = file.slice(0, file.size, file.type);
+            // Use audioBlob to send or save the uploaded audio as needed
+            await this.audioHandler.sendAudioData(audioBlob, fileName);
+          }
+        };
+
+        // Programmatically open the file dialog
+        fileInput.click();
+      },
+    });
+
+    this.addCommand({
+      id: "open-recording-controls",
+      name: "打开录音控制面板",
+      callback: () => {
+        this.openRecordingControls();
+      },
+    });
+    this.registerEditorMenu();
   }
   onFileMenu(menu: Menu, file: TFile) {
     const parentFile = this.app.workspace.getActiveFile();
@@ -680,7 +768,10 @@ export default class CopilotPlugin extends Plugin {
             .setTitle("Transcribe")
             .setIcon("headphones")
             .onClick(async () => {
-              if (this.user == null && this.settings.transcriptionEngine == IS_SWIFTINK) {
+              if (
+                this.user == null &&
+                this.Transcriptionsettings.transcriptionEngine == IS_SWIFTINK
+              ) {
                 this.pendingCommand = {
                   file: file,
                   parentFile: parentFile,
@@ -711,7 +802,7 @@ export default class CopilotPlugin extends Plugin {
 
     console.log("Copilot plugin unloaded");
 
-    if (this.settings.debug) console.log("Unloading Obsidian Transcription");
+    if (this.Transcriptionsettings.debug) console.log("Unloading Obsidian Transcription");
   }
 
   updateUserMessageHistory(newMessage: string) {
@@ -837,13 +928,34 @@ export default class CopilotPlugin extends Plugin {
     const savedSettings = await this.loadData();
     const sanitizedSettings = sanitizeSettings(savedSettings);
     setSettings(sanitizedSettings);
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    this.Transcriptionsettings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
   }
 
   async saveSettings() {
-    await this.saveData(this.settings);
+    await this.saveData(this.Transcriptionsettings);
   }
 
+  registerEditorMenu() {
+    this.registerEvent(
+      this.app.workspace.on("editor-menu", (menu, editor, view) => {
+        menu.addItem((item) => {
+          item
+            .setTitle("语音输入文字")
+            .setIcon("microphone")
+            .onClick(() => {
+              this.openRecordingControls();
+            });
+        });
+      })
+    );
+  }
+
+  openRecordingControls() {
+    if (!this.controls) {
+      this.controls = new Controls(this);
+    }
+    this.controls.open();
+  }
   mergeActiveModels(
     existingActiveModels: CustomModel[],
     builtInModels: CustomModel[]

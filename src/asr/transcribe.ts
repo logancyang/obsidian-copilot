@@ -2,12 +2,12 @@ import {
   TranscriptionSettings,
   /*SWIFTINK_AUTH_CALLBACK*/ API_BASE,
   DEFAULT_SETTINGS,
-} from "src/settings";
+} from "./settings";
 import { Notice, requestUrl, RequestUrlParam, TFile, Vault, App } from "obsidian";
 import { format } from "date-fns";
 import { paths, components } from "./types/swiftink";
 import { PayloadData, payloadGenerator, preprocessWhisperASRResponse } from "src/utils";
-import { StatusBar } from "./status";
+import { StatusBarReadwise } from "./status";
 import { SupabaseClient } from "@supabase/supabase-js";
 import * as tus from "tus-js-client";
 import { WhisperASRResponse, WhisperASRSegment } from "./types/whisper-asr";
@@ -19,7 +19,7 @@ const MAX_TRIES = 100;
 export class TranscriptionEngine {
   settings: TranscriptionSettings;
   vault: Vault;
-  statusBar: StatusBar | null;
+  statusBar: StatusBarReadwise | null;
   supabase: SupabaseClient;
   app: App;
 
@@ -33,7 +33,7 @@ export class TranscriptionEngine {
   constructor(
     settings: TranscriptionSettings,
     vault: Vault,
-    statusBar: StatusBar | null,
+    statusBar: StatusBarReadwise | null,
     supabase: SupabaseClient,
     app: App
   ) {
@@ -200,7 +200,7 @@ export class TranscriptionEngine {
           // Concatenate all segments into a single string if no timestamps are required
           return preprocessed.segments
             .map((segment: WhisperASRSegment) => segment.text)
-            .map((s) => s.trim())
+            .map((s: string) => s.trim())
             .join("\n");
         } else {
           // Fallback to full text if no segments are there
