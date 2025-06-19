@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { App, Modal } from "obsidian";
 import React from "react";
 import { createRoot, Root } from "react-dom/client";
@@ -16,20 +17,19 @@ function ConfirmModalContent({
   cancelButtonText: string;
 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      <div>{content}</div>
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
-        <button onClick={onCancel}>{cancelButtonText}</button>
-        <button
-          style={{
-            backgroundColor: "var(--interactive-accent)",
-            color: "var(--text-on-accent)",
-            cursor: "pointer",
-          }}
-          onClick={onConfirm}
-        >
-          {confirmButtonText}
-        </button>
+    <div className="tw-flex tw-flex-col tw-gap-5">
+      <div className="tw-whitespace-pre-wrap">{content}</div>
+      <div className="tw-flex tw-justify-end tw-gap-2">
+        {cancelButtonText && (
+          <Button variant="secondary" onClick={onCancel}>
+            {cancelButtonText}
+          </Button>
+        )}
+        {confirmButtonText && (
+          <Button variant="default" onClick={onConfirm}>
+            {confirmButtonText}
+          </Button>
+        )}
       </div>
     </div>
   );

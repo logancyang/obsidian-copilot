@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ModelDisplay } from "@/components/ui/model-display";
 import { ContextProcessor } from "@/contextProcessor";
-import { CustomPromptProcessor } from "@/customPromptProcessor";
+import { CustomCommandManager } from "@/commands/customCommandManager";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
@@ -47,6 +47,8 @@ import React, {
 } from "react";
 import { useDropzone } from "react-dropzone";
 import ContextControl from "./ContextControl";
+import { getCachedCustomCommands } from "@/commands/state";
+import { sortSlashCommands } from "@/commands/customCommandUtils";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -250,18 +252,22 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       fetchNoteTitles();
     };
 
-    const showCustomPromptModal = async () => {
-      const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
-      const prompts = await customPromptProcessor.getAllPrompts();
-      const promptTitles = prompts.map((prompt) => prompt.title);
+    const showCustomPromptModal = () => {
+      const commandManager = CustomCommandManager.getInstance();
+      const commands = getCachedCustomCommands();
+      const slashCommands = sortSlashCommands(
+        commands.filter((command) => command.showInSlashMenu)
+      );
+      const commandTitles = slashCommands.map((command) => command.title);
 
-      new ListPromptModal(app, promptTitles, async (promptTitle: string) => {
-        const selectedPrompt = prompts.find((prompt) => prompt.title === promptTitle);
-        if (selectedPrompt) {
-          customPromptProcessor.recordPromptUsage(selectedPrompt.title);
-          setInputMessage(selectedPrompt.content);
+      const modal = new ListPromptModal(app, commandTitles, (commandTitle: string) => {
+        const selectedCommand = slashCommands.find((command) => command.title === commandTitle);
+        if (selectedCommand) {
+          commandManager.recordUsage(selectedCommand);
+          setInputMessage(selectedCommand.content);
         }
-      }).open();
+      });
+      modal.open();
     };
 
     const showCopilotPlusOptionsModal = () => {

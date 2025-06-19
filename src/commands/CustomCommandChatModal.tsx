@@ -1,10 +1,9 @@
 import { CustomModel, useModelKey } from "@/aiParams";
-import { processCommandPrompt } from "@/commands/inlineEditCommandUtils";
+import { processCommandPrompt } from "@/commands/customCommandUtils";
 import { Button } from "@/components/ui/button";
 import { getModelDisplayText } from "@/components/ui/model-display";
 import ChatModelManager from "@/LLMProviders/chatModelManager";
 import { logError } from "@/logger";
-import { InlineEditCommandSettings, useSettingsValue } from "@/settings/model";
 import { findCustomModel, insertIntoEditor } from "@/utils";
 import {
   ChatPromptTemplate,
@@ -18,6 +17,8 @@ import { ArrowBigUp, Bot, Command, Copy, CornerDownLeft, PenLine } from "lucide-
 import { App, Modal, Notice, Platform } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
+import { CustomCommand } from "@/commands/type";
+import { useSettingsValue } from "@/settings/model";
 
 // Custom hook for managing chat chain
 function useChatChain(selectedModel: CustomModel) {
@@ -61,19 +62,19 @@ function useChatChain(selectedModel: CustomModel) {
   return { chatChain, chatMemory };
 }
 
-interface InlineEditModalContentProps {
+interface CustomCommandChatModalContentProps {
   originalText: string;
-  command: InlineEditCommandSettings;
+  command: CustomCommand;
   onInsert: (message: string) => void;
   onReplace: (message: string) => void;
 }
 
-function InlineEditModalContent({
+function CustomCommandChatModalContent({
   originalText,
   command,
   onInsert,
   onReplace,
-}: InlineEditModalContentProps) {
+}: CustomCommandChatModalContentProps) {
   const [aiCurrentMessage, setAiCurrentMessage] = useState<string | null>(null);
   const [processedMessage, setProcessedMessage] = useState<string | null>(null);
   const [followupInstruction, setFollowupInstruction] = useState<string>("");
@@ -89,7 +90,7 @@ function InlineEditModalContent({
 
   const { chatChain, chatMemory } = useChatChain(selectedModel);
 
-  const commandName = command.name;
+  const commandTitle = command.title;
 
   // Reusable function to handle streaming responses wrapped in useCallback
   const streamResponse = useCallback(
@@ -150,7 +151,7 @@ function InlineEditModalContent({
       }
 
       try {
-        const prompt = await processCommandPrompt(command.prompt, originalText);
+        const prompt = await processCommandPrompt(command.content, originalText);
         await streamResponse(prompt, abortController);
       } catch (error) {
         logError("Error in initial response:", error);
@@ -162,7 +163,7 @@ function InlineEditModalContent({
     return () => {
       abortController.abort();
     };
-  }, [command.prompt, originalText, chatChain, streamResponse]);
+  }, [command.content, originalText, chatChain, streamResponse]);
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -248,10 +249,10 @@ function InlineEditModalContent({
         {originalText}
       </div>
       <div className="tw-flex tw-flex-col tw-gap-2">
-        {commandName && (
+        {commandTitle && (
           <div className="tw-flex tw-items-center tw-gap-2 tw-font-bold tw-text-normal">
             <PenLine className="tw-size-4" />
-            {commandName}
+            {commandTitle}
           </div>
         )}
       </div>
@@ -314,7 +315,7 @@ function InlineEditModalContent({
                 className="tw-flex tw-items-center tw-gap-1"
               >
                 <span>Insert</span>
-                <div className="tw-flex tw-items-center tw-text-xs tw-text-muted">
+                <div className="tw-flex tw-items-center tw-text-xs tw-text-normal">
                   {Platform.isMacOS ? (
                     <>
                       <Command className="tw-size-3" />
@@ -335,7 +336,7 @@ function InlineEditModalContent({
                 className="tw-flex tw-items-center tw-gap-1"
               >
                 <span>Replace</span>
-                <div className="tw-flex tw-items-center tw-text-xs tw-text-muted">
+                <div className="tw-flex tw-items-center tw-text-xs tw-text-normal">
                   {Platform.isMacOS ? (
                     <>
                       <Command className="tw-size-3" />
@@ -357,14 +358,14 @@ function InlineEditModalContent({
   );
 }
 
-export class InlineEditModal extends Modal {
+export class CustomCommandChatModal extends Modal {
   private root: Root;
 
   constructor(
     app: App,
     private configs: {
       selectedText: string;
-      command: InlineEditCommandSettings;
+      command: CustomCommand;
     }
   ) {
     super(app);
@@ -386,7 +387,7 @@ export class InlineEditModal extends Modal {
     };
 
     this.root.render(
-      <InlineEditModalContent
+      <CustomCommandChatModalContent
         originalText={selectedText}
         command={command}
         onInsert={handleInsert}
