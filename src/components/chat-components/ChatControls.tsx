@@ -8,6 +8,7 @@ import {
   MessageCirclePlus,
   ChevronDown,
   SquareArrowOutUpRight,
+  Volume2 // 新增
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
@@ -151,6 +152,68 @@ export function ChatControls({ onNewChat, onSaveAsNote }: ChatControlsProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64">
+            {/* 新增：启用默认提示词开关 */}
+            <DropdownMenuItem
+              className="flex justify-between"
+              onSelect={(e) => {
+                e.preventDefault();
+                updateSetting("promptEnhancements", {
+                  ...settings.promptEnhancements,
+                  appendDefaultPrompt: !settings.promptEnhancements?.appendDefaultPrompt,
+                });
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <FileText className="size-4" />
+                启用默认提示词
+              </div>
+              <SettingSwitch
+                checked={settings.promptEnhancements?.appendDefaultPrompt !== false}
+              />
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="flex justify-between"
+              onSelect={(e) => {
+                e.preventDefault();
+                updateSetting("promptEnhancements", {
+                  ...settings.promptEnhancements,
+                  autoSpeech: {
+                    enabled: !settings.promptEnhancements?.autoSpeech?.enabled,
+                    prompt: settings.promptEnhancements?.autoSpeech?.prompt || "",
+                  },
+                });
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <Volume2 className="size-4" /> {/* 需要从lucide-react导入Volume2 */}
+                自动语音播放
+              </div>
+              <SettingSwitch
+                checked={settings.promptEnhancements?.autoSpeech?.enabled || false}
+              />
+            </DropdownMenuItem>
+            {/* 新增自动衍生问题开关 */}
+            <DropdownMenuItem
+              className="flex justify-between"
+              onSelect={(e) => {
+                e.preventDefault();
+                updateSetting("promptEnhancements", {
+                  ...settings.promptEnhancements,
+                  autoFollowUp: {
+                    enabled: !settings.promptEnhancements?.autoFollowUp?.enabled,
+                    prompt: settings.promptEnhancements?.autoFollowUp?.prompt || "",
+                  },
+                });
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <MessageCirclePlus className="size-4" />
+                自动衍生问题
+              </div>
+              <SettingSwitch
+                checked={settings.promptEnhancements?.autoFollowUp?.enabled || false}
+              />
+            </DropdownMenuItem>
             <DropdownMenuItem
               className="flex justify-between"
               onSelect={(e) => {

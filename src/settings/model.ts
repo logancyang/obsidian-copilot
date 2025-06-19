@@ -107,6 +107,17 @@ export interface CopilotSettings {
     selectedValues?: SelectedValues;
     traitOrder?: string[]; // 新增特征顺序数组
   };
+  promptEnhancements?: {
+    autoFollowUp?: {
+      enabled: boolean;
+      prompt: string;
+    };
+    autoSpeech?: {
+      enabled: boolean;
+      prompt: string;
+    };
+    appendDefaultPrompt?: boolean; // 新增是否拼接默认系统提示词
+  };
 }
 
 // 用于人设列表
@@ -267,8 +278,40 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 }
 
 export function getSystemPrompt(): string {
-  const userPrompt = getSettings().userSystemPrompt;
-  return userPrompt ? `${DEFAULT_SYSTEM_PROMPT}\n\n${userPrompt}` : DEFAULT_SYSTEM_PROMPT;
+  // const userPrompt = getSettings().userSystemPrompt;
+  // return userPrompt ? `${DEFAULT_SYSTEM_PROMPT}\n\n${userPrompt}` : DEFAULT_SYSTEM_PROMPT;
+
+  const settings = getSettings();
+  const userPrompt = settings.userSystemPrompt;
+
+  let basePrompt: string;
+  
+  // 根据是否拼接默认提示词进行判断
+  if (settings.promptEnhancements?.appendDefaultPrompt === false) {
+    // 不拼接默认提示词
+    basePrompt = userPrompt || '';
+  } else {
+    // 拼接默认提示词
+    basePrompt = userPrompt ? `${DEFAULT_SYSTEM_PROMPT}\n\n${userPrompt}` : DEFAULT_SYSTEM_PROMPT;
+  }
+
+  // 如果自动衍生问题功能开启且设置了提示词
+  if (
+    settings.promptEnhancements?.autoFollowUp?.enabled &&
+    settings.promptEnhancements.autoFollowUp.prompt
+  ) {
+    basePrompt += `\n\n${settings.promptEnhancements.autoFollowUp.prompt}`;
+  }
+
+  // 如果自动语音播放功能开启且设置了提示词
+  if (
+    settings.promptEnhancements?.autoSpeech?.enabled &&
+    settings.promptEnhancements.autoSpeech.prompt
+  ) {
+    basePrompt += `\n\n${settings.promptEnhancements.autoSpeech.prompt}`;
+  }
+
+  return basePrompt;
 }
 
 function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {
