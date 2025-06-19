@@ -253,7 +253,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     projectEnabled: true,
-    capabilities: [ModelCapability.VISION],
+    capabilities: [ModelCapability.VISION, ModelCapability.WEB_SEARCH],
   },
   {
     name: ChatModels.GEMINI_PRO,
@@ -261,7 +261,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     projectEnabled: true,
-    capabilities: [ModelCapability.VISION],
+    capabilities: [ModelCapability.VISION, ModelCapability.WEB_SEARCH],
   },
   {
     name: ChatModels.COMMAND_R,

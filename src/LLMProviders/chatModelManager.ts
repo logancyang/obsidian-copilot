@@ -10,6 +10,8 @@ import { logError, logInfo } from "@/logger";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { err2String, isOSeriesModel, safeFetch, withSuppressedTokenWarnings } from "@/utils";
 import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
+import { webSearchTool } from "@/tools/SearchTools";
+import { ModelCapability } from "@/constants";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatCohere } from "@langchain/cohere";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
@@ -184,6 +186,7 @@ export default class ChatModelManager {
           },
         ],
         baseUrl: customModel.baseUrl,
+        ...(customModel.capabilities?.includes(ModelCapability.WEB_SEARCH) && { tools: [webSearchTool] }),
       },
       [ChatModelProviders.XAI]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.xaiApiKey),
