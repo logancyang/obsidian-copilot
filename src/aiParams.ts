@@ -105,8 +105,9 @@ export interface CustomModel {
   stream?: boolean;
   temperature?: number;
   maxTokens?: number;
+  topP?: number;
+  frequencyPenalty?: number;
 
-  context?: number;
   projectEnabled?: boolean;
   plusExclusive?: boolean;
   believerExclusive?: boolean;
