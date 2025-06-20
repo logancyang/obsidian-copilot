@@ -625,6 +625,21 @@ ${chatContent}`;
     plugin.loadCopilotChatHistory();
   }, [plugin]);
 
+  // Event listener for abort stream events
+  useEffect(() => {
+    const handleAbortStream = (event: CustomEvent) => {
+      const reason = event.detail?.reason || ABORT_REASON.NEW_CHAT;
+      handleStopGenerating(reason);
+    };
+
+    eventTarget?.addEventListener(EVENT_NAMES.ABORT_STREAM, handleAbortStream);
+
+    // Cleanup function
+    return () => {
+      eventTarget?.removeEventListener(EVENT_NAMES.ABORT_STREAM, handleAbortStream);
+    };
+  }, [eventTarget, handleStopGenerating]);
+
   // Use the includeActiveNoteAsContext setting
   useEffect(() => {
     if (settings.includeActiveNoteAsContext !== undefined) {
