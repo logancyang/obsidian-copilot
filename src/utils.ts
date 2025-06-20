@@ -662,10 +662,14 @@ export async function insertIntoEditor(message: string, replace: boolean = false
   const editor = leaf.view.editor;
   const cursorFrom = editor.getCursor("from");
   const cursorTo = editor.getCursor("to");
+
+  // Remove think tags before inserting
+  const cleanedMessage = removeThinkTags(message);
+
   if (replace) {
-    editor.replaceRange(message, cursorFrom, cursorTo);
+    editor.replaceRange(cleanedMessage, cursorFrom, cursorTo);
   } else {
-    editor.replaceRange(message, cursorTo);
+    editor.replaceRange(cleanedMessage, cursorTo);
   }
   new Notice("Message inserted into the active note.");
 }
@@ -804,8 +808,11 @@ export function extractTextFromChunk(content: any): string {
 export function removeThinkTags(text: any): string {
   // First convert any content format to plain text
   const plainText = extractTextFromChunk(text);
-  // Then remove think tags
-  return plainText.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+  // Remove complete think tags and their content
+  let cleanedText = plainText.replace(/<think>[\s\S]*?<\/think>/g, "");
+  // Remove any remaining unclosed think tags (for streaming scenarios)
+  cleanedText = cleanedText.replace(/<think>[\s\S]*$/g, "");
+  return cleanedText.trim();
 }
 
 export function randomUUID() {
