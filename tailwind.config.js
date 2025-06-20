@@ -40,6 +40,14 @@ module.exports = {
         green: "var(--color-green)",
         blue: "var(--color-blue)",
       },
+      "context-manager": {
+        blue: "var(--color-blue)",
+        green: "var(--color-green)",
+        red: "var(--color-red)",
+        yellow: "var(--color-yellow)",
+        orange: "var(--color-orange)",
+        purple: "var(--color-purple)",
+      },
     },
     backgroundColor: {
       inherit: colors.inherit,
