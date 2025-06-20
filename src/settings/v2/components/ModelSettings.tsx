@@ -6,16 +6,38 @@ import ProjectManager from "@/LLMProviders/projectManager";
 import { logError } from "@/logger";
 import { setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import { ModelAddDialog } from "@/settings/v2/components/ModelAddDialog";
-import { ModelEditDialog } from "@/settings/v2/components/ModelEditDialog";
+import { ModelEditModal } from "@/settings/v2/components/ModelEditDialog";
 import { ModelTable } from "@/settings/v2/components/ModelTable";
+import { omit } from "@/utils";
 import { Notice } from "obsidian";
 import React, { useState } from "react";
 
 export const ModelSettings: React.FC = () => {
   const settings = useSettingsValue();
-  const [editingModel, setEditingModel] = useState<CustomModel | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showAddEmbeddingDialog, setShowAddEmbeddingDialog] = useState(false);
+
+  const onCopyModel = (model: CustomModel, isEmbeddingModel: boolean = false) => {
+    const newModel: CustomModel = {
+      ...omit(model, [
+        "isBuiltIn",
+        "core",
+        "projectEnabled",
+        "plusExclusive",
+        "believerExclusive",
+        "capabilities",
+        "displayName",
+        "dimensions",
+      ]),
+      name: `${model.name} (copy)`,
+    };
+
+    const settingField = isEmbeddingModel ? "activeEmbeddingModels" : "activeModels";
+
+    setSettings({
+      [settingField]: [...settings[settingField], newModel],
+    });
+  };
 
   const onDeleteModel = (modelKey: string) => {
     const [modelName, provider] = modelKey.split("|");
@@ -106,27 +128,25 @@ export const ModelSettings: React.FC = () => {
     new Notice("Embedding models refreshed successfully");
   };
 
+  const handleEditModel = (model: CustomModel) => {
+    const modal = new ModelEditModal(app, model, handleModelUpdate);
+    modal.open();
+  };
+
   return (
     <div className="tw-space-y-4">
       <section>
         <div className="tw-mb-3 tw-text-xl tw-font-bold">Chat Models</div>
         <ModelTable
           models={settings.activeModels}
-          onEdit={setEditingModel}
+          onEdit={handleEditModel}
+          onCopy={(model) => onCopyModel(model)}
           onDelete={onDeleteModel}
           onAdd={() => setShowAddDialog(true)}
           onUpdateModel={handleTableUpdate}
           onReorderModels={handleModelReorder}
           onRefresh={handleRefreshChatModels}
           title="Chat Model"
-        />
-
-        {/* model edit dialog*/}
-        <ModelEditDialog
-          open={!!editingModel}
-          onOpenChange={(open) => !open && setEditingModel(null)}
-          model={editingModel}
-          onUpdate={handleModelUpdate}
         />
 
         {/* model add dialog */}
@@ -193,6 +213,7 @@ export const ModelSettings: React.FC = () => {
         <ModelTable
           models={settings.activeEmbeddingModels}
           onDelete={onDeleteEmbeddingModel}
+          onCopy={(model) => onCopyModel(model, true)}
           onAdd={() => setShowAddEmbeddingDialog(true)}
           onUpdateModel={handleEmbeddingModelUpdate}
           onReorderModels={handleEmbeddingModelReorder}

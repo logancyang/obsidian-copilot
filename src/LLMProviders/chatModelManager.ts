@@ -122,6 +122,8 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
           organization: await getDecryptedKey(customModel.openAIOrgId || settings.openAIOrgId),
         },
+        topP: customModel.topP,
+        frequencyPenalty: customModel.frequencyPenalty,
         ...this.handleOpenAIExtraArgs(isOSeries, settings.maxTokens, settings.temperature),
       },
       [ChatModelProviders.ANTHROPIC]: {
@@ -135,6 +137,7 @@ export default class ChatModelManager {
           },
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
+        topP: customModel.topP,
         ...(isThinkingEnabled && {
           thinking: { type: "enabled", budget_tokens: 1024 },
         }),
@@ -156,6 +159,8 @@ export default class ChatModelManager {
           },
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
+        topP: customModel.topP,
+        frequencyPenalty: customModel.frequencyPenalty,
         ...this.handleOpenAIExtraArgs(isOSeries, settings.maxTokens, settings.temperature),
       },
       [ChatModelProviders.COHEREAI]: {
@@ -184,6 +189,7 @@ export default class ChatModelManager {
           },
         ],
         baseUrl: customModel.baseUrl,
+        topP: customModel.topP,
       },
       [ChatModelProviders.XAI]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.xaiApiKey),
@@ -197,6 +203,8 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl || "https://openrouter.ai/api/v1",
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
+        topP: customModel.topP,
+        frequencyPenalty: customModel.frequencyPenalty,
       },
       [ChatModelProviders.GROQ]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.groqApiKey),
@@ -210,6 +218,8 @@ export default class ChatModelManager {
         headers: new Headers({
           Authorization: `Bearer ${await getDecryptedKey(customModel.apiKey || "default-key")}`,
         }),
+        topP: customModel.topP,
+        frequencyPenalty: customModel.frequencyPenalty,
       },
       [ChatModelProviders.LM_STUDIO]: {
         modelName: modelName,
@@ -218,6 +228,8 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl || "http://localhost:1234/v1",
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
+        topP: customModel.topP,
+        frequencyPenalty: customModel.frequencyPenalty,
       },
       [ChatModelProviders.OPENAI_FORMAT]: {
         modelName: modelName,
@@ -227,6 +239,8 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
           defaultHeaders: { "dangerously-allow-browser": "true" },
         },
+        topP: customModel.topP,
+        frequencyPenalty: customModel.frequencyPenalty,
         ...this.handleOpenAIExtraArgs(isOSeries, settings.maxTokens, settings.temperature),
       },
       [ChatModelProviders.COPILOT_PLUS]: {
@@ -241,6 +255,8 @@ export default class ChatModelManager {
         model: modelName,
         apiKey: await getDecryptedKey(customModel.apiKey || settings.mistralApiKey),
         serverURL: customModel.baseUrl,
+        topP: customModel.topP,
+        frequencyPenalty: customModel.frequencyPenalty,
       },
       [ChatModelProviders.DEEPSEEK]: {
         modelName: modelName,
@@ -249,6 +265,8 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.DEEPSEEK].host,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
+        topP: customModel.topP,
+        frequencyPenalty: customModel.frequencyPenalty,
       },
     };
 
