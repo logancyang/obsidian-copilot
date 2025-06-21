@@ -8,7 +8,7 @@ import {
   MessageCirclePlus,
   ChevronDown,
   SquareArrowOutUpRight,
-  Volume2 // 新增
+  Volume2, // 新增
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
@@ -48,7 +48,7 @@ export function ChatControls({ onNewChat, onSaveAsNote }: ChatControlsProps) {
 
   return (
     <div className="w-full py-1 flex justify-between items-center px-1">
-      <div className="flex-1">
+      <div className="flex-1 flex items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost2" size="fit" className="ml-1">
@@ -126,6 +126,22 @@ export function ChatControls({ onNewChat, onSaveAsNote }: ChatControlsProps) {
             {presets.length === 0 && <DropdownMenuItem disabled>尚未创建任何人设</DropdownMenuItem>}
           </DropdownMenuContent>
         </DropdownMenu>
+        {/* 新增的口语化提示词开关 */}
+        <div className="flex items-center gap-1 ml-2">
+          <span className="text-sm">口语化</span>
+          <SettingSwitch
+            checked={settings.promptEnhancements?.autoSpeech?.useOralPrompt ?? true}
+            onCheckedChange={(checked) => {
+              updateSetting("promptEnhancements", {
+                ...settings.promptEnhancements,
+                autoSpeech: {
+                  ...settings.promptEnhancements?.autoSpeech, // 保留其他属性
+                  useOralPrompt: checked,
+                },
+              });
+            }}
+          />
+        </div>
       </div>
       <div>
         <Tooltip>
@@ -167,9 +183,7 @@ export function ChatControls({ onNewChat, onSaveAsNote }: ChatControlsProps) {
                 <FileText className="size-4" />
                 启用默认提示词
               </div>
-              <SettingSwitch
-                checked={settings.promptEnhancements?.appendDefaultPrompt !== false}
-              />
+              <SettingSwitch checked={settings.promptEnhancements?.appendDefaultPrompt !== false} />
             </DropdownMenuItem>
             <DropdownMenuItem
               className="flex justify-between"
@@ -178,8 +192,8 @@ export function ChatControls({ onNewChat, onSaveAsNote }: ChatControlsProps) {
                 updateSetting("promptEnhancements", {
                   ...settings.promptEnhancements,
                   autoSpeech: {
+                    ...settings.promptEnhancements?.autoSpeech, // 保留其他属性
                     enabled: !settings.promptEnhancements?.autoSpeech?.enabled,
-                    prompt: settings.promptEnhancements?.autoSpeech?.prompt || "",
                   },
                 });
               }}
@@ -188,9 +202,7 @@ export function ChatControls({ onNewChat, onSaveAsNote }: ChatControlsProps) {
                 <Volume2 className="size-4" /> {/* 需要从lucide-react导入Volume2 */}
                 自动语音播放
               </div>
-              <SettingSwitch
-                checked={settings.promptEnhancements?.autoSpeech?.enabled || false}
-              />
+              <SettingSwitch checked={settings.promptEnhancements?.autoSpeech?.enabled || false} />
             </DropdownMenuItem>
             {/* 新增自动衍生问题开关 */}
             <DropdownMenuItem
