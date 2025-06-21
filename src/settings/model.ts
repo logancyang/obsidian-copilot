@@ -112,6 +112,9 @@ export interface CopilotSettings {
   enableCustomPromptTemplating: boolean;
   /** Whether we have suggested built-in default commands to the user once. */
   suggestedDefaultCommands: boolean;
+  copilotAccessToken?: string;
+  copilotToken?: string;
+  copilotTokenExpiresAt?: number;
 }
 
 export const settingsStore = createStore();
