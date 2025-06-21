@@ -338,13 +338,13 @@ export interface ProviderResponseMap {
 }
 
 // Adapter type definition - converts provider-specific models to standard format
-export type ModelAdapter<T extends SettingKeyProviders> = (
+export type ModelAdapter<T extends keyof ProviderResponseMap> = (
   data: ProviderResponseMap[T]
 ) => StandardModel[];
 
 // Create adapter function type
 export type ProviderModelAdapters = {
-  [K in SettingKeyProviders]?: ModelAdapter<K>;
+  [K in Extract<SettingKeyProviders, keyof ProviderResponseMap>]?: ModelAdapter<K>;
 };
 
 /**
@@ -455,7 +455,8 @@ export const getDefaultModelAdapter = (provider: SettingKeyProviders) => {
  * Uses provider-specific adapter if available, otherwise falls back to default adapter
  */
 export const getModelAdapter = (provider: SettingKeyProviders) => {
-  return providerAdapters[provider] || getDefaultModelAdapter(provider);
+  // Type assertion to allow unknown providers to fallback to default adapter
+  return (providerAdapters as any)[provider] || getDefaultModelAdapter(provider);
 };
 
 /**

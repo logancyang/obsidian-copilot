@@ -37,6 +37,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { FormField } from "@/components/ui/form-field";
+import { SettingSwitch } from "@/components/ui/setting-switch";
 
 interface FormErrors {
   name: boolean;
@@ -547,6 +548,30 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
           </FormField>
 
           {renderProviderSpecificFields()}
+
+          <div className="tw-flex tw-items-center tw-justify-between tw-py-2">
+            <div className="tw-flex tw-items-center tw-gap-2">
+              <span className="tw-text-sm tw-font-medium">Stream output</span>
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="tw-size-4 tw-text-muted" />
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    Enable streaming responses from the model.
+                    {model.provider === "github-copilot" && (
+                      <p className="tw-text-error">Not supported by GitHub Copilot.</p>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <SettingSwitch
+              checked={model.provider === "github-copilot" ? false : (model.stream ?? true)}
+              disabled={model.provider === "github-copilot"}
+              onCheckedChange={(checked) => setModel({ ...model, stream: checked })}
+            />
+          </div>
         </div>
 
         <div className="tw-flex tw-items-center tw-justify-end tw-gap-4">

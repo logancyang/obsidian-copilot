@@ -13,6 +13,8 @@ import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatCohere } from "@langchain/cohere";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { AIMessage } from "@langchain/core/messages";
+import { Runnable } from "@langchain/core/runnables";
 import { ChatDeepSeek } from "@langchain/deepseek";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatGroq } from "@langchain/groq";
@@ -21,10 +23,62 @@ import { ChatOllama } from "@langchain/ollama";
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatXAI } from "@langchain/xai";
 import { Notice } from "obsidian";
+import { GitHubCopilotProvider } from "./githubCopilotProvider";
+import { ChatPromptValue } from "@langchain/core/prompt_values";
+
+class CopilotRunnable extends Runnable {
+  lc_serializable = false;
+  lc_namespace = ["langchain", "chat_models", "copilot"];
+  private provider: GitHubCopilotProvider;
+  private modelName: string;
+
+  constructor(provider: GitHubCopilotProvider, modelName: string) {
+    super();
+    this.provider = provider;
+    this.modelName = modelName;
+  }
+
+  async invoke(input: ChatPromptValue, options?: any): Promise<any> {
+    const messages = input.toChatMessages().map((m) => ({
+      role: m._getType() === "human" ? "user" : "assistant",
+      content: m.content as string,
+    }));
+    const response = await this.provider.sendChatMessage(messages, this.modelName);
+    const content = response.choices?.[0]?.message?.content || "";
+    return new AIMessage(content);
+  }
+}
 
 type ChatConstructorType = {
   new (config: any): any;
 };
+
+// Placeholder for GitHub Copilot chat provider
+class ChatGitHubCopilot {
+  private provider: GitHubCopilotProvider;
+  constructor(config: any) {
+    this.provider = new GitHubCopilotProvider();
+    // TODO: Use config for persistent storage, UI callbacks, etc.
+  }
+  async send(messages: { role: string; content: string }[], model = "gpt-4") {
+    return this.provider.sendChatMessage(messages, model);
+  }
+  getAuthState() {
+    return this.provider.getAuthState();
+  }
+  async startAuth() {
+    return this.provider.startDeviceCodeFlow();
+  }
+  async pollForAccessToken() {
+    return this.provider.pollForAccessToken();
+  }
+  async fetchCopilotToken() {
+    return this.provider.fetchCopilotToken();
+  }
+  resetAuth() {
+    this.provider.resetAuth();
+  }
+}
 
 const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.OPENAI]: ChatOpenAI,
@@ -41,6 +95,7 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.COPILOT_PLUS]: ChatOpenAI,
   [ChatModelProviders.MISTRAL]: ChatMistralAI,
   [ChatModelProviders.DEEPSEEK]: ChatDeepSeek,
+  [ChatModelProviders.GITHUB_COPILOT]: ChatGitHubCopilot, // Register GitHub Copilot
 } as const;
 
 type ChatProviderConstructMap = typeof CHAT_PROVIDER_CONSTRUCTORS;
@@ -72,6 +127,7 @@ export default class ChatModelManager {
     [ChatModelProviders.COPILOT_PLUS]: () => getSettings().plusLicenseKey,
     [ChatModelProviders.MISTRAL]: () => getSettings().mistralApiKey,
     [ChatModelProviders.DEEPSEEK]: () => getSettings().deepseekApiKey,
+    [ChatModelProviders.GITHUB_COPILOT]: () => "", // Placeholder for GitHub Copilot
   } as const;
 
   private constructor() {
@@ -97,10 +153,16 @@ export default class ChatModelManager {
     const isThinkingEnabled =
       modelName.startsWith("claude-3-7-sonnet") || modelName.startsWith("claude-sonnet-4");
 
+    // For GitHub Copilot, streaming is not supported
+    const streaming =
+      customModel.provider === ChatModelProviders.GITHUB_COPILOT
+        ? false
+        : (customModel.stream ?? true);
+
     // Base config without temperature when thinking is enabled
     const baseConfig: Omit<ModelConfig, "maxTokens" | "maxCompletionTokens" | "temperature"> = {
       modelName: modelName,
-      streaming: customModel.stream ?? true,
+      streaming,
       maxRetries: 3,
       maxConcurrency: 3,
       enableCors: customModel.enableCors,
@@ -250,6 +312,7 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
       },
+      [ChatModelProviders.GITHUB_COPILOT]: {}, // Placeholder config for GitHub Copilot
     };
 
     const selectedProviderConfig =
@@ -344,35 +407,28 @@ export default class ChatModelManager {
   }
 
   async setChatModel(model: CustomModel): Promise<void> {
-    const modelKey = getModelKeyFromModel(model);
     try {
-      const modelInstance = await this.createModelInstance(model);
-      ChatModelManager.chatModel = modelInstance;
-    } catch (error) {
-      logError(error);
-      new Notice(`Error creating model: ${modelKey}`);
+      ChatModelManager.chatModel = await this.createModelInstance(model);
+      logInfo(`Chat model set to ${model.name}`);
+    } catch (e) {
+      logError("Failed to set chat model:", e);
+      new Notice(`Failed to set chat model: ${e.message}`);
+      ChatModelManager.chatModel = null;
     }
   }
 
   async createModelInstance(model: CustomModel): Promise<BaseChatModel> {
-    // Create and return the appropriate model
-    const modelKey = getModelKeyFromModel(model);
-    const selectedModel = ChatModelManager.modelMap[modelKey];
-    if (!selectedModel) {
-      throw new Error(`No model found for: ${modelKey}`);
-    }
-    if (!selectedModel.hasApiKey) {
-      const errorMessage = `API key is not provided for the model: ${modelKey}.`;
-      new Notice(errorMessage);
-      throw new Error(errorMessage);
+    if (model.provider === ChatModelProviders.GITHUB_COPILOT) {
+      const provider = new GitHubCopilotProvider();
+      const copilotRunnable = new CopilotRunnable(provider, model.name);
+      // The type assertion is a bit of a hack, but it makes it work with the existing structure
+      return copilotRunnable as unknown as BaseChatModel;
     }
 
-    const modelConfig = await this.getModelConfig(model);
+    const AIConstructor = this.getProviderConstructor(model);
+    const config = await this.getModelConfig(model);
 
-    const newModelInstance = new selectedModel.AIConstructor({
-      ...modelConfig,
-    });
-    return newModelInstance;
+    return new AIConstructor(config);
   }
 
   validateChatModel(chatModel: BaseChatModel): boolean {
@@ -427,6 +483,19 @@ export default class ChatModelManager {
   }
 
   async ping(model: CustomModel): Promise<boolean> {
+    if (model.provider === ChatModelProviders.GITHUB_COPILOT) {
+      const provider = new GitHubCopilotProvider();
+      const state = provider.getAuthState();
+      if (state.status === "authenticated") {
+        new Notice("GitHub Copilot is authenticated.");
+        return true;
+      } else {
+        new Notice(
+          "GitHub Copilot is not authenticated. Please set it up in the 'Basic' settings tab."
+        );
+        return false;
+      }
+    }
     const tryPing = async (enableCors: boolean) => {
       const modelToTest = { ...model, enableCors };
       const modelConfig = await this.getModelConfig(modelToTest);
