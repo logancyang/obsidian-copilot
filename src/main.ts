@@ -8,7 +8,7 @@ import CopilotView from "@/components/CopilotView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 
-import { CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
+import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { registerContextMenu } from "@/commands/contextMenu";
 import { encryptAllKeys } from "@/encryptionService";
 import { logInfo } from "@/logger";
@@ -356,6 +356,17 @@ export default class CopilotPlugin extends Plugin {
     // First autosave the current chat if the setting is enabled
     await this.autosaveCurrentChat();
 
+    // Abort any ongoing streams before clearing chat
+    const existingView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0];
+    if (existingView) {
+      const copilotView = existingView.view as CopilotView;
+      // Dispatch abort event to stop any ongoing streams
+      const abortEvent = new CustomEvent(EVENT_NAMES.ABORT_STREAM, {
+        detail: { reason: ABORT_REASON.NEW_CHAT },
+      });
+      copilotView.eventTarget.dispatchEvent(abortEvent);
+    }
+
     // Clear chat history
     this.sharedState.clearChatHistory();
 
@@ -363,7 +374,6 @@ export default class CopilotPlugin extends Plugin {
     this.projectManager.getCurrentChainManager().memoryManager.clearChatMemory();
 
     // Update view if it exists
-    const existingView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0];
     if (existingView) {
       const copilotView = existingView.view as CopilotView;
       copilotView.updateView();
