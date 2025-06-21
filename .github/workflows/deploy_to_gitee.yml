@@ -17,23 +17,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           tags: true
       # 验证tag是否在master分支上或release上
       - run: |
-          onProtectedBranch=false
-          echo $GITHUB_REF_NAME
-          branches=$(git branch -r --contains tags/$GITHUB_REF_NAME)
-          echo $branches
-          for branch in $branches; do
-            echo $branch
-            if [[ $branch == "origin/master" ]] || [[ $branch == "origin/release/"* ]]; then
-              onProtectedBranch=true
+          echo "🔖 Tag name: $GITHUB_REF_NAME"
+          echo "🔨 Commit SHA: $GITHUB_SHA"
+
+          # 把 repo 完全拉平，让 `--contains` 能用
+          git fetch origin "refs/heads/*:refs/remotes/origin/*"
+
+          # 找出 remote branches 包含这个提交
+          branches=$(git branch -r --contains $GITHUB_SHA | sed 's|origin/||g' )
+          echo "Branches containing this commit: $branches"
+
+          ok=false
+          for b in $branches; do
+            if [[ "$b" == "master" ]] || [[ "$b" == release/* ]]; then
+              ok=true
+              break
             fi
           done
 
-          if [ "$onProtectedBranch" == false ]; then
-            echo "Tag is not on protected branch. Abort build."
+          if [ "$ok" != "true" ]; then
+            echo "❌ Tag $GITHUB_REF_NAME not found on master or any release/* branch"
             exit 1
+          else
+            echo "✅ Tag $GITHUB_REF_NAME is merged into a protected branch"
           fi
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
