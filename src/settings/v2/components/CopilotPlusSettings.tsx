@@ -71,12 +71,15 @@ export const CopilotPlusSettings: React.FC = () => {
   return (
     <div className="tw-flex tw-flex-col tw-gap-4">
       <section className="tw-flex tw-flex-col tw-gap-4">
-        <div className="tw-flex tw-items-center tw-py-4">
+        {/* <div className="tw-flex tw-items-center tw-py-4">
           <Badge variant="secondary" className="tw-text-accent">
             Plus Required
           </Badge>
-        </div>
+        </div> */}
         <div className="tw-flex tw-flex-col tw-gap-4">
+          <div className="tw-p-2 tw-text-sm tw-text-muted">
+            Note: Copilot Plus features previously requiring a license are currently being re-evaluated. Some settings below may control features that are temporarily disabled or will be re-routed to direct AI providers in the future.
+          </div>
           <SettingItem
             type="switch"
             title="Include Current Note in Context Menu"

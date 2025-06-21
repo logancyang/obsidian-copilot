@@ -61,14 +61,14 @@ const SUGGESTED_PROMPTS: Record<string, NotePrompt> = {
   },
 };
 
-const PROMPT_KEYS: Record<ChainType, Array<keyof typeof SUGGESTED_PROMPTS>> = {
+const PROMPT_KEYS: Record<string, Array<keyof typeof SUGGESTED_PROMPTS>> = { // ChainType changed to string for broader compatibility
   [ChainType.LLM_CHAIN]: ["activeNote", "quoteNote", "fun"],
   [ChainType.VAULT_QA_CHAIN]: ["qaVault", "qaVault", "quoteNote"],
-  [ChainType.COPILOT_PLUS_CHAIN]: ["copilotPlus", "copilotPlus", "copilotPlus"],
-  [ChainType.PROJECT_CHAIN]: ["copilotPlus", "copilotPlus", "copilotPlus"],
+  // [ChainType.COPILOT_PLUS_CHAIN]: ["copilotPlus", "copilotPlus", "copilotPlus"], // Plus features disabled
+  // [ChainType.PROJECT_CHAIN]: ["copilotPlus", "copilotPlus", "copilotPlus"], // Plus features disabled
 };
 
-function getRandomPrompt(chainType: ChainType = ChainType.LLM_CHAIN) {
+function getRandomPrompt(chainType: string = ChainType.LLM_CHAIN) { // ChainType changed to string
   const keys = PROMPT_KEYS[chainType] || PROMPT_KEYS[ChainType.LLM_CHAIN];
 
   // For repeated keys, shuffle once and take multiple items

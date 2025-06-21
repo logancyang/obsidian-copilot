@@ -1,5 +1,6 @@
 import { ImageProcessor } from "@/imageProcessing/imageProcessor";
-import { BrevilabsClient, Url4llmResponse } from "@/LLMProviders/brevilabsClient";
+// import { BrevilabsClient, Url4llmResponse } from "@/LLMProviders/brevilabsClient"; // BrevilabsClient disabled
+import { Url4llmResponse } from "@/LLMProviders/brevilabsClient"; // Url4llmResponse type is still used
 import { isYoutubeUrl } from "@/utils";
 
 export interface MentionData {
@@ -11,11 +12,11 @@ export interface MentionData {
 export class Mention {
   private static instance: Mention;
   private mentions: Map<string, MentionData>;
-  private brevilabsClient: BrevilabsClient;
+  private brevilabsClient: any; // BrevilabsClient disabled // BrevilabsClient
 
   private constructor() {
     this.mentions = new Map();
-    this.brevilabsClient = BrevilabsClient.getInstance();
+    this.brevilabsClient = null; // BrevilabsClient disabled // BrevilabsClient.getInstance();
   }
 
   static getInstance(): Mention {
@@ -43,7 +44,9 @@ export class Mention {
 
   async processUrl(url: string): Promise<Url4llmResponse> {
     try {
-      return await this.brevilabsClient.url4llm(url);
+      console.warn("Mention.processUrl: Fetching content for general URLs is disabled due to potential CORS restrictions and the removal of intermediary services. Only the URL itself will be used as context.");
+      // return await this.brevilabsClient.url4llm(url); // BrevilabsClient call already removed
+      return Promise.resolve({ response: `[Content for ${url} was not fetched. URL itself used as context.]`, elapsed_time_ms: 0 });
     } catch (error) {
       console.error(`Error processing URL ${url}:`, error);
       return { response: url, elapsed_time_ms: 0 };

@@ -84,7 +84,7 @@ export async function migrateCommands() {
 
   updateSetting("inlineEditCommands", []);
 
-  new ConfirmModal(app, () => {}, message, "🚀 New Copilot Custom Commands", "OK", "").open();
+  new ConfirmModal(app, () => {}, message, "🚀 New Copilot2 Custom Commands", "OK", "").open();
 }
 
 /** Generates the default commands. */
@@ -111,8 +111,8 @@ export async function suggestDefaultCommands(): Promise<void> {
       () => {
         generateDefaultCommands();
       },
-      "Would you like to add Copilot recommended commands in your custom prompts folder? These commands will be available through the right-click context menu and slash commands in chat.",
-      "Welcome to Copilot",
+      "Would you like to add Copilot2 recommended commands in your custom prompts folder? These commands will be available through the right-click context menu and slash commands in chat.",
+      "Welcome to Copilot2",
       "Confirm",
       "Skip"
     ).open();

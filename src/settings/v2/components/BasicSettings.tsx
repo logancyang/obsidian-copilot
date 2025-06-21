@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 const ChainType2Label: Record<ChainType, string> = {
   [ChainType.LLM_CHAIN]: "Chat",
   [ChainType.VAULT_QA_CHAIN]: "Vault QA (Basic)",
-  [ChainType.COPILOT_PLUS_CHAIN]: "Copilot Plus (beta)",
+  [ChainType.COPILOT_PLUS_CHAIN]: "Advanced Chat (beta)", // Renamed from Copilot Plus
   [ChainType.PROJECT_CHAIN]: "Projects (alpha)",
 };
 
@@ -227,16 +227,14 @@ export const BasicSettings: React.FC = () => {
                       <ul className="tw-pl-4 tw-text-sm tw-text-muted">
                         <li>
                           <strong>Chat:</strong> Regular chat mode for general conversations and
-                          tasks. <i>Free to use with your own API key.</i>
+                          tasks. <i>Use your own API key.</i>
                         </li>
                         <li>
                           <strong>Vault QA (Basic):</strong> Ask questions about your vault content
-                          with semantic search. <i>Free to use with your own API key.</i>
+                          with semantic search. <i>Use your own API key.</i>
                         </li>
                         <li>
-                          <strong>Copilot Plus:</strong> Covers all features of the 2 free modes,
-                          plus advanced paid features including chat context menu, advanced search,
-                          AI agents, and more. Check out{" "}
+                          <strong>Advanced Chat (beta):</strong> May include experimental features. Check out{" "}
                           <a
                             href={createPlusPageUrl(PLUS_UTM_MEDIUMS.MODE_SELECT_TOOLTIP)}
                             target="_blank"

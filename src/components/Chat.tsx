@@ -6,11 +6,12 @@ import {
   useModelKey,
 } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
+import { ModelCapability } from "@/constants"; // Added
 import { updateChatMemory } from "@/chatUtils";
 import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
-import { NewVersionBanner } from "@/components/chat-components/NewVersionBanner";
+// import { NewVersionBanner } from "@/components/chat-components/NewVersionBanner"; // Update check removed
 import { ProjectList } from "@/components/chat-components/ProjectList";
 import { ABORT_REASON, COMMAND_IDS, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
@@ -19,10 +20,11 @@ import { getAIResponse } from "@/langchainStream";
 import ChainManager from "@/LLMProviders/chainManager";
 import CopilotPlugin from "@/main";
 import { Mention } from "@/mentions/Mention";
-import { useIsPlusUser } from "@/plusUtils";
+// import { useIsPlusUser } from "@/plusUtils"; // Plus features disabled
 import {
   getComposerOutputPrompt,
   getSettings,
+  getModelKeyFromModel, // Added
   updateSetting,
   useSettingsValue,
 } from "@/settings/model";
@@ -66,12 +68,12 @@ const Chat: React.FC<ChatProps> = ({
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES.DEFAULT);
   const [contextNotes, setContextNotes] = useState<TFile[]>([]);
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
-  const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  // const [selectedImages, setSelectedImages] = useState<File[]>([]); // Managed by ChatInput now
   const [showChatUI, setShowChatUI] = useState(false);
 
   const [previousMode, setPreviousMode] = useState<ChainType | null>(null);
   const [selectedChain, setSelectedChain] = useChainType();
-  const isPlusUser = useIsPlusUser();
+  // const isPlusUser = useIsPlusUser(); // Plus features disabled
 
   const mention = Mention.getInstance();
 
@@ -99,36 +101,47 @@ const Chat: React.FC<ChatProps> = ({
     toolCalls,
     urls,
     contextNotes: passedContextNotes, // Rename to avoid shadowing
+    images, // New images parameter from ChatInput
   }: {
     toolCalls?: string[];
     urls?: string[];
     contextNotes?: TFile[];
+    images?: File[]; // New images parameter
   } = {}) => {
-    if (!inputMessage && selectedImages.length === 0) return;
+    // if (!inputMessage && selectedImages.length === 0) return; // Old check
+    if (!inputMessage && (!images || images.length === 0)) return; // New check with passed images
 
     const timestamp = formatDateTime(new Date());
 
     // Create message content array
-    const content: any[] = [];
+    const messageContentParts: any[] = [];
 
     // Add text content if present
     if (inputMessage) {
-      content.push({
+      messageContentParts.push({
         type: "text",
         text: inputMessage,
       });
     }
 
-    // Add images if present
-    for (const image of selectedImages) {
-      const imageData = await image.arrayBuffer();
-      const base64Image = Buffer.from(imageData).toString("base64");
-      content.push({
-        type: "image_url",
-        image_url: {
-          url: `data:${image.type};base64,${base64Image}`,
-        },
-      });
+    // Add images if present and model supports vision
+    const activeModelConfig = settings.activeModels.find(m => getModelKeyFromModel(m) === currentModelKey);
+    const modelSupportsVision = !!(activeModelConfig && activeModelConfig.capabilities?.includes(ModelCapability.VISION));
+
+    if (images && images.length > 0) {
+      if (modelSupportsVision) {
+        for (const imageFile of images) {
+          const arrayBuffer = await imageFile.arrayBuffer();
+          const base64Image = Buffer.from(arrayBuffer).toString("base64");
+          messageContentParts.push({
+            type: "image_url",
+            image_url: { url: `data:${imageFile.type};base64,${base64Image}` },
+          });
+        }
+      } else {
+        new Notice("The current model does not support images. Images were not sent.");
+        // Images are not added to messageContentParts if not supported
+      }
     }
 
     const notes = [...(passedContextNotes || [])];
@@ -144,21 +157,21 @@ const Chat: React.FC<ChatProps> = ({
     }
 
     const userMessage: ChatMessage = {
-      message: inputMessage || "Image message",
+      message: inputMessage || (images && images.length > 0 ? "Image message" : ""), // Adjust message if only images
       originalMessage: inputMessage,
       sender: USER_SENDER,
       isVisible: true,
       timestamp: timestamp,
-      content: content,
+      content: messageContentParts, // Use the new messageContentParts
       context: {
         notes,
         urls: urls || [],
       },
     };
 
-    // Clear input and images
+    // Clear input (image clearing is handled in ChatInput.tsx)
     setInputMessage("");
-    setSelectedImages([]);
+    // setSelectedImages([]); // This state in Chat.tsx is no longer the source of truth for sending
 
     // Add messages to chat history
     addMessage(userMessage);
@@ -216,7 +229,7 @@ const Chat: React.FC<ChatProps> = ({
       sender: USER_SENDER,
       isVisible: false,
       timestamp: timestamp,
-      content: content,
+      content: messageContentParts, // Use the new messageContentParts
       context: {
         notes,
         urls:
@@ -641,7 +654,7 @@ ${chatContent}`;
   const renderChatComponents = () => (
     <>
       <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
-        <NewVersionBanner currentVersion={plugin.manifest.version} />
+        {/* <NewVersionBanner currentVersion={plugin.manifest.version} /> */} {/* Update check removed */}
         <ChatMessages
           chatHistory={chatHistory}
           currentAiMessage={currentAiMessage}
@@ -680,9 +693,18 @@ ${chatContent}`;
           includeActiveNote={includeActiveNote}
           setIncludeActiveNote={setIncludeActiveNote}
           mention={mention}
-          selectedImages={selectedImages}
-          onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
-          setSelectedImages={setSelectedImages}
+          selectedImages={[]} // Pass empty array as ChatInput now manages its own state
+          onAddImage={(files: File[]) => {
+            // This prop is still needed by ChatInput to update Chat.tsx's selectedImages if Chat.tsx still uses it for display
+            // However, for sending, ChatInput will pass images directly to handleSendMessage
+            // For now, we can keep this to avoid breaking ChatInput's onAddImage prop immediately,
+            // but Chat.tsx's selectedImages state is not used for sending.
+            // Consider removing Chat.tsx's selectedImages state in a future refactor if not used for anything else.
+            setSelectedImages(files); // This might be removed if Chat.tsx no longer needs to know about images until send.
+          }}
+          setSelectedImages={(files: File[]) => { // This prop is also for ChatInput to manage its state via Chat's state
+             setSelectedImages(files); // This might be removed.
+          }}
           disableModelSwitch={selectedChain === ChainType.PROJECT_CHAIN}
         />
       </div>
@@ -709,9 +731,7 @@ ${chatContent}`;
                     setPreviousMode(null);
                   } else {
                     // default back to chat or plus mode
-                    setSelectedChain(
-                      isPlusUser ? ChainType.COPILOT_PLUS_CHAIN : ChainType.LLM_CHAIN
-                    );
+                    setSelectedChain(ChainType.LLM_CHAIN); // Default to LLM_CHAIN
                   }
                 }}
                 showChatUI={(v) => setShowChatUI(v)}

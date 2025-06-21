@@ -10,8 +10,8 @@ export function registerContextMenu(menu: Menu) {
     commands.filter((command: CustomCommand) => command.showInContextMenu)
   ).forEach((command: CustomCommand) => {
     menu.addItem((item) => {
-      item.setTitle(`Copilot: ${command.title}`).onClick(() => {
-        (app as any).commands.executeCommandById(`copilot:${getCommandId(command.title)}`);
+      item.setTitle(`Copilot2: ${command.title}`).onClick(() => {
+        (app as any).commands.executeCommandById(`copilot2:${getCommandId(command.title)}`);
       });
     });
   });

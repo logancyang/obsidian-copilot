@@ -45,7 +45,7 @@ export interface LegacyCommandSettings {
 
 export interface CopilotSettings {
   userId: string;
-  plusLicenseKey: string;
+  // plusLicenseKey: string; // Removed
   openAIApiKey: string;
   openAIOrgId: string;
   huggingfaceApiKey: string;
@@ -67,7 +67,7 @@ export interface CopilotSettings {
   temperature: number;
   maxTokens: number;
   contextTurns: number;
-  lastDismissedVersion: string | null;
+  // lastDismissedVersion: string | null; // Removed for update check removal
   // Do not use this directly, use getSystemPrompt() instead
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;
@@ -100,8 +100,8 @@ export interface CopilotSettings {
   showRelevantNotes: boolean;
   numPartitions: number;
   defaultConversationNoteName: string;
-  // undefined means never checked
-  isPlusUser: boolean | undefined;
+  // undefined means never checked // Removed: isPlusUser
+  // isPlusUser: boolean | undefined; // Removed
   inlineEditCommands: LegacyCommandSettings[] | undefined;
   enableAutocomplete: boolean;
   autocompleteAcceptKey: AcceptKeyOption;
@@ -254,13 +254,28 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.enableWordCompletion = DEFAULT_SETTINGS.enableWordCompletion;
   }
 
+  // Remove lastDismissedVersion if it exists (for users downgrading from older versions)
+  if (sanitizedSettings.hasOwnProperty("lastDismissedVersion")) {
+    delete (sanitizedSettings as any).lastDismissedVersion;
+  }
+
+  // Remove plusLicenseKey and isPlusUser if they exist (for users downgrading from older versions)
+  // These properties are removed from the CopilotSettings interface,
+  // so this cleanup is for settings files from versions that had them.
+  if (sanitizedSettings.hasOwnProperty("plusLicenseKey")) {
+    delete (sanitizedSettings as any).plusLicenseKey;
+  }
+  if (sanitizedSettings.hasOwnProperty("isPlusUser")) {
+    delete (sanitizedSettings as any).isPlusUser;
+  }
+
   return sanitizedSettings;
 }
 
 export function getComposerOutputPrompt(): string {
-  const isPlusUser = getSettings().isPlusUser;
-
-  return isPlusUser ? COMPOSER_OUTPUT_INSTRUCTIONS : "";
+  // const isPlusUser = getSettings().isPlusUser; // isPlusUser is removed
+  // return isPlusUser ? COMPOSER_OUTPUT_INSTRUCTIONS : ""; // Logic depending on isPlusUser is removed
+  return "";
 }
 
 export function getSystemPrompt(): string {

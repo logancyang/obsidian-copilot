@@ -765,23 +765,25 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
       return "";
     }
 
-    const urls = youtubeUrls.split("\n").filter((url) => url.trim());
-    const processPromises = urls.map(async (url) => {
-      try {
-        const response = await BrevilabsClient.getInstance().youtube4llm(url);
-        if (response.response.transcript) {
-          return `\n\nYouTube transcript from ${url}:\n${response.response.transcript}`;
-        }
-        return "";
-      } catch (error) {
-        logError(`Failed to process YouTube URL ${url}: ${error}`);
-        new Notice(`Failed to process YouTube URL ${url}: ${err2String(error)}`);
-        return "";
-      }
-    });
+    console.warn("processYoutubeUrlsContext: YouTube transcript processing is disabled due to the removal of intermediary services.");
+    // const urls = youtubeUrls.split("\n").filter((url) => url.trim());
+    // const processPromises = urls.map(async (url) => {
+    //   try {
+    //     const response = await BrevilabsClient.getInstance().youtube4llm(url);
+    //     if (response.response.transcript) {
+    //       return `\n\nYouTube transcript from ${url}:\n${response.response.transcript}`;
+    //     }
+    //     return "";
+    //   } catch (error) {
+    //     logError(`Failed to process YouTube URL ${url}: ${error}`);
+    //     new Notice(`Failed to process YouTube URL ${url}: ${err2String(error)}`);
+    //     return "";
+    //   }
+    // });
 
-    const results = await Promise.all(processPromises);
-    return results.join("");
+    // const results = await Promise.all(processPromises);
+    // return results.join("");
+    return Promise.resolve("[YouTube video processing for project contexts is temporarily disabled]");
   }
 
   public onunload(): void {

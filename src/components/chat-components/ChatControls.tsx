@@ -7,7 +7,8 @@ import { DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PLUS_UTM_MEDIUMS } from "@/constants";
-import { navigateToPlusPage, useIsPlusUser } from "@/plusUtils";
+// import { navigateToPlusPage, useIsPlusUser } from "@/plusUtils"; // useIsPlusUser removed
+import { navigateToPlusPage } from "@/plusUtils"; // navigateToPlusPage is still used
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { DropdownMenu, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
@@ -145,7 +146,7 @@ export function ChatControls({
 }: ChatControlsProps) {
   const settings = useSettingsValue();
   const [selectedChain, setSelectedChain] = useChainType();
-  const isPlusUser = useIsPlusUser();
+  // const isPlusUser = useIsPlusUser(); // Plus features disabled
 
   const handleModeChange = (chainType: ChainType) => {
     setSelectedChain(chainType);
@@ -189,7 +190,7 @@ export function ChatControls({
             >
               vault QA
             </DropdownMenuItem>
-            {isPlusUser ? (
+            {/* {isPlusUser ? ( // Plus features disabled
               <DropdownMenuItem
                 onSelect={() => {
                   handleModeChange(ChainType.COPILOT_PLUS_CHAIN);
@@ -200,19 +201,19 @@ export function ChatControls({
                   copilot plus (beta)
                 </div>
               </DropdownMenuItem>
-            ) : (
-              <DropdownMenuItem
-                onSelect={() => {
-                  navigateToPlusPage(PLUS_UTM_MEDIUMS.CHAT_MODE_SELECT);
-                  onCloseProject?.();
-                }}
-              >
-                copilot plus (beta)
-                <SquareArrowOutUpRight className="tw-size-3" />
-              </DropdownMenuItem>
-            )}
+            ) : ( */}
+            <DropdownMenuItem
+              onSelect={() => {
+                navigateToPlusPage(PLUS_UTM_MEDIUMS.CHAT_MODE_SELECT);
+                onCloseProject?.();
+              }}
+            >
+              Copilot Plus (beta)
+              <SquareArrowOutUpRight className="tw-size-3" />
+            </DropdownMenuItem>
+            {/* )} // Plus features disabled */}
 
-            {isPlusUser ? (
+            {/* {isPlusUser ? ( // Plus features disabled
               <DropdownMenuItem
                 className="tw-flex tw-items-center tw-gap-1"
                 onSelect={() => {
@@ -222,17 +223,18 @@ export function ChatControls({
                 <LibraryBig className="tw-size-4" />
                 projects (alpha)
               </DropdownMenuItem>
-            ) : (
-              <DropdownMenuItem
-                onSelect={() => {
-                  navigateToPlusPage(PLUS_UTM_MEDIUMS.CHAT_MODE_SELECT);
-                  onCloseProject?.();
-                }}
-              >
-                copilot plus (beta)
-                <SquareArrowOutUpRight className="tw-size-3" />
-              </DropdownMenuItem>
-            )}
+            ) : ( */}
+            <DropdownMenuItem
+              onSelect={() => {
+                // Defaulting to navigate to plus page as Project mode was likely a plus feature
+                navigateToPlusPage(PLUS_UTM_MEDIUMS.CHAT_MODE_SELECT);
+                onCloseProject?.();
+              }}
+            >
+              Projects (alpha)
+              <SquareArrowOutUpRight className="tw-size-3" />
+            </DropdownMenuItem>
+            {/* )} // Plus features disabled */}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

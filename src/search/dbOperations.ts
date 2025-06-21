@@ -108,7 +108,7 @@ export class DBOperations {
       return newDb;
     } catch (error) {
       logError(`Error initializing Orama database:`, error);
-      new Notice("Failed to initialize Copilot database. Some features may be limited.");
+      new Notice("Failed to initialize Copilot2 database. Some features may be limited.");
       return undefined;
     }
   }
@@ -165,11 +165,11 @@ export class DBOperations {
       // Save the empty database
       await this.saveDB();
 
-      new Notice("Local Copilot index cleared successfully.");
-      logInfo("Local Copilot index cleared successfully, new instance created.");
+      new Notice("Local Copilot2 index cleared successfully.");
+      logInfo("Local Copilot2 index cleared successfully, new instance created.");
     } catch (err) {
-      logError("Error clearing the local Copilot index:", err);
-      new Notice("An error occurred while clearing the local Copilot index.");
+      logError("Error clearing the local Copilot2 index:", err);
+      new Notice("An error occurred while clearing the local Copilot2 index.");
       throw err;
     }
   }
@@ -190,12 +190,12 @@ export class DBOperations {
           500
         );
         if (getSettings().debug) {
-          logInfo(`Deleted document from local Copilot index: ${filePath}`);
+          logInfo(`Deleted document from local Copilot2 index: ${filePath}`);
         }
       }
       this.markUnsavedChanges();
     } catch (err) {
-      logError("Error deleting document from local Copilotindex:", err);
+      logError("Error deleting document from local Copilot2 index:", err);
     }
   }
 
@@ -480,8 +480,8 @@ export class DBOperations {
 
       if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
         // Model has changed, notify user and rebuild DB
-        new Notice("New embedding model detected. Rebuilding Copilot index from scratch.");
-        logInfo("Detected change in embedding model. Rebuilding Copilot index from scratch.");
+        new Notice("New embedding model detected. Rebuilding Copilot2 index from scratch.");
+        logInfo("Detected change in embedding model. Rebuilding Copilot2 index from scratch.");
 
         // Create new DB with new model
         this.oramaDb = await this.createNewDb(embeddingInstance);
@@ -538,7 +538,7 @@ export class DBOperations {
       }
 
       logInfo(
-        "Copilot index: Docs to remove during garbage collection:",
+        "Copilot2 index: Docs to remove during garbage collection:",
         Array.from(new Set(docsToRemove.map((doc) => doc.path))).join(", ")
       );
 
@@ -555,8 +555,8 @@ export class DBOperations {
       await this.saveDB();
       return docsToRemove.length;
     } catch (err) {
-      logError("Error garbage collecting the Copilot index:", err);
-      throw new CustomError("Failed to garbage collect the Copilot index.");
+      logError("Error garbage collecting the Copilot2 index:", err);
+      throw new CustomError("Failed to garbage collect the Copilot2 index.");
     }
   }
 

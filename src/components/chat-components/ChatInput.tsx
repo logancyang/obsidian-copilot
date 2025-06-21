@@ -7,6 +7,7 @@ import {
   useProjectLoading,
 } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
+import { ModelCapability } from "@/constants"; // Added
 import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
 import { AddImageModal } from "@/components/modals/AddImageModal";
 import { ListPromptModal } from "@/components/modals/ListPromptModal";
@@ -57,6 +58,7 @@ interface ChatInputProps {
     toolCalls?: string[];
     urls?: string[];
     contextNotes?: TFile[];
+    images?: File[];
   }) => void;
   isGenerating: boolean;
   onStopGenerating: () => void;
@@ -106,8 +108,10 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     );
     const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
     const settings = useSettingsValue();
-    const isCopilotPlus =
-      currentChain === ChainType.COPILOT_PLUS_CHAIN || currentChain === ChainType.PROJECT_CHAIN;
+    // const isCopilotPlus = // isCopilotPlus gating for image features removed
+    //   currentChain === ChainType.COPILOT_PLUS_CHAIN || currentChain === ChainType.PROJECT_CHAIN;
+    const activeModel = settings.activeModels.find(m => getModelKeyFromModel(m) === getDisplayModelKey());
+    const modelSupportsVision = !!(activeModel && activeModel.capabilities?.includes(ModelCapability.VISION));
     const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
     const loadingMessages = [
       "Loading the project context...",
@@ -159,16 +163,19 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     };
 
     const onSendMessage = (includeVault: boolean) => {
-      if (!isCopilotPlus) {
-        handleSendMessage();
-        return;
-      }
+      // if (!isCopilotPlus) { // isCopilotPlus gating removed
+      //   handleSendMessage({ images: selectedImages }); // Pass images even for non-plus
+      //   setSelectedImages([]);
+      //   return;
+      // }
 
       handleSendMessage({
         toolCalls: includeVault ? ["@vault"] : [],
         contextNotes,
         urls: contextUrls,
+        images: selectedImages, // Pass selectedImages
       });
+      setSelectedImages([]); // Clear images after sending
     };
 
     const handleInputChange = async (event: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -193,7 +200,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         showNoteTitleModal(cursorPos);
       } else if (inputValue === "/") {
         showCustomPromptModal();
-      } else if (inputValue.slice(-1) === "@" && isCopilotPlus) {
+      } else if (inputValue.slice(-1) === "@") { // isCopilotPlus gating removed for @tools
         showCopilotPlusOptionsModal();
       }
     };
@@ -320,8 +327,10 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
     const handlePaste = useCallback(
       async (e: React.ClipboardEvent) => {
+        if (!modelSupportsVision) return; // Gated by vision capability
         const items = e.clipboardData?.items;
-        if (!items || !isCopilotPlus) return;
+        // if (!items || !isCopilotPlus) return; // isCopilotPlus gating removed
+        if (!items) return;
 
         const imageItems = Array.from(items).filter((item) => item.type.indexOf("image") !== -1);
 
@@ -474,7 +483,9 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           </div>
         )}
 
-        <div className="tw-relative" {...(isCopilotPlus ? getRootProps() : {})}>
+        {/* <div className="tw-relative" {...(isCopilotPlus ? getRootProps() : {})}> */} {/* isCopilotPlus gating removed */}
+        {/* <div className="tw-relative" {...getRootProps()}> */} {/* isCopilotPlus gating removed */}
+        <div className="tw-relative" {...(modelSupportsVision ? getRootProps() : {})}>
           {isProjectLoading && (
             <div className="tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-bg-primary tw-opacity-80 tw-backdrop-blur-sm">
               <div className="tw-flex tw-items-center tw-gap-2">
@@ -487,8 +498,9 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
             ref={textAreaRef}
             className="tw-max-h-40 tw-min-h-[60px] tw-w-full tw-resize-none tw-overflow-y-auto tw-rounded-md tw-border-none tw-bg-transparent tw-px-2 tw-text-sm tw-text-normal focus-visible:tw-ring-0"
             placeholder={
-              "Ask anything. [[ for notes. / for custom prompts. " +
-              (isCopilotPlus ? "@ for tools." : "")
+              // "Ask anything. [[ for notes. / for custom prompts. " + // isCopilotPlus gating removed
+              // (isCopilotPlus ? "@ for tools." : "")
+              "Ask anything. [[ for notes. / for custom prompts. @ for tools."
             }
             value={inputMessage}
             onChange={handleInputChange}
@@ -496,7 +508,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
             onPaste={handlePaste}
             disabled={isProjectLoading}
           />
-          {isCopilotPlus && (
+          {modelSupportsVision && (
             <>
               <input {...getInputProps()} />
               {/* Overlay that appears when dragging */}
@@ -596,7 +608,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
               </Button>
             ) : (
               <>
-                {isCopilotPlus && (
+                {modelSupportsVision && (
                   <Button
                     variant="ghost2"
                     size="fit"

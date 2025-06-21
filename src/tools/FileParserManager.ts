@@ -1,10 +1,11 @@
-import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { ProjectConfig } from "@/aiParams";
 import { PDFCache } from "@/cache/pdfCache";
+// BrevilabsClient import fully removed as it's no longer needed by any parser in this file after stubbing Docs4LLMParser
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { logError, logInfo } from "@/logger";
-import { TFile, Vault } from "obsidian";
+import { TFile, Vault, App } from "obsidian"; // Added App for vault.adapter.getBasePath()
 import { CanvasLoader } from "./CanvasLoader";
+import * as pdfjsLib from 'pdfjs-dist';
 
 interface FileParser {
   supportedExtensions: string[];
@@ -21,34 +22,69 @@ export class MarkdownParser implements FileParser {
 
 export class PDFParser implements FileParser {
   supportedExtensions = ["pdf"];
-  private brevilabsClient: BrevilabsClient;
+  // private brevilabsClient: BrevilabsClient; // BrevilabsClient removed
   private pdfCache: PDFCache;
+  private app: App; // Added App reference
 
-  constructor(brevilabsClient: BrevilabsClient) {
-    this.brevilabsClient = brevilabsClient;
+  constructor(app: App /*brevilabsClient: BrevilabsClient*/) { // BrevilabsClient removed from constructor
+    // this.brevilabsClient = brevilabsClient; // BrevilabsClient removed
+    this.app = app; // Store app reference
     this.pdfCache = PDFCache.getInstance();
   }
 
-  async parseFile(file: TFile, vault: Vault): Promise<string> {
+  async parseFile(file: TFile): Promise<string> {
+    console.log(`PDFParser: Attempting to parse file ${file.path} locally.`);
     try {
-      logInfo("Parsing PDF file:", file.path);
+      const arrayBuffer = await this.app.vault.readBinary(file);
 
-      // Try to get from cache first
-      const cachedResponse = await this.pdfCache.get(file);
-      if (cachedResponse) {
-        logInfo("Using cached PDF content for:", file.path);
-        return cachedResponse.response;
+      if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+        // This path needs to be resolvable by the Obsidian plugin's environment.
+        // It's often tricky. Using a CDN as a fallback for now.
+        // A robust solution would involve copying the worker file during the build process
+        // and constructing a path relative to the plugin's main.js or using a blob URL.
+        try {
+          // Attempt to construct a path relative to the plugin's base path
+          // This assumes the worker file is copied to a 'workers' subfolder in the plugin directory
+          const pluginId = this.app.manifest.id;
+          const basePath = this.app.vault.adapter.getBasePath(); // This might not be reliable in all Obsidian versions or platforms for web workers
+          // A more reliable way in newer Obsidian might be to use plugin.app.vault.adapter.getResourcePath('pdf.worker.mjs')
+          // For now, let's try a common relative path structure if possible, or fallback.
+          // THIS IS HIGHLY EXPERIMENTAL for Obsidian plugins:
+          // const localWorkerPath = `${basePath}/${pluginId}/pdf.worker.mjs`;
+          // pdfjsLib.GlobalWorkerOptions.workerSrc = localWorkerPath;
+          // console.log(`PDFParser: Attempting to set local workerSrc: ${localWorkerPath}`);
+
+          // Fallback to CDN if local setup is complex or fails
+          pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.mjs`;
+          console.warn("PDFParser: pdfjs-dist workerSrc not explicitly set by plugin build process, falling back to CDN. For true local/offline processing, ensure 'pdf.worker.mjs' is correctly bundled and its path is configured.");
+
+        } catch (e) {
+          console.error("PDFParser: Error trying to set workerSrc, defaulting to CDN.", e);
+          pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.mjs`;
+        }
       }
 
-      // If not in cache, read the file and call the API
-      const binaryContent = await vault.readBinary(file);
-      logInfo("Calling pdf4llm API for:", file.path);
-      const pdf4llmResponse = await this.brevilabsClient.pdf4llm(binaryContent);
-      await this.pdfCache.set(file, pdf4llmResponse);
-      return pdf4llmResponse.response;
+      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+      const pdf = await loadingTask.promise;
+      let fullText = "";
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map(item => (item as any).str).join(" "); // item as any to access str
+        fullText += pageText + "\n\n"; // Add double newline between pages
+      }
+
+      if (fullText.trim().length === 0) {
+        console.warn(`PDFParser: Extracted empty text from ${file.name}`);
+        return `Content of ${file.name} (PDF) could not be extracted or is empty.`;
+      }
+
+      return `Extracted text from ${file.name} (PDF):\n${fullText.trim()}`;
+
     } catch (error) {
-      logError(`Error extracting content from PDF ${file.path}:`, error);
-      return `[Error: Could not extract content from PDF ${file.basename}]`;
+      console.error(`PDFParser: Error parsing PDF ${file.name}:`, error);
+      return `Error processing PDF ${file.name} locally: ${error.message}`;
     }
   }
 
@@ -183,12 +219,12 @@ export class Docs4LLMParser implements FileParser {
     "wav",
     "webm",
   ];
-  private brevilabsClient: BrevilabsClient;
+  // private brevilabsClient: any; // BrevilabsClient removed
   private projectContextCache: ProjectContextCache;
   private currentProject: ProjectConfig | null;
 
-  constructor(brevilabsClient: BrevilabsClient, project: ProjectConfig | null = null) {
-    this.brevilabsClient = brevilabsClient;
+  constructor(project: ProjectConfig | null = null) { // BrevilabsClient parameter removed
+    // this.brevilabsClient = brevilabsClient; // BrevilabsClient removed
     this.projectContextCache = ProjectContextCache.getInstance();
     this.currentProject = project;
   }
@@ -221,45 +257,48 @@ export class Docs4LLMParser implements FileParser {
       const binaryContent = await vault.readBinary(file);
 
       logInfo(
-        `[Docs4LLMParser] Project ${this.currentProject.name}: Calling docs4llm API for: ${file.path}`
+        `[Docs4LLMParser] Project ${this.currentProject.name}: Attempting to parse ${file.extension} file: ${file.path}`
       );
-      const docs4llmResponse = await this.brevilabsClient.docs4llm(binaryContent, file.extension);
+      console.warn(`Docs4LLMParser.parseFile: Processing for .doc/.docx and other non-PDF/text document types (${file.extension}) is disabled due to removal of intermediary services.`);
+      // const docs4llmResponse = await this.brevilabsClient.docs4llm(binaryContent, file.extension); // BrevilabsClient call removed
 
-      if (!docs4llmResponse || !docs4llmResponse.response) {
-        throw new Error("Empty response from docs4llm API");
-      }
+      // if (!docs4llmResponse || !docs4llmResponse.response) {
+      //   throw new Error("Empty response from docs4llm API");
+      // }
 
-      // Ensure response is a string
-      let content = "";
-      if (typeof docs4llmResponse.response === "string") {
-        content = docs4llmResponse.response;
-      } else if (typeof docs4llmResponse.response === "object") {
-        // If response is an object, try to get the text content
-        if (docs4llmResponse.response.text) {
-          content = docs4llmResponse.response.text;
-        } else if (docs4llmResponse.response.content) {
-          content = docs4llmResponse.response.content;
-        } else {
-          // If no text/content field, stringify the entire response
-          content = JSON.stringify(docs4llmResponse.response, null, 2);
-        }
-      } else {
-        content = String(docs4llmResponse.response);
-      }
+      // // Ensure response is a string
+      // let content = "";
+      // if (typeof docs4llmResponse.response === "string") {
+      //   content = docs4llmResponse.response;
+      // } else if (typeof docs4llmResponse.response === "object") {
+      //   // If response is an object, try to get the text content
+      //   if (docs4llmResponse.response.text) {
+      //     content = docs4llmResponse.response.text;
+      //   } else if (docs4llmResponse.response.content) {
+      //     content = docs4llmResponse.response.content;
+      //   } else {
+      //     // If no text/content field, stringify the entire response
+      //     content = JSON.stringify(docs4llmResponse.response, null, 2);
+      //   }
+      // } else {
+      //   content = String(docs4llmResponse.response);
+      // }
 
-      // Cache the converted content
-      await this.projectContextCache.setFileContext(this.currentProject, file.path, content);
+      // // Cache the converted content
+      // await this.projectContextCache.setFileContext(this.currentProject, file.path, content);
 
-      logInfo(
-        `[Docs4LLMParser] Project ${this.currentProject.name}: Successfully processed and cached: ${file.path}`
-      );
-      return content;
+      // logInfo(
+      //   `[Docs4LLMParser] Project ${this.currentProject.name}: Successfully processed and cached: ${file.path}`
+      // );
+      // return content;
+      return Promise.resolve(`Processing for document type of '${file.name}' (${file.extension}) is currently not supported. Only PDF (local processing) and plain text files can be processed.`);
     } catch (error) {
       logError(
         `[Docs4LLMParser] Project ${this.currentProject?.name}: Error processing file ${file.path}:`,
         error
       );
-      throw error; // Propagate the error up
+      // throw error; // Propagate the error up - instead return a user-friendly message
+      return `Error attempting to process document ${file.name}: ${error.message}`;
     }
   }
 
@@ -286,7 +325,7 @@ export class FileParserManager {
   private currentProject: ProjectConfig | null;
 
   constructor(
-    brevilabsClient: BrevilabsClient,
+    // brevilabsClient: BrevilabsClient, // BrevilabsClient parameter removed
     vault: Vault,
     isProjectMode: boolean = false,
     project: ProjectConfig | null = null
@@ -298,11 +337,12 @@ export class FileParserManager {
     this.registerParser(new MarkdownParser());
 
     // In project mode, use Docs4LLMParser for all supported files including PDFs
-    this.registerParser(new Docs4LLMParser(brevilabsClient, project));
+    this.registerParser(new Docs4LLMParser(project)); // BrevilabsClient argument removed
 
     // Only register PDFParser when not in project mode
     if (!isProjectMode) {
-      this.registerParser(new PDFParser(brevilabsClient));
+      // Pass app to PDFParser constructor
+      this.registerParser(new PDFParser(vault.adapter.app as App));
     }
 
     this.registerParser(new CanvasParser());

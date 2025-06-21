@@ -1,4 +1,4 @@
-import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
+// import { BrevilabsClient } from "@/LLMProviders/brevilabsClient"; // BrevilabsClient disabled
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
 import ProjectManager from "@/LLMProviders/projectManager";
 import { logInfo } from "@/logger";
@@ -91,20 +91,23 @@ export class HybridRetriever extends BaseRetriever {
         (maxOramaScore < this.options.useRerankerThreshold || allScoresAreNaN);
       // Apply reranking if max score is below the threshold or all scores are NaN
       if (shouldRerank) {
-        const rerankResponse = await BrevilabsClient.getInstance().rerank(
-          query,
-          // Limit the context length to 3000 characters to avoid overflowing the reranker
-          combinedChunks.map((doc) => doc.pageContent.slice(0, 3000))
-        );
+        console.warn("HybridRetriever: Server-side reranking is disabled. Search results are based on local retrieval scores only.");
+        // const rerankResponse = await BrevilabsClient.getInstance().rerank( // BrevilabsClient disabled
+        //   query,
+        //   // Limit the context length to 3000 characters to avoid overflowing the reranker
+        //   combinedChunks.map((doc) => doc.pageContent.slice(0, 3000))
+        // );
 
-        // Map chunks based on reranked scores and include rerank_score in metadata
-        finalChunks = rerankResponse.response.data.map((item) => ({
-          ...combinedChunks[item.index],
-          metadata: {
-            ...combinedChunks[item.index].metadata,
-            rerank_score: item.relevance_score,
-          },
-        }));
+        // // Map chunks based on reranked scores and include rerank_score in metadata
+        // finalChunks = rerankResponse.response.data.map((item) => ({ // BrevilabsClient disabled - this would result in empty finalChunks
+        //   ...combinedChunks[item.index],
+        //   metadata: {
+        //     ...combinedChunks[item.index].metadata,
+        //     rerank_score: item.relevance_score,
+        //   },
+        // }));
+        // Instead of using the (now empty) reranked results, directly use combinedChunks.
+        // finalChunks is already initialized with combinedChunks, so no change needed here if rerank is skipped.
       }
 
       if (getSettings().debug) {

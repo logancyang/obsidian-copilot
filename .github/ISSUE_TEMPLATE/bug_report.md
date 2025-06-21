@@ -6,10 +6,10 @@ labels: ""
 assignees: ""
 ---
 
-- [ ] Disable all other plugins besides Copilot **(required)**
-- [ ] Screenshot of note + Copilot chat pane + dev console added **(required)**
+- [ ] Disable all other plugins besides Copilot2 **(required)**
+- [ ] Screenshot of note + Copilot2 chat pane + dev console added **(required)**
 
-Copilot version:
+Copilot2 version:
 
 (Bug report without the above will be closed)
 
@@ -20,7 +20,7 @@ A clear and concise description of what the bug is. Clear steps to reproduce the
 A clear and concise description of what you expected to happen.
 
 **Screenshots**
-Add screenshots to help explain your problem. Please turn on debug mode in Copilot settings, turn off other plugins to leave only Copilot dev messages as necessary.
+Add screenshots to help explain your problem. Please turn on debug mode in Copilot2 settings, turn off other plugins to leave only Copilot2 dev messages as necessary.
 
 **Additional context**
 Add any other context about the problem here.

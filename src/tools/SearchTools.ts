@@ -3,16 +3,22 @@ import {
   EMPTY_INDEX_ERROR_MESSAGE,
   PLUS_MODE_DEFAULT_SOURCE_CHUNKS,
   TEXT_WEIGHT,
+  ChatModelProviders,
+  ModelCapability,
 } from "@/constants";
 import { CustomError } from "@/error";
-import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
+// import { BrevilabsClient } from "@/LLMProviders/brevilabsClient"; // BrevilabsClient disabled
 import { HybridRetriever } from "@/search/hybridRetriever";
 import VectorStoreManager from "@/search/vectorStoreManager";
-import { getSettings } from "@/settings/model";
+import { getSettings, getModelKeyFromModel } from "@/settings/model";
 import { TimeInfo } from "@/tools/TimeTools";
-import { ChatHistoryEntry } from "@/utils";
+import { err2String, ChatHistoryEntry } from "@/utils";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
+import ChatModelManager from "@/LLMProviders/chatModelManager";
+import { getModelKey } from "@/aiParams";
+import { AIMessage } from "@langchain/core/messages";
+
 
 const localSearchTool = tool(
   async ({
@@ -112,32 +118,81 @@ const indexTool = tool(
   },
   {
     name: "indexVault",
-    description: "Index the vault to the Copilot index",
+    description: "Index the vault to the Copilot2 index",
   }
 );
 
 // Add new web search tool
 const webSearchTool = tool(
-  async ({ query, chatHistory }: { query: string; chatHistory: ChatHistoryEntry[] }) => {
+  async ({ query, chatHistory }: { query:string; chatHistory: ChatHistoryEntry[] }) => {
     try {
-      // Get standalone question considering chat history
-      const standaloneQuestion = await getStandaloneQuestion(query, chatHistory);
+      console.log(`webSearchTool invoked for query: ${query}`);
+      const chatModel = ChatModelManager.getInstance().getChatModel();
 
-      const response = await BrevilabsClient.getInstance().webSearch(standaloneQuestion);
-      const citations = response.response.citations || [];
-      const citationsList =
-        citations.length > 0
-          ? "\n\nSources:\n" + citations.map((url, index) => `[${index + 1}] ${url}`).join("\n")
-          : "";
+      if (!chatModel) {
+        console.error("webSearchTool: Chat model is not available.");
+        return "Error: Chat model is not available to perform web search.";
+      }
 
-      return (
-        "Here are the web search results. Please provide a response based on this information and include source citations listed at the end of your response under the heading '#### Sources' as a list of markdown links. For each URL, create a descriptive title based on the domain and path and return it in the markdown format '- [title](url)':\n\n" +
-        response.response.choices[0].message.content +
-        citationsList
-      );
+      const currentModelKey = getModelKey();
+      const settings = getSettings();
+      const activeModelConfig = settings.activeModels.find(m => getModelKeyFromModel(m) === currentModelKey);
+
+      let modelNameForLog = "current model";
+      if (activeModelConfig) {
+        modelNameForLog = activeModelConfig.name;
+        if (activeModelConfig.provider === ChatModelProviders.GOOGLE && activeModelConfig.capabilities?.includes(ModelCapability.WEB_SEARCH)) {
+          console.log(`webSearchTool: Attempting web search with Google model: ${modelNameForLog} which has WEB_SEARCH capability.`);
+        } else {
+          console.log(`webSearchTool: Attempting web search with ${modelNameForLog}. Success depends on its inherent capabilities.`);
+        }
+      } else {
+          console.log(`webSearchTool: Attempting web search with an unknown current model.`);
+      }
+
+      const searchPrompt = `Please perform a web search for the following query and provide a concise answer based on the search results. Include up to 3-5 source URLs if available and relevant, listing them at the end under a "Sources:" heading:
+
+Query: "${query}"`;
+
+      const messages = [];
+      // Add chat history if available, ensuring correct role mapping if needed
+      if (chatHistory && chatHistory.length > 0) {
+        // Assuming ChatHistoryEntry has { role: "user" | "assistant", content: string }
+        // Langchain expects { role: "human" | "ai", content: string } or specific message instances
+        chatHistory.forEach(entry => {
+          if (entry.role === "user") {
+            messages.push({ role: "human", content: entry.content });
+          } else if (entry.role === "assistant") {
+            messages.push({ role: "ai", content: entry.content });
+          }
+        });
+      }
+      messages.push({ role: "user", content: searchPrompt }); // Or "human" role
+
+      const response = await chatModel.invoke(messages);
+
+      let content = "";
+      // Standardize access to response content
+      if (response && typeof response.content === 'string') {
+        content = response.content;
+      } else if (response && Array.isArray(response.content) && response.content.length > 0) {
+        // Handle cases where content is an array of parts (e.g. text and tool calls in Gemini)
+        const textParts = response.content.filter(part => typeof part.text === 'string');
+        if (textParts.length > 0) {
+          content = textParts.map(part => part.text).join("\n");
+        } else {
+          content = "Model response did not contain a direct text part for search results.";
+        }
+      } else {
+        content = "Model did not return a recognizable text response for the web search.";
+      }
+
+      console.log(`webSearchTool: Response from model ${modelNameForLog}:`, content);
+      return content;
+
     } catch (error) {
-      console.error(`Error processing web search query ${query}:`, error);
-      return "";
+      console.error(`webSearchTool: Error during web search attempt:`, error);
+      return `Error performing web search: ${err2String(error)}`;
     }
   },
   {
