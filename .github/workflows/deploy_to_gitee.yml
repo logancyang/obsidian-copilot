@@ -22,6 +22,7 @@ jobs:
       # 验证tag是否在master分支上或release上
       - run: |
           onProtectedBranch=false
+          echo $GITHUB_REF_NAME
           branches=$(git branch -r --contains tags/$GITHUB_REF_NAME)
           for branch in $branches; do
             if [[ $branch == "origin/master" ]] || [[ $branch == "origin/release/"* ]]; then
