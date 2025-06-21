@@ -6,10 +6,10 @@ import { ChainType } from "./chainFactory";
 import { PromptSortStrategy } from "./types";
 
 export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
-export const CHAT_VIEWTYPE = "copilot-chat-view";
+export const CHAT_VIEWTYPE = "copilot2-chat-view"; // Renamed
 export const USER_SENDER = "user";
 export const AI_SENDER = "ai";
-export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.
+export const DEFAULT_SYSTEM_PROMPT = `You are Copilot2, a helpful assistant that integrates AI to Obsidian note-taking.
   1. Never mention that you do not have access to something. Always rely on the user provided context.
   2. Always answer to the best of your knowledge. If you are unsure about something, say so and ask the user to provide more context.
   3. If the user mentions "note", it most likely means an Obsidian note in the vault, not the generic meaning of a note.
@@ -88,7 +88,7 @@ export const COMPOSER_OUTPUT_INSTRUCTIONS = `Return the new note content or canv
 
 export const NOTE_CONTEXT_PROMPT_TAG = "note_context";
 export const EMPTY_INDEX_ERROR_MESSAGE =
-  "Copilot index does not exist. Please index your vault first!\n\n1. Set a working embedding model in QA settings. If it's not a local model, don't forget to set the API key. \n\n2. Click 'Refresh Index for Vault' and wait for indexing to complete. If you encounter the rate limiting error, please turn your request per second down in QA setting.";
+  "Copilot2 index does not exist. Please index your vault first!\n\n1. Set a working embedding model in QA settings. If it's not a local model, don't forget to set the API key. \n\n2. Click 'Refresh Index for Vault' and wait for indexing to complete. If you encounter the rate limiting error, please turn your request per second down in QA setting.";
 export const CHUNK_SIZE = 6000;
 export const CONTEXT_SCORE_THRESHOLD = 0.4;
 export const TEXT_WEIGHT = 0.4;
@@ -549,44 +549,44 @@ export enum DEFAULT_OPEN_AREA {
 
 export const COMMAND_IDS = {
   APPLY_ADHOC_PROMPT: "apply-adhoc-prompt",
-  CLEAR_LOCAL_COPILOT_INDEX: "clear-local-copilot-index",
-  CLEAR_COPILOT_CACHE: "clear-copilot-cache",
+  CLEAR_LOCAL_COPILOT_INDEX: "clear-local-copilot2-index",
+  CLEAR_COPILOT_CACHE: "clear-copilot2-cache",
   COUNT_WORD_AND_TOKENS_SELECTION: "count-word-and-tokens-selection",
   COUNT_TOTAL_VAULT_TOKENS: "count-total-vault-tokens",
   DEBUG_WORD_COMPLETION: "debug-word-completion",
-  FORCE_REINDEX_VAULT_TO_COPILOT_INDEX: "force-reindex-vault-to-copilot-index",
-  GARBAGE_COLLECT_COPILOT_INDEX: "garbage-collect-copilot-index",
-  INDEX_VAULT_TO_COPILOT_INDEX: "index-vault-to-copilot-index",
-  INSPECT_COPILOT_INDEX_BY_NOTE_PATHS: "copilot-inspect-index-by-note-paths",
-  LIST_INDEXED_FILES: "copilot-list-indexed-files",
-  LOAD_COPILOT_CHAT_CONVERSATION: "load-copilot-chat-conversation",
-  NEW_CHAT: "new-chat",
-  OPEN_COPILOT_CHAT_WINDOW: "chat-open-window",
-  REMOVE_FILES_FROM_COPILOT_INDEX: "remove-files-from-copilot-index",
-  SEARCH_ORAMA_DB: "copilot-search-orama-db",
-  TOGGLE_COPILOT_CHAT_WINDOW: "chat-toggle-window",
+  FORCE_REINDEX_VAULT_TO_COPILOT_INDEX: "force-reindex-vault-to-copilot2-index",
+  GARBAGE_COLLECT_COPILOT_INDEX: "garbage-collect-copilot2-index",
+  INDEX_VAULT_TO_COPILOT_INDEX: "index-vault-to-copilot2-index",
+  INSPECT_COPILOT_INDEX_BY_NOTE_PATHS: "copilot2-inspect-index-by-note-paths",
+  LIST_INDEXED_FILES: "copilot2-list-indexed-files",
+  LOAD_COPILOT_CHAT_CONVERSATION: "load-copilot2-chat-conversation",
+  NEW_CHAT: "new-chat", // ID remains generic
+  OPEN_COPILOT_CHAT_WINDOW: "chat-open-window", // ID remains generic
+  REMOVE_FILES_FROM_COPILOT_INDEX: "remove-files-from-copilot2-index",
+  SEARCH_ORAMA_DB: "copilot2-search-orama-db",
+  TOGGLE_COPILOT_CHAT_WINDOW: "chat-toggle-window", // ID remains generic
   TOGGLE_AUTOCOMPLETE: "toggle-autocomplete",
 } as const;
 
 export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.APPLY_ADHOC_PROMPT]: "Apply ad-hoc custom prompt",
-  [COMMAND_IDS.CLEAR_LOCAL_COPILOT_INDEX]: "Clear local Copilot index",
-  [COMMAND_IDS.CLEAR_COPILOT_CACHE]: "Clear Copilot cache",
+  [COMMAND_IDS.CLEAR_LOCAL_COPILOT_INDEX]: "Clear local Copilot2 index", // Name already updated
+  [COMMAND_IDS.CLEAR_COPILOT_CACHE]: "Clear Copilot2 cache", // Name already updated
   [COMMAND_IDS.COUNT_TOTAL_VAULT_TOKENS]: "Count total tokens in your vault",
   [COMMAND_IDS.COUNT_WORD_AND_TOKENS_SELECTION]: "Count words and tokens in selection",
   [COMMAND_IDS.DEBUG_WORD_COMPLETION]: "Word completion: Debug",
   [COMMAND_IDS.FORCE_REINDEX_VAULT_TO_COPILOT_INDEX]: "Force reindex vault",
   [COMMAND_IDS.GARBAGE_COLLECT_COPILOT_INDEX]:
-    "Garbage collect Copilot index (remove files that no longer exist in vault)",
+    "Garbage collect Copilot2 index (remove files that no longer exist in vault)",
   [COMMAND_IDS.INDEX_VAULT_TO_COPILOT_INDEX]: "Index (refresh) vault",
-  [COMMAND_IDS.INSPECT_COPILOT_INDEX_BY_NOTE_PATHS]: "Inspect Copilot index by note paths (debug)",
+  [COMMAND_IDS.INSPECT_COPILOT_INDEX_BY_NOTE_PATHS]: "Inspect Copilot2 index by note paths (debug)",
   [COMMAND_IDS.LIST_INDEXED_FILES]: "List all indexed files (debug)",
-  [COMMAND_IDS.LOAD_COPILOT_CHAT_CONVERSATION]: "Load Copilot chat conversation",
-  [COMMAND_IDS.NEW_CHAT]: "New Copilot Chat",
-  [COMMAND_IDS.OPEN_COPILOT_CHAT_WINDOW]: "Open Copilot Chat Window",
-  [COMMAND_IDS.REMOVE_FILES_FROM_COPILOT_INDEX]: "Remove files from Copilot index (debug)",
+  [COMMAND_IDS.LOAD_COPILOT_CHAT_CONVERSATION]: "Load Copilot2 chat conversation",
+  [COMMAND_IDS.NEW_CHAT]: "New Copilot2 Chat",
+  [COMMAND_IDS.OPEN_COPILOT_CHAT_WINDOW]: "Open Copilot2 Chat Window",
+  [COMMAND_IDS.REMOVE_FILES_FROM_COPILOT_INDEX]: "Remove files from Copilot2 index (debug)",
   [COMMAND_IDS.SEARCH_ORAMA_DB]: "Search OramaDB (debug)",
-  [COMMAND_IDS.TOGGLE_COPILOT_CHAT_WINDOW]: "Toggle Copilot Chat Window",
+  [COMMAND_IDS.TOGGLE_COPILOT_CHAT_WINDOW]: "Toggle Copilot2 Chat Window",
   [COMMAND_IDS.TOGGLE_AUTOCOMPLETE]: "Toggle autocomplete",
 };
 
@@ -601,8 +601,8 @@ export const AUTOCOMPLETE_CONFIG = {
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
   userId: uuidv4(),
-  isPlusUser: false,
-  plusLicenseKey: "",
+  // isPlusUser: false, // Removed
+  // plusLicenseKey: "", // Removed
   openAIApiKey: "",
   openAIOrgId: "",
   huggingfaceApiKey: "",
@@ -628,7 +628,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   openAIProxyBaseUrl: "",
   openAIEmbeddingProxyBaseUrl: "",
   stream: true,
-  defaultSaveFolder: "copilot-conversations",
+  defaultSaveFolder: "copilot2-conversations",
   defaultConversationTag: "copilot-conversation",
   autosaveChat: false,
   includeActiveNoteAsContext: true,
@@ -662,7 +662,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   autocompleteAcceptKey: AUTOCOMPLETE_CONFIG.KEYBIND,
   allowAdditionalContext: true,
   enableWordCompletion: false,
-  lastDismissedVersion: null,
+  // lastDismissedVersion: null, // Removed for update check removal
   passMarkdownImages: true,
   enableCustomPromptTemplating: true,
   suggestedDefaultCommands: false,

@@ -23,7 +23,7 @@ export class IndexEventHandler {
 
   private initializeEventListeners() {
     if (getSettings().debug) {
-      console.log("Copilot Plus: Initializing event listeners");
+      console.log("Copilot2: Initializing event listeners");
     }
     this.app.workspace.on("active-leaf-change", this.handleActiveLeafChange);
     this.app.vault.on("delete", this.handleFileDelete);
@@ -79,7 +79,7 @@ export class IndexEventHandler {
 
     this.debounceTimer = window.setTimeout(() => {
       if (getSettings().debug) {
-        console.log("Copilot Plus: Triggering reindex for file ", file.path);
+        console.log("Copilot2: Triggering reindex for file ", file.path);
       }
       this.indexOps.reindexFile(file);
       this.debounceTimer = null;

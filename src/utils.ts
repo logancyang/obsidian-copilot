@@ -696,26 +696,26 @@ export function isNewerVersion(latest: string, current: string): boolean {
   return false;
 }
 
-/**
- * Check for latest version from GitHub releases.
- * @returns latest version string or error message
- */
-export async function checkLatestVersion(): Promise<{
-  version: string | null;
-  error: string | null;
-}> {
-  try {
-    const response = await requestUrl({
-      url: "https://api.github.com/repos/logancyang/obsidian-copilot/releases/latest",
-      method: "GET",
-    });
-    const version = response.json.tag_name.replace("v", "");
-    return { version, error: null };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Failed to check for updates";
-    return { version: null, error: errorMessage };
-  }
-}
+// /** // Automatic update check disabled in Phase 1
+//  * Check for latest version from GitHub releases.
+//  * @returns latest version string or error message
+//  */
+// export async function checkLatestVersion(): Promise<{
+//   version: string | null;
+//   error: string | null;
+// }> {
+//   try {
+//     const response = await requestUrl({
+//       url: "https://api.github.com/repos/logancyang/obsidian-copilot/releases/latest",
+//       method: "GET",
+//     });
+//     const version = response.json.tag_name.replace("v", "");
+//     return { version, error: null };
+//   } catch (error) {
+//     const errorMessage = error instanceof Error ? error.message : "Failed to check for updates";
+//     return { version: null, error: errorMessage };
+//   }
+// }
 
 export function isOSeriesModel(model: BaseChatModel | string): boolean {
   if (typeof model === "string") {

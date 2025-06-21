@@ -1,11 +1,16 @@
-import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
+// import { BrevilabsClient } from "@/LLMProviders/brevilabsClient"; // BrevilabsClient disabled
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
 const simpleYoutubeTranscriptionTool = tool(
   async ({ url }: { url: string }) => {
     try {
-      const response = await BrevilabsClient.getInstance().youtube4llm(url);
+      console.warn("simpleYoutubeTranscriptionTool: YouTube transcript processing is disabled due to the removal of intermediary services.");
+      // const response = await BrevilabsClient.getInstance().youtube4llm(url); // BrevilabsClient disabled
+
+      // Simulate the response structure that the stubbed BrevilabsClient.youtube4llm would return
+      const response = { response: { transcript: "" }, elapsed_time_ms: 0 };
+
 
       // Check if transcript is empty
       if (!response.response.transcript) {

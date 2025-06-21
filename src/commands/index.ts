@@ -110,10 +110,10 @@ export function registerCommands(
   addCommand(plugin, COMMAND_IDS.GARBAGE_COLLECT_COPILOT_INDEX, async () => {
     try {
       const removedDocs = await plugin.vectorStoreManager.garbageCollectVectorStore();
-      new Notice(`${removedDocs} documents removed from Copilot index.`);
+      new Notice(`${removedDocs} documents removed from Copilot2 index.`);
     } catch (err) {
-      console.error("Error garbage collecting the Copilot index:", err);
-      new Notice("An error occurred while garbage collecting the Copilot index.");
+      console.error("Error garbage collecting the Copilot2 index:", err);
+      new Notice("An error occurred while garbage collecting the Copilot2 index.");
     }
   });
 
@@ -121,10 +121,10 @@ export function registerCommands(
     try {
       const indexedFileCount = await plugin.vectorStoreManager.indexVaultToVectorStore();
 
-      new Notice(`${indexedFileCount} vault files indexed to Copilot index.`);
+      new Notice(`${indexedFileCount} vault files indexed to Copilot2 index.`);
     } catch (err) {
-      console.error("Error indexing vault to Copilot index:", err);
-      new Notice("An error occurred while indexing vault to Copilot index.");
+      console.error("Error indexing vault to Copilot2 index:", err);
+      new Notice("An error occurred while indexing vault to Copilot2 index.");
     }
   });
 
@@ -132,10 +132,10 @@ export function registerCommands(
     try {
       const indexedFileCount = await plugin.vectorStoreManager.indexVaultToVectorStore(true);
 
-      new Notice(`${indexedFileCount} vault files re-indexed to Copilot index.`);
+      new Notice(`${indexedFileCount} vault files re-indexed to Copilot2 index.`);
     } catch (err) {
-      console.error("Error re-indexing vault to Copilot index:", err);
-      new Notice("An error occurred while re-indexing vault to Copilot index.");
+      console.error("Error re-indexing vault to Copilot2 index:", err);
+      new Notice("An error occurred while re-indexing vault to Copilot2 index.");
     }
   });
 
@@ -178,7 +178,7 @@ export function registerCommands(
 
       // Create content for the file
       const content = [
-        "# Copilot Files Status",
+        "# Copilot2 Files Status",
         `- Indexed files: ${indexedFiles.length}`,
         `	- Files missing embeddings: ${filesWithoutEmbeddings.size}`,
         `- Unindexed files: ${unindexedFiles.size}`,
@@ -206,7 +206,7 @@ export function registerCommands(
       ].join("\n");
 
       // Create or update the file in the vault
-      const fileName = `Copilot-Indexed-Files-${new Date().toLocaleDateString().replace(/\//g, "-")}.md`;
+      const fileName = `Copilot2-Indexed-Files-${new Date().toLocaleDateString().replace(/\//g, "-")}.md`;
       const filePath = `${fileName}`;
 
       const existingFile = plugin.app.vault.getAbstractFileByPath(filePath);
@@ -271,10 +271,10 @@ export function registerCommands(
       const { AutocompleteCache } = await import("@/cache/autocompleteCache");
       AutocompleteCache.getInstance().clear();
 
-      new Notice("All Copilot caches cleared successfully");
+      new Notice("All Copilot2 caches cleared successfully");
     } catch (error) {
-      console.error("Error clearing Copilot caches:", error);
-      new Notice("Failed to clear Copilot caches");
+      console.error("Error clearing Copilot2 caches:", error);
+      new Notice("Failed to clear Copilot2 caches");
     }
   });
 
@@ -283,6 +283,6 @@ export function registerCommands(
     const currentSettings = getSettings();
     const newValue = !currentSettings.enableAutocomplete;
     updateSetting("enableAutocomplete", newValue);
-    new Notice(`Copilot autocomplete ${newValue ? "enabled" : "disabled"}`);
+    new Notice(`Copilot2 autocomplete ${newValue ? "enabled" : "disabled"}`);
   });
 }

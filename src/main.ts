@@ -85,7 +85,7 @@ export default class CopilotPlugin extends Plugin {
 
     this.initActiveLeafChangeHandler();
 
-    this.addRibbonIcon("message-square", "Open Copilot Chat", (evt: MouseEvent) => {
+    this.addRibbonIcon("message-square", "Open Copilot2 Chat", (evt: MouseEvent) => {
       this.activateView();
     });
 
@@ -138,7 +138,7 @@ export default class CopilotPlugin extends Plugin {
     this.settingsUnsubscriber?.();
     this.autocompleteService?.destroy();
 
-    logInfo("Copilot plugin unloaded");
+    logInfo("Copilot2 plugin unloaded");
   }
 
   updateUserMessageHistory(newMessage: string) {

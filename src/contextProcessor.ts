@@ -91,8 +91,10 @@ export class ContextProcessor {
           note.extension !== "canvas"
         ) {
           // This file type is supported, but requires Plus mode (e.g., PDF)
+          // Plus mode is being removed, so this message is updated.
+          // Actual processing capability now depends on available local parsers.
           console.warn(
-            `File type ${note.extension} requires Copilot Plus mode for context processing.`
+            `File type ${note.extension} might have limited context processing capabilities in the current version.`
           );
           return;
         }

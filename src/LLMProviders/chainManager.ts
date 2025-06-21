@@ -87,7 +87,7 @@ export default class ChainManager {
   private validateChatModel() {
     if (!this.chatModelManager.validateChatModel(this.chatModelManager.getChatModel())) {
       const errorMsg =
-        "Chat model is not initialized properly, check your API key in Copilot setting and make sure you have API access.";
+        "Chat model is not initialized properly, check your API key in Copilot2 setting and make sure you have API access.";
       new Notice(errorMsg);
       throw new Error(errorMsg);
     }

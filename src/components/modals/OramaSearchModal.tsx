@@ -15,7 +15,7 @@ export class OramaSearchModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
 
-    contentEl.createEl("h2", { text: "Inspect Copilot Index by Note Paths" });
+    contentEl.createEl("h2", { text: "Inspect Copilot2 Index by Note Paths" });
 
     // Create textarea instead of input for multiline support
     this.searchInput = contentEl.createEl("textarea", {

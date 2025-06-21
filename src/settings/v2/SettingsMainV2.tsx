@@ -6,15 +6,15 @@ import { useLatestVersion } from "@/hooks/useLatestVersion";
 import CopilotPlugin from "@/main";
 import { resetSettings } from "@/settings/model";
 import { CommandSettings } from "@/settings/v2/components/CommandSettings";
-import { Cog, Command, Cpu, Database, Sparkles, Wrench } from "lucide-react";
+import { Cog, Command, Cpu, Database, /*Sparkles,*/ Wrench } from "lucide-react"; // Sparkles removed
 import React from "react";
 import { AdvancedSettings } from "./components/AdvancedSettings";
 import { BasicSettings } from "./components/BasicSettings";
-import { CopilotPlusSettings } from "./components/CopilotPlusSettings";
+// import { CopilotPlusSettings } from "./components/CopilotPlusSettings"; // Plus features disabled
 import { ModelSettings } from "./components/ModelSettings";
 import { QASettings } from "./components/QASettings";
 
-const TAB_IDS = ["basic", "model", "QA", "command", "plus", "advanced"] as const;
+const TAB_IDS = ["basic", "model", "QA", "command", "advanced"] as const; // "plus" removed
 type TabId = (typeof TAB_IDS)[number];
 
 // tab icons
@@ -23,7 +23,7 @@ const icons: Record<TabId, JSX.Element> = {
   model: <Cpu className="tw-size-5" />,
   QA: <Database className="tw-size-5" />,
   command: <Command className="tw-size-5" />,
-  plus: <Sparkles className="tw-size-5" />,
+  // plus: <Sparkles className="tw-size-5" />, // Plus features disabled
   advanced: <Wrench className="tw-size-5" />,
 };
 
@@ -33,7 +33,7 @@ const components: Record<TabId, React.FC> = {
   model: () => <ModelSettings />,
   QA: () => <QASettings />,
   command: () => <CommandSettings />,
-  plus: () => <CopilotPlusSettings />,
+  // plus: () => <CopilotPlusSettings />, // Plus features disabled
   advanced: () => <AdvancedSettings />,
 };
 
@@ -101,7 +101,7 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
         <div className="tw-flex tw-flex-col tw-gap-2">
           <h1 className="tw-flex tw-flex-col tw-gap-2 sm:tw-flex-row sm:tw-items-center sm:tw-justify-between">
             <div className="tw-flex tw-items-center tw-gap-2">
-              <span>Copilot Settings</span>
+              <span>Copilot2 Settings</span>
               <div className="tw-flex tw-items-center tw-gap-1">
                 <span className="tw-text-xs tw-text-muted">v{plugin.manifest.version}</span>
                 {latestVersion && (

@@ -90,7 +90,7 @@ export class CodeMirrorIntegration {
     try {
       await this.wordCompletionManager.initialize();
     } catch (error) {
-      logError("[Copilot Autocomplete] Failed to initialize word completion:", error);
+      logError("[Copilot2 Autocomplete] Failed to initialize word completion:", error);
     }
   }
 
@@ -227,7 +227,7 @@ export class CodeMirrorIntegration {
         // Force a dispatch to update the editor
         editorView.dispatch({});
       } catch (error) {
-        logError(`[Copilot Autocomplete] Error updating editor: ${error}`);
+        logError(`[Copilot2 Autocomplete] Error updating editor: ${error}`);
       }
     }
   }
@@ -492,7 +492,7 @@ export class CodeMirrorIntegration {
         this.activeRequests.delete(requestKey);
 
         logError(
-          "[Copilot Autocomplete] Error with LLM word selection, falling back to trie:",
+          "[Copilot2 Autocomplete] Error with LLM word selection, falling back to trie:",
           error
         );
 
@@ -598,7 +598,7 @@ export class CodeMirrorIntegration {
         // Clean up the request from active requests (only if we made a request)
         this.activeRequests.delete(requestKey);
 
-        logError("[Copilot Autocomplete] Error fetching autocomplete suggestions:", error);
+        logError("[Copilot2 Autocomplete] Error fetching autocomplete suggestions:", error);
       }
     }
   }
@@ -748,3 +748,5 @@ export class CodeMirrorIntegration {
     return this.cacheEnabled;
   }
 }
+
+[end of src/autocomplete/codemirrorIntegration.ts]

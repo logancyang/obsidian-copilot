@@ -1,4 +1,4 @@
-# Local Copilot Setup Guide
+# Local Copilot2 Setup Guide
 
 ## LM Studio
 
@@ -9,7 +9,7 @@ A rule of thumb to determine how large a model you can run:
 - If you are on an Apple Silicon Mac, look at your RAM
 - If you are on a Windows PC with a GPU, look at your VRAM.
 
-After you set your model and preset, you are free to test it out in LM Studio's Chat tab, making sure everything is working. Now you can find the Local Server tab, make sure you have `CORS` enabled, turn on hardware acceleration based on the type of device you have, and click Start Server. This will enable Copilot for Obsidian to access it.
+After you set your model and preset, you are free to test it out in LM Studio's Chat tab, making sure everything is working. Now you can find the Local Server tab, make sure you have `CORS` enabled, turn on hardware acceleration based on the type of device you have, and click Start Server. This will enable Copilot2 for Obsidian to access it.
 
 Notice that LM Studio doesn't require the user to do anything in the terminal whatsoever. It is the most user-friendly way to run local models on the market now!
 
@@ -17,7 +17,7 @@ Here's an example for Apple Metal macs. I can run 7B models blazingly fast on my
 
 <img src="./images/lm-studio.png" alt="LM Studio">
 
-In Copilot settings, select Add Custom Model, paste the model name from LM Studio, select `lm-studio` as provider, click add, and you'll find it in your model picker!
+In Copilot2 settings, select Add Custom Model, paste the model name from LM Studio, select `lm-studio` as provider, click add, and you'll find it in your model picker!
 
 <img src="./images/lm-studio-model-pick.png" alt="LM Studio Model">
 
@@ -71,7 +71,7 @@ Then, quit Ollama from the menu bar and reopen it.
 
 <img src="./images/ollama-serve.png" alt="Ollama">
 
-Inside Copilot settings, click Add Custom Model, enter the model name you pulled from Ollama, e.g. `mistral`, select `ollama` as provider, click add, and you'll find it in your model picker!
+Inside Copilot2 settings, click Add Custom Model, enter the model name you pulled from Ollama, e.g. `mistral`, select `ollama` as provider, click add, and you'll find it in your model picker!
 
 <img src="./images/ollama-setting.png" alt="Ollama">
 
@@ -103,7 +103,7 @@ Ollama has added support for local embeddings for RAG since v0.1.26! It's super 
 ollama pull nomic-embed-text
 ```
 
-and start your local Ollama server as before. Now you can add your Ollama embedding model in Copilot QA settings as `nomic-embed-text` with provider `ollama`, and it will use your local embeddings!
+and start your local Ollama server as before. Now you can add your Ollama embedding model in Copilot2 QA settings as `nomic-embed-text` with provider `ollama`, and it will use your local embeddings!
 
 With this one Ollama server running, you can set your Chat model as Ollama too, meaning it handles both chat streaming and embedding! You can then have a **completely offline QA** experience!
 
