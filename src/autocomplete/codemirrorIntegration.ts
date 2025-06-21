@@ -748,5 +748,3 @@ export class CodeMirrorIntegration {
     return this.cacheEnabled;
   }
 }
-
-[end of src/autocomplete/codemirrorIntegration.ts]
