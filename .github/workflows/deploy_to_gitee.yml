@@ -33,7 +33,7 @@ jobs:
 
           ok=false
           for b in $branches; do
-            if [[ "$b" == "master" ]] || [[ "$b" == release/* ]]; then
+            if [[ "$b" == "master" ]] || [[ "$b" == release/* ]] || [[ "$b" == "YaQia_dev" ]]; then
               ok=true
               break
             fi
@@ -83,6 +83,9 @@ jobs:
           # 保存私钥
           echo "${{ secrets.AI_LEARNING_ASSISTANT_PLUGINS_DIST }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
+
+          # 打印私钥行数，确定是否为空
+          echo "私钥行数：$(wc -l ~/.ssh/id_ed25519)"
 
           # 添加Gitee到known_hosts
           ssh-keyscan gitee.com >> ~/.ssh/known_hosts
