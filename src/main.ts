@@ -50,13 +50,12 @@ import {
   SUPABASE_URL,
   SUPABASE_KEY,
   IS_SWIFTINK,
-} from "./asr/settings";
+} from "./asr/TranscriptionSettingsTab";
 import { FileLink } from "./asr/fileLink";
 import { Timer } from "./asr/Timer";
 import { Controls } from "./asr/Controls";
 import { AudioHandler } from "./asr/AudioHandler";
-import { WhisperSettingsTab } from "./asr/WhisperSettingsTab";
-import { SettingsManager, WhisperSettings } from "./asr/SettingsManager";
+import { WhisperSettingsTab, SettingsManager, WhisperSettings } from "./asr/WhisperSettingsTab";
 import { NativeAudioRecorder } from "./asr/AudioRecorder";
 import { RecordingStatus, StatusBarRecord } from "./asr/StatusBar";
 
@@ -390,9 +389,6 @@ export default class CopilotPlugin extends Plugin {
 
           // Create the notice with the content
           const notice = new Notice(noticeContent, 16 * 1000);
-          notice.noticeEl.addEventListener("click", () => {
-            window.open(SWIFTINK_AUTH_CALLBACK, "_blank");
-          });
         }
       }
     }
@@ -598,7 +594,7 @@ export default class CopilotPlugin extends Plugin {
     });
 
     // This adds a settings tab so the user can configure various aspects of the plugin
-    this.addSettingTab(new TranscriptionSettingTab(this.app, this));
+    //this.addSettingTab(new TranscriptionSettingTab(this.app, this));
 
     this.registerObsidianProtocolHandler("swiftink_auth", async (callback) => {
       const params = new URLSearchParams(callback.hash);
@@ -685,7 +681,7 @@ export default class CopilotPlugin extends Plugin {
       this.openRecordingControls();
     });
 
-    this.addSettingTab(new WhisperSettingsTab(this.app, this));
+    //this.addSettingTab(new WhisperSettingsTab(this.app, this));
 
     this.timer = new Timer();
     this.audioHandler = new AudioHandler(this);

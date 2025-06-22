@@ -1,6 +1,5 @@
 import { App, PluginSettingTab, Setting, Notice } from "obsidian";
-import Whisper from "../main";
-import { WebSearchResponse } from "@/LLMProviders/brevilabsClient";
+import CopilotPlugin from "@/main";
 
 interface TranscriptionSettings {
   timestamps: boolean;
@@ -146,9 +145,9 @@ const LANGUAGES = {
 };
 
 class TranscriptionSettingTab extends PluginSettingTab {
-  plugin: Whisper;
+  plugin: CopilotPlugin;
 
-  constructor(app: App, plugin: Whisper) {
+  constructor(app: App, plugin: CopilotPlugin) {
     super(app, plugin);
     this.plugin = plugin;
   }

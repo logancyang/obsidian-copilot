@@ -14,6 +14,8 @@ import { ModelSettings } from "./components/ModelSettings";
 import { QASettings } from "./components/QASettings";
 import { SystemPromptsSection } from "./components/SystemPromptsSection";
 import { PromptEnhancementsSection } from "./components/PromptEnhancementsSection";
+import { TranscriptionSettingsTab } from "./components/TranscriptionSettingsTab";
+import { WhisperSettingsTab } from "./components/WhisperSettingsTab";
 
 const TAB_IDS = [
   "basic",
@@ -23,6 +25,8 @@ const TAB_IDS = [
   "advanced",
   "systemPrompts",
   "promptEnhancements",
+  "transcription",
+  "whisper",
 ] as const;
 type TabId = (typeof TAB_IDS)[number];
 
@@ -35,17 +39,8 @@ const icons: Record<TabId, JSX.Element> = {
   advanced: <Wrench className="w-5 h-5" />,
   systemPrompts: <Cog className="w-5 h-5" />,
   promptEnhancements: <Cog className="w-5 h-5" />,
-};
-
-// tab components
-const components: Record<TabId, React.FC> = {
-  basic: () => <BasicSettings />,
-  model: () => <ModelSettings />,
-  QA: () => <QASettings />,
-  command: () => <CommandSettings />,
-  advanced: () => <AdvancedSettings />,
-  systemPrompts: () => <SystemPromptsSection />,
-  promptEnhancements: () => <PromptEnhancementsSection />,
+  transcription: <Cog className="w-5 h-5" />,
+  whisper: <Cog className="w-5 h-5" />,
 };
 
 // tabs
@@ -58,6 +53,18 @@ const tabs: TabItemType[] = TAB_IDS.map((id) => ({
 const SettingsContent: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
   const { selectedTab, setSelectedTab } = useTab();
 
+  // tab components
+  const components: Record<TabId, React.FC> = {
+    basic: () => <BasicSettings />,
+    model: () => <ModelSettings />,
+    QA: () => <QASettings />,
+    command: () => <CommandSettings />,
+    advanced: () => <AdvancedSettings />,
+    systemPrompts: () => <SystemPromptsSection />,
+    promptEnhancements: () => <PromptEnhancementsSection />,
+    transcription: () => <TranscriptionSettingsTab app={plugin.app} plugin={plugin} />,
+    whisper: () => <WhisperSettingsTab plugin={plugin} />,
+  };
   return (
     <div className="flex flex-col">
       <div className="inline-flex rounded-lg">

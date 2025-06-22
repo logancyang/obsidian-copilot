@@ -2,7 +2,7 @@ import {
   TranscriptionSettings,
   /*SWIFTINK_AUTH_CALLBACK*/ API_BASE,
   DEFAULT_SETTINGS,
-} from "./settings";
+} from "./TranscriptionSettingsTab";
 import { Notice, requestUrl, RequestUrlParam, TFile, Vault, App } from "obsidian";
 import { format } from "date-fns";
 import { paths, components } from "./types/swiftink";
