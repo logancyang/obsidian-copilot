@@ -15,7 +15,7 @@ import {
   MessageContent,
 } from "@/imageProcessing/imageProcessor";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import { logInfo } from "@/logger";
+import { logError, logInfo, logWarn } from "@/logger";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { getSettings, getSystemPrompt } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
@@ -152,7 +152,6 @@ abstract class BaseChainRunner implements ChainRunner {
     abortController: AbortController,
     addMessage: (message: ChatMessage) => void,
     updateCurrentAiMessage: (message: string) => void,
-    debug: boolean,
     sources?: { title: string; score: number }[]
   ) {
     // Save to memory and add message if we have a response
@@ -179,26 +178,23 @@ abstract class BaseChainRunner implements ChainRunner {
       // Also clear if it's a new chat
       updateCurrentAiMessage("");
     }
-    if (debug) {
-      console.log(
-        "==== Chat Memory ====\n",
-        (this.chainManager.memoryManager.getMemory().chatHistory as any).messages.map(
-          (m: any) => m.content
-        )
-      );
-      console.log("==== Final AI Response ====\n", fullAIResponse);
-    }
+    logInfo(
+      "==== Chat Memory ====\n",
+      (this.chainManager.memoryManager.getMemory().chatHistory as any).messages.map(
+        (m: any) => m.content
+      )
+    );
+    logInfo("==== Final AI Response ====\n", fullAIResponse);
     return fullAIResponse;
   }
 
   protected async handleError(
     error: any,
-    debug: boolean,
     addMessage?: (message: ChatMessage) => void,
     updateCurrentAiMessage?: (message: string) => void
   ) {
     const msg = err2String(error);
-    if (debug) console.error("Error during LLM invocation:", msg);
+    logError("Error during LLM invocation:", msg);
     const errorData = error?.response?.data?.error || msg;
     const errorCode = errorData?.code || msg;
     let errorMessage = "";
@@ -213,7 +209,7 @@ abstract class BaseChainRunner implements ChainRunner {
       errorMessage = `${errorCode}`;
     }
 
-    console.error(errorData);
+    logError(errorData);
 
     if (addMessage && updateCurrentAiMessage) {
       updateCurrentAiMessage("");
@@ -242,7 +238,7 @@ abstract class BaseChainRunner implements ChainRunner {
     } else {
       // Fallback to Notice if message handlers aren't provided
       new Notice(errorMessage);
-      console.error(errorData);
+      logError(errorData);
     }
   }
 }
@@ -259,7 +255,6 @@ class LLMChainRunner extends BaseChainRunner {
       updateLoading?: (loading: boolean) => void;
     }
   ): Promise<string> {
-    const { debug = false } = options;
     const streamer = new ThinkBlockStreamer(updateCurrentAiMessage);
 
     try {
@@ -293,9 +288,7 @@ class LLMChainRunner extends BaseChainRunner {
         content: userMessage.message,
       });
 
-      if (debug) {
-        logInfo("==== Final Request to AI ====\n", messages);
-      }
+      logInfo("==== Final Request to AI ====\n", messages);
 
       // Stream with abort signal
       const chatStream = await withSuppressedTokenWarnings(() =>
@@ -317,7 +310,7 @@ class LLMChainRunner extends BaseChainRunner {
         logInfo("Stream aborted by user", { reason: abortController.signal.reason });
         // Don't show error message for user-initiated aborts
       } else {
-        await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
+        await this.handleError(error, addMessage, updateCurrentAiMessage);
       }
     }
 
@@ -335,8 +328,7 @@ class LLMChainRunner extends BaseChainRunner {
       userMessage,
       abortController,
       addMessage,
-      updateCurrentAiMessage,
-      debug
+      updateCurrentAiMessage
     );
   }
 }
@@ -353,7 +345,6 @@ class VaultQAChainRunner extends BaseChainRunner {
       updateLoading?: (loading: boolean) => void;
     }
   ): Promise<string> {
-    const { debug = false } = options;
     const streamer = new ThinkBlockStreamer(updateCurrentAiMessage);
 
     try {
@@ -365,8 +356,7 @@ class VaultQAChainRunner extends BaseChainRunner {
           userMessage,
           abortController,
           addMessage,
-          updateCurrentAiMessage,
-          debug
+          updateCurrentAiMessage
         );
       }
 
@@ -429,9 +419,7 @@ class VaultQAChainRunner extends BaseChainRunner {
         content: userMessage.message,
       });
 
-      if (debug) {
-        logInfo("==== Final Request to AI ====\n", messages);
-      }
+      logInfo("==== Final Request to AI ====\n", messages);
 
       // Stream with abort signal
       const chatStream = await withSuppressedTokenWarnings(() =>
@@ -453,7 +441,7 @@ class VaultQAChainRunner extends BaseChainRunner {
         logInfo("VaultQA stream aborted by user", { reason: abortController.signal.reason });
         // Don't show error message for user-initiated aborts
       } else {
-        await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
+        await this.handleError(error, addMessage, updateCurrentAiMessage);
       }
     }
 
@@ -474,8 +462,7 @@ class VaultQAChainRunner extends BaseChainRunner {
       userMessage,
       abortController,
       addMessage,
-      updateCurrentAiMessage,
-      debug
+      updateCurrentAiMessage
     );
   }
 
@@ -607,8 +594,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     textContent: string,
     userMessage: ChatMessage,
     abortController: AbortController,
-    updateCurrentAiMessage: (message: string) => void,
-    debug: boolean
+    updateCurrentAiMessage: (message: string) => void
   ): Promise<string> {
     // Get chat history
     const memory = this.chainManager.memoryManager.getMemory();
@@ -695,7 +681,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       updateLoadingMessage?: (message: string) => void;
     }
   ): Promise<string> {
-    const { debug = false, updateLoadingMessage } = options;
+    const { updateLoadingMessage } = options;
     let fullAIResponse = "";
     let sources: { title: string; score: number }[] = [];
     let currentPartialResponse = "";
@@ -721,8 +707,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
                 userMessage,
                 abortController,
                 addMessage,
-                updateCurrentAiMessage,
-                debug
+                updateCurrentAiMessage
               );
             }
             return this.handleResponse(
@@ -730,24 +715,22 @@ class CopilotPlusChainRunner extends BaseChainRunner {
               userMessage,
               abortController,
               addMessage,
-              updateCurrentAiMessage,
-              debug
+              updateCurrentAiMessage
             );
           } catch (error) {
-            console.error("Error processing YouTube video:", error);
+            logError("Error processing YouTube video:", error);
             return this.handleResponse(
               failMessage,
               userMessage,
               abortController,
               addMessage,
-              updateCurrentAiMessage,
-              debug
+              updateCurrentAiMessage
             );
           }
         }
       }
 
-      if (debug) console.log("==== Step 1: Analyzing intent ====");
+      logInfo("==== Step 1: Analyzing intent ====");
       let toolCalls;
       // Use the original message for intent analysis
       const messageForAnalysis = userMessage.originalMessage || userMessage.message;
@@ -759,8 +742,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
           userMessage,
           abortController,
           addMessage,
-          updateCurrentAiMessage,
-          debug
+          updateCurrentAiMessage
         );
       }
 
@@ -771,7 +753,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         .join(" ")
         .trim();
 
-      const toolOutputs = await this.executeToolCalls(toolCalls, debug, updateLoadingMessage);
+      const toolOutputs = await this.executeToolCalls(toolCalls, updateLoadingMessage);
       const localSearchResult = toolOutputs.find(
         (output) => output.tool === "localSearch" && output.output && output.output.length > 0
       );
@@ -782,14 +764,14 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       const chatHistory = extractChatHistory(memoryVariables);
 
       if (localSearchResult) {
-        if (debug) console.log("==== Step 2: Processing local search results ====");
+        logInfo("==== Step 2: Processing local search results ====");
         const documents = JSON.parse(localSearchResult.output);
 
-        if (debug) console.log("==== Step 3: Condensing Question ====");
+        logInfo("==== Step 3: Condensing Question ====");
         const standaloneQuestion = await getStandaloneQuestion(cleanedUserMessage, chatHistory);
-        if (debug) console.log("Condensed standalone question: ", standaloneQuestion);
+        logInfo("Condensed standalone question: ", standaloneQuestion);
 
-        if (debug) console.log("==== Step 4: Preparing context ====");
+        logInfo("==== Step 4: Preparing context ====");
         const timeExpression = this.getTimeExpression(toolCalls);
         const context = this.prepareLocalSearchResult(documents, timeExpression);
 
@@ -799,8 +781,8 @@ class CopilotPlusChainRunner extends BaseChainRunner {
           currentTimeOutputs
         );
 
-        if (debug) console.log(context);
-        if (debug) console.log("==== Step 5: Invoking QA Chain ====");
+        logInfo(context);
+        logInfo("==== Step 5: Invoking QA Chain ====");
         const qaPrompt = await this.chainManager.promptManager.getQAPrompt({
           question: enhancedQuestion,
           context,
@@ -811,8 +793,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
           qaPrompt,
           userMessage,
           abortController,
-          trackAndUpdateAiMessage,
-          debug
+          trackAndUpdateAiMessage
         );
 
         // Append sources to the response
@@ -830,8 +811,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
           enhancedUserMessage,
           userMessage,
           abortController,
-          trackAndUpdateAiMessage,
-          debug
+          trackAndUpdateAiMessage
         );
       }
     } catch (error: any) {
@@ -843,7 +823,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         logInfo("CopilotPlus stream aborted by user", { reason: abortController.signal.reason });
         // Don't show error message for user-initiated aborts
       } else {
-        await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
+        await this.handleError(error, addMessage, updateCurrentAiMessage);
       }
     }
 
@@ -864,14 +844,13 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       abortController,
       addMessage,
       updateCurrentAiMessage,
-      debug,
       sources
     );
   }
 
   private getSources(documents: any): { title: string; score: number }[] {
     if (!documents || !Array.isArray(documents)) {
-      console.warn("No valid documents provided to getSources");
+      logWarn("No valid documents provided to getSources");
       return [];
     }
     return this.sortUniqueDocsByScore(documents);
@@ -883,7 +862,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     // Iterate through all documents
     for (const doc of documents) {
       if (!doc.title || (!doc?.score && !doc?.rerank_score)) {
-        console.warn("Invalid document structure:", doc);
+        logWarn("Invalid document structure:", doc);
         continue;
       }
 
@@ -907,14 +886,11 @@ class CopilotPlusChainRunner extends BaseChainRunner {
 
   private async executeToolCalls(
     toolCalls: any[],
-    debug: boolean,
     updateLoadingMessage?: (message: string) => void
   ) {
     const toolOutputs = [];
     for (const toolCall of toolCalls) {
-      if (debug) {
-        console.log(`==== Step 2: Calling tool: ${toolCall.tool.name} ====`);
-      }
+      logInfo(`==== Step 2: Calling tool: ${toolCall.tool.name} ====`);
       if (toolCall.tool.name === "localSearch") {
         updateLoadingMessage?.(LOADING_MESSAGES.READING_FILES);
       } else if (toolCall.tool.name === "webSearch") {
@@ -962,7 +938,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     let truncatedDocs = includedDocs;
     if (totalLength > MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT) {
       const truncationRatio = MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT / totalLength;
-      console.log("Truncating documents to fit context length. Truncation ratio:", truncationRatio);
+      logInfo("Truncating documents to fit context length. Truncation ratio:", truncationRatio);
       truncatedDocs = includedDocs.map((doc) => ({
         ...doc,
         content: doc.content.slice(0, Math.floor(doc.content.length * truncationRatio)),
