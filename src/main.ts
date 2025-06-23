@@ -236,25 +236,75 @@ export default class CopilotPlugin extends Plugin {
     }
   }
 
-  async activateView(): Promise<void> {
-    const leaves = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE);
-    if (leaves.length === 0) {
+async activateView(): Promise<void> {
+  console.log(`Copilot2: activateView called. CHAT_VIEWTYPE is "${CHAT_VIEWTYPE}".`);
+  let leaves = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE);
+  console.log(`Copilot2: Found ${leaves.length} leaves of type ${CHAT_VIEWTYPE}.`);
+
+  if (leaves.length === 0) {
+    console.log("Copilot2: No existing view found. Attempting to create a new one.");
+    let targetLeaf: WorkspaceLeaf | null = null;
+    try {
       if (getSettings().defaultOpenArea === DEFAULT_OPEN_AREA.VIEW) {
-        await this.app.workspace.getRightLeaf(false).setViewState({
-          type: CHAT_VIEWTYPE,
-          active: true,
-        });
+        console.log("Copilot2: Default open area is VIEW (right/left sidebar). Getting right leaf.");
+        targetLeaf = this.app.workspace.getRightLeaf(false);
+        if (!targetLeaf) {
+            console.log("Copilot2: Could not get right leaf, trying left leaf.");
+            targetLeaf = this.app.workspace.getLeftLeaf(false);
+        }
+        if (!targetLeaf) {
+            console.log("Copilot2: Could not get any side leaf, trying main leaf.");
+            targetLeaf = this.app.workspace.getLeaf(true); // Fallback to main workspace if sidebars are tricky
+        }
       } else {
-        await this.app.workspace.getLeaf(true).setViewState({
-          type: CHAT_VIEWTYPE,
-          active: true,
-        });
+        console.log("Copilot2: Default open area is EDITOR. Getting a new leaf in main workspace.");
+        targetLeaf = this.app.workspace.getLeaf(true); // 'true' for new leaf in main area
       }
-    } else {
-      this.app.workspace.revealLeaf(leaves[0]);
+
+      if (!targetLeaf) {
+        console.error("Copilot2: Failed to get a target leaf for the new view.");
+        new Notice("Copilot2: Failed to get a workspace leaf to open the chat view.");
+        return;
+      }
+      console.log("Copilot2: Target leaf obtained. Attempting to set view state.");
+      await targetLeaf.setViewState({
+        type: CHAT_VIEWTYPE,
+        active: true,
+      });
+      console.log("Copilot2: View state set. Revealing leaf.");
+      this.app.workspace.revealLeaf(targetLeaf);
+      console.log("Copilot2: Leaf revealed.");
+
+      // Verify the view is active
+      leaves = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE);
+      if (leaves.length > 0 && leaves.includes(targetLeaf)) {
+        const currentView = targetLeaf.view;
+        if (currentView && currentView.getViewType() === CHAT_VIEWTYPE) {
+            console.log(`Copilot2: View successfully activated in leaf. View type: ${currentView.getViewType()}`);
+        } else {
+            console.error("Copilot2: Leaf activated, but view type does not match or view is null.", currentView?.getViewType());
+        }
+      } else {
+          console.error("Copilot2: Leaf was targeted, but no view of the correct type found after activation.");
+      }
+
+    } catch (error) {
+      console.error("Copilot2: Error during activateView for new leaf:", error);
+      new Notice("Copilot2: Error opening chat view. Check developer console.");
     }
-    this.emitChatIsVisible();
+  } else {
+    console.log("Copilot2: Existing view found. Revealing leaf 0.");
+    try {
+      this.app.workspace.revealLeaf(leaves[0]);
+      console.log("Copilot2: Existing leaf revealed.");
+    } catch (error) {
+      console.error("Copilot2: Error revealing existing leaf:", error);
+      new Notice("Copilot2: Error revealing chat view. Check developer console.");
+    }
   }
+  // This emit might need to be more conditional, ensuring the view is truly visible.
+  this.emitChatIsVisible();
+}
 
   async deactivateView() {
     this.app.workspace.detachLeavesOfType(CHAT_VIEWTYPE);
