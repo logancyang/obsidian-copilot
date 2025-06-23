@@ -155,7 +155,12 @@ abstract class BaseChainRunner implements ChainRunner {
     debug: boolean,
     sources?: { title: string; score: number }[]
   ) {
-    if (fullAIResponse && abortController.signal.reason !== ABORT_REASON.NEW_CHAT) {
+    // Save to memory and add message if we have a response
+    // Skip only if it's a NEW_CHAT abort (clearing everything)
+    if (
+      fullAIResponse &&
+      !(abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT)
+    ) {
       await this.chainManager.memoryManager
         .getMemory()
         .saveContext({ input: userMessage.message }, { output: fullAIResponse });
@@ -167,8 +172,13 @@ abstract class BaseChainRunner implements ChainRunner {
         timestamp: formatDateTime(new Date()),
         sources: sources,
       });
+
+      // Clear the streaming message since it's now in chat history
+      updateCurrentAiMessage("");
+    } else if (abortController.signal.reason === ABORT_REASON.NEW_CHAT) {
+      // Also clear if it's a new chat
+      updateCurrentAiMessage("");
     }
-    updateCurrentAiMessage("");
     if (debug) {
       console.log(
         "==== Chat Memory ====\n",
@@ -295,15 +305,33 @@ class LLMChainRunner extends BaseChainRunner {
       );
 
       for await (const chunk of chatStream) {
-        if (abortController.signal.aborted) break;
+        if (abortController.signal.aborted) {
+          logInfo("Stream iteration aborted", { reason: abortController.signal.reason });
+          break;
+        }
         streamer.processChunk(chunk);
       }
-    } catch (error) {
-      await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
+    } catch (error: any) {
+      // Check if the error is due to abort signal
+      if (error.name === "AbortError" || abortController.signal.aborted) {
+        logInfo("Stream aborted by user", { reason: abortController.signal.reason });
+        // Don't show error message for user-initiated aborts
+      } else {
+        await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
+      }
+    }
+
+    // Always return the response, even if partial
+    const response = streamer.close();
+
+    // Only skip saving if it's a new chat (clearing everything)
+    if (abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT) {
+      updateCurrentAiMessage("");
+      return "";
     }
 
     return this.handleResponse(
-      streamer.close(),
+      response,
       userMessage,
       abortController,
       addMessage,
@@ -413,33 +441,42 @@ class VaultQAChainRunner extends BaseChainRunner {
       );
 
       for await (const chunk of chatStream) {
-        if (abortController.signal.aborted) break;
+        if (abortController.signal.aborted) {
+          logInfo("VaultQA stream iteration aborted", { reason: abortController.signal.reason });
+          break;
+        }
         streamer.processChunk(chunk);
       }
-
-      // Add sources to the response
-      let fullAIResponse = streamer.close();
-      fullAIResponse = this.addSourcestoResponse(fullAIResponse);
-
-      return this.handleResponse(
-        fullAIResponse,
-        userMessage,
-        abortController,
-        addMessage,
-        updateCurrentAiMessage,
-        debug
-      );
-    } catch (error) {
-      await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
-      return this.handleResponse(
-        "",
-        userMessage,
-        abortController,
-        addMessage,
-        updateCurrentAiMessage,
-        debug
-      );
+    } catch (error: any) {
+      // Check if the error is due to abort signal
+      if (error.name === "AbortError" || abortController.signal.aborted) {
+        logInfo("VaultQA stream aborted by user", { reason: abortController.signal.reason });
+        // Don't show error message for user-initiated aborts
+      } else {
+        await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
+      }
     }
+
+    // Always get the response, even if partial
+    let fullAIResponse = streamer.close();
+
+    // Only skip saving if it's a new chat (clearing everything)
+    if (abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT) {
+      updateCurrentAiMessage("");
+      return "";
+    }
+
+    // Add sources to the response
+    fullAIResponse = this.addSourcestoResponse(fullAIResponse);
+
+    return this.handleResponse(
+      fullAIResponse,
+      userMessage,
+      abortController,
+      addMessage,
+      updateCurrentAiMessage,
+      debug
+    );
   }
 
   private addSourcestoResponse(response: string): string {
@@ -634,7 +671,12 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     );
 
     for await (const chunk of chatStream) {
-      if (abortController.signal.aborted) break;
+      if (abortController.signal.aborted) {
+        logInfo("CopilotPlus multimodal stream iteration aborted", {
+          reason: abortController.signal.reason,
+        });
+        break;
+      }
       streamer.processChunk(chunk);
     }
 
@@ -656,6 +698,13 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     const { debug = false, updateLoadingMessage } = options;
     let fullAIResponse = "";
     let sources: { title: string; score: number }[] = [];
+    let currentPartialResponse = "";
+
+    // Wrapper to track partial response
+    const trackAndUpdateAiMessage = (message: string) => {
+      currentPartialResponse = message;
+      updateCurrentAiMessage(message);
+    };
 
     try {
       // Check if this is a YouTube-only message
@@ -762,7 +811,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
           qaPrompt,
           userMessage,
           abortController,
-          updateCurrentAiMessage,
+          trackAndUpdateAiMessage,
           debug
         );
 
@@ -781,14 +830,32 @@ class CopilotPlusChainRunner extends BaseChainRunner {
           enhancedUserMessage,
           userMessage,
           abortController,
-          updateCurrentAiMessage,
+          trackAndUpdateAiMessage,
           debug
         );
       }
-    } catch (error) {
+    } catch (error: any) {
       // Reset loading message to default
       updateLoadingMessage?.(LOADING_MESSAGES.DEFAULT);
-      await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
+
+      // Check if the error is due to abort signal
+      if (error.name === "AbortError" || abortController.signal.aborted) {
+        logInfo("CopilotPlus stream aborted by user", { reason: abortController.signal.reason });
+        // Don't show error message for user-initiated aborts
+      } else {
+        await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
+      }
+    }
+
+    // Only skip saving if it's a new chat (clearing everything)
+    if (abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT) {
+      updateCurrentAiMessage("");
+      return "";
+    }
+
+    // If aborted but not a new chat, use the partial response
+    if (abortController.signal.aborted && currentPartialResponse) {
+      fullAIResponse = currentPartialResponse;
     }
 
     return this.handleResponse(

@@ -112,6 +112,49 @@ Copilot for Obsidian is an AI-powered assistant plugin that integrates various L
 - Test files adjacent to implementation (`.test.ts`)
 - Use `@testing-library/react` for component testing
 
+### Manual Test Checklists
+
+**Important**: After each significant change, generate a manual test checklist document that includes:
+
+1. **Overview**: Brief description of what changed
+2. **Test Scenarios**: Specific test cases with steps and expected results
+3. **Verification Checklist**: List of items to verify functionality
+4. **Files Modified**: List of changed files for reference
+
+Example format:
+
+```markdown
+# [Feature] Test Instructions
+
+## Overview
+
+Brief description of the feature/fix
+
+## Test Scenarios
+
+### 1. Test Case Name
+
+1. Step one
+2. Step two
+3. **Expected Result:**
+   - Expected behavior
+   - UI state changes
+   - Data persistence
+
+### 2. Another Test Case
+
+[...]
+
+## Verification Checklist
+
+- [ ] Core functionality works
+- [ ] Edge cases handled
+- [ ] No regressions
+- [ ] Performance acceptable
+```
+
+This helps ensure thorough testing and provides documentation for QA.
+
 ## Important Notes
 
 - The plugin supports multiple LLM providers with custom endpoints

@@ -355,6 +355,9 @@ ${chatContent}`;
         }
         abortController.abort(reason);
         setLoading(false);
+        setLoadingMessage(LOADING_MESSAGES.DEFAULT);
+        // Keep the partial AI message visible
+        // Don't clear setCurrentAiMessage here
       }
     },
     [abortController, settings.debug]
