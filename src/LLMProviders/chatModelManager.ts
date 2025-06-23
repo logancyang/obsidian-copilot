@@ -78,9 +78,42 @@ export default class ChatModelManager {
 
   private constructor() {
     this.buildModelMap();
-    subscribeToSettingsChange(() => {
-      this.buildModelMap();
-      this.validateCurrentModel();
+    subscribeToSettingsChange(async (prevSettings, newSettings) => {
+      this.buildModelMap(); // Rebuilds modelMap based on newSettings.activeModels
+
+      const newDefaultModelKey = newSettings.defaultModelKey;
+      const oldDefaultModelKey = prevSettings.defaultModelKey; // Get previous default model key
+
+      // Condition to re-initialize:
+      // 1. The default model key setting has actually changed.
+      // 2. Or, there is no model currently instantiated (ChatModelManager.chatModel is null).
+      if (oldDefaultModelKey !== newDefaultModelKey || !ChatModelManager.chatModel) {
+        console.log(`ChatModelManager: Default model key changed from "${oldDefaultModelKey}" to "${newDefaultModelKey}", or no model currently active. Attempting to set new default.`);
+
+        // Find the CustomModel object corresponding to the newDefaultModelKey
+        const modelToSet = newSettings.activeModels.find(m => getModelKeyFromModel(m) === newDefaultModelKey);
+
+        if (modelToSet && modelToSet.enabled) {
+          // setChatModel calls createModelInstance, which uses modelMap to check for API key availability
+          // and throws if the model can't be created (e.g. missing API key).
+          // The setChatModel method itself has a try/catch and logs errors.
+          await this.setChatModel(modelToSet);
+          // If setChatModel fails, ChatModelManager.chatModel might remain as it was or be null.
+          // A success log is inside setChatModel if modelInstance is created.
+        } else {
+          if (newDefaultModelKey) { // Avoid notice if defaultModelKey is empty or undefined
+            new Notice(`Default model "${newDefaultModelKey}" not found or is disabled. Please select a valid model in settings.`);
+          }
+          ChatModelManager.chatModel = null; // Explicitly clear if the new default isn't settable
+          console.warn(`ChatModelManager: Default model "${newDefaultModelKey}" not found/disabled. Active model cleared.`);
+        }
+      } else {
+        // Default model key hasn't changed, but other settings might have affected the validity
+        // of the currently instantiated model (e.g., its API key was removed if it's a custom model).
+        // this.validateCurrentModel() checks if the model identified by current settings.defaultModelKey
+        // is still valid in the modelMap.
+        this.validateCurrentModel();
+      }
     });
   }
 
