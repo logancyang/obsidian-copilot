@@ -579,6 +579,9 @@ const TranscriptionSettingsTab: React.FC<{ app: App; plugin: CopilotPlugin }> = 
                   ></label>
                 </div>
               </div>
+              <p className="text-xs text-green-700 dark:text-green-300 mt-1.5">
+                Encode audio first through ffmpeg
+              </p>
             </div>
 
             <div className="form-group">
@@ -640,6 +643,9 @@ const TranscriptionSettingsTab: React.FC<{ app: App; plugin: CopilotPlugin }> = 
                   ></label>
                 </div>
               </div>
+              <p className="text-xs text-green-700 dark:text-green-300 mt-1.5">
+                Filter out silence from the audio
+              </p>
             </div>
           </div>
         </section>
