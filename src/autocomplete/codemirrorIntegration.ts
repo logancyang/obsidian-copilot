@@ -612,6 +612,19 @@ export class CodeMirrorIntegration {
       return false;
     }
 
+    // Don't suggest for Obsidian wiki links that just started
+    if (prefix.endsWith("[[")) {
+      return false;
+    }
+
+    // Check if we're in the middle of writing a note link
+    // This regex matches if there's an open [[ without a closing ]] yet
+    const wikiLinkRegex = /\[\[[^\]]*$/;
+    if (wikiLinkRegex.test(prefix)) {
+      // We're inside a wiki link, let Obsidian's native note completion handle this
+      return false;
+    }
+
     // Check if we're in the middle of typing a word
     const trimmedPrefix = prefix.trim();
     const lastChar = trimmedPrefix[trimmedPrefix.length - 1];
@@ -621,6 +634,25 @@ export class CodeMirrorIntegration {
       // Check if there's a current word of sufficient length
       const currentWord = this.getCurrentWordFromPrefix(prefix);
       if (currentWord && currentWord.length >= 2) {
+        // Check if word is already complete and has no significant completions
+        const trieSuggestions = this.wordCompletionManager.getSuggestions(currentWord);
+        if (trieSuggestions.length === 0) {
+          return false; // No suggestions available
+        }
+
+        const isCurrentWordComplete = trieSuggestions.some(
+          (suggestion) => suggestion.word === currentWord
+        );
+
+        const hasSignificantCompletions = trieSuggestions.some(
+          (suggestion) => suggestion.word.length - currentWord.length >= 2
+        );
+
+        // If current word is complete and no significant completions exist, don't trigger
+        if (isCurrentWordComplete && !hasSignificantCompletions) {
+          return false; // No meaningful completion needed
+        }
+
         return true;
       }
     }
