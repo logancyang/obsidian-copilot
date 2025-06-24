@@ -196,6 +196,10 @@ export default class ChatModelManager {
         configuration: {
           baseURL: customModel.baseUrl || "https://openrouter.ai/api/v1",
           fetch: customModel.enableCors ? safeFetch : undefined,
+          defaultHeaders: {
+            "HTTP-Referer": "https://obsidiancopilot.com",
+            "X-Title": "Obsidian Copilot",
+          },
         },
       },
       [ChatModelProviders.GROQ]: {

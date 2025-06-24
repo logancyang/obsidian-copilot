@@ -115,8 +115,8 @@ export enum ChatModels {
   GPT_41_nano = "gpt-4.1-nano",
   O4_mini = "o4-mini",
   AZURE_OPENAI = "azure-openai",
-  GEMINI_PRO = "gemini-2.5-pro-preview-06-05", // TODO(logan): update this when it's GA
-  GEMINI_FLASH = "gemini-2.5-flash-preview-04-17", // TODO(logan): update this when it's GA
+  GEMINI_PRO = "gemini-2.5-pro",
+  GEMINI_FLASH = "gemini-2.5-flash",
   CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest",
   CLAUDE_3_7_SONNET = "claude-3-7-sonnet-latest",
   CLAUDE_4_SONNET = "claude-sonnet-4-20250514",
@@ -130,6 +130,9 @@ export enum ChatModels {
   MISTRAL_TINY = "mistral-tiny-latest",
   DEEPSEEK_REASONER = "deepseek-reasoner",
   DEEPSEEK_CHAT = "deepseek-chat",
+  OPENROUTER_GEMINI_2_5_FLASH = "google/gemini-2.5-flash",
+  OPENROUTER_GEMINI_2_5_PRO = "google/gemini-2.5-pro",
+  OPENROUTER_GEMINI_2_5_FLASH_LITE = "google/gemini-2.5-flash-lite-preview-06-17",
 }
 
 // Model Providers
@@ -171,6 +174,33 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     core: true,
     plusExclusive: true,
     projectEnabled: false,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
+    name: ChatModels.OPENROUTER_GEMINI_2_5_FLASH_LITE,
+    provider: ChatModelProviders.OPENROUTERAI,
+    enabled: true,
+    isBuiltIn: true,
+    core: true,
+    projectEnabled: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
+    name: ChatModels.OPENROUTER_GEMINI_2_5_FLASH,
+    provider: ChatModelProviders.OPENROUTERAI,
+    enabled: true,
+    isBuiltIn: true,
+    core: true,
+    projectEnabled: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
+    name: ChatModels.OPENROUTER_GEMINI_2_5_PRO,
+    provider: ChatModelProviders.OPENROUTERAI,
+    enabled: true,
+    isBuiltIn: true,
+    core: true,
+    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
