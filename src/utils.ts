@@ -184,6 +184,8 @@ export function getNotesFromTags(vault: Vault, tags: string[], noteFiles?: TFile
   return filesWithTag;
 }
 
+// TODO: Chain type conversion still needed for chain runner selection
+// This function is still used but the underlying chain infrastructure is deprecated
 export const stringToChainType = (chain: string): ChainType => {
   switch (chain) {
     case "llm_chain":
@@ -197,6 +199,8 @@ export const stringToChainType = (chain: string): ChainType => {
   }
 };
 
+// TODO: These chain validation functions are deprecated
+// Remove after confirming chainManager no longer uses them
 export const isLLMChain = (chain: RunnableSequence): chain is RunnableSequence => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (chain as any).last.bound.modelName || (chain as any).last.bound.model;

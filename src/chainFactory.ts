@@ -1,3 +1,6 @@
+// TODO(logan): This entire file is deprecated since we moved to direct chat model calls in chain runners
+// Consider removing after verifying no dependencies remain
+
 import { BaseLanguageModel } from "@langchain/core/language_models/base";
 import { StringOutputParser } from "@langchain/core/output_parsers";
 import { ChatPromptTemplate, PromptTemplate } from "@langchain/core/prompts";

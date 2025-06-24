@@ -15,7 +15,8 @@ import {
   MessageContent,
 } from "@/imageProcessing/imageProcessor";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import { logInfo } from "@/logger";
+import { logError, logInfo, logWarn } from "@/logger";
+import { HybridRetriever } from "@/search/hybridRetriever";
 import { getSettings, getSystemPrompt } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { ToolManager } from "@/tools/toolManager";
@@ -151,10 +152,14 @@ abstract class BaseChainRunner implements ChainRunner {
     abortController: AbortController,
     addMessage: (message: ChatMessage) => void,
     updateCurrentAiMessage: (message: string) => void,
-    debug: boolean,
     sources?: { title: string; score: number }[]
   ) {
-    if (fullAIResponse && abortController.signal.reason !== ABORT_REASON.NEW_CHAT) {
+    // Save to memory and add message if we have a response
+    // Skip only if it's a NEW_CHAT abort (clearing everything)
+    if (
+      fullAIResponse &&
+      !(abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT)
+    ) {
       await this.chainManager.memoryManager
         .getMemory()
         .saveContext({ input: userMessage.message }, { output: fullAIResponse });
@@ -166,28 +171,30 @@ abstract class BaseChainRunner implements ChainRunner {
         timestamp: formatDateTime(new Date()),
         sources: sources,
       });
+
+      // Clear the streaming message since it's now in chat history
+      updateCurrentAiMessage("");
+    } else if (abortController.signal.reason === ABORT_REASON.NEW_CHAT) {
+      // Also clear if it's a new chat
+      updateCurrentAiMessage("");
     }
-    updateCurrentAiMessage("");
-    if (debug) {
-      console.log(
-        "==== Chat Memory ====\n",
-        (this.chainManager.memoryManager.getMemory().chatHistory as any).messages.map(
-          (m: any) => m.content
-        )
-      );
-      console.log("==== Final AI Response ====\n", fullAIResponse);
-    }
+    logInfo(
+      "==== Chat Memory ====\n",
+      (this.chainManager.memoryManager.getMemory().chatHistory as any).messages.map(
+        (m: any) => m.content
+      )
+    );
+    logInfo("==== Final AI Response ====\n", fullAIResponse);
     return fullAIResponse;
   }
 
   protected async handleError(
     error: any,
-    debug: boolean,
     addMessage?: (message: ChatMessage) => void,
     updateCurrentAiMessage?: (message: string) => void
   ) {
     const msg = err2String(error);
-    if (debug) console.error("Error during LLM invocation:", msg);
+    logError("Error during LLM invocation:", msg);
     const errorData = error?.response?.data?.error || msg;
     const errorCode = errorData?.code || msg;
     let errorMessage = "";
@@ -202,7 +209,7 @@ abstract class BaseChainRunner implements ChainRunner {
       errorMessage = `${errorCode}`;
     }
 
-    console.error(errorData);
+    logError(errorData);
 
     if (addMessage && updateCurrentAiMessage) {
       updateCurrentAiMessage("");
@@ -231,7 +238,7 @@ abstract class BaseChainRunner implements ChainRunner {
     } else {
       // Fallback to Notice if message handlers aren't provided
       new Notice(errorMessage);
-      console.error(errorData);
+      logError(errorData);
     }
   }
 }
@@ -248,30 +255,80 @@ class LLMChainRunner extends BaseChainRunner {
       updateLoading?: (loading: boolean) => void;
     }
   ): Promise<string> {
-    const { debug = false } = options;
     const streamer = new ThinkBlockStreamer(updateCurrentAiMessage);
 
     try {
-      const chain = this.chainManager.getChain();
-      const chatStream = await chain.stream({
-        input: userMessage.message,
-      } as any);
+      // Get chat history from memory
+      const memory = this.chainManager.memoryManager.getMemory();
+      const memoryVariables = await memory.loadMemoryVariables({});
+      const chatHistory = extractChatHistory(memoryVariables);
+
+      // Create messages array starting with system message
+      const messages: any[] = [];
+
+      // Add system message if available
+      const systemPrompt = getSystemPrompt();
+      const chatModel = this.chainManager.chatModelManager.getChatModel();
+
+      if (systemPrompt) {
+        messages.push({
+          role: getMessageRole(chatModel),
+          content: systemPrompt,
+        });
+      }
+
+      // Add chat history
+      for (const entry of chatHistory) {
+        messages.push({ role: entry.role, content: entry.content });
+      }
+
+      // Add current user message
+      messages.push({
+        role: "user",
+        content: userMessage.message,
+      });
+
+      logInfo("==== Final Request to AI ====\n", messages);
+
+      // Stream with abort signal
+      const chatStream = await withSuppressedTokenWarnings(() =>
+        this.chainManager.chatModelManager.getChatModel().stream(messages, {
+          signal: abortController.signal,
+        })
+      );
 
       for await (const chunk of chatStream) {
-        if (abortController.signal.aborted) break;
+        if (abortController.signal.aborted) {
+          logInfo("Stream iteration aborted", { reason: abortController.signal.reason });
+          break;
+        }
         streamer.processChunk(chunk);
       }
-    } catch (error) {
-      await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
+    } catch (error: any) {
+      // Check if the error is due to abort signal
+      if (error.name === "AbortError" || abortController.signal.aborted) {
+        logInfo("Stream aborted by user", { reason: abortController.signal.reason });
+        // Don't show error message for user-initiated aborts
+      } else {
+        await this.handleError(error, addMessage, updateCurrentAiMessage);
+      }
+    }
+
+    // Always return the response, even if partial
+    const response = streamer.close();
+
+    // Only skip saving if it's a new chat (clearing everything)
+    if (abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT) {
+      updateCurrentAiMessage("");
+      return "";
     }
 
     return this.handleResponse(
-      streamer.close(),
+      response,
       userMessage,
       abortController,
       addMessage,
-      updateCurrentAiMessage,
-      debug
+      updateCurrentAiMessage
     );
   }
 }
@@ -288,8 +345,7 @@ class VaultQAChainRunner extends BaseChainRunner {
       updateLoading?: (loading: boolean) => void;
     }
   ): Promise<string> {
-    const { debug = false } = options;
-    let fullAIResponse = "";
+    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage);
 
     try {
       // Add check for empty index
@@ -300,37 +356,113 @@ class VaultQAChainRunner extends BaseChainRunner {
           userMessage,
           abortController,
           addMessage,
-          updateCurrentAiMessage,
-          debug
+          updateCurrentAiMessage
         );
       }
 
+      // Get chat history from memory
       const memory = this.chainManager.memoryManager.getMemory();
       const memoryVariables = await memory.loadMemoryVariables({});
       const chatHistory = extractChatHistory(memoryVariables);
-      const qaStream = await this.chainManager.getRetrievalChain().stream({
-        question: userMessage.message,
-        chat_history: chatHistory,
-      } as any);
 
-      for await (const chunk of qaStream) {
-        if (abortController.signal.aborted) break;
-        fullAIResponse += chunk.content;
-        updateCurrentAiMessage(fullAIResponse);
+      // Generate standalone question from user message + chat history
+      // This is similar to what the conversational retrieval chain does
+      let standaloneQuestion = userMessage.message;
+      if (chatHistory.length > 0) {
+        // For simplicity, we'll use the original question directly
+        // The original chain would rephrase it, but this approach should work for most cases
+        standaloneQuestion = userMessage.message;
       }
 
-      fullAIResponse = this.addSourcestoResponse(fullAIResponse);
-    } catch (error) {
-      await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
+      // Create retriever (similar to how it's done in chainManager)
+      const retriever = new HybridRetriever({
+        minSimilarityScore: 0.01,
+        maxK: getSettings().maxSourceChunks,
+        salientTerms: [],
+      });
+
+      // Retrieve relevant documents
+      const retrievedDocs = await retriever.getRelevantDocuments(standaloneQuestion);
+
+      // Store retrieved documents for sources
+      this.chainManager.storeRetrieverDocuments(retrievedDocs);
+
+      // Format documents as context
+      const context = retrievedDocs.map((doc: any) => doc.pageContent).join("\n\n");
+
+      // Create messages array
+      const messages: any[] = [];
+
+      // Add system message with QA instruction
+      const systemPrompt = getSystemPrompt();
+      const qaInstructions =
+        "\n\nAnswer the question with as detailed as possible based only on the following context:\n" +
+        context;
+      const fullSystemMessage = systemPrompt + qaInstructions;
+
+      const chatModel = this.chainManager.chatModelManager.getChatModel();
+      if (fullSystemMessage) {
+        messages.push({
+          role: getMessageRole(chatModel),
+          content: fullSystemMessage,
+        });
+      }
+
+      // Add chat history
+      for (const entry of chatHistory) {
+        messages.push({ role: entry.role, content: entry.content });
+      }
+
+      // Add current user question
+      messages.push({
+        role: "user",
+        content: userMessage.message,
+      });
+
+      logInfo("==== Final Request to AI ====\n", messages);
+
+      // Stream with abort signal
+      const chatStream = await withSuppressedTokenWarnings(() =>
+        this.chainManager.chatModelManager.getChatModel().stream(messages, {
+          signal: abortController.signal,
+        })
+      );
+
+      for await (const chunk of chatStream) {
+        if (abortController.signal.aborted) {
+          logInfo("VaultQA stream iteration aborted", { reason: abortController.signal.reason });
+          break;
+        }
+        streamer.processChunk(chunk);
+      }
+    } catch (error: any) {
+      // Check if the error is due to abort signal
+      if (error.name === "AbortError" || abortController.signal.aborted) {
+        logInfo("VaultQA stream aborted by user", { reason: abortController.signal.reason });
+        // Don't show error message for user-initiated aborts
+      } else {
+        await this.handleError(error, addMessage, updateCurrentAiMessage);
+      }
     }
+
+    // Always get the response, even if partial
+    let fullAIResponse = streamer.close();
+
+    // Only skip saving if it's a new chat (clearing everything)
+    if (abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT) {
+      updateCurrentAiMessage("");
+      return "";
+    }
+
+    // Add sources to the response
+    fullAIResponse = this.addSourcestoResponse(fullAIResponse);
 
     return this.handleResponse(
       fullAIResponse,
       userMessage,
       abortController,
       addMessage,
-      updateCurrentAiMessage,
-      debug
+      updateCurrentAiMessage
     );
   }
 
@@ -462,8 +594,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     textContent: string,
     userMessage: ChatMessage,
     abortController: AbortController,
-    updateCurrentAiMessage: (message: string) => void,
-    debug: boolean
+    updateCurrentAiMessage: (message: string) => void
   ): Promise<string> {
     // Get chat history
     const memory = this.chainManager.memoryManager.getMemory();
@@ -520,11 +651,18 @@ class CopilotPlusChainRunner extends BaseChainRunner {
 
     // Wrap the stream call with warning suppression
     const chatStream = await withSuppressedTokenWarnings(() =>
-      this.chainManager.chatModelManager.getChatModel().stream(messages)
+      this.chainManager.chatModelManager.getChatModel().stream(messages, {
+        signal: abortController.signal,
+      })
     );
 
     for await (const chunk of chatStream) {
-      if (abortController.signal.aborted) break;
+      if (abortController.signal.aborted) {
+        logInfo("CopilotPlus multimodal stream iteration aborted", {
+          reason: abortController.signal.reason,
+        });
+        break;
+      }
       streamer.processChunk(chunk);
     }
 
@@ -543,9 +681,16 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       updateLoadingMessage?: (message: string) => void;
     }
   ): Promise<string> {
-    const { debug = false, updateLoadingMessage } = options;
+    const { updateLoadingMessage } = options;
     let fullAIResponse = "";
     let sources: { title: string; score: number }[] = [];
+    let currentPartialResponse = "";
+
+    // Wrapper to track partial response
+    const trackAndUpdateAiMessage = (message: string) => {
+      currentPartialResponse = message;
+      updateCurrentAiMessage(message);
+    };
 
     try {
       // Check if this is a YouTube-only message
@@ -562,8 +707,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
                 userMessage,
                 abortController,
                 addMessage,
-                updateCurrentAiMessage,
-                debug
+                updateCurrentAiMessage
               );
             }
             return this.handleResponse(
@@ -571,24 +715,22 @@ class CopilotPlusChainRunner extends BaseChainRunner {
               userMessage,
               abortController,
               addMessage,
-              updateCurrentAiMessage,
-              debug
+              updateCurrentAiMessage
             );
           } catch (error) {
-            console.error("Error processing YouTube video:", error);
+            logError("Error processing YouTube video:", error);
             return this.handleResponse(
               failMessage,
               userMessage,
               abortController,
               addMessage,
-              updateCurrentAiMessage,
-              debug
+              updateCurrentAiMessage
             );
           }
         }
       }
 
-      if (debug) console.log("==== Step 1: Analyzing intent ====");
+      logInfo("==== Step 1: Analyzing intent ====");
       let toolCalls;
       // Use the original message for intent analysis
       const messageForAnalysis = userMessage.originalMessage || userMessage.message;
@@ -600,8 +742,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
           userMessage,
           abortController,
           addMessage,
-          updateCurrentAiMessage,
-          debug
+          updateCurrentAiMessage
         );
       }
 
@@ -612,7 +753,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
         .join(" ")
         .trim();
 
-      const toolOutputs = await this.executeToolCalls(toolCalls, debug, updateLoadingMessage);
+      const toolOutputs = await this.executeToolCalls(toolCalls, updateLoadingMessage);
       const localSearchResult = toolOutputs.find(
         (output) => output.tool === "localSearch" && output.output && output.output.length > 0
       );
@@ -623,14 +764,14 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       const chatHistory = extractChatHistory(memoryVariables);
 
       if (localSearchResult) {
-        if (debug) console.log("==== Step 2: Processing local search results ====");
+        logInfo("==== Step 2: Processing local search results ====");
         const documents = JSON.parse(localSearchResult.output);
 
-        if (debug) console.log("==== Step 3: Condensing Question ====");
+        logInfo("==== Step 3: Condensing Question ====");
         const standaloneQuestion = await getStandaloneQuestion(cleanedUserMessage, chatHistory);
-        if (debug) console.log("Condensed standalone question: ", standaloneQuestion);
+        logInfo("Condensed standalone question: ", standaloneQuestion);
 
-        if (debug) console.log("==== Step 4: Preparing context ====");
+        logInfo("==== Step 4: Preparing context ====");
         const timeExpression = this.getTimeExpression(toolCalls);
         const context = this.prepareLocalSearchResult(documents, timeExpression);
 
@@ -640,8 +781,8 @@ class CopilotPlusChainRunner extends BaseChainRunner {
           currentTimeOutputs
         );
 
-        if (debug) console.log(context);
-        if (debug) console.log("==== Step 5: Invoking QA Chain ====");
+        logInfo(context);
+        logInfo("==== Step 5: Invoking QA Chain ====");
         const qaPrompt = await this.chainManager.promptManager.getQAPrompt({
           question: enhancedQuestion,
           context,
@@ -652,8 +793,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
           qaPrompt,
           userMessage,
           abortController,
-          updateCurrentAiMessage,
-          debug
+          trackAndUpdateAiMessage
         );
 
         // Append sources to the response
@@ -671,14 +811,31 @@ class CopilotPlusChainRunner extends BaseChainRunner {
           enhancedUserMessage,
           userMessage,
           abortController,
-          updateCurrentAiMessage,
-          debug
+          trackAndUpdateAiMessage
         );
       }
-    } catch (error) {
+    } catch (error: any) {
       // Reset loading message to default
       updateLoadingMessage?.(LOADING_MESSAGES.DEFAULT);
-      await this.handleError(error, debug, addMessage, updateCurrentAiMessage);
+
+      // Check if the error is due to abort signal
+      if (error.name === "AbortError" || abortController.signal.aborted) {
+        logInfo("CopilotPlus stream aborted by user", { reason: abortController.signal.reason });
+        // Don't show error message for user-initiated aborts
+      } else {
+        await this.handleError(error, addMessage, updateCurrentAiMessage);
+      }
+    }
+
+    // Only skip saving if it's a new chat (clearing everything)
+    if (abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT) {
+      updateCurrentAiMessage("");
+      return "";
+    }
+
+    // If aborted but not a new chat, use the partial response
+    if (abortController.signal.aborted && currentPartialResponse) {
+      fullAIResponse = currentPartialResponse;
     }
 
     return this.handleResponse(
@@ -687,14 +844,13 @@ class CopilotPlusChainRunner extends BaseChainRunner {
       abortController,
       addMessage,
       updateCurrentAiMessage,
-      debug,
       sources
     );
   }
 
   private getSources(documents: any): { title: string; score: number }[] {
     if (!documents || !Array.isArray(documents)) {
-      console.warn("No valid documents provided to getSources");
+      logWarn("No valid documents provided to getSources");
       return [];
     }
     return this.sortUniqueDocsByScore(documents);
@@ -706,7 +862,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     // Iterate through all documents
     for (const doc of documents) {
       if (!doc.title || (!doc?.score && !doc?.rerank_score)) {
-        console.warn("Invalid document structure:", doc);
+        logWarn("Invalid document structure:", doc);
         continue;
       }
 
@@ -730,14 +886,11 @@ class CopilotPlusChainRunner extends BaseChainRunner {
 
   private async executeToolCalls(
     toolCalls: any[],
-    debug: boolean,
     updateLoadingMessage?: (message: string) => void
   ) {
     const toolOutputs = [];
     for (const toolCall of toolCalls) {
-      if (debug) {
-        console.log(`==== Step 2: Calling tool: ${toolCall.tool.name} ====`);
-      }
+      logInfo(`==== Step 2: Calling tool: ${toolCall.tool.name} ====`);
       if (toolCall.tool.name === "localSearch") {
         updateLoadingMessage?.(LOADING_MESSAGES.READING_FILES);
       } else if (toolCall.tool.name === "webSearch") {
@@ -785,7 +938,7 @@ class CopilotPlusChainRunner extends BaseChainRunner {
     let truncatedDocs = includedDocs;
     if (totalLength > MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT) {
       const truncationRatio = MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT / totalLength;
-      console.log("Truncating documents to fit context length. Truncation ratio:", truncationRatio);
+      logInfo("Truncating documents to fit context length. Truncation ratio:", truncationRatio);
       truncatedDocs = includedDocs.map((doc) => ({
         ...doc,
         content: doc.content.slice(0, Math.floor(doc.content.length * truncationRatio)),

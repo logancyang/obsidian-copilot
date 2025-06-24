@@ -355,6 +355,9 @@ ${chatContent}`;
         }
         abortController.abort(reason);
         setLoading(false);
+        setLoadingMessage(LOADING_MESSAGES.DEFAULT);
+        // Keep the partial AI message visible
+        // Don't clear setCurrentAiMessage here
       }
     },
     [abortController, settings.debug]
@@ -624,6 +627,21 @@ ${chatContent}`;
   const handleLoadHistory = useCallback(() => {
     plugin.loadCopilotChatHistory();
   }, [plugin]);
+
+  // Event listener for abort stream events
+  useEffect(() => {
+    const handleAbortStream = (event: CustomEvent) => {
+      const reason = event.detail?.reason || ABORT_REASON.NEW_CHAT;
+      handleStopGenerating(reason);
+    };
+
+    eventTarget?.addEventListener(EVENT_NAMES.ABORT_STREAM, handleAbortStream);
+
+    // Cleanup function
+    return () => {
+      eventTarget?.removeEventListener(EVENT_NAMES.ABORT_STREAM, handleAbortStream);
+    };
+  }, [eventTarget, handleStopGenerating]);
 
   // Use the includeActiveNoteAsContext setting
   useEffect(() => {

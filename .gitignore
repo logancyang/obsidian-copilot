@@ -24,3 +24,6 @@ data.json
 
 # Test Environment
 .env.test
+
+# Claude configuration
+.claude/settings.local.json
