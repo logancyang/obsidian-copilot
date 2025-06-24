@@ -40,10 +40,6 @@ export class FileCache<T> {
     return `${this.cacheDir}/${cacheKey}.md`;
   }
 
-  private getLegacyCachePath(cacheKey: string): string {
-    return `${this.cacheDir}/${cacheKey}.json`;
-  }
-
   async get(cacheKey: string): Promise<T | null> {
     try {
       // Check memory cache first
@@ -58,46 +54,38 @@ export class FileCache<T> {
         logInfo("File cache hit:", cacheKey);
         const cacheContent = await app.vault.adapter.read(cachePath);
 
-        // Parse content based on file format
+        // Since we're using .md extension, content is primarily string-based
+        // Only attempt JSON parsing if content was originally serialized as JSON
         let parsedContent: T;
-        try {
-          // Try to parse as JSON first (for non-string types)
-          parsedContent = JSON.parse(cacheContent);
-        } catch {
-          // If not valid JSON, treat as string content (for markdown/text)
+
+        // Check if content starts with JSON markers (object/array)
+        const trimmedContent = cacheContent.trim();
+        if (
+          (trimmedContent.startsWith("{") && trimmedContent.endsWith("}")) ||
+          (trimmedContent.startsWith("[") && trimmedContent.endsWith("]"))
+        ) {
+          try {
+            // Only parse as JSON if it looks like serialized JSON
+            parsedContent = JSON.parse(cacheContent);
+          } catch {
+            // If JSON parsing fails, treat as string content
+            parsedContent = cacheContent as T;
+          }
+        } else {
+          // For non-JSON-like content, treat as string
           parsedContent = cacheContent as T;
         }
 
-        // Create cache entry for memory storage
+        // Create cache entry for memory storage with proper timestamp handling
         const cacheEntry: FileCacheEntry<T> = {
           content: parsedContent,
-          timestamp: Date.now(), // Use current time since we don't store timestamp in .md files
+          timestamp: Date.now(), // Note: file-based cache doesn't preserve original timestamp
         };
 
         // Store in memory cache
         this.memoryCache.set(cacheKey, cacheEntry);
 
         return cacheEntry.content;
-      }
-
-      // Check for legacy JSON cache file and migrate if found
-      const legacyCachePath = this.getLegacyCachePath(cacheKey);
-      if (await app.vault.adapter.exists(legacyCachePath)) {
-        logInfo("Legacy JSON cache hit, migrating:", cacheKey);
-        const legacyCacheContent = await app.vault.adapter.read(legacyCachePath);
-        const legacyCacheEntry = JSON.parse(legacyCacheContent) as FileCacheEntry<T>;
-
-        // Store in new markdown format
-        await app.vault.adapter.write(cachePath, String(legacyCacheEntry.content));
-
-        // Store in memory cache
-        this.memoryCache.set(cacheKey, legacyCacheEntry);
-
-        // Remove legacy JSON file
-        await app.vault.adapter.remove(legacyCachePath);
-        logInfo("Migrated legacy cache file:", cacheKey);
-
-        return legacyCacheEntry.content;
       }
 
       logInfo("Cache miss for file:", cacheKey);
@@ -149,13 +137,6 @@ export class FileCache<T> {
         await app.vault.adapter.remove(cachePath);
         logInfo("Removed file from cache:", cacheKey);
       }
-
-      // Also remove legacy JSON file if it exists
-      const legacyCachePath = this.getLegacyCachePath(cacheKey);
-      if (await app.vault.adapter.exists(legacyCachePath)) {
-        await app.vault.adapter.remove(legacyCachePath);
-        logInfo("Removed legacy file from cache:", cacheKey);
-      }
     } catch (error) {
       logError("Error removing file from cache:", error);
     }
@@ -166,7 +147,7 @@ export class FileCache<T> {
       // Clear memory cache
       this.memoryCache.clear();
 
-      // Clear file cache (both .md and legacy .json files)
+      // Clear file cache
       if (await app.vault.adapter.exists(this.cacheDir)) {
         const files = await app.vault.adapter.list(this.cacheDir);
         logInfo("Clearing file cache, removing files:", files.files.length);
