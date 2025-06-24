@@ -1,27 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  FileAudio,
-  FileImage,
-  FileText,
-  FileVideo,
-  FolderIcon,
-  Plus,
-  PlusCircle,
-  TagIcon,
-  XIcon,
-} from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
-import { App, Modal, Notice, TFile } from "obsidian";
-import { createRoot, Root } from "react-dom/client";
 import { ProjectConfig } from "@/aiParams";
-import { Button } from "@/components/ui/button";
-import { SearchBar } from "@/components/ui/SearchBar";
-import { TagSearchModal } from "@/components/modals/TagSearchModal";
 import { FolderSearchModal } from "@/components/modals/FolderSearchModal";
 import { ProjectFileSelectModal } from "@/components/modals/ProjectFileSelectModal";
+import { TagSearchModal } from "@/components/modals/TagSearchModal";
+import { TruncatedText } from "@/components/TruncatedText";
+import { Button } from "@/components/ui/button";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { SearchBar } from "@/components/ui/SearchBar";
+import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import {
   createPatternSettingsValue,
   getFilePattern,
@@ -31,7 +19,21 @@ import {
   shouldIndexFile,
 } from "@/search/searchUtils";
 import { getTagsFromNote } from "@/utils";
-import { TruncatedText } from "@/components/TruncatedText";
+import {
+  FileAudio,
+  FileImage,
+  FileText,
+  FileVideo,
+  FolderIcon,
+  HelpCircle,
+  Plus,
+  PlusCircle,
+  TagIcon,
+  XIcon,
+} from "lucide-react";
+import { App, Modal, Notice, TFile } from "obsidian";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createRoot, Root } from "react-dom/client";
 
 function FileIcon({ extension, size = "tw-size-4" }: { extension: string; size?: string }) {
   const ext = extension.toLowerCase().replace("*.", "");
@@ -60,6 +62,7 @@ interface SectionHeaderProps {
   title: string;
   iconColorClassName: string;
   onAddClick: () => void;
+  tooltip?: string;
 }
 
 const SectionHeader: React.FC<SectionHeaderProps> = ({
@@ -67,12 +70,25 @@ const SectionHeader: React.FC<SectionHeaderProps> = ({
   title,
   iconColorClassName,
   onAddClick,
+  tooltip,
 }) => {
   return (
     <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between">
       <div className="tw-flex tw-items-center">
         <IconComponent className={`tw-mr-2 tw-size-4 ${iconColorClassName}`} />
         <h3 className={`tw-text-sm tw-font-semibold ${iconColorClassName}`}>{title}</h3>
+        {tooltip && (
+          <TooltipProvider delayDuration={0}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <HelpCircle className="tw-ml-2 tw-size-4 tw-text-muted" />
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="tw-max-w-80">{tooltip}</div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
       </div>
       <Button
         variant="ghost"
@@ -105,6 +121,7 @@ interface SectionListProps {
   onItemClick: (itemId: string, itemName?: string) => void;
   onAddClick: () => void;
   onDeleteItem: (e: React.MouseEvent, item: SectionItem) => void;
+  tooltip?: string;
 }
 
 const SectionList: React.FC<SectionListProps> = ({
@@ -119,6 +136,7 @@ const SectionList: React.FC<SectionListProps> = ({
   onItemClick,
   onAddClick,
   onDeleteItem,
+  tooltip,
 }) => {
   return (
     <div>
@@ -127,6 +145,7 @@ const SectionList: React.FC<SectionListProps> = ({
         title={title}
         iconColorClassName={iconColorClassName}
         onAddClick={onAddClick}
+        tooltip={tooltip}
       />
       <div className="tw-space-y-1">
         {items.map((item) => (
@@ -853,7 +872,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
           <div className="tw-flex tw-h-full tw-flex-col">
             {/* Header */}
             <div className="tw-border-b tw-p-4">
-              <h2 className="tw-text-lg tw-font-semibold">Project Context</h2>
+              <h2 className="tw-text-lg tw-font-semibold">File Context</h2>
             </div>
 
             <ScrollArea className="tw-max-h-[500px] tw-flex-1">
@@ -871,6 +890,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
                   onItemClick={groupHandlers.click.tag}
                   onAddClick={groupHandlers.add.tag}
                   onDeleteItem={(e, item) => groupHandlers.delete.tag(e, item)}
+                  tooltip="must be in note property"
                 />
 
                 <Separator />

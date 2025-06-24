@@ -1,4 +1,6 @@
 import { ProjectConfig } from "@/aiParams";
+import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
+import { TruncatedText } from "@/components/TruncatedText";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
@@ -7,15 +9,13 @@ import { ObsidianNativeSelect } from "@/components/ui/obsidian-native-select";
 import { SettingSlider } from "@/components/ui/setting-slider";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { getDecodedPatterns } from "@/search/searchUtils";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { checkModelApiKey, err2String, randomUUID } from "@/utils";
 import { HelpCircle } from "lucide-react";
 import { App, Modal, Notice } from "obsidian";
 import React, { useState } from "react";
 import { createRoot, Root } from "react-dom/client";
-import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
-import { TruncatedText } from "@/components/TruncatedText";
-import { getDecodedPatterns } from "@/search/searchUtils";
 
 interface AddProjectModalContentProps {
   initialProject?: ProjectConfig;
@@ -257,7 +257,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
           <FormField
             label={
               <div className="tw-flex tw-items-center tw-gap-2">
-                <span>Project Context</span>
+                <span>File Context</span>
                 <TooltipProvider delayDuration={0}>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -279,11 +279,10 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
                 </TooltipProvider>
               </div>
             }
-            description="Define patterns to include specific files or folders in the project context"
+            description="Define patterns to include specific files, folders or tags (specified in the note property) in the project context."
           >
             <div className="tw-flex tw-items-center tw-gap-2">
               <div className="tw-flex tw-flex-1 tw-flex-row">
-                <span className="tw-text-sm">Patterns configure：</span>
                 <TruncatedText className="tw-max-w-[100px] tw-text-sm tw-text-accent">
                   {showContext}
                 </TruncatedText>
