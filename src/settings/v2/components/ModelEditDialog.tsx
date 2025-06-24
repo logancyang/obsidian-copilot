@@ -319,6 +319,40 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
             step={0.05}
           />
         </FormField>
+
+        <FormField
+          label={
+            <div className="tw-flex tw-items-center tw-gap-2">
+              Frequency Penalty
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="tw-size-4 tw-text-muted" />
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <div className="tw-w-[300px]">
+                      <p>
+                        The frequency penalty parameter tells the model not to repeat a word that
+                        has already been used multiple times in the conversation.
+                      </p>
+                      <em>
+                        The higher the value, the more the model is penalized for repeating words.
+                      </em>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          }
+        >
+          <SettingSlider
+            value={localModel.frequencyPenalty ?? 0}
+            onChange={(value) => handleLocalUpdate("frequencyPenalty", value)}
+            max={2}
+            min={0}
+            step={0.05}
+          />
+        </FormField>
       </div>
     </div>
   );
