@@ -5,7 +5,6 @@ import {
   FileText,
   FileVideo,
   FolderIcon,
-  Hash,
   Plus,
   PlusCircle,
   TagIcon,
@@ -13,7 +12,6 @@ import {
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { App, Modal, Notice, TFile } from "obsidian";
@@ -386,24 +384,6 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
     latestIgnoreItems.current = ignoreItems;
   }, [groupList, ignoreItems]);
 
-  // update project when component unmount
-  useEffect(() => {
-    return () => {
-      const include = convertGroupListToInclusions(latestGroupList.current, appAllFiles);
-      const exclude = convertDeletedItemsToExclusions(latestIgnoreItems.current);
-
-      onSave({
-        ...initialProject,
-        contextSource: {
-          ...initialProject.contextSource,
-          inclusions: include,
-          exclusions: exclude,
-        },
-      });
-    };
-    // eslint-disable-next-line
-  }, []);
-
   const allItems: Array<{ id: string; name: string }> = useMemo(() => {
     const items: Array<{ id: string; name: string }> = [];
 
@@ -703,8 +683,9 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
 
               // remove file from ignore
               setIgnoreItems((prev) => {
-                prev.files.delete(file);
-                return prev;
+                const newFiles = new Set(prev.files);
+                newFiles.delete(file);
+                return { ...prev, files: newFiles };
               });
 
               setGroupList((prev) => ({
@@ -738,9 +719,9 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
               if (isAlreadyIgnored) return;
 
               setIgnoreItems((prev) => {
-                const newIgnoreItems = { ...prev };
-                newIgnoreItems.files.add(file);
-                return newIgnoreItems;
+                const newFiles = new Set(prev.files);
+                newFiles.add(file);
+                return { ...prev, files: newFiles };
               });
 
               // Remove related files from the groupList
@@ -806,8 +787,9 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
     if (file) {
       // add file to ignore
       setIgnoreItems((prev) => {
-        prev.files.add(file);
-        return prev;
+        const newFiles = new Set(prev.files);
+        newFiles.add(file);
+        return { ...prev, files: newFiles };
       });
 
       setGroupList((prev) => removeFileFromGroupList(prev, item.id));
@@ -840,9 +822,9 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
 
     if (file) {
       setIgnoreItems((prev) => {
-        const newIgnoreItems = { ...prev };
-        newIgnoreItems.files.delete(file);
-        return newIgnoreItems;
+        const newFiles = new Set(prev.files);
+        newFiles.delete(file);
+        return { ...prev, files: newFiles };
       });
 
       // refresh groupList
@@ -850,9 +832,22 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
     }
   };
 
+  const handleSave = () => {
+    const include = convertGroupListToInclusions(groupList, appAllFiles);
+    const exclude = convertDeletedItemsToExclusions(ignoreItems);
+    onSave({
+      ...initialProject,
+      contextSource: {
+        ...initialProject.contextSource,
+        inclusions: include,
+        exclusions: exclude,
+      },
+    });
+  };
+
   return (
-    <TooltipProvider>
-      <ResizablePanelGroup direction="horizontal" className="tw-size-full">
+    <div className="tw-flex tw-h-full tw-flex-col">
+      <ResizablePanelGroup direction="horizontal" className="tw-flex-1">
         {/* Left Sidebar - Navigation */}
         <ResizablePanel defaultSize={30} minSize={20} maxSize={40}>
           <div className="tw-flex tw-h-full tw-flex-col">
@@ -917,8 +912,9 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
 
                 <Separator />
 
+                {/* todo(emt-lin)：maybe use this in the future */}
                 {/* Extensions Section */}
-                <SectionList
+                {/*<SectionList
                   title="Extensions"
                   IconComponent={Hash}
                   iconColorClassName="tw-text-context-manager-green"
@@ -932,7 +928,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
                   onDeleteItem={(e, item) => groupHandlers.delete.extension(e, item)}
                 />
 
-                <Separator />
+                <Separator />*/}
 
                 {/* Ignore Files Section */}
                 <div>
@@ -1009,7 +1005,13 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
-    </TooltipProvider>
+      <div className="tw-flex tw-justify-end tw-gap-2 tw-border-t tw-p-1">
+        <Button variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button onClick={handleSave}>Save</Button>
+      </div>
+    </div>
   );
 }
 
@@ -1032,6 +1034,7 @@ export class ContextManageModal extends Modal {
 
     const handleSave = (project: ProjectConfig) => {
       this.onSave(project);
+      this.close();
     };
 
     const handleCancel = () => {
