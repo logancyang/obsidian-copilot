@@ -37,6 +37,10 @@ export class FileCache<T> {
   }
 
   private getCachePath(cacheKey: string): string {
+    return `${this.cacheDir}/${cacheKey}.md`;
+  }
+
+  private getLegacyCachePath(cacheKey: string): string {
     return `${this.cacheDir}/${cacheKey}.json`;
   }
 
@@ -53,12 +57,37 @@ export class FileCache<T> {
       if (await app.vault.adapter.exists(cachePath)) {
         logInfo("File cache hit:", cacheKey);
         const cacheContent = await app.vault.adapter.read(cachePath);
-        const cacheEntry = JSON.parse(cacheContent) as FileCacheEntry<T>;
+
+        // Create cache entry for memory storage
+        const cacheEntry: FileCacheEntry<T> = {
+          content: cacheContent as T,
+          timestamp: Date.now(), // Use current time since we don't store timestamp in .md files
+        };
 
         // Store in memory cache
         this.memoryCache.set(cacheKey, cacheEntry);
 
         return cacheEntry.content;
+      }
+
+      // Check for legacy JSON cache file and migrate if found
+      const legacyCachePath = this.getLegacyCachePath(cacheKey);
+      if (await app.vault.adapter.exists(legacyCachePath)) {
+        logInfo("Legacy JSON cache hit, migrating:", cacheKey);
+        const legacyCacheContent = await app.vault.adapter.read(legacyCachePath);
+        const legacyCacheEntry = JSON.parse(legacyCacheContent) as FileCacheEntry<T>;
+
+        // Store in new markdown format
+        await app.vault.adapter.write(cachePath, String(legacyCacheEntry.content));
+
+        // Store in memory cache
+        this.memoryCache.set(cacheKey, legacyCacheEntry);
+
+        // Remove legacy JSON file
+        await app.vault.adapter.remove(legacyCachePath);
+        logInfo("Migrated legacy cache file:", cacheKey);
+
+        return legacyCacheEntry.content;
       }
 
       logInfo("Cache miss for file:", cacheKey);
@@ -82,8 +111,8 @@ export class FileCache<T> {
       // Store in memory cache
       this.memoryCache.set(cacheKey, cacheEntry);
 
-      // Store in file cache
-      await app.vault.adapter.write(cachePath, JSON.stringify(cacheEntry));
+      // Store content directly as markdown in file cache
+      await app.vault.adapter.write(cachePath, String(content));
       logInfo("Cached file content:", cacheKey);
     } catch (error) {
       logError("Error writing to file cache:", error);
@@ -95,11 +124,18 @@ export class FileCache<T> {
       // Remove from memory cache
       this.memoryCache.delete(cacheKey);
 
-      // Remove from file cache
+      // Remove from file cache (markdown format)
       const cachePath = this.getCachePath(cacheKey);
       if (await app.vault.adapter.exists(cachePath)) {
         await app.vault.adapter.remove(cachePath);
         logInfo("Removed file from cache:", cacheKey);
+      }
+
+      // Also remove legacy JSON file if it exists
+      const legacyCachePath = this.getLegacyCachePath(cacheKey);
+      if (await app.vault.adapter.exists(legacyCachePath)) {
+        await app.vault.adapter.remove(legacyCachePath);
+        logInfo("Removed legacy file from cache:", cacheKey);
       }
     } catch (error) {
       logError("Error removing file from cache:", error);
@@ -111,7 +147,7 @@ export class FileCache<T> {
       // Clear memory cache
       this.memoryCache.clear();
 
-      // Clear file cache
+      // Clear file cache (both .md and legacy .json files)
       if (await app.vault.adapter.exists(this.cacheDir)) {
         const files = await app.vault.adapter.list(this.cacheDir);
         logInfo("Clearing file cache, removing files:", files.files.length);

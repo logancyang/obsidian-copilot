@@ -315,6 +315,9 @@ export class BrevilabsClient {
     // Add file_type as a regular field
     formData.append("file_type", fileType);
 
+    // Add user_id for rate limiting (required by backend)
+    formData.append("user_id", getSettings().userId);
+
     const { data, error } = await this.makeFormDataRequest<Docs4llmResponse>("/docs4llm", formData);
 
     if (error) {
