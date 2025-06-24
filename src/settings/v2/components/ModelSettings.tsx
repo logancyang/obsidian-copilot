@@ -165,38 +165,6 @@ export const ModelSettings: React.FC = () => {
         <div className="tw-space-y-4">
           <SettingItem
             type="slider"
-            title="Temperature"
-            description="Default is 0.1. Higher values will result in more creativeness, but also more mistakes. Set to 0 for no randomness."
-            value={settings.temperature}
-            onChange={(value) => updateSetting("temperature", value)}
-            min={0}
-            max={2}
-            step={0.05}
-          />
-
-          <SettingItem
-            type="slider"
-            title="Token limit"
-            description={
-              <>
-                <p>
-                  The maximum number of <em>output tokens</em> to generate. Default is 6000.
-                </p>
-                <em>
-                  This number plus the length of your prompt (input tokens) must be smaller than the
-                  context window of the model.
-                </em>
-              </>
-            }
-            value={settings.maxTokens}
-            onChange={(value) => updateSetting("maxTokens", value)}
-            min={0}
-            max={65000}
-            step={100}
-          />
-
-          <SettingItem
-            type="slider"
             title="Conversation turns in context"
             description="The number of previous conversation turns to include in the context. Default is 15 turns, i.e. 30 messages."
             value={settings.contextTurns}

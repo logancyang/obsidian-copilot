@@ -253,7 +253,7 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
           }
         >
           <SettingSlider
-            value={localModel.maxTokens ?? 1000}
+            value={localModel.maxTokens ?? settings.maxTokens ?? 1000}
             onChange={(value) => handleLocalUpdate("maxTokens", value)}
             min={0}
             max={65000}
@@ -282,7 +282,7 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
           }
         >
           <SettingSlider
-            value={localModel.temperature ?? 1}
+            value={localModel.temperature ?? settings.temperature ?? 1}
             onChange={(value) => handleLocalUpdate("temperature", value)}
             max={2}
             min={0}
