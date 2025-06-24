@@ -1,5 +1,5 @@
 import { ProjectConfig, setCurrentProject } from "@/aiParams";
-import { AddProjectModal } from "@/components/modals/AddProjectModal";
+import { AddProjectModal } from "@/components/modals/project/AddProjectModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { SearchBar } from "@/components/ui/SearchBar";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { updateSetting } from "@/settings/model";
@@ -25,12 +26,10 @@ import {
   Search,
   Trash2,
   X,
-  XCircle,
 } from "lucide-react";
 import { App, Notice } from "obsidian";
 import React, { memo, useEffect, useMemo, useState } from "react";
 import { filterProjects } from "@/utils/projectUtils";
-import { Input } from "../ui/input";
 
 function ProjectItem({
   project,
@@ -356,23 +355,11 @@ export const ProjectList = memo(
                     {projects.length > 0 && (
                       <div className="tw-px-4 tw-pb-2 tw-pt-3">
                         <div className="tw-relative">
-                          <Input
-                            type="text"
-                            placeholder="Search projects..."
+                          <SearchBar
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={setSearchQuery}
+                            placeholder="Search projects..."
                           />
-                          {searchQuery && (
-                            <Button
-                              variant={"secondary"}
-                              onClick={() => setSearchQuery("")}
-                              className="tw-absolute tw-right-8 tw-top-1/2 tw-size-4 -tw-translate-y-1/2 tw-transform tw-rounded-full tw-p-0 tw-transition-colors"
-                              aria-label="Clear search"
-                            >
-                              <XCircle className="tw-size-4 tw-text-muted/60 hover:tw-text-accent-hover" />
-                            </Button>
-                          )}
-                          <Search className="tw-absolute tw-right-3 tw-top-1/2 tw-size-4 -tw-translate-y-1/2 tw-transform tw-text-muted" />
                         </div>
                       </div>
                     )}
