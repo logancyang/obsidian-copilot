@@ -23,9 +23,9 @@ export const FormField: React.FC<FormFieldProps> = ({
       <Label className={error ? "tw-text-error" : ""}>
         {label} {required && <span className="tw-text-error">*</span>}
       </Label>
+      {description && <p className="tw-text-sm tw-text-muted">{description}</p>}
       {children}
       {error && <p className="tw-text-xs tw-text-error">{errorMessage}</p>}
-      {description && <p className="tw-text-sm tw-text-muted">{description}</p>}
     </div>
   );
 };
