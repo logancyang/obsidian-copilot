@@ -1,0 +1,107 @@
+import {
+  BaseChatModel,
+  type BaseChatModelParams,
+} from "@langchain/core/language_models/chat_models";
+import { AIMessage, type BaseMessage, type MessageContent } from "@langchain/core/messages";
+import { type ChatResult, ChatGeneration } from "@langchain/core/outputs";
+import { type CallbackManagerForLLMRun } from "@langchain/core/callbacks/manager";
+import { GitHubCopilotProvider } from "./githubCopilotProvider";
+
+export interface CopilotChatModelParams extends BaseChatModelParams {
+  provider: GitHubCopilotProvider;
+  modelName: string;
+}
+
+export class CopilotChatModel extends BaseChatModel {
+  lc_serializable = false;
+  lc_namespace = ["langchain", "chat_models", "copilot"];
+  private provider: GitHubCopilotProvider;
+  modelName: string;
+
+  constructor(fields: CopilotChatModelParams) {
+    super(fields);
+    this.provider = fields.provider;
+    this.modelName = fields.modelName;
+  }
+
+  _llmType(): string {
+    return "copilot-chat-model";
+  }
+
+  private _convertMessageType(messageType: string): string {
+    switch (messageType) {
+      case "human":
+        return "user";
+      case "ai":
+        return "assistant";
+      case "system":
+        return "system";
+      case "tool":
+        return "tool";
+      case "function":
+        return "function";
+      case "generic":
+      default:
+        return "user";
+    }
+  }
+
+  async _generate(
+    messages: BaseMessage[],
+    options: this["ParsedCallOptions"],
+    runManager?: CallbackManagerForLLMRun
+  ): Promise<ChatResult> {
+    const chatMessages = messages.map((m) => ({
+      role: this._convertMessageType(m._getType()),
+      content: m.content as string,
+    }));
+
+    const response = await this.provider.sendChatMessage(chatMessages, this.modelName);
+    const content = response.choices?.[0]?.message?.content || "";
+
+    const generation: ChatGeneration = {
+      text: content,
+      message: new AIMessage(content),
+    };
+
+    return {
+      generations: [generation],
+      llmOutput: {}, // add more details here if needed
+    };
+  }
+
+  /**
+   * A simple approximation: ~4 chars per token for English text
+   * This matches the fallback behavior in ChatModelManager.countTokens
+   */
+  async getNumTokens(content: MessageContent): Promise<number> {
+    const text = typeof content === "string" ? content : JSON.stringify(content);
+    if (!text) return 0;
+    return Math.ceil(text.length / 4);
+  }
+}
+
+export class ChatGitHubCopilot {
+  private provider: GitHubCopilotProvider;
+  constructor(config: any) {
+    this.provider = new GitHubCopilotProvider();
+  }
+  async send(messages: { role: string; content: string }[], model = "gpt-4") {
+    return this.provider.sendChatMessage(messages, model);
+  }
+  getAuthState() {
+    return this.provider.getAuthState();
+  }
+  async startAuth() {
+    return this.provider.startDeviceCodeFlow();
+  }
+  async pollForAccessToken() {
+    return this.provider.pollForAccessToken();
+  }
+  async fetchCopilotToken() {
+    return this.provider.fetchCopilotToken();
+  }
+  resetAuth() {
+    this.provider.resetAuth();
+  }
+}
