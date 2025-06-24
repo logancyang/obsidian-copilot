@@ -120,8 +120,9 @@ export class GitHubCopilotProvider {
     if (res.status !== 200) throw new Error("Failed to get Copilot token");
     const data = res.json;
     this.authState.copilotToken = data.token;
-    this.authState.copilotTokenExpiresAt =
-      Date.now() + (data.expires_at ? data.expires_at * 1000 : 3600 * 1000);
+    this.authState.copilotTokenExpiresAt = data.expires_at
+      ? data.expires_at * 1000
+      : Date.now() + 3600 * 1000;
     this.authState.status = "authenticated";
     // Persist Copilot token and expiration
     updateSetting("copilotToken", data.token);
