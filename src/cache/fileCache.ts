@@ -58,9 +58,19 @@ export class FileCache<T> {
         logInfo("File cache hit:", cacheKey);
         const cacheContent = await app.vault.adapter.read(cachePath);
 
+        // Parse content based on file format
+        let parsedContent: T;
+        try {
+          // Try to parse as JSON first (for non-string types)
+          parsedContent = JSON.parse(cacheContent);
+        } catch {
+          // If not valid JSON, treat as string content (for markdown/text)
+          parsedContent = cacheContent as T;
+        }
+
         // Create cache entry for memory storage
         const cacheEntry: FileCacheEntry<T> = {
-          content: cacheContent as T,
+          content: parsedContent,
           timestamp: Date.now(), // Use current time since we don't store timestamp in .md files
         };
 
@@ -111,8 +121,17 @@ export class FileCache<T> {
       // Store in memory cache
       this.memoryCache.set(cacheKey, cacheEntry);
 
-      // Store content directly as markdown in file cache
-      await app.vault.adapter.write(cachePath, String(content));
+      // Serialize content properly for file storage
+      let serializedContent: string;
+      if (typeof content === "string") {
+        // If content is already a string, use it directly
+        serializedContent = content;
+      } else {
+        // For non-string content, serialize as JSON
+        serializedContent = JSON.stringify(content, null, 2);
+      }
+
+      await app.vault.adapter.write(cachePath, serializedContent);
       logInfo("Cached file content:", cacheKey);
     } catch (error) {
       logError("Error writing to file cache:", error);
