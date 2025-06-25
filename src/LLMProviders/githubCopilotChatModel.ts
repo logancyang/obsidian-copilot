@@ -6,6 +6,7 @@ import { AIMessage, type BaseMessage, type MessageContent } from "@langchain/cor
 import { type ChatResult, ChatGeneration } from "@langchain/core/outputs";
 import { type CallbackManagerForLLMRun } from "@langchain/core/callbacks/manager";
 import { GitHubCopilotProvider } from "./githubCopilotProvider";
+import { extractTextFromChunk } from "@/utils";
 
 export interface CopilotChatModelParams extends BaseChatModelParams {
   provider: GitHubCopilotProvider;
@@ -53,7 +54,7 @@ export class CopilotChatModel extends BaseChatModel {
   ): Promise<ChatResult> {
     const chatMessages = messages.map((m) => ({
       role: this._convertMessageType(m._getType()),
-      content: m.content as string,
+      content: extractTextFromChunk(m.content),
     }));
 
     const response = await this.provider.sendChatMessage(chatMessages, this.modelName);
