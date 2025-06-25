@@ -18,7 +18,10 @@ import { Mention } from "@/mentions/Mention";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { getToolDescription } from "@/tools/toolManager";
 import { checkModelApiKey, err2String, extractNoteFiles, isNoteTitleUnique } from "@/utils";
+import {Controls} from "@/asr/Controls";
+import Whisper from "@/main";
 import {
+  Activity,
   ArrowBigUp,
   ChevronDown,
   Command,
@@ -27,6 +30,7 @@ import {
   StopCircle,
   X,
   Loader2,
+  Mic,
 } from "lucide-react";
 import { App, Notice, Platform, TFile } from "obsidian";
 import React, {
@@ -61,6 +65,7 @@ interface ChatInputProps {
   selectedImages: File[];
   onAddImage: (files: File[]) => void;
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
+  whisperPlugin: Whisper;
 }
 
 const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
@@ -81,6 +86,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       selectedImages,
       onAddImage,
       setSelectedImages,
+      whisperPlugin,
     },
     ref
   ) => {
@@ -98,6 +104,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     );
     const settings = useSettingsValue();
     const isCopilotPlus = currentChain === ChainType.COPILOT_PLUS_CHAIN;
+    const [showVoiceControls, setShowVoiceControls] = useState(false);
 
     useImperativeHandle(ref, () => ({
       focus: () => {
@@ -581,6 +588,27 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                     }}
                   >
                     <Image className="w-4 h-4" />
+                  </Button>
+                )}
+                {false ? (
+                  <Button
+                    variant="ghost2"
+                    size="fit"
+                    className="text-muted"
+                  >
+                  <Activity className="size-4" />
+                    Whispering
+                  </Button>
+                ):(
+                  <Button
+                    variant="ghost2"
+                    size="fit"
+                    onClick={() => {
+                      new Controls(whisperPlugin,{isCopilot: true}).open();
+                    }}
+                  >
+                    <Mic className="!size-3" />
+                    {false ? (<span></span>):(<span>voice</span>)}
                   </Button>
                 )}
                 <Button

@@ -107,6 +107,78 @@ export class AudioHandler {
     }
   }
 
+  async sendAudioData2copilot(blob: Blob, fileName: string): Promise<void> {
+    // Get the base file name without extension
+    const baseFileName = getBaseFileName(fileName);
+
+    const audioFilePath = `${
+      this.plugin.whisperSettings.saveAudioFilePath
+        ? `${this.plugin.whisperSettings.saveAudioFilePath}/`
+        : ""
+    }${fileName}`;
+
+    const noteFilePath = `${
+      this.plugin.whisperSettings.createNewFileAfterRecordingPath
+        ? `${this.plugin.whisperSettings.createNewFileAfterRecordingPath}/`
+        : ""
+    }${baseFileName}.md`;
+
+    if (this.plugin.whisperSettings.debugMode) {
+      new Notice(`Sending audio data size: ${blob.size / 1000} KB`);
+    }
+
+    if (!this.plugin.whisperSettings.useLocalService && !this.plugin.whisperSettings.apiKey) {
+      new Notice("API key is missing. Please add your API key in the settings.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", blob, fileName);
+    formData.append("model", this.plugin.whisperSettings.model);
+    formData.append("language", this.plugin.whisperSettings.language);
+    if (this.plugin.whisperSettings.prompt)
+      formData.append("prompt", this.plugin.whisperSettings.prompt);
+
+    try {
+      // If the saveAudioFile setting is true, save the audio file
+      if (this.plugin.whisperSettings.saveAudioFile) {
+        const arrayBuffer = await blob.arrayBuffer();
+        await this.plugin.app.vault.adapter.writeBinary(audioFilePath, new Uint8Array(arrayBuffer));
+        new Notice("Audio saved successfully.");
+      }
+    } catch (err) {
+      console.error("Error saving audio file:", err);
+      new Notice("Error saving audio file: " + err.message);
+    }
+
+    try {
+      if (this.plugin.whisperSettings.debugMode) {
+        new Notice("Parsing audio data:" + fileName);
+      }
+
+      let response;
+      if (this.plugin.whisperSettings.useLocalService) {
+        // 使用本地 whisper ASR 服务
+        response = await this.sendToLocalService(blob, fileName);
+      } else {
+        // 使用远程 OpenAI API
+        response = await axios.post(this.plugin.whisperSettings.apiUrl, formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            Authorization: `Bearer ${this.plugin.whisperSettings.apiKey}`,
+          },
+        });
+      }
+      if(this.plugin.setChatInput) {
+        this.plugin.setChatInput(response.data.text);
+      }
+      new Notice("Audio parsed successfully.");
+    } catch (err) {
+      console.error("Error parsing audio:", err);
+      new Notice("Error parsing audio: " + err.message);
+    }
+  }
+
   async sendToLocalService(blob: Blob, fileName: string): Promise<{ data: { text: string } }> {
     const payload_data: Record<string, any> = {};
     payload_data["audio_file"] = blob;

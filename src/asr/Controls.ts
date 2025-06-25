@@ -8,10 +8,12 @@ export class Controls extends Modal {
   private pauseButton: ButtonComponent;
   private stopButton: ButtonComponent;
   private timerDisplay: HTMLElement;
+  private customParam: any; // 新增属性来存储传入的参数
 
-  constructor(plugin: Whisper) {
+  constructor(plugin: Whisper,customParam:any) {
     super(plugin.app);
     this.plugin = plugin;
+    this.customParam = customParam; // 存储传入的参数
     this.containerEl.addClass("recording-controls");
 
     // Add elapsed time display
@@ -77,7 +79,11 @@ export class Controls extends Modal {
 
     const extension = this.plugin.recorder.getMimeType()?.split("/")[1];
     const fileName = `${new Date().toISOString().replace(/[:.]/g, "-")}.${extension}`;
-    await this.plugin.audioHandler.sendAudioData(blob, fileName);
+    if(this.customParam.isCopilot){
+      await this.plugin.audioHandler.sendAudioData2copilot(blob, fileName);
+    }else{
+      await this.plugin.audioHandler.sendAudioData(blob, fileName);
+    }
     this.plugin.statusBarRecord.updateStatus(RecordingStatus.Idle);
     this.close();
   }

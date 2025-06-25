@@ -112,6 +112,8 @@ export default class CopilotPlugin extends Plugin {
     "mkv",
   ];
 
+  public setChatInput: ((input: string) => void) | undefined;
+
   constructor(app: App, manifest: PluginManifest) {
     super(app, manifest);
     // Additional initialization if needed
@@ -947,8 +949,9 @@ export default class CopilotPlugin extends Plugin {
   }
 
   openRecordingControls() {
+    const CustomParam = { isCopilot: false };
     if (!this.controls) {
-      this.controls = new Controls(this);
+      this.controls = new Controls(this,CustomParam);
     }
     this.controls.open();
   }
