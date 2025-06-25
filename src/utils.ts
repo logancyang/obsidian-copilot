@@ -487,13 +487,6 @@ export async function safeFetch(url: string, options: RequestInit = {}): Promise
   // Remove content-length if it exists
   delete (headers as Record<string, string>)["content-length"];
 
-  if (typeof options.body === "string") {
-    const newBody = JSON.parse(options.body ?? {});
-    // todo(emt-lin):frequency_penalty: default 0, but perplexity.ai requires 1 by default. so, delete this argument for now
-    delete newBody["frequency_penalty"];
-    options.body = JSON.stringify(newBody);
-  }
-
   logInfo("==== safeFetch method request ====");
 
   const method = options.method?.toUpperCase() || "POST";
