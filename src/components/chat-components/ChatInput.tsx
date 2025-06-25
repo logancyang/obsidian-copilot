@@ -175,6 +175,9 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       const inputValue = event.target.value;
       const cursorPos = event.target.selectionStart;
 
+      // Check for slash BEFORE updating state
+      const shouldShowSlashModal = cursorPos > 0 && inputValue[cursorPos - 1] === "/";
+
       setInputMessage(inputValue);
       adjustTextareaHeight();
 
@@ -191,8 +194,9 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       // Handle other input triggers
       if (cursorPos >= 2 && inputValue.slice(cursorPos - 2, cursorPos) === "[[") {
         showNoteTitleModal(cursorPos);
-      } else if (inputValue === "/") {
-        showCustomPromptModal();
+      } else if (shouldShowSlashModal) {
+        // Pass the inputValue directly to ensure we use the current value
+        showCustomPromptModal(cursorPos, inputValue);
       } else if (inputValue.slice(-1) === "@" && isCopilotPlus) {
         showCopilotPlusOptionsModal();
       }
@@ -252,7 +256,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       fetchNoteTitles();
     };
 
-    const showCustomPromptModal = () => {
+    const showCustomPromptModal = (cursorPos: number, currentInputValue: string) => {
       const commandManager = CustomCommandManager.getInstance();
       const commands = getCachedCustomCommands();
       const slashCommands = sortSlashCommands(
@@ -260,11 +264,34 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       );
       const commandTitles = slashCommands.map((command) => command.title);
 
+      // Use the passed input value and cursor position
+      const slashPosition = cursorPos - 1;
+
       const modal = new ListPromptModal(app, commandTitles, (commandTitle: string) => {
         const selectedCommand = slashCommands.find((command) => command.title === commandTitle);
         if (selectedCommand) {
           commandManager.recordUsage(selectedCommand);
-          setInputMessage(selectedCommand.content);
+
+          // Replace the "/" with the command content
+          let before = "";
+          let after = "";
+
+          if (slashPosition >= 0 && currentInputValue[slashPosition] === "/") {
+            before = currentInputValue.slice(0, slashPosition);
+            after = currentInputValue.slice(slashPosition + 1);
+          }
+
+          const newInputMessage = before + selectedCommand.content + after;
+          setInputMessage(newInputMessage);
+
+          // Set cursor position after the inserted command content
+          setTimeout(() => {
+            if (textAreaRef.current) {
+              const newCursorPos = before.length + selectedCommand.content.length;
+              textAreaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+              textAreaRef.current.focus();
+            }
+          }, 0);
         }
       });
       modal.open();
