@@ -6,6 +6,7 @@ import { ChainType } from "@/chainFactory";
 import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
 import { TFile } from "obsidian";
 import { ChatContextMenu } from "./ChatContextMenu";
+import { SelectedTextContext } from "@/sharedState";
 
 interface ChatControlsProps {
   app: App;
@@ -17,6 +18,8 @@ interface ChatControlsProps {
   activeNote: TFile | null;
   contextUrls: string[];
   onRemoveUrl: (url: string) => void;
+  selectedTextContexts?: SelectedTextContext[];
+  onRemoveSelectedText?: (id: string) => void;
 }
 
 const ContextControl: React.FC<ChatControlsProps> = ({
@@ -29,6 +32,8 @@ const ContextControl: React.FC<ChatControlsProps> = ({
   activeNote,
   contextUrls,
   onRemoveUrl,
+  selectedTextContexts,
+  onRemoveSelectedText,
 }) => {
   const [selectedChain] = useChainType();
 
@@ -68,7 +73,23 @@ const ContextControl: React.FC<ChatControlsProps> = ({
   };
 
   if (selectedChain !== ChainType.COPILOT_PLUS_CHAIN) {
-    return null;
+    // In non-Plus modes, only show selected text contexts if any exist
+    if (!selectedTextContexts || selectedTextContexts.length === 0) {
+      return null;
+    }
+
+    return (
+      <ChatContextMenu
+        activeNote={null}
+        contextNotes={[]}
+        onAddContext={() => {}} // No-op for non-Plus modes
+        onRemoveContext={() => {}} // No-op for non-Plus modes
+        contextUrls={[]}
+        onRemoveUrl={() => {}} // No-op for non-Plus modes
+        selectedTextContexts={selectedTextContexts}
+        onRemoveSelectedText={onRemoveSelectedText}
+      />
+    );
   }
 
   return (
@@ -79,6 +100,8 @@ const ContextControl: React.FC<ChatControlsProps> = ({
       onRemoveContext={handleRemoveContext}
       contextUrls={contextUrls}
       onRemoveUrl={onRemoveUrl}
+      selectedTextContexts={selectedTextContexts}
+      onRemoveSelectedText={onRemoveSelectedText}
     />
   );
 };

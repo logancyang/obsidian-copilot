@@ -26,7 +26,7 @@ import {
   updateSetting,
   useSettingsValue,
 } from "@/settings/model";
-import SharedState, { ChatMessage, useSharedState } from "@/sharedState";
+import SharedState, { ChatMessage, SelectedTextContext, useSharedState } from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { err2String, formatDateTime } from "@/utils";
 import { Buffer } from "buffer";
@@ -68,6 +68,7 @@ const Chat: React.FC<ChatProps> = ({
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [showChatUI, setShowChatUI] = useState(false);
+  const [selectedTextContexts, setSelectedTextContexts] = useState<SelectedTextContext[]>([]);
 
   const [previousMode, setPreviousMode] = useState<ChainType | null>(null);
   const [selectedChain, setSelectedChain] = useChainType();
@@ -92,6 +93,21 @@ const Chat: React.FC<ChatProps> = ({
     };
   }, [eventTarget]);
 
+  // Sync selected text contexts from plugin
+  useEffect(() => {
+    const updateSelectedTextContexts = () => {
+      setSelectedTextContexts([...plugin.selectedTextContexts]);
+    };
+
+    // Initialize with current state
+    updateSelectedTextContexts();
+
+    // Subscribe to changes
+    const unsubscribe = plugin.subscribeToSelectedTextContextsChange(updateSelectedTextContexts);
+
+    return unsubscribe;
+  }, [plugin]);
+
   const appContext = useContext(AppContext);
   const app = plugin.app || appContext;
 
@@ -99,10 +115,12 @@ const Chat: React.FC<ChatProps> = ({
     toolCalls,
     urls,
     contextNotes: passedContextNotes, // Rename to avoid shadowing
+    selectedTextContexts: passedSelectedTextContexts,
   }: {
     toolCalls?: string[];
     urls?: string[];
     contextNotes?: TFile[];
+    selectedTextContexts?: SelectedTextContext[];
   } = {}) => {
     if (!inputMessage && selectedImages.length === 0) return;
 
@@ -153,6 +171,7 @@ const Chat: React.FC<ChatProps> = ({
       context: {
         notes,
         urls: urls || [],
+        selectedTextContexts: passedSelectedTextContexts || [],
       },
     };
 
@@ -200,9 +219,17 @@ const Chat: React.FC<ChatProps> = ({
       currentChain
     );
 
+    // Process selected text contexts
+    const selectedTextContextAddition = contextProcessor.processSelectedTextContexts(
+      passedSelectedTextContexts || []
+    );
+
     // Combine everything
     const finalProcessedMessage =
-      processedUserMessage + urlContextAddition.urlContext + noteContextAddition;
+      processedUserMessage +
+      urlContextAddition.urlContext +
+      noteContextAddition +
+      selectedTextContextAddition;
 
     let messageWithToolCalls = inputMessage;
     // Add tool calls last
@@ -223,6 +250,7 @@ const Chat: React.FC<ChatProps> = ({
           currentChain === ChainType.COPILOT_PLUS_CHAIN
             ? [...(urls || []), ...urlContextAddition.imageUrls]
             : urls || [],
+        selectedTextContexts: passedSelectedTextContexts || [],
       },
     };
 
@@ -607,6 +635,13 @@ ${chatContent}`;
     setInputMessage((prev) => `${prev} ${prompt} `);
   }, []);
 
+  const handleRemoveSelectedText = useCallback(
+    (id: string) => {
+      plugin.removeSelectedTextContext(id);
+    },
+    [plugin]
+  );
+
   const handleNewChat = useCallback(async () => {
     handleStopGenerating(ABORT_REASON.NEW_CHAT);
     // Delegate to the shared plugin method for consistent behavior
@@ -615,6 +650,7 @@ ${chatContent}`;
     // Additional UI state reset specific to this component
     setCurrentAiMessage("");
     setContextNotes([]);
+    plugin.clearSelectedTextContexts();
     // Only modify includeActiveNote if in a non-COPILOT_PLUS_CHAIN mode
     // In COPILOT_PLUS_CHAIN mode, respect the settings.includeActiveNoteAsContext value
     if (selectedChain !== ChainType.COPILOT_PLUS_CHAIN) {
@@ -702,6 +738,8 @@ ${chatContent}`;
           onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
           setSelectedImages={setSelectedImages}
           disableModelSwitch={selectedChain === ChainType.PROJECT_CHAIN}
+          selectedTextContexts={selectedTextContexts}
+          onRemoveSelectedText={handleRemoveSelectedText}
         />
       </div>
     </>

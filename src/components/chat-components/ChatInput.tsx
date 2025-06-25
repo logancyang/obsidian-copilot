@@ -23,6 +23,7 @@ import { CustomCommandManager } from "@/commands/customCommandManager";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
+import { SelectedTextContext } from "@/sharedState";
 import { getToolDescription } from "@/tools/toolManager";
 import { checkModelApiKey, err2String, extractNoteFiles, isNoteTitleUnique } from "@/utils";
 import {
@@ -57,6 +58,7 @@ interface ChatInputProps {
     toolCalls?: string[];
     urls?: string[];
     contextNotes?: TFile[];
+    selectedTextContexts?: SelectedTextContext[];
   }) => void;
   isGenerating: boolean;
   onStopGenerating: () => void;
@@ -70,6 +72,8 @@ interface ChatInputProps {
   onAddImage: (files: File[]) => void;
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
   disableModelSwitch?: boolean;
+  selectedTextContexts?: SelectedTextContext[];
+  onRemoveSelectedText?: (id: string) => void;
 }
 
 const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
@@ -90,6 +94,8 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       onAddImage,
       setSelectedImages,
       disableModelSwitch,
+      selectedTextContexts,
+      onRemoveSelectedText,
     },
     ref
   ) => {
@@ -168,6 +174,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         toolCalls: includeVault ? ["@vault"] : [],
         contextNotes,
         urls: contextUrls,
+        selectedTextContexts,
       });
     };
 
@@ -478,6 +485,8 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           activeNote={currentActiveNote}
           contextUrls={contextUrls}
           onRemoveUrl={(url: string) => setContextUrls((prev) => prev.filter((u) => u !== url))}
+          selectedTextContexts={selectedTextContexts}
+          onRemoveSelectedText={onRemoveSelectedText}
         />
 
         {selectedImages.length > 0 && (

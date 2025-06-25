@@ -3,14 +3,17 @@ import { TFile } from "obsidian";
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { SelectedTextContext } from "@/sharedState";
 
 interface ChatContextMenuProps {
   activeNote: TFile | null;
   contextNotes: TFile[];
   contextUrls: string[];
+  selectedTextContexts?: SelectedTextContext[];
   onAddContext: () => void;
   onRemoveContext: (path: string) => void;
   onRemoveUrl: (url: string) => void;
+  onRemoveSelectedText?: (id: string) => void;
 }
 
 function ContextNote({
@@ -60,13 +63,45 @@ function ContextUrl({ url, onRemoveUrl }: { url: string; onRemoveUrl: (url: stri
   );
 }
 
+function ContextSelection({
+  selectedText,
+  onRemoveSelectedText,
+}: {
+  selectedText: SelectedTextContext;
+  onRemoveSelectedText: (id: string) => void;
+}) {
+  const lineRange =
+    selectedText.startLine === selectedText.endLine
+      ? `L${selectedText.startLine}`
+      : `L${selectedText.startLine}-${selectedText.endLine}`;
+
+  return (
+    <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
+      <div className="tw-flex tw-items-center tw-gap-1">
+        <span className="tw-max-w-40 tw-truncate">{selectedText.noteTitle}</span>
+        <span className="tw-text-xs tw-text-faint">{lineRange}</span>
+      </div>
+      <Button
+        variant="ghost2"
+        size="fit"
+        onClick={() => onRemoveSelectedText(selectedText.id)}
+        aria-label="Remove from context"
+      >
+        <X className="tw-size-4" />
+      </Button>
+    </Badge>
+  );
+}
+
 export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   activeNote,
   contextNotes,
   contextUrls,
+  selectedTextContexts = [],
   onAddContext,
   onRemoveContext,
   onRemoveUrl,
+  onRemoveSelectedText,
 }) => {
   const uniqueNotes = React.useMemo(() => {
     const notesMap = new Map(contextNotes.map((note) => [note.path, note]));
@@ -84,7 +119,11 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
 
   const uniqueUrls = React.useMemo(() => Array.from(new Set(contextUrls)), [contextUrls]);
 
-  const hasContext = uniqueNotes.length > 0 || uniqueUrls.length > 0 || !!activeNote;
+  const hasContext =
+    uniqueNotes.length > 0 ||
+    uniqueUrls.length > 0 ||
+    selectedTextContexts.length > 0 ||
+    !!activeNote;
 
   return (
     <div className="tw-flex tw-w-full tw-items-center tw-gap-1">
@@ -118,6 +157,13 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
         ))}
         {uniqueUrls.map((url) => (
           <ContextUrl key={url} url={url} onRemoveUrl={onRemoveUrl} />
+        ))}
+        {selectedTextContexts.map((selectedText) => (
+          <ContextSelection
+            key={selectedText.id}
+            selectedText={selectedText}
+            onRemoveSelectedText={onRemoveSelectedText || (() => {})}
+          />
         ))}
       </div>
     </div>

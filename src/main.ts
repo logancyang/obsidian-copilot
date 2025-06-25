@@ -23,7 +23,7 @@ import {
   setSettings,
   subscribeToSettingsChange,
 } from "@/settings/model";
-import SharedState from "@/sharedState";
+import SharedState, { SelectedTextContext } from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import {
   Editor,
@@ -51,6 +51,8 @@ export default class CopilotPlugin extends Plugin {
   customCommandRegister: CustomCommandRegister;
   settingsUnsubscriber?: () => void;
   private autocompleteService: AutocompleteService;
+  selectedTextContexts: SelectedTextContext[] = [];
+  private selectedTextContextsCallbacks: Set<() => void> = new Set();
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -404,5 +406,31 @@ export default class CopilotPlugin extends Plugin {
       content: doc.pageContent,
       metadata: doc.metadata,
     }));
+  }
+
+  addSelectedTextContext(context: SelectedTextContext): void {
+    this.selectedTextContexts.push(context);
+    this.notifySelectedTextContextsChange();
+  }
+
+  removeSelectedTextContext(id: string): void {
+    this.selectedTextContexts = this.selectedTextContexts.filter((context) => context.id !== id);
+    this.notifySelectedTextContextsChange();
+  }
+
+  clearSelectedTextContexts(): void {
+    this.selectedTextContexts = [];
+    this.notifySelectedTextContextsChange();
+  }
+
+  subscribeToSelectedTextContextsChange(callback: () => void): () => void {
+    this.selectedTextContextsCallbacks.add(callback);
+    return () => {
+      this.selectedTextContextsCallbacks.delete(callback);
+    };
+  }
+
+  private notifySelectedTextContextsChange(): void {
+    this.selectedTextContextsCallbacks.forEach((callback) => callback());
   }
 }

@@ -2,6 +2,7 @@ import { ChainType } from "@/chainFactory";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { TFile, Vault } from "obsidian";
 import { NOTE_CONTEXT_PROMPT_TAG } from "./constants";
+import { SelectedTextContext } from "./sharedState";
 
 export class ContextProcessor {
   private static instance: ContextProcessor;
@@ -167,5 +168,24 @@ export class ContextProcessor {
         hasEmbeddedPDFs,
       }),
     ]);
+  }
+
+  processSelectedTextContexts(selectedTextContexts: SelectedTextContext[]): string {
+    if (!selectedTextContexts || selectedTextContexts.length === 0) {
+      return "";
+    }
+
+    let additionalContext = "";
+
+    for (const selectedText of selectedTextContexts) {
+      const lineRange =
+        selectedText.startLine === selectedText.endLine
+          ? `L${selectedText.startLine}`
+          : `L${selectedText.startLine}-${selectedText.endLine}`;
+
+      additionalContext += `\n\n <selected_text> \n Title: [[${selectedText.noteTitle}]]\nPath: ${selectedText.notePath}\nLines: ${lineRange}\n\n${selectedText.content}\n</selected_text>`;
+    }
+
+    return additionalContext;
   }
 }
