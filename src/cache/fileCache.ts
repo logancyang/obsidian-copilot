@@ -54,32 +54,30 @@ export class FileCache<T> {
         logInfo("File cache hit:", cacheKey);
         const cacheContent = await app.vault.adapter.read(cachePath);
 
-        // Since we're using .md extension, content is primarily string-based
-        // Only attempt JSON parsing if content was originally serialized as JSON
+        // .md files contain either plain string content or JSON-serialized content
         let parsedContent: T;
 
-        // Check if content starts with JSON markers (object/array)
+        // Try to parse as JSON first (for non-string types that were serialized)
         const trimmedContent = cacheContent.trim();
         if (
           (trimmedContent.startsWith("{") && trimmedContent.endsWith("}")) ||
           (trimmedContent.startsWith("[") && trimmedContent.endsWith("]"))
         ) {
           try {
-            // Only parse as JSON if it looks like serialized JSON
             parsedContent = JSON.parse(cacheContent);
           } catch {
-            // If JSON parsing fails, treat as string content
+            // JSON parsing failed, treat as string content
             parsedContent = cacheContent as T;
           }
         } else {
-          // For non-JSON-like content, treat as string
+          // Plain text content (primary case for markdown)
           parsedContent = cacheContent as T;
         }
 
-        // Create cache entry for memory storage with proper timestamp handling
+        // Create cache entry for memory storage (file-based cache doesn't preserve timestamps)
         const cacheEntry: FileCacheEntry<T> = {
           content: parsedContent,
-          timestamp: Date.now(), // Note: file-based cache doesn't preserve original timestamp
+          timestamp: Date.now(),
         };
 
         // Store in memory cache
