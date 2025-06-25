@@ -23,7 +23,12 @@ import { createRoot, Root } from "react-dom/client";
 
 interface ModelEditModalContentProps {
   model: CustomModel;
-  onUpdate: (originalModel: CustomModel, updatedModel: CustomModel) => void;
+  isEmbeddingModel: boolean;
+  onUpdate: (
+    isEmbeddingModel: boolean,
+    originalModel: CustomModel,
+    updatedModel: CustomModel
+  ) => void;
   onCancel: () => void;
 }
 
@@ -31,6 +36,7 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
   model,
   onUpdate,
   onCancel,
+  isEmbeddingModel,
 }) => {
   const [localModel, setLocalModel] = useState<CustomModel>(model);
   const [originalModel, setOriginalModel] = useState<CustomModel>(model);
@@ -53,9 +59,9 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
   const debouncedOnUpdate = useMemo(
     () =>
       debounce((currentOriginalModel: CustomModel, updatedModel: CustomModel) => {
-        onUpdate(currentOriginalModel, updatedModel);
+        onUpdate(isEmbeddingModel, currentOriginalModel, updatedModel);
       }, 500),
-    [onUpdate]
+    [isEmbeddingModel, onUpdate]
   );
 
   // Function to update local state immediately
@@ -98,6 +104,10 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
   })) as Array<{ id: ModelCapability; label: string; description: string }>;
 
   const displayApiKey = localModel.apiKey || getDefaultApiKey(localModel.provider as Provider);
+  const showOtherParameters =
+    !isEmbeddingModel &&
+    localModel.provider !== "copilot-plus" &&
+    localModel.provider !== "copilot-plus-jina";
 
   return (
     <div className="tw-space-y-3 tw-p-4">
@@ -179,180 +189,187 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
           )}
         </FormField>
 
-        <FormField
-          label={
-            <div className="tw-flex tw-items-center tw-gap-1.5">
-              <span className="tw-leading-none">Model Capabilities</span>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="tw-size-4" />
-                  </TooltipTrigger>
-                  <TooltipContent align="start" className="tw-max-w-96" side="bottom">
-                    <div className="tw-text-sm tw-text-muted">
-                      Only used to display model capabilities, does not affect model functionality
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          }
-        >
-          <div className="tw-flex tw-items-center tw-gap-4">
-            {capabilityOptions.map(({ id, label, description }) => (
-              <div key={id} className="tw-flex tw-items-center tw-gap-2">
-                <Checkbox
-                  id={id}
-                  checked={localModel.capabilities?.includes(id)}
-                  onCheckedChange={(checked) => {
-                    const newCapabilities = localModel.capabilities || [];
-                    const value = checked
-                      ? [...newCapabilities, id]
-                      : newCapabilities.filter((cap) => cap !== id);
-                    handleLocalUpdate("capabilities", value);
-                  }}
-                />
-                <Label htmlFor={id} className="tw-text-sm">
+        {showOtherParameters && (
+          <>
+            <FormField
+              label={
+                <div className="tw-flex tw-items-center tw-gap-1.5">
+                  <span className="tw-leading-none">Model Capabilities</span>
                   <TooltipProvider delayDuration={0}>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span>{label}</span>
+                        <HelpCircle className="tw-size-4" />
                       </TooltipTrigger>
-                      <TooltipContent side="bottom">{description}</TooltipContent>
+                      <TooltipContent align="start" className="tw-max-w-96" side="bottom">
+                        <div className="tw-text-sm tw-text-muted">
+                          Only used to display model capabilities, does not affect model
+                          functionality
+                        </div>
+                      </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
-                </Label>
+                </div>
+              }
+            >
+              <div className="tw-flex tw-items-center tw-gap-4">
+                {capabilityOptions.map(({ id, label, description }) => (
+                  <div key={id} className="tw-flex tw-items-center tw-gap-2">
+                    <Checkbox
+                      id={id}
+                      checked={localModel.capabilities?.includes(id)}
+                      onCheckedChange={(checked) => {
+                        const newCapabilities = localModel.capabilities || [];
+                        const value = checked
+                          ? [...newCapabilities, id]
+                          : newCapabilities.filter((cap) => cap !== id);
+                        handleLocalUpdate("capabilities", value);
+                      }}
+                    />
+                    <Label htmlFor={id} className="tw-text-sm">
+                      <TooltipProvider delayDuration={0}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span>{label}</span>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom">{description}</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </Label>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </FormField>
+            </FormField>
 
-        <FormField
-          label={
-            <div className="tw-flex tw-items-center tw-gap-2">
-              Token limit
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="tw-size-4 tw-text-muted" />
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    <div className="tw-w-[300px]">
-                      <p>
-                        The maximum number of <em>output tokens</em> to generate. Default is 1000.
-                      </p>
-                      <em>
-                        This number plus the length of your prompt (input tokens) must be smaller
-                        than the context window of the model.
-                      </em>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          }
-        >
-          <SettingSlider
-            value={localModel.maxTokens ?? settings.maxTokens ?? 1000}
-            onChange={(value) => handleLocalUpdate("maxTokens", value)}
-            min={0}
-            max={65000}
-            step={100}
-          />
-        </FormField>
+            <FormField
+              label={
+                <div className="tw-flex tw-items-center tw-gap-2">
+                  Token limit
+                  <TooltipProvider delayDuration={0}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="tw-size-4 tw-text-muted" />
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        <div className="tw-w-[300px]">
+                          <p>
+                            The maximum number of <em>output tokens</em> to generate. Default is
+                            1000.
+                          </p>
+                          <em>
+                            This number plus the length of your prompt (input tokens) must be
+                            smaller than the context window of the model.
+                          </em>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              }
+            >
+              <SettingSlider
+                value={localModel.maxTokens ?? settings.maxTokens ?? 1000}
+                onChange={(value) => handleLocalUpdate("maxTokens", value)}
+                min={0}
+                max={65000}
+                step={100}
+              />
+            </FormField>
 
-        <FormField
-          label={
-            <div className="tw-flex tw-items-center tw-gap-2">
-              Temperature
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="tw-size-4 tw-text-muted" />
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    <div className="tw-max-w-[300px]">
-                      Higher values make the model more creative and unpredictable, while lower
-                      values make it more deterministic and precise.
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          }
-        >
-          <SettingSlider
-            value={localModel.temperature ?? settings.temperature ?? 1}
-            onChange={(value) => handleLocalUpdate("temperature", value)}
-            max={2}
-            min={0}
-            step={0.05}
-          />
-        </FormField>
+            <FormField
+              label={
+                <div className="tw-flex tw-items-center tw-gap-2">
+                  Temperature
+                  <TooltipProvider delayDuration={0}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="tw-size-4 tw-text-muted" />
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        <div className="tw-max-w-[300px]">
+                          Higher values make the model more creative and unpredictable, while lower
+                          values make it more deterministic and precise.
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              }
+            >
+              <SettingSlider
+                value={localModel.temperature ?? settings.temperature ?? 1}
+                onChange={(value) => handleLocalUpdate("temperature", value)}
+                max={2}
+                min={0}
+                step={0.05}
+              />
+            </FormField>
 
-        <FormField
-          label={
-            <div className="tw-flex tw-items-center tw-gap-2">
-              Top-P
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="tw-size-4 tw-text-muted" />
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    <div className="tw-w-[300px]">
-                      Default value is 1, the smaller the value, the less variety in the answers,
-                      the easier to understand, the larger the value, the larger the range of the
-                      Al&#39;s vocabulary, the more diverse
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          }
-        >
-          <SettingSlider
-            value={localModel.topP ?? 0.9}
-            onChange={(value) => handleLocalUpdate("topP", value)}
-            max={1}
-            min={0}
-            step={0.05}
-          />
-        </FormField>
+            <FormField
+              label={
+                <div className="tw-flex tw-items-center tw-gap-2">
+                  Top-P
+                  <TooltipProvider delayDuration={0}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="tw-size-4 tw-text-muted" />
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        <div className="tw-w-[300px]">
+                          Default value is 0.9, the smaller the value, the less variety in the
+                          answers, the easier to understand, the larger the value, the larger the
+                          range of the Al&#39;s vocabulary, the more diverse
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              }
+            >
+              <SettingSlider
+                value={localModel.topP ?? 0.9}
+                onChange={(value) => handleLocalUpdate("topP", value)}
+                max={1}
+                min={0}
+                step={0.05}
+              />
+            </FormField>
 
-        <FormField
-          label={
-            <div className="tw-flex tw-items-center tw-gap-2">
-              Frequency Penalty
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="tw-size-4 tw-text-muted" />
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    <div className="tw-w-[300px]">
-                      <p>
-                        The frequency penalty parameter tells the model not to repeat a word that
-                        has already been used multiple times in the conversation.
-                      </p>
-                      <em>
-                        The higher the value, the more the model is penalized for repeating words.
-                      </em>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          }
-        >
-          <SettingSlider
-            value={localModel.frequencyPenalty ?? 0}
-            onChange={(value) => handleLocalUpdate("frequencyPenalty", value)}
-            max={2}
-            min={0}
-            step={0.05}
-          />
-        </FormField>
+            <FormField
+              label={
+                <div className="tw-flex tw-items-center tw-gap-2">
+                  Frequency Penalty
+                  <TooltipProvider delayDuration={0}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="tw-size-4 tw-text-muted" />
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        <div className="tw-w-[300px]">
+                          <p>
+                            The frequency penalty parameter tells the model not to repeat a word
+                            that has already been used multiple times in the conversation.
+                          </p>
+                          <em>
+                            The higher the value, the more the model is penalized for repeating
+                            words.
+                          </em>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              }
+            >
+              <SettingSlider
+                value={localModel.frequencyPenalty ?? 0}
+                onChange={(value) => handleLocalUpdate("frequencyPenalty", value)}
+                max={2}
+                min={0}
+                step={0.05}
+              />
+            </FormField>
+          </>
+        )}
       </div>
     </div>
   );
@@ -364,7 +381,12 @@ export class ModelEditModal extends Modal {
   constructor(
     app: App,
     private model: CustomModel,
-    private onUpdate: (originalModel: CustomModel, updatedModel: CustomModel) => void
+    private isEmbeddingModel: boolean,
+    private onUpdate: (
+      isEmbeddingModel: boolean,
+      originalModel: CustomModel,
+      updatedModel: CustomModel
+    ) => void
   ) {
     super(app);
   }
@@ -373,8 +395,12 @@ export class ModelEditModal extends Modal {
     const { contentEl } = this;
     this.root = createRoot(contentEl);
 
-    const handleUpdate = (originalModel: CustomModel, updatedModel: CustomModel) => {
-      this.onUpdate(originalModel, updatedModel);
+    const handleUpdate = (
+      isEmbeddingModel: boolean,
+      originalModel: CustomModel,
+      updatedModel: CustomModel
+    ) => {
+      this.onUpdate(isEmbeddingModel, originalModel, updatedModel);
     };
 
     const handleCancel = () => {
@@ -382,7 +408,12 @@ export class ModelEditModal extends Modal {
     };
 
     this.root.render(
-      <ModelEditModalContent model={this.model} onUpdate={handleUpdate} onCancel={handleCancel} />
+      <ModelEditModalContent
+        model={this.model}
+        isEmbeddingModel={this.isEmbeddingModel}
+        onUpdate={handleUpdate}
+        onCancel={handleCancel}
+      />
     );
   }
 

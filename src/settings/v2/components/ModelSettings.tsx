@@ -4,7 +4,7 @@ import { BUILTIN_CHAT_MODELS, BUILTIN_EMBEDDING_MODELS } from "@/constants";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
 import ProjectManager from "@/LLMProviders/projectManager";
 import { logError } from "@/logger";
-import { setSettings, updateSetting, useSettingsValue } from "@/settings/model";
+import { CopilotSettings, setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import { ModelAddDialog } from "@/settings/v2/components/ModelAddDialog";
 import { ModelEditModal } from "@/settings/v2/components/ModelEditDialog";
 import { ModelTable } from "@/settings/v2/components/ModelTable";
@@ -32,11 +32,18 @@ export const ModelSettings: React.FC = () => {
       name: `${model.name} (copy)`,
     };
 
-    const settingField = isEmbeddingModel ? "activeEmbeddingModels" : "activeModels";
+    const settingField: keyof CopilotSettings = isEmbeddingModel
+      ? "activeEmbeddingModels"
+      : "activeModels";
 
-    setSettings({
-      [settingField]: [...settings[settingField], newModel],
-    });
+    updateSetting(settingField, [...settings[settingField], newModel]);
+  };
+
+  const handleModelReorder = (newModels: CustomModel[], isEmbeddingModel: boolean = false) => {
+    const settingField: keyof CopilotSettings = isEmbeddingModel
+      ? "activeEmbeddingModels"
+      : "activeModels";
+    updateSetting(settingField, newModels);
   };
 
   const onDeleteModel = (modelKey: string) => {
@@ -59,14 +66,22 @@ export const ModelSettings: React.FC = () => {
     });
   };
 
-  const handleModelUpdate = (originalModel: CustomModel, updatedModel: CustomModel) => {
-    const modelIndex = settings.activeModels.findIndex(
+  const handleModelUpdate = (
+    isEmbeddingModel: boolean,
+    originalModel: CustomModel,
+    updatedModel: CustomModel
+  ) => {
+    const settingField: keyof CopilotSettings = isEmbeddingModel
+      ? "activeEmbeddingModels"
+      : "activeModels";
+
+    const modelIndex = settings[settingField].findIndex(
       (m) => m.name === originalModel.name && m.provider === originalModel.provider
     );
     if (modelIndex !== -1) {
-      const updatedModels = [...settings.activeModels];
+      const updatedModels = [...settings[settingField]];
       updatedModels[modelIndex] = updatedModel;
-      updateSetting("activeModels", updatedModels);
+      updateSetting(settingField, updatedModels);
     } else {
       new Notice("Could not find model to update");
       logError("Could not find model to update:", originalModel);
@@ -79,10 +94,6 @@ export const ModelSettings: React.FC = () => {
       m.name === updatedModel.name && m.provider === updatedModel.provider ? updatedModel : m
     );
     updateSetting("activeModels", updatedModels);
-  };
-
-  const handleModelReorder = (newModels: CustomModel[]) => {
-    updateSetting("activeModels", newModels);
   };
 
   const onDeleteEmbeddingModel = (modelKey: string) => {
@@ -98,10 +109,6 @@ export const ModelSettings: React.FC = () => {
       m.name === updatedModel.name && m.provider === updatedModel.provider ? updatedModel : m
     );
     updateSetting("activeEmbeddingModels", updatedModels);
-  };
-
-  const handleEmbeddingModelReorder = (newModels: CustomModel[]) => {
-    updateSetting("activeEmbeddingModels", newModels);
   };
 
   const handleRefreshChatModels = () => {
@@ -128,8 +135,8 @@ export const ModelSettings: React.FC = () => {
     new Notice("Embedding models refreshed successfully");
   };
 
-  const handleEditModel = (model: CustomModel) => {
-    const modal = new ModelEditModal(app, model, handleModelUpdate);
+  const handleEditModel = (model: CustomModel, isEmbeddingModel: boolean = false) => {
+    const modal = new ModelEditModal(app, model, isEmbeddingModel, handleModelUpdate);
     modal.open();
   };
 
@@ -139,12 +146,12 @@ export const ModelSettings: React.FC = () => {
         <div className="tw-mb-3 tw-text-xl tw-font-bold">Chat Models</div>
         <ModelTable
           models={settings.activeModels}
-          onEdit={handleEditModel}
+          onEdit={(model) => handleEditModel(model)}
           onCopy={(model) => onCopyModel(model)}
           onDelete={onDeleteModel}
           onAdd={() => setShowAddDialog(true)}
           onUpdateModel={handleTableUpdate}
-          onReorderModels={handleModelReorder}
+          onReorderModels={(newModels) => handleModelReorder(newModels)}
           onRefresh={handleRefreshChatModels}
           title="Chat Model"
         />
@@ -180,11 +187,12 @@ export const ModelSettings: React.FC = () => {
         <div className="tw-mb-3 tw-text-xl tw-font-bold">Embedding Models</div>
         <ModelTable
           models={settings.activeEmbeddingModels}
+          onEdit={(model) => handleEditModel(model, true)}
           onDelete={onDeleteEmbeddingModel}
           onCopy={(model) => onCopyModel(model, true)}
           onAdd={() => setShowAddEmbeddingDialog(true)}
           onUpdateModel={handleEmbeddingModelUpdate}
-          onReorderModels={handleEmbeddingModelReorder}
+          onReorderModels={(newModels) => handleModelReorder(newModels, true)}
           onRefresh={handleRefreshEmbeddingModels}
           title="Embedding Model"
         />
