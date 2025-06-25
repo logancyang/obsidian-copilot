@@ -40,6 +40,15 @@ export class FileCache<T> {
     return `${this.cacheDir}/${cacheKey}.md`;
   }
 
+  private safeParseJSON(str: string): { success: boolean; data: any } {
+    try {
+      const parsed = JSON.parse(str);
+      return { success: true, data: parsed };
+    } catch {
+      return { success: false, data: null };
+    }
+  }
+
   async get(cacheKey: string): Promise<T | null> {
     try {
       // Check memory cache first
@@ -54,30 +63,54 @@ export class FileCache<T> {
         logInfo("File cache hit:", cacheKey);
         const cacheContent = await app.vault.adapter.read(cachePath);
 
-        // .md files contain either plain string content or JSON-serialized content
-        let parsedContent: T;
-
-        // Try to parse as JSON first (for non-string types that were serialized)
-        const trimmedContent = cacheContent.trim();
-        if (
-          (trimmedContent.startsWith("{") && trimmedContent.endsWith("}")) ||
-          (trimmedContent.startsWith("[") && trimmedContent.endsWith("]"))
-        ) {
-          try {
-            parsedContent = JSON.parse(cacheContent);
-          } catch {
-            // JSON parsing failed, treat as string content
-            parsedContent = cacheContent as T;
-          }
-        } else {
-          // Plain text content (primary case for markdown)
-          parsedContent = cacheContent as T;
+        // Parse the markdown file format: <!-- CACHE_META:timestamp:contentType --> followed by content
+        const lines = cacheContent.split("\n");
+        if (lines.length === 0) {
+          logError("Empty cache file, removing:", cacheKey);
+          await this.remove(cacheKey);
+          return null;
         }
 
-        // Create cache entry for memory storage (file-based cache doesn't preserve timestamps)
+        let timestamp = Date.now(); // fallback timestamp
+        let contentType = "string"; // default content type
+        let contentStartIndex = 0;
+
+        // Check for metadata header
+        const firstLine = lines[0];
+        const metaMatch = firstLine.match(/^<!-- CACHE_META:(\d+):(string|json) -->$/);
+        if (metaMatch) {
+          timestamp = parseInt(metaMatch[1], 10);
+          contentType = metaMatch[2];
+          contentStartIndex = 1;
+        }
+        // NOTE: Legacy cache files (without metadata header) will use fallback values
+        // but won't be automatically migrated to the new format. They will be
+        // naturally replaced when the cache entries are updated.
+
+        // Extract content (everything after the metadata line)
+        const contentLines = lines.slice(contentStartIndex);
+        const rawContent = contentLines.join("\n");
+
+        let parsedContent: T;
+
+        if (contentType === "json") {
+          // Content was stored as JSON
+          const parseResult = this.safeParseJSON(rawContent);
+          if (!parseResult.success) {
+            logError("Failed to parse JSON content from cache file, removing:", cacheKey);
+            await this.remove(cacheKey);
+            return null;
+          }
+          parsedContent = parseResult.data as T;
+        } else {
+          // Content is stored as plain text
+          parsedContent = rawContent as T;
+        }
+
+        // Create cache entry with preserved timestamp
         const cacheEntry: FileCacheEntry<T> = {
           content: parsedContent,
-          timestamp: Date.now(),
+          timestamp: timestamp,
         };
 
         // Store in memory cache
@@ -99,25 +132,33 @@ export class FileCache<T> {
       await this.ensureCacheDir();
       const cachePath = this.getCachePath(cacheKey);
 
+      const timestamp = Date.now();
       const cacheEntry: FileCacheEntry<T> = {
         content,
-        timestamp: Date.now(),
+        timestamp,
       };
 
       // Store in memory cache
       this.memoryCache.set(cacheKey, cacheEntry);
 
-      // Serialize content properly for file storage
+      // Determine content type and serialize appropriately
       let serializedContent: string;
+      let contentType: string;
+
       if (typeof content === "string") {
-        // If content is already a string, use it directly
+        // String content stored directly
         serializedContent = content;
+        contentType = "string";
       } else {
-        // For non-string content, serialize as JSON
+        // Non-string content serialized as JSON
         serializedContent = JSON.stringify(content, null, 2);
+        contentType = "json";
       }
 
-      await app.vault.adapter.write(cachePath, serializedContent);
+      // Create markdown file with metadata header
+      const fileContent = `<!-- CACHE_META:${timestamp}:${contentType} -->\n${serializedContent}`;
+
+      await app.vault.adapter.write(cachePath, fileContent);
       logInfo("Cached file content:", cacheKey);
     } catch (error) {
       logError("Error writing to file cache:", error);
