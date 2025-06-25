@@ -229,18 +229,34 @@ export class Docs4LLMParser implements FileParser {
         throw new Error("Empty response from docs4llm API");
       }
 
-      // Ensure response is a string
+      // Extract markdown content from response
       let content = "";
       if (typeof docs4llmResponse.response === "string") {
         content = docs4llmResponse.response;
+      } else if (Array.isArray(docs4llmResponse.response)) {
+        // Handle array of documents from docs4llm
+        const markdownParts: string[] = [];
+        for (const doc of docs4llmResponse.response) {
+          if (doc.content) {
+            // Prioritize markdown content, then fallback to text content
+            if (doc.content.md) {
+              markdownParts.push(doc.content.md);
+            } else if (doc.content.text) {
+              markdownParts.push(doc.content.text);
+            }
+          }
+        }
+        content = markdownParts.join("\n\n");
       } else if (typeof docs4llmResponse.response === "object") {
-        // If response is an object, try to get the text content
-        if (docs4llmResponse.response.text) {
+        // Handle single object response (backward compatibility)
+        if (docs4llmResponse.response.md) {
+          content = docs4llmResponse.response.md;
+        } else if (docs4llmResponse.response.text) {
           content = docs4llmResponse.response.text;
         } else if (docs4llmResponse.response.content) {
           content = docs4llmResponse.response.content;
         } else {
-          // If no text/content field, stringify the entire response
+          // If no markdown/text/content field, stringify the entire response
           content = JSON.stringify(docs4llmResponse.response, null, 2);
         }
       } else {

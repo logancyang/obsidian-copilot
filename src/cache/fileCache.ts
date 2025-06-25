@@ -37,7 +37,7 @@ export class FileCache<T> {
   }
 
   private getCachePath(cacheKey: string): string {
-    return `${this.cacheDir}/${cacheKey}.json`;
+    return `${this.cacheDir}/${cacheKey}.md`;
   }
 
   async get(cacheKey: string): Promise<T | null> {
@@ -53,7 +53,34 @@ export class FileCache<T> {
       if (await app.vault.adapter.exists(cachePath)) {
         logInfo("File cache hit:", cacheKey);
         const cacheContent = await app.vault.adapter.read(cachePath);
-        const cacheEntry = JSON.parse(cacheContent) as FileCacheEntry<T>;
+
+        // .md files contain either plain string content or JSON-serialized content
+        // The safest approach is to go back to a simpler method that doesn't try to embed metadata in the content itself.
+        // Since preserving timestamps in file-based cache is not critical (memory cache handles active sessions)
+        let parsedContent: T;
+
+        // Try to parse as JSON first (for non-string types that were serialized)
+        const trimmedContent = cacheContent.trim();
+        if (
+          (trimmedContent.startsWith("{") && trimmedContent.endsWith("}")) ||
+          (trimmedContent.startsWith("[") && trimmedContent.endsWith("]"))
+        ) {
+          try {
+            parsedContent = JSON.parse(cacheContent);
+          } catch {
+            // JSON parsing failed, treat as string content
+            parsedContent = cacheContent as T;
+          }
+        } else {
+          // Plain text content (primary case for markdown)
+          parsedContent = cacheContent as T;
+        }
+
+        // Create cache entry for memory storage (file-based cache doesn't preserve timestamps)
+        const cacheEntry: FileCacheEntry<T> = {
+          content: parsedContent,
+          timestamp: Date.now(),
+        };
 
         // Store in memory cache
         this.memoryCache.set(cacheKey, cacheEntry);
@@ -74,16 +101,26 @@ export class FileCache<T> {
       await this.ensureCacheDir();
       const cachePath = this.getCachePath(cacheKey);
 
+      const timestamp = Date.now();
       const cacheEntry: FileCacheEntry<T> = {
         content,
-        timestamp: Date.now(),
+        timestamp,
       };
 
       // Store in memory cache
       this.memoryCache.set(cacheKey, cacheEntry);
 
-      // Store in file cache
-      await app.vault.adapter.write(cachePath, JSON.stringify(cacheEntry));
+      // Serialize content properly for file storage
+      let serializedContent: string;
+      if (typeof content === "string") {
+        // If content is already a string, use it directly
+        serializedContent = content;
+      } else {
+        // For non-string content, serialize as JSON
+        serializedContent = JSON.stringify(content, null, 2);
+      }
+
+      await app.vault.adapter.write(cachePath, serializedContent);
       logInfo("Cached file content:", cacheKey);
     } catch (error) {
       logError("Error writing to file cache:", error);
@@ -95,7 +132,7 @@ export class FileCache<T> {
       // Remove from memory cache
       this.memoryCache.delete(cacheKey);
 
-      // Remove from file cache
+      // Remove from file cache (markdown format)
       const cachePath = this.getCachePath(cacheKey);
       if (await app.vault.adapter.exists(cachePath)) {
         await app.vault.adapter.remove(cachePath);
