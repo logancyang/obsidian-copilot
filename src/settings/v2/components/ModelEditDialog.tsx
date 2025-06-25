@@ -253,7 +253,7 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
                         <div className="tw-w-[300px]">
                           <p>
                             The maximum number of <em>output tokens</em> to generate. Default is
-                            1000.
+                            6000.
                           </p>
                           <em>
                             This number plus the length of your prompt (input tokens) must be
@@ -267,7 +267,7 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
               }
             >
               <SettingSlider
-                value={localModel.maxTokens ?? settings.maxTokens ?? 1000}
+                value={localModel.maxTokens ?? settings.maxTokens ?? 6000}
                 onChange={(value) => handleLocalUpdate("maxTokens", value)}
                 min={0}
                 max={65000}
@@ -286,8 +286,8 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
                       </TooltipTrigger>
                       <TooltipContent side="bottom">
                         <div className="tw-max-w-[300px]">
-                          Higher values make the model more creative and unpredictable, while lower
-                          values make it more deterministic and precise.
+                          Default is 0.1. Higher values will result in more creativeness, but also
+                          more mistakes. Set to 0 for no randomness.
                         </div>
                       </TooltipContent>
                     </Tooltip>
@@ -296,7 +296,7 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
               }
             >
               <SettingSlider
-                value={localModel.temperature ?? settings.temperature ?? 1}
+                value={localModel.temperature ?? settings.temperature ?? 0.1}
                 onChange={(value) => handleLocalUpdate("temperature", value)}
                 max={2}
                 min={0}
