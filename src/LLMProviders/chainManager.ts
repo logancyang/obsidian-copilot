@@ -14,7 +14,7 @@ import {
   ProjectChainRunner,
   VaultQAChainRunner,
   SequentialThinkingChainRunner,
-} from "@/LLMProviders/chainRunner";
+} from "@/LLMProviders/chainRunner/index";
 import { logError, logInfo } from "@/logger";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import VectorStoreManager from "@/search/vectorStoreManager";
