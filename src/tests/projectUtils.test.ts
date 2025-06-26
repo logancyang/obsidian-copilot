@@ -12,7 +12,7 @@ describe("projectUtils", () => {
       projectModelKey: "gpt-3.5-turbo",
       modelConfigs: {
         temperature: 0.7,
-        maxTokens: 1000,
+        maxTokens: 6000,
       },
       contextSource: {
         inclusions: "src/**/*.tsx",

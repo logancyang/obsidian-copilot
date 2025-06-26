@@ -42,7 +42,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
       projectModelKey: "",
       modelConfigs: {
         temperature: 1.0,
-        maxTokens: 1000,
+        maxTokens: 6000,
       },
       contextSource: {
         inclusions: "",
@@ -241,7 +241,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
             </FormField>
             <FormField label="Token Limit">
               <SettingSlider
-                value={formData.modelConfigs?.maxTokens ?? 1000}
+                value={formData.modelConfigs?.maxTokens ?? 6000}
                 onChange={(value) => handleInputChange("modelConfigs.maxTokens", value)}
                 min={1}
                 max={65000}
