@@ -58,7 +58,6 @@ interface ChatInputProps {
     toolCalls?: string[];
     urls?: string[];
     contextNotes?: TFile[];
-    selectedTextContexts?: SelectedTextContext[];
   }) => void;
   isGenerating: boolean;
   onStopGenerating: () => void;
@@ -174,7 +173,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         toolCalls: includeVault ? ["@vault"] : [],
         contextNotes,
         urls: contextUrls,
-        selectedTextContexts,
       });
     };
 

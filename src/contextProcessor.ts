@@ -1,8 +1,8 @@
+import { getSelectedTextContexts } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { TFile, Vault } from "obsidian";
 import { NOTE_CONTEXT_PROMPT_TAG } from "./constants";
-import { SelectedTextContext } from "./sharedState";
 
 export class ContextProcessor {
   private static instance: ContextProcessor;
@@ -170,7 +170,9 @@ export class ContextProcessor {
     ]);
   }
 
-  processSelectedTextContexts(selectedTextContexts: SelectedTextContext[]): string {
+  processSelectedTextContexts(): string {
+    const selectedTextContexts = getSelectedTextContexts();
+
     if (!selectedTextContexts || selectedTextContexts.length === 0) {
       return "";
     }

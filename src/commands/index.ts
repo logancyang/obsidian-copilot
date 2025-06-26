@@ -1,4 +1,4 @@
-import { getChainType } from "@/aiParams";
+import { addSelectedTextContext, getChainType } from "@/aiParams";
 import { FileCache } from "@/cache/fileCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { ChainType } from "@/chainFactory";
@@ -334,19 +334,10 @@ export function registerCommands(
       endLine: Math.max(startLine, endLine),
     };
 
-    // Add to plugin's selected text contexts
-    plugin.addSelectedTextContext(selectedTextContext);
+    // Add to selected text contexts atom
+    addSelectedTextContext(selectedTextContext);
 
     // Open chat window to show the context was added
     plugin.activateView();
-
-    const lineRange =
-      selectedTextContext.startLine === selectedTextContext.endLine
-        ? `L${selectedTextContext.startLine}`
-        : `L${selectedTextContext.startLine}-${selectedTextContext.endLine}`;
-
-    new Notice(
-      `Added selection from ${selectedTextContext.noteTitle} (${lineRange}) to chat context`
-    );
   });
 }
