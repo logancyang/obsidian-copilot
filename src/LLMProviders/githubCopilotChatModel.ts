@@ -81,28 +81,3 @@ export class CopilotChatModel extends BaseChatModel {
     return Math.ceil(text.length / 4);
   }
 }
-
-export class ChatGitHubCopilot {
-  private provider: GitHubCopilotProvider;
-  constructor(config: any) {
-    this.provider = new GitHubCopilotProvider();
-  }
-  async send(messages: { role: string; content: string }[], model = "gpt-4") {
-    return this.provider.sendChatMessage(messages, model);
-  }
-  getAuthState() {
-    return this.provider.getAuthState();
-  }
-  async startAuth() {
-    return this.provider.startDeviceCodeFlow();
-  }
-  async pollForAccessToken() {
-    return this.provider.pollForAccessToken();
-  }
-  async fetchCopilotToken() {
-    return this.provider.fetchCopilotToken();
-  }
-  resetAuth() {
-    this.provider.resetAuth();
-  }
-}

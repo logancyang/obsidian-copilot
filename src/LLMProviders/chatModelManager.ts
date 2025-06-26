@@ -22,13 +22,13 @@ import { ChatOpenAI } from "@langchain/openai";
 import { ChatXAI } from "@langchain/xai";
 import { Notice } from "obsidian";
 import { GitHubCopilotProvider } from "./githubCopilotProvider";
-import { ChatGitHubCopilot, CopilotChatModel } from "./githubCopilotChatModel";
+import { CopilotChatModel } from "./githubCopilotChatModel";
 
 type ChatConstructorType = {
   new (config: any): any;
 };
 
-const CHAT_PROVIDER_CONSTRUCTORS = {
+const CHAT_PROVIDER_CONSTRUCTORS: Partial<Record<ChatModelProviders, ChatConstructorType>> = {
   [ChatModelProviders.OPENAI]: ChatOpenAI,
   [ChatModelProviders.AZURE_OPENAI]: ChatOpenAI,
   [ChatModelProviders.ANTHROPIC]: ChatAnthropic,
@@ -43,10 +43,7 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.COPILOT_PLUS]: ChatOpenAI,
   [ChatModelProviders.MISTRAL]: ChatMistralAI,
   [ChatModelProviders.DEEPSEEK]: ChatDeepSeek,
-  [ChatModelProviders.GITHUB_COPILOT]: ChatGitHubCopilot, // Register GitHub Copilot
 } as const;
-
-type ChatProviderConstructMap = typeof CHAT_PROVIDER_CONSTRUCTORS;
 
 export default class ChatModelManager {
   private static instance: ChatModelManager;
@@ -60,7 +57,7 @@ export default class ChatModelManager {
     }
   >;
 
-  private readonly providerApiKeyMap: Record<ChatModelProviders, () => string> = {
+  private readonly providerApiKeyMap: Partial<Record<ChatModelProviders, () => string>> = {
     [ChatModelProviders.OPENAI]: () => getSettings().openAIApiKey,
     [ChatModelProviders.GOOGLE]: () => getSettings().googleApiKey,
     [ChatModelProviders.AZURE_OPENAI]: () => getSettings().azureOpenAIApiKey,
@@ -75,7 +72,6 @@ export default class ChatModelManager {
     [ChatModelProviders.COPILOT_PLUS]: () => getSettings().plusLicenseKey,
     [ChatModelProviders.MISTRAL]: () => getSettings().mistralApiKey,
     [ChatModelProviders.DEEPSEEK]: () => getSettings().deepseekApiKey,
-    [ChatModelProviders.GITHUB_COPILOT]: () => "", // Placeholder for GitHub Copilot
   } as const;
 
   private constructor() {
@@ -121,9 +117,7 @@ export default class ChatModelManager {
       (baseConfig as any).temperature = customModel.temperature ?? settings.temperature;
     }
 
-    const providerConfig: {
-      [K in keyof ChatProviderConstructMap]: ConstructorParameters<ChatProviderConstructMap[K]>[0];
-    } = {
+    const providerConfig = {
       [ChatModelProviders.OPENAI]: {
         modelName: modelName,
         openAIApiKey: await getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
@@ -260,8 +254,7 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
       },
-      [ChatModelProviders.GITHUB_COPILOT]: {}, // Placeholder config for GitHub Copilot
-    };
+    } as any;
 
     const selectedProviderConfig =
       providerConfig[customModel.provider as keyof typeof providerConfig] || {};
@@ -326,7 +319,7 @@ export default class ChatModelManager {
         const constructor = this.getProviderConstructor(model);
         const getDefaultApiKey = this.providerApiKeyMap[model.provider as ChatModelProviders];
 
-        const apiKey = model.apiKey || getDefaultApiKey();
+        const apiKey = model.apiKey || (getDefaultApiKey ? getDefaultApiKey() : "");
         const modelKey = getModelKeyFromModel(model);
         modelMap[modelKey] = {
           hasApiKey: Boolean(model.apiKey || apiKey),
@@ -338,11 +331,9 @@ export default class ChatModelManager {
   }
 
   getProviderConstructor(model: CustomModel): ChatConstructorType {
-    const constructor: ChatConstructorType =
-      CHAT_PROVIDER_CONSTRUCTORS[model.provider as ChatModelProviders];
+    const constructor = CHAT_PROVIDER_CONSTRUCTORS[model.provider as ChatModelProviders];
     if (!constructor) {
-      console.warn(`Unknown provider: ${model.provider} for model: ${model.name}`);
-      throw new Error(`Unknown provider: ${model.provider} for model: ${model.name}`);
+      throw new Error(`No chat model constructor registered for provider: ${model.provider}`);
     }
     return constructor;
   }
@@ -366,11 +357,30 @@ export default class ChatModelManager {
   }
 
   async createModelInstance(model: CustomModel): Promise<BaseChatModel> {
+    // Validate model existence
+    if (!model) {
+      throw new Error("No model provided to createModelInstance.");
+    }
+
+    // Special handling for GitHub Copilot
     if (model.provider === ChatModelProviders.GITHUB_COPILOT) {
       const provider = new GitHubCopilotProvider();
       return new CopilotChatModel({ provider, modelName: model.name });
     }
 
+    // Validate model is enabled and has API key if required
+    const modelKey = getModelKeyFromModel(model);
+    const selectedModel = ChatModelManager.modelMap?.[modelKey];
+    if (!selectedModel) {
+      throw new Error(`Model '${model.name}' is not enabled or not found in the model map.`);
+    }
+    if (!selectedModel.hasApiKey) {
+      throw new Error(
+        `API key is missing for model '${model.name}'. Please check your API key settings.`
+      );
+    }
+
+    // Only now get the constructor
     const AIConstructor = this.getProviderConstructor(model);
     const config = await this.getModelConfig(model);
 
