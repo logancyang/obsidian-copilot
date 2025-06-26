@@ -19,7 +19,16 @@ import { logError, logInfo, logWarn } from "@/logger";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { getSettings, getSystemPrompt } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
+import { createGetFileTreeTool } from "@/tools/FileTreeTools";
+import { indexTool, localSearchTool, webSearchTool } from "@/tools/SearchTools";
+import {
+  getCurrentTimeTool,
+  getTimeInfoByEpochTool,
+  getTimeRangeMsTool,
+  pomodoroTool,
+} from "@/tools/TimeTools";
 import { ToolManager } from "@/tools/toolManager";
+import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools";
 import {
   err2String,
   extractChatHistory,
@@ -980,4 +989,583 @@ class ProjectChainRunner extends CopilotPlusChainRunner {
   }
 }
 
-export { CopilotPlusChainRunner, LLMChainRunner, ProjectChainRunner, VaultQAChainRunner };
+interface ToolCall {
+  name: string;
+  args: any;
+}
+
+interface ToolExecutionResult {
+  toolName: string;
+  result: string;
+  success: boolean;
+}
+
+class SequentialThinkingChainRunner extends CopilotPlusChainRunner {
+  private parseXMLToolCalls(text: string): ToolCall[] {
+    const toolCalls: ToolCall[] = [];
+
+    try {
+      const regex = /<use_tool>([\s\S]*?)<\/use_tool>/g;
+
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        const content = match[1];
+        const nameMatch = content.match(/<name>([\s\S]*?)<\/name>/);
+        const argsMatch = content.match(/<args>([\s\S]*?)<\/args>/);
+
+        if (nameMatch) {
+          const name = nameMatch[1].trim();
+
+          // Validate tool name
+          if (!name || name.length === 0) {
+            logWarn("Skipping tool call with empty name");
+            continue;
+          }
+
+          let args = {};
+
+          if (argsMatch) {
+            try {
+              const argsText = argsMatch[1].trim();
+              if (argsText) {
+                args = JSON.parse(argsText);
+              }
+            } catch (e) {
+              logError("Failed to parse tool arguments:", e);
+              // Use the raw string as args if JSON parsing fails
+              args = { raw: argsMatch[1].trim() };
+            }
+          }
+
+          toolCalls.push({ name, args });
+        }
+      }
+    } catch (error) {
+      logError("Error parsing XML tool calls:", error);
+      // Return empty array if parsing fails completely
+      return [];
+    }
+
+    return toolCalls;
+  }
+
+  private async executeSequentialToolCall(
+    toolCall: ToolCall,
+    updateCurrentAiMessage: (message: string) => void
+  ): Promise<ToolExecutionResult> {
+    const TOOL_TIMEOUT = 30000; // 30 seconds timeout per tool
+
+    try {
+      // Validate tool call
+      if (!toolCall || !toolCall.name) {
+        return {
+          toolName: toolCall?.name || "unknown",
+          result: "Error: Invalid tool call - missing tool name",
+          success: false,
+        };
+      }
+
+      // Note: Tool execution message is now handled by the calling loop
+
+      // Find the tool in the existing tool registry
+      const availableTools = this.getAvailableTools();
+      const tool = availableTools.find((t) => t.name === toolCall.name);
+
+      if (!tool) {
+        const availableToolNames = availableTools.map((t) => t.name).join(", ");
+        return {
+          toolName: toolCall.name,
+          result: `Error: Tool '${toolCall.name}' not found. Available tools: ${availableToolNames}`,
+          success: false,
+        };
+      }
+
+      // Execute the tool with timeout
+      const result = await Promise.race([
+        ToolManager.callTool(tool, toolCall.args),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`Tool execution timed out after ${TOOL_TIMEOUT}ms`)),
+            TOOL_TIMEOUT
+          )
+        ),
+      ]);
+
+      // Validate result
+      if (result === null || result === undefined) {
+        logWarn(`Tool ${toolCall.name} returned null/undefined result`);
+        return {
+          toolName: toolCall.name,
+          result: "Tool executed but returned no result",
+          success: true,
+        };
+      }
+
+      return {
+        toolName: toolCall.name,
+        result: typeof result === "string" ? result : JSON.stringify(result),
+        success: true,
+      };
+    } catch (error) {
+      logError(`Error executing tool ${toolCall.name}:`, error);
+      return {
+        toolName: toolCall.name,
+        result: `Error: ${err2String(error)}`,
+        success: false,
+      };
+    }
+  }
+
+  private getAvailableTools(): any[] {
+    // Get tools from the existing IntentAnalyzer
+    const tools: any[] = [
+      localSearchTool,
+      webSearchTool,
+      pomodoroTool,
+      simpleYoutubeTranscriptionTool,
+      getCurrentTimeTool,
+      getTimeInfoByEpochTool,
+      getTimeRangeMsTool,
+      indexTool,
+    ];
+
+    // Add file tree tool if available
+    if (this.chainManager.app?.vault) {
+      const fileTreeTool = createGetFileTreeTool(this.chainManager.app.vault.getRoot());
+      tools.push(fileTreeTool);
+    }
+
+    return tools;
+  }
+
+  private generateToolDescriptions(): string {
+    const tools = this.getAvailableTools();
+    return tools
+      .map((tool) => {
+        const schema = tool.schema || {};
+        const params = schema.properties
+          ? Object.entries(schema.properties)
+              .map(
+                ([key, val]: [string, any]) => `  - ${key}: ${val.description || "No description"}`
+              )
+              .join("\n")
+          : "";
+
+        return `- ${tool.name}: ${tool.description}${params ? "\n" + params : ""}`;
+      })
+      .join("\n\n");
+  }
+
+  private stripToolCallXML(text: string): string {
+    // Remove all <use_tool>...</use_tool> blocks
+    let cleaned = text.replace(/<use_tool>[\s\S]*?<\/use_tool>/g, "");
+
+    // Remove empty code blocks that might appear
+    cleaned = cleaned.replace(/```\w*\s*```/g, "");
+
+    // Remove tool_code blocks (both empty and with content)
+    cleaned = cleaned.replace(/```tool_code[\s\S]*?```/g, "");
+
+    // Remove any remaining empty code blocks with various languages
+    cleaned = cleaned.replace(/```[\w]*[\s\n]*```/g, "");
+
+    // Clean up excessive whitespace and trim
+    cleaned = cleaned.replace(/\n\s*\n\s*\n/g, "\n\n").trim();
+
+    return cleaned;
+  }
+
+  private logToolCall(toolCall: ToolCall, iteration: number): void {
+    const displayName = this.getToolDisplayName(toolCall.name);
+    const emoji = this.getToolEmoji(toolCall.name);
+
+    // Create clean parameter display
+    const paramDisplay =
+      Object.keys(toolCall.args).length > 0
+        ? JSON.stringify(toolCall.args, null, 2)
+        : "(no parameters)";
+
+    logInfo(`${emoji} [Iteration ${iteration}] ${displayName.toUpperCase()}`);
+    logInfo(`Parameters:`, paramDisplay);
+    logInfo("---");
+  }
+
+  private logToolResult(toolName: string, result: ToolExecutionResult): void {
+    const displayName = this.getToolDisplayName(toolName);
+    const emoji = this.getToolEmoji(toolName);
+    const status = result.success ? "✅ SUCCESS" : "❌ FAILED";
+
+    logInfo(`${emoji} ${displayName.toUpperCase()} RESULT: ${status}`);
+
+    // Log abbreviated result for readability
+    if (result.result.length > 500) {
+      logInfo(
+        `Result: ${result.result.substring(0, 500)}... (truncated, ${result.result.length} chars total)`
+      );
+    } else {
+      logInfo(`Result:`, result.result);
+    }
+    logInfo("---");
+  }
+
+  private deduplicateSources(
+    sources: { title: string; score: number }[]
+  ): { title: string; score: number }[] {
+    const uniqueSources = new Map<string, { title: string; score: number }>();
+
+    for (const source of sources) {
+      const existing = uniqueSources.get(source.title);
+      if (!existing || source.score > existing.score) {
+        uniqueSources.set(source.title, source);
+      }
+    }
+
+    return Array.from(uniqueSources.values()).sort((a, b) => b.score - a.score);
+  }
+
+  private getToolDisplayName(toolName: string): string {
+    const displayNameMap: Record<string, string> = {
+      localSearch: "vault search",
+      webSearch: "web search",
+      getFileTree: "file tree",
+      getCurrentTime: "current time",
+      pomodoroTool: "pomodoro timer",
+      simpleYoutubeTranscriptionTool: "YouTube transcription",
+      indexTool: "index",
+    };
+
+    return displayNameMap[toolName] || toolName;
+  }
+
+  private getToolEmoji(toolName: string): string {
+    const emojiMap: Record<string, string> = {
+      localSearch: "🔍",
+      webSearch: "🌐",
+      getFileTree: "📁",
+      getCurrentTime: "🕒",
+      pomodoroTool: "⏱️",
+      simpleYoutubeTranscriptionTool: "📺",
+      indexTool: "📚",
+    };
+
+    return emojiMap[toolName] || "🔧";
+  }
+
+  private buildIterationDisplay(
+    iterationHistory: string[],
+    currentIteration: number,
+    currentMessage: string
+  ): string {
+    // Simply join all history without headers or separators
+    const allParts = [...iterationHistory];
+
+    // Add current message if present
+    if (currentMessage) {
+      allParts.push(currentMessage);
+    }
+
+    // Join with simple spacing
+    return allParts.join("\n\n");
+  }
+
+  private generateSystemPrompt(): string {
+    const basePrompt = getSystemPrompt();
+    const toolDescriptions = this.generateToolDescriptions();
+
+    return `${basePrompt}
+
+# Sequential Thinking Mode
+
+You are now in sequential thinking mode. You can use tools to gather information and complete tasks step by step.
+
+When you need to use a tool, format it EXACTLY like this:
+<use_tool>
+<name>tool_name_here</name>
+<args>
+{
+  "param1": "value1",
+  "param2": "value2"
+}
+</args>
+</use_tool>
+
+## Important Tool Usage Examples:
+
+For localSearch (searching notes in the vault):
+<use_tool>
+<name>localSearch</name>
+<args>
+{
+  "query": "piano learning",
+  "salientTerms": ["piano", "learning", "practice", "music"]
+}
+</args>
+</use_tool>
+
+For webSearch:
+<use_tool>
+<name>webSearch</name>
+<args>
+{
+  "query": "piano learning techniques",
+  "chatHistory": []
+}
+</args>
+</use_tool>
+
+For getFileTree:
+<use_tool>
+<name>getFileTree</name>
+<args>
+{}
+</args>
+</use_tool>
+
+Available tools:
+${toolDescriptions}
+
+CRITICAL: For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings). Extract key terms from the query for salientTerms.
+
+You can use multiple tools in sequence. After each tool execution, you'll receive the results and can decide whether to use more tools or provide your final response.
+
+Always explain your reasoning before using tools. Be conversational and clear about what you're doing.
+When you've gathered enough information, provide your final response without any tool calls.
+
+IMPORTANT: Do not include any code blocks (\`\`\`) or tool_code blocks in your responses. Only use the <use_tool> format for tool calls.`;
+  }
+
+  async run(
+    userMessage: ChatMessage,
+    abortController: AbortController,
+    updateCurrentAiMessage: (message: string) => void,
+    addMessage: (message: ChatMessage) => void,
+    options: {
+      debug?: boolean;
+      ignoreSystemMessage?: boolean;
+      updateLoading?: (loading: boolean) => void;
+      updateLoadingMessage?: (message: string) => void;
+    }
+  ): Promise<string> {
+    let fullAIResponse = "";
+    const conversationMessages: any[] = [];
+    const iterationHistory: string[] = []; // Track all iterations for display
+    const collectedSources: { title: string; score: number }[] = []; // Collect sources from localSearch
+
+    try {
+      // Get chat history from memory
+      const memory = this.chainManager.memoryManager.getMemory();
+      const memoryVariables = await memory.loadMemoryVariables({});
+      const chatHistory = extractChatHistory(memoryVariables);
+
+      // Build initial conversation messages
+      const customSystemPrompt = this.generateSystemPrompt();
+      const chatModel = this.chainManager.chatModelManager.getChatModel();
+
+      if (customSystemPrompt) {
+        conversationMessages.push({
+          role: getMessageRole(chatModel),
+          content: customSystemPrompt,
+        });
+      }
+
+      // Add chat history
+      for (const entry of chatHistory) {
+        conversationMessages.push({ role: entry.role, content: entry.content });
+      }
+
+      // Add current user message
+      conversationMessages.push({
+        role: "user",
+        content: userMessage.message,
+      });
+
+      // Sequential thinking loop
+      const maxIterations = 4; // Prevent infinite loops while allowing sufficient reasoning
+      let iteration = 0;
+
+      while (iteration < maxIterations) {
+        if (abortController.signal.aborted) {
+          break;
+        }
+
+        iteration++;
+        logInfo(`=== Sequential Thinking Iteration ${iteration} ===`);
+
+        // Get AI response
+        const response = await this.streamResponse(
+          conversationMessages,
+          abortController,
+          (message) => {
+            // Strip tool calls from streaming display and show cumulative conversation
+            const cleanedMessage = this.stripToolCallXML(message);
+            const currentDisplay = [...iterationHistory, cleanedMessage].join("\n\n");
+            updateCurrentAiMessage(currentDisplay);
+          }
+        );
+
+        if (!response) break;
+
+        // Parse tool calls from the response
+        const toolCalls = this.parseXMLToolCalls(response);
+
+        if (toolCalls.length === 0) {
+          // No tool calls, this is the final response
+          // Strip any tool call XML from final response too
+          const cleanedResponse = this.stripToolCallXML(response);
+          fullAIResponse = [...iterationHistory, cleanedResponse].join("\n\n");
+          break;
+        }
+
+        // Store this iteration's response (AI reasoning) without tool call XML
+        const responseWithoutToolCalls = this.stripToolCallXML(response);
+        iterationHistory.push(responseWithoutToolCalls);
+
+        // Execute tool calls and show progress
+        const toolResults: ToolExecutionResult[] = [];
+        const toolCallMessages: string[] = [];
+
+        for (const toolCall of toolCalls) {
+          if (abortController.signal.aborted) break;
+
+          // Log tool call details for debugging
+          this.logToolCall(toolCall, iteration);
+
+          // Create tool calling message with better spacing and display name
+          const toolEmoji = this.getToolEmoji(toolCall.name);
+          const toolDisplayName = this.getToolDisplayName(toolCall.name);
+          const toolCallingMessage = `<br/>\n\n${toolEmoji} *Calling ${toolDisplayName}...*\n\n<br/>`;
+          toolCallMessages.push(toolCallingMessage);
+
+          // Show all history plus all tool call messages
+          const currentDisplay = [...iterationHistory, ...toolCallMessages].join("\n\n");
+          updateCurrentAiMessage(currentDisplay);
+
+          const result = await this.executeSequentialToolCall(toolCall, () => {});
+          toolResults.push(result);
+
+          // Log tool result
+          this.logToolResult(toolCall.name, result);
+
+          // Collect sources from localSearch results
+          if (toolCall.name === "localSearch" && result.success) {
+            try {
+              const searchResults = JSON.parse(result.result);
+              if (Array.isArray(searchResults)) {
+                const sources = searchResults.map((doc: any) => ({
+                  title: doc.title || doc.path,
+                  score: doc.rerank_score || doc.score || 0,
+                }));
+                collectedSources.push(...sources);
+              }
+            } catch (e) {
+              logWarn("Failed to parse localSearch results for sources:", e);
+            }
+          }
+        }
+
+        // Add all tool call messages to history so they persist
+        if (toolCallMessages.length > 0) {
+          iterationHistory.push(toolCallMessages.join("\n"));
+        }
+
+        // Don't add tool results to display - they're internal only
+
+        // Add AI response to conversation for next iteration
+        conversationMessages.push({
+          role: "assistant",
+          content: response,
+        });
+
+        // Add tool results as user messages for next iteration
+        const toolResultsForConversation = toolResults
+          .map((result) => `Tool '${result.toolName}' result: ${result.result}`)
+          .join("\n\n");
+
+        conversationMessages.push({
+          role: "user",
+          content: toolResultsForConversation,
+        });
+
+        logInfo("Tool results added to conversation:", toolResultsForConversation);
+      }
+
+      // If we hit max iterations, the last response becomes the final one
+      if (iteration >= maxIterations && !fullAIResponse) {
+        fullAIResponse = iterationHistory.join("\n\n");
+      }
+    } catch (error: any) {
+      if (error.name === "AbortError" || abortController.signal.aborted) {
+        logInfo("Sequential thinking stream aborted by user", {
+          reason: abortController.signal.reason,
+        });
+      } else {
+        logError("Sequential thinking failed, falling back to regular Plus mode:", error);
+
+        // Fallback to regular CopilotPlusChainRunner
+        try {
+          const fallbackRunner = new CopilotPlusChainRunner(this.chainManager);
+          return await fallbackRunner.run(
+            userMessage,
+            abortController,
+            updateCurrentAiMessage,
+            addMessage,
+            options
+          );
+        } catch (fallbackError) {
+          logError("Fallback to regular Plus mode also failed:", fallbackError);
+          await this.handleError(fallbackError, addMessage, updateCurrentAiMessage);
+          return "";
+        }
+      }
+    }
+
+    // Handle response like the parent class, with sources if we found any
+    const uniqueSources = this.deduplicateSources(collectedSources);
+    return this.handleResponse(
+      fullAIResponse,
+      userMessage,
+      abortController,
+      addMessage,
+      updateCurrentAiMessage,
+      uniqueSources.length > 0 ? uniqueSources : undefined
+    );
+  }
+
+  private async streamResponse(
+    messages: any[],
+    abortController: AbortController,
+    updateCurrentAiMessage: (message: string) => void
+  ): Promise<string> {
+    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage);
+
+    try {
+      const chatStream = await withSuppressedTokenWarnings(() =>
+        this.chainManager.chatModelManager.getChatModel().stream(messages, {
+          signal: abortController.signal,
+        })
+      );
+
+      for await (const chunk of chatStream) {
+        if (abortController.signal.aborted) {
+          break;
+        }
+        streamer.processChunk(chunk);
+      }
+
+      return streamer.close();
+    } catch (error) {
+      if (error.name === "AbortError" || abortController.signal.aborted) {
+        return streamer.close();
+      }
+      throw error;
+    }
+  }
+}
+
+export {
+  CopilotPlusChainRunner,
+  LLMChainRunner,
+  ProjectChainRunner,
+  SequentialThinkingChainRunner,
+  VaultQAChainRunner,
+};

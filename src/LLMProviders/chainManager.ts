@@ -13,6 +13,7 @@ import {
   LLMChainRunner,
   ProjectChainRunner,
   VaultQAChainRunner,
+  SequentialThinkingChainRunner,
 } from "@/LLMProviders/chainRunner";
 import { logError, logInfo } from "@/logger";
 import { HybridRetriever } from "@/search/hybridRetriever";
@@ -274,12 +275,18 @@ export default class ChainManager {
 
   private getChainRunner(): ChainRunner {
     const chainType = getChainType();
+    const settings = getSettings();
+
     switch (chainType) {
       case ChainType.LLM_CHAIN:
         return new LLMChainRunner(this);
       case ChainType.VAULT_QA_CHAIN:
         return new VaultQAChainRunner(this);
       case ChainType.COPILOT_PLUS_CHAIN:
+        // Use SequentialThinkingChainRunner if the setting is enabled
+        if (settings.enableSequentialThinking) {
+          return new SequentialThinkingChainRunner(this);
+        }
         return new CopilotPlusChainRunner(this);
       case ChainType.PROJECT_CHAIN:
         return new ProjectChainRunner(this);
