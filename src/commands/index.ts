@@ -1,5 +1,7 @@
+import { addSelectedTextContext, getChainType } from "@/aiParams";
 import { FileCache } from "@/cache/fileCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
+import { ChainType } from "@/chainFactory";
 import { AdhocPromptModal } from "@/components/modals/AdhocPromptModal";
 import { DebugSearchModal } from "@/components/modals/DebugSearchModal";
 import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
@@ -7,7 +9,9 @@ import { RemoveFromIndexModal } from "@/components/modals/RemoveFromIndexModal";
 import CopilotPlugin from "@/main";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { CopilotSettings, getSettings, updateSetting } from "@/settings/model";
+import { SelectedTextContext } from "@/sharedState";
 import { Editor, Notice, TFile } from "obsidian";
+import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";
 
 /**
@@ -284,5 +288,56 @@ export function registerCommands(
     const newValue = !currentSettings.enableAutocomplete;
     updateSetting("enableAutocomplete", newValue);
     new Notice(`Copilot autocomplete ${newValue ? "enabled" : "disabled"}`);
+  });
+
+  // Add selection to chat context command
+  addEditorCommand(plugin, COMMAND_IDS.ADD_SELECTION_TO_CHAT_CONTEXT, async (editor: Editor) => {
+    // Check if we're in Copilot Plus mode
+    const currentChainType = getChainType();
+    if (
+      currentChainType !== ChainType.COPILOT_PLUS_CHAIN &&
+      currentChainType !== ChainType.PROJECT_CHAIN
+    ) {
+      new Notice("Selected text context is only available in Copilot Plus and Project modes");
+      return;
+    }
+
+    const selectedText = editor.getSelection();
+    if (!selectedText) {
+      new Notice("No text selected");
+      return;
+    }
+
+    const activeFile = plugin.app.workspace.getActiveFile();
+    if (!activeFile) {
+      new Notice("No active file");
+      return;
+    }
+
+    // Get selection range to determine line numbers
+    const selectionRange = editor.listSelections()[0];
+    if (!selectionRange) {
+      new Notice("Could not determine selection range");
+      return;
+    }
+
+    const startLine = selectionRange.anchor.line + 1; // Convert to 1-based line numbers
+    const endLine = selectionRange.head.line + 1;
+
+    // Create selected text context
+    const selectedTextContext: SelectedTextContext = {
+      id: uuidv4(),
+      content: selectedText,
+      noteTitle: activeFile.basename,
+      notePath: activeFile.path,
+      startLine: Math.min(startLine, endLine),
+      endLine: Math.max(startLine, endLine),
+    };
+
+    // Add to selected text contexts atom
+    addSelectedTextContext(selectedTextContext);
+
+    // Open chat window to show the context was added
+    plugin.activateView();
   });
 }

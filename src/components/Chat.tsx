@@ -1,12 +1,16 @@
 import {
+  clearSelectedTextContexts,
   getCurrentProject,
   ProjectConfig,
+  removeSelectedTextContext,
   setCurrentProject,
   useChainType,
   useModelKey,
+  useSelectedTextContexts,
 } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { updateChatMemory } from "@/chatUtils";
+import { processPrompt } from "@/commands/customCommandUtils";
 import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
@@ -32,7 +36,6 @@ import { err2String, formatDateTime } from "@/utils";
 import { Buffer } from "buffer";
 import { Notice, TFile } from "obsidian";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { processPrompt } from "@/commands/customCommandUtils";
 
 type ChatMode = "default" | "project";
 
@@ -68,6 +71,7 @@ const Chat: React.FC<ChatProps> = ({
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [showChatUI, setShowChatUI] = useState(false);
+  const [selectedTextContexts] = useSelectedTextContexts();
 
   const [previousMode, setPreviousMode] = useState<ChainType | null>(null);
   const [selectedChain, setSelectedChain] = useChainType();
@@ -153,6 +157,7 @@ const Chat: React.FC<ChatProps> = ({
       context: {
         notes,
         urls: urls || [],
+        selectedTextContexts,
       },
     };
 
@@ -200,9 +205,15 @@ const Chat: React.FC<ChatProps> = ({
       currentChain
     );
 
+    // Process selected text contexts
+    const selectedTextContextAddition = contextProcessor.processSelectedTextContexts();
+
     // Combine everything
     const finalProcessedMessage =
-      processedUserMessage + urlContextAddition.urlContext + noteContextAddition;
+      processedUserMessage +
+      urlContextAddition.urlContext +
+      noteContextAddition +
+      selectedTextContextAddition;
 
     let messageWithToolCalls = inputMessage;
     // Add tool calls last
@@ -223,6 +234,7 @@ const Chat: React.FC<ChatProps> = ({
           currentChain === ChainType.COPILOT_PLUS_CHAIN
             ? [...(urls || []), ...urlContextAddition.imageUrls]
             : urls || [],
+        selectedTextContexts,
       },
     };
 
@@ -607,6 +619,10 @@ ${chatContent}`;
     setInputMessage((prev) => `${prev} ${prompt} `);
   }, []);
 
+  const handleRemoveSelectedText = useCallback((id: string) => {
+    removeSelectedTextContext(id);
+  }, []);
+
   const handleNewChat = useCallback(async () => {
     handleStopGenerating(ABORT_REASON.NEW_CHAT);
     // Delegate to the shared plugin method for consistent behavior
@@ -615,6 +631,7 @@ ${chatContent}`;
     // Additional UI state reset specific to this component
     setCurrentAiMessage("");
     setContextNotes([]);
+    clearSelectedTextContexts();
     // Only modify includeActiveNote if in a non-COPILOT_PLUS_CHAIN mode
     // In COPILOT_PLUS_CHAIN mode, respect the settings.includeActiveNoteAsContext value
     if (selectedChain !== ChainType.COPILOT_PLUS_CHAIN) {
@@ -702,6 +719,8 @@ ${chatContent}`;
           onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
           setSelectedImages={setSelectedImages}
           disableModelSwitch={selectedChain === ChainType.PROJECT_CHAIN}
+          selectedTextContexts={selectedTextContexts}
+          onRemoveSelectedText={handleRemoveSelectedText}
         />
       </div>
     </>

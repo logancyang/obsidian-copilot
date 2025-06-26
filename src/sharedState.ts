@@ -3,6 +3,15 @@ import { FormattedDateTime } from "./utils";
 import { TFile } from "obsidian";
 import CopilotPlugin from "@/main";
 
+export interface SelectedTextContext {
+  content: string;
+  noteTitle: string;
+  notePath: string;
+  startLine: number;
+  endLine: number;
+  id: string;
+}
+
 export interface ChatMessage {
   message: string;
   originalMessage?: string;
@@ -14,6 +23,7 @@ export interface ChatMessage {
   context?: {
     notes: TFile[];
     urls: string[];
+    selectedTextContexts?: SelectedTextContext[];
   };
   isErrorMessage?: boolean;
 }

@@ -1,3 +1,4 @@
+import { getSelectedTextContexts } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { TFile, Vault } from "obsidian";
@@ -167,5 +168,26 @@ export class ContextProcessor {
         hasEmbeddedPDFs,
       }),
     ]);
+  }
+
+  processSelectedTextContexts(): string {
+    const selectedTextContexts = getSelectedTextContexts();
+
+    if (!selectedTextContexts || selectedTextContexts.length === 0) {
+      return "";
+    }
+
+    let additionalContext = "";
+
+    for (const selectedText of selectedTextContexts) {
+      const lineRange =
+        selectedText.startLine === selectedText.endLine
+          ? `L${selectedText.startLine}`
+          : `L${selectedText.startLine}-${selectedText.endLine}`;
+
+      additionalContext += `\n\n <selected_text> \n Title: [[${selectedText.noteTitle}]]\nPath: ${selectedText.notePath}\nLines: ${lineRange}\n\n${selectedText.content}\n</selected_text>`;
+    }
+
+    return additionalContext;
   }
 }
