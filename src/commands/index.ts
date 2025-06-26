@@ -1,5 +1,7 @@
+import { getChainType } from "@/aiParams";
 import { FileCache } from "@/cache/fileCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
+import { ChainType } from "@/chainFactory";
 import { AdhocPromptModal } from "@/components/modals/AdhocPromptModal";
 import { DebugSearchModal } from "@/components/modals/DebugSearchModal";
 import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
@@ -9,8 +11,8 @@ import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { CopilotSettings, getSettings, updateSetting } from "@/settings/model";
 import { SelectedTextContext } from "@/sharedState";
 import { Editor, Notice, TFile } from "obsidian";
-import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";
 import { v4 as uuidv4 } from "uuid";
+import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";
 
 /**
  * Add a command to the plugin.
@@ -290,6 +292,16 @@ export function registerCommands(
 
   // Add selection to chat context command
   addEditorCommand(plugin, COMMAND_IDS.ADD_SELECTION_TO_CHAT_CONTEXT, async (editor: Editor) => {
+    // Check if we're in Copilot Plus mode
+    const currentChainType = getChainType();
+    if (
+      currentChainType !== ChainType.COPILOT_PLUS_CHAIN &&
+      currentChainType !== ChainType.PROJECT_CHAIN
+    ) {
+      new Notice("Selected text context is only available in Copilot Plus and Project modes");
+      return;
+    }
+
     const selectedText = editor.getSelection();
     if (!selectedText) {
       new Notice("No text selected");

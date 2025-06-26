@@ -4,9 +4,9 @@ import React from "react";
 
 import { ChainType } from "@/chainFactory";
 import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
+import { SelectedTextContext } from "@/sharedState";
 import { TFile } from "obsidian";
 import { ChatContextMenu } from "./ChatContextMenu";
-import { SelectedTextContext } from "@/sharedState";
 
 interface ChatControlsProps {
   app: App;
@@ -72,24 +72,8 @@ const ContextControl: React.FC<ChatControlsProps> = ({
     }
   };
 
-  if (selectedChain !== ChainType.COPILOT_PLUS_CHAIN) {
-    // In non-Plus modes, only show selected text contexts if any exist
-    if (!selectedTextContexts || selectedTextContexts.length === 0) {
-      return null;
-    }
-
-    return (
-      <ChatContextMenu
-        activeNote={null}
-        contextNotes={[]}
-        onAddContext={() => {}} // No-op for non-Plus modes
-        onRemoveContext={() => {}} // No-op for non-Plus modes
-        contextUrls={[]}
-        onRemoveUrl={() => {}} // No-op for non-Plus modes
-        selectedTextContexts={selectedTextContexts}
-        onRemoveSelectedText={onRemoveSelectedText}
-      />
-    );
+  if (selectedChain !== ChainType.COPILOT_PLUS_CHAIN && selectedChain !== ChainType.PROJECT_CHAIN) {
+    return null;
   }
 
   return (
