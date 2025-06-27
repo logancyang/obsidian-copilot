@@ -246,6 +246,11 @@ const Chat: React.FC<ChatProps> = ({
       updateUserMessageHistory(inputMessage);
     }
 
+    // Autosave the chat if the setting is enabled
+    if (settings.autosaveChat) {
+      await handleSaveAsNote();
+    }
+
     await getAIResponse(
       promptMessageHidden,
       chainManager,
@@ -254,6 +259,10 @@ const Chat: React.FC<ChatProps> = ({
       setAbortController,
       { debug: settings.debug, updateLoadingMessage: setLoadingMessage }
     );
+    // Autosave the chat if the setting is enabled
+    if (settings.autosaveChat) {
+      await handleSaveAsNote();
+    }
     setLoading(false);
     setLoadingMessage(LOADING_MESSAGES.DEFAULT);
   };
@@ -422,8 +431,21 @@ ${chatContent}`;
       } finally {
         setLoading(false);
       }
+
+      // Autosave the chat if the setting is enabled
+      if (settings.autosaveChat) {
+        await handleSaveAsNote();
+      }
     },
-    [addMessage, chainManager, chatHistory, clearMessages, settings.debug]
+    [
+      addMessage,
+      chainManager,
+      chatHistory,
+      clearMessages,
+      settings.debug,
+      settings.autosaveChat,
+      handleSaveAsNote,
+    ]
   );
 
   const handleEdit = useCallback(
@@ -459,8 +481,21 @@ ${chatContent}`;
       ) {
         handleRegenerate(messageIndex + 1);
       }
+
+      // Autosave the chat if the setting is enabled
+      if (settings.autosaveChat) {
+        await handleSaveAsNote();
+      }
     },
-    [addMessage, chainManager.memoryManager, chatHistory, clearMessages, handleRegenerate]
+    [
+      addMessage,
+      chainManager.memoryManager,
+      chatHistory,
+      clearMessages,
+      handleRegenerate,
+      settings.autosaveChat,
+      handleSaveAsNote,
+    ]
   );
 
   const createEffect = (
