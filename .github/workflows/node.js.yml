@@ -30,6 +30,8 @@ jobs:
       - run: npm run build --if-present
       - run: npm test
       - name: Run Integration tests
+        # Only run integration tests for trusted events (push) or when secrets are available
+        if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
         env:
           GEMINI_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         run: npm run test:integration
