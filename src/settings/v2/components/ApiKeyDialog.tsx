@@ -247,6 +247,7 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
       );
 
       if (!existingModel) {
+        // todo 这里保存的时候要不要保存 key，因为如果在 dialog 里面切换 key，会导致 model 的 key 没有切换，从而不一致
         const updatedModels = [...settings.activeModels, customModel];
         updateSetting("activeModels", updatedModels);
         new Notice(

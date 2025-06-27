@@ -38,6 +38,22 @@ const chainTypeAtom = atom(
 const currentProjectAtom = atom<ProjectConfig | null>(null);
 const projectLoadingAtom = atom<boolean>(false);
 
+interface ProjectContextLoadState {
+  success: Array<string>;
+  failed: Array<string>;
+  processingFiles: Array<string>;
+  total: Array<string>;
+}
+
+const projectContextLoadingFilesAtom = atom<ProjectContextLoadState>({
+  success: [],
+  failed: [],
+  processingFiles: [],
+  total: [],
+});
+
+console.log(projectContextLoadingFilesAtom);
+
 const selectedTextContextsAtom = atom<SelectedTextContext[]>([]);
 
 export interface ProjectConfig {

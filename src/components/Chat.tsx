@@ -6,6 +6,7 @@ import {
   setCurrentProject,
   useChainType,
   useModelKey,
+  useProjectLoading,
   useSelectedTextContexts,
 } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
@@ -36,6 +37,7 @@ import { err2String, formatDateTime } from "@/utils";
 import { Buffer } from "buffer";
 import { Notice, TFile } from "obsidian";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
+import ProgressCard from "@/components/project/progress-card";
 
 type ChatMode = "default" | "project";
 
@@ -72,6 +74,7 @@ const Chat: React.FC<ChatProps> = ({
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [showChatUI, setShowChatUI] = useState(false);
   const [selectedTextContexts] = useSelectedTextContexts();
+  const [isProjectLoading] = useProjectLoading();
 
   const [previousMode, setPreviousMode] = useState<ChainType | null>(null);
   const [selectedChain, setSelectedChain] = useChainType();
@@ -724,38 +727,46 @@ ${chatContent}`;
           onReplaceChat={setInputMessage}
           showHelperComponents={selectedChain !== ChainType.PROJECT_CHAIN}
         />
-        <ChatControls
-          onNewChat={handleNewChat}
-          onSaveAsNote={() => handleSaveAsNote()}
-          onLoadHistory={handleLoadHistory}
-          onModeChange={(newMode) => {
-            setPreviousMode(selectedChain);
-            // Hide chat UI when switching to project mode
-            if (newMode === ChainType.PROJECT_CHAIN) {
-              setShowChatUI(false);
-            }
-          }}
-        />
-        <ChatInput
-          ref={inputRef}
-          inputMessage={inputMessage}
-          setInputMessage={setInputMessage}
-          handleSendMessage={handleSendMessage}
-          isGenerating={loading}
-          onStopGenerating={() => handleStopGenerating(ABORT_REASON.USER_STOPPED)}
-          app={app}
-          contextNotes={contextNotes}
-          setContextNotes={setContextNotes}
-          includeActiveNote={includeActiveNote}
-          setIncludeActiveNote={setIncludeActiveNote}
-          mention={mention}
-          selectedImages={selectedImages}
-          onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
-          setSelectedImages={setSelectedImages}
-          disableModelSwitch={selectedChain === ChainType.PROJECT_CHAIN}
-          selectedTextContexts={selectedTextContexts}
-          onRemoveSelectedText={handleRemoveSelectedText}
-        />
+        {isProjectLoading ? (
+          <div className="tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-xl">
+            <ProgressCard />
+          </div>
+        ) : (
+          <>
+            <ChatControls
+              onNewChat={handleNewChat}
+              onSaveAsNote={() => handleSaveAsNote()}
+              onLoadHistory={handleLoadHistory}
+              onModeChange={(newMode) => {
+                setPreviousMode(selectedChain);
+                // Hide chat UI when switching to project mode
+                if (newMode === ChainType.PROJECT_CHAIN) {
+                  setShowChatUI(false);
+                }
+              }}
+            />
+            <ChatInput
+              ref={inputRef}
+              inputMessage={inputMessage}
+              setInputMessage={setInputMessage}
+              handleSendMessage={handleSendMessage}
+              isGenerating={loading}
+              onStopGenerating={() => handleStopGenerating(ABORT_REASON.USER_STOPPED)}
+              app={app}
+              contextNotes={contextNotes}
+              setContextNotes={setContextNotes}
+              includeActiveNote={includeActiveNote}
+              setIncludeActiveNote={setIncludeActiveNote}
+              mention={mention}
+              selectedImages={selectedImages}
+              onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
+              setSelectedImages={setSelectedImages}
+              disableModelSwitch={selectedChain === ChainType.PROJECT_CHAIN}
+              selectedTextContexts={selectedTextContexts}
+              onRemoveSelectedText={handleRemoveSelectedText}
+            />
+          </>
+        )}
       </div>
     </>
   );
