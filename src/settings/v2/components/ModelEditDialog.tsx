@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
+  DEFAULT_MODEL_SETTING,
   MODEL_CAPABILITIES,
   ModelCapability,
   Provider,
@@ -252,8 +253,8 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
                       <TooltipContent side="bottom">
                         <div className="tw-w-[300px]">
                           <p>
-                            The maximum number of <em>output tokens</em> to generate. Default is
-                            6000.
+                            The maximum number of <em>output tokens</em> to generate. Default is{" "}
+                            {DEFAULT_MODEL_SETTING.MAX_TOKENS}.
                           </p>
                           <em>
                             This number plus the length of your prompt (input tokens) must be
@@ -267,7 +268,9 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
               }
             >
               <SettingSlider
-                value={localModel.maxTokens ?? settings.maxTokens ?? 6000}
+                value={
+                  localModel.maxTokens ?? settings.maxTokens ?? DEFAULT_MODEL_SETTING.MAX_TOKENS
+                }
                 onChange={(value) => handleLocalUpdate("maxTokens", value)}
                 min={0}
                 max={65000}
@@ -286,8 +289,8 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
                       </TooltipTrigger>
                       <TooltipContent side="bottom">
                         <div className="tw-max-w-[300px]">
-                          Default is 0.1. Higher values will result in more creativeness, but also
-                          more mistakes. Set to 0 for no randomness.
+                          Default is {DEFAULT_MODEL_SETTING.TEMPERATURE}. Higher values will result
+                          in more creativeness, but also more mistakes. Set to 0 for no randomness.
                         </div>
                       </TooltipContent>
                     </Tooltip>
@@ -296,7 +299,11 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
               }
             >
               <SettingSlider
-                value={localModel.temperature ?? settings.temperature ?? 0.1}
+                value={
+                  localModel.temperature ??
+                  settings.temperature ??
+                  DEFAULT_MODEL_SETTING.TEMPERATURE
+                }
                 onChange={(value) => handleLocalUpdate("temperature", value)}
                 max={2}
                 min={0}

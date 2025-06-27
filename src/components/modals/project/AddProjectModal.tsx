@@ -16,6 +16,7 @@ import { HelpCircle } from "lucide-react";
 import { App, Modal, Notice } from "obsidian";
 import React, { useState } from "react";
 import { createRoot, Root } from "react-dom/client";
+import { DEFAULT_MODEL_SETTING } from "@/constants";
 
 interface AddProjectModalContentProps {
   initialProject?: ProjectConfig;
@@ -41,8 +42,8 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
       systemPrompt: "",
       projectModelKey: "",
       modelConfigs: {
-        temperature: 1.0,
-        maxTokens: 6000,
+        temperature: DEFAULT_MODEL_SETTING.TEMPERATURE,
+        maxTokens: DEFAULT_MODEL_SETTING.MAX_TOKENS,
       },
       contextSource: {
         inclusions: "",
@@ -231,7 +232,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
           <div className="tw-grid tw-grid-cols-1 tw-gap-4">
             <FormField label="Temperature">
               <SettingSlider
-                value={formData.modelConfigs?.temperature ?? 1}
+                value={formData.modelConfigs?.temperature ?? DEFAULT_MODEL_SETTING.TEMPERATURE}
                 onChange={(value) => handleInputChange("modelConfigs.temperature", value)}
                 min={0}
                 max={2}
@@ -241,7 +242,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
             </FormField>
             <FormField label="Token Limit">
               <SettingSlider
-                value={formData.modelConfigs?.maxTokens ?? 6000}
+                value={formData.modelConfigs?.maxTokens ?? DEFAULT_MODEL_SETTING.MAX_TOKENS}
                 onChange={(value) => handleInputChange("modelConfigs.maxTokens", value)}
                 min={1}
                 max={65000}
