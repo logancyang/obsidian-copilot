@@ -16,7 +16,7 @@ const Separator = React.forwardRef<
     orientation={orientation}
     className={cn(
       "tw-shrink-0 tw-bg-[var(--background-modifier-border)]",
-      orientation === "horizontal" ? "tw-h-[1px] tw-w-full" : "tw-h-full tw-w-[1px]",
+      orientation === "horizontal" ? "tw-h-px tw-w-full" : "tw-h-full tw-w-px",
       className
     )}
     {...props}
