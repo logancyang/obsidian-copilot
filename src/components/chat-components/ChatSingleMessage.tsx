@@ -279,10 +279,12 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                   if (
                     composerData.type === "composer" &&
                     composerData.path &&
-                    (composerData.content !== undefined || composerData.canvas_json)
+                    // `content` and `canvas_json` should never exist together
+                    (typeof composerData.content === "string" ||
+                      typeof composerData.canvas_json === "string")
                   ) {
                     let newContent;
-                    if (composerData.content !== undefined) {
+                    if (typeof composerData.content === "string") {
                       newContent = composerData.content;
                     } else {
                       newContent = JSON.stringify(composerData.canvas_json);
