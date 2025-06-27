@@ -4,6 +4,7 @@ import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
+import { SettingSlider } from "@/components/ui/setting-slider";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DEFAULT_MODEL_SETTING,
@@ -17,9 +18,8 @@ import {
 import { getSettings } from "@/settings/model";
 import { debounce, getProviderInfo, getProviderLabel } from "@/utils";
 import { HelpCircle } from "lucide-react";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { SettingSlider } from "@/components/ui/setting-slider";
 import { App, Modal } from "obsidian";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
 
 interface ModelEditModalContentProps {
@@ -105,10 +105,7 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
   })) as Array<{ id: ModelCapability; label: string; description: string }>;
 
   const displayApiKey = localModel.apiKey || getDefaultApiKey(localModel.provider as Provider);
-  const showOtherParameters =
-    !isEmbeddingModel &&
-    localModel.provider !== "copilot-plus" &&
-    localModel.provider !== "copilot-plus-jina";
+  const showOtherParameters = !isEmbeddingModel && localModel.provider !== "copilot-plus-jina";
 
   return (
     <div className="tw-space-y-3 tw-p-4">
