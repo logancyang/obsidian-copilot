@@ -160,7 +160,7 @@ export const ModelSettings: React.FC = () => {
             description={
               <>
                 <p>
-                  The maximum number of <em>output tokens</em> to generate. Default is 1000.
+                  The maximum number of <em>output tokens</em> to generate. Default is 6000.
                 </p>
                 <em>
                   This number plus the length of your prompt (input tokens) must be smaller than the
