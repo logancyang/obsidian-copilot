@@ -36,17 +36,27 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   ChevronDown,
   ChevronRight,
+  Copy,
   Eye,
   Globe,
   GripVertical,
   Lightbulb,
   LucideProps,
+  MoreVertical,
   Pencil,
+  PencilLine,
   Plus,
   RefreshCw,
   Trash2,
 } from "lucide-react";
 import React, { ForwardRefExoticComponent, RefAttributes } from "react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useContainerContext } from "@/settings/v2/components/ContainerContext";
 
 const CAPABILITY_ICONS: Record<
   ModelCapability,
@@ -110,27 +120,25 @@ const renderCapabilities = (model: CustomModel) => {
   );
 };
 
-interface ModelTableProps {
-  models: CustomModel[];
-  onEdit?: (model: CustomModel) => void;
-  onDelete: (modelKey: string) => void;
-  onAdd: () => void;
-  onUpdateModel: (model: CustomModel) => void;
-  onReorderModels?: (newModels: CustomModel[]) => void;
-  onRefresh?: () => void;
-  title: string;
-}
-
 interface ModelCardProps {
   model: CustomModel;
-  onEdit?: () => void;
-  onDelete?: () => void;
+  onEdit?: (model: CustomModel) => void;
+  onCopy?: (model: CustomModel) => void;
+  onDelete: (modelKey: string) => void;
   onUpdateModel: (model: CustomModel) => void;
   id: string;
 }
 
-const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdateModel, id }) => {
+const ModelCard: React.FC<ModelCardProps> = ({
+  model,
+  onEdit,
+  onCopy,
+  onDelete,
+  onUpdateModel,
+  id,
+}) => {
   const [isExpanded, setIsExpanded] = React.useState(false);
+  const container = useContainerContext();
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
@@ -205,24 +213,57 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
                 size="icon"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onEdit();
+                  onEdit(model);
                 }}
               >
                 <Pencil className="tw-size-4" />
               </Button>
             )}
-            {onDelete && !model.core && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete();
-                }}
-              >
-                <Trash2 className="tw-size-4" />
-              </Button>
-            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <MoreVertical className="tw-size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" container={container}>
+                {onEdit && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(model);
+                    }}
+                  >
+                    <PencilLine className="tw-mr-2 tw-size-4" />
+                    Edit
+                  </DropdownMenuItem>
+                )}
+
+                {onCopy && !model.core && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCopy(model);
+                    }}
+                  >
+                    <Copy className="tw-mr-2 tw-size-4" />
+                    Copy
+                  </DropdownMenuItem>
+                )}
+
+                {!model.core && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(getModelKeyFromModel(model));
+                    }}
+                    className="tw-text-error"
+                  >
+                    <Trash2 className="tw-mr-2 tw-size-4" />
+                    Delete
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </CardHeader>
@@ -261,22 +302,26 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
   );
 };
 
-const SortableTableRow: React.FC<{
+const DesktopSortableTableRow: React.FC<{
   model: CustomModel;
   onEdit?: (model: CustomModel) => void;
+  onCopy?: (model: CustomModel) => void;
   onDelete: (modelKey: string) => void;
   onUpdateModel: (model: CustomModel) => void;
   isEmbeddingModel: boolean;
-}> = ({ model, onEdit, onDelete, onUpdateModel, isEmbeddingModel }) => {
+}> = ({ model, onEdit, onCopy, onDelete, onUpdateModel, isEmbeddingModel }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: getModelKeyFromModel(model),
     disabled: model.core,
   });
+  const container = useContainerContext();
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   };
+
+  const showDropdownMenu = onEdit || !model.core || (onCopy && !model.core);
 
   return (
     <TableRow
@@ -334,15 +379,40 @@ const SortableTableRow: React.FC<{
               <Pencil className="tw-size-4" />
             </Button>
           )}
-          {!model.core && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => onDelete(getModelKeyFromModel(model))}
-              className="tw-shadow-sm tw-transition-shadow hover:tw-shadow-md"
-            >
-              <Trash2 className="tw-size-4" />
-            </Button>
+
+          {showDropdownMenu && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <MoreVertical className="tw-size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" container={container}>
+                {onEdit && (
+                  <DropdownMenuItem onClick={() => onEdit(model)}>
+                    <PencilLine className="tw-mr-2 tw-size-4" />
+                    Edit
+                  </DropdownMenuItem>
+                )}
+
+                {onCopy && !model.core && (
+                  <DropdownMenuItem onClick={() => onCopy(model)}>
+                    <Copy className="tw-mr-2 tw-size-4" />
+                    Copy
+                  </DropdownMenuItem>
+                )}
+
+                {!model.core && (
+                  <DropdownMenuItem
+                    onClick={() => onDelete(getModelKeyFromModel(model))}
+                    className="tw-text-error"
+                  >
+                    <Trash2 className="tw-mr-2 tw-size-4" />
+                    Delete
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       </TableCell>
@@ -350,9 +420,22 @@ const SortableTableRow: React.FC<{
   );
 };
 
+interface ModelTableProps {
+  models: CustomModel[];
+  onEdit?: (model: CustomModel) => void;
+  onCopy?: (model: CustomModel) => void;
+  onDelete: (modelKey: string) => void;
+  onAdd: () => void;
+  onUpdateModel: (model: CustomModel) => void;
+  onReorderModels?: (newModels: CustomModel[]) => void;
+  onRefresh?: () => void;
+  title: string;
+}
+
 export const ModelTable: React.FC<ModelTableProps> = ({
   models,
   onEdit,
+  onCopy,
   onDelete,
   onAdd,
   onUpdateModel,
@@ -457,8 +540,9 @@ export const ModelTable: React.FC<ModelTableProps> = ({
                 key={getModelKeyFromModel(model)}
                 id={getModelKeyFromModel(model)}
                 model={model}
-                onEdit={onEdit ? () => onEdit(model) : undefined}
-                onDelete={() => onDelete(getModelKeyFromModel(model))}
+                onEdit={onEdit}
+                onCopy={onCopy}
+                onDelete={onDelete}
                 onUpdateModel={onUpdateModel}
               />
             ))}
@@ -497,10 +581,11 @@ export const ModelTable: React.FC<ModelTableProps> = ({
                   strategy={verticalListSortingStrategy}
                 >
                   {models.map((model) => (
-                    <SortableTableRow
+                    <DesktopSortableTableRow
                       key={getModelKeyFromModel(model)}
                       model={model}
-                      onEdit={onEdit ? () => onEdit(model) : undefined}
+                      onEdit={onEdit}
+                      onCopy={onCopy}
                       onDelete={onDelete}
                       onUpdateModel={onUpdateModel}
                       isEmbeddingModel={isEmbeddingModel}

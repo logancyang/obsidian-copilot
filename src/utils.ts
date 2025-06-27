@@ -487,12 +487,6 @@ export async function safeFetch(url: string, options: RequestInit = {}): Promise
   // Remove content-length if it exists
   delete (headers as Record<string, string>)["content-length"];
 
-  if (typeof options.body === "string") {
-    const newBody = JSON.parse(options.body ?? {});
-    delete newBody["frequency_penalty"];
-    options.body = JSON.stringify(newBody);
-  }
-
   logInfo("==== safeFetch method request ====");
 
   const method = options.method?.toUpperCase() || "POST";

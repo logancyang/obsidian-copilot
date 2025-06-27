@@ -4,18 +4,47 @@ import { BUILTIN_CHAT_MODELS, BUILTIN_EMBEDDING_MODELS } from "@/constants";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
 import ProjectManager from "@/LLMProviders/projectManager";
 import { logError } from "@/logger";
-import { setSettings, updateSetting, useSettingsValue } from "@/settings/model";
+import { CopilotSettings, setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import { ModelAddDialog } from "@/settings/v2/components/ModelAddDialog";
-import { ModelEditDialog } from "@/settings/v2/components/ModelEditDialog";
+import { ModelEditModal } from "@/settings/v2/components/ModelEditDialog";
 import { ModelTable } from "@/settings/v2/components/ModelTable";
+import { omit } from "@/utils";
 import { Notice } from "obsidian";
 import React, { useState } from "react";
 
 export const ModelSettings: React.FC = () => {
   const settings = useSettingsValue();
-  const [editingModel, setEditingModel] = useState<CustomModel | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showAddEmbeddingDialog, setShowAddEmbeddingDialog] = useState(false);
+
+  const onCopyModel = (model: CustomModel, isEmbeddingModel: boolean = false) => {
+    const newModel: CustomModel = {
+      ...omit(model, [
+        "isBuiltIn",
+        "core",
+        "projectEnabled",
+        "plusExclusive",
+        "believerExclusive",
+        "capabilities",
+        "displayName",
+        "dimensions",
+      ]),
+      name: `${model.name} (copy)`,
+    };
+
+    const settingField: keyof CopilotSettings = isEmbeddingModel
+      ? "activeEmbeddingModels"
+      : "activeModels";
+
+    updateSetting(settingField, [...settings[settingField], newModel]);
+  };
+
+  const handleModelReorder = (newModels: CustomModel[], isEmbeddingModel: boolean = false) => {
+    const settingField: keyof CopilotSettings = isEmbeddingModel
+      ? "activeEmbeddingModels"
+      : "activeModels";
+    updateSetting(settingField, newModels);
+  };
 
   const onDeleteModel = (modelKey: string) => {
     const [modelName, provider] = modelKey.split("|");
@@ -37,14 +66,22 @@ export const ModelSettings: React.FC = () => {
     });
   };
 
-  const handleModelUpdate = (originalModel: CustomModel, updatedModel: CustomModel) => {
-    const modelIndex = settings.activeModels.findIndex(
+  const handleModelUpdate = (
+    isEmbeddingModel: boolean,
+    originalModel: CustomModel,
+    updatedModel: CustomModel
+  ) => {
+    const settingField: keyof CopilotSettings = isEmbeddingModel
+      ? "activeEmbeddingModels"
+      : "activeModels";
+
+    const modelIndex = settings[settingField].findIndex(
       (m) => m.name === originalModel.name && m.provider === originalModel.provider
     );
     if (modelIndex !== -1) {
-      const updatedModels = [...settings.activeModels];
+      const updatedModels = [...settings[settingField]];
       updatedModels[modelIndex] = updatedModel;
-      updateSetting("activeModels", updatedModels);
+      updateSetting(settingField, updatedModels);
     } else {
       new Notice("Could not find model to update");
       logError("Could not find model to update:", originalModel);
@@ -57,10 +94,6 @@ export const ModelSettings: React.FC = () => {
       m.name === updatedModel.name && m.provider === updatedModel.provider ? updatedModel : m
     );
     updateSetting("activeModels", updatedModels);
-  };
-
-  const handleModelReorder = (newModels: CustomModel[]) => {
-    updateSetting("activeModels", newModels);
   };
 
   const onDeleteEmbeddingModel = (modelKey: string) => {
@@ -76,10 +109,6 @@ export const ModelSettings: React.FC = () => {
       m.name === updatedModel.name && m.provider === updatedModel.provider ? updatedModel : m
     );
     updateSetting("activeEmbeddingModels", updatedModels);
-  };
-
-  const handleEmbeddingModelReorder = (newModels: CustomModel[]) => {
-    updateSetting("activeEmbeddingModels", newModels);
   };
 
   const handleRefreshChatModels = () => {
@@ -106,27 +135,25 @@ export const ModelSettings: React.FC = () => {
     new Notice("Embedding models refreshed successfully");
   };
 
+  const handleEditModel = (model: CustomModel, isEmbeddingModel: boolean = false) => {
+    const modal = new ModelEditModal(app, model, isEmbeddingModel, handleModelUpdate);
+    modal.open();
+  };
+
   return (
     <div className="tw-space-y-4">
       <section>
         <div className="tw-mb-3 tw-text-xl tw-font-bold">Chat Models</div>
         <ModelTable
           models={settings.activeModels}
-          onEdit={setEditingModel}
+          onEdit={(model) => handleEditModel(model)}
+          onCopy={(model) => onCopyModel(model)}
           onDelete={onDeleteModel}
           onAdd={() => setShowAddDialog(true)}
           onUpdateModel={handleTableUpdate}
-          onReorderModels={handleModelReorder}
+          onReorderModels={(newModels) => handleModelReorder(newModels)}
           onRefresh={handleRefreshChatModels}
           title="Chat Model"
-        />
-
-        {/* model edit dialog*/}
-        <ModelEditDialog
-          open={!!editingModel}
-          onOpenChange={(open) => !open && setEditingModel(null)}
-          model={editingModel}
-          onUpdate={handleModelUpdate}
         />
 
         {/* model add dialog */}
@@ -145,38 +172,6 @@ export const ModelSettings: React.FC = () => {
         <div className="tw-space-y-4">
           <SettingItem
             type="slider"
-            title="Temperature"
-            description="Default is 0.1. Higher values will result in more creativeness, but also more mistakes. Set to 0 for no randomness."
-            value={settings.temperature}
-            onChange={(value) => updateSetting("temperature", value)}
-            min={0}
-            max={2}
-            step={0.05}
-          />
-
-          <SettingItem
-            type="slider"
-            title="Token limit"
-            description={
-              <>
-                <p>
-                  The maximum number of <em>output tokens</em> to generate. Default is 6000.
-                </p>
-                <em>
-                  This number plus the length of your prompt (input tokens) must be smaller than the
-                  context window of the model.
-                </em>
-              </>
-            }
-            value={settings.maxTokens}
-            onChange={(value) => updateSetting("maxTokens", value)}
-            min={0}
-            max={65000}
-            step={100}
-          />
-
-          <SettingItem
-            type="slider"
             title="Conversation turns in context"
             description="The number of previous conversation turns to include in the context. Default is 15 turns, i.e. 30 messages."
             value={settings.contextTurns}
@@ -192,10 +187,12 @@ export const ModelSettings: React.FC = () => {
         <div className="tw-mb-3 tw-text-xl tw-font-bold">Embedding Models</div>
         <ModelTable
           models={settings.activeEmbeddingModels}
+          onEdit={(model) => handleEditModel(model, true)}
           onDelete={onDeleteEmbeddingModel}
+          onCopy={(model) => onCopyModel(model, true)}
           onAdd={() => setShowAddEmbeddingDialog(true)}
           onUpdateModel={handleEmbeddingModelUpdate}
-          onReorderModels={handleEmbeddingModelReorder}
+          onReorderModels={(newModels) => handleModelReorder(newModels, true)}
           onRefresh={handleRefreshEmbeddingModels}
           title="Embedding Model"
         />
