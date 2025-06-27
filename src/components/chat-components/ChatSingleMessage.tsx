@@ -279,10 +279,14 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                   if (
                     composerData.type === "composer" &&
                     composerData.path &&
-                    (composerData.content || composerData.canvas_json)
+                    (composerData.content !== undefined || composerData.canvas_json)
                   ) {
-                    let newContent =
-                      composerData.content || JSON.stringify(composerData.canvas_json);
+                    let newContent;
+                    if (composerData.content !== undefined) {
+                      newContent = composerData.content;
+                    } else {
+                      newContent = JSON.stringify(composerData.canvas_json);
+                    }
                     let path = composerData.path.trim();
                     // If path starts with a /, remove it
                     if (path.startsWith("/")) {
