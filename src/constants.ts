@@ -108,6 +108,11 @@ export const PLUS_UTM_MEDIUMS = {
 };
 export type PlusUtmMedium = (typeof PLUS_UTM_MEDIUMS)[keyof typeof PLUS_UTM_MEDIUMS];
 
+export const DEFAULT_MODEL_SETTING = {
+  MAX_TOKENS: 6000,
+  TEMPERATURE: 0.1,
+};
+
 export enum ChatModels {
   COPILOT_PLUS_FLASH = "copilot-plus-flash",
   GPT_41 = "gpt-4.1",
@@ -653,8 +658,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   defaultChainType: ChainType.LLM_CHAIN,
   defaultModelKey: ChatModels.GPT_41 + "|" + ChatModelProviders.OPENAI,
   embeddingModelKey: EmbeddingModels.OPENAI_EMBEDDING_SMALL + "|" + EmbeddingModelProviders.OPENAI,
-  temperature: 0.1,
-  maxTokens: 6000,
+  temperature: DEFAULT_MODEL_SETTING.TEMPERATURE,
+  maxTokens: DEFAULT_MODEL_SETTING.MAX_TOKENS,
   contextTurns: 15,
   userSystemPrompt: "",
   openAIProxyBaseUrl: "",
