@@ -248,7 +248,7 @@ const Chat: React.FC<ChatProps> = ({
 
     // Autosave the chat if the setting is enabled
     if (settings.autosaveChat) {
-      await handleSaveAsNote();
+      handleSaveAsNote();
     }
 
     await getAIResponse(
@@ -261,7 +261,7 @@ const Chat: React.FC<ChatProps> = ({
     );
     // Autosave the chat if the setting is enabled
     if (settings.autosaveChat) {
-      await handleSaveAsNote();
+      handleSaveAsNote();
     }
     setLoading(false);
     setLoadingMessage(LOADING_MESSAGES.DEFAULT);
@@ -433,7 +433,7 @@ ${chatContent}`;
 
       // Autosave the chat if the setting is enabled
       if (settings.autosaveChat) {
-        await handleSaveAsNote();
+        handleSaveAsNote();
       }
     },
     [
@@ -483,7 +483,7 @@ ${chatContent}`;
 
       // Autosave the chat if the setting is enabled
       if (settings.autosaveChat) {
-        await handleSaveAsNote();
+        handleSaveAsNote();
       }
     },
     [
