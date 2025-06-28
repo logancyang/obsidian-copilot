@@ -24,7 +24,7 @@ export function PromptEnhancementsSection() {
   );
   // 新增：是否拼接默认系统提示词
   const [appendDefaultPrompt, setAppendDefaultPrompt] = useState(
-    settings.promptEnhancements?.appendDefaultPrompt || false
+    settings.promptEnhancements?.appendDefaultPrompt ?? true
   );
 
   const [isPromptExpanded, setIsPromptExpanded] = useState(false);
@@ -39,7 +39,7 @@ export function PromptEnhancementsSection() {
     setFollowUpPrompt(settings.promptEnhancements?.autoFollowUp?.prompt || "");
     setAutoSpeechEnabled(settings.promptEnhancements?.autoSpeech?.enabled || false);
     setSpeechPrompt(settings.promptEnhancements?.autoSpeech?.prompt || "");
-    setAppendDefaultPrompt(settings.promptEnhancements?.appendDefaultPrompt || false);
+    setAppendDefaultPrompt(settings.promptEnhancements?.appendDefaultPrompt ?? true);
     setUseOralPrompt(settings.promptEnhancements?.autoSpeech?.useOralPrompt ?? true);
   }, [settings.promptEnhancements]);
 
