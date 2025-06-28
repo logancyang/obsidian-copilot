@@ -15,6 +15,7 @@ import ProjectManager from "@/LLMProviders/projectManager";
 import { isProjectMode } from "@/aiParams";
 import { createMemoryTool } from "@/tools/MemoryTools";
 import { BrevilabsClient } from "./brevilabsClient";
+import { createMemoryTool } from "@/tools/MemoryTools";
 
 // TODO: Add @index with explicit pdf files in chat context menu
 export const COPILOT_TOOL_NAMES = [
