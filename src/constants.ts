@@ -698,6 +698,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   passMarkdownImages: true,
   enableCustomPromptTemplating: true,
   suggestedDefaultCommands: false,
+  memoryFolder: "copilot-memory",
 };
 
 export const EVENT_NAMES = {

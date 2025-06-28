@@ -112,6 +112,7 @@ export interface CopilotSettings {
   enableCustomPromptTemplating: boolean;
   /** Whether we have suggested built-in default commands to the user once. */
   suggestedDefaultCommands: boolean;
+  memoryFolder: string;
 }
 
 export const settingsStore = createStore();

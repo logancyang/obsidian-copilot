@@ -14,9 +14,17 @@ import { BrevilabsClient } from "./brevilabsClient";
 import { Vault } from "obsidian";
 import ProjectManager from "@/LLMProviders/projectManager";
 import { isProjectMode } from "@/aiParams";
+import { createMemoryTool } from "@/tools/MemoryTools";
 
 // TODO: Add @index with explicit pdf files in chat context menu
-export const COPILOT_TOOL_NAMES = ["@vault", "@composer", "@websearch", "@youtube", "@pomodoro"];
+export const COPILOT_TOOL_NAMES = [
+  "@vault",
+  "@composer",
+  "@websearch",
+  "@youtube",
+  "@pomodoro",
+  "@memory",
+];
 
 type ToolCall = {
   tool: any;
@@ -155,6 +163,21 @@ export class IntentAnalyzer {
           },
         });
       }
+    }
+
+    // Handle @memory command
+    if (message.includes("@memory")) {
+      const chainManager = ProjectManager.instance.getCurrentChainManager();
+      const memoryTool = createMemoryTool(
+        chainManager.chatModelManager.getChatModel(),
+        chainManager.app.vault
+      );
+      processedToolCalls.push({
+        tool: memoryTool,
+        args: {
+          userInput: this.removeAtCommands(originalMessage),
+        },
+      });
     }
   }
 

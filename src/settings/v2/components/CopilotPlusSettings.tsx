@@ -78,6 +78,17 @@ export const CopilotPlusSettings: React.FC = () => {
         </div>
         <div className="tw-flex tw-flex-col tw-gap-4">
           <SettingItem
+            type="text"
+            title="Memory Folder Name"
+            description="Folder where memories are stored"
+            value={settings.memoryFolder}
+            onChange={(value) => {
+              updateSetting("memoryFolder", value);
+            }}
+            placeholder="copilot-memory"
+          />
+
+          <SettingItem
             type="switch"
             title="Include Current Note in Context Menu"
             description="Automatically include the current note in the chat context menu by default when sending messages to the AI."

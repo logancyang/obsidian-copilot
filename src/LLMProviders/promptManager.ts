@@ -12,6 +12,8 @@ export default class PromptManager {
   private chatPrompt: ChatPromptTemplate;
   private qaPrompt: ChatPromptTemplate;
 
+  private app: App;
+
   private constructor() {
     this.initChatPrompt();
     this.initQAPrompt();
