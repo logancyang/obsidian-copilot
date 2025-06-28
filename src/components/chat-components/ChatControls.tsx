@@ -145,12 +145,30 @@ export function ChatControls({ onNewChat, onSaveAsNote }: ChatControlsProps) {
       </div>
       <div>
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost2" size="icon" title="New Chat" onClick={onNewChat}>
-              <MessageCirclePlus className="size-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>New Chat</TooltipContent>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost2" size="icon" title="新建会话">
+                <MessageCirclePlus className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-28">
+              <DropdownMenuItem
+                onSelect={() => onNewChat()}
+                className="text-red-500 focus:text-red-500"
+              >
+                确认新建
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+                }}
+              >
+                取消
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <TooltipContent>新建会话</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
