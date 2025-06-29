@@ -1,5 +1,5 @@
 import axios from "axios";
-import Whisper from "../main";
+import Whisper from "@/main";
 import { Notice, MarkdownView, requestUrl } from "obsidian";
 import { getBaseFileName, payloadGenerator } from "../utils";
 
@@ -15,36 +15,36 @@ export class AudioHandler {
     const baseFileName = getBaseFileName(fileName);
 
     const audioFilePath = `${
-      this.plugin.whisperSettings.saveAudioFilePath
-        ? `${this.plugin.whisperSettings.saveAudioFilePath}/`
+      this.plugin.asrSettings.Asr_saveAudioFilePath
+        ? `${this.plugin.asrSettings.Asr_saveAudioFilePath}/`
         : ""
     }${fileName}`;
 
     const noteFilePath = `${
-      this.plugin.whisperSettings.createNewFileAfterRecordingPath
-        ? `${this.plugin.whisperSettings.createNewFileAfterRecordingPath}/`
+      this.plugin.asrSettings.Asr_createNewFileAfterRecordingPath
+        ? `${this.plugin.asrSettings.Asr_createNewFileAfterRecordingPath}/`
         : ""
     }${baseFileName}.md`;
 
-    if (this.plugin.whisperSettings.debugMode) {
+    if (this.plugin.asrSettings.Asr_debugMode) {
       new Notice(`Sending audio data size: ${blob.size / 1000} KB`);
     }
 
-    if (!this.plugin.whisperSettings.useLocalService && !this.plugin.whisperSettings.apiKey) {
+    if (!this.plugin.asrSettings.Asr_useLocalService && !this.plugin.asrSettings.Asr_apiKey) {
       new Notice("API key is missing. Please add your API key in the settings.");
       return;
     }
 
     const formData = new FormData();
     formData.append("file", blob, fileName);
-    formData.append("model", this.plugin.whisperSettings.model);
-    formData.append("language", this.plugin.whisperSettings.language);
-    if (this.plugin.whisperSettings.prompt)
-      formData.append("prompt", this.plugin.whisperSettings.prompt);
+    formData.append("model", this.plugin.asrSettings.Asr_transcriptionEngine);
+    formData.append("language", this.plugin.asrSettings.Asr_language);
+    if (this.plugin.asrSettings.Asr_prompt)
+      formData.append("prompt", this.plugin.asrSettings.Asr_prompt);
 
     try {
       // If the saveAudioFile setting is true, save the audio file
-      if (this.plugin.whisperSettings.saveAudioFile) {
+      if (this.plugin.asrSettings.Asr_saveAudioFile) {
         const arrayBuffer = await blob.arrayBuffer();
         await this.plugin.app.vault.adapter.writeBinary(audioFilePath, new Uint8Array(arrayBuffer));
         new Notice("Audio saved successfully.");
@@ -55,20 +55,20 @@ export class AudioHandler {
     }
 
     try {
-      if (this.plugin.whisperSettings.debugMode) {
+      if (this.plugin.asrSettings.Asr_debugMode) {
         new Notice("Parsing audio data:" + fileName);
       }
 
       let response;
-      if (this.plugin.whisperSettings.useLocalService) {
+      if (this.plugin.asrSettings.Asr_useLocalService) {
         // 使用本地 whisper ASR 服务
         response = await this.sendToLocalService(blob, fileName);
       } else {
         // 使用远程 OpenAI API
-        response = await axios.post(this.plugin.whisperSettings.apiUrl, formData, {
+        response = await axios.post(this.plugin.asrSettings.Asr_apiUrl, formData, {
           headers: {
             "Content-Type": "multipart/form-data",
-            Authorization: `Bearer ${this.plugin.whisperSettings.apiKey}`,
+            Authorization: `Bearer ${this.plugin.asrSettings.Asr_apiKey}`,
           },
         });
       }
@@ -76,7 +76,7 @@ export class AudioHandler {
       // Determine if a new file should be created
       const activeView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
       const shouldCreateNewFile =
-        this.plugin.whisperSettings.createNewFileAfterRecording || !activeView;
+        this.plugin.asrSettings.Asr_createNewFileAfterRecording || !activeView;
 
       if (shouldCreateNewFile) {
         await this.plugin.app.vault.create(
@@ -112,36 +112,36 @@ export class AudioHandler {
     const baseFileName = getBaseFileName(fileName);
 
     const audioFilePath = `${
-      this.plugin.whisperSettings.saveAudioFilePath
-        ? `${this.plugin.whisperSettings.saveAudioFilePath}/`
+      this.plugin.asrSettings.Asr_saveAudioFilePath
+        ? `${this.plugin.asrSettings.Asr_saveAudioFilePath}/`
         : ""
     }${fileName}`;
 
     const noteFilePath = `${
-      this.plugin.whisperSettings.createNewFileAfterRecordingPath
-        ? `${this.plugin.whisperSettings.createNewFileAfterRecordingPath}/`
+      this.plugin.asrSettings.Asr_createNewFileAfterRecordingPath
+        ? `${this.plugin.asrSettings.Asr_createNewFileAfterRecordingPath}/`
         : ""
     }${baseFileName}.md`;
 
-    if (this.plugin.whisperSettings.debugMode) {
+    if (this.plugin.asrSettings.Asr_debugMode) {
       new Notice(`Sending audio data size: ${blob.size / 1000} KB`);
     }
 
-    if (!this.plugin.whisperSettings.useLocalService && !this.plugin.whisperSettings.apiKey) {
+    if (!this.plugin.asrSettings.Asr_useLocalService && !this.plugin.asrSettings.Asr_apiKey) {
       new Notice("API key is missing. Please add your API key in the settings.");
       return;
     }
 
     const formData = new FormData();
     formData.append("file", blob, fileName);
-    formData.append("model", this.plugin.whisperSettings.model);
-    formData.append("language", this.plugin.whisperSettings.language);
-    if (this.plugin.whisperSettings.prompt)
-      formData.append("prompt", this.plugin.whisperSettings.prompt);
+    formData.append("model", this.plugin.asrSettings.Asr_transcriptionEngine);
+    formData.append("language", this.plugin.asrSettings.Asr_language);
+    if (this.plugin.asrSettings.Asr_prompt)
+      formData.append("prompt", this.plugin.asrSettings.Asr_prompt);
 
     try {
       // If the saveAudioFile setting is true, save the audio file
-      if (this.plugin.whisperSettings.saveAudioFile) {
+      if (this.plugin.asrSettings.Asr_saveAudioFile) {
         const arrayBuffer = await blob.arrayBuffer();
         await this.plugin.app.vault.adapter.writeBinary(audioFilePath, new Uint8Array(arrayBuffer));
         new Notice("Audio saved successfully.");
@@ -152,24 +152,24 @@ export class AudioHandler {
     }
 
     try {
-      if (this.plugin.whisperSettings.debugMode) {
+      if (this.plugin.asrSettings.Asr_debugMode) {
         new Notice("Parsing audio data:" + fileName);
       }
 
       let response;
-      if (this.plugin.whisperSettings.useLocalService) {
+      if (this.plugin.asrSettings.Asr_useLocalService) {
         // 使用本地 whisper ASR 服务
         response = await this.sendToLocalService(blob, fileName);
       } else {
         // 使用远程 OpenAI API
-        response = await axios.post(this.plugin.whisperSettings.apiUrl, formData, {
+        response = await axios.post(this.plugin.asrSettings.Asr_apiUrl, formData, {
           headers: {
             "Content-Type": "multipart/form-data",
-            Authorization: `Bearer ${this.plugin.whisperSettings.apiKey}`,
+            Authorization: `Bearer ${this.plugin.asrSettings.Asr_apiKey}`,
           },
         });
       }
-      if(this.plugin.setChatInput) {
+      if (this.plugin.setChatInput) {
         this.plugin.setChatInput(response.data.text);
       }
       new Notice("Audio parsed successfully.");
@@ -187,14 +187,15 @@ export class AudioHandler {
     let args = "output=json";
     args += `&word_timestamps=true`;
 
-    const { translate, encode, vadFilter, language, prompt } = this.plugin.whisperSettings;
-    if (translate) args += `&task=translate`;
-    if (encode !== true) args += `&encode=${encode}`;
-    if (vadFilter !== false) args += `&vad_filter=${vadFilter}`;
-    if (language !== "en") args += `&language=${language}`;
-    if (prompt) args += `&initial_prompt=${prompt}`;
+    const { Asr_translate, Asr_encode, Asr_vadFilter, Asr_language, Asr_prompt } =
+      this.plugin.asrSettings;
+    if (Asr_translate) args += `&task=translate`;
+    if (Asr_encode !== true) args += `&encode=${Asr_encode}`;
+    if (Asr_vadFilter !== false) args += `&vad_filter=${Asr_vadFilter}`;
+    if (Asr_language !== "en") args += `&language=${Asr_language}`;
+    if (Asr_prompt) args += `&initial_prompt=${Asr_prompt}`;
 
-    const urls = this.plugin.whisperSettings.localServiceUrl.split(";").filter(Boolean);
+    const urls = this.plugin.asrSettings.Asr_localServiceUrl.split(";").filter(Boolean);
 
     for (const baseUrl of urls) {
       const url = `${baseUrl}/asr?${args}`;
@@ -211,7 +212,7 @@ export class AudioHandler {
 
       try {
         const response = await requestUrl(options);
-        if (this.plugin.whisperSettings.debugMode) {
+        if (this.plugin.asrSettings.Asr_debugMode) {
           console.log("Raw response:", response);
         }
 
@@ -229,7 +230,7 @@ export class AudioHandler {
           },
         };
       } catch (error) {
-        if (this.plugin.whisperSettings.debugMode) {
+        if (this.plugin.asrSettings.Asr_debugMode) {
           console.error("Error with URL:", url, error);
         }
         // 如果是最后一个 URL，抛出错误

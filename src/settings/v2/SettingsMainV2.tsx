@@ -14,8 +14,7 @@ import { ModelSettings } from "./components/ModelSettings";
 import { QASettings } from "./components/QASettings";
 import { SystemPromptsSection } from "./components/SystemPromptsSection";
 import { PromptEnhancementsSection } from "./components/PromptEnhancementsSection";
-import { TranscriptionSettingsTab } from "./components/TranscriptionSettingsTab";
-import { WhisperSettingsTab } from "./components/WhisperSettingsTab";
+import { AsrSetting } from "./components/AsrSettings";
 
 const TAB_IDS = [
   "basic",
@@ -25,8 +24,7 @@ const TAB_IDS = [
   "advanced",
   "systemPrompts",
   "promptEnhancements",
-  "transcription",
-  "whisper",
+  "ASR",
 ] as const;
 type TabId = (typeof TAB_IDS)[number];
 
@@ -39,8 +37,7 @@ const icons: Record<TabId, JSX.Element> = {
   advanced: <Wrench className="w-5 h-5" />,
   systemPrompts: <Cog className="w-5 h-5" />,
   promptEnhancements: <Cog className="w-5 h-5" />,
-  transcription: <Cog className="w-5 h-5" />,
-  whisper: <Cog className="w-5 h-5" />,
+  ASR: <Cog className="w-5 h-5" />,
 };
 
 // tabs
@@ -62,8 +59,7 @@ const SettingsContent: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
     advanced: () => <AdvancedSettings />,
     systemPrompts: () => <SystemPromptsSection />,
     promptEnhancements: () => <PromptEnhancementsSection />,
-    transcription: () => <TranscriptionSettingsTab app={plugin.app} plugin={plugin} />,
-    whisper: () => <WhisperSettingsTab plugin={plugin} />,
+    ASR: () => <AsrSetting plugin={plugin} />,
   };
   return (
     <div className="flex flex-col">

@@ -37,6 +37,26 @@ export interface InlineEditCommandSettings {
 }
 
 export interface CopilotSettings {
+  Asr_apiKey: string;
+  Asr_apiUrl: string;
+  Asr_debugMode: boolean;
+  Asr_encode: boolean;
+  Asr_prompt: string;
+  Asr_language: string;
+  Asr_lineSpacing: string;
+  Asr_createNewFileAfterRecording: boolean;
+  Asr_createNewFileAfterRecordingPath: string;
+  Asr_saveAudioFile: boolean;
+  Asr_saveAudioFilePath: string;
+  Asr_useLocalService: boolean;
+  Asr_localServiceUrl: string;
+  Asr_translate: boolean;
+  Asr_transcriptionEngine: string;
+  Asr_timestamps: boolean;
+  Asr_timestampFormat: string;
+  Asr_timestampInterval: string; // easier to store as a string and convert to number when needed
+  Asr_wordTimestamps: boolean;
+  Asr_vadFilter: boolean;
   userId: string;
   plusLicenseKey: string;
   openAIApiKey: string;
@@ -285,11 +305,11 @@ export function getSystemPrompt(): string {
   const userPrompt = settings.userSystemPrompt;
 
   let basePrompt: string;
-  
+
   // 根据是否拼接默认提示词进行判断
   if (settings.promptEnhancements?.appendDefaultPrompt === false) {
     // 不拼接默认提示词
-    basePrompt = userPrompt || '';
+    basePrompt = userPrompt || "";
   } else {
     // 拼接默认提示词
     basePrompt = userPrompt ? `${DEFAULT_SYSTEM_PROMPT}\n\n${userPrompt}` : DEFAULT_SYSTEM_PROMPT;

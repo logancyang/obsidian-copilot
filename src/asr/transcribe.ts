@@ -1,46 +1,31 @@
-import {
-  TranscriptionSettings,
-  /*SWIFTINK_AUTH_CALLBACK*/ API_BASE,
-  DEFAULT_SETTINGS,
-} from "./TranscriptionSettingsTab";
+import { DEFAULT_SETTINGS } from "@/constants";
 import { Notice, requestUrl, RequestUrlParam, TFile, Vault, App } from "obsidian";
 import { format } from "date-fns";
-import { paths, components } from "./types/swiftink";
 import { PayloadData, payloadGenerator, preprocessWhisperASRResponse } from "src/utils";
 import { StatusBarReadwise } from "./status";
-import { SupabaseClient } from "@supabase/supabase-js";
-import * as tus from "tus-js-client";
-import { WhisperASRResponse, WhisperASRSegment } from "./types/whisper-asr";
+import { WhisperASRResponse, WhisperASRSegment, components } from "./types/whisper-asr";
+import Whisper from "@/main";
 
 type TranscriptionBackend = (file: TFile) => Promise<string>;
 
 const MAX_TRIES = 100;
 
 export class TranscriptionEngine {
-  settings: TranscriptionSettings;
+  private plugin: Whisper;
   vault: Vault;
   statusBar: StatusBarReadwise | null;
-  supabase: SupabaseClient;
   app: App;
 
   transcriptionEngine: TranscriptionBackend;
 
   transcription_engines: { [key: string]: TranscriptionBackend } = {
-    swiftink: this.getTranscriptionSwiftink,
     whisper_asr: this.getTranscriptionWhisperASR,
   };
 
-  constructor(
-    settings: TranscriptionSettings,
-    vault: Vault,
-    statusBar: StatusBarReadwise | null,
-    supabase: SupabaseClient,
-    app: App
-  ) {
-    this.settings = settings;
+  constructor(plugin: Whisper, vault: Vault, statusBar: StatusBarReadwise | null, app: App) {
+    this.plugin = plugin;
     this.vault = vault;
     this.statusBar = statusBar;
-    this.supabase = supabase;
     this.app = app;
   }
 
@@ -107,13 +92,14 @@ export class TranscriptionEngine {
   }
 
   async getTranscription(file: TFile): Promise<string> {
-    if (this.settings.debug)
-      console.log(`Transcription engine: ${this.settings.transcriptionEngine}`);
+    if (this.plugin.asrSettings.Asr_debugMode)
+      console.log(`Transcription engine: ${this.plugin.asrSettings.Asr_transcriptionEngine}`);
     const start = new Date();
-    this.transcriptionEngine = this.transcription_engines[this.settings.transcriptionEngine];
+    this.transcriptionEngine =
+      this.transcription_engines[this.plugin.asrSettings.Asr_transcriptionEngine];
     return this.transcriptionEngine(file).then((transcription) => {
-      if (this.settings.debug) console.log(`Transcription: ${transcription}`);
-      if (this.settings.debug)
+      if (this.plugin.asrSettings.Asr_debugMode) console.log(`Transcription: ${transcription}`);
+      if (this.plugin.asrSettings.Asr_debugMode)
         console.log(`Transcription took ${new Date().getTime() - start.getTime()} ms`);
       return transcription;
     });
@@ -126,14 +112,13 @@ export class TranscriptionEngine {
 
     let args = "output=json"; // always output json, so we can have the timestamps if we need them
     args += `&word_timestamps=true`; // always output word timestamps, so we can have the timestamps if we need them
-    const { translate, encode, vadFilter, language, initialPrompt } = this.settings;
-    if (translate) args += `&task=translate`;
-    if (encode !== DEFAULT_SETTINGS.encode) args += `&encode=${encode}`;
-    if (vadFilter !== DEFAULT_SETTINGS.vadFilter) args += `&vad_filter=${vadFilter}`;
-    if (language !== DEFAULT_SETTINGS.language) args += `&language=${language}`;
-    if (initialPrompt) args += `&initial_prompt=${initialPrompt}`;
+    const { Asr_translate, Asr_encode, Asr_vadFilter, Asr_language } = this.plugin.asrSettings;
+    if (Asr_translate) args += `&task=translate`;
+    if (Asr_encode !== DEFAULT_SETTINGS.Asr_encode) args += `&encode=${Asr_encode}`;
+    if (Asr_vadFilter !== DEFAULT_SETTINGS.Asr_vadFilter) args += `&vad_filter=${Asr_vadFilter}`;
+    if (Asr_language !== DEFAULT_SETTINGS.Asr_language) args += `&language=${Asr_language}`;
 
-    const urls = this.settings.whisperASRUrls.split(";").filter(Boolean); // Remove empty strings
+    const urls = this.plugin.asrSettings.Asr_localServiceUrl.split(";").filter(Boolean); // Remove empty strings
 
     for (const baseUrl of urls) {
       const url = `${baseUrl}/asr?${args}`;
@@ -150,14 +135,15 @@ export class TranscriptionEngine {
 
       try {
         const response = await requestUrl(options);
-        if (this.settings.debug) console.log("Raw response:", response);
+        if (this.plugin.asrSettings.Asr_debugMode) console.log("Raw response:", response);
 
         // ASR_ENGINE=faster_whisper returns segments as an array. Preprocess it to match the standard.
         const preprocessed = Array.isArray(response.json.segments[0])
           ? preprocessWhisperASRResponse(response.json)
           : (response.json as WhisperASRResponse);
 
-        if (this.settings.debug) console.log("Preprocessed response:", preprocessed);
+        if (this.plugin.asrSettings.Asr_debugMode)
+          console.log("Preprocessed response:", preprocessed);
 
         // Create segments for each word timestamp if word timestamps are available
         const wordSegments = preprocessed.segments.reduce(
@@ -179,23 +165,29 @@ export class TranscriptionEngine {
           []
         );
 
-        if (this.settings.wordTimestamps) {
-          return this.segmentsToTimestampedString(wordSegments, this.settings.timestampFormat);
-        } else if (parseInt(this.settings.timestampInterval)) {
+        if (this.plugin.asrSettings.Asr_wordTimestamps) {
+          return this.segmentsToTimestampedString(
+            wordSegments,
+            this.plugin.asrSettings.Asr_timestampFormat
+          );
+        } else if (parseInt(this.plugin.asrSettings.Asr_timestampInterval)) {
           // Feed the function word segments with the interval
           return this.segmentsToTimestampedString(
             wordSegments,
-            this.settings.timestampFormat,
-            parseInt(this.settings.timestampInterval)
+            this.plugin.asrSettings.Asr_timestampFormat,
+            parseInt(this.plugin.asrSettings.Asr_timestampInterval)
           );
-        } else if (this.settings.timestamps) {
+        } else if (this.plugin.asrSettings.Asr_timestamps) {
           // Use existing segment-to-string functionality if only segment timestamps are needed
           const segments = preprocessed.segments.map((segment: WhisperASRSegment) => ({
             start: segment.start,
             end: segment.end,
             text: segment.text,
           }));
-          return this.segmentsToTimestampedString(segments, this.settings.timestampFormat);
+          return this.segmentsToTimestampedString(
+            segments,
+            this.plugin.asrSettings.Asr_timestampFormat
+          );
         } else if (preprocessed.segments) {
           // Concatenate all segments into a single string if no timestamps are required
           return preprocessed.segments
@@ -207,230 +199,11 @@ export class TranscriptionEngine {
           return preprocessed.text;
         }
       } catch (error) {
-        if (this.settings.debug) console.error("Error with URL:", url, error);
+        if (this.plugin.asrSettings.Asr_debugMode) console.error("Error with URL:", url, error);
         // Don't return or throw yet, try the next URL
       }
     }
     // If all URLs fail, reject the promise with a generic error or the last specific error caught
     return Promise.reject("All Whisper ASR URLs failed");
-  }
-
-  async getTranscriptionSwiftink(file: TFile): Promise<string> {
-    //const api_base = "https://api.swiftink.io";
-
-    const session = await this.supabase.auth.getSession().then((res) => {
-      return res.data;
-    });
-
-    if (session == null || session.session == null) {
-      //window.open(SWIFTINK_AUTH_CALLBACK, "_blank");
-      return Promise.reject("No user session found. Please log in and try again.");
-    }
-
-    const token = session.session.access_token;
-    const id = session.session.user.id;
-
-    const fileStream = await this.vault.readBinary(file);
-    const filename = file.name.replace(/[^a-zA-Z0-9.]+/g, "-");
-
-    // Declare progress notice for uploading
-    let uploadProgressNotice: Notice | null = null;
-
-    const uploadPromise = new Promise<tus.Upload>((resolve) => {
-      const upload = new tus.Upload(new Blob([fileStream]), {
-        endpoint: `https://vcdeqgrsqaexpnogauly.supabase.co/storage/v1/upload/resumable`,
-        retryDelays: [0, 3000, 5000, 10000, 20000],
-        headers: {
-          authorization: `Bearer ${token}`,
-          "x-upsert": "true",
-        },
-        uploadDataDuringCreation: true,
-        metadata: {
-          bucketName: "swiftink-upload",
-          objectName: `${id}/${filename}`,
-        },
-        chunkSize: 6 * 1024 * 1024,
-        onProgress: (bytesUploaded, bytesTotal) => {
-          const percentage = ((bytesUploaded / bytesTotal) * 100).toFixed(2);
-
-          // Create a notice message with the progress
-          const noticeMessage = `Uploading ${filename}: ${percentage}%`;
-
-          // Check if a notice has already been created
-          if (!uploadProgressNotice) {
-            // If not, create a new notice
-            uploadProgressNotice = new Notice(noticeMessage, 80 * 1000);
-          } else {
-            // If the notice exists, update its content
-            uploadProgressNotice.setMessage(noticeMessage);
-            //uploadProgressNotice.hide();
-          }
-
-          if (this.settings.debug) {
-            console.log(bytesUploaded, bytesTotal, percentage + "%");
-          }
-        },
-        onSuccess: () => {
-          if (this.settings.debug) {
-            console.log(`Successfully uploaded ${filename} to Swiftink`);
-          }
-
-          // Close the progress notice on successful upload
-          if (uploadProgressNotice) {
-            uploadProgressNotice.hide();
-          }
-
-          resolve(upload);
-        },
-      });
-
-      upload.start();
-    });
-
-    try {
-      await uploadPromise;
-      new Notice(`Successfully uploaded ${filename} to Swiftink`);
-    } catch (error) {
-      if (this.settings.debug) {
-        console.log("Failed to upload to Swiftink: ", error);
-      }
-
-      return Promise.reject(new Notice(`Failed to upload ${filename} to Swiftink`));
-    }
-
-    // Declare progress notice for transcription
-    let transcriptionProgressNotice: Notice | null = null;
-
-    const fileUrl = `https://vcdeqgrsqaexpnogauly.supabase.co/storage/v1/object/public/swiftink-upload/${id}/${filename}`;
-    const url = `${API_BASE}/transcripts/`;
-    const headers = { Authorization: `Bearer ${token}` };
-    const body: paths["/transcripts/"]["post"]["requestBody"]["content"]["application/json"] = {
-      name: filename,
-      url: fileUrl,
-    };
-
-    if (this.settings.language != "auto")
-      body.language = this.settings
-        .language as components["schemas"]["CreateTranscriptionRequest"]["language"];
-
-    if (this.settings.debug) console.log(body);
-
-    const options: RequestUrlParam = {
-      method: "POST",
-      url: url,
-      headers: headers,
-      body: JSON.stringify(body),
-    };
-
-    let transcript_create_res;
-    try {
-      transcript_create_res = await requestUrl(options);
-    } catch (error) {
-      if (this.settings.debug) console.log("Failed to create transcript: ", error);
-      return Promise.reject(error);
-    }
-
-    let transcript: components["schemas"]["TranscriptSchema"] = transcript_create_res.json;
-    if (this.settings.debug) console.log(transcript);
-
-    let completed_statuses = ["transcribed", "complete"];
-
-    if (this.settings.embedSummary || this.settings.embedOutline || this.settings.embedKeywords) {
-      completed_statuses = ["complete"];
-    }
-
-    return new Promise((resolve, reject) => {
-      let tries = 0;
-
-      // Function to update the transcription progress notice
-      const updateTranscriptionNotice = () => {
-        const noticeMessage = `Transcribing ${transcript.name}...`;
-        if (!transcriptionProgressNotice) {
-          transcriptionProgressNotice = new Notice(noticeMessage, 80 * 1000);
-        } else {
-          transcriptionProgressNotice.setMessage(noticeMessage);
-        }
-      };
-
-      const poll = setInterval(async () => {
-        const options: RequestUrlParam = {
-          method: "GET",
-          url: `${API_BASE}/transcripts/${transcript.id}`,
-          headers: headers,
-        };
-        const transcript_res = await requestUrl(options);
-        transcript = transcript_res.json;
-        if (this.settings.debug) console.log(transcript);
-
-        if (transcript.status && completed_statuses.includes(transcript.status)) {
-          clearInterval(poll);
-
-          //Close the transcription progress notice on completion
-          if (transcriptionProgressNotice) {
-            transcriptionProgressNotice.hide();
-          }
-
-          new Notice(`Successfully transcribed ${filename} with Swiftink`);
-          resolve(this.formatSwiftinkResults(transcript));
-        } else if (transcript.status == "failed") {
-          if (this.settings.debug) console.error("Swiftink failed to transcribe the file");
-          clearInterval(poll);
-          reject("Swiftink failed to transcribe the file");
-        } else if (transcript.status == "validation_failed") {
-          if (this.settings.debug) console.error("Swiftink has detected an invalid file");
-          clearInterval(poll);
-          reject("Swiftink has detected an invalid file");
-        } else if (tries > MAX_TRIES) {
-          if (this.settings.debug) console.error("Swiftink took too long to transcribe the file");
-          clearInterval(poll);
-          reject("Swiftink took too long to transcribe the file");
-        } else {
-          // Update the transcription progress notice
-          updateTranscriptionNotice();
-        }
-        tries++;
-      }, 3000);
-    });
-  }
-
-  formatSwiftinkResults(transcript: components["schemas"]["TranscriptSchema"]): string {
-    let transcript_text = "## Transcript\n";
-
-    if (this.settings.timestamps)
-      transcript_text += this.segmentsToTimestampedString(
-        transcript.text_segments,
-        this.settings.timestampFormat
-      );
-    else transcript_text += transcript.text ? transcript.text : "";
-
-    if (transcript_text.slice(-1) !== "\n") transcript_text += "\n";
-
-    if (
-      this.settings.embedSummary &&
-      transcript.summary &&
-      transcript.summary !== "Insufficient information for a summary."
-    )
-      transcript_text += `## Summary\n${transcript.summary}`;
-
-    if (transcript_text.slice(-1) !== "\n") transcript_text += "\n";
-
-    if (this.settings.embedOutline && transcript.heading_segments.length > 0)
-      transcript_text += `## Outline\n${this.segmentsToTimestampedString(
-        transcript.heading_segments,
-        this.settings.timestampFormat
-      )}`;
-
-    if (transcript_text.slice(-1) !== "\n") transcript_text += "\n";
-
-    if (this.settings.embedKeywords && transcript.keywords.length > 0)
-      transcript_text += `## Keywords\n${transcript.keywords.join(", ")}`;
-
-    if (transcript_text.slice(-1) !== "\n") transcript_text += "\n";
-
-    if (this.settings.embedAdditionalFunctionality) {
-      transcript_text += `[...](obsidian://swiftink_transcript_functions?id=${transcript.id})`;
-    }
-
-    return transcript_text;
   }
 }

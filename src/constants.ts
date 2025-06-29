@@ -496,6 +496,26 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
+  Asr_apiKey: "",
+  Asr_apiUrl: "https://api.openai.com/v1/audio/transcriptions",
+  Asr_debugMode: false,
+  Asr_encode: true,
+  Asr_prompt: "",
+  Asr_language: "en",
+  Asr_lineSpacing: "multi",
+  Asr_createNewFileAfterRecording: false,
+  Asr_createNewFileAfterRecordingPath: "",
+  Asr_saveAudioFile: false,
+  Asr_saveAudioFilePath: "",
+  Asr_useLocalService: true,
+  Asr_localServiceUrl: "http://localhost:9000",
+  Asr_translate: false,
+  Asr_transcriptionEngine: "whisper_asr",
+  Asr_timestamps: false,
+  Asr_timestampFormat: "auto",
+  Asr_timestampInterval: "0", // easier to store as a string and convert to number when needed
+  Asr_wordTimestamps: false,
+  Asr_vadFilter: false, // this doesn't seem to do anything in the current version of the Whisper ASR server
   userId: uuidv4(),
   isPlusUser: false,
   plusLicenseKey: "",

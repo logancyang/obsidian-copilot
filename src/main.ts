@@ -41,21 +41,11 @@ import { IntentAnalyzer } from "./LLMProviders/intentAnalyzer";
 import { ChildProcess } from "child_process";
 import { TranscriptionEngine } from "./asr/transcribe";
 import { StatusBarReadwise } from "./asr/status";
-import { createClient, User } from "@supabase/supabase-js";
-import {
-  TranscriptionSettings,
-  DEFAULT_SETTINGS,
-  TranscriptionSettingTab,
-  SWIFTINK_AUTH_CALLBACK,
-  SUPABASE_URL,
-  SUPABASE_KEY,
-  IS_SWIFTINK,
-} from "./asr/TranscriptionSettingsTab";
 import { FileLink } from "./asr/fileLink";
 import { Timer } from "./asr/Timer";
 import { Controls } from "./asr/Controls";
 import { AudioHandler } from "./asr/AudioHandler";
-import { WhisperSettingsTab, SettingsManager, WhisperSettings } from "./asr/WhisperSettingsTab";
+import { AsrSettings, DEFAULT_SETTINGS } from "./asr/AsrSettingsTab";
 import { NativeAudioRecorder } from "./asr/AudioRecorder";
 import { RecordingStatus, StatusBarRecord } from "./asr/StatusBar";
 
@@ -69,22 +59,19 @@ export default class CopilotPlugin extends Plugin {
   vectorStoreManager: VectorStoreManager;
   fileParserManager: FileParserManager;
   settingsUnsubscriber?: () => void;
-  Transcriptionsettings: TranscriptionSettings;
-  statusBarReadwise: StatusBarReadwise;
-  whisperSettings: WhisperSettings;
-  settingsManager: SettingsManager;
+
+  asrSettings: AsrSettings;
   timer: Timer;
   recorder: NativeAudioRecorder;
   audioHandler: AudioHandler;
   controls: Controls | null = null;
   statusBarRecord: StatusBarRecord;
+  statusBarReadwise: StatusBarReadwise;
 
   public static plugin: Plugin;
   public static children: Array<ChildProcess> = [];
   public transcriptionEngine: TranscriptionEngine;
-  public user: User | null;
 
-  private pendingCommand: { file?: TFile; parentFile: TFile } | null = null;
   private ongoingTranscriptionTasks: Array<{
     task: Promise<void>;
     abortController: AbortController;
@@ -119,68 +106,6 @@ export default class CopilotPlugin extends Plugin {
     // Additional initialization if needed
   }
 
-  public supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-    auth: {
-      detectSessionInUrl: false,
-      autoRefreshToken: true,
-      persistSession: true,
-    },
-  });
-
-  private querySelectionOnAuthentication(authString: string, display: string) {
-    if (authString === ".swiftink-manage-account-btn") {
-      return document.querySelectorAll(authString).forEach((element) => {
-        element.innerHTML = `Manage ${this.user?.email}`;
-      });
-    } else {
-      return document.querySelectorAll(authString).forEach((element) => {
-        element.setAttribute("style", display);
-      });
-    }
-  }
-
-  // Modify your executePendingCommand method to store the ongoing task
-  private async executePendingCommand(pendingCommand: { file?: TFile; parentFile: TFile }) {
-    try {
-      // Check if the user is authenticated
-      const session = await this.supabase.auth.getSession().then((res) => {
-        return res.data;
-      });
-
-      if (!session || !session.session) {
-        throw new Error("User not authenticated.");
-      }
-
-      if (pendingCommand?.file) {
-        const abortController = new AbortController();
-        const task = this.transcribeAndWrite(
-          pendingCommand.parentFile,
-          pendingCommand.file,
-          abortController
-        );
-        this.ongoingTranscriptionTasks.push({
-          task,
-          abortController,
-        });
-        await task;
-      } else {
-        const filesToTranscribe = await this.getTranscribeableFiles(pendingCommand.parentFile);
-        for (const fileToTranscribe of filesToTranscribe) {
-          const abortController = new AbortController();
-          const task = this.transcribeAndWrite(
-            pendingCommand.parentFile,
-            fileToTranscribe,
-            abortController
-          );
-          this.ongoingTranscriptionTasks.push({ task, abortController });
-          await task;
-        }
-      }
-    } catch (error) {
-      console.error("Error during transcription process:", error);
-    }
-  }
-
   public getTranscribeableFiles = async (file: TFile) => {
     // Get all linked files in the markdown file
     const filesLinked = Object.keys(this.app.metadataCache.resolvedLinks[file.path]);
@@ -193,7 +118,7 @@ export default class CopilotPlugin extends Plugin {
         linkedFileExtension === undefined ||
         !CopilotPlugin.transcribeFileExtensions.includes(linkedFileExtension.toLowerCase())
       ) {
-        if (this.Transcriptionsettings.debug)
+        if (this.asrSettings.Asr_debugMode)
           console.log(
             "Skipping " +
               linkedFilePath +
@@ -208,7 +133,7 @@ export default class CopilotPlugin extends Plugin {
       // Validate that we are dealing with a file and add it to the list of verified files to transcribe
       if (linkedFile instanceof TFile) filesToTranscribe.push(linkedFile);
       else {
-        if (this.Transcriptionsettings.debug) console.log("Could not find file " + linkedFilePath);
+        if (this.asrSettings.Asr_debugMode) console.log("Could not find file " + linkedFilePath);
         continue;
       }
     }
@@ -221,7 +146,7 @@ export default class CopilotPlugin extends Plugin {
     abortController: AbortController | null
   ) {
     try {
-      if (this.Transcriptionsettings.debug) console.log("Transcribing " + file.path);
+      if (this.asrSettings.Asr_debugMode) console.log("Transcribing " + file.path);
 
       const transcription = await this.transcriptionEngine.getTranscription(file);
 
@@ -232,7 +157,7 @@ export default class CopilotPlugin extends Plugin {
       const startReplacementIndex =
         fileText.indexOf(fileLinkStringTagged) + fileLinkStringTagged.length;
 
-      if (this.Transcriptionsettings.lineSpacing === "single") {
+      if (this.asrSettings.Asr_lineSpacing === "single") {
         fileText = [
           fileText.slice(0, startReplacementIndex),
           `${transcription}`,
@@ -263,7 +188,7 @@ export default class CopilotPlugin extends Plugin {
           10 * 1000
         );
       } else {
-        if (this.Transcriptionsettings.debug) console.log(error);
+        if (this.asrSettings.Asr_debugMode) console.log(error);
         new Notice(`Error transcribing file: ${error}`, 10 * 1000);
       }
     } finally {
@@ -271,6 +196,7 @@ export default class CopilotPlugin extends Plugin {
       abortController = null;
     }
   }
+
   async onload(): Promise<void> {
     await this.loadSettings();
     this.settingsUnsubscriber = subscribeToSettingsChange(async (prev, next) => {
@@ -336,64 +262,15 @@ export default class CopilotPlugin extends Plugin {
       })
     );
 
-    await this.loadSettings();
-    CopilotPlugin.plugin = this;
     console.log("Loading Obsidian Transcription");
-    if (this.Transcriptionsettings.debug) console.log("Debug mode enabled");
+    if (this.asrSettings.Asr_debugMode) console.log("Debug mode enabled");
 
     this.transcriptionEngine = new TranscriptionEngine(
-      this.Transcriptionsettings,
+      this,
       this.app.vault,
       this.statusBarReadwise,
-      this.supabase,
       this.app
     );
-
-    // Prompt the user to sign in if the have Swiftink selected and are not signed in
-    if (this.Transcriptionsettings.transcriptionEngine == "swiftink") {
-      this.user = await this.supabase.auth.getUser().then((res) => {
-        return res.data.user || null;
-      });
-      if (this.user == null) {
-        // First try setting the access token and refresh token from the settings
-        if (this.Transcriptionsettings.debug)
-          console.log("Trying to set access token and refresh token from settings");
-        if (
-          this.Transcriptionsettings.swiftink_access_token != null &&
-          this.Transcriptionsettings.swiftink_refresh_token != null
-        ) {
-          await this.supabase.auth.setSession({
-            access_token: this.Transcriptionsettings.swiftink_access_token,
-            refresh_token: this.Transcriptionsettings.swiftink_refresh_token,
-          });
-          this.user = await this.supabase.auth.getUser().then((res) => {
-            return res.data.user || null;
-          });
-        }
-
-        // If the user is still null, prompt them to sign in
-
-        if (this.user == null) {
-          const noticeContent = document.createDocumentFragment();
-
-          // Create the text node
-          const textNode = document.createTextNode("Transcription: You are signed out. Please ");
-
-          // Create the hyperlink
-          const signInLink = document.createElement("a");
-          //signInLink.href = SWIFTINK_AUTH_CALLBACK;
-          signInLink.target = "_blank";
-          signInLink.textContent = "Sign In";
-
-          // Append the text and link to the document fragment
-          noticeContent.appendChild(textNode);
-          noticeContent.appendChild(signInLink);
-
-          // Create the notice with the content
-          const notice = new Notice(noticeContent, 16 * 1000);
-        }
-      }
-    }
 
     if (!Platform.isMobileApp) {
       this.statusBarReadwise = new StatusBarReadwise(this.addStatusBarItem());
@@ -486,20 +363,11 @@ export default class CopilotPlugin extends Plugin {
         const filesToTranscribe = await this.getTranscribeableFiles(view.file);
         const fileNames = filesToTranscribe.map((file) => file.name).join(", ");
         new Notice(`Files Selected: ${fileNames}`, 5 * 1000);
-
-        if (this.user == null && this.Transcriptionsettings.transcriptionEngine == IS_SWIFTINK) {
-          this.pendingCommand = {
-            parentFile: view.file,
-          };
-
-          window.open(SWIFTINK_AUTH_CALLBACK, "_blank");
-        } else {
-          for (const fileToTranscribe of filesToTranscribe) {
-            const abortController = new AbortController();
-            const task = this.transcribeAndWrite(view.file, fileToTranscribe, abortController);
-            this.ongoingTranscriptionTasks.push({ task, abortController });
-            await task;
-          }
+        for (const fileToTranscribe of filesToTranscribe) {
+          const abortController = new AbortController();
+          const task = this.transcribeAndWrite(view.file, fileToTranscribe, abortController);
+          this.ongoingTranscriptionTasks.push({ task, abortController });
+          await task;
         }
       },
     });
@@ -535,58 +403,23 @@ export default class CopilotPlugin extends Plugin {
             if (view.file === null) return;
 
             new Notice(`File Selected: ${file.name}`, 5 * 1000);
-
-            if (
-              this.transcriptionInstance.user == null &&
-              this.transcriptionInstance.Transcriptionsettings.transcriptionEngine == IS_SWIFTINK
-            ) {
-              this.transcriptionInstance.pendingCommand = {
-                file: file,
-                parentFile: view.file,
-              };
-
-              // Redirect to sign-in
-              window.open(SWIFTINK_AUTH_CALLBACK, "_blank");
-            } else {
-              const abortController = new AbortController();
-              const task = this.transcriptionInstance.transcribeAndWrite(
-                view.file,
-                file,
-                abortController
-              );
-              this.transcriptionInstance.ongoingTranscriptionTasks.push({
-                task,
-                abortController,
-              });
-              await task;
-            }
+            const abortController = new AbortController();
+            const task = this.transcriptionInstance.transcribeAndWrite(
+              view.file,
+              file,
+              abortController
+            );
+            this.transcriptionInstance.ongoingTranscriptionTasks.push({
+              task,
+              abortController,
+            });
+            await task;
           }
         }
 
         new FileSelectionModal(this.app, this).open();
       },
     });
-
-    // Register a command to transcribe a media file when right-clicking on it
-    // this.registerEvent(
-    // 	// if (!Transcription.transcribeFileExtensions.includes(view.file.extension.toLowerCase())) return;
-    // 	this.app.workspace.on("file-menu", (menu: Menu, file) => {
-    // 		if (file instanceof TFolder) return;
-    // 		// if (file.parent instanceof TFolder) return;
-    // 		if (!(file instanceof TFile)) return;
-    // 		console.log(file)
-    // 		menu.addItem((item) => {
-    // 			item
-    // 				.setTitle("Transcribe File 🖊️")
-    // 				.setIcon("document")
-    // 				.onClick(async () => {
-    // 					if (!Transcription.transcribeFileExtensions.includes(file.extension.toLowerCase())) return;
-    // 					// transcribeAndWrite(file.parent, file)
-    // 					new Notice(file.path);
-    // 				});
-    // 		});
-    // 	})
-    // );
 
     // Kill child processes when the plugin is unloaded
     this.app.workspace.on("quit", () => {
@@ -597,87 +430,7 @@ export default class CopilotPlugin extends Plugin {
 
     // This adds a settings tab so the user can configure various aspects of the plugin
     //this.addSettingTab(new TranscriptionSettingTab(this.app, this));
-
-    this.registerObsidianProtocolHandler("swiftink_auth", async (callback) => {
-      const params = new URLSearchParams(callback.hash);
-      const access_token = params.get("access_token");
-      const refresh_token = params.get("refresh_token");
-
-      if (!access_token || !refresh_token) {
-        new Notice("Transcription: Error authenticating with Swiftink.io");
-        return;
-      }
-
-      await this.supabase.auth.setSession({
-        access_token: access_token,
-        refresh_token: refresh_token,
-      });
-      this.user = await this.supabase.auth.getUser().then((res) => {
-        return res.data.user || null;
-      });
-      new Notice("Successfully authenticated with Swiftink.io");
-
-      // Save to settings
-      this.Transcriptionsettings.swiftink_access_token = access_token;
-      this.Transcriptionsettings.swiftink_refresh_token = refresh_token;
-      await this.saveSettings();
-
-      // Show the settings for user auth/unauth based on whether the user is signed in
-      if (this.user == null) {
-        this.querySelectionOnAuthentication(".swiftink-unauthed-only", "display: block !important");
-        this.querySelectionOnAuthentication(".swiftink-authed-only", "display: none !important");
-      } else {
-        this.querySelectionOnAuthentication(".swiftink-unauthed-only", "display: none !important");
-        this.querySelectionOnAuthentication(".swiftink-authed-only", "display: block !important");
-        this.querySelectionOnAuthentication(".swiftink-manage-account-btn", "");
-      }
-
-      // Execute the pending command if there is one
-      if (this.pendingCommand) {
-        await this.executePendingCommand(this.pendingCommand);
-        this.pendingCommand = null; // Reset pending command after execution
-      }
-
-      return;
-    });
-
-    this.registerObsidianProtocolHandler("swiftink_transcript_functions", async (callback) => {
-      const id = callback.id;
-      console.log(id);
-
-      const functions = [
-        "View on Swiftink.io",
-        // "Delete from Swiftink.io",
-        // "Download .txt",
-        // "Download .srt",
-        // "Copy text to clipboard",
-        // "Copy summary to clipboard",
-        // "Copy outline to clipboard",
-        // "Copy keywords to clipboard",
-      ];
-
-      class SwiftinkTranscriptFunctionsModal extends FuzzySuggestModal<string> {
-        getItems(): string[] {
-          return functions;
-        }
-
-        getItemText(function_name: string): string {
-          return function_name;
-        }
-
-        onChooseItem(function_name: string) {
-          // new Notice(`Running ${function_name} on ${id}`);
-          if (function_name == "View on Swiftink.io") {
-            window.open("https://swiftink.io/dashboard/transcripts/" + id, "_blank");
-          }
-        }
-      }
-
-      new SwiftinkTranscriptFunctionsModal(this.app).open();
-    });
-
-    this.settingsManager = new SettingsManager(this);
-    this.whisperSettings = await this.settingsManager.loadSettings();
+    console.log("Loading Obsidian Whisper");
 
     this.addRibbonIcon("activity", "Open recording controls", (evt) => {
       this.openRecordingControls();
@@ -750,6 +503,7 @@ export default class CopilotPlugin extends Plugin {
     });
     this.registerEditorMenu();
   }
+
   onFileMenu(menu: Menu, file: TFile) {
     const parentFile = this.app.workspace.getActiveFile();
 
@@ -766,17 +520,6 @@ export default class CopilotPlugin extends Plugin {
             .setTitle("Transcribe")
             .setIcon("headphones")
             .onClick(async () => {
-              if (
-                this.user == null &&
-                this.Transcriptionsettings.transcriptionEngine == IS_SWIFTINK
-              ) {
-                this.pendingCommand = {
-                  file: file,
-                  parentFile: parentFile,
-                };
-                // Redirect to sign-in
-                window.open(SWIFTINK_AUTH_CALLBACK, "_blank");
-              }
               // Handle the click event
               const abortController = new AbortController();
               const task = this.transcribeAndWrite(parentFile, file, abortController);
@@ -800,7 +543,7 @@ export default class CopilotPlugin extends Plugin {
 
     console.log("Copilot plugin unloaded");
 
-    if (this.Transcriptionsettings.debug) console.log("Unloading Obsidian Transcription");
+    if (this.asrSettings.Asr_debugMode) console.log("Unloading Obsidian Transcription");
   }
 
   updateUserMessageHistory(newMessage: string) {
@@ -926,11 +669,7 @@ export default class CopilotPlugin extends Plugin {
     const savedSettings = await this.loadData();
     const sanitizedSettings = sanitizeSettings(savedSettings);
     setSettings(sanitizedSettings);
-    this.Transcriptionsettings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-  }
-
-  async saveSettings() {
-    await this.saveData(this.Transcriptionsettings);
+    this.asrSettings = Object.assign({}, sanitizedSettings, await this.loadData());
   }
 
   registerEditorMenu() {
@@ -951,7 +690,7 @@ export default class CopilotPlugin extends Plugin {
   openRecordingControls() {
     const CustomParam = { isCopilot: false };
     if (!this.controls) {
-      this.controls = new Controls(this,CustomParam);
+      this.controls = new Controls(this, CustomParam);
     }
     this.controls.open();
   }
