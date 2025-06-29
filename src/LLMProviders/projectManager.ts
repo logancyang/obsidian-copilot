@@ -6,6 +6,8 @@ import {
   subscribeToChainTypeChange,
   subscribeToModelKeyChange,
   subscribeToProjectChange,
+  updateProjectContextLoadState,
+  getProjectContextLoadState,
 } from "@/aiParams";
 import { ContextCache, ProjectContextCache } from "@/cache/projectContextCache";
 import { ChainType } from "@/chainFactory";
@@ -231,57 +233,7 @@ export default class ProjectManager {
       ]);
 
       // After other contexts are processed, ensure all referenced non-markdown files are parsed and cached
-      if (updatedContextCacheAfterSources.fileContexts) {
-        const fileContextCount = Object.keys(updatedContextCacheAfterSources.fileContexts).length;
-        logInfo(
-          `[loadProjectContext] Project ${project.name}: Checking ${fileContextCount} fileContexts for non-markdown processing.`
-        );
-
-        if (fileContextCount > 0) {
-          this.fileParserManager = new FileParserManager(
-            BrevilabsClient.getInstance(),
-            this.app.vault,
-            true,
-            project
-          );
-          let processedNonMdCount = 0;
-          for (const filePath in updatedContextCacheAfterSources.fileContexts) {
-            const file = this.app.vault.getAbstractFileByPath(filePath);
-            if (file instanceof TFile && file.extension !== "md") {
-              if (this.fileParserManager.supportsExtension(file.extension)) {
-                try {
-                  const existingContent = await this.projectContextCache.getFileContext(
-                    project,
-                    filePath
-                  );
-                  if (!existingContent) {
-                    logInfo(
-                      `[loadProjectContext] Project ${project.name}: Parsing/caching new/updated file: ${filePath}`
-                    );
-                    await this.fileParserManager.parseFile(file, this.app.vault);
-                    processedNonMdCount++;
-                  } // else { logInfo for skipped can be too verbose }
-                } catch (error) {
-                  logError(
-                    `[loadProjectContext] Project ${project.name}: Error parsing file ${filePath}:`,
-                    error
-                  );
-
-                  // Check if this is a rate limit error and re-throw it to fail the entire operation
-                  if (isRateLimitError(error)) {
-                    throw error; // Re-throw to fail the entire operation
-                  }
-                }
-              }
-            }
-          }
-          if (processedNonMdCount > 0) {
-            logInfo(
-              `[loadProjectContext] Project ${project.name}: Processed and cached ${processedNonMdCount} non-markdown files.`
-            );
-          }
-        }
-      }
+      await this.processNonMarkdownFiles(project, updatedContextCacheAfterSources);
 
       updatedContextCacheAfterSources.timestamp = Date.now();
       await this.projectContextCache.set(project, updatedContextCacheAfterSources);
@@ -591,6 +543,8 @@ ${contextParts.join("\n\n")}
         let content = "";
         let metadata = "";
 
+        // todo set file start process
+        this.setFileOrUrlStartProcess(file.path);
         try {
           const stat = await this.app.vault.adapter.stat(file.path);
           metadata = `[[${file.basename}]]
@@ -601,8 +555,12 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
 
           // Only process markdown files here
           content = await this.app.vault.read(file);
+          // todo set file process successful
+          this.setFileOrUrlProcessSuccessful(file.path);
           logInfo(`Completed processing markdown file: ${file.path}`);
         } catch (error) {
+          // todo set file process failed
+          this.setFileOrUrlProcessFailed(file.path);
           logError(`Error processing file ${file.path}: ${error}`);
           content = `[Error: ${err2String(error)}]`;
         }
@@ -659,8 +617,8 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
     }
 
     const webContextPromises = urlsToFetch.map(async (url) => {
-      // processWebUrlsContext itself should log errors if a specific URL fetch fails.
-      const webContext = await this.processWebUrlsContext(url);
+      // processWebUrlContext itself should log errors if a specific URL fetch fails.
+      const webContext = await this.processWebUrlContext(url);
       if (webContext) {
         logInfo(
           `[processWebUrls] Project ${project.name}: Successfully fetched content for URL: ${url.substring(0, 50)}...`
@@ -726,7 +684,7 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
     }
 
     const youtubeContextPromises = urlsToFetch.map(async (url) => {
-      const youtubeContext = await this.processYoutubeUrlsContext(url);
+      const youtubeContext = await this.processYoutubeUrlContext(url);
       if (youtubeContext) {
         logInfo(
           `[processYoutubeUrls] Project ${project.name}: Successfully fetched transcript for YouTube URL: ${url.substring(0, 50)}...`
@@ -751,47 +709,174 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
     return contextCache;
   }
 
-  private async processWebUrlsContext(webUrls?: string): Promise<string> {
-    if (!webUrls?.trim()) {
+  private async processWebUrlContext(webUrl?: string): Promise<string> {
+    if (!webUrl?.trim()) {
       return "";
     }
 
     try {
+      // todo set file start process
+      this.setFileOrUrlStartProcess(webUrl);
       const mention = Mention.getInstance();
-      const { urlContext } = await mention.processUrls(webUrls);
+      const { urlContext } = await mention.processUrls(webUrl);
+      // todo set file successful
+      this.setFileOrUrlProcessSuccessful(webUrl);
       return urlContext || "";
     } catch (error) {
-      logError(`Failed to process web URLs: ${error}`);
-      new Notice(`Failed to process web URLs: ${err2String(error)}`);
+      // todo set file process failed
+      this.setFileOrUrlProcessFailed(webUrl);
+      logError(`Failed to process web URL: ${error}`);
+      new Notice(`Failed to process web URL: ${err2String(error)}`);
       return "";
     }
   }
 
-  private async processYoutubeUrlsContext(youtubeUrls?: string): Promise<string> {
-    if (!youtubeUrls?.trim()) {
+  private async processYoutubeUrlContext(youtubeUrl?: string): Promise<string> {
+    if (!youtubeUrl?.trim()) {
       return "";
     }
 
-    const urls = youtubeUrls.split("\n").filter((url) => url.trim());
-    const processPromises = urls.map(async (url) => {
-      try {
-        const response = await BrevilabsClient.getInstance().youtube4llm(url);
-        if (response.response.transcript) {
-          return `\n\nYouTube transcript from ${url}:\n${response.response.transcript}`;
-        }
-        return "";
-      } catch (error) {
-        logError(`Failed to process YouTube URL ${url}: ${error}`);
-        new Notice(`Failed to process YouTube URL ${url}: ${err2String(error)}`);
-        return "";
+    try {
+      // todo set file start process
+      this.setFileOrUrlStartProcess(youtubeUrl);
+      const response = await BrevilabsClient.getInstance().youtube4llm(youtubeUrl);
+      if (response.response.transcript) {
+        return `\n\nYouTube transcript from ${youtubeUrl}:\n${response.response.transcript}`;
       }
-    });
+      // todo set file successful
+      this.setFileOrUrlProcessSuccessful(youtubeUrl);
+      return "";
+    } catch (error) {
+      // todo set file process failed
+      this.setFileOrUrlProcessFailed(youtubeUrl);
+      logError(`Failed to process YouTube URL ${youtubeUrl}: ${error}`);
+      new Notice(`Failed to process YouTube URL ${youtubeUrl}: ${err2String(error)}`);
+      return "";
+    }
+  }
 
-    const results = await Promise.all(processPromises);
-    return results.join("");
+  private async processNonMarkdownFiles(
+    project: ProjectConfig,
+    contextCache: ContextCache
+  ): Promise<void> {
+    if (!contextCache.fileContexts) {
+      return;
+    }
+
+    const fileContextCount = Object.keys(contextCache.fileContexts).length;
+    logInfo(
+      `[loadProjectContext] Project ${project.name}: Checking ${fileContextCount} fileContexts for non-markdown processing.`
+    );
+
+    if (fileContextCount <= 0) {
+      return;
+    }
+
+    this.fileParserManager = new FileParserManager(
+      BrevilabsClient.getInstance(),
+      this.app.vault,
+      true,
+      project
+    );
+
+    let processedNonMdCount = 0;
+    for (const filePath in contextCache.fileContexts) {
+      const file = this.app.vault.getAbstractFileByPath(filePath);
+      if (
+        file instanceof TFile &&
+        file.extension !== "md" &&
+        this.fileParserManager.supportsExtension(file.extension)
+      ) {
+        try {
+          const existingContent = await this.projectContextCache.getFileContext(project, filePath);
+          if (!existingContent) {
+            logInfo(
+              `[loadProjectContext] Project ${project.name}: Parsing/caching new/updated file: ${filePath}`
+            );
+            // todo set file start process
+            this.setFileOrUrlStartProcess(filePath);
+            await this.fileParserManager.parseFile(file, this.app.vault);
+            // todo set file successful
+            this.setFileOrUrlProcessSuccessful(filePath);
+            processedNonMdCount++;
+          } // else { logInfo for skipped can be too verbose }
+        } catch (error) {
+          // todo set file process failed
+          this.setFileOrUrlProcessFailed(filePath);
+          logError(
+            `[loadProjectContext] Project ${project.name}: Error parsing file ${filePath}:`,
+            error
+          );
+
+          // Check if this is a rate limit error and re-throw it to fail the entire operation
+          if (isRateLimitError(error)) {
+            throw error; // Re-throw to fail the entire operation
+          }
+        }
+      }
+    }
+
+    if (processedNonMdCount > 0) {
+      logInfo(
+        `[loadProjectContext] Project ${project.name}: Processed and cached ${processedNonMdCount} non-markdown files.`
+      );
+    }
   }
 
   public onunload(): void {
     this.projectContextCache.cleanup();
+  }
+
+  // Mark file as processing started
+  private setFileOrUrlStartProcess(key: string): void {
+    const state = getProjectContextLoadState();
+
+    logInfo(
+      `[setContextStartProcess] Project ${this.currentProjectId}: Marking file/url as processing started: ${key}`
+    );
+
+    // Add to processing files list
+    if (!state.processingFiles.includes(key)) {
+      updateProjectContextLoadState("processingFiles", [...state.processingFiles, key]);
+    }
+
+    // Ensure file is in the total list
+    if (!state.total.includes(key)) {
+      updateProjectContextLoadState("total", [...state.total, key]);
+    }
+  }
+
+  private setFileOrUrlProcessSuccessful(key: string): void {
+    const state = getProjectContextLoadState();
+
+    logInfo(
+      `[setFileOrUrlProcessSuccessful] Project ${this.currentProjectId}: Marking file/url as successfully processed: ${key}`
+    );
+
+    updateProjectContextLoadState(
+      "processingFiles",
+      state.processingFiles.filter((file) => file !== key)
+    );
+
+    if (!state.success.includes(key)) {
+      updateProjectContextLoadState("success", [...state.success, key]);
+    }
+  }
+
+  private setFileOrUrlProcessFailed(key: string): void {
+    const state = getProjectContextLoadState();
+
+    logInfo(
+      `[setFileOrUrlProcessFailed] Project ${this.currentProjectId}: Marking file/url as failed: ${key}`
+    );
+
+    updateProjectContextLoadState(
+      "processingFiles",
+      state.processingFiles.filter((file) => file !== key)
+    );
+
+    if (!state.failed.includes(key)) {
+      updateProjectContextLoadState("failed", [...state.failed, key]);
+    }
   }
 }
