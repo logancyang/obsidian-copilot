@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import CopilotPlugin from "@/main";
-import { AsrSettings, LANGUAGES } from "@/asr/AsrSettingsTab";
-import { CopilotSettings, setSettings } from "@/settings/model";
+import { LANGUAGES } from "@/asr/AsrSettingsTab";
+import { CopilotSettings, setSettings, useSettingsValue } from "@/settings/model";
 import { DEFAULT_SETTINGS } from "@/constants";
 
 /**
@@ -52,7 +52,7 @@ export class SettingsManager {
 }
 
 const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
-  const [settings, setSettings] = useState<CopilotSettings>(DEFAULT_SETTINGS);
+  const settings = useSettingsValue();
   const settingsManager = new SettingsManager(plugin);
 
   const saveSetting = async (newSettings: Partial<CopilotSettings>) => {
@@ -95,7 +95,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
             <label className="relative inline-flex items-center cursor-pointer">
               <input
                 type="checkbox"
-                checked={settings.Asr_useLocalService}
+                checked={plugin.asrSettings.Asr_useLocalService}
                 onChange={(e) => handleToggleChange("Asr_useLocalService")(e.target.checked)}
                 className="sr-only peer"
               ></input>
@@ -109,7 +109,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
               className="px-3 py-1 rounded-full text-xs font-medium
                    {settings.Asr_useLocalService ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}"
             >
-              {settings.Asr_useLocalService ? "Local Service" : "OpenAI API"}
+              {plugin.asrSettings.Asr_useLocalService ? "Local Service" : "OpenAI API"}
             </span>
           </div>
         </div>
@@ -123,7 +123,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
           </label>
           <div className="relative">
             <select
-              value={settings.Asr_transcriptionEngine}
+              value={plugin.asrSettings.Asr_transcriptionEngine}
               onChange={(e) => saveSetting({ Asr_transcriptionEngine: e.target.value })}
               className="w-full px-4 py-2 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-white"
             >
@@ -148,7 +148,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
             <input
               type="text"
               placeholder="sk-...xxxx"
-              value={settings.Asr_apiKey}
+              value={plugin.asrSettings.Asr_apiKey}
               onChange={(e) => handleTextChange("Asr_apiKey")(e.target.value)}
               className="col-span-2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
@@ -159,7 +159,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
             <input
               type="text"
               placeholder="https://api.your-custom-url.com"
-              value={settings.Asr_apiUrl}
+              value={plugin.asrSettings.Asr_apiUrl}
               onChange={(e) => handleTextChange("Asr_apiUrl")(e.target.value)}
               className="col-span-2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
@@ -176,7 +176,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
             <input
               type="text"
               placeholder={DEFAULT_SETTINGS.Asr_localServiceUrl}
-              value={settings.Asr_localServiceUrl}
+              value={plugin.asrSettings.Asr_localServiceUrl}
               onChange={(e) => {
                 handleTextChange("Asr_localServiceUrl")(e.target.value);
               }}
@@ -189,7 +189,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
             <div className="col-span-2 flex items-center gap-3">
               <input
                 type="checkbox"
-                checked={settings.Asr_encode}
+                checked={plugin.asrSettings.Asr_encode}
                 onChange={(e) => handleToggleChange("Asr_encode")(e.target.checked)}
                 className="h-4 w-4 text-blue-500 rounded border-gray-300 focus:ring-blue-500"
               />
@@ -202,7 +202,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
             <div className="col-span-2 flex items-center gap-3">
               <input
                 type="checkbox"
-                checked={settings.Asr_vadFilter}
+                checked={plugin.asrSettings.Asr_vadFilter}
                 onChange={(e) => handleToggleChange("Asr_vadFilter")(e.target.checked)}
                 className="h-4 w-4 text-blue-500 rounded border-gray-300 focus:ring-blue-500"
               />
@@ -221,7 +221,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
             <div className="col-span-2 flex items-center gap-3">
               <input
                 type="checkbox"
-                checked={settings.Asr_saveAudioFile}
+                checked={plugin.asrSettings.Asr_saveAudioFile}
                 onChange={(e) => handleToggleChange("Asr_saveAudioFile")(e.target.checked)}
                 className="h-4 w-4 text-blue-500 rounded border-gray-300 focus:ring-blue-500"
               />
@@ -236,9 +236,9 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
             <input
               type="text"
               placeholder="Example: folder/audio"
-              value={settings.Asr_saveAudioFilePath}
+              value={plugin.asrSettings.Asr_saveAudioFilePath}
               onChange={(e) => handleTextChange("Asr_saveAudioFilePath")(e.target.value)}
-              disabled={!settings.Asr_saveAudioFile}
+              disabled={!plugin.asrSettings.Asr_saveAudioFile}
               className="col-span-2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
@@ -248,7 +248,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
             <div className="col-span-2 flex items-center gap-3">
               <input
                 type="checkbox"
-                checked={settings.Asr_createNewFileAfterRecording}
+                checked={plugin.asrSettings.Asr_createNewFileAfterRecording}
                 onChange={(e) =>
                   handleToggleChange("Asr_createNewFileAfterRecording")(e.target.checked)
                 }
@@ -265,11 +265,11 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
             <input
               type="text"
               placeholder="Example: folder/note"
-              value={settings.Asr_createNewFileAfterRecordingPath}
+              value={plugin.asrSettings.Asr_createNewFileAfterRecordingPath}
               onChange={(e) =>
                 handleTextChange("Asr_createNewFileAfterRecordingPath")(e.target.value)
               }
-              disabled={!settings.Asr_createNewFileAfterRecording}
+              disabled={!plugin.asrSettings.Asr_createNewFileAfterRecording}
               className="col-span-2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
@@ -288,7 +288,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
             </label>
             <div className="relative">
               <select
-                value={settings.Asr_language}
+                value={plugin.asrSettings.Asr_language}
                 onChange={(e) => {
                   saveSetting({ Asr_language: e.target.value });
                 }}
@@ -316,7 +316,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
             </label>
             <div className="relative">
               <select
-                value={settings.Asr_lineSpacing}
+                value={plugin.asrSettings.Asr_lineSpacing}
                 onChange={(e) => saveSetting({ Asr_lineSpacing: e.target.value })}
                 className="w-full px-4 py-2 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-white"
               >
@@ -340,7 +340,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
               <div className="relative inline-block w-10 mr-2 align-middle select-none">
                 <input
                   type="checkbox"
-                  checked={settings.Asr_timestamps}
+                  checked={plugin.asrSettings.Asr_timestamps}
                   onChange={(e) => saveSetting({ Asr_timestamps: e.target.checked })}
                   className="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 border-gray-300 appearance-none cursor-pointer transition-transform duration-200 ease-in transform translate-x-0 checked:translate-x-4 checked:border-blue-500"
                 />
@@ -353,14 +353,14 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
           </div>
 
           <div
-            className={`form-group ${settings.Asr_timestamps ? "" : "opacity-50 pointer-events-none"}`}
+            className={`form-group ${plugin.asrSettings.Asr_timestamps ? "" : "opacity-50 pointer-events-none"}`}
           >
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Timestamp format
             </label>
             <div className="relative">
               <select
-                value={settings.Asr_timestampFormat}
+                value={plugin.asrSettings.Asr_timestampFormat}
                 onChange={(e) => saveSetting({ Asr_timestampFormat: e.target.value })}
                 className="w-full px-4 py-2 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-white"
               >
@@ -379,14 +379,14 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
           </div>
 
           <div
-            className={`form-group ${settings.Asr_timestamps ? "" : "opacity-50 pointer-events-none"}`}
+            className={`form-group ${plugin.asrSettings.Asr_timestamps ? "" : "opacity-50 pointer-events-none"}`}
           >
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Timestamp interval
             </label>
             <div className="relative">
               <select
-                value={settings.Asr_timestampInterval}
+                value={plugin.asrSettings.Asr_timestampInterval}
                 onChange={(e) => saveSetting({ Asr_timestampInterval: e.target.value })}
                 className="w-full px-4 py-2 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-white"
               >
