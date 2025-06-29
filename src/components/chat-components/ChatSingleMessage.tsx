@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { ChatMessage } from "@/sharedState";
 import { insertIntoEditor } from "@/utils";
 import { Bot, User } from "lucide-react";
-import { App, Component, MarkdownRenderer, MarkdownView, TFile, Notice  } from "obsidian";
+import { App, Component, MarkdownRenderer, MarkdownView, TFile, Notice } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useSettingsValue } from "@/settings/model";
 
@@ -200,34 +200,30 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   };
 
   // 修改 handleSpeak 函数
-  const handleSpeak = useCallback(async (textToSpeak?: string) => {
-    console.log('[TTS] 播放检查', { 
-      isStreaming, 
-      sender: message.sender, 
-      isError: message.isErrorMessage,
-      text: textToSpeak || message.message 
-    });
-
-    const ttsPlugin = (app as any).plugins?.getPlugin('aloud-tts-ai-learning-assistant');
-    if (!ttsPlugin?.ttsService) {
-      console.error('[TTS] 插件不可用');
-      return;
-    }
-
-    try {
-      const text = (textToSpeak || message.message || '').trim();
-      if (!text) {
-        console.error('[TTS] 播放失败: 文本内容为空');
+  const handleSpeak = useCallback(
+    async (textToSpeak?: string) => {
+      const ttsPlugin = (app as any).plugins?.getPlugin("aloud-tts-ai-learning-assistant");
+      if (!ttsPlugin?.ttsService) {
+        // console.error('[TTS] 插件不可用');
         return;
       }
-      
-      console.log('[TTS] 播放文本', { text });
-      await ttsPlugin.ttsService.playText(text);
-    } catch (e) {
-      console.error('[TTS] 播放失败', e);
-      new Notice("Failed to play audio");
-    }
-  }, [app, message.message, message.isErrorMessage, message.sender, isStreaming]);
+
+      try {
+        const text = (textToSpeak || message.message || "").trim();
+        if (!text) {
+          // console.error('[TTS] 播放失败: 文本内容为空');
+          return;
+        }
+
+        // console.log('[TTS] 播放文本', { text });
+        await ttsPlugin.ttsService.playText(text);
+      } catch (e) {
+        console.error("[TTS] 播放失败", e);
+        new Notice("Failed to play audio");
+      }
+    },
+    [app, message.message]
+  );
 
   useEffect(() => {
     if (contentRef.current && message.sender !== USER_SENDER) {
@@ -240,13 +236,14 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       }
 
       // 简化自动播放检查，只在非流式模式下播放
-      const canAutoPlay = (
+      const canAutoPlay =
         !isStreaming && // 只处理完整消息
         !message.isErrorMessage && // 不处理错误消息
         settings.promptEnhancements?.autoSpeech?.enabled &&
         message.message &&
-        (app as any).plugins?.getPlugin('aloud-tts-ai-learning-assistant')?.ttsService?.isAvailable?.()
-      );
+        (app as any).plugins
+          ?.getPlugin("aloud-tts-ai-learning-assistant")
+          ?.ttsService?.isAvailable?.();
 
       if (canAutoPlay) {
         handleSpeak();
@@ -270,7 +267,15 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         componentRef.current = null;
       }
     };
-  }, [message, app, componentRef, isStreaming, preprocess, handleSpeak, settings.promptEnhancements?.autoSpeech?.enabled]);
+  }, [
+    message,
+    app,
+    componentRef,
+    isStreaming,
+    preprocess,
+    handleSpeak,
+    settings.promptEnhancements?.autoSpeech?.enabled,
+  ]);
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
@@ -329,7 +334,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     insertIntoEditor(message.message, hasSelection);
   };
 
-  
   const renderMessageContent = () => {
     if (message.content) {
       return (

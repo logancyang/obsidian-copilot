@@ -133,8 +133,9 @@ export interface CopilotSettings {
       prompt: string;
     };
     autoSpeech?: {
-      enabled: boolean;
-      prompt: string;
+      enabled?: boolean;
+      prompt?: string;
+      useOralPrompt?: boolean;
     };
     appendDefaultPrompt?: boolean; // 新增是否拼接默认系统提示词
   };
@@ -325,7 +326,7 @@ export function getSystemPrompt(): string {
 
   // 如果自动语音播放功能开启且设置了提示词
   if (
-    settings.promptEnhancements?.autoSpeech?.enabled &&
+    settings.promptEnhancements?.autoSpeech?.useOralPrompt &&
     settings.promptEnhancements.autoSpeech.prompt
   ) {
     basePrompt += `\n\n${settings.promptEnhancements.autoSpeech.prompt}`;
