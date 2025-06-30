@@ -8,6 +8,7 @@ import {
   subscribeToProjectChange,
   updateProjectContextLoadState,
   getProjectContextLoadState,
+  setProjectContextLoadState,
 } from "@/aiParams";
 import { ContextCache, ProjectContextCache } from "@/cache/projectContextCache";
 import { ChainType } from "@/chainFactory";
@@ -207,6 +208,17 @@ export default class ProjectManager {
       }
       logInfo(`[loadProjectContext] Starting for project: ${project.name}`);
 
+      // 清除所有项目上下文加载状态
+      setProjectContextLoadState({
+        success: [],
+        failed: [],
+        processingFiles: [],
+        total: [],
+      });
+      logInfo(
+        `[loadProjectContext] Project ${project.name}: Cleared all project context load states`
+      );
+
       const initialProjectCache = await this.projectContextCache.get(project);
       const contextCache = initialProjectCache || {
         markdownContext: "",
@@ -225,6 +237,9 @@ export default class ProjectManager {
           `[loadProjectContext] Project ${project.name}: Existing cache found. MarkdownNeedsReload: ${contextCache.markdownNeedsReload}`
         );
       }
+
+      // 预统计所有需要处理的项目
+      this.preComputeAllItems(project, contextCache);
 
       const [updatedContextCacheAfterSources] = await Promise.all([
         this.processMarkdownFiles(project, contextCache),
@@ -495,6 +510,30 @@ ${contextParts.join("\n\n")}
         logInfo(
           `[processMarkdownFiles] Project ${project.name}: Markdown content already up-to-date.`
         );
+
+        // 标记已缓存的 markdown 文件为成功
+        const { inclusions: inclusionPatterns, exclusions: exclusionPatterns } =
+          getMatchingPatterns({
+            inclusions: project.contextSource.inclusions,
+            exclusions: project.contextSource.exclusions,
+            isProject: true,
+          });
+
+        const cachedMarkdownFiles = this.app.vault.getFiles().filter((file) => {
+          return (
+            file.extension === "md" && shouldIndexFile(file, inclusionPatterns, exclusionPatterns)
+          );
+        });
+
+        cachedMarkdownFiles.forEach((file) => {
+          this.markCachedItemAsSuccess(file.path);
+        });
+
+        if (cachedMarkdownFiles.length > 0) {
+          logInfo(
+            `[processMarkdownFiles] Project ${project.name}: Marked ${cachedMarkdownFiles.length} cached markdown files as successful`
+          );
+        }
       }
     }
     logInfo(
@@ -543,24 +582,21 @@ ${contextParts.join("\n\n")}
         let content = "";
         let metadata = "";
 
-        // todo set file start process
-        this.setFileOrUrlStartProcess(file.path);
         try {
-          const stat = await this.app.vault.adapter.stat(file.path);
+          // Only process markdown files here
+          const [stat, fileContent] = await this.executeWithProcessTracking(file.path, async () => {
+            return Promise.all([this.app.vault.adapter.stat(file.path), this.app.vault.read(file)]);
+          });
+
           metadata = `[[${file.basename}]]
 path: ${file.path}
 type: ${file.extension}
 created: ${stat ? new Date(stat.ctime).toISOString() : "unknown"}
 modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
 
-          // Only process markdown files here
-          content = await this.app.vault.read(file);
-          // todo set file process successful
-          this.setFileOrUrlProcessSuccessful(file.path);
+          content = fileContent;
           logInfo(`Completed processing markdown file: ${file.path}`);
         } catch (error) {
-          // todo set file process failed
-          this.setFileOrUrlProcessFailed(file.path);
           logError(`Error processing file ${file.path}: ${error}`);
           content = `[Error: ${err2String(error)}]`;
         }
@@ -598,6 +634,17 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
       `[processWebUrls] Project ${project.name}: Found ${urlsInConfig.length} URLs in config.`
     );
     const currentCachedUrls = Object.keys(contextCache.webContexts);
+
+    // 标记已缓存的URLs为成功
+    const cachedUrls = urlsInConfig.filter((url) => contextCache.webContexts[url]);
+    cachedUrls.forEach((url) => {
+      this.markCachedItemAsSuccess(url);
+    });
+    if (cachedUrls.length > 0) {
+      logInfo(
+        `[processWebUrls] Project ${project.name}: Marked ${cachedUrls.length} cached Web URLs as successful`
+      );
+    }
 
     const urlsToFetch = urlsInConfig.filter((url) => !contextCache.webContexts[url]);
     if (urlsToFetch.length > 0) {
@@ -666,6 +713,17 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
     );
     const currentCachedUrls = Object.keys(contextCache.youtubeContexts);
 
+    // 标记已缓存的URLs为成功
+    const cachedUrls = urlsInConfig.filter((url) => contextCache.youtubeContexts[url]);
+    cachedUrls.forEach((url) => {
+      this.markCachedItemAsSuccess(url);
+    });
+    if (cachedUrls.length > 0) {
+      logInfo(
+        `[processYoutubeUrls] Project ${project.name}: Marked ${cachedUrls.length} cached YouTube URLs as successful`
+      );
+    }
+
     const urlsToFetch = urlsInConfig.filter((url) => !contextCache.youtubeContexts[url]);
     if (urlsToFetch.length > 0) {
       logInfo(
@@ -715,16 +773,12 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
     }
 
     try {
-      // todo set file start process
-      this.setFileOrUrlStartProcess(webUrl);
       const mention = Mention.getInstance();
-      const { urlContext } = await mention.processUrls(webUrl);
-      // todo set file successful
-      this.setFileOrUrlProcessSuccessful(webUrl);
+      const { urlContext } = await this.executeWithProcessTracking(webUrl, async () => {
+        return mention.processUrls(webUrl);
+      });
       return urlContext || "";
     } catch (error) {
-      // todo set file process failed
-      this.setFileOrUrlProcessFailed(webUrl);
       logError(`Failed to process web URL: ${error}`);
       new Notice(`Failed to process web URL: ${err2String(error)}`);
       return "";
@@ -737,18 +791,14 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
     }
 
     try {
-      // todo set file start process
-      this.setFileOrUrlStartProcess(youtubeUrl);
-      const response = await BrevilabsClient.getInstance().youtube4llm(youtubeUrl);
+      const response = await this.executeWithProcessTracking(youtubeUrl, async () => {
+        return BrevilabsClient.getInstance().youtube4llm(youtubeUrl);
+      });
       if (response.response.transcript) {
         return `\n\nYouTube transcript from ${youtubeUrl}:\n${response.response.transcript}`;
       }
-      // todo set file successful
-      this.setFileOrUrlProcessSuccessful(youtubeUrl);
       return "";
     } catch (error) {
-      // todo set file process failed
-      this.setFileOrUrlProcessFailed(youtubeUrl);
       logError(`Failed to process YouTube URL ${youtubeUrl}: ${error}`);
       new Notice(`Failed to process YouTube URL ${youtubeUrl}: ${err2String(error)}`);
       return "";
@@ -780,6 +830,8 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
     );
 
     let processedNonMdCount = 0;
+    let cachedNonMdCount = 0;
+
     for (const filePath in contextCache.fileContexts) {
       const file = this.app.vault.getAbstractFileByPath(filePath);
       if (
@@ -793,16 +845,15 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
             logInfo(
               `[loadProjectContext] Project ${project.name}: Parsing/caching new/updated file: ${filePath}`
             );
-            // todo set file start process
-            this.setFileOrUrlStartProcess(filePath);
-            await this.fileParserManager.parseFile(file, this.app.vault);
-            // todo set file successful
-            this.setFileOrUrlProcessSuccessful(filePath);
+            await this.executeWithProcessTracking(filePath, async () => {
+              return this.fileParserManager.parseFile(file, this.app.vault);
+            });
             processedNonMdCount++;
-          } // else { logInfo for skipped can be too verbose }
+          } else {
+            this.markCachedItemAsSuccess(filePath);
+            cachedNonMdCount++;
+          }
         } catch (error) {
-          // todo set file process failed
-          this.setFileOrUrlProcessFailed(filePath);
           logError(
             `[loadProjectContext] Project ${project.name}: Error parsing file ${filePath}:`,
             error
@@ -821,10 +872,31 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
         `[loadProjectContext] Project ${project.name}: Processed and cached ${processedNonMdCount} non-markdown files.`
       );
     }
+
+    if (cachedNonMdCount > 0) {
+      logInfo(
+        `[loadProjectContext] Project ${project.name}: Marked ${cachedNonMdCount} cached non-markdown files as successful.`
+      );
+    }
   }
 
   public onunload(): void {
     this.projectContextCache.cleanup();
+  }
+
+  private async executeWithProcessTracking<T>(
+    key: string,
+    operation: () => Promise<T>
+  ): Promise<T> {
+    this.setFileOrUrlStartProcess(key);
+    try {
+      const result = await operation();
+      this.setFileOrUrlProcessSuccessful(key);
+      return result;
+    } catch (error) {
+      this.setFileOrUrlProcessFailed(key);
+      throw error; // throw error to outer layer
+    }
   }
 
   // Mark file as processing started
@@ -832,7 +904,7 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
     const state = getProjectContextLoadState();
 
     logInfo(
-      `[setContextStartProcess] Project ${this.currentProjectId}: Marking file/url as processing started: ${key}`
+      `[setFileOrUrlStartProcess] Project ${this.currentProjectId}: Marking file/url as processing started: ${key}`
     );
 
     // Add to processing files list
@@ -877,6 +949,69 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
 
     if (!state.failed.includes(key)) {
       updateProjectContextLoadState("failed", [...state.failed, key]);
+    }
+  }
+
+  private preComputeAllItems(project: ProjectConfig, contextCache: ContextCache) {
+    logInfo(`[preComputeAllItems] Starting pre-computation for project: ${project.name}`);
+
+    const allItems: string[] = [];
+
+    // 1. 统计所有匹配的文件（markdown 和 非markdown）
+    if (project.contextSource?.inclusions || project.contextSource?.exclusions) {
+      const { inclusions: inclusionPatterns, exclusions: exclusionPatterns } = getMatchingPatterns({
+        inclusions: project.contextSource?.inclusions,
+        exclusions: project.contextSource?.exclusions,
+        isProject: true,
+      });
+
+      const allMatchingFiles = this.app.vault.getFiles().filter((file) => {
+        return shouldIndexFile(file, inclusionPatterns, exclusionPatterns);
+      });
+
+      // 将所有匹配的文件路径添加到列表中
+      allItems.push(...allMatchingFiles.map((file) => file.path));
+    }
+
+    // 2. 统计所有 Web URLs
+    const configuredWebUrls = project.contextSource?.webUrls?.trim() || "";
+    if (configuredWebUrls) {
+      const webUrls = configuredWebUrls.split("\n").filter((url) => url.trim());
+      allItems.push(...webUrls);
+    }
+
+    // 3. 统计所有 YouTube URLs
+    const configuredYoutubeUrls = project.contextSource?.youtubeUrls?.trim() || "";
+    if (configuredYoutubeUrls) {
+      const youtubeUrls = configuredYoutubeUrls.split("\n").filter((url) => url.trim());
+      allItems.push(...youtubeUrls);
+    }
+
+    // 将所有项目添加到 total 列表中
+    if (allItems.length > 0) {
+      const uniqueItems = [...new Set([...allItems])];
+      updateProjectContextLoadState("total", uniqueItems);
+      logInfo(
+        `[preComputeAllItems] Project ${project.name}: Added ${allItems.length} items to tracking (${uniqueItems.length} total unique items)`
+      );
+    }
+  }
+
+  private markCachedItemAsSuccess(key: string): void {
+    const state = getProjectContextLoadState();
+
+    logInfo(
+      `[markCachedItemAsSuccess] Project ${this.currentProjectId}: Marking cached item as successful: ${key}`
+    );
+
+    // 确保项目在 total 列表中
+    if (!state.total.includes(key)) {
+      updateProjectContextLoadState("total", [...state.total, key]);
+    }
+
+    // 直接标记为成功
+    if (!state.success.includes(key)) {
+      updateProjectContextLoadState("success", [...state.success, key]);
     }
   }
 }
