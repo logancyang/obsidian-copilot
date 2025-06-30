@@ -695,7 +695,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   /** @deprecated */
   inlineEditCommands: [],
   projectList: [],
-  enableAutocomplete: true,
+  enableAutocomplete: false,
   autocompleteAcceptKey: AUTOCOMPLETE_CONFIG.KEYBIND,
   allowAdditionalContext: true,
   enableWordCompletion: false,
