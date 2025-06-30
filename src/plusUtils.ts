@@ -53,13 +53,20 @@ export async function isBelieverPlan(): Promise<boolean> {
 
 /**
  * Apply the Copilot Plus settings.
- * WARNING! If the embedding model is changed, the vault will be indexed. Use it
- * with caution.
+ * Note: The indexVaultToVectorStore method will automatically detect embedding
+ * model changes and trigger reindexing if needed, so we don't need to check
+ * for model changes here to avoid duplicate indexing operations.
  */
 export function applyPlusSettings(): void {
   const defaultModelKey = DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY;
   const embeddingModelKey = DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY;
-  const previousEmbeddingModelKey = getSettings().embeddingModelKey;
+
+  console.log("Applying Plus settings:", {
+    previousEmbeddingModelKey: getSettings().embeddingModelKey,
+    newEmbeddingModelKey: embeddingModelKey,
+    defaultModelKey,
+  });
+
   setModelKey(defaultModelKey);
   setChainType(ChainType.COPILOT_PLUS_CHAIN);
   setSettings({
@@ -67,9 +74,11 @@ export function applyPlusSettings(): void {
     embeddingModelKey,
     defaultChainType: ChainType.COPILOT_PLUS_CHAIN,
   });
-  if (previousEmbeddingModelKey !== embeddingModelKey) {
-    VectorStoreManager.getInstance().indexVaultToVectorStore();
-  }
+
+  // Always trigger indexing when applying Plus settings since the embedding model
+  // has likely changed. The indexVaultToVectorStore method will handle model
+  // change detection internally and show appropriate notices.
+  VectorStoreManager.getInstance().indexVaultToVectorStore();
 }
 
 export function createPlusPageUrl(medium: PlusUtmMedium): string {
