@@ -4,13 +4,15 @@ import { CopilotPlusExpiredModal } from "@/components/modals/CopilotPlusExpiredM
 import {
   ChatModelProviders,
   ChatModels,
+  DEFAULT_SETTINGS,
   EmbeddingModelProviders,
   EmbeddingModels,
   PlusUtmMedium,
 } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import VectorStoreManager from "@/search/vectorStoreManager";
+import { logError, logInfo } from "@/logger";
 import { getSettings, setSettings, updateSetting, useSettingsValue } from "@/settings/model";
+import { Notice } from "obsidian";
 
 export const DEFAULT_COPILOT_PLUS_CHAT_MODEL = ChatModels.COPILOT_PLUS_FLASH;
 export const DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY =
@@ -18,6 +20,10 @@ export const DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY =
 export const DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL = EmbeddingModels.COPILOT_PLUS_SMALL;
 export const DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY =
   DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL + "|" + EmbeddingModelProviders.COPILOT_PLUS;
+
+// Default models for free users (imported from DEFAULT_SETTINGS)
+export const DEFAULT_FREE_CHAT_MODEL_KEY = DEFAULT_SETTINGS.defaultModelKey;
+export const DEFAULT_FREE_EMBEDDING_MODEL_KEY = DEFAULT_SETTINGS.embeddingModelKey;
 
 /** Check if the model key is a Copilot Plus model. */
 export function isPlusModel(modelKey: string): boolean {
@@ -53,13 +59,20 @@ export async function isBelieverPlan(): Promise<boolean> {
 
 /**
  * Apply the Copilot Plus settings.
- * WARNING! If the embedding model is changed, the vault will be indexed. Use it
- * with caution.
+ * Includes clinical fix to ensure indexing is triggered when embedding model changes,
+ * as the automatic detection doesn't work reliably in all scenarios.
  */
 export function applyPlusSettings(): void {
   const defaultModelKey = DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY;
   const embeddingModelKey = DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY;
   const previousEmbeddingModelKey = getSettings().embeddingModelKey;
+
+  logInfo("applyPlusSettings: Changing embedding model", {
+    from: previousEmbeddingModelKey,
+    to: embeddingModelKey,
+    changed: previousEmbeddingModelKey !== embeddingModelKey,
+  });
+
   setModelKey(defaultModelKey);
   setChainType(ChainType.COPILOT_PLUS_CHAIN);
   setSettings({
@@ -67,8 +80,22 @@ export function applyPlusSettings(): void {
     embeddingModelKey,
     defaultChainType: ChainType.COPILOT_PLUS_CHAIN,
   });
+
+  // Ensure indexing happens only once when embedding model changes
   if (previousEmbeddingModelKey !== embeddingModelKey) {
-    VectorStoreManager.getInstance().indexVaultToVectorStore();
+    logInfo("applyPlusSettings: Embedding model changed, triggering indexing");
+    import("@/search/vectorStoreManager")
+      .then((module) => {
+        module.default.getInstance().indexVaultToVectorStore();
+      })
+      .catch((error) => {
+        logError("Failed to trigger indexing after Plus settings applied:", error);
+        new Notice(
+          "Failed to update Copilot index. Please try force reindexing from the command palette."
+        );
+      });
+  } else {
+    logInfo("applyPlusSettings: No embedding model change, skipping indexing");
   }
 }
 
@@ -86,7 +113,27 @@ export function turnOnPlus(): void {
 
 export function turnOffPlus(): void {
   const previousIsPlusUser = getSettings().isPlusUser;
-  updateSetting("isPlusUser", false);
+  const previousEmbeddingModelKey = getSettings().embeddingModelKey;
+
+  logInfo("turnOffPlus: Resetting embedding model", {
+    from: previousEmbeddingModelKey,
+    to: DEFAULT_FREE_EMBEDDING_MODEL_KEY,
+    changed: previousEmbeddingModelKey !== DEFAULT_FREE_EMBEDDING_MODEL_KEY,
+  });
+
+  // Reset models to default free user models
+  setModelKey(DEFAULT_FREE_CHAT_MODEL_KEY);
+  setChainType(DEFAULT_SETTINGS.defaultChainType);
+  setSettings({
+    isPlusUser: false,
+    defaultModelKey: DEFAULT_FREE_CHAT_MODEL_KEY,
+    embeddingModelKey: DEFAULT_FREE_EMBEDDING_MODEL_KEY,
+    defaultChainType: DEFAULT_SETTINGS.defaultChainType,
+  });
+
+  // Note: Reindexing will be handled automatically by the model change detection system
+  // when the embedding model change is detected elsewhere in the application
+
   if (previousIsPlusUser) {
     new CopilotPlusExpiredModal(app).open();
   }
