@@ -393,7 +393,15 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault(); // Prevents adding a newline to the textarea
       handleSaveEdit();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      handleCancelEdit();
     }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditedMessage(message.message);
   };
 
   const handleEdit = () => {
@@ -439,7 +447,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                       value={editedMessage}
                       onChange={handleTextareaChange}
                       onKeyDown={handleKeyDown}
-                      onBlur={handleSaveEdit}
                       autoFocus
                       className="edit-textarea"
                     />
@@ -479,7 +486,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         value={editedMessage}
         onChange={handleTextareaChange}
         onKeyDown={handleKeyDown}
-        onBlur={handleSaveEdit}
         autoFocus
         className="edit-textarea"
       />
