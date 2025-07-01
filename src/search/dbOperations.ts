@@ -480,12 +480,7 @@ export class DBOperations {
 
       if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
         // Model has changed, notify user and rebuild DB
-        const isPlusModel = currEmbeddingModel.includes("copilot-plus");
-        const noticeMessage = isPlusModel
-          ? "Upgraded to Copilot Plus embedding model. Rebuilding index for enhanced search capabilities..."
-          : "New embedding model detected. Rebuilding Copilot index from scratch.";
-
-        new Notice(noticeMessage);
+        new Notice("New embedding model detected. Rebuilding Copilot index from scratch.");
         logInfo(
           `Detected change in embedding model from "${prevEmbeddingModel}" to "${currEmbeddingModel}". Rebuilding Copilot index from scratch.`
         );

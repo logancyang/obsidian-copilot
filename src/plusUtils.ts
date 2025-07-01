@@ -66,12 +66,6 @@ export function applyPlusSettings(): void {
   const defaultModelKey = DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY;
   const embeddingModelKey = DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY;
 
-  console.log("Applying Plus settings:", {
-    previousEmbeddingModelKey: getSettings().embeddingModelKey,
-    newEmbeddingModelKey: embeddingModelKey,
-    defaultModelKey,
-  });
-
   setModelKey(defaultModelKey);
   setChainType(ChainType.COPILOT_PLUS_CHAIN);
   setSettings({
