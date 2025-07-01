@@ -4,6 +4,7 @@ import { CopilotPlusExpiredModal } from "@/components/modals/CopilotPlusExpiredM
 import {
   ChatModelProviders,
   ChatModels,
+  DEFAULT_SETTINGS,
   EmbeddingModelProviders,
   EmbeddingModels,
   PlusUtmMedium,
@@ -18,6 +19,10 @@ export const DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY =
 export const DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL = EmbeddingModels.COPILOT_PLUS_SMALL;
 export const DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY =
   DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL + "|" + EmbeddingModelProviders.COPILOT_PLUS;
+
+// Default models for free users (imported from DEFAULT_SETTINGS)
+export const DEFAULT_FREE_CHAT_MODEL_KEY = DEFAULT_SETTINGS.defaultModelKey;
+export const DEFAULT_FREE_EMBEDDING_MODEL_KEY = DEFAULT_SETTINGS.embeddingModelKey;
 
 /** Check if the model key is a Copilot Plus model. */
 export function isPlusModel(modelKey: string): boolean {
@@ -95,7 +100,20 @@ export function turnOnPlus(): void {
 
 export function turnOffPlus(): void {
   const previousIsPlusUser = getSettings().isPlusUser;
-  updateSetting("isPlusUser", false);
+
+  // Reset models to default free user models
+  setModelKey(DEFAULT_FREE_CHAT_MODEL_KEY);
+  setChainType(DEFAULT_SETTINGS.defaultChainType);
+  setSettings({
+    isPlusUser: false,
+    defaultModelKey: DEFAULT_FREE_CHAT_MODEL_KEY,
+    embeddingModelKey: DEFAULT_FREE_EMBEDDING_MODEL_KEY,
+    defaultChainType: DEFAULT_SETTINGS.defaultChainType,
+  });
+
+  // Note: Reindexing will be handled automatically by the model change detection system
+  // when the embedding model change is detected elsewhere in the application
+
   if (previousIsPlusUser) {
     new CopilotPlusExpiredModal(app).open();
   }
