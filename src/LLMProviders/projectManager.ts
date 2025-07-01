@@ -6,9 +6,6 @@ import {
   subscribeToChainTypeChange,
   subscribeToModelKeyChange,
   subscribeToProjectChange,
-  updateProjectContextLoadState,
-  getProjectContextLoadState,
-  setProjectContextLoadState,
 } from "@/aiParams";
 import { ContextCache, ProjectContextCache } from "@/cache/projectContextCache";
 import { ChainType } from "@/chainFactory";
@@ -28,6 +25,7 @@ import { App, Notice, TFile } from "obsidian";
 import VectorStoreManager from "../search/vectorStoreManager";
 import { BrevilabsClient } from "./brevilabsClient";
 import ChainManager from "./chainManager";
+import { ProjectLoadTracker } from "./projectLoadTracker";
 
 export default class ProjectManager {
   public static instance: ProjectManager;
@@ -39,6 +37,7 @@ export default class ProjectManager {
   private chatMessageCache: Map<string, ChatMessage[]>;
   private defaultProjectKey: string = "defaultProjectKey";
   private fileParserManager: FileParserManager;
+  private loadTracker: ProjectLoadTracker;
 
   private constructor(app: App, vectorStoreManager: VectorStoreManager, plugin: CopilotPlugin) {
     this.app = app;
@@ -53,6 +52,7 @@ export default class ProjectManager {
       true,
       null
     );
+    this.loadTracker = ProjectLoadTracker.getInstance();
 
     // Set up subscriptions
     subscribeToModelKeyChange(async () => {
@@ -137,6 +137,7 @@ export default class ProjectManager {
       if (!project) {
         await this.saveCurrentProjectMessage();
         this.currentProjectId = null; // ensure set currentProjectId
+        this.loadTracker.setCurrentProjectId(null);
 
         await this.loadNextProjectMessage();
         this.refreshChatView();
@@ -151,6 +152,7 @@ export default class ProjectManager {
 
       await this.saveCurrentProjectMessage();
       this.currentProjectId = projectId; // ensure set currentProjectId
+      this.loadTracker.setCurrentProjectId(projectId);
 
       // Use sequential operations to ensure loading state is maintained
       // through the entire process
@@ -209,12 +211,7 @@ export default class ProjectManager {
       logInfo(`[loadProjectContext] Starting for project: ${project.name}`);
 
       // 清除所有项目上下文加载状态
-      setProjectContextLoadState({
-        success: [],
-        failed: [],
-        processingFiles: [],
-        total: [],
-      });
+      this.loadTracker.clearAllLoadStates();
       logInfo(
         `[loadProjectContext] Project ${project.name}: Cleared all project context load states`
       );
@@ -239,7 +236,7 @@ export default class ProjectManager {
       }
 
       // 预统计所有需要处理的项目
-      this.preComputeAllItems(project, contextCache);
+      this.loadTracker.preComputeAllItems(project, contextCache, this.app);
 
       const [updatedContextCacheAfterSources] = await Promise.all([
         this.processMarkdownFiles(project, contextCache),
@@ -526,7 +523,7 @@ ${contextParts.join("\n\n")}
         });
 
         cachedMarkdownFiles.forEach((file) => {
-          this.markCachedItemAsSuccess(file.path);
+          this.loadTracker.markCachedItemAsSuccess(file.path);
         });
 
         if (cachedMarkdownFiles.length > 0) {
@@ -584,9 +581,15 @@ ${contextParts.join("\n\n")}
 
         try {
           // Only process markdown files here
-          const [stat, fileContent] = await this.executeWithProcessTracking(file.path, async () => {
-            return Promise.all([this.app.vault.adapter.stat(file.path), this.app.vault.read(file)]);
-          });
+          const [stat, fileContent] = await this.loadTracker.executeWithProcessTracking(
+            file.path,
+            async () => {
+              return Promise.all([
+                this.app.vault.adapter.stat(file.path),
+                this.app.vault.read(file),
+              ]);
+            }
+          );
 
           metadata = `[[${file.basename}]]
 path: ${file.path}
@@ -638,7 +641,7 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
     // 标记已缓存的URLs为成功
     const cachedUrls = urlsInConfig.filter((url) => contextCache.webContexts[url]);
     cachedUrls.forEach((url) => {
-      this.markCachedItemAsSuccess(url);
+      this.loadTracker.markCachedItemAsSuccess(url);
     });
     if (cachedUrls.length > 0) {
       logInfo(
@@ -716,7 +719,7 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
     // 标记已缓存的URLs为成功
     const cachedUrls = urlsInConfig.filter((url) => contextCache.youtubeContexts[url]);
     cachedUrls.forEach((url) => {
-      this.markCachedItemAsSuccess(url);
+      this.loadTracker.markCachedItemAsSuccess(url);
     });
     if (cachedUrls.length > 0) {
       logInfo(
@@ -774,7 +777,7 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
 
     try {
       const mention = Mention.getInstance();
-      const { urlContext } = await this.executeWithProcessTracking(webUrl, async () => {
+      const { urlContext } = await this.loadTracker.executeWithProcessTracking(webUrl, async () => {
         return mention.processUrls(webUrl);
       });
       return urlContext || "";
@@ -791,7 +794,7 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
     }
 
     try {
-      const response = await this.executeWithProcessTracking(youtubeUrl, async () => {
+      const response = await this.loadTracker.executeWithProcessTracking(youtubeUrl, async () => {
         return BrevilabsClient.getInstance().youtube4llm(youtubeUrl);
       });
       if (response.response.transcript) {
@@ -845,12 +848,12 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
             logInfo(
               `[loadProjectContext] Project ${project.name}: Parsing/caching new/updated file: ${filePath}`
             );
-            await this.executeWithProcessTracking(filePath, async () => {
+            await this.loadTracker.executeWithProcessTracking(filePath, async () => {
               return this.fileParserManager.parseFile(file, this.app.vault);
             });
             processedNonMdCount++;
           } else {
-            this.markCachedItemAsSuccess(filePath);
+            this.loadTracker.markCachedItemAsSuccess(filePath);
             cachedNonMdCount++;
           }
         } catch (error) {
@@ -882,136 +885,5 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
 
   public onunload(): void {
     this.projectContextCache.cleanup();
-  }
-
-  private async executeWithProcessTracking<T>(
-    key: string,
-    operation: () => Promise<T>
-  ): Promise<T> {
-    this.setFileOrUrlStartProcess(key);
-    try {
-      const result = await operation();
-      this.setFileOrUrlProcessSuccessful(key);
-      return result;
-    } catch (error) {
-      this.setFileOrUrlProcessFailed(key);
-      throw error; // throw error to outer layer
-    }
-  }
-
-  // Mark file as processing started
-  private setFileOrUrlStartProcess(key: string): void {
-    const state = getProjectContextLoadState();
-
-    logInfo(
-      `[setFileOrUrlStartProcess] Project ${this.currentProjectId}: Marking file/url as processing started: ${key}`
-    );
-
-    // Add to processing files list
-    if (!state.processingFiles.includes(key)) {
-      updateProjectContextLoadState("processingFiles", [...state.processingFiles, key]);
-    }
-
-    // Ensure file is in the total list
-    if (!state.total.includes(key)) {
-      updateProjectContextLoadState("total", [...state.total, key]);
-    }
-  }
-
-  private setFileOrUrlProcessSuccessful(key: string): void {
-    const state = getProjectContextLoadState();
-
-    logInfo(
-      `[setFileOrUrlProcessSuccessful] Project ${this.currentProjectId}: Marking file/url as successfully processed: ${key}`
-    );
-
-    updateProjectContextLoadState(
-      "processingFiles",
-      state.processingFiles.filter((file) => file !== key)
-    );
-
-    if (!state.success.includes(key)) {
-      updateProjectContextLoadState("success", [...state.success, key]);
-    }
-  }
-
-  private setFileOrUrlProcessFailed(key: string): void {
-    const state = getProjectContextLoadState();
-
-    logInfo(
-      `[setFileOrUrlProcessFailed] Project ${this.currentProjectId}: Marking file/url as failed: ${key}`
-    );
-
-    updateProjectContextLoadState(
-      "processingFiles",
-      state.processingFiles.filter((file) => file !== key)
-    );
-
-    if (!state.failed.includes(key)) {
-      updateProjectContextLoadState("failed", [...state.failed, key]);
-    }
-  }
-
-  private preComputeAllItems(project: ProjectConfig, contextCache: ContextCache) {
-    logInfo(`[preComputeAllItems] Starting pre-computation for project: ${project.name}`);
-
-    const allItems: string[] = [];
-
-    // 1. 统计所有匹配的文件（markdown 和 非markdown）
-    if (project.contextSource?.inclusions || project.contextSource?.exclusions) {
-      const { inclusions: inclusionPatterns, exclusions: exclusionPatterns } = getMatchingPatterns({
-        inclusions: project.contextSource?.inclusions,
-        exclusions: project.contextSource?.exclusions,
-        isProject: true,
-      });
-
-      const allMatchingFiles = this.app.vault.getFiles().filter((file) => {
-        return shouldIndexFile(file, inclusionPatterns, exclusionPatterns);
-      });
-
-      // 将所有匹配的文件路径添加到列表中
-      allItems.push(...allMatchingFiles.map((file) => file.path));
-    }
-
-    // 2. 统计所有 Web URLs
-    const configuredWebUrls = project.contextSource?.webUrls?.trim() || "";
-    if (configuredWebUrls) {
-      const webUrls = configuredWebUrls.split("\n").filter((url) => url.trim());
-      allItems.push(...webUrls);
-    }
-
-    // 3. 统计所有 YouTube URLs
-    const configuredYoutubeUrls = project.contextSource?.youtubeUrls?.trim() || "";
-    if (configuredYoutubeUrls) {
-      const youtubeUrls = configuredYoutubeUrls.split("\n").filter((url) => url.trim());
-      allItems.push(...youtubeUrls);
-    }
-
-    // 将所有项目添加到 total 列表中
-    if (allItems.length > 0) {
-      const uniqueItems = [...new Set([...allItems])];
-      updateProjectContextLoadState("total", uniqueItems);
-      logInfo(
-        `[preComputeAllItems] Project ${project.name}: Added ${allItems.length} items to tracking (${uniqueItems.length} total unique items)`
-      );
-    }
-  }
-
-  private markCachedItemAsSuccess(key: string): void {
-    const state = getProjectContextLoadState();
-
-    logInfo(
-      `[markCachedItemAsSuccess] Project ${this.currentProjectId}: Marking cached item as successful: ${key}`
-    );
-
-    // 确保项目在 total 列表中
-    if (!state.total.includes(key)) {
-      updateProjectContextLoadState("total", [...state.total, key]);
-    }
-
-    // 直接标记为成功
-    if (!state.success.includes(key)) {
-      updateProjectContextLoadState("success", [...state.success, key]);
-    }
   }
 }
