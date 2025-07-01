@@ -246,6 +246,11 @@ const Chat: React.FC<ChatProps> = ({
       updateUserMessageHistory(inputMessage);
     }
 
+    // Autosave the chat if the setting is enabled
+    if (settings.autosaveChat) {
+      handleSaveAsNote();
+    }
+
     await getAIResponse(
       promptMessageHidden,
       chainManager,
@@ -254,6 +259,10 @@ const Chat: React.FC<ChatProps> = ({
       setAbortController,
       { debug: settings.debug, updateLoadingMessage: setLoadingMessage }
     );
+    // Autosave the chat if the setting is enabled
+    if (settings.autosaveChat) {
+      handleSaveAsNote();
+    }
     setLoading(false);
     setLoadingMessage(LOADING_MESSAGES.DEFAULT);
   };
@@ -264,8 +273,8 @@ const Chat: React.FC<ChatProps> = ({
       return;
     }
 
-    // Filter visible messages
-    const visibleMessages = chatHistory.filter((message) => message.isVisible);
+    // Filter visible messages - use sharedState directly to ensure we get the latest messages
+    const visibleMessages = sharedState.getMessages().filter((message) => message.isVisible);
 
     if (visibleMessages.length === 0) {
       new Notice("No messages to save.");
@@ -340,7 +349,6 @@ ${chatContent}`;
       if (existingFile instanceof TFile) {
         // If the file exists, update its content
         await app.vault.modify(existingFile, noteContentWithTimestamp);
-        new Notice(`Chat updated in existing note: ${noteFileName}`);
       } else {
         // If the file doesn't exist, create a new one
         await app.vault.create(noteFileName, noteContentWithTimestamp);
@@ -352,7 +360,7 @@ ${chatContent}`;
     }
   }, [
     app,
-    chatHistory,
+    sharedState,
     currentModelKey,
     settings.defaultConversationTag,
     settings.defaultSaveFolder,
@@ -422,8 +430,21 @@ ${chatContent}`;
       } finally {
         setLoading(false);
       }
+
+      // Autosave the chat if the setting is enabled
+      if (settings.autosaveChat) {
+        handleSaveAsNote();
+      }
     },
-    [addMessage, chainManager, chatHistory, clearMessages, settings.debug]
+    [
+      addMessage,
+      chainManager,
+      chatHistory,
+      clearMessages,
+      settings.debug,
+      settings.autosaveChat,
+      handleSaveAsNote,
+    ]
   );
 
   const handleEdit = useCallback(
@@ -459,8 +480,21 @@ ${chatContent}`;
       ) {
         handleRegenerate(messageIndex + 1);
       }
+
+      // Autosave the chat if the setting is enabled
+      if (settings.autosaveChat) {
+        handleSaveAsNote();
+      }
     },
-    [addMessage, chainManager.memoryManager, chatHistory, clearMessages, handleRegenerate]
+    [
+      addMessage,
+      chainManager.memoryManager,
+      chatHistory,
+      clearMessages,
+      handleRegenerate,
+      settings.autosaveChat,
+      handleSaveAsNote,
+    ]
   );
 
   const createEffect = (
