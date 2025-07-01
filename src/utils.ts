@@ -477,6 +477,11 @@ export function extractYoutubeUrl(text: string): string | null {
   return match ? match[0] : null;
 }
 
+export function extractAllYoutubeUrls(text: string): string[] {
+  const matches = text.matchAll(new RegExp(YOUTUBE_URL_REGEX, "g"));
+  return Array.from(matches, (match) => match[0]);
+}
+
 /** Proxy function to use in place of fetch() to bypass CORS restrictions.
  * It currently doesn't support streaming until this is implemented
  * https://forum.obsidian.md/t/support-streaming-the-request-and-requesturl-response-body/87381 */
