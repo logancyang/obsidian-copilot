@@ -10,8 +10,9 @@ import {
   PlusUtmMedium,
 } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import { logInfo } from "@/logger";
+import { logError, logInfo } from "@/logger";
 import { getSettings, setSettings, updateSetting, useSettingsValue } from "@/settings/model";
+import { Notice } from "obsidian";
 
 export const DEFAULT_COPILOT_PLUS_CHAT_MODEL = ChatModels.COPILOT_PLUS_FLASH;
 export const DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY =
@@ -80,14 +81,19 @@ export function applyPlusSettings(): void {
     defaultChainType: ChainType.COPILOT_PLUS_CHAIN,
   });
 
-  // Clinical fix: Ensure indexing happens when embedding model changes
-  // The automatic detection may not work in all scenarios, so we check explicitly
+  // Ensure indexing happens only once when embedding model changes
   if (previousEmbeddingModelKey !== embeddingModelKey) {
     logInfo("applyPlusSettings: Embedding model changed, triggering indexing");
-    // Import at runtime to avoid circular dependency
-    import("@/search/vectorStoreManager").then((module) => {
-      module.default.getInstance().indexVaultToVectorStore();
-    });
+    import("@/search/vectorStoreManager")
+      .then((module) => {
+        module.default.getInstance().indexVaultToVectorStore();
+      })
+      .catch((error) => {
+        logError("Failed to trigger indexing after Plus settings applied:", error);
+        new Notice(
+          "Failed to update Copilot index. Please try force reindexing from the command palette."
+        );
+      });
   } else {
     logInfo("applyPlusSettings: No embedding model change, skipping indexing");
   }
