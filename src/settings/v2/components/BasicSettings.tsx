@@ -368,7 +368,7 @@ export const BasicSettings: React.FC = () => {
           <SettingItem
             type="switch"
             title="Autosave Chat"
-            description="Automatically save the chat when starting a new one or when the plugin reloads"
+            description="Automatically saves the chat after every user message and AI response."
             checked={settings.autosaveChat}
             onCheckedChange={(checked) => updateSetting("autosaveChat", checked)}
           />
