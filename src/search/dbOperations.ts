@@ -481,7 +481,9 @@ export class DBOperations {
       if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
         // Model has changed, notify user and rebuild DB
         new Notice("New embedding model detected. Rebuilding Copilot index from scratch.");
-        logInfo("Detected change in embedding model. Rebuilding Copilot index from scratch.");
+        logInfo(
+          `Detected change in embedding model from "${prevEmbeddingModel}" to "${currEmbeddingModel}". Rebuilding Copilot index from scratch.`
+        );
 
         // Create new DB with new model
         this.oramaDb = await this.createNewDb(embeddingInstance);
