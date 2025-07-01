@@ -10,7 +10,7 @@ import {
   PlusUtmMedium,
 } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import VectorStoreManager from "@/search/vectorStoreManager";
+import { logInfo } from "@/logger";
 import { getSettings, setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 
 export const DEFAULT_COPILOT_PLUS_CHAT_MODEL = ChatModels.COPILOT_PLUS_FLASH;
@@ -58,13 +58,19 @@ export async function isBelieverPlan(): Promise<boolean> {
 
 /**
  * Apply the Copilot Plus settings.
- * Note: The indexVaultToVectorStore method will automatically detect embedding
- * model changes and trigger reindexing if needed, so we don't need to check
- * for model changes here to avoid duplicate indexing operations.
+ * Includes clinical fix to ensure indexing is triggered when embedding model changes,
+ * as the automatic detection doesn't work reliably in all scenarios.
  */
 export function applyPlusSettings(): void {
   const defaultModelKey = DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY;
   const embeddingModelKey = DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY;
+  const previousEmbeddingModelKey = getSettings().embeddingModelKey;
+
+  logInfo("applyPlusSettings: Changing embedding model", {
+    from: previousEmbeddingModelKey,
+    to: embeddingModelKey,
+    changed: previousEmbeddingModelKey !== embeddingModelKey,
+  });
 
   setModelKey(defaultModelKey);
   setChainType(ChainType.COPILOT_PLUS_CHAIN);
@@ -74,10 +80,17 @@ export function applyPlusSettings(): void {
     defaultChainType: ChainType.COPILOT_PLUS_CHAIN,
   });
 
-  // Always trigger indexing when applying Plus settings since the embedding model
-  // has likely changed. The indexVaultToVectorStore method will handle model
-  // change detection internally and show appropriate notices.
-  VectorStoreManager.getInstance().indexVaultToVectorStore();
+  // Clinical fix: Ensure indexing happens when embedding model changes
+  // The automatic detection may not work in all scenarios, so we check explicitly
+  if (previousEmbeddingModelKey !== embeddingModelKey) {
+    logInfo("applyPlusSettings: Embedding model changed, triggering indexing");
+    // Import at runtime to avoid circular dependency
+    import("@/search/vectorStoreManager").then((module) => {
+      module.default.getInstance().indexVaultToVectorStore();
+    });
+  } else {
+    logInfo("applyPlusSettings: No embedding model change, skipping indexing");
+  }
 }
 
 export function createPlusPageUrl(medium: PlusUtmMedium): string {
@@ -94,6 +107,13 @@ export function turnOnPlus(): void {
 
 export function turnOffPlus(): void {
   const previousIsPlusUser = getSettings().isPlusUser;
+  const previousEmbeddingModelKey = getSettings().embeddingModelKey;
+
+  logInfo("turnOffPlus: Resetting embedding model", {
+    from: previousEmbeddingModelKey,
+    to: DEFAULT_FREE_EMBEDDING_MODEL_KEY,
+    changed: previousEmbeddingModelKey !== DEFAULT_FREE_EMBEDDING_MODEL_KEY,
+  });
 
   // Reset models to default free user models
   setModelKey(DEFAULT_FREE_CHAT_MODEL_KEY);
