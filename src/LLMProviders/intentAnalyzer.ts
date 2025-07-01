@@ -11,7 +11,7 @@ import {
 } from "@/tools/TimeTools";
 import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools";
 import { ToolManager } from "@/tools/toolManager";
-import { extractAllYoutubeUrls, extractChatHistory, extractYoutubeUrl } from "@/utils";
+import { extractAllYoutubeUrls, extractChatHistory } from "@/utils";
 import { Vault } from "obsidian";
 import { BrevilabsClient } from "./brevilabsClient";
 
@@ -144,25 +144,12 @@ export class IntentAnalyzer {
       });
     }
 
-    // Handle @youtube command
-    if (message.includes("@youtube")) {
-      const youtubeUrl = extractYoutubeUrl(originalMessage);
-      if (youtubeUrl) {
-        processedToolCalls.push({
-          tool: simpleYoutubeTranscriptionTool,
-          args: {
-            url: youtubeUrl,
-          },
-        });
-      }
-    }
-
-    // Auto-detect YouTube URLs even without @youtube command
+    // Auto-detect YouTube URLs (handles both @youtube command and auto-detection)
     const youtubeUrls = extractAllYoutubeUrls(originalMessage);
     for (const url of youtubeUrls) {
       // Check if we already have a YouTube tool call for this URL
       const hasYoutubeToolForUrl = processedToolCalls.some(
-        (tc) => tc.tool.name === "youtubeTranscription" && tc.args.url === url
+        (tc) => tc.tool.name === simpleYoutubeTranscriptionTool.name && tc.args.url === url
       );
 
       if (!hasYoutubeToolForUrl) {
