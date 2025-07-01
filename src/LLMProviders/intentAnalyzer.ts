@@ -1,3 +1,6 @@
+import ProjectManager from "@/LLMProviders/projectManager";
+import { isProjectMode } from "@/aiParams";
+import { createGetFileTreeTool } from "@/tools/FileTreeTools";
 import { indexTool, localSearchTool, webSearchTool } from "@/tools/SearchTools";
 import {
   getCurrentTimeTool,
@@ -6,14 +9,11 @@ import {
   pomodoroTool,
   TimeInfo,
 } from "@/tools/TimeTools";
-import { createGetFileTreeTool } from "@/tools/FileTreeTools";
 import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools";
 import { ToolManager } from "@/tools/toolManager";
-import { extractChatHistory, extractYoutubeUrl } from "@/utils";
-import { BrevilabsClient } from "./brevilabsClient";
+import { extractAllYoutubeUrls, extractChatHistory } from "@/utils";
 import { Vault } from "obsidian";
-import ProjectManager from "@/LLMProviders/projectManager";
-import { isProjectMode } from "@/aiParams";
+import { BrevilabsClient } from "./brevilabsClient";
 
 // TODO: Add @index with explicit pdf files in chat context menu
 export const COPILOT_TOOL_NAMES = ["@vault", "@composer", "@websearch", "@youtube", "@pomodoro"];
@@ -144,15 +144,18 @@ export class IntentAnalyzer {
       });
     }
 
-    // Handle @youtube command
-    if (message.includes("@youtube")) {
-      const youtubeUrl = extractYoutubeUrl(originalMessage);
-      if (youtubeUrl) {
+    // Auto-detect YouTube URLs (handles both @youtube command and auto-detection)
+    const youtubeUrls = extractAllYoutubeUrls(originalMessage);
+    for (const url of youtubeUrls) {
+      // Check if we already have a YouTube tool call for this URL
+      const hasYoutubeToolForUrl = processedToolCalls.some(
+        (tc) => tc.tool.name === simpleYoutubeTranscriptionTool.name && tc.args.url === url
+      );
+
+      if (!hasYoutubeToolForUrl) {
         processedToolCalls.push({
           tool: simpleYoutubeTranscriptionTool,
-          args: {
-            url: youtubeUrl,
-          },
+          args: { url },
         });
       }
     }
