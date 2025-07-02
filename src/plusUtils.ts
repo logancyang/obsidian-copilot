@@ -113,27 +113,7 @@ export function turnOnPlus(): void {
 
 export function turnOffPlus(): void {
   const previousIsPlusUser = getSettings().isPlusUser;
-  const previousEmbeddingModelKey = getSettings().embeddingModelKey;
-
-  logInfo("turnOffPlus: Resetting embedding model", {
-    from: previousEmbeddingModelKey,
-    to: DEFAULT_FREE_EMBEDDING_MODEL_KEY,
-    changed: previousEmbeddingModelKey !== DEFAULT_FREE_EMBEDDING_MODEL_KEY,
-  });
-
-  // Reset models to default free user models
-  setModelKey(DEFAULT_FREE_CHAT_MODEL_KEY);
-  setChainType(DEFAULT_SETTINGS.defaultChainType);
-  setSettings({
-    isPlusUser: false,
-    defaultModelKey: DEFAULT_FREE_CHAT_MODEL_KEY,
-    embeddingModelKey: DEFAULT_FREE_EMBEDDING_MODEL_KEY,
-    defaultChainType: DEFAULT_SETTINGS.defaultChainType,
-  });
-
-  // Note: Reindexing will be handled automatically by the model change detection system
-  // when the embedding model change is detected elsewhere in the application
-
+  updateSetting("isPlusUser", false);
   if (previousIsPlusUser) {
     new CopilotPlusExpiredModal(app).open();
   }
