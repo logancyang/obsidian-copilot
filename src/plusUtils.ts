@@ -111,6 +111,12 @@ export function turnOnPlus(): void {
   updateSetting("isPlusUser", true);
 }
 
+/**
+ * Turn off Plus user status.
+ * IMPORTANT: This is called on every plugin start for users without a Plus license key (see checkIsPlusUser).
+ * DO NOT reset model settings here - it will cause free users to lose their model selections on every app restart.
+ * Only update the isPlusUser flag.
+ */
 export function turnOffPlus(): void {
   const previousIsPlusUser = getSettings().isPlusUser;
   updateSetting("isPlusUser", false);
