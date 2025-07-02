@@ -181,7 +181,13 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       const cursorPos = event.target.selectionStart;
 
       // Check for slash BEFORE updating state
-      const shouldShowSlashModal = cursorPos > 0 && inputValue[cursorPos - 1] === "/";
+      // Only show slash modal if:
+      // 1. We just typed a "/" AND
+      // 2. Either the input is empty OR there's a space before the "/"
+      const shouldShowSlashModal =
+        cursorPos > 0 &&
+        inputValue[cursorPos - 1] === "/" &&
+        (cursorPos === 1 || inputValue[cursorPos - 2] === " ");
 
       setInputMessage(inputValue);
       adjustTextareaHeight();
