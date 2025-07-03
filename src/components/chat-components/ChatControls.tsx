@@ -83,7 +83,8 @@ export async function reloadCurrentProject() {
     const isRateLimit =
       errorMessage.includes("Request rate limit exceeded") ||
       errorMessage.includes("RATE_LIMIT_EXCEEDED") ||
-      errorMessage.includes("429");
+      errorMessage.includes("429") ||
+      error?.status === 429;
 
     if (!isRateLimit) {
       new Notice("Failed to reload project context. Check console for details.");
@@ -138,7 +139,8 @@ export async function forceRebuildCurrentProjectContext() {
         const isRateLimit =
           errorMessage.includes("Request rate limit exceeded") ||
           errorMessage.includes("RATE_LIMIT_EXCEEDED") ||
-          errorMessage.includes("429");
+          errorMessage.includes("429") ||
+          error?.status === 429;
 
         if (!isRateLimit) {
           new Notice("Failed to force rebuild project context. Check console for details.");

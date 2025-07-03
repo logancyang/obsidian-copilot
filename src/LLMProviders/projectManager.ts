@@ -271,7 +271,8 @@ export default class ProjectManager {
                   const isRateLimit =
                     errorMessage.includes("Request rate limit exceeded") ||
                     errorMessage.includes("RATE_LIMIT_EXCEEDED") ||
-                    errorMessage.includes("429");
+                    errorMessage.includes("429") ||
+                    error?.status === 429;
 
                   if (isRateLimit) {
                     throw error; // Re-throw to fail the entire operation
