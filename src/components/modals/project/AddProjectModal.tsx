@@ -9,6 +9,7 @@ import { ObsidianNativeSelect } from "@/components/ui/obsidian-native-select";
 import { SettingSlider } from "@/components/ui/setting-slider";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { DEFAULT_MODEL_SETTING } from "@/constants";
 import { getDecodedPatterns } from "@/search/searchUtils";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { checkModelApiKey, err2String, randomUUID } from "@/utils";
@@ -16,7 +17,6 @@ import { HelpCircle } from "lucide-react";
 import { App, Modal, Notice } from "obsidian";
 import React, { useState } from "react";
 import { createRoot, Root } from "react-dom/client";
-import { DEFAULT_MODEL_SETTING } from "@/constants";
 
 interface AddProjectModalContentProps {
   initialProject?: ProjectConfig;
@@ -274,6 +274,12 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
                         <strong>• Images:</strong> jpg, png, svg, gif, bmp, webp, tiff
                         <br />
                         <strong>• Spreadsheets:</strong> xlsx, xls, csv, numbers
+                        <br />
+                        <br />
+                        Non-markdown files are converted to markdown in the background.
+                        <br />
+                        <strong>Rate limit:</strong> 50 files or 100MB per 3 hours, whichever is
+                        reached first.
                       </div>
                     </TooltipContent>
                   </Tooltip>
