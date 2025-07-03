@@ -20,6 +20,7 @@ import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { err2String } from "@/utils";
+import { isRateLimitError } from "@/utils/rateLimitUtils";
 import { App, Notice, TFile } from "obsidian";
 import VectorStoreManager from "../search/vectorStoreManager";
 import { BrevilabsClient } from "./brevilabsClient";
@@ -265,6 +266,11 @@ export default class ProjectManager {
                     `[loadProjectContext] Project ${project.name}: Error parsing file ${filePath}:`,
                     error
                   );
+
+                  // Check if this is a rate limit error and re-throw it to fail the entire operation
+                  if (isRateLimitError(error)) {
+                    throw error; // Re-throw to fail the entire operation
+                  }
                 }
               }
             }
@@ -376,6 +382,7 @@ export default class ProjectManager {
           `[getProjectContext] Project ${project.name}: Markdown needs reload. Triggering full load.`
         );
       }
+
       const updatedCache = await this.loadProjectContext(project);
       if (!updatedCache) {
         logError(`[getProjectContext] Project ${project.name}: loadProjectContext returned null.`);
