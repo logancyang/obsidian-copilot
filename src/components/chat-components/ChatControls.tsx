@@ -7,9 +7,11 @@ import { DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PLUS_UTM_MEDIUMS } from "@/constants";
+import { logError } from "@/logger";
 import { navigateToPlusPage, useIsPlusUser } from "@/plusUtils";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { updateSetting, useSettingsValue } from "@/settings/model";
+import { Docs4LLMParser } from "@/tools/FileParserManager";
 import { DropdownMenu, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
 import {
   AlertTriangle,
@@ -74,8 +76,19 @@ export async function reloadCurrentProject() {
       throw new Error("Copilot plugin or ProjectManager not available.");
     }
   } catch (error) {
-    console.error("Error reloading project context:", error);
-    new Notice("Failed to reload project context. Check console for details.");
+    logError("Error reloading project context:", error);
+
+    // Check if this is a rate limit error and let the FileParserManager notice handle it
+    const errorMessage = error?.message || error?.toString() || "";
+    const isRateLimit =
+      errorMessage.includes("Request rate limit exceeded") ||
+      errorMessage.includes("RATE_LIMIT_EXCEEDED") ||
+      errorMessage.includes("429");
+
+    if (!isRateLimit) {
+      new Notice("Failed to reload project context. Check console for details.");
+    }
+    // If it's a rate limit error, don't show generic failure message - let the rate limit notice show
   } finally {
     setProjectLoading(false); // Stop loading indicator
   }
@@ -99,6 +112,9 @@ export async function forceRebuildCurrentProjectContext() {
         );
 
         // Step 1: Completely clear all cached data for this project (in-memory and on-disk)
+        // Reset rate limit notice timer to allow showing notices during force rebuild
+        Docs4LLMParser.resetRateLimitNoticeTimer();
+
         await ProjectContextCache.getInstance().clearForProject(currentProject);
         new Notice(`Cache for project "${currentProject.name}" has been cleared.`);
 
@@ -115,8 +131,19 @@ export async function forceRebuildCurrentProjectContext() {
           throw new Error("Copilot plugin or ProjectManager not available for rebuild.");
         }
       } catch (error) {
-        console.error("Error force rebuilding project context:", error);
-        new Notice("Failed to force rebuild project context. Check console for details.");
+        logError("Error force rebuilding project context:", error);
+
+        // Check if this is a rate limit error and let the FileParserManager notice handle it
+        const errorMessage = error?.message || error?.toString() || "";
+        const isRateLimit =
+          errorMessage.includes("Request rate limit exceeded") ||
+          errorMessage.includes("RATE_LIMIT_EXCEEDED") ||
+          errorMessage.includes("429");
+
+        if (!isRateLimit) {
+          new Notice("Failed to force rebuild project context. Check console for details.");
+        }
+        // If it's a rate limit error, don't show generic failure message - let the rate limit notice show
       } finally {
         setProjectLoading(false); // Stop loading indicator
       }

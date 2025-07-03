@@ -265,6 +265,17 @@ export default class ProjectManager {
                     `[loadProjectContext] Project ${project.name}: Error parsing file ${filePath}:`,
                     error
                   );
+
+                  // Check if this is a rate limit error and re-throw it to fail the entire operation
+                  const errorMessage = error?.message || error?.toString() || "";
+                  const isRateLimit =
+                    errorMessage.includes("Request rate limit exceeded") ||
+                    errorMessage.includes("RATE_LIMIT_EXCEEDED") ||
+                    errorMessage.includes("429");
+
+                  if (isRateLimit) {
+                    throw error; // Re-throw to fail the entire operation
+                  }
                 }
               }
             }
@@ -376,6 +387,7 @@ export default class ProjectManager {
           `[getProjectContext] Project ${project.name}: Markdown needs reload. Triggering full load.`
         );
       }
+
       const updatedCache = await this.loadProjectContext(project);
       if (!updatedCache) {
         logError(`[getProjectContext] Project ${project.name}: loadProjectContext returned null.`);

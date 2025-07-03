@@ -3,7 +3,7 @@ import { ProjectConfig } from "@/aiParams";
 import { PDFCache } from "@/cache/pdfCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { logError, logInfo } from "@/logger";
-import { TFile, Vault } from "obsidian";
+import { Notice, TFile, Vault } from "obsidian";
 import { CanvasLoader } from "./CanvasLoader";
 
 interface FileParser {
@@ -186,6 +186,11 @@ export class Docs4LLMParser implements FileParser {
   private brevilabsClient: BrevilabsClient;
   private projectContextCache: ProjectContextCache;
   private currentProject: ProjectConfig | null;
+  private static lastRateLimitNoticeTime: number = 0;
+
+  public static resetRateLimitNoticeTimer(): void {
+    Docs4LLMParser.lastRateLimitNoticeTime = 0;
+  }
 
   constructor(brevilabsClient: BrevilabsClient, project: ProjectConfig | null = null) {
     this.brevilabsClient = brevilabsClient;
@@ -275,8 +280,47 @@ export class Docs4LLMParser implements FileParser {
         `[Docs4LLMParser] Project ${this.currentProject?.name}: Error processing file ${file.path}:`,
         error
       );
+
+      // Check if this is a rate limit error and show user-friendly notice
+      if (this.isRateLimitError(error)) {
+        this.showRateLimitNotice(error);
+      }
+
       throw error; // Propagate the error up
     }
+  }
+
+  private isRateLimitError(error: any): boolean {
+    if (!error || typeof error !== "object") return false;
+
+    const errorMessage = error.message || error.toString();
+    return (
+      errorMessage.includes("Request rate limit exceeded") ||
+      errorMessage.includes("RATE_LIMIT_EXCEEDED") ||
+      error.status === 429
+    );
+  }
+
+  private showRateLimitNotice(error: any): void {
+    const now = Date.now();
+
+    // Only show one rate limit notice per minute to avoid spam
+    if (now - Docs4LLMParser.lastRateLimitNoticeTime < 60000) {
+      return;
+    }
+
+    Docs4LLMParser.lastRateLimitNoticeTime = now;
+
+    const errorMessage = error.message || error.toString();
+
+    // Extract the retry time from the error message if possible
+    const retryMatch = errorMessage.match(/Try again in ([\d\w\s]+)/);
+    const retryTime = retryMatch ? retryMatch[1] : "some time";
+
+    new Notice(
+      `⚠️ Rate limit exceeded for document processing. Please try again in ${retryTime}. Having fewer non-markdown files in the project will help.`,
+      10000 // Show notice for 10 seconds
+    );
   }
 
   async clearCache(): Promise<void> {
