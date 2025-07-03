@@ -1,5 +1,10 @@
 import ProjectManager from "@/LLMProviders/projectManager";
-import { ChatHistoryEntry, removeThinkTags, withSuppressedTokenWarnings } from "@/utils";
+import {
+  ChatHistoryEntry,
+  removeThinkTags,
+  removeErrorTags,
+  withSuppressedTokenWarnings,
+} from "@/utils";
 import { BaseChatModelCallOptions } from "@langchain/core/language_models/chat_models";
 
 export async function getStandaloneQuestion(
@@ -37,6 +42,7 @@ export async function getStandaloneQuestion(
       },
     ]);
 
-    return removeThinkTags(response.content as string);
+    const cleanedResponse = removeThinkTags(response.content as string);
+    return removeErrorTags(cleanedResponse);
   });
 }
