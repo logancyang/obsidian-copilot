@@ -3,28 +3,94 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Loader2, ChevronDown, ChevronRight, AlertCircle, RotateCcw } from "lucide-react";
-import { useProjectContextLoad } from "@/aiParams";
+import { AlertCircle, ChevronDown, ChevronRight, FileText, Loader2, RotateCcw } from "lucide-react";
+import { FailedItem, useProjectContextLoad } from "@/aiParams";
 import { Button } from "@/components/ui/button";
+import { TruncatedText } from "@/components/TruncatedText";
+import CopilotPlugin from "@/main";
 
-export default function ProgressCard() {
+interface ProgressCardProps {
+  plugin?: CopilotPlugin;
+}
+
+export default function ProgressCard({ plugin }: ProgressCardProps) {
   // 使用真实的项目上下文加载状态数据
   const [contextLoadState] = useProjectContextLoad();
-  const totalFiles = contextLoadState.total.length;
-  const successFiles = contextLoadState.success.length;
-  const failedFiles = contextLoadState.failed.length;
-  const processedFiles = successFiles + failedFiles;
-  const progressPercentage = totalFiles > 0 ? Math.round((processedFiles / totalFiles) * 100) : 0;
+  const totalFiles = contextLoadState.total;
+  const successFiles = contextLoadState.success;
+  const failedFiles = contextLoadState.failed;
+  const processingFiles = contextLoadState.processingFiles;
 
-  const failedFilesList = [
-    "corrupted_data.xlsx",
-    "large_presentation.pptx",
-    "encrypted_document.pdf",
-  ];
+  /*const mockFailedFiles: FailedItem[] = [
+    {
+      path: "large_dataset.xlsx",
+      type: "nonMd",
+      error:
+        "Rate limit exceeded. (Rate limit: 50 files or 100MB per 3 hours, whichever is reached first)",
+      timestamp: Date.now() - 300000,
+    },
+    {
+      path: "https://jasonhtmlshare.neocities.org/Input%20Structuring%20CN%20-%20%E6%99%BA%E8%83%BD%E5%86%85%E5%AE%B9%E7%BB%93%E6%9E%84%E5%8C%96%E5%A4%84%E7%90%86%E5%B7%A5%E5%85%B7",
+      type: "web",
+      error: "Connection timeout",
+      timestamp: Date.now() - 150000,
+    },
+    {
+      path: "https://youtube.com/watch?v=abc123",
+      type: "youtube",
+      error:
+        "Video not available Video not available Video not available Video not available Video not available Video not available ",
+      timestamp: Date.now() - 600000,
+    },
+    {
+      path: "notes/corrupted-file.md",
+      type: "md",
+      error: "Invalid file encoding",
+      timestamp: Date.now() - 900000,
+    },
+  ];*/
+
+  // const failedFiles = [...realFailedFiles, ...mockFailedFiles];
+  const processedFilesLen = successFiles.length + failedFiles.length;
+  const progressPercentage =
+    totalFiles.length > 0 ? Math.round((processedFilesLen / totalFiles.length) * 100) : 0;
+
+  const getFailedItemDisplayName = (item: FailedItem): string => {
+    return item.path;
+    // if (item.type === 'web' || item.type === 'youtube') {
+    //   // 对于URL，显示简化的名称或域名
+    //   try {
+    //     const url = new URL(item.path);
+    //     return url.hostname + (url.pathname !== '/' ? url.pathname.substring(0, 20) + '...' : '');
+    //   } catch {
+    //     return item.path.substring(0, 30) + (item.path.length > 30 ? '...' : '');
+    //   }
+    // }
+    // // 对于文件，显示文件名
+    // const pathParts = item.path.split('/');
+    // return pathParts[pathParts.length - 1];
+  };
+
+  /*const handleRetryAllFailed = () => {
+    console.log("Retrying all failed items");
+  };*/
+
+  const handleRetryFailedItem = async (item: FailedItem) => {
+    if (!plugin?.projectManager) {
+      console.error("ProjectManager not available");
+      return;
+    }
+
+    try {
+      await plugin.projectManager.retryFailedItem(item);
+    } catch (error) {
+      console.error(`重试失败项时出错: ${error}`);
+    }
+  };
 
   // 控制文件列表展开/折叠状态
   const [isProcessingExpanded, setIsProcessingExpanded] = useState(false);
-  const [isFailedExpanded, setIsFailedExpanded] = useState(false);
+  const [isFailedExpanded, setIsFailedExpanded] = useState(true);
 
   return (
     <Card className="tw-w-full tw-border tw-border-solid tw-border-border tw-bg-transparent tw-shadow-none">
@@ -41,54 +107,57 @@ export default function ProgressCard() {
             <div className="tw-flex tw-items-center tw-gap-2">
               <span className="tw-text-muted">Total progress</span>
               <span className="tw-text-xs tw-text-muted">
-                (Success: <span className="tw-font-medium tw-text-success">{successFiles}</span>,
-                Failed: <span className="tw-font-medium tw-text-error">{failedFiles}</span>)
+                (Success:{" "}
+                <span className="tw-font-medium tw-text-success">{successFiles.length}</span>,
+                Failed: <span className="tw-font-medium tw-text-error">{failedFiles.length}</span>)
               </span>
             </div>
             <span className="tw-font-medium">
-              {processedFiles}/{totalFiles} ({progressPercentage}%)
+              {processedFilesLen}/{totalFiles.length} ({progressPercentage}%)
             </span>
           </div>
           <Progress value={progressPercentage} className="tw-h-2" />
         </div>
 
-        {/* 当前处理文件 */}
-        <div className="tw-space-y-3">
-          <div
-            className="tw--m-1 tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-p-1 tw-transition-colors hover:tw-bg-muted/10"
-            onClick={() => setIsProcessingExpanded(!isProcessingExpanded)}
-          >
-            <Loader2 className="tw-size-4 tw-animate-spin tw-text-accent" />
-            <span className="tw-text-sm tw-font-medium">Processing</span>
-            <Badge variant="secondary" className="tw-text-xs  tw-bg-muted/10">
-              {contextLoadState.processingFiles.length} files
-            </Badge>
-            {isProcessingExpanded ? (
-              <ChevronDown className="tw-ml-auto tw-size-4" />
-            ) : (
-              <ChevronRight className="tw-ml-auto tw-size-4" />
+        {/* Currently processing file */}
+        {processingFiles.length > 0 && (
+          <div className="tw-space-y-3">
+            <div
+              className="tw--m-1 tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-p-1 tw-transition-colors hover:tw-bg-muted/10"
+              onClick={() => setIsProcessingExpanded(!isProcessingExpanded)}
+            >
+              <Loader2 className="tw-size-4 tw-animate-spin tw-text-accent" />
+              <span className="tw-text-sm tw-font-medium">Processing</span>
+              <Badge variant="secondary" className="tw-text-xs  tw-bg-muted/10">
+                {processingFiles.length} files
+              </Badge>
+              {isProcessingExpanded ? (
+                <ChevronDown className="tw-ml-auto tw-size-4" />
+              ) : (
+                <ChevronRight className="tw-ml-auto tw-size-4" />
+              )}
+            </div>
+
+            {isProcessingExpanded && (
+              <div className="tw-max-h-32 tw-space-y-2 tw-overflow-y-auto">
+                {processingFiles.map((fileName, index) => (
+                  <div
+                    key={index}
+                    className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-p-2 tw-text-sm tw-bg-faint/10"
+                  >
+                    <div className="tw-size-2 tw-animate-pulse tw-rounded-full tw-bg-interactive-accent" />
+                    <TruncatedText className="tw-flex-1" title={fileName}>
+                      {fileName}
+                    </TruncatedText>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
+        )}
 
-          {isProcessingExpanded && (
-            <div className="tw-max-h-32 tw-space-y-2 tw-overflow-y-auto">
-              {contextLoadState.processingFiles.map((fileName, index) => (
-                <div
-                  key={index}
-                  className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-p-2 tw-text-sm tw-bg-faint/10"
-                >
-                  <div className="tw-size-2 tw-animate-pulse tw-rounded-full tw-bg-interactive-accent" />
-                  <span className="tw-flex-1 tw-truncate" title={fileName}>
-                    {fileName}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* 失败文件 */}
-        {failedFilesList.length > 0 && (
+        {/* Failed to process the file */}
+        {failedFiles.length > 0 && (
           <div className="tw-space-y-3">
             <div className="tw-flex tw-items-center tw-gap-2">
               <div
@@ -98,7 +167,7 @@ export default function ProgressCard() {
                 <AlertCircle className="tw-size-4 tw-text-error" />
                 <span className="tw-text-sm tw-font-medium">Failed</span>
                 <Badge variant="destructive" className="tw-text-xs">
-                  {failedFiles} files
+                  {failedFiles.length} files
                 </Badge>
                 {isFailedExpanded ? (
                   <ChevronDown className="tw-ml-auto tw-size-4" />
@@ -106,32 +175,64 @@ export default function ProgressCard() {
                   <ChevronRight className="tw-ml-auto tw-size-4" />
                 )}
               </div>
-              <Button
+              {/*todo(emt-lin)：in the future, we can add all failed files to retry*/}
+              {/*<Button
                 size="sm"
-                variant="default"
+                variant="ghost"
                 className="tw-size-6 tw-bg-transparent tw-p-0"
                 title="Retry failed files"
                 onClick={(e) => {
                   e.stopPropagation();
                   // 处理重试逻辑
-                  console.log("Retrying failed files...");
+                  handleRetryAllFailed()
                 }}
               >
                 <RotateCcw className="tw-size-3" />
-              </Button>
+              </Button>*/}
             </div>
 
             {isFailedExpanded && (
               <div className="tw-max-h-32 tw-space-y-2 tw-overflow-y-auto">
-                {failedFilesList.map((file, index) => (
+                {failedFiles.map((failedItem: FailedItem, index: number) => (
                   <div
                     key={index}
                     className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-p-2 tw-text-sm tw-bg-faint/10"
                   >
                     <div className="tw-size-2 tw-rounded-full tw-bg-error/80" />
-                    <span className="tw-flex-1 tw-truncate" title={file}>
-                      {file}
-                    </span>
+                    <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-1">
+                      <div className="tw-flex tw-items-center tw-gap-2">
+                        {/*todo(emt-lin)：in the future, we can add all failed files to retry*/}
+                        {/*<Badge
+                          variant="secondary"
+                          className="tw-h-4 tw-w-16 tw-justify-center tw-text-xs"
+                        >
+                          {failedItem.type}
+                        </Badge>*/}
+                        <TruncatedText className="tw-flex-1 tw-font-bold" title={failedItem.path}>
+                          {getFailedItemDisplayName(failedItem)}
+                        </TruncatedText>
+                      </div>
+                      {failedItem.error && (
+                        <TruncatedText
+                          className="tw-flex-1  tw-text-xs tw-text-error"
+                          title={failedItem.error}
+                        >
+                          Loading Error: {failedItem.error}
+                        </TruncatedText>
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="tw-size-5 tw-p-0"
+                      title={`Retry ${failedItem.type} item`}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        await handleRetryFailedItem(failedItem);
+                      }}
+                    >
+                      <RotateCcw className="tw-size-3" />
+                    </Button>
                   </div>
                 ))}
               </div>

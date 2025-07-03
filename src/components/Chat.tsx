@@ -729,7 +729,7 @@ ${chatContent}`;
         />
         {isProjectLoading ? (
           <div className="tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-xl">
-            <ProgressCard />
+            <ProgressCard plugin={plugin} />
           </div>
         ) : (
           <>

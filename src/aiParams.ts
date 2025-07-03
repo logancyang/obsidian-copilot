@@ -38,9 +38,16 @@ const chainTypeAtom = atom(
 const currentProjectAtom = atom<ProjectConfig | null>(null);
 const projectLoadingAtom = atom<boolean>(false);
 
+export interface FailedItem {
+  path: string;
+  type: "md" | "web" | "youtube" | "nonMd";
+  error?: string;
+  timestamp?: number;
+}
+
 interface ProjectContextLoadState {
   success: Array<string>;
-  failed: Array<string>;
+  failed: Array<FailedItem>;
   processingFiles: Array<string>;
   total: Array<string>;
 }

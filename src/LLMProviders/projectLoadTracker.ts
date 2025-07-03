@@ -1,13 +1,16 @@
 import {
+  FailedItem,
   getProjectContextLoadState,
-  updateProjectContextLoadState,
-  setProjectContextLoadState,
   ProjectConfig,
+  setProjectContextLoadState,
+  updateProjectContextLoadState,
 } from "@/aiParams";
 import { ContextCache } from "@/cache/projectContextCache";
 import { logInfo } from "@/logger";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
-import { TFile } from "obsidian";
+import { err2String } from "@/utils";
+import { App, TFile } from "obsidian";
+import { isRateLimitError } from "@/utils/rateLimitUtils";
 
 /**
  * ProjectLoadTracker is responsible for managing the progress tracking of project file processing
@@ -15,14 +18,16 @@ import { TFile } from "obsidian";
 export class ProjectLoadTracker {
   private static instance: ProjectLoadTracker;
   private currentProjectId: string | null;
+  private app: App;
 
-  private constructor() {
+  private constructor(app: App) {
     this.currentProjectId = null;
+    this.app = app;
   }
 
-  public static getInstance(): ProjectLoadTracker {
+  public static getInstance(app: App): ProjectLoadTracker {
     if (!ProjectLoadTracker.instance) {
-      ProjectLoadTracker.instance = new ProjectLoadTracker();
+      ProjectLoadTracker.instance = new ProjectLoadTracker(app);
     }
     return ProjectLoadTracker.instance;
   }
@@ -46,14 +51,23 @@ export class ProjectLoadTracker {
   /**
    * Wrap an operation and track its execution status
    */
-  public async executeWithProcessTracking<T>(key: string, operation: () => Promise<T>): Promise<T> {
+  public async executeWithProcessTracking<T>(
+    key: string,
+    type: FailedItem["type"],
+    operation: () => Promise<T>
+  ): Promise<T> {
     this.setFileOrUrlStartProcess(key);
     try {
       const result = await operation();
       this.setFileOrUrlProcessSuccessful(key);
       return result;
     } catch (error) {
-      this.setFileOrUrlProcessFailed(key);
+      console.log("========================");
+      const errorMessage = isRateLimitError(error)
+        ? "Rate limit exceeded. (Rate limit: 50 files or 100MB per 3 hours, whichever is reached first)"
+        : err2String(error);
+
+      this.setFileOrUrlProcessFailed(key, type, errorMessage);
       throw error; // throw error to outer layer
     }
   }
@@ -66,6 +80,12 @@ export class ProjectLoadTracker {
 
     logInfo(
       `[setFileOrUrlStartProcess] Project ${this.currentProjectId}: Marking file/url as processing started: ${key}`
+    );
+
+    // note: we remove the failed file from the failed list when it starts processing
+    updateProjectContextLoadState(
+      "failed",
+      state.failed.filter((file) => file.path !== key)
     );
 
     // Add to processing files list
@@ -102,7 +122,7 @@ export class ProjectLoadTracker {
   /**
    * Mark a process as failed
    */
-  private setFileOrUrlProcessFailed(key: string): void {
+  private setFileOrUrlProcessFailed(key: string, type: FailedItem["type"], error?: string): void {
     const state = getProjectContextLoadState();
 
     logInfo(
@@ -114,15 +134,23 @@ export class ProjectLoadTracker {
       state.processingFiles.filter((file) => file !== key)
     );
 
-    if (!state.failed.includes(key)) {
-      updateProjectContextLoadState("failed", [...state.failed, key]);
+    // Check if this item is already in the failed list
+    const existingFailed = state.failed.find((item) => item.path === key);
+    if (!existingFailed) {
+      const failedItem: FailedItem = {
+        path: key,
+        type,
+        error,
+        timestamp: Date.now(),
+      };
+      updateProjectContextLoadState("failed", [...state.failed, failedItem]);
     }
   }
 
   /**
    * Pre-compute all items that need to be processed in the project
    */
-  public preComputeAllItems(project: ProjectConfig, contextCache: ContextCache, app: any): void {
+  public preComputeAllItems(project: ProjectConfig, contextCache: ContextCache): void {
     logInfo(`[preComputeAllItems] Starting pre-computation for project: ${project.name}`);
 
     const allItems: string[] = [];
@@ -135,7 +163,7 @@ export class ProjectLoadTracker {
         isProject: true,
       });
 
-      const allMatchingFiles = app.vault.getFiles().filter((file: TFile) => {
+      const allMatchingFiles = this.app.vault.getFiles().filter((file: TFile) => {
         return shouldIndexFile(file, inclusionPatterns, exclusionPatterns);
       });
 
@@ -168,14 +196,86 @@ export class ProjectLoadTracker {
   }
 
   /**
+   * Mark all cached items as successful
+   */
+  public markAllCachedItemsAsSuccess(project: ProjectConfig, contextCache: ContextCache): void {
+    logInfo(
+      `[markAllCachedItemsAsSuccess] Starting for project: ${this.currentProjectId || "default"}`
+    );
+
+    // 1. Mark cached Web URLs
+    const configuredWebUrls = project.contextSource?.webUrls?.trim() || "";
+    if (configuredWebUrls) {
+      const urlsInConfig = configuredWebUrls.split("\n").filter((url) => url.trim());
+      const cachedUrls = urlsInConfig.filter((url) => contextCache.webContexts[url]);
+      cachedUrls.forEach((url) => {
+        this.markCachedItemAsSuccess(url);
+      });
+      if (cachedUrls.length > 0) {
+        logInfo(
+          `[markAllCachedItemsAsSuccess] Project ${
+            this.currentProjectId || "default"
+          }: Marked ${cachedUrls.length} cached Web URLs as successful`
+        );
+      }
+    }
+
+    // 2. Mark cached YouTube URLs
+    const configuredYoutubeUrls = project.contextSource?.youtubeUrls?.trim() || "";
+    if (configuredYoutubeUrls) {
+      const urlsInConfig = configuredYoutubeUrls.split("\n").filter((url) => url.trim());
+      const cachedUrls = urlsInConfig.filter((url) => contextCache.youtubeContexts[url]);
+      cachedUrls.forEach((url) => {
+        this.markCachedItemAsSuccess(url);
+      });
+      if (cachedUrls.length > 0) {
+        logInfo(
+          `[markAllCachedItemsAsSuccess] Project ${
+            this.currentProjectId || "default"
+          }: Marked ${cachedUrls.length} cached YouTube URLs as successful`
+        );
+      }
+    }
+
+    // 3. Mark all files present in fileContexts as successful
+    if (contextCache.fileContexts) {
+      const { inclusions, exclusions } = project.contextSource || {};
+      const { inclusions: inclusionPatterns, exclusions: exclusionPatterns } = getMatchingPatterns({
+        inclusions,
+        exclusions,
+        isProject: true,
+      });
+
+      const matchingFilesSet = new Set(
+        this.app.vault
+          .getFiles()
+          .filter((file: TFile) => shouldIndexFile(file, inclusionPatterns, exclusionPatterns))
+          .map((file: TFile) => file.path)
+      );
+
+      const cachedFilesToMark = Object.keys(contextCache.fileContexts).filter((filePath) =>
+        matchingFilesSet.has(filePath)
+      );
+
+      cachedFilesToMark.forEach((filePath) => {
+        this.markCachedItemAsSuccess(filePath);
+      });
+
+      if (cachedFilesToMark.length > 0) {
+        logInfo(
+          `[markAllCachedItemsAsSuccess] Project ${this.currentProjectId || "default"}: Marked ${
+            cachedFilesToMark.length
+          } cached files that match current project patterns as successful.`
+        );
+      }
+    }
+  }
+
+  /**
    * Mark a cached item as successful
    */
   public markCachedItemAsSuccess(key: string): void {
     const state = getProjectContextLoadState();
-
-    logInfo(
-      `[markCachedItemAsSuccess] Project ${this.currentProjectId}: Marking cached item as successful: ${key}`
-    );
 
     // Ensure the item is in the total list
     if (!state.total.includes(key)) {

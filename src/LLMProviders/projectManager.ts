@@ -1,4 +1,5 @@
 import {
+  FailedItem,
   getChainType,
   isProjectMode,
   ProjectConfig,
@@ -52,7 +53,7 @@ export default class ProjectManager {
       true,
       null
     );
-    this.loadTracker = ProjectLoadTracker.getInstance();
+    this.loadTracker = ProjectLoadTracker.getInstance(this.app);
 
     // Set up subscriptions
     subscribeToModelKeyChange(async () => {
@@ -210,7 +211,7 @@ export default class ProjectManager {
       }
       logInfo(`[loadProjectContext] Starting for project: ${project.name}`);
 
-      // 清除所有项目上下文加载状态
+      // Clear all project context loading states
       this.loadTracker.clearAllLoadStates();
       logInfo(
         `[loadProjectContext] Project ${project.name}: Cleared all project context load states`
@@ -235,8 +236,9 @@ export default class ProjectManager {
         );
       }
 
-      // 预统计所有需要处理的项目
-      this.loadTracker.preComputeAllItems(project, contextCache, this.app);
+      // Pre-count all items that need to be processed
+      this.loadTracker.preComputeAllItems(project, contextCache);
+      this.loadTracker.markAllCachedItemsAsSuccess(project, contextCache);
 
       const [updatedContextCacheAfterSources] = await Promise.all([
         this.processMarkdownFiles(project, contextCache),
@@ -507,30 +509,6 @@ ${contextParts.join("\n\n")}
         logInfo(
           `[processMarkdownFiles] Project ${project.name}: Markdown content already up-to-date.`
         );
-
-        // 标记已缓存的 markdown 文件为成功
-        const { inclusions: inclusionPatterns, exclusions: exclusionPatterns } =
-          getMatchingPatterns({
-            inclusions: project.contextSource.inclusions,
-            exclusions: project.contextSource.exclusions,
-            isProject: true,
-          });
-
-        const cachedMarkdownFiles = this.app.vault.getFiles().filter((file) => {
-          return (
-            file.extension === "md" && shouldIndexFile(file, inclusionPatterns, exclusionPatterns)
-          );
-        });
-
-        cachedMarkdownFiles.forEach((file) => {
-          this.loadTracker.markCachedItemAsSuccess(file.path);
-        });
-
-        if (cachedMarkdownFiles.length > 0) {
-          logInfo(
-            `[processMarkdownFiles] Project ${project.name}: Marked ${cachedMarkdownFiles.length} cached markdown files as successful`
-          );
-        }
       }
     }
     logInfo(
@@ -583,6 +561,7 @@ ${contextParts.join("\n\n")}
           // Only process markdown files here
           const [stat, fileContent] = await this.loadTracker.executeWithProcessTracking(
             file.path,
+            "md",
             async () => {
               return Promise.all([
                 this.app.vault.adapter.stat(file.path),
@@ -638,17 +617,6 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
     );
     const currentCachedUrls = Object.keys(contextCache.webContexts);
 
-    // 标记已缓存的URLs为成功
-    const cachedUrls = urlsInConfig.filter((url) => contextCache.webContexts[url]);
-    cachedUrls.forEach((url) => {
-      this.loadTracker.markCachedItemAsSuccess(url);
-    });
-    if (cachedUrls.length > 0) {
-      logInfo(
-        `[processWebUrls] Project ${project.name}: Marked ${cachedUrls.length} cached Web URLs as successful`
-      );
-    }
-
     const urlsToFetch = urlsInConfig.filter((url) => !contextCache.webContexts[url]);
     if (urlsToFetch.length > 0) {
       logInfo(
@@ -670,23 +638,18 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
       // processWebUrlContext itself should log errors if a specific URL fetch fails.
       const webContext = await this.processWebUrlContext(url);
       if (webContext) {
+        contextCache.webContexts[url] = webContext;
         logInfo(
           `[processWebUrls] Project ${project.name}: Successfully fetched content for URL: ${url.substring(0, 50)}...`
         );
-      }
-      return { url, context: webContext };
-    });
-
-    const results = await Promise.all(webContextPromises);
-    results.forEach((result) => {
-      if (result && result.context) {
-        contextCache.webContexts[result.url] = result.context;
-      } else if (result && !result.context) {
+      } else {
         logWarn(
-          `[processWebUrls] Project ${project.name}: Fetched empty content for Web URL: ${result.url}`
+          `[processWebUrls] Project ${project.name}: Fetched empty content for Web URL: ${url}`
         );
       }
     });
+
+    await Promise.all(webContextPromises);
     logInfo(
       `[processWebUrls] Completed for project: ${project.name}. Total Web contexts: ${Object.keys(contextCache.webContexts).length}`
     );
@@ -716,17 +679,6 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
     );
     const currentCachedUrls = Object.keys(contextCache.youtubeContexts);
 
-    // 标记已缓存的URLs为成功
-    const cachedUrls = urlsInConfig.filter((url) => contextCache.youtubeContexts[url]);
-    cachedUrls.forEach((url) => {
-      this.loadTracker.markCachedItemAsSuccess(url);
-    });
-    if (cachedUrls.length > 0) {
-      logInfo(
-        `[processYoutubeUrls] Project ${project.name}: Marked ${cachedUrls.length} cached YouTube URLs as successful`
-      );
-    }
-
     const urlsToFetch = urlsInConfig.filter((url) => !contextCache.youtubeContexts[url]);
     if (urlsToFetch.length > 0) {
       logInfo(
@@ -747,23 +699,18 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
     const youtubeContextPromises = urlsToFetch.map(async (url) => {
       const youtubeContext = await this.processYoutubeUrlContext(url);
       if (youtubeContext) {
+        contextCache.youtubeContexts[url] = youtubeContext;
         logInfo(
           `[processYoutubeUrls] Project ${project.name}: Successfully fetched transcript for YouTube URL: ${url.substring(0, 50)}...`
         );
-      }
-      return { url, context: youtubeContext };
-    });
-
-    const results = await Promise.all(youtubeContextPromises);
-    results.forEach((result) => {
-      if (result && result.context) {
-        contextCache.youtubeContexts[result.url] = result.context;
-      } else if (result && !result.context) {
+      } else {
         logWarn(
-          `[processYoutubeUrls] Project ${project.name}: Fetched empty transcript for YouTube URL: ${result.url}`
+          `[processYoutubeUrls] Project ${project.name}: Fetched empty transcript for YouTube URL: ${url}`
         );
       }
     });
+
+    await Promise.all(youtubeContextPromises);
     logInfo(
       `[processYoutubeUrls] Completed for project: ${project.name}. Total YouTube contexts: ${Object.keys(contextCache.youtubeContexts).length}`
     );
@@ -777,9 +724,14 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
 
     try {
       const mention = Mention.getInstance();
-      const { urlContext } = await this.loadTracker.executeWithProcessTracking(webUrl, async () => {
-        return mention.processUrls(webUrl);
-      });
+      const { urlContext } = await this.loadTracker.executeWithProcessTracking(
+        webUrl,
+        "web",
+        async () => {
+          // todo 由于异常没有抛出，所以需要额外返回一个 错误信息 字段
+          return mention.processUrls(webUrl);
+        }
+      );
       return urlContext || "";
     } catch (error) {
       logError(`Failed to process web URL: ${error}`);
@@ -794,9 +746,13 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
     }
 
     try {
-      const response = await this.loadTracker.executeWithProcessTracking(youtubeUrl, async () => {
-        return BrevilabsClient.getInstance().youtube4llm(youtubeUrl);
-      });
+      const response = await this.loadTracker.executeWithProcessTracking(
+        youtubeUrl,
+        "youtube",
+        async () => {
+          return BrevilabsClient.getInstance().youtube4llm(youtubeUrl);
+        }
+      );
       if (response.response.transcript) {
         return `\n\nYouTube transcript from ${youtubeUrl}:\n${response.response.transcript}`;
       }
@@ -833,7 +789,6 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
     );
 
     let processedNonMdCount = 0;
-    let cachedNonMdCount = 0;
 
     for (const filePath in contextCache.fileContexts) {
       const file = this.app.vault.getAbstractFileByPath(filePath);
@@ -848,14 +803,11 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
             logInfo(
               `[loadProjectContext] Project ${project.name}: Parsing/caching new/updated file: ${filePath}`
             );
-            await this.loadTracker.executeWithProcessTracking(filePath, async () => {
+            await this.loadTracker.executeWithProcessTracking(filePath, "nonMd", async () => {
               return this.fileParserManager.parseFile(file, this.app.vault);
             });
             processedNonMdCount++;
-          } else {
-            this.loadTracker.markCachedItemAsSuccess(filePath);
-            cachedNonMdCount++;
-          }
+          } // else { logInfo for skipped can be too verbose }
         } catch (error) {
           logError(
             `[loadProjectContext] Project ${project.name}: Error parsing file ${filePath}:`,
@@ -875,11 +827,131 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
         `[loadProjectContext] Project ${project.name}: Processed and cached ${processedNonMdCount} non-markdown files.`
       );
     }
+  }
 
-    if (cachedNonMdCount > 0) {
-      logInfo(
-        `[loadProjectContext] Project ${project.name}: Marked ${cachedNonMdCount} cached non-markdown files as successful.`
+  /**
+   * Retry failed item
+   * @param failedItem Failed item information
+   */
+  public async retryFailedItem(failedItem: FailedItem): Promise<void> {
+    try {
+      if (!this.currentProjectId) {
+        logWarn("[retryFailedItem] No current project, aborting retry");
+        return;
+      }
+
+      const project = getSettings().projectList.find((p) => p.id === this.currentProjectId);
+      if (!project) {
+        logError(`[retryFailedItem] Current project not found: ${this.currentProjectId}`);
+        return;
+      }
+
+      logInfo(`[retryFailedItem] Starting retry for ${failedItem.type} item: ${failedItem.path}`);
+
+      // Execute different retry logic based on type
+      switch (failedItem.type) {
+        case "web":
+          await this.retryWebUrl(project, failedItem.path);
+          break;
+        case "youtube":
+          await this.retryYoutubeUrl(project, failedItem.path);
+          break;
+        case "md":
+          await this.retryMarkdownFile(project, failedItem.path);
+          break;
+        case "nonMd":
+          await this.retryNonMarkdownFile(project, failedItem.path);
+          break;
+        default:
+          logWarn(`[retryFailedItem] Unknown item type: ${failedItem.type}`);
+          return;
+      }
+
+      logInfo(`[retryFailedItem] Successfully retried ${failedItem.type} item: ${failedItem.path}`);
+      new Notice(`Retry successful: ${failedItem.path}`);
+    } catch (error) {
+      logError(
+        `[retryFailedItem] Failed to retry ${failedItem.type} item ${failedItem.path}:`,
+        error
       );
+      new Notice(`Retry failed: ${err2String(error)}`);
+    }
+  }
+
+  private async retryWebUrl(project: ProjectConfig, url: string): Promise<void> {
+    const contextCache = await this.projectContextCache.get(project);
+    if (!contextCache) {
+      throw new Error("Project context cache not found");
+    }
+
+    const webContext = await this.processWebUrlContext(url);
+    if (webContext) {
+      contextCache.webContexts[url] = webContext;
+      await this.projectContextCache.set(project, contextCache);
+      logInfo(`[retryWebUrl] Successfully updated web context for: ${url}`);
+    } else {
+      throw new Error("Failed to fetch web content");
+    }
+  }
+
+  private async retryYoutubeUrl(project: ProjectConfig, url: string): Promise<void> {
+    const contextCache = await this.projectContextCache.get(project);
+    if (!contextCache) {
+      throw new Error("Project context cache not found");
+    }
+
+    // Re-process YouTube URL
+    const youtubeContext = await this.processYoutubeUrlContext(url);
+    if (youtubeContext) {
+      contextCache.youtubeContexts[url] = youtubeContext;
+      await this.projectContextCache.set(project, contextCache);
+      logInfo(`[retryYoutubeUrl] Successfully updated youtube context for: ${url}`);
+    } else {
+      throw new Error("Failed to fetch YouTube transcript");
+    }
+  }
+
+  private async retryMarkdownFile(project: ProjectConfig, filePath: string): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(filePath);
+    if (!(file instanceof TFile) || file.extension !== "md") {
+      throw new Error(`File not found or not a markdown file: ${filePath}`);
+    }
+
+    try {
+      // add flag to track reprocessing of Markdown
+      await this.loadTracker.executeWithProcessTracking(file.path, "md", async () => {
+        return Promise.all([this.app.vault.adapter.stat(file.path), this.app.vault.read(file)]);
+      });
+
+      logInfo(`[retryMarkdownFile] Successfully reprocessed markdown file: ${filePath}`);
+
+      // flag the markdown context as needing a reload
+      await this.projectContextCache.invalidateMarkdownContext(project);
+    } catch (error) {
+      logError(`[retryMarkdownFile] Error processing file ${filePath}: ${error}`);
+      throw error;
+    }
+  }
+
+  private async retryNonMarkdownFile(project: ProjectConfig, filePath: string): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(filePath);
+    if (!(file instanceof TFile) || file.extension === "md") {
+      throw new Error(`File not found or is a markdown file: ${filePath}`);
+    }
+
+    if (!this.fileParserManager.supportsExtension(file.extension)) {
+      throw new Error(`Unsupported file extension: ${file.extension}`);
+    }
+
+    try {
+      await this.loadTracker.executeWithProcessTracking(filePath, "nonMd", async () => {
+        return this.fileParserManager.parseFile(file, this.app.vault);
+      });
+
+      logInfo(`[retryNonMarkdownFile] Successfully reprocessed non-markdown file: ${filePath}`);
+    } catch (error) {
+      logError(`[retryNonMarkdownFile] Error processing file ${filePath}: ${error}`);
+      throw error;
     }
   }
 
