@@ -20,6 +20,7 @@ import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { ChatMessage } from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { err2String } from "@/utils";
+import { isRateLimitError } from "@/utils/rateLimitUtils";
 import { App, Notice, TFile } from "obsidian";
 import VectorStoreManager from "../search/vectorStoreManager";
 import { BrevilabsClient } from "./brevilabsClient";
@@ -267,14 +268,7 @@ export default class ProjectManager {
                   );
 
                   // Check if this is a rate limit error and re-throw it to fail the entire operation
-                  const errorMessage = error?.message || error?.toString() || "";
-                  const isRateLimit =
-                    errorMessage.includes("Request rate limit exceeded") ||
-                    errorMessage.includes("RATE_LIMIT_EXCEEDED") ||
-                    errorMessage.includes("429") ||
-                    error?.status === 429;
-
-                  if (isRateLimit) {
+                  if (isRateLimitError(error)) {
                     throw error; // Re-throw to fail the entire operation
                   }
                 }

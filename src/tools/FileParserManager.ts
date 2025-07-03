@@ -3,6 +3,7 @@ import { ProjectConfig } from "@/aiParams";
 import { PDFCache } from "@/cache/pdfCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { logError, logInfo } from "@/logger";
+import { extractRetryTime, isRateLimitError } from "@/utils/rateLimitUtils";
 import { Notice, TFile, Vault } from "obsidian";
 import { CanvasLoader } from "./CanvasLoader";
 
@@ -282,23 +283,12 @@ export class Docs4LLMParser implements FileParser {
       );
 
       // Check if this is a rate limit error and show user-friendly notice
-      if (this.isRateLimitError(error)) {
+      if (isRateLimitError(error)) {
         this.showRateLimitNotice(error);
       }
 
       throw error; // Propagate the error up
     }
-  }
-
-  private isRateLimitError(error: any): boolean {
-    if (!error || typeof error !== "object") return false;
-
-    const errorMessage = error.message || error.toString();
-    return (
-      errorMessage.includes("Request rate limit exceeded") ||
-      errorMessage.includes("RATE_LIMIT_EXCEEDED") ||
-      error.status === 429
-    );
   }
 
   private showRateLimitNotice(error: any): void {
@@ -311,11 +301,7 @@ export class Docs4LLMParser implements FileParser {
 
     Docs4LLMParser.lastRateLimitNoticeTime = now;
 
-    const errorMessage = error.message || error.toString();
-
-    // Extract the retry time from the error message if possible
-    const retryMatch = errorMessage.match(/Try again in ([\d\w\s]+)/);
-    const retryTime = retryMatch ? retryMatch[1] : "some time";
+    const retryTime = extractRetryTime(error);
 
     new Notice(
       `⚠️ Rate limit exceeded for document processing. Please try again in ${retryTime}. Having fewer non-markdown files in the project will help.`,
