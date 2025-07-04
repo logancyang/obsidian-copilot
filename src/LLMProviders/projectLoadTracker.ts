@@ -78,10 +78,6 @@ export class ProjectLoadTracker {
   private setFileOrUrlStartProcess(key: string): void {
     const state = getProjectContextLoadState();
 
-    logInfo(
-      `[setFileOrUrlStartProcess] Project ${this.currentProjectId}: Marking file/url as processing started: ${key}`
-    );
-
     // note: we remove the failed file from the failed list when it starts processing
     updateProjectContextLoadState(
       "failed",
@@ -105,10 +101,6 @@ export class ProjectLoadTracker {
   private setFileOrUrlProcessSuccessful(key: string): void {
     const state = getProjectContextLoadState();
 
-    logInfo(
-      `[setFileOrUrlProcessSuccessful] Project ${this.currentProjectId}: Marking file/url as successfully processed: ${key}`
-    );
-
     updateProjectContextLoadState(
       "processingFiles",
       state.processingFiles.filter((file) => file !== key)
@@ -124,10 +116,6 @@ export class ProjectLoadTracker {
    */
   private setFileOrUrlProcessFailed(key: string, type: FailedItem["type"], error?: string): void {
     const state = getProjectContextLoadState();
-
-    logInfo(
-      `[setFileOrUrlProcessFailed] Project ${this.currentProjectId}: Marking file/url as failed: ${key}`
-    );
 
     updateProjectContextLoadState(
       "processingFiles",

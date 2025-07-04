@@ -1,10 +1,10 @@
 import * as React from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, ChevronDown, ChevronRight, FileText, Loader2, RotateCcw } from "lucide-react";
-import { FailedItem, useProjectContextLoad } from "@/aiParams";
+import { FailedItem, useProjectContextLoad, useProjectLoading } from "@/aiParams";
 import { Button } from "@/components/ui/button";
 import { TruncatedText } from "@/components/TruncatedText";
 import CopilotPlugin from "@/main";
@@ -14,12 +14,14 @@ interface ProgressCardProps {
 }
 
 export default function ProgressCard({ plugin }: ProgressCardProps) {
-  // 使用真实的项目上下文加载状态数据
   const [contextLoadState] = useProjectContextLoad();
   const totalFiles = contextLoadState.total;
   const successFiles = contextLoadState.success;
   const failedFiles = contextLoadState.failed;
   const processingFiles = contextLoadState.processingFiles;
+
+  // Use project loading state hook
+  const [, setLoading] = useProjectLoading();
 
   /*const mockFailedFiles: FailedItem[] = [
     {
@@ -58,7 +60,7 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
   const getFailedItemDisplayName = (item: FailedItem): string => {
     return item.path;
     // if (item.type === 'web' || item.type === 'youtube') {
-    //   // 对于URL，显示简化的名称或域名
+    //   // For URLs, display simplified name or domain
     //   try {
     //     const url = new URL(item.path);
     //     return url.hostname + (url.pathname !== '/' ? url.pathname.substring(0, 20) + '...' : '');
@@ -66,7 +68,7 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
     //     return item.path.substring(0, 30) + (item.path.length > 30 ? '...' : '');
     //   }
     // }
-    // // 对于文件，显示文件名
+    // // For files, display the file name
     // const pathParts = item.path.split('/');
     // return pathParts[pathParts.length - 1];
   };
@@ -84,13 +86,29 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
     try {
       await plugin.projectManager.retryFailedItem(item);
     } catch (error) {
-      console.error(`重试失败项时出错: ${error}`);
+      console.error(`Error retrying failed item: ${error}`);
     }
   };
 
-  // 控制文件列表展开/折叠状态
+  // Control file list expand/collapse state
   const [isProcessingExpanded, setIsProcessingExpanded] = useState(false);
   const [isFailedExpanded, setIsFailedExpanded] = useState(true);
+
+  // Monitor loading status and set loading to false with delay when all files are processed
+  useEffect(() => {
+    // Check if all files are processed or there are no files to process
+    const allFilesProcessed =
+      totalFiles.length === 0 || // No files to process
+      (processedFilesLen === totalFiles.length && totalFiles.length > 0); // All files are processed
+
+    if (allFilesProcessed && processingFiles.length === 0) {
+      const timer = setTimeout(() => {
+        setLoading(false);
+      }, 500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [processedFilesLen, totalFiles.length, processingFiles.length, setLoading]);
 
   return (
     <Card className="tw-w-full tw-border tw-border-solid tw-border-border tw-bg-transparent tw-shadow-none">
@@ -101,7 +119,7 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="tw-space-y-6">
-        {/* 总进度显示 */}
+        {/* Total progress display */}
         <div className="tw-space-y-2">
           <div className="tw-flex tw-items-center tw-justify-between tw-text-sm">
             <div className="tw-flex tw-items-center tw-gap-2">
@@ -175,7 +193,7 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
                   <ChevronRight className="tw-ml-auto tw-size-4" />
                 )}
               </div>
-              {/*todo(emt-lin)：in the future, we can add all failed files to retry*/}
+              {/*todo(emt-lin): in the future, we can add all failed files to retry*/}
               {/*<Button
                 size="sm"
                 variant="ghost"
@@ -183,7 +201,7 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
                 title="Retry failed files"
                 onClick={(e) => {
                   e.stopPropagation();
-                  // 处理重试逻辑
+                  // Handle retry logic
                   handleRetryAllFailed()
                 }}
               >
@@ -201,7 +219,7 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
                     <div className="tw-size-2 tw-rounded-full tw-bg-error/80" />
                     <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-1">
                       <div className="tw-flex tw-items-center tw-gap-2">
-                        {/*todo(emt-lin)：in the future, we can add all failed files to retry*/}
+                        {/*todo(emt-lin): in the future, we can add all failed files to retry*/}
                         {/*<Badge
                           variant="secondary"
                           className="tw-h-4 tw-w-16 tw-justify-center tw-text-xs"

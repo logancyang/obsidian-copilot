@@ -176,7 +176,9 @@ export default class ProjectManager {
       logError(`Failed to switch project: ${error}`);
       throw error;
     } finally {
-      // setProjectLoading(false);
+      // setTimeout(() => {
+      //   setProjectLoading(false);
+      // }, 1000)
     }
   }
 
