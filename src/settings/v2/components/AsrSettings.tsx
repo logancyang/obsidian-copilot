@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import CopilotPlugin from "@/main";
 import { LANGUAGES } from "@/asr/AsrSettingsTab";
 import { CopilotSettings, setSettings, useSettingsValue } from "@/settings/model";

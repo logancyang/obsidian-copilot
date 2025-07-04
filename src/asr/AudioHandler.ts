@@ -109,19 +109,12 @@ export class AudioHandler {
 
   async sendAudioData2copilot(blob: Blob, fileName: string): Promise<void> {
     // Get the base file name without extension
-    const baseFileName = getBaseFileName(fileName);
 
     const audioFilePath = `${
       this.plugin.asrSettings.Asr_saveAudioFilePath
         ? `${this.plugin.asrSettings.Asr_saveAudioFilePath}/`
         : ""
     }${fileName}`;
-
-    const noteFilePath = `${
-      this.plugin.asrSettings.Asr_createNewFileAfterRecordingPath
-        ? `${this.plugin.asrSettings.Asr_createNewFileAfterRecordingPath}/`
-        : ""
-    }${baseFileName}.md`;
 
     if (this.plugin.asrSettings.Asr_debugMode) {
       new Notice(`Sending audio data size: ${blob.size / 1000} KB`);

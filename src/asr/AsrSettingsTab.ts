@@ -1,6 +1,3 @@
-import CopilotPlugin from "@/main";
-import { App, PluginSettingTab, Setting, Plugin, TFolder } from "obsidian";
-
 export interface AsrSettings {
   Asr_apiKey: string;
   Asr_apiUrl: string;

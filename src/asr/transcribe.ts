@@ -1,5 +1,5 @@
 import { DEFAULT_SETTINGS } from "@/constants";
-import { Notice, requestUrl, RequestUrlParam, TFile, Vault, App } from "obsidian";
+import { requestUrl, RequestUrlParam, TFile, Vault, App } from "obsidian";
 import { format } from "date-fns";
 import { PayloadData, payloadGenerator, preprocessWhisperASRResponse } from "src/utils";
 import { StatusBarReadwise } from "./status";
@@ -7,8 +7,6 @@ import { WhisperASRResponse, WhisperASRSegment, components } from "./types/whisp
 import Whisper from "@/main";
 
 type TranscriptionBackend = (file: TFile) => Promise<string>;
-
-const MAX_TRIES = 100;
 
 export class TranscriptionEngine {
   private plugin: Whisper;

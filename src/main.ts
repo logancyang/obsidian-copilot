@@ -45,7 +45,7 @@ import { FileLink } from "./asr/fileLink";
 import { Timer } from "./asr/Timer";
 import { Controls } from "./asr/Controls";
 import { AudioHandler } from "./asr/AudioHandler";
-import { AsrSettings, DEFAULT_SETTINGS } from "./asr/AsrSettingsTab";
+import { AsrSettings } from "./asr/AsrSettingsTab";
 import { NativeAudioRecorder } from "./asr/AudioRecorder";
 import { RecordingStatus, StatusBarRecord } from "./asr/StatusBar";
 
