@@ -156,6 +156,7 @@ export enum ChatModelProviders {
   COPILOT_PLUS = "copilot-plus",
   MISTRAL = "mistralai",
   DEEPSEEK = "deepseek",
+  GITHUB_COPILOT = "github-copilot",
 }
 
 export enum ModelCapability {
@@ -542,6 +543,12 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     keyManagementURL: "",
     listModelURL: "",
   },
+  [ChatModelProviders.GITHUB_COPILOT]: {
+    label: "GitHub Copilot",
+    host: "https://api.githubcopilot.com",
+    keyManagementURL: "",
+    listModelURL: "",
+  },
   [EmbeddingModelProviders.COPILOT_PLUS_JINA]: {
     label: "Copilot Plus",
     host: "https://api.brevilabs.com/v1",
@@ -563,6 +570,7 @@ export const ProviderSettingsKeyMap: Record<SettingKeyProviders, keyof CopilotSe
   "copilot-plus": "plusLicenseKey",
   mistralai: "mistralApiKey",
   deepseek: "deepseekApiKey",
+  "github-copilot": "copilotToken",
 };
 
 export enum VAULT_VECTOR_STORE_STRATEGY {
@@ -703,6 +711,10 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   passMarkdownImages: true,
   enableCustomPromptTemplating: true,
   suggestedDefaultCommands: false,
+  // GitHub Copilot provider tokens (optional, for persistence)
+  copilotAccessToken: "",
+  copilotToken: "",
+  copilotTokenExpiresAt: 0,
 };
 
 export const EVENT_NAMES = {
