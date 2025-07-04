@@ -803,13 +803,17 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
     e.stopPropagation();
 
     const file = appAllFiles.find((file) => file.path === item.id);
+
     if (file) {
-      // add file to ignore
-      setIgnoreItems((prev) => {
-        const newFiles = new Set(prev.files);
-        newFiles.add(file);
-        return { ...prev, files: newFiles };
-      });
+      // note: in notes group, file should be removed instead of ignore
+      if (!groupList.notes.some((note) => note.id === file.path)) {
+        // add file to ignore
+        setIgnoreItems((prev) => {
+          const newFiles = new Set(prev.files);
+          newFiles.add(file);
+          return { ...prev, files: newFiles };
+        });
+      }
 
       setGroupList((prev) => removeFileFromGroupList(prev, item.id));
     }
