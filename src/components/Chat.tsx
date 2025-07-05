@@ -527,6 +527,10 @@ ${chatContent}`;
     }
   }, [onSaveChat, handleSaveAsNote]);
 
+  useEffect(() => {
+    plugin.setChatInput = setInputMessage;
+  }, [plugin, setInputMessage]);
+
   const handleDelete = useCallback(
     async (messageIndex: number) => {
       const newChatHistory = [...chatHistory];
@@ -597,6 +601,7 @@ ${chatContent}`;
           selectedImages={selectedImages}
           onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
           setSelectedImages={setSelectedImages}
+          whisperPlugin={plugin} 
         />
       </div>
     </div>

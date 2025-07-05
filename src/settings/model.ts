@@ -37,6 +37,26 @@ export interface InlineEditCommandSettings {
 }
 
 export interface CopilotSettings {
+  Asr_apiKey: string;
+  Asr_apiUrl: string;
+  Asr_debugMode: boolean;
+  Asr_encode: boolean;
+  Asr_prompt: string;
+  Asr_language: string;
+  Asr_lineSpacing: string;
+  Asr_createNewFileAfterRecording: boolean;
+  Asr_createNewFileAfterRecordingPath: string;
+  Asr_saveAudioFile: boolean;
+  Asr_saveAudioFilePath: string;
+  Asr_useLocalService: boolean;
+  Asr_localServiceUrl: string;
+  Asr_translate: boolean;
+  Asr_transcriptionEngine: string;
+  Asr_timestamps: boolean;
+  Asr_timestampFormat: string;
+  Asr_timestampInterval: string; // easier to store as a string and convert to number when needed
+  Asr_wordTimestamps: boolean;
+  Asr_vadFilter: boolean;
   userId: string;
   plusLicenseKey: string;
   openAIApiKey: string;

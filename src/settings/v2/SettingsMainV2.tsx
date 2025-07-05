@@ -14,6 +14,7 @@ import { ModelSettings } from "./components/ModelSettings";
 import { QASettings } from "./components/QASettings";
 import { SystemPromptsSection } from "./components/SystemPromptsSection";
 import { PromptEnhancementsSection } from "./components/PromptEnhancementsSection";
+import { AsrSetting } from "./components/AsrSettings";
 
 const TAB_IDS = [
   "basic",
@@ -23,6 +24,7 @@ const TAB_IDS = [
   "advanced",
   "systemPrompts",
   "promptEnhancements",
+  "ASR",
 ] as const;
 type TabId = (typeof TAB_IDS)[number];
 
@@ -35,17 +37,7 @@ const icons: Record<TabId, JSX.Element> = {
   advanced: <Wrench className="w-5 h-5" />,
   systemPrompts: <Cog className="w-5 h-5" />,
   promptEnhancements: <Cog className="w-5 h-5" />,
-};
-
-// tab components
-const components: Record<TabId, React.FC> = {
-  basic: () => <BasicSettings />,
-  model: () => <ModelSettings />,
-  QA: () => <QASettings />,
-  command: () => <CommandSettings />,
-  advanced: () => <AdvancedSettings />,
-  systemPrompts: () => <SystemPromptsSection />,
-  promptEnhancements: () => <PromptEnhancementsSection />,
+  ASR: <Cog className="w-5 h-5" />,
 };
 
 // tabs
@@ -58,6 +50,17 @@ const tabs: TabItemType[] = TAB_IDS.map((id) => ({
 const SettingsContent: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
   const { selectedTab, setSelectedTab } = useTab();
 
+  // tab components
+  const components: Record<TabId, React.FC> = {
+    basic: () => <BasicSettings />,
+    model: () => <ModelSettings />,
+    QA: () => <QASettings />,
+    command: () => <CommandSettings />,
+    advanced: () => <AdvancedSettings />,
+    systemPrompts: () => <SystemPromptsSection />,
+    promptEnhancements: () => <PromptEnhancementsSection />,
+    ASR: () => <AsrSetting plugin={plugin} />,
+  };
   return (
     <div className="flex flex-col">
       <div className="inline-flex rounded-lg">
