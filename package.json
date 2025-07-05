@@ -116,7 +116,7 @@
     "clsx": "^2.1.1",
     "cohere-ai": "^7.13.0",
     "crypto-js": "^4.1.1",
-    "date-fns": "^2.29.3",
+    "date-fns": "^2.30.0",
     "esbuild-plugin-svg": "^0.1.0",
     "eventsource-parser": "^1.0.0",
     "jotai": "^2.10.3",
