@@ -1,7 +1,7 @@
 {
   "id": "copilot-ai-learning-assistant",
   "name": "Copilot (AI Learning Assistant)",
-  "version": "1.1",
+  "version": "1.2.0",
   "minAppVersion": "0.15.0",
   "description": "An AI Copilot in Obsidian. Development fork by AI Learning Assistant based on original work by Logan Yang.",
   "author": "AI Learning Assistant Dev (based on Logan Yang's work)",
