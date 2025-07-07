@@ -81,8 +81,9 @@ export async function getEncryptedKey(apiKey: string): Promise<string> {
 
   try {
     // Try desktop encryption first
-    if (getSafeStorage()?.isEncryptionAvailable()) {
-      const encryptedBuffer = getSafeStorage().encryptString(apiKey) as Buffer;
+    const safeStorage = getSafeStorage();
+    if (safeStorage?.isEncryptionAvailable()) {
+      const encryptedBuffer = safeStorage.encryptString(apiKey) as Buffer;
       return DESKTOP_PREFIX + encryptedBuffer.toString("base64");
     }
 
@@ -109,7 +110,12 @@ export async function getDecryptedKey(apiKey: string): Promise<string> {
   if (apiKey.startsWith(DESKTOP_PREFIX)) {
     const base64Data = apiKey.replace(DESKTOP_PREFIX, "");
     const buffer = Buffer.from(base64Data, "base64");
-    return getSafeStorage().decryptString(buffer) as string;
+    // return getSafeStorage().decryptString(buffer) as string;
+    const safeStorage = getSafeStorage();
+    if (!safeStorage) {
+      throw new Error("Safe storage is not available");
+    }
+    return safeStorage.decryptString(buffer) as string;
   }
 
   if (apiKey.startsWith(WEBCRYPTO_PREFIX)) {
@@ -127,7 +133,12 @@ export async function getDecryptedKey(apiKey: string): Promise<string> {
     if (getSafeStorage()?.isEncryptionAvailable()) {
       try {
         const buffer = Buffer.from(base64Data, "base64");
-        return getSafeStorage().decryptString(buffer) as string;
+        // return getSafeStorage().decryptString(buffer) as string;
+        const safeStorage = getSafeStorage();
+        if (!safeStorage) {
+          throw new Error("Safe storage is not available");
+        }
+        return safeStorage.decryptString(buffer) as string;
       } catch {
         // Silent catch is intentional - if desktop decryption fails,
         // it means this key was likely encrypted with Web Crypto.

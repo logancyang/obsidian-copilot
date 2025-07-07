@@ -37,6 +37,26 @@ export interface InlineEditCommandSettings {
 }
 
 export interface CopilotSettings {
+  Asr_apiKey: string;
+  Asr_apiUrl: string;
+  Asr_debugMode: boolean;
+  Asr_encode: boolean;
+  Asr_prompt: string;
+  Asr_language: string;
+  Asr_lineSpacing: string;
+  Asr_createNewFileAfterRecording: boolean;
+  Asr_createNewFileAfterRecordingPath: string;
+  Asr_saveAudioFile: boolean;
+  Asr_saveAudioFilePath: string;
+  Asr_useLocalService: boolean;
+  Asr_localServiceUrl: string;
+  Asr_translate: boolean;
+  Asr_transcriptionEngine: string;
+  Asr_timestamps: boolean;
+  Asr_timestampFormat: string;
+  Asr_timestampInterval: string; // easier to store as a string and convert to number when needed
+  Asr_wordTimestamps: boolean;
+  Asr_vadFilter: boolean;
   userId: string;
   plusLicenseKey: string;
   openAIApiKey: string;
@@ -106,6 +126,18 @@ export interface CopilotSettings {
     checkedItems?: CheckedItems;
     selectedValues?: SelectedValues;
     traitOrder?: string[]; // 新增特征顺序数组
+  };
+  promptEnhancements?: {
+    autoFollowUp?: {
+      enabled: boolean;
+      prompt: string;
+    };
+    autoSpeech?: {
+      enabled?: boolean;
+      prompt?: string;
+      useOralPrompt?: boolean;
+    };
+    appendDefaultPrompt?: boolean; // 新增是否拼接默认系统提示词
   };
 }
 
@@ -267,8 +299,40 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 }
 
 export function getSystemPrompt(): string {
-  const userPrompt = getSettings().userSystemPrompt;
-  return userPrompt ? `${DEFAULT_SYSTEM_PROMPT}\n\n${userPrompt}` : DEFAULT_SYSTEM_PROMPT;
+  // const userPrompt = getSettings().userSystemPrompt;
+  // return userPrompt ? `${DEFAULT_SYSTEM_PROMPT}\n\n${userPrompt}` : DEFAULT_SYSTEM_PROMPT;
+
+  const settings = getSettings();
+  const userPrompt = settings.userSystemPrompt;
+
+  let basePrompt: string;
+
+  // 根据是否拼接默认提示词进行判断
+  if (settings.promptEnhancements?.appendDefaultPrompt === false) {
+    // 不拼接默认提示词
+    basePrompt = userPrompt || "";
+  } else {
+    // 拼接默认提示词
+    basePrompt = userPrompt ? `${DEFAULT_SYSTEM_PROMPT}\n\n${userPrompt}` : DEFAULT_SYSTEM_PROMPT;
+  }
+
+  // 如果自动衍生问题功能开启且设置了提示词
+  if (
+    settings.promptEnhancements?.autoFollowUp?.enabled &&
+    settings.promptEnhancements.autoFollowUp.prompt
+  ) {
+    basePrompt += `\n\n${settings.promptEnhancements.autoFollowUp.prompt}`;
+  }
+
+  // 如果自动语音播放功能开启且设置了提示词
+  if (
+    settings.promptEnhancements?.autoSpeech?.useOralPrompt &&
+    settings.promptEnhancements.autoSpeech.prompt
+  ) {
+    basePrompt += `\n\n${settings.promptEnhancements.autoSpeech.prompt}`;
+  }
+
+  return basePrompt;
 }
 
 function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {

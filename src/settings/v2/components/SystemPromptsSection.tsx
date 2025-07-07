@@ -664,6 +664,13 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
             {editingState.mode && editingState.key === key && (
               <div className="ml-10 pl-2 border-l-2 border-blue-200">
                 <textarea
+                  ref={(el) => {
+                    if (el) {
+                      // 初次渲染时立即计算并设置高度
+                      el.style.height = "auto";
+                      el.style.height = `${Math.max(el.scrollHeight, 80)}px`;
+                    }
+                  }}
                   value={editingState.value}
                   onChange={(e) => {
                     setEditingState((prev) => ({

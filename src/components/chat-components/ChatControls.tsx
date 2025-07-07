@@ -8,6 +8,7 @@ import {
   MessageCirclePlus,
   ChevronDown,
   SquareArrowOutUpRight,
+  Volume2, // 新增
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
@@ -47,7 +48,7 @@ export function ChatControls({ onNewChat, onSaveAsNote }: ChatControlsProps) {
 
   return (
     <div className="w-full py-1 flex justify-between items-center px-1">
-      <div className="flex-1">
+      <div className="flex-1 flex items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost2" size="fit" className="ml-1">
@@ -125,15 +126,49 @@ export function ChatControls({ onNewChat, onSaveAsNote }: ChatControlsProps) {
             {presets.length === 0 && <DropdownMenuItem disabled>尚未创建任何人设</DropdownMenuItem>}
           </DropdownMenuContent>
         </DropdownMenu>
+        {/* 新增的口语化提示词开关 */}
+        <div className="flex items-center gap-1 ml-2">
+          <span className="text-sm">口语化</span>
+          <SettingSwitch
+            checked={settings.promptEnhancements?.autoSpeech?.useOralPrompt ?? true}
+            onCheckedChange={(checked) => {
+              updateSetting("promptEnhancements", {
+                ...settings.promptEnhancements,
+                autoSpeech: {
+                  ...settings.promptEnhancements?.autoSpeech, // 保留其他属性
+                  useOralPrompt: checked,
+                },
+              });
+            }}
+          />
+        </div>
       </div>
       <div>
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost2" size="icon" title="New Chat" onClick={onNewChat}>
-              <MessageCirclePlus className="size-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>New Chat</TooltipContent>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost2" size="icon" title="新建会话">
+                <MessageCirclePlus className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-28">
+              <DropdownMenuItem
+                onSelect={() => onNewChat()}
+                className="text-red-500 focus:text-red-500"
+              >
+                确认新建
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+                }}
+              >
+                取消
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <TooltipContent>新建会话</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -151,6 +186,64 @@ export function ChatControls({ onNewChat, onSaveAsNote }: ChatControlsProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64">
+            {/* 新增：启用默认提示词开关 */}
+            <DropdownMenuItem
+              className="flex justify-between"
+              onSelect={(e) => {
+                e.preventDefault();
+                updateSetting("promptEnhancements", {
+                  ...settings.promptEnhancements,
+                  appendDefaultPrompt: !settings.promptEnhancements?.appendDefaultPrompt,
+                });
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <FileText className="size-4" />
+                启用默认提示词
+              </div>
+              <SettingSwitch checked={settings.promptEnhancements?.appendDefaultPrompt !== false} />
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="flex justify-between"
+              onSelect={(e) => {
+                e.preventDefault();
+                updateSetting("promptEnhancements", {
+                  ...settings.promptEnhancements,
+                  autoSpeech: {
+                    ...settings.promptEnhancements?.autoSpeech, // 保留其他属性
+                    enabled: !settings.promptEnhancements?.autoSpeech?.enabled,
+                  },
+                });
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <Volume2 className="size-4" /> {/* 需要从lucide-react导入Volume2 */}
+                自动语音播放
+              </div>
+              <SettingSwitch checked={settings.promptEnhancements?.autoSpeech?.enabled || false} />
+            </DropdownMenuItem>
+            {/* 新增自动衍生问题开关 */}
+            <DropdownMenuItem
+              className="flex justify-between"
+              onSelect={(e) => {
+                e.preventDefault();
+                updateSetting("promptEnhancements", {
+                  ...settings.promptEnhancements,
+                  autoFollowUp: {
+                    enabled: !settings.promptEnhancements?.autoFollowUp?.enabled,
+                    prompt: settings.promptEnhancements?.autoFollowUp?.prompt || "",
+                  },
+                });
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <MessageCirclePlus className="size-4" />
+                自动衍生问题
+              </div>
+              <SettingSwitch
+                checked={settings.promptEnhancements?.autoFollowUp?.enabled || false}
+              />
+            </DropdownMenuItem>
             <DropdownMenuItem
               className="flex justify-between"
               onSelect={(e) => {
