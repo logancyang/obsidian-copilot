@@ -1,6 +1,7 @@
 import { ImageProcessor } from "@/imageProcessing/imageProcessor";
 import { BrevilabsClient, Url4llmResponse } from "@/LLMProviders/brevilabsClient";
-import { isYoutubeUrl } from "@/utils";
+import { err2String, isYoutubeUrl } from "@/utils";
+import { logError } from "@/logger";
 
 export interface MentionData {
   type: string;
@@ -41,24 +42,32 @@ export class Mention {
       .filter((url) => !isYoutubeUrl(url));
   }
 
-  async processUrl(url: string): Promise<Url4llmResponse> {
+  async processUrl(url: string): Promise<Url4llmResponse & { error?: string }> {
     try {
       return await this.brevilabsClient.url4llm(url);
     } catch (error) {
-      console.error(`Error processing URL ${url}:`, error);
-      return { response: url, elapsed_time_ms: 0 };
+      const msg = `Error processing URL ${url}: ${err2String(error)}`;
+      logError(msg);
+      return { response: url, elapsed_time_ms: 0, error: msg };
     }
   }
 
   // For non-youtube URLs
-  async processUrls(text: string): Promise<{ urlContext: string; imageUrls: string[] }> {
+  async processUrls(
+    text: string
+  ): Promise<{
+    urlContext: string;
+    imageUrls: string[];
+    processedErrorUrls: Record<string, string>;
+  }> {
     const urls = this.extractUrls(text);
     let urlContext = "";
     const imageUrls: string[] = [];
+    const processedErrorUrls: Record<string, string> = {};
 
     // Return empty string if no URLs to process
     if (urls.length === 0) {
-      return { urlContext: "", imageUrls: [] };
+      return { urlContext, imageUrls, processedErrorUrls };
     }
 
     // Process all URLs concurrently
@@ -71,6 +80,10 @@ export class Mention {
 
       if (!this.mentions.has(url)) {
         const processed = await this.processUrl(url);
+
+        if (processed.error) {
+          processedErrorUrls[url] = processed.error;
+        }
         this.mentions.set(url, {
           type: "url",
           original: url,
@@ -89,7 +102,7 @@ export class Mention {
       }
     });
 
-    return { urlContext, imageUrls };
+    return { urlContext, imageUrls, processedErrorUrls };
   }
 
   getMentions(): Map<string, MentionData> {

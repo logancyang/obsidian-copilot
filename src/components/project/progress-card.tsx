@@ -17,13 +17,17 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
   const [contextLoadState] = useProjectContextLoad();
   const totalFiles = contextLoadState.total;
   const successFiles = contextLoadState.success;
-  const failedFiles = contextLoadState.failed;
+  const realFailedFiles = contextLoadState.failed;
   const processingFiles = contextLoadState.processingFiles;
+
+  // Control file list expand/collapse state
+  const [isProcessingExpanded, setIsProcessingExpanded] = useState(false);
+  const [isFailedExpanded, setIsFailedExpanded] = useState(false);
 
   // Use project loading state hook
   const [, setLoading] = useProjectLoading();
 
-  /*const mockFailedFiles: FailedItem[] = [
+  const mockFailedFiles: FailedItem[] = [
     {
       path: "large_dataset.xlsx",
       type: "nonMd",
@@ -50,9 +54,9 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
       error: "Invalid file encoding",
       timestamp: Date.now() - 900000,
     },
-  ];*/
+  ];
 
-  // const failedFiles = [...realFailedFiles, ...mockFailedFiles];
+  const failedFiles = [...realFailedFiles, ...mockFailedFiles];
   const processedFilesLen = successFiles.length + failedFiles.length;
   const progressPercentage =
     totalFiles.length > 0 ? Math.round((processedFilesLen / totalFiles.length) * 100) : 0;
@@ -90,10 +94,6 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
     }
   };
 
-  // Control file list expand/collapse state
-  const [isProcessingExpanded, setIsProcessingExpanded] = useState(false);
-  const [isFailedExpanded, setIsFailedExpanded] = useState(true);
-
   // Monitor loading status and set loading to false with delay when all files are processed
   useEffect(() => {
     // Check if all files are processed or there are no files to process
@@ -113,9 +113,12 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
   return (
     <Card className="tw-w-full tw-border tw-border-solid tw-border-border tw-bg-transparent tw-shadow-none">
       <CardHeader>
-        <CardTitle className="tw-flex tw-items-center tw-gap-2">
-          <FileText className="tw-size-5" />
-          Context Loading
+        <CardTitle className="tw-flex tw-items-center tw-justify-between tw-gap-2">
+          <div className="tw-flex tw-items-center tw-gap-2">
+            <FileText className="tw-size-5" />
+            Context Loading
+          </div>
+          {/*start chat*/}
         </CardTitle>
       </CardHeader>
       <CardContent className="tw-space-y-6">
@@ -138,41 +141,39 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
         </div>
 
         {/* Currently processing file */}
-        {processingFiles.length > 0 && (
-          <div className="tw-space-y-3">
-            <div
-              className="tw--m-1 tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-p-1 tw-transition-colors hover:tw-bg-muted/10"
-              onClick={() => setIsProcessingExpanded(!isProcessingExpanded)}
-            >
-              <Loader2 className="tw-size-4 tw-animate-spin tw-text-accent" />
-              <span className="tw-text-sm tw-font-medium">Processing</span>
-              <Badge variant="secondary" className="tw-text-xs  tw-bg-muted/10">
-                {processingFiles.length} files
-              </Badge>
-              {isProcessingExpanded ? (
-                <ChevronDown className="tw-ml-auto tw-size-4" />
-              ) : (
-                <ChevronRight className="tw-ml-auto tw-size-4" />
-              )}
-            </div>
-
-            {isProcessingExpanded && (
-              <div className="tw-max-h-32 tw-space-y-2 tw-overflow-y-auto">
-                {processingFiles.map((fileName, index) => (
-                  <div
-                    key={index}
-                    className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-p-2 tw-text-sm tw-bg-faint/10"
-                  >
-                    <div className="tw-size-2 tw-animate-pulse tw-rounded-full tw-bg-interactive-accent" />
-                    <TruncatedText className="tw-flex-1" title={fileName}>
-                      {fileName}
-                    </TruncatedText>
-                  </div>
-                ))}
-              </div>
+        <div className="tw-space-y-3">
+          <div
+            className="tw--m-1 tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-p-1 tw-transition-colors hover:tw-bg-muted/10"
+            onClick={() => setIsProcessingExpanded(!isProcessingExpanded)}
+          >
+            <Loader2 className="tw-size-4 tw-animate-spin tw-text-accent" />
+            <span className="tw-text-sm tw-font-medium">Processing</span>
+            <Badge variant="secondary" className="tw-text-xs  tw-bg-muted/10">
+              {processingFiles.length} files
+            </Badge>
+            {isProcessingExpanded ? (
+              <ChevronDown className="tw-ml-auto tw-size-4" />
+            ) : (
+              <ChevronRight className="tw-ml-auto tw-size-4" />
             )}
           </div>
-        )}
+
+          {isProcessingExpanded && (
+            <div className="tw-max-h-32 tw-space-y-2 tw-overflow-y-auto">
+              {processingFiles.map((fileName, index) => (
+                <div
+                  key={index}
+                  className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-p-2 tw-text-sm tw-bg-faint/10"
+                >
+                  <div className="tw-size-2 tw-animate-pulse tw-rounded-full tw-bg-interactive-accent" />
+                  <TruncatedText className="tw-flex-1" title={fileName}>
+                    {fileName}
+                  </TruncatedText>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Failed to process the file */}
         {failedFiles.length > 0 && (
@@ -216,28 +217,25 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
                     key={index}
                     className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-p-2 tw-text-sm tw-bg-faint/10"
                   >
-                    <div className="tw-size-2 tw-rounded-full tw-bg-error/80" />
                     <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-1">
                       <div className="tw-flex tw-items-center tw-gap-2">
-                        {/*todo(emt-lin): in the future, we can add all failed files to retry*/}
-                        {/*<Badge
-                          variant="secondary"
-                          className="tw-h-4 tw-w-16 tw-justify-center tw-text-xs"
-                        >
-                          {failedItem.type}
-                        </Badge>*/}
+                        <div className="tw-size-2 tw-rounded-full tw-bg-error/80" />
                         <TruncatedText className="tw-flex-1 tw-font-bold" title={failedItem.path}>
                           {getFailedItemDisplayName(failedItem)}
                         </TruncatedText>
                       </div>
-                      {failedItem.error && (
-                        <TruncatedText
-                          className="tw-flex-1  tw-text-xs tw-text-error"
-                          title={failedItem.error}
-                        >
-                          Loading Error: {failedItem.error}
-                        </TruncatedText>
-                      )}
+                      <div className="tw-flex tw-items-center tw-gap-2">
+                        <div className="tw-size-2 tw-rounded-full" />
+                        {failedItem.error && (
+                          <TruncatedText
+                            className="tw-flex-1 tw-text-xs tw-text-error/80"
+                            title={failedItem.error}
+                          >
+                            <span className="tw-text-sm tw-text-error">Loading Error: </span>
+                            {failedItem.error}
+                          </TruncatedText>
+                        )}
+                      </div>
                     </div>
                     <Button
                       size="sm"

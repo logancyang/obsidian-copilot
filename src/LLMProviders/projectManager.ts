@@ -206,6 +206,9 @@ export default class ProjectManager {
   }
 
   private async loadProjectContext(project: ProjectConfig): Promise<ContextCache | null> {
+    // for update context condition
+    setProjectLoading(true);
+
     try {
       if (!project.contextSource) {
         logWarn(`[loadProjectContext] Project ${project.name}: No contextSource. Aborting.`);
@@ -730,8 +733,12 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
         webUrl,
         "web",
         async () => {
-          // todo 由于异常没有抛出，所以需要额外返回一个 错误信息 字段
-          return mention.processUrls(webUrl);
+          const result = await mention.processUrls(webUrl);
+
+          if (result.processedErrorUrls[webUrl]) {
+            throw new Error(result.processedErrorUrls[webUrl]);
+          }
+          return result;
         }
       );
       return urlContext || "";
