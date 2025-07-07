@@ -9,7 +9,6 @@ import { CustomCommandChatModal } from "@/commands/CustomCommandChatModal";
 import debounce from "lodash.debounce";
 import { CustomCommand } from "@/commands/type";
 import {
-  createCachedCommand,
   deleteCachedCommand,
   getCachedCustomCommands,
   updateCachedCommand,
@@ -79,8 +78,11 @@ export class CustomCommandRegister {
   private handleFileCreation = async (file: TFile) => {
     if (isCustomCommandFile(file)) {
       const customCommand = await parseCustomCommandFile(file);
+
+      // Use updateCommand to ensure proper frontmatter is added
+      await CustomCommandManager.getInstance().updateCommand(customCommand, customCommand.title);
+
       this.registerCommand(customCommand);
-      createCachedCommand(customCommand.title);
     }
   };
 
@@ -103,8 +105,9 @@ export class CustomCommandRegister {
     // Register the new command if it's still a custom command file
     if (isCustomCommandFile(file)) {
       const customCommand = await parseCustomCommandFile(file);
+      // Use updateCommand to ensure proper frontmatter is added
+      await CustomCommandManager.getInstance().updateCommand(customCommand, customCommand.title);
       this.registerCommand(customCommand);
-      updateCachedCommand(customCommand, customCommand.title);
     }
   };
 
