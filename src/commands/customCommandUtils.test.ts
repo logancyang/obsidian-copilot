@@ -686,8 +686,8 @@ describe("parseCustomCommandFile", () => {
       title: "Test Command",
       modelKey: "",
       content: "Prompt content only, no frontmatter.",
-      showInContextMenu: false,
-      showInSlashMenu: false,
+      showInContextMenu: true,
+      showInSlashMenu: true,
       order: Number.MAX_SAFE_INTEGER,
       lastUsedMs: 0,
     });
