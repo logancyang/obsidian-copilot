@@ -33,6 +33,10 @@ export function validateCommandName(
     return null; // No change is allowed
   }
 
+  if (!trimmedName) {
+    return "Command name cannot be empty";
+  }
+
   // eslint-disable-next-line no-control-regex
   const invalidChars = /[#<>:"/\\|?*[\]^\x00-\x1F]/g;
   if (invalidChars.test(trimmedName)) {

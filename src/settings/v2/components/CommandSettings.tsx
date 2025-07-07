@@ -32,22 +32,17 @@ import { cn } from "@/lib/utils";
 import { useSettingsValue } from "@/settings/model";
 import { updateSetting } from "@/settings/model";
 import { PromptSortStrategy } from "@/types";
-import { useContainerContext } from "@/settings/v2/components/ContainerContext";
-import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Input } from "@/components/ui/input";
+
 import { Notice } from "obsidian";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CustomCommand } from "@/commands/type";
-import {
-  loadAllCustomCommands,
-  sortCommandsByOrder,
-  validateCommandName,
-} from "@/commands/customCommandUtils";
+import { loadAllCustomCommands, sortCommandsByOrder } from "@/commands/customCommandUtils";
 import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
 import { SettingItem } from "@/components/ui/setting-item";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { generateDefaultCommands } from "@/commands/migrator";
+import { EMPTY_COMMAND } from "@/commands/constants";
 
 const SortableTableRow: React.FC<{
   command: CustomCommand;
@@ -165,8 +160,6 @@ export const CommandSettings: React.FC = () => {
     return sortCommandsByOrder([...rawCommands]);
   }, [rawCommands]);
 
-  const [newCommandName, setNewCommandName] = React.useState("");
-
   const settings = useSettingsValue();
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -178,22 +171,6 @@ export const CommandSettings: React.FC = () => {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
-
-  const validationError = validateCommandName(newCommandName, commands);
-  const canCreate = !validationError && newCommandName.trim() !== "";
-
-  const handleCreateCommand = async () => {
-    if (!canCreate) return;
-
-    try {
-      await CustomCommandManager.getInstance().createCommand(newCommandName.trim(), "");
-      setNewCommandName("");
-      new Notice(`Command "${newCommandName.trim()}" created successfully!`);
-    } catch (error) {
-      console.error("Failed to create command:", error);
-      new Notice("Failed to create command. Please try again.");
-    }
-  };
 
   const handleUpdate = async (newCommand: CustomCommand, prevCommandTitle: string) => {
     await CustomCommandManager.getInstance().updateCommand(newCommand, prevCommandTitle);
@@ -236,8 +213,6 @@ export const CommandSettings: React.FC = () => {
 
     await CustomCommandManager.getInstance().updateCommands(newCommands);
   };
-
-  const container = useContainerContext();
 
   return (
     <div className="tw-space-y-4">
@@ -381,60 +356,27 @@ export const CommandSettings: React.FC = () => {
                 Generate Default Commands
               </Button>
             </div>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="default" className="tw-gap-2">
-                  <Plus className="tw-size-4" />
-                  Add Command
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent container={container} className="tw-w-80" align="end">
-                <div className="tw-flex tw-flex-col tw-gap-4">
-                  <div className="tw-space-y-2">
-                    <div className="tw-text-lg tw-font-medium tw-leading-none">
-                      Create New Command
-                    </div>
-                    <p className="tw-text-sm tw-text-muted">
-                      Enter a name for your new custom command. A markdown file will be created in
-                      your custom prompts folder.
-                    </p>
-                  </div>
-                  <div className="tw-space-y-2">
-                    <Input
-                      placeholder="Command name"
-                      value={newCommandName}
-                      onChange={(e) => setNewCommandName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && canCreate) {
-                          handleCreateCommand();
-                        }
-                      }}
-                    />
-                    {validationError && (
-                      <p className="tw-text-sm tw-text-error">{validationError}</p>
-                    )}
-                  </div>
-                  <div className="tw-flex tw-justify-end tw-gap-2">
-                    <PopoverClose asChild>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => {
-                          setNewCommandName("");
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                    </PopoverClose>
-                    <PopoverClose asChild>
-                      <Button size="sm" onClick={handleCreateCommand} disabled={!canCreate}>
-                        Create
-                      </Button>
-                    </PopoverClose>
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
+            <Button
+              variant="default"
+              className="tw-gap-2"
+              onClick={() => {
+                const newCommand: CustomCommand = {
+                  ...EMPTY_COMMAND,
+                };
+                const modal = new CustomCommandSettingsModal(
+                  app,
+                  commands,
+                  newCommand,
+                  async (updatedCommand) => {
+                    await handleUpdate(updatedCommand, updatedCommand.title);
+                  }
+                );
+                modal.open();
+              }}
+            >
+              <Plus className="tw-size-4" />
+              Add Command
+            </Button>
           </div>
         </div>
       </section>
