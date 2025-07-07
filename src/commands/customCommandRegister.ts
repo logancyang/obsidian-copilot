@@ -66,7 +66,7 @@ export class CustomCommandRegister {
         updateCachedCommand(customCommand, customCommand.title);
       }
     },
-    3000,
+    1000,
     {
       // We cannot use leading: true because frontmatter is not updated
       // immediately when modify event is triggered.
@@ -77,12 +77,15 @@ export class CustomCommandRegister {
 
   private handleFileCreation = async (file: TFile) => {
     if (isCustomCommandFile(file)) {
-      const customCommand = await parseCustomCommandFile(file);
+      setTimeout(async () => {
+        const customCommand = await parseCustomCommandFile(file);
 
-      // Use updateCommand to ensure proper frontmatter is added
-      await CustomCommandManager.getInstance().updateCommand(customCommand, customCommand.title);
+        // Use updateCommand to ensure proper frontmatter is added
+        await CustomCommandManager.getInstance().updateCommand(customCommand, customCommand.title);
 
-      this.registerCommand(customCommand);
+        this.registerCommand(customCommand);
+        // We need to wait for the frontmatter to be updated
+      }, 1000);
     }
   };
 

@@ -8,7 +8,6 @@ import {
   COPILOT_COMMAND_LAST_USED,
   COPILOT_COMMAND_MODEL_KEY,
   COPILOT_COMMAND_SLASH_ENABLED,
-  EMPTY_COMMAND,
 } from "@/commands/constants";
 import {
   createCachedCommand,
@@ -27,13 +26,12 @@ export class CustomCommandManager {
     return CustomCommandManager.instance;
   }
 
-  async createCommand(title: string, content: string, skipStoreUpdate = false): Promise<void> {
-    let command = { ...EMPTY_COMMAND, title, content };
+  async createCommand(command: CustomCommand, skipStoreUpdate = false): Promise<void> {
     if (!skipStoreUpdate) {
-      command = createCachedCommand(title, content);
+      command = createCachedCommand(command);
     }
     const folderPath = getCustomCommandsFolder();
-    const filePath = getCommandFilePath(title);
+    const filePath = getCommandFilePath(command.title);
 
     // Check if the folder exists and create it if it doesn't
     const folderExists = await app.vault.adapter.exists(folderPath);
@@ -41,7 +39,7 @@ export class CustomCommandManager {
       await app.vault.createFolder(folderPath);
     }
 
-    const file = await app.vault.create(filePath, content);
+    const file = await app.vault.create(filePath, command.content);
     await app.fileManager.processFrontMatter(file, (frontmatter) => {
       frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = command.showInContextMenu;
       frontmatter[COPILOT_COMMAND_SLASH_ENABLED] = command.showInSlashMenu;
@@ -49,6 +47,9 @@ export class CustomCommandManager {
       frontmatter[COPILOT_COMMAND_MODEL_KEY] = command.modelKey;
       frontmatter[COPILOT_COMMAND_LAST_USED] = command.lastUsedMs;
     });
+    if (!skipStoreUpdate) {
+      updateCachedCommand(command, command.title);
+    }
   }
 
   async recordUsage(command: CustomCommand) {
@@ -79,7 +80,7 @@ export class CustomCommandManager {
     }
 
     if (!commandFile) {
-      await this.createCommand(command.title, command.content, skipStoreUpdate);
+      await this.createCommand(command, skipStoreUpdate);
       commandFile = app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
     }
 
@@ -92,6 +93,9 @@ export class CustomCommandManager {
         frontmatter[COPILOT_COMMAND_MODEL_KEY] = command.modelKey;
         frontmatter[COPILOT_COMMAND_LAST_USED] = command.lastUsedMs;
       });
+      if (!skipStoreUpdate) {
+        updateCachedCommand(command, command.title);
+      }
     }
   }
 

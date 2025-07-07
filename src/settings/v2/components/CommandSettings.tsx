@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { useCustomCommands } from "@/commands/state";
-import { Lightbulb, GripVertical, Trash2, Plus, Info, PenLine } from "lucide-react";
+import { Lightbulb, GripVertical, Trash2, Plus, Info, PenLine, Copy } from "lucide-react";
 
 import {
   Table,
@@ -36,7 +36,11 @@ import { PromptSortStrategy } from "@/types";
 import { Notice } from "obsidian";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CustomCommand } from "@/commands/type";
-import { loadAllCustomCommands, sortCommandsByOrder } from "@/commands/customCommandUtils";
+import {
+  loadAllCustomCommands,
+  sortCommandsByOrder,
+  generateCopyCommandName,
+} from "@/commands/customCommandUtils";
 import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
 import { SettingItem } from "@/components/ui/setting-item";
 import { CustomCommandManager } from "@/commands/customCommandManager";
@@ -49,7 +53,8 @@ const SortableTableRow: React.FC<{
   commands: CustomCommand[];
   onUpdate: (newCommand: CustomCommand, prevCommandTitle: string) => void;
   onRemove: (command: CustomCommand) => void;
-}> = ({ command, commands, onUpdate, onRemove }) => {
+  onCopy: (command: CustomCommand) => void;
+}> = ({ command, commands, onUpdate, onRemove, onCopy }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: command.title,
   });
@@ -132,6 +137,9 @@ const SortableTableRow: React.FC<{
           >
             <PenLine className="tw-size-4" />
           </Button>
+          <Button variant="ghost" size="icon" onClick={() => onCopy(command)} title="Copy command">
+            <Copy className="tw-size-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -176,6 +184,14 @@ export const CommandSettings: React.FC = () => {
     await CustomCommandManager.getInstance().updateCommand(newCommand, prevCommandTitle);
   };
 
+  const handleCreate = async (newCommand: CustomCommand) => {
+    // Reorder the existing commands so the order frontmatter is set to the
+    // correct value. This allows the new command to always show up at the bottom
+    // of the list.
+    reorderCommands(commands);
+    await handleUpdate(newCommand, newCommand.title);
+  };
+
   const handleRemove = async (command: CustomCommand) => {
     try {
       await CustomCommandManager.getInstance().deleteCommand(command);
@@ -186,6 +202,28 @@ export const CommandSettings: React.FC = () => {
       new Notice("Failed to delete command. Please try again.");
       throw error;
     }
+  };
+
+  const handleCopy = async (command: CustomCommand) => {
+    try {
+      const copyName = generateCopyCommandName(command.title, commands);
+      const copiedCommand: CustomCommand = {
+        ...command,
+        title: copyName,
+      };
+      await CustomCommandManager.getInstance().updateCommand(copiedCommand, copiedCommand.title);
+    } catch (error) {
+      console.error("Failed to copy command:", error);
+      new Notice("Failed to copy command. Please try again.");
+    }
+  };
+
+  const reorderCommands = async (newOrderedCommands: CustomCommand[]) => {
+    const newCommands = [...newOrderedCommands];
+    for (let i = 0; i < newCommands.length; i++) {
+      newCommands[i] = { ...newCommands[i], order: i * 10 };
+    }
+    await CustomCommandManager.getInstance().updateCommands(newCommands);
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
@@ -207,11 +245,7 @@ export const CommandSettings: React.FC = () => {
     const [movedCommand] = newCommands.splice(activeIndex, 1);
     newCommands.splice(overIndex, 0, movedCommand);
 
-    for (let i = 0; i < newCommands.length; i++) {
-      newCommands[i] = { ...newCommands[i], order: i * 10 };
-    }
-
-    await CustomCommandManager.getInstance().updateCommands(newCommands);
+    await reorderCommands(newCommands);
   };
 
   return (
@@ -259,7 +293,7 @@ export const CommandSettings: React.FC = () => {
           ]}
         />
 
-        <div className="tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-4 tw-text-muted">
+        <div className="tw-mb-4 tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-4 tw-text-muted">
           <Lightbulb className="tw-size-5" />{" "}
           <div>
             Commands are automatically loaded from .md files in your custom prompts folder{" "}
@@ -269,6 +303,44 @@ export const CommandSettings: React.FC = () => {
         </div>
 
         <div className="tw-flex tw-flex-col tw-gap-4">
+          <div className="tw-flex tw-w-full tw-justify-between">
+            <div>
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  new ConfirmModal(
+                    app,
+                    generateDefaultCommands,
+                    "This will add default commands to your custom prompts folder. Do you want to continue?",
+                    "Generate Default Commands"
+                  ).open()
+                }
+              >
+                Generate Default Commands
+              </Button>
+            </div>
+            <Button
+              variant="default"
+              className="tw-gap-2"
+              onClick={() => {
+                const newCommand: CustomCommand = {
+                  ...EMPTY_COMMAND,
+                };
+                const modal = new CustomCommandSettingsModal(
+                  app,
+                  commands,
+                  newCommand,
+                  async (updatedCommand) => {
+                    await handleCreate(updatedCommand);
+                  }
+                );
+                modal.open();
+              }}
+            >
+              <Plus className="tw-size-4" />
+              Add Command
+            </Button>
+          </div>
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -333,6 +405,7 @@ export const CommandSettings: React.FC = () => {
                         commands={commands}
                         onUpdate={handleUpdate}
                         onRemove={handleRemove}
+                        onCopy={handleCopy}
                       />
                     ))
                   )}
@@ -340,44 +413,6 @@ export const CommandSettings: React.FC = () => {
               </SortableContext>
             </Table>
           </DndContext>
-          <div className="tw-flex tw-w-full tw-justify-between">
-            <div>
-              <Button
-                variant="secondary"
-                onClick={() =>
-                  new ConfirmModal(
-                    app,
-                    generateDefaultCommands,
-                    "This will add default commands to your custom prompts folder. Do you want to continue?",
-                    "Generate Default Commands"
-                  ).open()
-                }
-              >
-                Generate Default Commands
-              </Button>
-            </div>
-            <Button
-              variant="default"
-              className="tw-gap-2"
-              onClick={() => {
-                const newCommand: CustomCommand = {
-                  ...EMPTY_COMMAND,
-                };
-                const modal = new CustomCommandSettingsModal(
-                  app,
-                  commands,
-                  newCommand,
-                  async (updatedCommand) => {
-                    await handleUpdate(updatedCommand, updatedCommand.title);
-                  }
-                );
-                modal.open();
-              }}
-            >
-              <Plus className="tw-size-4" />
-              Add Command
-            </Button>
-          </div>
         </div>
       </section>
     </div>

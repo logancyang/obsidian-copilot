@@ -395,3 +395,23 @@ export async function processPrompt(
     includedFiles: Array.from(includedFiles),
   };
 }
+
+/**
+ * Generates a unique name for a copied command by adding "(copy)" or "(copy N)" suffix.
+ */
+export function generateCopyCommandName(
+  originalName: string,
+  existingCommands: CustomCommand[]
+): string {
+  const baseName = `${originalName} (copy)`;
+  let copyName = baseName;
+  let counter = 1;
+
+  // Check if the base copy name already exists
+  while (existingCommands.some((cmd) => cmd.title.toLowerCase() === copyName.toLowerCase())) {
+    counter++;
+    copyName = `${originalName} (copy ${counter})`;
+  }
+
+  return copyName;
+}

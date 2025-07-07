@@ -1,20 +1,18 @@
 import { atom, createStore } from "jotai";
 import { useAtomValue } from "jotai";
 import { CustomCommand } from "./type";
-import { EMPTY_COMMAND } from "@/commands/constants";
 
 const customCommandsStore = createStore();
 const customCommandsAtom = atom<CustomCommand[]>([]);
 
-export function createCachedCommand(title: string, content = ""): CustomCommand {
+export function createCachedCommand(command: CustomCommand): CustomCommand {
   const commands = customCommandsStore.get(customCommandsAtom);
-  const command = commands.find((command) => command.title === title);
-  if (command) {
-    return command;
+  const existingCommand = commands.find((c) => c.title === command.title);
+  if (existingCommand) {
+    return existingCommand;
   }
-  const newCommand = { ...EMPTY_COMMAND, title, content };
-  customCommandsStore.set(customCommandsAtom, [...commands, newCommand]);
-  return newCommand;
+  customCommandsStore.set(customCommandsAtom, [...commands, command]);
+  return command;
 }
 
 export function deleteCachedCommand(title: string) {
