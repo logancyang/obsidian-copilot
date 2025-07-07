@@ -8,6 +8,7 @@ import {
   COPILOT_COMMAND_LAST_USED,
   COPILOT_COMMAND_MODEL_KEY,
   COPILOT_COMMAND_SLASH_ENABLED,
+  EMPTY_COMMAND,
 } from "@/commands/constants";
 import {
   createCachedCommand,
@@ -27,8 +28,9 @@ export class CustomCommandManager {
   }
 
   async createCommand(title: string, content: string, skipStoreUpdate = false): Promise<void> {
+    let command = { ...EMPTY_COMMAND, title, content };
     if (!skipStoreUpdate) {
-      createCachedCommand(title);
+      command = createCachedCommand(title, content);
     }
     const folderPath = getCustomCommandsFolder();
     const filePath = getCommandFilePath(title);
@@ -41,11 +43,11 @@ export class CustomCommandManager {
 
     const file = await app.vault.create(filePath, content);
     await app.fileManager.processFrontMatter(file, (frontmatter) => {
-      frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = false;
-      frontmatter[COPILOT_COMMAND_SLASH_ENABLED] = false;
-      frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] = Number.MAX_SAFE_INTEGER;
-      frontmatter[COPILOT_COMMAND_MODEL_KEY] = "";
-      frontmatter[COPILOT_COMMAND_LAST_USED] = 0;
+      frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = command.showInContextMenu;
+      frontmatter[COPILOT_COMMAND_SLASH_ENABLED] = command.showInSlashMenu;
+      frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] = command.order;
+      frontmatter[COPILOT_COMMAND_MODEL_KEY] = command.modelKey;
+      frontmatter[COPILOT_COMMAND_LAST_USED] = command.lastUsedMs;
     });
   }
 

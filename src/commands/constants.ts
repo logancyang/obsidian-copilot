@@ -5,8 +5,8 @@ export const COMMAND_NAME_MAX_LENGTH = 50;
 export const EMPTY_COMMAND: CustomCommand = {
   title: "",
   content: "",
-  showInContextMenu: false,
-  showInSlashMenu: false,
+  showInContextMenu: true,
+  showInSlashMenu: true,
   order: Number.MAX_SAFE_INTEGER,
   modelKey: "",
   lastUsedMs: 0,

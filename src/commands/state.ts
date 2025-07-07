@@ -6,12 +6,15 @@ import { EMPTY_COMMAND } from "@/commands/constants";
 const customCommandsStore = createStore();
 const customCommandsAtom = atom<CustomCommand[]>([]);
 
-export function createCachedCommand(title: string) {
+export function createCachedCommand(title: string, content = ""): CustomCommand {
   const commands = customCommandsStore.get(customCommandsAtom);
-  if (commands.some((command) => command.title === title)) {
-    return;
+  const command = commands.find((command) => command.title === title);
+  if (command) {
+    return command;
   }
-  customCommandsStore.set(customCommandsAtom, [...commands, { ...EMPTY_COMMAND, title }]);
+  const newCommand = { ...EMPTY_COMMAND, title, content };
+  customCommandsStore.set(customCommandsAtom, [...commands, newCommand]);
+  return newCommand;
 }
 
 export function deleteCachedCommand(title: string) {
