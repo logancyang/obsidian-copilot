@@ -1,0 +1,122 @@
+name: Deploy to Gitee
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20.x]
+        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          tags: true
+      # 验证tag是否在master分支上或release上
+      - run: |
+          echo "🔖 Tag name: $GITHUB_REF_NAME"
+          echo "🔨 Commit SHA: $GITHUB_SHA"
+
+          # 把 repo 完全拉平，让 `--contains` 能用
+          git fetch origin "refs/heads/*:refs/remotes/origin/*"
+
+          # 找出 remote branches 包含这个提交
+          branches=$(git branch -r --contains $GITHUB_SHA | sed 's|origin/||g' )
+          echo "Branches containing this commit: $branches"
+
+          ok=false
+          for b in $branches; do
+            if [[ "$b" == "master" ]] || [[ "$b" == release/* ]]; then
+              ok=true
+              break
+            fi
+          done
+
+          if [ "$ok" != "true" ]; then
+            echo "❌ Tag $GITHUB_REF_NAME not found on master or any release/* branch"
+            exit 1
+          else
+            echo "✅ Tag $GITHUB_REF_NAME is merged into a protected branch"
+          fi
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+      - run: npm ci
+      - run: npm run build --if-present
+      # 上传构建产物
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: |
+            main.js
+            styles.css
+            manifest.json
+
+  deploy_to_gitee:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      # 下载构建产物
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-output
+          path: artifacts
+
+      # 设置SSH密钥
+      - name: Setup SSH Keys
+        run: |
+          # 创建.ssh目录
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          # 保存私钥
+          echo "${{ secrets.AI_LEARNING_ASSISTANT_PLUGINS_DIST }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          # 添加Gitee到known_hosts
+          ssh-keyscan gitee.com >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      # 克隆Gitee仓库，Gitee仓库对应的路径需要在GitHub仓库中设置
+      # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/store-information-in-variables#defining-configuration-variables-for-multiple-workflows
+      - name: Clone Gitee Repository
+        run: |
+          git clone "git@gitee.com:ai-learning-assistant-dev/ai-learning-assistant-plugin-dist.git" gitee-repo
+          cd gitee-repo
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      # 同步文件
+      - name: Sync files to Gitee
+        run: |
+          mkdir -p gitee-repo/"${{ github.repository }}"
+          # 复制构建文件
+          cp artifacts/main.js gitee-repo/"${{ github.repository }}"
+          cp artifacts/styles.css gitee-repo/"${{ github.repository }}"
+          cp artifacts/manifest.json gitee-repo/"${{ github.repository }}"
+
+          cd gitee-repo
+
+          # 检查变更
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "没有文件变更"
+          else
+            echo "检测到文件变更，准备提交..."
+            git add .
+            git commit -m "自动同步: $(date +'%Y-%m-%d %H:%M:%S')"
+
+            # 使用SSH推送
+            git push origin master
+            echo "同步完成!"
+          fi
