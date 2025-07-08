@@ -138,7 +138,6 @@ export default class ProjectManager {
       if (!project) {
         await this.saveCurrentProjectMessage();
         this.currentProjectId = null; // ensure set currentProjectId
-        this.loadTracker.setCurrentProjectId(null);
 
         await this.loadNextProjectMessage();
         this.refreshChatView();
@@ -153,7 +152,6 @@ export default class ProjectManager {
 
       await this.saveCurrentProjectMessage();
       this.currentProjectId = projectId; // ensure set currentProjectId
-      this.loadTracker.setCurrentProjectId(projectId);
 
       // Use sequential operations to ensure loading state is maintained
       // through the entire process
@@ -241,18 +239,20 @@ export default class ProjectManager {
         );
       }
 
+      const projectAllFiles = this.getProjectAllFiles(project);
+
       // Pre-count all items that need to be processed
-      this.loadTracker.preComputeAllItems(project, contextCache);
-      this.loadTracker.markAllCachedItemsAsSuccess(project, contextCache);
+      this.loadTracker.preComputeAllItems(project, projectAllFiles);
+      this.loadTracker.markAllCachedItemsAsSuccess(project, contextCache, projectAllFiles);
 
       const [updatedContextCacheAfterSources] = await Promise.all([
-        this.processMarkdownFiles(project, contextCache),
+        this.processMarkdownFiles(project, contextCache, projectAllFiles),
         this.processWebUrls(project, contextCache),
         this.processYoutubeUrls(project, contextCache),
       ]);
 
       // After other contexts are processed, ensure all referenced non-markdown files are parsed and cached
-      await this.processNonMarkdownFiles(project, updatedContextCacheAfterSources);
+      await this.processNonMarkdownFiles(project, projectAllFiles);
 
       updatedContextCacheAfterSources.timestamp = Date.now();
       await this.projectContextCache.set(project, updatedContextCacheAfterSources);
@@ -479,80 +479,50 @@ ${contextParts.join("\n\n")}
 
   private async processMarkdownFiles(
     project: ProjectConfig,
-    contextCache: ContextCache
+    contextCache: ContextCache,
+    projectAllFiles: TFile[]
   ): Promise<ContextCache> {
     logInfo(`[processMarkdownFiles] Starting for project: ${project.name}`);
-    const initialFileContextsCount = Object.keys(contextCache.fileContexts || {}).length;
 
-    if (project.contextSource?.inclusions || project.contextSource?.exclusions) {
-      contextCache = await this.projectContextCache.updateProjectFilesFromPatterns(
+    if (
+      contextCache.markdownNeedsReload ||
+      !contextCache.markdownContext ||
+      !contextCache.markdownContext.trim()
+    ) {
+      logInfo(`[processMarkdownFiles] Project ${project.name}: Processing markdown content.`);
+      const markdownContent = await this.processMarkdownFileContext(projectAllFiles);
+
+      // add context reference to markdown file
+      this.projectContextCache.updateProjectMarkdownFilesFromPatterns(
         project,
-        contextCache
+        contextCache,
+        projectAllFiles
       );
-      const newFileContextsCount = Object.keys(contextCache.fileContexts || {}).length;
-      if (newFileContextsCount > initialFileContextsCount) {
-        logInfo(
-          `[processMarkdownFiles] Project ${project.name}: Added ${newFileContextsCount - initialFileContextsCount} new file references via updateProjectFilesFromPatterns.`
-        );
-      }
 
-      if (
-        contextCache.markdownNeedsReload ||
-        !contextCache.markdownContext ||
-        !contextCache.markdownContext.trim()
-      ) {
-        logInfo(`[processMarkdownFiles] Project ${project.name}: Processing markdown content.`);
-        const markdownContent = await this.processFileContext(
-          project.contextSource.inclusions,
-          project.contextSource.exclusions,
-          project
-        );
-        contextCache.markdownContext = markdownContent;
-        contextCache.markdownNeedsReload = false;
-        logInfo(`[processMarkdownFiles] Project ${project.name}: Markdown content updated.`);
-      } else {
-        logInfo(
-          `[processMarkdownFiles] Project ${project.name}: Markdown content already up-to-date.`
-        );
-      }
+      contextCache.markdownContext = markdownContent;
+      contextCache.markdownNeedsReload = false;
+
+      logInfo(`[processMarkdownFiles] Project ${project.name}: Markdown content updated.`);
+    } else {
+      logInfo(
+        `[processMarkdownFiles] Project ${project.name}: Markdown content already up-to-date.`
+      );
     }
+
     logInfo(
       `[processMarkdownFiles] Completed for project: ${project.name}. Total fileContexts: ${Object.keys(contextCache.fileContexts || {}).length}`
     );
     return contextCache;
   }
 
-  private async processFileContext(
-    inclusions?: string,
-    exclusions?: string,
-    project?: ProjectConfig
-  ): Promise<string> {
-    if (!inclusions && !exclusions) {
-      return "";
-    }
-
-    if (!project) {
-      return "";
-    }
-
-    // NOTE: Must not fallback to GLOBAL inclusions and exclusions in Copilot settings in Projects!
-    // This is to avoid project inclusions in the project that conflict with the global ones
-    // Project UI should be the ONLY source of truth for project inclusions and exclusions
-    const { inclusions: inclusionPatterns, exclusions: exclusionPatterns } = getMatchingPatterns({
-      inclusions,
-      exclusions,
-      isProject: true,
-    });
-
+  private async processMarkdownFileContext(projectAllFiles: TFile[]): Promise<string> {
     // FileParserManager will be used to process these files when they're accessed,
     // either immediately or on-demand when the context is formatted
 
     // Get all markdown files that match the inclusion/exclusion patterns
     // Note: We're only processing markdown files here, other file types
     // are handled by FileParserManager and stored in the file cache
-    const files = this.app.vault.getFiles().filter((file) => {
-      return file.extension === "md" && shouldIndexFile(file, inclusionPatterns, exclusionPatterns);
-    });
+    const files = projectAllFiles.filter((file) => file.extension === "md");
 
     logInfo(`Found ${files.length} markdown files to process for project context`);
 
@@ -734,8 +704,10 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
         "web",
         async () => {
           const result = await mention.processUrls(webUrl);
+          console.log("processWebUrlContext=========", result);
 
           if (result.processedErrorUrls[webUrl]) {
+            console.log("error", result.processedErrorUrls[webUrl]);
             throw new Error(result.processedErrorUrls[webUrl]);
           }
           return result;
@@ -744,7 +716,6 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
       return urlContext || "";
     } catch (error) {
       logError(`Failed to process web URL: ${error}`);
-      new Notice(`Failed to process web URL: ${err2String(error)}`);
       return "";
     }
   }
@@ -775,18 +746,15 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
 
   private async processNonMarkdownFiles(
     project: ProjectConfig,
-    contextCache: ContextCache
+    projectAllFiles: TFile[]
   ): Promise<void> {
-    if (!contextCache.fileContexts) {
-      return;
-    }
+    const nonMarkdownFiles = projectAllFiles.filter((file) => file.extension !== "md");
 
-    const fileContextCount = Object.keys(contextCache.fileContexts).length;
     logInfo(
-      `[loadProjectContext] Project ${project.name}: Checking ${fileContextCount} fileContexts for non-markdown processing.`
+      `[loadProjectContext] Project ${project.name}: Checking for non-markdown processing: ${nonMarkdownFiles.length} files .`
     );
 
-    if (fileContextCount <= 0) {
+    if (nonMarkdownFiles.length <= 0) {
       return;
     }
 
@@ -799,13 +767,9 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
 
     let processedNonMdCount = 0;
 
-    for (const filePath in contextCache.fileContexts) {
-      const file = this.app.vault.getAbstractFileByPath(filePath);
-      if (
-        file instanceof TFile &&
-        file.extension !== "md" &&
-        this.fileParserManager.supportsExtension(file.extension)
-      ) {
+    for (const file of nonMarkdownFiles) {
+      const filePath = file.path;
+      if (this.fileParserManager.supportsExtension(file.extension)) {
         try {
           const existingContent = await this.projectContextCache.getFileContext(project, filePath);
           if (!existingContent) {
@@ -962,6 +926,25 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
       logError(`[retryNonMarkdownFile] Error processing file ${filePath}: ${error}`);
       throw error;
     }
+  }
+
+  private getProjectAllFiles(project: ProjectConfig) {
+    if (!project.contextSource) {
+      project.contextSource = {};
+    }
+
+    // NOTE: Must not fallback to GLOBAL inclusions and exclusions in Copilot settings in Projects!
+    // This is to avoid project inclusions in the project that conflict with the global ones
+    // Project UI should be the ONLY source of truth for project inclusions and exclusions
+    const { inclusions: inclusionPatterns, exclusions: exclusionPatterns } = getMatchingPatterns({
+      inclusions: project.contextSource.inclusions,
+      exclusions: project.contextSource.exclusions,
+      isProject: true,
+    });
+
+    return this.app.vault.getFiles().filter((file: TFile) => {
+      return shouldIndexFile(file, inclusionPatterns, exclusionPatterns);
+    });
   }
 
   public onunload(): void {

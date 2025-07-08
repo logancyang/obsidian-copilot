@@ -269,6 +269,8 @@ export class Docs4LLMParser implements FileParser {
         content = String(docs4llmResponse.response);
       }
 
+      console.log("Cache the converted content============");
+
       // Cache the converted content
       await this.projectContextCache.setFileContext(this.currentProject, file.path, content);
 

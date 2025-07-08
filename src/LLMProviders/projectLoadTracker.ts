@@ -7,7 +7,6 @@ import {
 } from "@/aiParams";
 import { ContextCache } from "@/cache/projectContextCache";
 import { logInfo } from "@/logger";
-import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import { err2String } from "@/utils";
 import { App, TFile } from "obsidian";
 import { isRateLimitError } from "@/utils/rateLimitUtils";
@@ -17,11 +16,9 @@ import { isRateLimitError } from "@/utils/rateLimitUtils";
  */
 export class ProjectLoadTracker {
   private static instance: ProjectLoadTracker;
-  private currentProjectId: string | null;
   private app: App;
 
   private constructor(app: App) {
-    this.currentProjectId = null;
     this.app = app;
   }
 
@@ -30,10 +27,6 @@ export class ProjectLoadTracker {
       ProjectLoadTracker.instance = new ProjectLoadTracker(app);
     }
     return ProjectLoadTracker.instance;
-  }
-
-  public setCurrentProjectId(projectId: string | null): void {
-    this.currentProjectId = projectId;
   }
 
   /**
@@ -62,7 +55,6 @@ export class ProjectLoadTracker {
       this.setFileOrUrlProcessSuccessful(key);
       return result;
     } catch (error) {
-      console.log("========================");
       const errorMessage = isRateLimitError(error)
         ? "Rate limit exceeded. (Rate limit: 50 files or 100MB per 3 hours, whichever is reached first)"
         : err2String(error);
@@ -138,26 +130,14 @@ export class ProjectLoadTracker {
   /**
    * Pre-compute all items that need to be processed in the project
    */
-  public preComputeAllItems(project: ProjectConfig, contextCache: ContextCache): void {
+  public preComputeAllItems(project: ProjectConfig, projectAllFiles: TFile[]): void {
     logInfo(`[preComputeAllItems] Starting pre-computation for project: ${project.name}`);
 
     const allItems: string[] = [];
 
     // 1. Count all matching files (markdown and non-markdown)
-    if (project.contextSource?.inclusions || project.contextSource?.exclusions) {
-      const { inclusions: inclusionPatterns, exclusions: exclusionPatterns } = getMatchingPatterns({
-        inclusions: project.contextSource?.inclusions,
-        exclusions: project.contextSource?.exclusions,
-        isProject: true,
-      });
-
-      const allMatchingFiles = this.app.vault.getFiles().filter((file: TFile) => {
-        return shouldIndexFile(file, inclusionPatterns, exclusionPatterns);
-      });
-
-      // Add all matching file paths to the list
-      allItems.push(...allMatchingFiles.map((file: TFile) => file.path));
-    }
+    // Add all matching file paths to the list
+    allItems.push(...projectAllFiles.map((file: TFile) => file.path));
 
     // 2. Count all Web URLs
     const configuredWebUrls = project.contextSource?.webUrls?.trim() || "";
@@ -186,10 +166,12 @@ export class ProjectLoadTracker {
   /**
    * Mark all cached items as successful
    */
-  public markAllCachedItemsAsSuccess(project: ProjectConfig, contextCache: ContextCache): void {
-    logInfo(
-      `[markAllCachedItemsAsSuccess] Starting for project: ${this.currentProjectId || "default"}`
-    );
+  public markAllCachedItemsAsSuccess(
+    project: ProjectConfig,
+    contextCache: ContextCache,
+    projectAllFiles: TFile[]
+  ): void {
+    logInfo(`[markAllCachedItemsAsSuccess] Starting for project: ${project.name || "default"}`);
 
     // 1. Mark cached Web URLs
     const configuredWebUrls = project.contextSource?.webUrls?.trim() || "";
@@ -202,7 +184,7 @@ export class ProjectLoadTracker {
       if (cachedUrls.length > 0) {
         logInfo(
           `[markAllCachedItemsAsSuccess] Project ${
-            this.currentProjectId || "default"
+            project.name || "default"
           }: Marked ${cachedUrls.length} cached Web URLs as successful`
         );
       }
@@ -219,7 +201,7 @@ export class ProjectLoadTracker {
       if (cachedUrls.length > 0) {
         logInfo(
           `[markAllCachedItemsAsSuccess] Project ${
-            this.currentProjectId || "default"
+            project.name || "default"
           }: Marked ${cachedUrls.length} cached YouTube URLs as successful`
         );
       }
@@ -227,19 +209,7 @@ export class ProjectLoadTracker {
 
     // 3. Mark all files present in fileContexts as successful
     if (contextCache.fileContexts) {
-      const { inclusions, exclusions } = project.contextSource || {};
-      const { inclusions: inclusionPatterns, exclusions: exclusionPatterns } = getMatchingPatterns({
-        inclusions,
-        exclusions,
-        isProject: true,
-      });
-
-      const matchingFilesSet = new Set(
-        this.app.vault
-          .getFiles()
-          .filter((file: TFile) => shouldIndexFile(file, inclusionPatterns, exclusionPatterns))
-          .map((file: TFile) => file.path)
-      );
+      const matchingFilesSet = new Set(projectAllFiles.map((file: TFile) => file.path));
 
       const cachedFilesToMark = Object.keys(contextCache.fileContexts).filter((filePath) =>
         matchingFilesSet.has(filePath)
@@ -251,7 +221,7 @@ export class ProjectLoadTracker {
 
       if (cachedFilesToMark.length > 0) {
         logInfo(
-          `[markAllCachedItemsAsSuccess] Project ${this.currentProjectId || "default"}: Marked ${
+          `[markAllCachedItemsAsSuccess] Project ${project.name || "default"}: Marked ${
             cachedFilesToMark.length
           } cached files that match current project patterns as successful.`
         );
@@ -273,6 +243,26 @@ export class ProjectLoadTracker {
     // Mark as successful directly
     if (!state.success.includes(key)) {
       updateProjectContextLoadState("success", [...state.success, key]);
+    }
+  }
+
+  public makeItemFailed(key: string, type: FailedItem["type"], error?: string): void {
+    const state = getProjectContextLoadState();
+    // Ensure the item is in the total list
+    if (!state.total.includes(key)) {
+      updateProjectContextLoadState("total", [...state.total, key]);
+    }
+
+    // Check if this item is already in the failed list
+    const existingFailed = state.failed.find((item) => item.path === key);
+    if (!existingFailed) {
+      const failedItem: FailedItem = {
+        path: key,
+        type,
+        error,
+        timestamp: Date.now(),
+      };
+      updateProjectContextLoadState("failed", [...state.failed, failedItem]);
     }
   }
 }

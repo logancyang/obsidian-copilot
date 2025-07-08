@@ -72,7 +72,7 @@ export interface ProjectConfig {
     maxTokens?: number;
   };
   contextSource: {
-    inclusions: string;
+    inclusions?: string;
     exclusions?: string;
     webUrls?: string;
     youtubeUrls?: string;

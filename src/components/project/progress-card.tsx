@@ -17,7 +17,7 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
   const [contextLoadState] = useProjectContextLoad();
   const totalFiles = contextLoadState.total;
   const successFiles = contextLoadState.success;
-  const realFailedFiles = contextLoadState.failed;
+  const failedFiles = contextLoadState.failed;
   const processingFiles = contextLoadState.processingFiles;
 
   // Control file list expand/collapse state
@@ -27,36 +27,6 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
   // Use project loading state hook
   const [, setLoading] = useProjectLoading();
 
-  const mockFailedFiles: FailedItem[] = [
-    {
-      path: "large_dataset.xlsx",
-      type: "nonMd",
-      error:
-        "Rate limit exceeded. (Rate limit: 50 files or 100MB per 3 hours, whichever is reached first)",
-      timestamp: Date.now() - 300000,
-    },
-    {
-      path: "https://jasonhtmlshare.neocities.org/Input%20Structuring%20CN%20-%20%E6%99%BA%E8%83%BD%E5%86%85%E5%AE%B9%E7%BB%93%E6%9E%84%E5%8C%96%E5%A4%84%E7%90%86%E5%B7%A5%E5%85%B7",
-      type: "web",
-      error: "Connection timeout",
-      timestamp: Date.now() - 150000,
-    },
-    {
-      path: "https://youtube.com/watch?v=abc123",
-      type: "youtube",
-      error:
-        "Video not available Video not available Video not available Video not available Video not available Video not available ",
-      timestamp: Date.now() - 600000,
-    },
-    {
-      path: "notes/corrupted-file.md",
-      type: "md",
-      error: "Invalid file encoding",
-      timestamp: Date.now() - 900000,
-    },
-  ];
-
-  const failedFiles = [...realFailedFiles, ...mockFailedFiles];
   const processedFilesLen = successFiles.length + failedFiles.length;
   const progressPercentage =
     totalFiles.length > 0 ? Math.round((processedFilesLen / totalFiles.length) * 100) : 0;
@@ -99,8 +69,8 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
     // Check if all files are processed or there are no files to process
     const allFilesProcessed =
       totalFiles.length === 0 || // No files to process
-      (processedFilesLen === totalFiles.length && totalFiles.length > 0); // All files are processed
-
+      (successFiles.length === totalFiles.length && totalFiles.length > 0); // All files are processed
+    console.log("useEffect=================", successFiles);
     if (allFilesProcessed && processingFiles.length === 0) {
       const timer = setTimeout(() => {
         setLoading(false);
@@ -108,7 +78,7 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
 
       return () => clearTimeout(timer);
     }
-  }, [processedFilesLen, totalFiles.length, processingFiles.length, setLoading]);
+  }, [processedFilesLen, totalFiles.length, processingFiles.length, setLoading, successFiles]);
 
   return (
     <Card className="tw-w-full tw-border tw-border-solid tw-border-border tw-bg-transparent tw-shadow-none">

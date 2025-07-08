@@ -7,6 +7,7 @@ export interface MentionData {
   type: string;
   original: string;
   processed?: string;
+  error?: string;
 }
 
 export class Mention {
@@ -46,16 +47,14 @@ export class Mention {
     try {
       return await this.brevilabsClient.url4llm(url);
     } catch (error) {
-      const msg = `Error processing URL ${url}: ${err2String(error)}`;
-      logError(msg);
+      const msg = err2String(error);
+      logError(`Error processing URL ${url}: ${msg}`);
       return { response: url, elapsed_time_ms: 0, error: msg };
     }
   }
 
   // For non-youtube URLs
-  async processUrls(
-    text: string
-  ): Promise<{
+  async processUrls(text: string): Promise<{
     urlContext: string;
     imageUrls: string[];
     processedErrorUrls: Record<string, string>;
@@ -80,14 +79,11 @@ export class Mention {
 
       if (!this.mentions.has(url)) {
         const processed = await this.processUrl(url);
-
-        if (processed.error) {
-          processedErrorUrls[url] = processed.error;
-        }
         this.mentions.set(url, {
           type: "url",
           original: url,
           processed: processed.response,
+          error: processed.error,
         });
       }
       return this.mentions.get(url);
@@ -99,6 +95,10 @@ export class Mention {
     processedUrls.forEach((urlData) => {
       if (urlData?.processed) {
         urlContext += `\n\nContent from ${urlData.original}:\n${urlData.processed}`;
+      }
+
+      if (urlData?.error) {
+        processedErrorUrls[urlData.original] = urlData.error;
       }
     });
 

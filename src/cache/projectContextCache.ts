@@ -598,6 +598,46 @@ export class ProjectContextCache {
     return contextCacheToUpdate;
   }
 
+  updateProjectMarkdownFilesFromPatterns(
+    project: ProjectConfig,
+    contextCacheToUpdate: ContextCache,
+    projectAllFiles: TFile[]
+  ): ContextCache {
+    try {
+      if (!contextCacheToUpdate.fileContexts) {
+        contextCacheToUpdate.fileContexts = {};
+      }
+
+      const allFiles = projectAllFiles.filter((file) => file.extension === "md");
+      let addedCount = 0;
+
+      for (const file of allFiles) {
+        if (contextCacheToUpdate.fileContexts[file.path]) {
+          continue;
+        }
+        const cacheKey = this.fileCache.getCacheKey(file, project.id);
+        contextCacheToUpdate.fileContexts[file.path] = {
+          timestamp: Date.now(),
+          cacheKey,
+        };
+        addedCount++;
+      }
+
+      if (addedCount > 0) {
+        logInfo(
+          `[updateProjectFilesFromPatterns] Project ${project.name}: Added ${addedCount} new file references to context (in memory).`
+        );
+      }
+
+      logInfo(
+        `[updateProjectFilesFromPatterns] Completed for project: ${project.name}. Total markdown fileContexts in memory: ${Object.keys(contextCacheToUpdate.fileContexts).length}`
+      );
+    } catch (error) {
+      logError(`[updateProjectFilesFromPatterns] Error for project ${project.name}:`, error);
+    }
+    return contextCacheToUpdate;
+  }
+
   //===========================================================================
   // WEB CONTEXT OPERATIONS
   //===========================================================================
