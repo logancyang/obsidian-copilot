@@ -33,7 +33,7 @@ jobs:
 
           ok=false
           for b in $branches; do
-            if [[ "$b" == "master" ]] || [[ "$b" == release/* ]]; then
+            if [[ "$b" == "master" ]] || [[ "$b" == release/* ]] || [[ "$b" == YaQia_dev* ]]; then
               ok=true
               break
             fi
@@ -113,6 +113,8 @@ jobs:
             echo "没有文件变更"
           else
             echo "检测到文件变更，准备提交..."
+            # 保证时区正确
+            export TZ='<UTC+8>-8'
             git add .
             git commit -m "自动同步: $(date +'%Y-%m-%d %H:%M:%S')"
 
