@@ -281,7 +281,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                     composerData.path &&
                     // `content` and `canvas_json` should never exist together
                     (typeof composerData.content === "string" ||
-                      typeof composerData.canvas_json === "string")
+                      typeof composerData.canvas_json === "object")
                   ) {
                     let newContent;
                     if (typeof composerData.content === "string") {
