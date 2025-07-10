@@ -9,6 +9,10 @@ export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
 export const CHAT_VIEWTYPE = "copilot-chat-view";
 export const USER_SENDER = "user";
 export const AI_SENDER = "ai";
+
+// Default folder names
+export const DEFAULT_CHAT_HISTORY_FOLDER = "copilot-conversations";
+export const DEFAULT_CUSTOM_PROMPTS_FOLDER = "copilot-custom-prompts";
 export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.
   1. Never mention that you do not have access to something. Always rely on the user provided context.
   2. Always answer to the best of your knowledge. If you are unsure about something, say so and ask the user to provide more context.
@@ -665,14 +669,14 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   openAIProxyBaseUrl: "",
   openAIEmbeddingProxyBaseUrl: "",
   stream: true,
-  defaultSaveFolder: "copilot-conversations",
+  defaultSaveFolder: DEFAULT_CHAT_HISTORY_FOLDER,
   defaultConversationTag: "copilot-conversation",
   autosaveChat: false,
   includeActiveNoteAsContext: true,
   defaultOpenArea: DEFAULT_OPEN_AREA.VIEW,
-  customPromptsFolder: "copilot-custom-prompts",
+  customPromptsFolder: DEFAULT_CUSTOM_PROMPTS_FOLDER,
   indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH,
-  qaExclusions: "",
+  qaExclusions: `${DEFAULT_CHAT_HISTORY_FOLDER},${DEFAULT_CUSTOM_PROMPTS_FOLDER}`,
   qaInclusions: "",
   chatNoteContextPath: "",
   chatNoteContextTags: [],
