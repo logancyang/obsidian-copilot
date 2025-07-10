@@ -1,4 +1,5 @@
 import { App, FuzzySuggestModal, TFile } from "obsidian";
+import { isAllowedFileForContext } from "@/utils";
 
 export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
   protected activeNote: TFile | null;
@@ -17,17 +18,13 @@ export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
       .filter(
         (file): file is TFile =>
           file instanceof TFile &&
-          (file.extension === "md" || file.extension === "pdf" || file.extension === "canvas") &&
+          isAllowedFileForContext(file) &&
           !excludeNotePaths.includes(file.path) &&
           file.path !== this.activeNote?.path
       );
 
     // Get all other files that weren't recently opened
-    const allFiles = this.app.vault
-      .getFiles()
-      .filter(
-        (file) => file.extension === "md" || file.extension === "pdf" || file.extension === "canvas"
-      );
+    const allFiles = this.app.vault.getFiles().filter((file) => isAllowedFileForContext(file));
 
     const otherFiles = allFiles.filter(
       (file) =>
@@ -36,8 +33,10 @@ export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
         file.path !== this.activeNote?.path
     );
 
-    // Combine active note (if exists) with recent files and other files
-    return [...(this.activeNote ? [this.activeNote] : []), ...recentFiles, ...otherFiles];
+    // Combine active note (if exists and is allowed type) with recent files and other files
+    const activeNoteArray =
+      this.activeNote && isAllowedFileForContext(this.activeNote) ? [this.activeNote] : [];
+    return [...activeNoteArray, ...recentFiles, ...otherFiles];
   }
 
   protected formatNoteTitle(basename: string, isActive: boolean, extension?: string): string {

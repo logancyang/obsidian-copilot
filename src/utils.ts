@@ -280,6 +280,16 @@ export function getFileName(file: TFile): string {
   return file.basename;
 }
 
+/**
+ * Check if a file is allowed for context (markdown, PDF, or canvas files)
+ * @param file The file to check
+ * @returns true if the file is allowed, false otherwise
+ */
+export function isAllowedFileForContext(file: TFile | null): boolean {
+  if (!file) return false;
+  return file.extension === "md" || file.extension === "pdf" || file.extension === "canvas";
+}
+
 export async function getAllNotesContent(vault: Vault): Promise<string> {
   let allContent = "";
 
