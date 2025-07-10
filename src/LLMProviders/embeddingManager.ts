@@ -13,11 +13,12 @@ import { OllamaEmbeddings } from "@langchain/ollama";
 import { AzureOpenAIEmbeddings, OpenAIEmbeddings } from "@langchain/openai";
 import { Notice } from "obsidian";
 import { CustomJinaEmbeddings } from "./CustomJinaEmbeddings";
+import { CustomOpenAIEmbeddings } from "./CustomOpenAIEmbeddings";
 
 type EmbeddingConstructorType = new (config: any) => Embeddings;
 
 const EMBEDDING_PROVIDER_CONSTRUCTORS = {
-  [EmbeddingModelProviders.COPILOT_PLUS]: OpenAIEmbeddings,
+  [EmbeddingModelProviders.COPILOT_PLUS]: CustomOpenAIEmbeddings,
   [EmbeddingModelProviders.COPILOT_PLUS_JINA]: CustomJinaEmbeddings,
   [EmbeddingModelProviders.OPENAI]: OpenAIEmbeddings,
   [EmbeddingModelProviders.COHEREAI]: CohereEmbeddings,
