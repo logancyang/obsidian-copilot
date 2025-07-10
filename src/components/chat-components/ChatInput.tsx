@@ -25,7 +25,13 @@ import { Mention } from "@/mentions/Mention";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { SelectedTextContext } from "@/sharedState";
 import { getToolDescription } from "@/tools/toolManager";
-import { checkModelApiKey, err2String, extractNoteFiles, isNoteTitleUnique } from "@/utils";
+import {
+  checkModelApiKey,
+  err2String,
+  extractNoteFiles,
+  isAllowedFileForContext,
+  isNoteTitleUnique,
+} from "@/utils";
 import {
   ArrowBigUp,
   ChevronDown,
@@ -106,9 +112,10 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const [modelError, setModelError] = useState<string | null>(null);
     const [currentChain] = useChainType();
     const [isProjectLoading] = useProjectLoading();
-    const [currentActiveNote, setCurrentActiveNote] = useState<TFile | null>(
-      app.workspace.getActiveFile()
-    );
+    const [currentActiveNote, setCurrentActiveNote] = useState<TFile | null>(() => {
+      const activeFile = app.workspace.getActiveFile();
+      return isAllowedFileForContext(activeFile) ? activeFile : null;
+    });
     const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
     const settings = useSettingsValue();
     const isCopilotPlus =
@@ -441,7 +448,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         // Set new timeout
         timeoutId = setTimeout(() => {
           const activeNote = app.workspace.getActiveFile();
-          setCurrentActiveNote(activeNote);
+          setCurrentActiveNote(isAllowedFileForContext(activeNote) ? activeNote : null);
         }, 100); // Wait 100ms after the last event because it fires multiple times
       };
 
