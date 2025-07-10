@@ -28,12 +28,13 @@ export class CustomOpenAIEmbeddings extends OpenAIEmbeddings {
       encoding_format: "float",
     };
 
-    // Get the correct baseURL and apiKey from the configuration
+    // Get the correct baseURL, apiKey, and fetch function from the configuration
     const baseURL = this.customConfig.configuration?.baseURL || "https://api.openai.com/v1";
     const url = `${baseURL}/embeddings`;
     const apiKey = this.customConfig.apiKey;
+    const fetchFn = this.customConfig.configuration?.fetch || fetch;
 
-    const response = await fetch(url, {
+    const response = await fetchFn(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
