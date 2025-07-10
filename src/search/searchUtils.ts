@@ -70,7 +70,7 @@ export function getDecodedPatterns(value: string): string[] {
 }
 
 /**
- * Get the exclusion patterns the exclusion settings string.
+ * Get the exclusion patterns from the exclusion settings string.
  * @returns An array of exclusion patterns.
  */
 function getExclusionPatterns(): string[] {
