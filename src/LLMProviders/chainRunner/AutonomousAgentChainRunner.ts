@@ -25,7 +25,7 @@ import {
 import { parseXMLToolCalls, stripToolCallXML } from "./utils/xmlParsing";
 import { ModelAdapterFactory, messageRequiresTools } from "./utils/modelAdapter";
 
-export class SequentialThinkingChainRunner extends CopilotPlusChainRunner {
+export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private getAvailableTools(): any[] {
     // Get tools from the existing IntentAnalyzer
     const tools: any[] = [
@@ -143,7 +143,7 @@ export class SequentialThinkingChainRunner extends CopilotPlusChainRunner {
         content: enhancedUserMessage,
       });
 
-      // Sequential thinking loop
+      // Autonomous agent loop
       const maxIterations = 4; // Prevent infinite loops while allowing sufficient reasoning
       let iteration = 0;
 
@@ -153,7 +153,7 @@ export class SequentialThinkingChainRunner extends CopilotPlusChainRunner {
         }
 
         iteration++;
-        logInfo(`=== Sequential Thinking Iteration ${iteration} ===`);
+        logInfo(`=== Autonomous Agent Iteration ${iteration} ===`);
 
         // Get AI response
         const response = await this.streamResponse(
@@ -273,11 +273,11 @@ export class SequentialThinkingChainRunner extends CopilotPlusChainRunner {
       }
     } catch (error: any) {
       if (error.name === "AbortError" || abortController.signal.aborted) {
-        logInfo("Sequential thinking stream aborted by user", {
+        logInfo("Autonomous agent stream aborted by user", {
           reason: abortController.signal.reason,
         });
       } else {
-        logError("Sequential thinking failed, falling back to regular Plus mode:", error);
+        logError("Autonomous agent failed, falling back to regular Plus mode:", error);
 
         // Fallback to regular CopilotPlusChainRunner
         try {

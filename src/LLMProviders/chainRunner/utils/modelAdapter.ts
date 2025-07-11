@@ -1,7 +1,7 @@
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 
 /**
- * Model-specific adaptations for sequential thinking
+ * Model-specific adaptations for autonomous agent
  * Handles quirks and requirements of different LLM providers
  */
 
@@ -36,9 +36,9 @@ class BaseModelAdapter implements ModelAdapter {
   enhanceSystemPrompt(basePrompt: string, toolDescriptions: string): string {
     return `${basePrompt}
 
-# Sequential Thinking Mode
+# Autonomous Agent Mode
 
-You are now in sequential thinking mode. You can use tools to gather information and complete tasks step by step.
+You are now in autonomous agent mode. You can use tools to gather information and complete tasks step by step.
 
 When you need to use a tool, format it EXACTLY like this:
 <use_tool>

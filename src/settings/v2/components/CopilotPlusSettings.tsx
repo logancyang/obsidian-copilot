@@ -99,11 +99,11 @@ export const CopilotPlusSettings: React.FC = () => {
 
           <SettingItem
             type="switch"
-            title="Sequential Thinking"
-            description="Enable sequential thinking mode in Plus chat. The AI will reason step-by-step and decide which tools to use automatically, improving response quality for complex queries."
-            checked={settings.enableSequentialThinking}
+            title="Autonomous Agent"
+            description="Enable autonomous agent mode in Plus chat. The AI will reason step-by-step and decide which tools to use automatically, improving response quality for complex queries."
+            checked={settings.enableAutonomousAgent}
             onCheckedChange={(checked) => {
-              updateSetting("enableSequentialThinking", checked);
+              updateSetting("enableAutonomousAgent", checked);
             }}
           />
 

@@ -7,7 +7,7 @@ This directory contains the refactored chain runner system for Obsidian Copilot,
 The chain runner system provides two distinct tool calling approaches:
 
 1. **Legacy Tool Calling** (CopilotPlusChainRunner) - Uses Brevilabs API for intent analysis
-2. **Sequential Thinking** (SequentialThinkingChainRunner) - Uses XML-based tool calling inspired by Cline
+2. **Autonomous Agent** (AutonomousAgentChainRunner) - Uses XML-based tool calling inspired by Cline
 
 ## Architecture
 
@@ -18,7 +18,7 @@ chainRunner/
 ├── VaultQAChainRunner.ts              # Vault-only Q&A with retrieval
 ├── CopilotPlusChainRunner.ts          # Legacy tool calling system
 ├── ProjectChainRunner.ts              # Project-aware extension of Plus
-├── SequentialThinkingChainRunner.ts   # XML-based sequential tool calling
+├── AutonomousAgentChainRunner.ts   # XML-based autonomous agent tool calling
 ├── index.ts                           # Main exports
 └── utils/
     ├── ThinkBlockStreamer.ts          # Handles thinking content from models
@@ -69,7 +69,7 @@ const response = await this.streamMultimodalResponse(enhancedMessage, ...);
 - `pomodoroTool` - Pomodoro timer
 - `youtubeTranscription` - YouTube video transcription
 
-### 2. Sequential Thinking (SequentialThinkingChainRunner)
+### 2. Autonomous Agent (AutonomousAgentChainRunner)
 
 **How it works:**
 
@@ -127,7 +127,7 @@ while (iteration < maxIterations) {
 
 ## Key Differences
 
-| Aspect             | Legacy (Plus)           | Sequential Thinking                   |
+| Aspect             | Legacy (Plus)           | Autonomous Agent                      |
 | ------------------ | ----------------------- | ------------------------------------- |
 | **Tool Decision**  | Brevilabs API analysis  | AI decides autonomously               |
 | **Tool Execution** | Pre-LLM, synchronous    | During conversation, iterative        |
@@ -181,7 +181,7 @@ All tools from the legacy system plus autonomous decision-making:
 
 ### System Prompt Engineering
 
-The Sequential Thinking mode uses a comprehensive system prompt that:
+The Autonomous Agent mode uses a comprehensive system prompt that:
 
 1. **Explains the XML format** with exact examples
 2. **Provides tool descriptions** with parameter details
@@ -205,7 +205,7 @@ When you need to use a tool, format it EXACTLY like this:
 CRITICAL: For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings).
 ```
 
-## Benefits of Sequential Thinking
+## Benefits of Autonomous Agent
 
 1. **Autonomous Tool Selection** - AI decides what tools to use without pre-analysis
 2. **Tool Chaining** - Can use results from one tool to inform the next
@@ -216,21 +216,21 @@ CRITICAL: For localSearch, you MUST always provide both "query" (string) and "sa
 
 ## Usage
 
-### Enable Sequential Thinking
+### Enable Autonomous Agent
 
 ```typescript
 // In settings
-settings.enableSequentialThinking = true;
+settings.enableAutonomousAgent = true;
 
 // ChainManager automatically selects the appropriate runner
-const runner = chainManager.getChainRunner(); // Returns SequentialThinkingChainRunner
+const runner = chainManager.getChainRunner(); // Returns AutonomousAgentChainRunner
 ```
 
 ### Example Query Flow
 
 **User Input:** "Find my notes about machine learning and research current best practices"
 
-**Sequential Thinking Process:**
+**Autonomous Agent Process:**
 
 1. **Iteration 1**: AI reasons about the task → calls `localSearch` for ML notes
 2. **Iteration 2**: Analyzes vault results → calls `webSearch` for current practices
@@ -244,7 +244,7 @@ const runner = chainManager.getChainRunner(); // Returns SequentialThinkingChain
 
 ## Error Handling & Fallbacks
 
-### Sequential Thinking Fallbacks
+### Autonomous Agent Fallbacks
 
 ```typescript
 try {
@@ -327,4 +327,4 @@ if (modelName.includes("newmodel")) {
 7. **Alternative Parsing** - Model adapters could handle non-XML formats
 8. **Response Validation** - Adapters could validate model outputs
 
-The sequential thinking approach represents a significant evolution from traditional tool calling, enabling more sophisticated AI reasoning and autonomous task completion.
+The autonomous agent approach represents a significant evolution from traditional tool calling, enabling more sophisticated AI reasoning and autonomous task completion.

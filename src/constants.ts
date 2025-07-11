@@ -705,7 +705,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableWordCompletion: false,
   lastDismissedVersion: null,
   passMarkdownImages: true,
-  enableSequentialThinking: false,
+  enableAutonomousAgent: false,
   enableCustomPromptTemplating: true,
   suggestedDefaultCommands: false,
 };
