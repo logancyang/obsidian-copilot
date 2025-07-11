@@ -292,9 +292,10 @@ export function ChatControls({
             {presets.length === 0 && <DropdownMenuItem disabled>尚未创建任何人设</DropdownMenuItem>}
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
         {/* 新增的口语化提示词开关 */}
-        <div className="flex items-center gap-1 ml-2">
-          <span className="text-sm">口语化</span>
+        {/* <div className="tw-flex tw-items-center tw-gap-1">
+          <span className="tw-text-sm">口语化</span>
           <SettingSwitch
             checked={settings.promptEnhancements?.autoSpeech?.useOralPrompt ?? true}
             onCheckedChange={(checked) => {
@@ -306,15 +307,43 @@ export function ChatControls({
                 },
               });
             }}
+            className="tw-scale-75" // 缩小开关尺寸
           />
-        </div>
-      </div>
+        </div> */}
       <div>
+        {/* 修改后的口语化开关按钮 */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button 
+              variant="ghost2" 
+              size="icon" 
+              className="tw-px-2 tw-w-auto tw-mr-1"  // 增加右间距
+            >
+              <div className="tw-flex tw-items-center tw-gap-1">
+                <span className="tw-text-sm">口语化</span>
+                <SettingSwitch 
+                  checked={settings.promptEnhancements?.autoSpeech?.useOralPrompt ?? true}
+                  onCheckedChange={(checked) => {
+                    updateSetting("promptEnhancements", {
+                      ...settings.promptEnhancements,
+                      autoSpeech: {
+                        ...settings.promptEnhancements?.autoSpeech,
+                        useOralPrompt: checked,
+                      },
+                    });
+                  }}
+                  className="tw-scale-75"
+                />
+              </div>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>口语化回答模式</TooltipContent>
+        </Tooltip>
         <Tooltip>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost2" size="icon" title="新建会话">
-                <MessageCirclePlus className="size-4" />
+                <MessageCirclePlus className="tw-size-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-28">
@@ -364,7 +393,7 @@ export function ChatControls({
           <DropdownMenuContent align="end" className="tw-w-64">
             {/* 新增：启用默认提示词开关 */}
             <DropdownMenuItem
-              className="flex justify-between"
+              className="tw-flex tw-justify-between"
               onSelect={(e) => {
                 e.preventDefault();
                 updateSetting("promptEnhancements", {
@@ -373,34 +402,40 @@ export function ChatControls({
                 });
               }}
             >
-              <div className="flex items-center gap-2">
-                <FileText className="size-4" />
-                启用默认提示词
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <FileText className="tw-size-4" />
+                <span>启用默认提示词</span>
               </div>
-              <SettingSwitch checked={settings.promptEnhancements?.appendDefaultPrompt !== false} />
+              <SettingSwitch 
+                checked={settings.promptEnhancements?.appendDefaultPrompt !== false}
+                className="tw-ml-4"  // 增加左侧间距
+              />
             </DropdownMenuItem>
             <DropdownMenuItem
-              className="flex justify-between"
+              className="tw-flex tw-justify-between"
               onSelect={(e) => {
                 e.preventDefault();
                 updateSetting("promptEnhancements", {
                   ...settings.promptEnhancements,
                   autoSpeech: {
-                    ...settings.promptEnhancements?.autoSpeech, // 保留其他属性
+                    ...settings.promptEnhancements?.autoSpeech,
                     enabled: !settings.promptEnhancements?.autoSpeech?.enabled,
                   },
                 });
               }}
             >
-              <div className="flex items-center gap-2">
-                <Volume2 className="size-4" /> {/* 需要从lucide-react导入Volume2 */}
-                自动语音播放
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <Volume2 className="tw-size-4" />
+                <span>自动语音播放</span>
               </div>
-              <SettingSwitch checked={settings.promptEnhancements?.autoSpeech?.enabled || false} />
+              <SettingSwitch 
+                checked={settings.promptEnhancements?.autoSpeech?.enabled || false}
+                className="tw-ml-4"
+              />
             </DropdownMenuItem>
             {/* 新增自动衍生问题开关 */}
             <DropdownMenuItem
-              className="flex justify-between"
+              className="tw-flex tw-justify-between"
               onSelect={(e) => {
                 e.preventDefault();
                 updateSetting("promptEnhancements", {
@@ -412,12 +447,13 @@ export function ChatControls({
                 });
               }}
             >
-              <div className="flex items-center gap-2">
-                <MessageCirclePlus className="size-4" />
-                自动衍生问题
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <MessageCirclePlus className="tw-size-4" />
+                <span>自动衍生问题</span>
               </div>
               <SettingSwitch
                 checked={settings.promptEnhancements?.autoFollowUp?.enabled || false}
+                className="tw-ml-4"
               />
             </DropdownMenuItem>
             <DropdownMenuItem

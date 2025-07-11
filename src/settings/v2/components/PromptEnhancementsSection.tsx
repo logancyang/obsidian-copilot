@@ -113,9 +113,9 @@ export function PromptEnhancementsSection() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-4 p-4 border rounded-lg">
-        <div className="flex items-center justify-between">
+    <div className="tw-space-y-6">
+      <div className="tw-space-y-4 tw-p-4 tw-border tw-rounded-lg tw-bg-card">
+        <div className="tw-flex tw-items-center tw-justify-between">
           <SettingItem
             type="switch"
             title="拼接默认系统提示词"
@@ -127,22 +127,22 @@ export function PromptEnhancementsSection() {
             variant="ghost"
             size="sm"
             onClick={() => setIsPromptExpanded(!isPromptExpanded)}
-            className="text-sm"
+            className="tw-text-sm"
           >
             {isPromptExpanded ? "隐藏" : "查看"}默认提示词
           </Button>
         </div>
 
         {isPromptExpanded && (
-          <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-md">
-            <div className="font-medium text-sm mb-2">默认系统提示词内容：</div>
-            <div className="whitespace-pre-wrap text-sm max-w-3xl">{DEFAULT_SYSTEM_PROMPT}</div>
+          <div className="tw-mt-4 tw-p-4 tw-bg-gray-50 dark:tw-bg-gray-800 tw-rounded-md">
+            <div className="tw-font-medium tw-text-sm tw-mb-2">默认系统提示词内容：</div>
+            <div className="tw-whitespace-pre-wrap tw-text-sm tw-max-w-3xl">{DEFAULT_SYSTEM_PROMPT}</div>
           </div>
         )}
       </div>
       {/* 自动衍生问题部分 */}
-      <div className="space-y-4 p-4 border rounded-lg">
-        <div className="flex items-center justify-between">
+      <div className="tw-space-y-4 tw-p-4 tw-border tw-rounded-lg tw-bg-card">
+        <div className="tw-flex tw-items-center tw-justify-between">
           <SettingItem
             type="switch"
             title="自动衍生问题"
@@ -153,23 +153,27 @@ export function PromptEnhancementsSection() {
         </div>
 
         {autoFollowUpEnabled && (
-          <div className="space-y-2">
-            <Label>衍生问题提示词</Label>
+          <div className="tw-space-y-2">
+            <Label className="tw-block tw-text-sm tw-font-medium tw-text-foreground">
+              衍生问题提示词
+            </Label>
             <Textarea
               value={followUpPrompt}
               onChange={(e) => setFollowUpPrompt(e.target.value)}
               placeholder="输入自动生成问题的提示词 (例如: '基于当前对话内容，生成3个可能的后续问题:')"
-              className="min-h-[100px]"
+              className="tw-min-h-[100px] tw-text-sm"
             />
-            <Button onClick={saveFollowUpSettings}>保存提示词</Button>
+            <Button className="tw-mt-2" onClick={saveFollowUpSettings}>
+              保存提示词
+            </Button>
           </div>
         )}
       </div>
 
       {/* 自动语音播放部分 */}
-      <div className="space-y-4 p-4 border rounded-lg">
+      <div className="tw-space-y-4 tw-p-4 tw-border tw-rounded-lg tw-bg-card">
         {/* 第一行：自动语音播放开关 */}
-        <div className="flex items-center justify-between">
+        <div className="tw-flex tw-items-center tw-justify-between">
           <SettingItem
             type="switch"
             title="自动语音播放"
@@ -180,7 +184,7 @@ export function PromptEnhancementsSection() {
         </div>
 
         {/* 第二行：口语化提示词开关 */}
-        <div className="flex items-center justify-between">
+        <div className="tw-flex tw-items-center tw-justify-between">
           <SettingItem
             type="switch"
             title="使用口语化提示词"
@@ -191,16 +195,20 @@ export function PromptEnhancementsSection() {
         </div>
 
         {useOralPrompt && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>语音提示词</Label>
+          <div className="tw-space-y-4">
+            <div className="tw-space-y-2">
+              <Label className="tw-block tw-text-sm tw-font-medium tw-text-foreground">
+                语音提示词
+              </Label>
               <Textarea
                 value={speechPrompt}
                 onChange={(e) => setSpeechPrompt(e.target.value)}
                 placeholder="输入语音播放的提示词"
-                className="min-h-[100px]"
+                className="tw-min-h-[100px] tw-text-sm"
               />
-              <Button onClick={saveSpeechSettings}>保存提示词</Button>
+              <Button className="tw-mt-2" onClick={saveSpeechSettings}>
+                保存提示词
+              </Button>
             </div>
           </div>
         )}
