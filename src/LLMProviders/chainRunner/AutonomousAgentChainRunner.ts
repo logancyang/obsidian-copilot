@@ -316,26 +316,52 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   ): Promise<string> {
     const streamer = new ThinkBlockStreamer(updateCurrentAiMessage);
 
-    try {
-      const chatStream = await withSuppressedTokenWarnings(() =>
-        this.chainManager.chatModelManager.getChatModel().stream(messages, {
-          signal: abortController.signal,
-        })
-      );
+    const maxRetries = 2;
+    let retryCount = 0;
 
-      for await (const chunk of chatStream) {
-        if (abortController.signal.aborted) {
-          break;
+    while (retryCount <= maxRetries) {
+      try {
+        const chatStream = await withSuppressedTokenWarnings(() =>
+          this.chainManager.chatModelManager.getChatModel().stream(messages, {
+            signal: abortController.signal,
+          })
+        );
+
+        for await (const chunk of chatStream) {
+          if (abortController.signal.aborted) {
+            break;
+          }
+          streamer.processChunk(chunk);
         }
-        streamer.processChunk(chunk);
-      }
 
-      return streamer.close();
-    } catch (error) {
-      if (error.name === "AbortError" || abortController.signal.aborted) {
         return streamer.close();
+      } catch (error) {
+        if (error.name === "AbortError" || abortController.signal.aborted) {
+          return streamer.close();
+        }
+
+        // Check if this is an overloaded error that we should retry
+        const isOverloadedError =
+          error?.message?.includes("overloaded") ||
+          error?.message?.includes("Overloaded") ||
+          error?.error?.type === "overloaded_error";
+
+        if (isOverloadedError && retryCount < maxRetries) {
+          retryCount++;
+          logInfo(
+            `Retrying autonomous agent request (attempt ${retryCount}/${maxRetries + 1}) due to overloaded error`
+          );
+
+          // Wait before retrying (exponential backoff)
+          await new Promise((resolve) => setTimeout(resolve, 1000 * retryCount));
+          continue;
+        }
+
+        throw error;
       }
-      throw error;
     }
+
+    // This should never be reached, but just in case
+    return streamer.close();
   }
 }

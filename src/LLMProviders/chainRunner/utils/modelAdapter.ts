@@ -159,11 +159,52 @@ FINAL REMINDER FOR GPT MODELS: If the user asks you to search, find, or look up 
 }
 
 /**
- * Claude adapter (currently uses defaults, but ready for customization)
+ * Claude adapter with special handling for thinking models
  */
 class ClaudeModelAdapter extends BaseModelAdapter {
-  // Claude follows instructions well, so we use the base implementation
-  // But we have the structure ready if we need Claude-specific handling
+  private isThinkingModel(): boolean {
+    return (
+      this.modelName.includes("claude-3-7-sonnet") ||
+      this.modelName.includes("claude-sonnet-4") ||
+      this.modelName.includes("claude-3.7-sonnet") ||
+      this.modelName.includes("claude-4-sonnet")
+    );
+  }
+
+  enhanceSystemPrompt(basePrompt: string, toolDescriptions: string): string {
+    const baseSystemPrompt = super.enhanceSystemPrompt(basePrompt, toolDescriptions);
+
+    // Add specific instructions for thinking models
+    if (this.isThinkingModel()) {
+      const thinkingModelSection = `
+
+IMPORTANT FOR CLAUDE THINKING MODELS:
+- You are a thinking model with internal reasoning capability
+- Your thinking process will be automatically wrapped in <think> tags - do not manually add thinking tags
+- Place ALL tool calls AFTER your thinking is complete, in the main response body
+- Tool calls must be in the main response body, NOT inside thinking sections
+- Format tool calls exactly as shown in the examples above
+- Do not provide final answers before using tools - use tools first, then provide your response based on the results
+- If you need to use tools, include them immediately after your thinking, before any final response
+
+CORRECT FLOW FOR THINKING MODELS:
+1. Think through the problem (this happens automatically)
+2. Use tools to gather information (place tool calls in main response)
+3. Wait for tool results
+4. Provide final response based on gathered information
+
+INCORRECT: Providing a final answer before using tools
+CORRECT: Using tools first, then providing answer based on results`;
+
+      return baseSystemPrompt + thinkingModelSection;
+    }
+
+    return baseSystemPrompt;
+  }
+
+  needsSpecialHandling(): boolean {
+    return this.isThinkingModel();
+  }
 }
 
 /**

@@ -140,7 +140,7 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
         ...(isThinkingEnabled && {
-          thinking: { type: "enabled", budget_tokens: 1024 },
+          thinking: { type: "enabled", budget_tokens: 2048 },
         }),
       },
       [ChatModelProviders.AZURE_OPENAI]: {
