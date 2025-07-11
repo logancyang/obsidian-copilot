@@ -8,6 +8,7 @@ import { FailedItem, useProjectContextLoad, useProjectLoading } from "@/aiParams
 import { Button } from "@/components/ui/button";
 import { TruncatedText } from "@/components/TruncatedText";
 import CopilotPlugin from "@/main";
+import { logError } from "@/logger";
 
 interface ProgressCardProps {
   plugin?: CopilotPlugin;
@@ -53,14 +54,14 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
 
   const handleRetryFailedItem = async (item: FailedItem) => {
     if (!plugin?.projectManager) {
-      console.error("ProjectManager not available");
+      logError("ProjectManager not available");
       return;
     }
 
     try {
       await plugin.projectManager.retryFailedItem(item);
     } catch (error) {
-      console.error(`Error retrying failed item: ${error}`);
+      logError(`Error retrying failed item: ${error}`);
     }
   };
 
@@ -73,7 +74,7 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
     console.log("useEffect=================", successFiles);
     if (allFilesProcessed && processingFiles.length === 0) {
       const timer = setTimeout(() => {
-        setLoading(false);
+        // setLoading(false);
       }, 500);
 
       return () => clearTimeout(timer);
