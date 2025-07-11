@@ -277,14 +277,20 @@ interface ModelAdapter {
   enhanceUserMessage(message: string, requiresTools: boolean): string;
   parseToolCalls?(response: string): any[]; // Future extension
   needsSpecialHandling(): boolean;
+  sanitizeResponse?(response: string, iteration: number): string;
+  shouldTruncateStreaming?(partialResponse: string): boolean;
+  detectPrematureResponse?(response: string): {
+    hasPremature: boolean;
+    type: "before" | "after" | null;
+  };
 }
 ```
 
 ### Current Adapters
 
 1. **BaseModelAdapter** - Default behavior for well-behaved models
-2. **GPTModelAdapter** - Aggressive prompting for GPT models
-3. **ClaudeModelAdapter** - Ready for Claude-specific customizations
+2. **GPTModelAdapter** - Aggressive prompting for GPT models that often skip tool calls
+3. **ClaudeModelAdapter** - Specialized handling for Claude thinking models (3.7 Sonnet, Claude 4)
 4. **GeminiModelAdapter** - Ready for Gemini-specific handling
 
 ### Adding a New Model
@@ -308,13 +314,80 @@ if (modelName.includes("newmodel")) {
 }
 ```
 
+### Claude Model Adapter Features
+
+The `ClaudeModelAdapter` includes specialized handling for Claude thinking models:
+
+#### Thinking Model Support
+
+- **Claude 3.7 Sonnet** and **Claude 4** - Automatic thinking mode configuration
+- **Think Block Preservation** - Maintains valuable reasoning context in responses
+- **Temperature Control** - Disables temperature for thinking models (as required by API)
+
+#### Claude 4 Hallucination Prevention
+
+Claude 4 has a tendency to write complete responses immediately after tool calls instead of waiting for results. The adapter addresses this with:
+
+```typescript
+// Enhanced prompting with explicit autonomous agent pattern
+enhanceSystemPrompt(basePrompt: string, toolDescriptions: string): string {
+  if (this.isClaudeSonnet4()) {
+    // Add specific instructions for Claude 4:
+    // - Brief sentence + tool calls + STOP pattern
+    // - Explicit warnings about premature responses
+    // - Clear autonomous agent iteration guidance
+  }
+}
+
+// Detection of premature responses
+detectPrematureResponse(response: string): {
+  hasPremature: boolean;
+  type: "before" | "after" | null;
+} {
+  // Allows brief sentences before tool calls (up to 2 sentences, 200 chars)
+  // Detects substantial content after tool calls (forbidden)
+  // Uses threshold-based detection for generalizability
+}
+
+// Response sanitization
+sanitizeResponse(response: string, iteration: number): string {
+  // Preserves ALL think blocks
+  // Removes substantial non-thinking content after tool calls
+  // Only applies to first iteration when hallucination occurs
+}
+
+// Streaming truncation
+shouldTruncateStreaming(partialResponse: string): boolean {
+  // Prevents streaming of hallucinated content to users
+  // Truncates at last complete tool call when threshold exceeded
+}
+```
+
+#### Flow Improvement
+
+The adapter creates a better conversational flow by allowing brief explanatory sentences before tool calls:
+
+```
+[Think block]
+I'll search your vault and web for piano practice information.
+🔍 Calling vault search...
+[Think block]
+Let me gather more specific information about practice routines.
+🌐 Calling web search...
+[Think block]
+[final answer]
+```
+
 ### Benefits
 
 1. **Separation of Concerns** - Model quirks isolated from core logic
 2. **Maintainability** - Easy to find and update model-specific code
 3. **Extensibility** - Simple to add support for new models
 4. **Testing** - Model adapters can be unit tested independently
-5. **Clean Core** - Sequential thinking logic remains model-agnostic
+5. **Clean Core** - Autonomous agent logic remains model-agnostic
+6. **Hallucination Prevention** - Specialized handling for problematic models
+7. **Streaming Protection** - Prevents bad content from reaching users
+8. **Generalizable Solutions** - Uses threshold-based detection over regex patterns
 
 ## Future Considerations
 
@@ -326,5 +399,7 @@ if (modelName.includes("newmodel")) {
 6. **Tool Permissions** - User control over tool access
 7. **Alternative Parsing** - Model adapters could handle non-XML formats
 8. **Response Validation** - Adapters could validate model outputs
+9. **Model-Specific Optimizations** - Expand adapter capabilities for emerging models
+10. **Hallucination Detection** - More sophisticated premature response detection
 
 The autonomous agent approach represents a significant evolution from traditional tool calling, enabling more sophisticated AI reasoning and autonomous task completion.

@@ -1,3 +1,5 @@
+import { ModelAdapter } from "./modelAdapter";
+
 /**
  * ThinkBlockStreamer handles streaming content from various LLM providers
  * that support thinking/reasoning modes (like Claude and Deepseek).
@@ -5,8 +7,12 @@
 export class ThinkBlockStreamer {
   private hasOpenThinkBlock = false;
   private fullResponse = "";
+  private shouldTruncate = false;
 
-  constructor(private updateCurrentAiMessage: (message: string) => void) {}
+  constructor(
+    private updateCurrentAiMessage: (message: string) => void,
+    private modelAdapter?: ModelAdapter
+  ) {}
 
   private handleClaude37Chunk(content: any[]) {
     let textContent = "";
@@ -50,6 +56,11 @@ export class ThinkBlockStreamer {
   }
 
   processChunk(chunk: any) {
+    // If we've already decided to truncate, don't process more chunks
+    if (this.shouldTruncate) {
+      return;
+    }
+
     let handledThinking = false;
 
     // Handle Claude 3.7 array-based content
@@ -66,7 +77,34 @@ export class ThinkBlockStreamer {
       this.hasOpenThinkBlock = false;
     }
 
+    // Check if we should truncate streaming based on model adapter
+    if (this.modelAdapter?.shouldTruncateStreaming?.(this.fullResponse)) {
+      this.shouldTruncate = true;
+      // Find the last complete tool call to truncate cleanly
+      this.fullResponse = this.truncateToLastCompleteToolCall(this.fullResponse);
+    }
+
     this.updateCurrentAiMessage(this.fullResponse);
+  }
+
+  private truncateToLastCompleteToolCall(response: string): string {
+    // Find the last complete </use_tool> tag
+    const lastCompleteToolEnd = response.lastIndexOf("</use_tool>");
+
+    if (lastCompleteToolEnd === -1) {
+      // No complete tool calls found, return original response
+      return response;
+    }
+
+    // Truncate to after the last complete tool call
+    const truncated = response.substring(0, lastCompleteToolEnd + "</use_tool>".length);
+
+    // Use model adapter to sanitize if available
+    if (this.modelAdapter?.sanitizeResponse) {
+      return this.modelAdapter.sanitizeResponse(truncated, 1);
+    }
+
+    return truncated;
   }
 
   close() {

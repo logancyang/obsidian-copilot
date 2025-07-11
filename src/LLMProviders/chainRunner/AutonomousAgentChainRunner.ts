@@ -12,6 +12,7 @@ import {
 import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools";
 import { extractChatHistory, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
+import { messageRequiresTools, ModelAdapter, ModelAdapterFactory } from "./utils/modelAdapter";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import {
   deduplicateSources,
@@ -23,7 +24,6 @@ import {
   ToolExecutionResult,
 } from "./utils/toolExecution";
 import { parseXMLToolCalls, stripToolCallXML } from "./utils/xmlParsing";
-import { ModelAdapterFactory, messageRequiresTools } from "./utils/modelAdapter";
 
 export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private getAvailableTools(): any[] {
@@ -160,11 +160,12 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           conversationMessages,
           abortController,
           (message) => {
-            // Strip tool calls from streaming display and show cumulative conversation
+            // Show tool calls as indicators during streaming for clarity, preserve think blocks
             const cleanedMessage = stripToolCallXML(message);
             const currentDisplay = [...iterationHistory, cleanedMessage].join("\n\n");
             updateCurrentAiMessage(currentDisplay);
-          }
+          },
+          adapter
         );
 
         if (!response) break;
@@ -176,6 +177,19 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         logInfo(`=== Iteration ${iteration} Response Analysis ===`);
         logInfo(`Response length: ${response.length} characters`);
         logInfo(`Parsed tool calls: ${toolCalls.length}`);
+
+        // Use model adapter to detect and handle premature responses
+        const prematureResponseResult = adapter.detectPrematureResponse?.(response);
+        if (prematureResponseResult?.hasPremature && iteration === 1) {
+          if (prematureResponseResult.type === "before") {
+            logWarn("⚠️  Model provided premature response BEFORE tool calls!");
+            logWarn("Sanitizing response to keep only tool calls for first iteration");
+          } else if (prematureResponseResult.type === "after") {
+            logWarn("⚠️  Model provided hallucinated response AFTER tool calls!");
+            logWarn("Truncating response at last tool call for first iteration");
+          }
+        }
+
         if (toolCalls.length === 0) {
           logInfo("No XML tool calls found in response:");
           logInfo(response.substring(0, 500) + (response.length > 500 ? "..." : ""));
@@ -188,15 +202,25 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
         if (toolCalls.length === 0) {
           // No tool calls, this is the final response
-          // Strip any tool call XML from final response too
+          // Strip any tool call XML from final response but preserve think blocks
           const cleanedResponse = stripToolCallXML(response);
           fullAIResponse = [...iterationHistory, cleanedResponse].join("\n\n");
           break;
         }
 
-        // Store this iteration's response (AI reasoning) without tool call XML
-        const responseWithoutToolCalls = stripToolCallXML(response);
-        iterationHistory.push(responseWithoutToolCalls);
+        // Use model adapter to sanitize response if needed
+        let sanitizedResponse = response;
+        if (adapter.sanitizeResponse && prematureResponseResult?.hasPremature) {
+          sanitizedResponse = adapter.sanitizeResponse(response, iteration);
+        }
+
+        // Store this iteration's response (AI reasoning) with tool indicators and think blocks preserved
+        const responseForHistory: string = stripToolCallXML(sanitizedResponse);
+
+        // Only add to history if there's meaningful content
+        if (responseForHistory.trim()) {
+          iterationHistory.push(responseForHistory);
+        }
 
         // Execute tool calls and show progress
         const toolResults: ToolExecutionResult[] = [];
@@ -312,9 +336,10 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private async streamResponse(
     messages: any[],
     abortController: AbortController,
-    updateCurrentAiMessage: (message: string) => void
+    updateCurrentAiMessage: (message: string) => void,
+    adapter: ModelAdapter
   ): Promise<string> {
-    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage);
+    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage, adapter);
 
     const maxRetries = 2;
     let retryCount = 0;
