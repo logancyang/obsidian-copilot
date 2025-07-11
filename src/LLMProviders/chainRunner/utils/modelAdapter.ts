@@ -1,4 +1,5 @@
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { logInfo } from "@/logger";
 
 /**
  * Model-specific adaptations for autonomous agent
@@ -449,11 +450,71 @@ REMEMBER: One brief sentence before tools is perfect. Nothing after tool calls.`
 }
 
 /**
- * Gemini adapter
+ * Gemini adapter with aggressive tool calling prompts
  */
 class GeminiModelAdapter extends BaseModelAdapter {
-  // Gemini also works well with base implementation
-  // Ready for future customization if needed
+  enhanceSystemPrompt(basePrompt: string, toolDescriptions: string): string {
+    const baseSystemPrompt = super.enhanceSystemPrompt(basePrompt, toolDescriptions);
+
+    // Gemini needs very explicit instructions about tool usage
+    const geminiSpecificSection = `
+
+🚨 CRITICAL INSTRUCTIONS FOR GEMINI - AUTONOMOUS AGENT MODE 🚨
+
+You MUST use tools to complete tasks. DO NOT ask the user questions about how to search.
+
+When the user mentions "my notes" or "my vault", you MUST immediately use the localSearch tool.
+When the user asks to "search the web", you MUST immediately use the webSearch tool.
+
+❌ WRONG (what you just did):
+"Let's start by searching your notes. What kind of information should I look for?"
+
+✅ CORRECT (what you MUST do):
+<use_tool>
+<name>localSearch</name>
+<args>
+{
+  "query": "piano",
+  "salientTerms": ["piano", "practice", "notes", "learning"]
+}
+</args>
+</use_tool>
+
+GEMINI SPECIFIC RULES:
+1. When user mentions "my notes" about X → use localSearch with query "X"
+2. When user says "search the web" → use webSearch tool immediately
+3. DO NOT ask clarifying questions about search terms
+4. DO NOT wait for permission to use tools
+5. Use tools IMMEDIATELY based on the user's request
+
+PATTERN FOR MULTI-STEP REQUESTS:
+User: "based on my X notes, search the web for Y and create Z"
+Your response:
+<use_tool>
+<name>localSearch</name>
+<args>{"query": "X", "salientTerms": ["X", "related", "terms"]}</args>
+</use_tool>
+<use_tool>
+<name>webSearch</name>
+<args>{"query": "Y", "chatHistory": []}</args>
+</use_tool>
+
+Remember: The user has already told you what to do. Execute it NOW with the tools.`;
+
+    return baseSystemPrompt + geminiSpecificSection;
+  }
+
+  enhanceUserMessage(message: string, requiresTools: boolean): string {
+    if (requiresTools) {
+      // Add explicit reminder for Gemini
+      return `${message}\n\nREMINDER: Use the tools immediately. Do not ask questions. For "my notes", use localSearch. For "search the web", use webSearch.`;
+    }
+    return message;
+  }
+
+  needsSpecialHandling(): boolean {
+    return true;
+  }
 }
 
 /**
@@ -463,27 +524,34 @@ export class ModelAdapterFactory {
   static createAdapter(model: BaseChatModel): ModelAdapter {
     const modelName = ((model as any).modelName || (model as any).model || "").toLowerCase();
 
+    logInfo(`Creating model adapter for: ${modelName}`);
+
     // GPT models need special handling
     if (modelName.includes("gpt")) {
+      logInfo("Using GPTModelAdapter");
       return new GPTModelAdapter(modelName);
     }
 
     // Claude models
     if (modelName.includes("claude")) {
+      logInfo("Using ClaudeModelAdapter");
       return new ClaudeModelAdapter(modelName);
     }
 
-    // Gemini models
-    if (modelName.includes("gemini")) {
+    // Gemini models (check for both "gemini" and "google" prefixes)
+    if (modelName.includes("gemini") || modelName.includes("google/gemini")) {
+      logInfo("Using GeminiModelAdapter");
       return new GeminiModelAdapter(modelName);
     }
 
     // Copilot Plus models
     if (modelName.includes("copilot-plus")) {
+      logInfo("Using BaseModelAdapter for Copilot Plus");
       return new BaseModelAdapter(modelName);
     }
 
     // Default adapter for unknown models
+    logInfo("Using BaseModelAdapter (default)");
     return new BaseModelAdapter(modelName);
   }
 }
