@@ -19,16 +19,16 @@ export function PlusSettings() {
   }, [settings.plusLicenseKey]);
 
   return (
-    <section className="flex flex-col gap-4 bg-secondary p-4 rounded-lg">
-      <div className="text-xl font-bold flex items-center gap-2 justify-between">
+    <section className="tw-flex tw-flex-col tw-gap-4 tw-rounded-lg tw-bg-secondary tw-p-4">
+      <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-text-xl tw-font-bold">
         <span>Copilot Plus (beta)</span>
         {isPlusUser && (
-          <Badge variant="outline" className="text-success">
+          <Badge variant="outline" className="tw-text-success">
             Active
           </Badge>
         )}
       </div>
-      <div className="text-sm text-muted flex flex-col gap-2">
+      <div className="tw-flex tw-flex-col tw-gap-2 tw-text-sm tw-text-muted">
         <div>
           Copilot Plus takes your Obsidian experience to the next level with cutting-edge AI
           capabilities. This premium tier unlocks advanced features, including chat context, PDF and
@@ -39,9 +39,9 @@ export function PlusSettings() {
           rolling out regularly. Join now to secure the lowest price and get early access!
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="tw-flex tw-items-center tw-gap-2">
         <PasswordInput
-          className="w-full"
+          className="tw-w-full"
           placeholder="Enter your license key"
           value={localLicenseKey}
           onChange={(value) => {
@@ -62,15 +62,15 @@ export function PlusSettings() {
               new CopilotPlusWelcomeModal(app).open();
             }
           }}
-          className="min-w-20"
+          className="tw-min-w-20"
         >
-          {isChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply"}
+          {isChecking ? <Loader2 className="tw-size-4 tw-animate-spin" /> : "Apply"}
         </Button>
         <Button variant="secondary" onClick={() => navigateToPlusPage(PLUS_UTM_MEDIUMS.SETTINGS)}>
-          Join Now <ExternalLink className="size-4" />
+          Join Now <ExternalLink className="tw-size-4" />
         </Button>
       </div>
-      <div className="text-error">{error}</div>
+      <div className="tw-text-error">{error}</div>
     </section>
   );
 }

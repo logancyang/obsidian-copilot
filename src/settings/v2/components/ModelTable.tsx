@@ -2,6 +2,7 @@ import { CustomModel } from "@/aiParams";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ModelCapabilityIcons } from "@/components/ui/model-display";
 import {
   Table,
   TableBody,
@@ -10,30 +11,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { MODEL_CAPABILITIES, ModelCapability } from "@/constants";
 import { cn } from "@/lib/utils";
 import { getModelKeyFromModel } from "@/settings/model";
 import { getProviderLabel } from "@/utils";
 import {
-  Pencil,
-  Plus,
-  Trash2,
-  Lightbulb,
-  Eye,
-  Globe,
-  ChevronDown,
-  ChevronRight,
-  LucideProps,
-  GripVertical,
-} from "lucide-react";
-import React, { ForwardRefExoticComponent, RefAttributes } from "react";
-import {
-  DndContext,
   closestCenter,
+  DndContext,
+  DragEndEvent,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
-  DragEndEvent,
 } from "@dnd-kit/core";
 import {
   arrayMove,
@@ -43,9 +33,30 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ModelCapabilityIcons } from "@/components/ui/model-display";
-import { MODEL_CAPABILITIES, ModelCapability } from "@/constants";
+import {
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Eye,
+  Globe,
+  GripVertical,
+  Lightbulb,
+  LucideProps,
+  MoreVertical,
+  Pencil,
+  PencilLine,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
+import React, { ForwardRefExoticComponent, RefAttributes } from "react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useContainerContext } from "@/settings/v2/components/ContainerContext";
 
 const CAPABILITY_ICONS: Record<
   ModelCapability,
@@ -57,17 +68,17 @@ const CAPABILITY_ICONS: Record<
 > = {
   [ModelCapability.REASONING]: {
     icon: Lightbulb,
-    color: "text-model-capabilities-blue",
+    color: "tw-text-model-capabilities-blue",
     tooltip: MODEL_CAPABILITIES.reasoning,
   },
   [ModelCapability.VISION]: {
     icon: Eye,
-    color: "text-model-capabilities-green",
+    color: "tw-text-model-capabilities-green",
     tooltip: MODEL_CAPABILITIES.vision,
   },
   [ModelCapability.WEB_SEARCH]: {
     icon: Globe,
-    color: "text-model-capabilities-blue",
+    color: "tw-text-model-capabilities-blue",
     tooltip: MODEL_CAPABILITIES.websearch,
   },
 } as const;
@@ -81,10 +92,10 @@ const CAPABILITY_ORDER = [
 const renderCapabilities = (model: CustomModel) => {
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="grid grid-cols-3 gap-1 w-16 mx-auto">
+      <div className="tw-mx-auto tw-grid tw-w-16 tw-grid-cols-3 tw-gap-1">
         {CAPABILITY_ORDER.map((capability) => {
           const config = CAPABILITY_ICONS[capability];
-          if (!config) return <div key={capability} className="w-4" />;
+          if (!config) return <div key={capability} className="tw-w-4" />;
 
           const Icon = config.icon;
           const hasCapability = model.capabilities?.includes(capability);
@@ -92,15 +103,15 @@ const renderCapabilities = (model: CustomModel) => {
           return hasCapability ? (
             <Tooltip key={capability}>
               <TooltipTrigger asChild>
-                <div className="flex items-center justify-center">
-                  <Icon className={`h-4 w-4 ${config.color}`} />
+                <div className="tw-flex tw-items-center tw-justify-center">
+                  <Icon className={cn("tw-size-4", config.color)} />
                 </div>
               </TooltipTrigger>
               <TooltipContent side="bottom">{config.tooltip}</TooltipContent>
             </Tooltip>
           ) : (
-            <div key={capability} className="flex items-center justify-center">
-              <div className="w-4 h-4" />
+            <div key={capability} className="tw-flex tw-items-center tw-justify-center">
+              <div className="tw-size-4" />
             </div>
           );
         })}
@@ -109,26 +120,25 @@ const renderCapabilities = (model: CustomModel) => {
   );
 };
 
-interface ModelTableProps {
-  models: CustomModel[];
-  onEdit?: (model: CustomModel) => void;
-  onDelete: (modelKey: string) => void;
-  onAdd: () => void;
-  onUpdateModel: (model: CustomModel) => void;
-  onReorderModels?: (newModels: CustomModel[]) => void;
-  title: string;
-}
-
 interface ModelCardProps {
   model: CustomModel;
-  onEdit?: () => void;
-  onDelete?: () => void;
+  onEdit?: (model: CustomModel) => void;
+  onCopy?: (model: CustomModel) => void;
+  onDelete: (modelKey: string) => void;
   onUpdateModel: (model: CustomModel) => void;
   id: string;
 }
 
-const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdateModel, id }) => {
+const ModelCard: React.FC<ModelCardProps> = ({
+  model,
+  onEdit,
+  onCopy,
+  onDelete,
+  onUpdateModel,
+  id,
+}) => {
   const [isExpanded, setIsExpanded] = React.useState(false);
+  const container = useContainerContext();
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
@@ -145,51 +155,50 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
       ref={setNodeRef}
       style={style}
       className={cn(
-        "mb-2",
+        "tw-mb-2",
         isDragging && [
-          "opacity-90",
-          "shadow-lg",
-          "border-2",
-          "border-accent/50",
-          "relative",
-          "z-[9999]",
-          "bg-background",
-          "rounded-lg",
-          "transform-gpu",
+          "tw-opacity-90",
+          "tw-shadow-lg",
+          "tw-border-accent/50",
+          "tw-relative",
+          "tw-z-[9999]",
+          "tw-bg-primary",
+          "tw-rounded-lg",
+          "tw-transform-gpu",
         ],
-        !model.core && "touch-none"
+        !model.core && "tw-touch-none"
       )}
     >
-      <CardHeader className="p-3">
-        <div className="flex items-center justify-between">
+      <CardHeader className="tw-p-3">
+        <div className="tw-flex tw-items-center tw-justify-between">
           {!model.core && (
             <div
-              className="mr-2 touch-none cursor-grab active:cursor-grabbing"
+              className="tw-mr-2 tw-cursor-grab tw-touch-none active:tw-cursor-grabbing"
               {...attributes}
               {...listeners}
             >
-              <GripVertical className="h-4 w-4 text-muted-foreground" />
+              <GripVertical className="tw-size-4" />
             </div>
           )}
 
-          <div className="flex-1 cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 flex items-center justify-center">
+          <div className="tw-flex-1 tw-cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
+            <div className="tw-flex tw-items-center tw-gap-2">
+              <div className="tw-flex tw-size-3 tw-items-center tw-justify-center">
                 {isExpanded ? (
-                  <ChevronDown className="h-3 w-3 stroke-[7]" />
+                  <ChevronDown className="tw-size-3 tw-stroke-[7]" />
                 ) : (
-                  <ChevronRight className="h-3 w-3 stroke-[7]" />
+                  <ChevronRight className="tw-size-3 tw-stroke-[7]" />
                 )}
               </div>
               <div>
-                <div className="flex items-center gap-1">
-                  <span className="font-medium">{model.displayName || model.name}</span>
+                <div className="tw-flex tw-items-center tw-gap-1">
+                  <span className="tw-font-medium">{model.displayName || model.name}</span>
                   {model.capabilities && model.capabilities.length > 0 && (
                     <ModelCapabilityIcons capabilities={model.capabilities} iconSize={14} />
                   )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted bg-secondary">
+                <div className="tw-flex tw-items-center tw-gap-2">
+                  <span className="tw-bg-secondary tw-text-sm tw-text-muted">
                     {getProviderLabel(model.provider, model)}
                   </span>
                 </div>
@@ -197,45 +206,78 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="tw-flex tw-items-center tw-gap-2">
             {onEdit && (
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onEdit();
+                  onEdit(model);
                 }}
               >
-                <Pencil className="h-4 w-4" />
+                <Pencil className="tw-size-4" />
               </Button>
             )}
-            {onDelete && !model.core && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete();
-                }}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <MoreVertical className="tw-size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" container={container}>
+                {onEdit && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(model);
+                    }}
+                  >
+                    <PencilLine className="tw-mr-2 tw-size-4" />
+                    Edit
+                  </DropdownMenuItem>
+                )}
+
+                {onCopy && !model.core && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCopy(model);
+                    }}
+                  >
+                    <Copy className="tw-mr-2 tw-size-4" />
+                    Copy
+                  </DropdownMenuItem>
+                )}
+
+                {!model.core && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(getModelKeyFromModel(model));
+                    }}
+                    className="tw-text-error"
+                  >
+                    <Trash2 className="tw-mr-2 tw-size-4" />
+                    Delete
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </CardHeader>
       <div
         className={cn(
-          "transition-all duration-300 ease-in-out",
-          isExpanded ? "max-h-20 opacity-100" : "max-h-0 opacity-0 overflow-hidden"
+          "tw-transition-all tw-duration-300 tw-ease-in-out",
+          isExpanded ? "tw-max-h-20 tw-opacity-100" : "tw-max-h-0 tw-overflow-hidden tw-opacity-0"
         )}
       >
-        <CardContent className="p-3 pt-0">
-          <div className="flex justify-around">
+        <CardContent className="tw-p-3 tw-pt-0">
+          <div className="tw-flex tw-justify-around">
             {!model.isEmbeddingModel && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm">Enabled</span>
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <span className="tw-text-sm">Enabled</span>
                 <Checkbox
                   checked={model.enabled}
                   onCheckedChange={(checked: boolean) =>
@@ -244,8 +286,8 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
                 />
               </div>
             )}
-            <div className="flex items-center gap-2">
-              <span className="text-sm">CORS</span>
+            <div className="tw-flex tw-items-center tw-gap-2">
+              <span className="tw-text-sm">CORS</span>
               <Checkbox
                 checked={model.enableCors}
                 onCheckedChange={(checked: boolean) =>
@@ -260,89 +302,117 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, onEdit, onDelete, onUpdate
   );
 };
 
-const SortableTableRow: React.FC<{
+const DesktopSortableTableRow: React.FC<{
   model: CustomModel;
   onEdit?: (model: CustomModel) => void;
+  onCopy?: (model: CustomModel) => void;
   onDelete: (modelKey: string) => void;
   onUpdateModel: (model: CustomModel) => void;
   isEmbeddingModel: boolean;
-}> = ({ model, onEdit, onDelete, onUpdateModel, isEmbeddingModel }) => {
+}> = ({ model, onEdit, onCopy, onDelete, onUpdateModel, isEmbeddingModel }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: getModelKeyFromModel(model),
     disabled: model.core,
   });
+  const container = useContainerContext();
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   };
 
+  const showDropdownMenu = onEdit || !model.core || (onCopy && !model.core);
+
   return (
     <TableRow
       ref={setNodeRef}
       style={style}
       className={cn(
-        "hover:bg-interactive-accent/10 transition-colors duration-200",
+        "tw-transition-colors tw-duration-200 hover:tw-bg-interactive-accent/10",
         isDragging &&
-          "shadow-lg bg-background/90 backdrop-blur-sm relative z-[100] cursor-grabbing border-2 border-accent/50",
-        !isDragging && "z-auto"
+          "tw-relative tw-z-[100] tw-cursor-grabbing tw-shadow-lg tw-backdrop-blur-sm tw-border-accent/50 tw-bg-primary/90"
       )}
     >
-      <TableCell className="w-6 px-2">
+      <TableCell className="tw-w-6 tw-px-2">
         {!model.core && (
           <Button
             variant="ghost"
             size="icon"
-            className="cursor-grab touch-none hover:cursor-grab active:cursor-grabbing p-0 h-6 w-6"
+            className="tw-size-6 tw-cursor-grab tw-touch-none tw-p-0 hover:tw-cursor-grab active:tw-cursor-grabbing"
             {...attributes}
             {...listeners}
           >
-            <GripVertical className="h-4 w-4 text-muted-foreground hover:text-foreground transition-colors" />
+            <GripVertical className="tw-size-4 tw-transition-colors" />
           </Button>
         )}
       </TableCell>
-      <TableCell className="pl-0">{model.displayName || model.name}</TableCell>
+      <TableCell className="tw-pl-0">{model.displayName || model.name}</TableCell>
       <TableCell>{getProviderLabel(model.provider, model)}</TableCell>
-      <TableCell className="text-center flex justify-center">{renderCapabilities(model)}</TableCell>
+      <TableCell>{renderCapabilities(model)}</TableCell>
       {!isEmbeddingModel && (
-        <TableCell className="text-center">
+        <TableCell className="tw-text-center">
           <Checkbox
             id={`${getModelKeyFromModel(model)}-enabled`}
             checked={model.enabled}
             onCheckedChange={(checked: boolean) => onUpdateModel({ ...model, enabled: checked })}
-            className="mx-auto"
+            className="tw-mx-auto"
           />
         </TableCell>
       )}
-      <TableCell className="text-center">
+      <TableCell className="tw-text-center">
         <Checkbox
           id={`${getModelKeyFromModel(model)}-enableCors`}
           checked={model.enableCors}
           onCheckedChange={(checked: boolean) => onUpdateModel({ ...model, enableCors: checked })}
-          className="mx-auto"
+          className="tw-mx-auto"
         />
       </TableCell>
-      <TableCell className="text-center">
-        <div className="flex justify-center gap-2">
+      <TableCell className="tw-text-center">
+        <div className="tw-flex tw-justify-center tw-gap-2">
           {onEdit && (
             <Button
               variant="ghost"
               size="icon"
               onClick={() => onEdit(model)}
-              className="shadow-sm hover:shadow-md transition-shadow"
+              className="tw-shadow-sm tw-transition-shadow hover:tw-shadow-md"
             >
-              <Pencil className="h-4 w-4" />
+              <Pencil className="tw-size-4" />
             </Button>
           )}
-          {!model.core && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => onDelete(getModelKeyFromModel(model))}
-              className="shadow-sm hover:shadow-md transition-shadow"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+
+          {showDropdownMenu && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <MoreVertical className="tw-size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" container={container}>
+                {onEdit && (
+                  <DropdownMenuItem onClick={() => onEdit(model)}>
+                    <PencilLine className="tw-mr-2 tw-size-4" />
+                    Edit
+                  </DropdownMenuItem>
+                )}
+
+                {onCopy && !model.core && (
+                  <DropdownMenuItem onClick={() => onCopy(model)}>
+                    <Copy className="tw-mr-2 tw-size-4" />
+                    Copy
+                  </DropdownMenuItem>
+                )}
+
+                {!model.core && (
+                  <DropdownMenuItem
+                    onClick={() => onDelete(getModelKeyFromModel(model))}
+                    className="tw-text-error"
+                  >
+                    <Trash2 className="tw-mr-2 tw-size-4" />
+                    Delete
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       </TableCell>
@@ -350,13 +420,27 @@ const SortableTableRow: React.FC<{
   );
 };
 
+interface ModelTableProps {
+  models: CustomModel[];
+  onEdit?: (model: CustomModel) => void;
+  onCopy?: (model: CustomModel) => void;
+  onDelete: (modelKey: string) => void;
+  onAdd: () => void;
+  onUpdateModel: (model: CustomModel) => void;
+  onReorderModels?: (newModels: CustomModel[]) => void;
+  onRefresh?: () => void;
+  title: string;
+}
+
 export const ModelTable: React.FC<ModelTableProps> = ({
   models,
   onEdit,
+  onCopy,
   onDelete,
   onAdd,
   onUpdateModel,
   onReorderModels,
+  onRefresh,
   title,
 }) => {
   const isEmbeddingModel = !!(models.length > 0 && models[0].isEmbeddingModel);
@@ -439,7 +523,7 @@ export const ModelTable: React.FC<ModelTableProps> = ({
 
   // Mobile view rendering
   const renderMobileView = () => (
-    <div className="copilot-model-table-mobile relative">
+    <div className="tw-relative md:tw-hidden">
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -450,14 +534,15 @@ export const ModelTable: React.FC<ModelTableProps> = ({
           items={models.map((model) => getModelKeyFromModel(model))}
           strategy={verticalListSortingStrategy}
         >
-          <div className="space-y-2 relative">
+          <div className="tw-relative tw-space-y-2">
             {models.map((model) => (
               <ModelCard
                 key={getModelKeyFromModel(model)}
                 id={getModelKeyFromModel(model)}
                 model={model}
-                onEdit={onEdit ? () => onEdit(model) : undefined}
-                onDelete={() => onDelete(getModelKeyFromModel(model))}
+                onEdit={onEdit}
+                onCopy={onCopy}
+                onDelete={onDelete}
                 onUpdateModel={onUpdateModel}
               />
             ))}
@@ -468,38 +553,39 @@ export const ModelTable: React.FC<ModelTableProps> = ({
   );
 
   return (
-    <div className="mb-4">
+    <div className="tw-mb-4">
       {/* Desktop view */}
-      <div className="copilot-model-table-desktop">
+      <div className="tw-hidden md:tw-block">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragEnd={handleDragEnd}
           modifiers={[createDragModifier(false)]}
         >
-          <div className="relative overflow-hidden">
+          <div className="tw-relative tw-overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-6 px-2"></TableHead>
-                  <TableHead className="pl-0">Model</TableHead>
+                  <TableHead className="tw-w-6 tw-px-2"></TableHead>
+                  <TableHead className="tw-pl-0">Model</TableHead>
                   <TableHead>Provider</TableHead>
-                  <TableHead className="text-center">Capabilities</TableHead>
-                  {!isEmbeddingModel && <TableHead className="text-center">Enable</TableHead>}
-                  <TableHead className="text-center">CORS</TableHead>
-                  <TableHead className="w-[100px] text-center">Actions</TableHead>
+                  <TableHead className="tw-text-center">Capabilities</TableHead>
+                  {!isEmbeddingModel && <TableHead className="tw-text-center">Enable</TableHead>}
+                  <TableHead className="tw-text-center">CORS</TableHead>
+                  <TableHead className="tw-w-[100px] tw-text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody className="relative">
+              <TableBody className="tw-relative">
                 <SortableContext
                   items={models.map((model) => getModelKeyFromModel(model))}
                   strategy={verticalListSortingStrategy}
                 >
                   {models.map((model) => (
-                    <SortableTableRow
+                    <DesktopSortableTableRow
                       key={getModelKeyFromModel(model)}
                       model={model}
-                      onEdit={onEdit ? () => onEdit(model) : undefined}
+                      onEdit={onEdit}
+                      onCopy={onCopy}
                       onDelete={onDelete}
                       onUpdateModel={onUpdateModel}
                       isEmbeddingModel={isEmbeddingModel}
@@ -515,9 +601,19 @@ export const ModelTable: React.FC<ModelTableProps> = ({
       {/* Mobile view */}
       {renderMobileView()}
 
-      <div className="mt-4 flex justify-end">
-        <Button onClick={onAdd} variant="secondary" className="flex items-center gap-2">
-          <Plus className="h-4 w-4" />
+      <div className="tw-mt-4 tw-flex tw-justify-end tw-gap-2">
+        {onRefresh && (
+          <Button
+            onClick={onRefresh}
+            variant="secondary"
+            className="tw-flex tw-items-center tw-gap-2"
+          >
+            <RefreshCw className="tw-size-4" />
+            Refresh Built-in Models
+          </Button>
+        )}
+        <Button onClick={onAdd} variant="secondary" className="tw-flex tw-items-center tw-gap-2">
+          <Plus className="tw-size-4" />
           Add Custom Model
         </Button>
       </div>

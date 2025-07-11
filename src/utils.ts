@@ -210,6 +210,8 @@ export function getNotesFromTags(vault: Vault, tags: string[], noteFiles?: TFile
   return filesWithTag;
 }
 
+// TODO: Chain type conversion still needed for chain runner selection
+// This function is still used but the underlying chain infrastructure is deprecated
 export const stringToChainType = (chain: string): ChainType => {
   switch (chain) {
     case "llm_chain":
@@ -223,6 +225,8 @@ export const stringToChainType = (chain: string): ChainType => {
   }
 };
 
+// TODO: These chain validation functions are deprecated
+// Remove after confirming chainManager no longer uses them
 export const isLLMChain = (chain: RunnableSequence): chain is RunnableSequence => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (chain as any).last.bound.modelName || (chain as any).last.bound.model;
@@ -322,6 +326,16 @@ export function getFileName(file: TFile): string {
   return file.basename;
 }
 
+/**
+ * Check if a file is allowed for context (markdown, PDF, or canvas files)
+ * @param file The file to check
+ * @returns true if the file is allowed, false otherwise
+ */
+export function isAllowedFileForContext(file: TFile | null): boolean {
+  if (!file) return false;
+  return file.extension === "md" || file.extension === "pdf" || file.extension === "canvas";
+}
+
 export async function getAllNotesContent(vault: Vault): Promise<string> {
   let allContent = "";
 
@@ -399,14 +413,23 @@ export function getSendChatContextNotesPrompt(
   );
 }
 
-export function extractChatHistory(memoryVariables: MemoryVariables): [string, string][] {
-  const chatHistory: [string, string][] = [];
+export interface ChatHistoryEntry {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export function extractChatHistory(memoryVariables: MemoryVariables): ChatHistoryEntry[] {
+  const chatHistory: ChatHistoryEntry[] = [];
   const { history } = memoryVariables;
 
   for (let i = 0; i < history.length; i += 2) {
     const userMessage = history[i]?.content || "";
     const aiMessage = history[i + 1]?.content || "";
-    chatHistory.push([userMessage, aiMessage]);
+
+    chatHistory.push(
+      { role: "user", content: userMessage },
+      { role: "assistant", content: aiMessage }
+    );
   }
 
   return chatHistory;
@@ -567,6 +590,11 @@ export function extractYoutubeUrl(text: string): string | null {
   return match ? match[0] : null;
 }
 
+export function extractAllYoutubeUrls(text: string): string[] {
+  const matches = text.matchAll(new RegExp(YOUTUBE_URL_REGEX, "g"));
+  return Array.from(matches, (match) => match[0]);
+}
+
 /** Proxy function to use in place of fetch() to bypass CORS restrictions.
  * It currently doesn't support streaming until this is implemented
  * https://forum.obsidian.md/t/support-streaming-the-request-and-requesturl-response-body/87381 */
@@ -576,12 +604,6 @@ export async function safeFetch(url: string, options: RequestInit = {}): Promise
 
   // Remove content-length if it exists
   delete (headers as Record<string, string>)["content-length"];
-
-  if (typeof options.body === "string") {
-    const newBody = JSON.parse(options.body ?? {});
-    delete newBody["frequency_penalty"];
-    options.body = JSON.stringify(newBody);
-  }
 
   logInfo("==== safeFetch method request ====");
 
@@ -756,10 +778,14 @@ export async function insertIntoEditor(message: string, replace: boolean = false
   const editor = leaf.view.editor;
   const cursorFrom = editor.getCursor("from");
   const cursorTo = editor.getCursor("to");
+
+  // Remove think tags before inserting
+  const cleanedMessage = removeThinkTags(message);
+
   if (replace) {
-    editor.replaceRange(message, cursorFrom, cursorTo);
+    editor.replaceRange(cleanedMessage, cursorFrom, cursorTo);
   } else {
-    editor.replaceRange(message, cursorTo);
+    editor.replaceRange(cleanedMessage, cursorTo);
   }
   new Notice("Message inserted into the active note.");
 }
@@ -872,13 +898,75 @@ export function checkModelApiKey(
 }
 
 /**
+ * Extracts text content from a message chunk that could be either a string
+ * or an array of content objects (Claude 3.7 format)
+ */
+export function extractTextFromChunk(content: any): string {
+  if (typeof content === "string") {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .filter((item) => item.type === "text")
+      .map((item) => item.text)
+      .join("");
+  }
+  // For any other type, try to convert to string or return empty
+  return String(content || "");
+}
+
+/**
  * Removes any <think> tags and their content from the text.
  * This is used to clean model outputs before using them for RAG.
- * @param text - The text to remove think tags from
+ * Handles both string content and array-based content (Claude 3.7 format)
+ * @param text - The text or content array to remove think tags from
  * @returns The text with think tags removed
  */
-export function removeThinkTags(text: string): string {
-  return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+export function removeThinkTags(text: any): string {
+  // First convert any content format to plain text
+  const plainText = extractTextFromChunk(text);
+  // Remove complete think tags and their content
+  let cleanedText = plainText.replace(/<think>[\s\S]*?<\/think>/g, "");
+  // Remove any remaining unclosed think tags (for streaming scenarios)
+  cleanedText = cleanedText.replace(/<think>[\s\S]*$/g, "");
+  return cleanedText.trim();
+}
+
+export function randomUUID() {
+  return crypto.randomUUID();
+}
+
+/**
+ * Executes a function with token counting warnings suppressed
+ * This can be used anywhere in the codebase where token counting warnings should be suppressed
+ * @param fn The function to execute without token counting warnings
+ * @returns The result of the function
+ */
+export async function withSuppressedTokenWarnings<T>(fn: () => Promise<T>): Promise<T> {
+  // Store original console.warn
+  const originalWarn = console.warn;
+
+  try {
+    // Replace with filtered version
+    console.warn = function (...args) {
+      // Ignore token counting warnings
+      if (
+        args[0]?.includes &&
+        (args[0].includes("Failed to calculate number of tokens") ||
+          args[0].includes("Unknown model"))
+      ) {
+        return;
+      }
+      // Pass through other warnings
+      return originalWarn.apply(console, args);
+    };
+
+    // Execute the provided function
+    return await fn();
+  } finally {
+    // Always restore original console.warn, even if an error occurs
+    console.warn = originalWarn;
+  }
 }
 /* Utility functions for Obsidian Transcript */
 import { App, FileSystemAdapter, getBlobArrayBuffer } from "obsidian";

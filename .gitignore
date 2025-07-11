@@ -21,3 +21,9 @@ data.json
 
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store
+
+# Test Environment
+.env.test
+
+# Claude configuration
+.claude/settings.local.json

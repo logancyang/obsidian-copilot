@@ -1,167 +1,307 @@
-# 🔍 Copilot for Obsidian
+<h1 align="center">Copilot for Obsidian</h1>
 
-![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/logancyang/obsidian-copilot?style=for-the-badge&sort=semver) ![Obsidian Downloads](https://img.shields.io/badge/dynamic/json?logo=obsidian&color=%23483699&label=downloads&query=%24%5B%22copilot%22%5D.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json&style=for-the-badge)
+<h2 align="center">
+The Ultimate AI Assistant for Your Second Brain
+</h2>
 
-Copilot for Obsidian is an **open-source** LLM interface right inside Obsidian. It has a minimalistic design and is straightforward to use.
+<p align="center">
+  <img src="https://img.shields.io/github/v/release/logancyang/obsidian-copilot?style=for-the-badge&sort=semver" alt="GitHub release (latest SemVer)">
+  <img src="https://img.shields.io/badge/dynamic/json?logo=obsidian&color=%23483699&label=downloads&query=%24%5B%22copilot%22%5D.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json&style=for-the-badge" alt="Obsidian Downloads">
+</p>
 
-- 💬 Chat UI in Obsidian with support for countless models, just BYO API key or use local models with LM Studio or Ollama.
-- 🛠️ Prompt AI with Copilot commands or your own custom prompts at the speed of thought.
-- 🧠 Talk to your entire vault for answers and insights.
-- 🚀 Turbocharge your Second Brain with powerful AI agents (Copilot Plus).
+<p align="center">
+  <a href="https://www.obsidiancopilot.com/en/docs">Documentation</a> |
+  <a href="https://www.youtube.com/@loganhallucinates">Youtube</a> |
+  <a href="https://github.com/logancyang/obsidian-copilot/issues/new?template=bug_report.md">Report Bug</a> |
+  <a href="https://github.com/logancyang/obsidian-copilot/issues/new?template=feature_request.md">Request Feature</a>
+</p>
 
-My goal is to make it the **ultimate AI assistant** that truly **understands** your personal knowledge base while being **privacy-focused**.
+<p align="center">
+  <a href="https://example.com](https://obsidian.md/blog/2024-goty-winners/">
+    <img src="./images/reward-banner.svg" alt="Reward Banner" width="400"/>
+  </a>
+</p>
 
-It has a **local** index that powers the question-answering. Your notes are always stored on your own device and nowhere else! More features are under construction. Stay tuned!
+Copilot for Obsidian is your best in‑vault AI assistant, designed to listen, act at the speed of thought, and keep you creating in flow—all within Obsidian’s integrated, tab‑free workspace.
 
-<img src="./images/ui.jpg" alt="UI">
+- **🔒 Your data is 100% yours**: Local storage, no ads, and full control of your API keys.
+- **🧠 Elevate your second brain**: Tap any OpenAI-compatible or local model to uncover insights, spark connections, and create powerful content.
+- **🌐 Instant multimedia understanding**: Drop in webpages, YouTube videos, images, PDFs, or real-time web search for quick insights and summaries.
+- **✍️ Create at the speed of thought**: Launch Prompt Palette or edit with AI in one click—your ideas, amplified effortlessly.
 
-If you enjoy Copilot for Obsidian, please consider [sponsoring this project](https://github.com/sponsors/logancyang), or donate by clicking the button below. It will help me keep this project going to build toward a privacy-focused AI experience. Thank you!
+<p align="center">
+  <em>Your AI assistant in Obsidian—powerful yet intuitive, keeping you in the creative flow.</em>
+</p>
+<p align="center">
+  <img src="./images/product-UI-screenshot.png" alt="Product UI screenshot" width="800"/>
+</p>
 
-<a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
+## Why People Love It ❤️
 
-SPECIAL THANKS TO OUR TOP SPONSORS:
-@mikelaaron, @pedramamini, @Arlorean, @dashinja, @azagore, @MTGMAD, @gpythomas, @emaynard, @scmarinelli, @borthwick, @adamhill, @gluecode, @rusi, @timgrote, @JiaruiYu-Consilium, @ddocta, @AMOz1, @chchwy, @pborenstein, @GitTom, @kazukgw, @mjluser1, @joesfer, @rwaal, @turnoutnow-harpreet, @dreznicek, @xrise-informatik, @jeremygentles, @ZhengRui, @bfoujols, @jsmith0475, @pagiaddlemon, @sebbyyyywebbyyy, @royschwartz2, @vikram11, @amiable-dev, @khalidhalim, @DrJsPBs, @chishaku, @Andrea18500, @shayonpal, @rhm2k, @snorcup, @JohnBub, @obstinatelark, @jonashaefele, @vishnu2kmohan
+- *"Copilot is the missing link that turns Obsidian into a true second brain. I use it to draft investment memos with text, code, and visuals—all in one place. It’s the first tool that truly unifies how I search, process, organize, and retrieve knowledge without ever leaving Obsidian. With AI-powered search, organization, and reasoning built into my notes, it unlocks insights I’d otherwise miss. My workflow is faster, deeper, and more connected than ever—I can’t imagine working without it."* - @jasonzhangb, Investor & Research Analyst
+- *"Since discovering Copilot, my writing process has been completely transformed. Conversing with my own articles and thoughts is the most refreshing experience I’ve had in decades.”* - Mat QV, Writer
+- *"Copilot has transformed our family—not just as a productivity assistant, but as a therapist. I introduced it to my non‑technical wife, Mania, who was stressed about our daughter’s upcoming exam; within an hour, she gained clarity on her mindset and next steps, finding calm and confidence."* - @screenfluent, A Loving Husband
 
-[Changelog](https://github.com/logancyang/obsidian-copilot/releases)
+## **Get Started in 5 Minutes**
 
-## 🚀 v2.8.0 Revamped Settings, Inline Edit Dialog, and Relevant Notes in Copilot Chat! 🚀
+### FREE Product Features
 
-As we are fast approaching the **official launch of Copilot Plus**, we've revamped the settings page to make it more user-friendly and intuitive. Please share your feedback on the new settings page! We've also implemented a brand new experience for easier inline editing of selected text using Copilot commands such as `simplify`, `translate`, `fix grammar`, etc. You can now select text and see a list of them in your right-click context menu. (Thanks to @Emt-lin and @zeroliu for the contribution!)
+**🔌 Install Copilot in Community Plugins in Obsidian**
 
-We've introduced **Relevant Notes in Copilot Chat** in the previous release. You can now see the collapsible **Relevant Notes** section at the top of the chat UI. It uses the same Copilot index you create for Vault QA. "Relevance" is determined by Copilot's own special algorithm based on hybrid search and Obsidian's note graph similarity, it is not just vector similarity. You can clearly see ranking factors such as the level of similarity and whether it has a direct link or backlink to the current note. You can also add any relevant note to chat with one click. The entire feature is developed by our great @zeroliu, one of our top contributors 💪. Enjoy!
+**🔑 Set Up Your AI Model (API Key)**
 
-<img src="./images/relevant-notes-in-copilot-chat.png" alt="Relevant Notes in Copilot Chat" width="700">
+- To start using Copilot AI features, you'll need access to an AI model of your choice.
 
-## 🤖 v2.7.0 Copilot Plus (alpha) demo video - AI Agent for Obsidian! 🚀
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=mzMbiamzOqM" target="_blank">
+    <img src="./images/AI-Model-Setup.png" alt="AI Model API Key" width="700" height="394">
+  </a><br>
+  <em>Click the image to watch the video on YouTube</em>
+</p>
 
-Copilot Plus is a brand new mode that brings powerful agentic capabilities to Obsidian. Think of it as Cursor inside Obsidian but optimized for PKM use cases instead of coding.
+**📖** **Chat Mode: Summarize Specific Notes**
 
-Check out the demo video below for the first sneak peak of what Copilot Plus can do. It is under active development so expect more features to come very soon!
+- 🧠 **Use When:** You want to reference specific notes or folders, generate content, or talk through ideas with Copilot like a knowledgeable thought partner.
 
-<a href="https://youtu.be/tZ2jm_UPc6c?si=KjwkHFFRAHwZqlW4" target="_blank"><img src="./images/thumbnail-copilot-plus.png" width="700" /></a>
+- 💭 **In `Chat` mode, ask Copilot:**
+  > _"Summarize [[Meeting Notes – March]] and create a follow-up task list based on notes in {projects}."_
 
-## 🛠️ Features
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=idit7nCqEs0" target="_blank">
+    <img src="./images/Chat-Mode.png" alt="Chat Mode" width="700" height="394">
+  </a><br>
+  <em>Click the image to watch the video on YouTube</em>
+</p>
 
-- Engage with numerous LLMs seamlessly within Obsidian via the Copilot Chat window.
-- Access OpenAI or Anthropic models without purchasing ChatGPT Plus or Claude Pro—simply use your own API key (stored locally) and pay as you go for the best value.
-- Choose from a variety of models, including OpenAI, Azure, Google, Anthropic, OpenRouter, Groq, Cohere, or **any third-party models with OpenAI-compatible APIs** via Custom Model.
-- Customize parameters like LLM temperature, max tokens, and conversation context to suit your needs (**be mindful of API costs**).
-- Utilize local models powered by LM Studio and Ollama.
-- Easily copy, edit, or insert any message to your note with a single click.
-- Save or load entire conversations to or from a note.
-- To mention a note in Copilot Chat, simply type `[[` and provide the note title.
-- Use simple commands to **simplify, emojify, summarize, translate, change tone, fix grammar, rewrite into a tweet/thread, count tokens**, and more.
-- Take advantage of powerful **User Custom Prompts**! You can _add, apply, edit, and delete_ your custom prompts, all stored locally in your Obsidian vault as markdown. Trigger any custom prompt with a simple `/` in the chat input!
-- **Interact with your entire vault** using "Vault QA" mode. Ask questions and receive **cited responses**!
-- All QA modes leverage retrieval augmentation with a **local index**, ensuring your data isn't sent to a cloud-based vector search service.
-- **Copilot Plus (beta)**: supercharge your second brain with a **powerful AI agent** right inside your Obsidian vault. [Learn more here](https://obsidiancopilot.com).
+**📖** **Vault QA Mode: Chat With Your Entire Vault**
 
-Chat and Vault QA modes are completely free to use. Copilot Plus is currently in beta, buy now to lock in the lowest price!
+- 🧠 **Use When:** You want to search your vault for patterns, ideas, or facts without knowing exactly where the information is stored.
 
-## Model Providers
+- 💭 **In `Vault QA` mode, ask Copilot:**
 
-**OpenAI**, **Anthropic**, **Azure OpenAI**, **Google Gemini**, **Cohere**, **OpenRouter**, **GROQ**, and any **3rd Party Models with OpenAI-Compatible API** are supported. You can easily add them via Custom Model in Copilot settings.
+  > _"What insights can I gather about the benefits of journaling from all of my notes?"_
 
-**LM Studio** and **Ollama** are supported for local models. Please check out the super simple setup guide [here](local_copilot.md). Don't forget to flex your creativity in custom prompts using local models!
+- 💡 **Tip:** Replace _the benefits of journaling_ with any topic mentioned in your notes to get more precise results.
 
-## 🤗 New to Copilot? Quick Guide for Beginners
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=hBLMWE8WRFU" target="_blank">
+    <img src="./images/Vault-Mode.png" alt="Vault Mode" width="700" height="394">
+  </a><br>
+  <em>Click the image to watch the video on YouTube</em>
+</p>
 
-The simplest way to get started is to get an OpenAI API key (with payment method set up with OpenAI) and set it in the Copilot settings. Then simply pick `gpt-4o` or `gpt-4o-mini` in the model dropdown to start chatting. Make sure to set your **default chat and embedding model** in the first tab of Copilot settings.
+**📖 Edit and Apply with One Click**
 
-For plus users, you can keep the embedding model as is `copilot-plus-small` (it's a smaller but better model than the OpenAI large, and it's covered by your subscription). For free users, you can set the embedding model to `text-embedding-3-small` as the starting point, and explore other embedding models once you get a sense of how this works.
+- 🧠 **Use When:** You want to quickly fix grammar, spelling or wording directly in your notes—without switching tabs or manually rewriting.
 
-Please check out the [documentation](https://obsidiancopilot.com/en/docs) for more details.
+- 💭 **Select the text** and **edit with one RIGHT click**
 
-Try going through all the Copilot commands in the command palette, and see what they do. You can also checkout my [youtube channel](https://youtube.com/@loganhallucinates?sub_confirmation=1) for previous demos.
+- 💡 **Tip:** Set up and customize your right-click menu with common actions you use often, like _"Summarize"_, _"Simplify Language"_, or _"Translate to Formal Tone"_—so you can apply them effortlessly while you write.
 
-#### 🔧 Adding Models
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=hSmRnmEVoec" target="_blank">
+    <img src="./images/One-Click-Commands.png" alt="One-Click Commands" width="700" height="394">
+  </a><br>
+  <em>Click the image to watch the video on YouTube</em>
+</p>
 
-Add model using the "Custom Model" form.
+**📖 Automate your workflow with the Copilot Prompt Palette**
 
-- When you add any model from the existing list of providers, there's no need to provide the URL.
-- When you add your own custom models, you can add them with the endpoint URL as long as they have OpenAI-compatible API.
+- 🧠 **Use When:** You want to speed up repetitive tasks like summarizing, rewriting, or translating without typing full prompts every time.
 
-You can also use your own system prompt, choose between different embedding providers for Vault QA and more.
+- 💭 Type / to use Prompt Palette
 
-#### 💬 User Custom Prompt: Create as Many Copilot Commands as You Like!
+- 💡 **Tip:** Create shortcuts for your most-used actions—like _"Translate to Spanish"_ or _"Draft a blog post outline"_—and trigger them instantly with typing / !
 
-You can add, apply, edit and delete your own custom Copilot commands, all persisted in your **local** Obsidian environment!
-Check out this demo video below!
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=9YzY2OJ54wM" target="_blank">
+    <img src="./images/Prompt-Palette.png" alt="Prompt Palette" width="700" height="394">
+  </a><br>
+  <em>Click the image to watch the video on YouTube</em>
+</p>
 
-<a href="https://www.youtube.com/watch?v=apuV1Jz6ObE" target="_blank"><img src="./images/thumbnail2.png" width="700" /></a>
+**📖 Stay in flow with the Relevant Notes**
 
-#### 🧠 Advanced Custom Prompt! Unleash your creativity and fully leverage the long context window!
+- 🧠 **Use When:** You're working on a note and want to pull in context or insights from related notes—without breaking your focus.
 
-<a href="https://youtu.be/VPNlXeCsH74?si=eYjJhO2cZtU7VrQz" target="_blank"><img src="./images/thumbnail-adv-prompt-tutorial.png" width="700" /></a>
+- 💭 Appears automatically when there's useful related content.
 
-This video shows how Advanced Custom Prompt works. This form of templating enables a lot more possibilities with long context window models. If you have your own creative cool use cases, don't hesitate to share them in the discussion or in the youtube comment section!
+- 💡 **Tip:** Use it to quickly reference past research, ideas, or decisions—no need to search or switch tabs.
 
-## ⚙️ Installation (recommended)
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=qapQD7jD3Uk" target="_blank">
+    <img src="./images/Relevant-Notes.png" alt="Relevant Notes" width="700" height="394">
+  </a><br>
+  <em>Click the image to watch the video on YouTube</em>
+</p>
 
-- Open Community Plugins settings page, click on the Browse button.
-- Search for "Copilot" in the search bar and find the plugin with this exact name.
-- Click on the Install button.
-- Once the installation is complete, enable the Copilot plugin by toggling on its switch in the Community Plugins settings page.
+### Level Up with Copilot Plus and Beyond
 
-Now you can see the chat icon in your leftside ribbon, clicking on it will open the chat panel on the right! Don't forget to provide your API keys in settings before using the plugin!
+Copilot Plus brings powerful AI agentic capabilities, context-aware actions and seamless tool integration—built to elevate your knowledge work in Obsidian.
 
-#### ⛓️ Manual Installation
+🆙 **Upgrade to Copilot Plus**
 
-- Go to the latest release
-- Download `main.js`, `manifest.json`, `styles.css` and put them under `.obsidian/plugins/obsidian-copilot/` in your vault
-- Open your Obsidian settings > Community plugins, and turn on `Copilot`.
+First, go to https://www.obsidiancopilot.com/en to subscribe to Copilot Plus. Then, set up Copilot Plus License Key in Obsidian.
 
-#### 📣 Again, please always be mindful of the API cost if you use expensive models with a long context!
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=pPfWKZnNYhA" target="_blank">
+    <img src="./images/Copilot-Plus-Setup.png" alt="Copilot Plus Setup" width="700" height="394">
+  </a><br>
+  <em>Click the image to watch the video on YouTube</em>
+</p>
 
-## 🤔 FAQ (please read before submitting an issue)
+❔Community is at the heart of everything we build. Join us on Discord for updates, priority support, and a voice in shaping the best AI products for your experience.
+
+<p align="center">
+  <img src="./images/discord-support.png" alt="Discord support screenshot" width="700"/>
+</p>
+
+**📖 Get Precision Insights From a Specific Time Window**
+
+- 🧠 **Use When:** You want to quickly review tasks, notes, or ideas from a specific time range without manually digging through files.
+
+- 💭 **In Chat mode, ask Copilot:**
+
+  > _"Give me a recap of everything I captured last week."_
+
+- 💡 **Tip:** Try variations like _"Summarize my highlights from August 11 through August 22"_ for even more insights.
+
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=sXP2sjvrqtI" target="_blank">
+    <img src="./images/Time-Based-Queries.png" alt="Time-Based Queries" width="700" height="394">
+  </a><br>
+  <em>Click the image to watch the video on YouTube</em>
+</p>
+
+**📖 One Prompt, Every Source—Instant Summaries from PDFs, Videos, and Web**
+
+- 🧠 **Use When:** You want to combine information from multiple formats—documents, videos, web pages, and images—into one concise, actionable summary.
+
+- 💭 **In PLUS mode, ask Copilot:**
+
+  > "Please write a short intro of Kiwi birds based on the following information I collected about this animal.
+
+  > @youtube Summarize [](https://www.youtube.com/watch?v=tZ2jm_UPc6c&t=417s)[https://www.youtube.com/watch?v=tZ2jm_UPc6c&t=417s](https://www.youtube.com/watch?v=ABTfc5wUT1U)
+  > in a short paragraph.
+
+  > @websearch where can I find Kiwi birds?
+
+  > Summarize https://www.doc.govt.nz/nature/native-animals/birds/birds-a-z/kiwi/ in 300 words.“
+
+- 🛠️ **Add PDFs and Images as Context to Enrich Your Learning**
+
+- 💡 _Tip: For large PDFs, reference specific sections to focus the AI's attention._
+
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=WXoOZmMSHVE" target="_blank">
+    <img src="./images/One-Prompt-Every-Source.png" alt="One Prompt, Every Source" width="700" height="394">
+  </a><br>
+  <em>Click the image to watch the video on YouTube</em>
+</p>
+
+
+# **💡 Need Help?**
+
+- Check the [documentation](https://www.obsidiancopilot.com/en/docs) for setup guides, how-tos, and advanced features.
+- Watch [Youtube](https://www.youtube.com/@loganhallucinates) for walkthroughs.
+- If you're experiencing a bug or have a feature idea, please follow the steps below to help us help you faster:
+  - 🐛 Bug Report Checklist
+    - ☑️Use the [bug report template](https://github.com/logancyang/obsidian-copilot/issues/new?template=bug_report.md) when reporting an issue
+    - ☑️Enable Debug Mode in Copilot Settings → Advanced for more detailed logs
+    - ☑️Open the dev console to collect error messages:
+      - Mac: Cmd + Option + I
+      - Windows: Ctrl + Shift + I
+    - ☑️Turn off all other plugins, keeping only Copilot enabled
+    - ☑️Attach relevant console logs to your report
+    - ☑️Submit your bug report [here](https://github.com/logancyang/obsidian-copilot/issues/new?template=bug_report.md)
+  - 💡 Feature Request Checklist
+    - ☑️Use the [feature request template](https://github.com/logancyang/obsidian-copilot/issues/new?template=feature_request.md) for requesting a new feature
+    - ☑️Clearly describe the feature, why it matters, and how it would help
+    - ☑️Submit your feature request [here](https://github.com/logancyang/obsidian-copilot/issues/new?template=feature_request.md)
+
+# **🙋‍♂️ FAQ**
 
 <details>
-  <summary>"You do not have access to this model"</summary>
+  <summary><strong>Why isn’t Vault search finding my notes?</strong></summary>
 
-- You need to **have access to the model APIs** to use them. Usually they require an API key and a payment method.
-- A common misunderstanding I see is that some think they have access to GPT-4 API when they get ChatGPT Plus subscription. It's not always true (depending on when you signed up). _You need to have access to GPT-4 API to use the model in this plugin_. Please check if you have payment available on your OpenAI account. Then check OpenAI playground if you can use that particular model https://platform.openai.com/playground?mode=chat. Again, API access and ChatGPT Plus are two different things! You can use the API without the ChatGPT Plus subscription.
-- Reference issue: https://github.com/logancyang/obsidian-copilot/issues/3#issuecomment-1544583676
+If you're using the Vault QA mode (or the tool <code>@vault</code> in Plus), try the following:
+
+- Ensure you have a working embedding model from your AI model's provider (e.g. OpenAI). Watch this video: [AI Model Setup (API Key)](https://www.youtube.com/watch?v=mzMbiamzOqM)
+- Ensure your Copilot indexing is up-to-date. Watch this video: [Vault Mode](https://www.youtube.com/watch?v=hBLMWE8WRFU)
+- If issues persist, run <strong>Force Re-Index</strong> or use <strong>List Indexed Files</strong> from the Command Palette to inspect what's included in the index.
+- ⚠️ <strong>Don’t switch embedding models after indexing</strong>—it can break the results.
 </details>
+
 <details>
-  <summary>It's not using my note as context</summary>
+  <summary><strong>Why is my AI model returning error code 429: ‘Insufficient Quota’?</strong></summary>
 
-- Please don't forget to switch to "**Vault QA**" in the Mode Selection dropdown in order to start the QA. Copilot does not have your note as context in "Chat" mode without an explicit `[[notetitle]]` in the message.
-<img src="./images/faq-mode-switch.png" alt="Settings" width="500">
+Most likely this is happening because you haven’t configured billing with your chosen model provider—or you’ve hit your monthly quota. For example, OpenAI typically caps individual accounts at $120/month. To resolve:
+
+- ▶️ Watch the “AI Model Setup” video: [AI Model Setup (API Key)](https://www.youtube.com/watch?v=mzMbiamzOqM)
+- 🔍 Verify your billing settings in your OpenAI dashboard
+- 💳 Add a payment method if one isn’t already on file
+- 📊 Check your usage dashboard for any quota or limit warnings
+
+If you’re using a different provider, please refer to their documentation and billing policies for the equivalent steps.
+
 </details>
+
 <details>
-  <summary>"insufficient_quota"</summary>
+  <summary><strong>Why am I getting a token limit error?</strong></summary>
 
-- Most likely because **you haven't set up payment in your OpenAI account**, or you exceeded your max monthly limit. OpenAI has a cap on how much you can use their API, usually $120 for individual users.
-- Reference issue: https://github.com/logancyang/obsidian-copilot/issues/11
-</details>
-<details>
-  <summary>"context_length_exceeded"</summary>
+Please refer to your model provider’s documentation for the context window size.
 
-- Please refer to the model provider's documentation for the context window size. **Note: if you set a big max token limit in your Copilot setting, you could get this error**. Max token refers to completion tokens, not input tokens. So a bigger max output token limit means a smaller input token limit!
-- The prompts behind the scenes for Copilot commands can also take up tokens, so please limit your message length and max tokens to avoid this error. (For QA with Unlimited Context, use the "QA" mode in the dropdown! Requires Copilot v2.1.0.)
-- Reference issue: https://github.com/logancyang/obsidian-copilot/issues/1#issuecomment-1542934569
-</details>
-<details>
-  <summary>Azure issue</summary>
+⚠️ If you set a large <strong>max token limit</strong> in your Copilot settings, you may encounter this error.
 
-- It's a bit tricky to get all Azure credentials right in the first try. My suggestion is to use `curl` to test in your terminal first, make sure it gets response back, and then set the correct params in Copilot settings. Example:
-  ```
-  curl https://YOUR_RESOURCE_NAME.openai.azure.com/openai/deployments/YOUR_DEPLOYMENT_NAME/completions?api-version=VERSION\
-    -H "Content-Type: application/json" \
-    -H "api-key: YOUR_API_KEY" \
-    -d "{
-    \"prompt\": \"Once upon a time\",
-    \"max_tokens\": 5
-  }"
-  ```
-- Reference issue: https://github.com/logancyang/obsidian-copilot/issues/98
+- <strong>Max tokens</strong> refers to <em>completion tokens</em>, not input tokens.
+- A higher output token limit means less room for input!
+
+🧠 Behind-the-scenes prompts for Copilot commands also consume tokens, so:
+
+- Keep your message length short
+- Set a reasonable max token value to avoid hitting the cap
+
+💡 For QA with unlimited context, switch to the <strong>Vault QA</strong> mode in the dropdown (Copilot v2.1.0+ required).
+
 </details>
 
-When opening an issue, please follow the issue template and include relevant console logs. You can go to Copilot's settings and turn on "Debug mode" at the bottom for more console messages. On Mac, you can open the console by pressing `Cmd+Opt+I`. On Windows, you can open the console by pressing `Ctrl+Shift+I`.
+# **💎 Choose the Copilot Plan That’s Right for You**
 
-## Copilot Plus Disclosure
+| **Feature**                                                        | **Free Plan ✅** | **Plus Plan 💎** | **Believer Plan 🛡️** |
+| ------------------------------------------------------------------ | ---------------- | ---------------- | -------------------- |
+| No credit card or sign-up required                                 | ✅               | ❌               | ❌                   |
+| All open-source features                                           | ✅               | ✅               | ✅                   |
+| Bring your own API key                                             | ✅               | ✅               | ✅                   |
+| Best-in-class AI chat in Obsidian                                  | ✅               | ✅               | ✅                   |
+| Local data store for Vault QA                                      | ✅               | ✅               | ✅                   |
+| Support                                                            | ✅ Essential     | ✅ Pro           | ✅ Elite             |
+| AI agent capabilities                                              | ❌               | ✅               | ✅                   |
+| Image and PDF support                                              | ❌               | ✅               | ✅                   |
+| Enhanced chat UI (context menu)                                    | ❌               | ✅               | ✅                   |
+| State-of-the-art embedding models included                         | ❌               | ✅               | ✅                   |
+| Exclusive @AI tools (e.g., web, YouTube)                           | ❌               | ✅               | ✅                   |
+| Exclusive chat model included in plan                              | ❌               | ✅               | ✅                   |
+| Access to exclusive Discord channel                                | ❌               | ✅               | ✅                   |
+| Lifetime access                                                    | ❌               | ❌               | ✅                   |
+| Priority access to new features                                    | ❌               | ❌               | ✅                   |
+| Prioritized feature requests                                       | ❌               | ❌               | ✅                   |
+| Exclusive access to next-gen chat & embedding models (coming soon) | ❌               | ❌               | ✅                   |
 
-Copilot Plus is a premium product of Brevilabs LLC and it is not affiliated with Obsidian. It offers a powerful agentic AI integration into Obsidian. Please check out our website [obsidiancopilot.com](https://obsidiancopilot.com) for more details!
+## **🙏 Thank You**
+
+If you share the vision of building the most powerful AI agent for our second brain, consider [sponsoring this project](https://github.com/sponsors/logancyang) or buying me a coffee. Help spread the word by sharing Copilot for Obsidian on Twitter/X, Reddit, or your favorite platform!
+
+<p align="center">
+  <img src="https://camo.githubusercontent.com/7b8f7343bfc6e3c65c7901846637b603fd812f1a5f768d8b0572558bde859eb9/68747470733a2f2f63646e2e6275796d6561636f666665652e636f6d2f627574746f6e732f76322f64656661756c742d79656c6c6f772e706e67" alt="BuyMeACoffee" width="200">
+</p>
+
+**Acknowledgments**
+
+Special thanks to our top sponsors: @mikelaaron, @pedramamini, @Arlorean, @dashinja, @azagore, @MTGMAD, @gpythomas, @emaynard, @scmarinelli, @borthwick, @adamhill, @gluecode, @rusi, @timgrote, @JiaruiYu-Consilium, @ddocta, @AMOz1, @chchwy, @pborenstein, @GitTom, @kazukgw, @mjluser1, @joesfer, @rwaal, @turnoutnow-harpreet, @dreznicek, @xrise-informatik, @jeremygentles, @ZhengRui, @bfoujols, @jsmith0475, @pagiaddlemon, @sebbyyyywebbyyy, @royschwartz2, @vikram11, @amiable-dev, @khalidhalim, @DrJsPBs, @chishaku, @Andrea18500, @shayonpal, @rhm2k, @snorcup, @JohnBub, @obstinatelark, @jonashaefele, @vishnu2kmohan
+
+## **Copilot Plus Disclosure**
+
+Copilot Plus is a premium product of Brevilabs LLC and it is not affiliated with Obsidian. It offers a powerful agentic AI integration into Obsidian. Please check out our website [obsidiancopilot.com](https://obsidiancopilot.com/) for more details!
 
 - An account and payment are required for full access.
 - Copilot Plus requires network use to faciliate the AI agent.
@@ -170,12 +310,6 @@ Copilot Plus is a premium product of Brevilabs LLC and it is not affiliated with
 - The frontend code of Copilot plugin is fully open-source. However, the backend code facilitating the AI agents is close-sourced and proprietary.
 - We offer a full refund if you are not satisfied with the product within 14 days of your purchase, no questions asked.
 
-## 🙏 Thank You
+## **Authors**
 
-If you share my vision, please consider [sponsoring this project](https://github.com/sponsors/logancyang) or buying me some coffees!
-
-<a href="https://www.buymeacoffee.com/logancyang" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 150px !important;" ></a>
-
-Please also help spread the word by sharing about the Copilot for Obsidian Plugin on Twitter/X, Reddit, or any other social media platform you use.
-
-You can find me on Twitter/X [@logancyang](https://twitter.com/logancyang).
+Brevilabs Team | Email: logan@brevilabs.com | X/Twitter: [@logancyang](https://twitter.com/logancyang)

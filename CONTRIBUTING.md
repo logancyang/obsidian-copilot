@@ -53,6 +53,22 @@ In the case of Copilot for Obsidian, you will need to:
 
 Try to be descriptive in your branch names and pull requests. Happy coding!
 
+## Prompt Testing
+
+If you are making prompt changes, make sure to run the integration tests using the following steps:
+
+First creating a `.env.test` file in the root directory with your Gemini API keys
+
+```
+GEMINI_API_KEY=your_api_key_here
+```
+
+Then run the integration tests:
+
+```
+npm run test:integration
+```
+
 ## Manual Testing Checklist
 
 This is a list of items to manually test after any non-trivial code change. Test the items relevant to your code change. If not sure, randomly choose items below.

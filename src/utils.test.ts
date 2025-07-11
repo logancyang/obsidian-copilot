@@ -9,6 +9,7 @@ import {
   isFolderMatch,
   processVariableNameForNotePath,
   sliceFileParagraphs,
+  removeThinkTags,
 } from "./utils";
 
 // Mock Obsidian's TFile class
@@ -419,5 +420,78 @@ describe("sliceFileParagraphs", () => {
     mockFile.lineRange = { start: 2, end: 2 };
     const result = sliceFileParagraphs(mockFile, content);
     expect(result).toEqual("second line");
+  });
+});
+
+describe("removeThinkTags", () => {
+  it("should remove complete think tags and their content", () => {
+    const input = "Before <think>This is thinking content</think> After";
+    const expected = "Before  After";
+    expect(removeThinkTags(input)).toBe(expected);
+  });
+
+  it("should handle multiple think tags", () => {
+    const input = "Text <think>First thought</think> middle <think>Second thought</think> end";
+    const expected = "Text  middle  end";
+    expect(removeThinkTags(input)).toBe(expected);
+  });
+
+  it("should handle multiline think content", () => {
+    const input = `Start
+<think>
+Line 1
+Line 2
+Line 3
+</think>
+End`;
+    const expected = "Start\n\nEnd";
+    expect(removeThinkTags(input)).toBe(expected);
+  });
+
+  it("should handle unclosed think tags (streaming scenario)", () => {
+    const input = "Before content <think>Partial thought that is still being";
+    const expected = "Before content";
+    expect(removeThinkTags(input)).toBe(expected);
+  });
+
+  it("should handle empty think tags", () => {
+    const input = "Text <think></think> more text";
+    const expected = "Text  more text";
+    expect(removeThinkTags(input)).toBe(expected);
+  });
+
+  it("should handle text without think tags", () => {
+    const input = "This is regular text without any think tags";
+    const expected = "This is regular text without any think tags";
+    expect(removeThinkTags(input)).toBe(expected);
+  });
+
+  it("should handle nested content within think tags", () => {
+    const input = `Main text <think>
+I need to consider:
+- Point 1
+- Point 2
+<inner>nested content</inner>
+</think> Final text`;
+    const expected = "Main text  Final text";
+    expect(removeThinkTags(input)).toBe(expected);
+  });
+
+  it("should trim whitespace from the result", () => {
+    const input = "  <think>content</think>  ";
+    const expected = "";
+    expect(removeThinkTags(input)).toBe(expected);
+  });
+
+  it("should handle think tags at the beginning of text", () => {
+    const input = "<think>Initial thoughts</think>Main content here";
+    const expected = "Main content here";
+    expect(removeThinkTags(input)).toBe(expected);
+  });
+
+  it("should handle think tags at the end of text", () => {
+    const input = "Main content here<think>Final thoughts</think>";
+    const expected = "Main content here";
+    expect(removeThinkTags(input)).toBe(expected);
   });
 });

@@ -10,6 +10,7 @@ import { HybridRetriever } from "@/search/hybridRetriever";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings } from "@/settings/model";
 import { TimeInfo } from "@/tools/TimeTools";
+import { ChatHistoryEntry } from "@/utils";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
@@ -117,7 +118,7 @@ const indexTool = tool(
 
 // Add new web search tool
 const webSearchTool = tool(
-  async ({ query, chatHistory }: { query: string; chatHistory: [string, string][] }) => {
+  async ({ query, chatHistory }: { query: string; chatHistory: ChatHistoryEntry[] }) => {
     try {
       // Get standalone question considering chat history
       const standaloneQuestion = await getStandaloneQuestion(query, chatHistory);
@@ -145,7 +146,12 @@ const webSearchTool = tool(
     schema: z.object({
       query: z.string().describe("The search query"),
       chatHistory: z
-        .array(z.tuple([z.string(), z.string()]))
+        .array(
+          z.object({
+            role: z.enum(["user", "assistant"]),
+            content: z.string(),
+          })
+        )
         .describe("Previous conversation turns"),
     }),
   }

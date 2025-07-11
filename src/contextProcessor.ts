@@ -1,6 +1,8 @@
+import { getSelectedTextContexts } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { TFile, Vault } from "obsidian";
+import { NOTE_CONTEXT_PROMPT_TAG } from "./constants";
 
 export class ContextProcessor {
   private static instance: ContextProcessor;
@@ -65,7 +67,7 @@ export class ContextProcessor {
   ): Promise<string> {
     let additionalContext = "";
 
-    const processNote = async (note: TFile) => {
+    const processNote = async (note: TFile, prompt_tag: string = NOTE_CONTEXT_PROMPT_TAG) => {
       try {
         // Check if this note was already processed (via custom prompt)
         if (excludedNotePaths.has(note.path)) {
@@ -104,21 +106,28 @@ export class ContextProcessor {
           content = await this.processEmbeddedPDFs(content, vault, fileParserManager);
         }
 
-        additionalContext += `\n\nTitle: [[${note.basename}]]\nPath: ${note.path}\n\n${content}`;
+        additionalContext += `\n\n <${prompt_tag}> \n Title: [[${note.basename}]]\nPath: ${note.path}\n\n${content}\n</${prompt_tag}>`;
       } catch (error) {
         console.error(`Error processing file ${note.path}:`, error);
-        additionalContext += `\n\nTitle: [[${note.basename}]]\nPath: ${note.path}\n\n[Error: Could not process file]`;
+        additionalContext += `\n\n <${prompt_tag}_error> \n Title: [[${note.basename}]]\nPath: ${note.path}\n\n[Error: Could not process file]\n</${prompt_tag}_error>`;
       }
     };
 
+    const includedFilePaths = new Set<string>();
+
     // Process active note if included
     if (includeActiveNote && activeNote) {
-      await processNote(activeNote);
+      await processNote(activeNote, "active_note");
+      includedFilePaths.add(activeNote.path);
     }
 
     // Process context notes
     for (const note of contextNotes) {
+      if (includedFilePaths.has(note.path)) {
+        continue;
+      }
       await processNote(note);
+      includedFilePaths.add(note.path);
     }
 
     return additionalContext;
@@ -159,5 +168,26 @@ export class ContextProcessor {
         hasEmbeddedPDFs,
       }),
     ]);
+  }
+
+  processSelectedTextContexts(): string {
+    const selectedTextContexts = getSelectedTextContexts();
+
+    if (!selectedTextContexts || selectedTextContexts.length === 0) {
+      return "";
+    }
+
+    let additionalContext = "";
+
+    for (const selectedText of selectedTextContexts) {
+      const lineRange =
+        selectedText.startLine === selectedText.endLine
+          ? `L${selectedText.startLine}`
+          : `L${selectedText.startLine}-${selectedText.endLine}`;
+
+      additionalContext += `\n\n <selected_text> \n Title: [[${selectedText.noteTitle}]]\nPath: ${selectedText.notePath}\nLines: ${lineRange}\n\n${selectedText.content}\n</selected_text>`;
+    }
+
+    return additionalContext;
   }
 }

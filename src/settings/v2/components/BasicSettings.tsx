@@ -2,31 +2,30 @@ import { ChainType } from "@/chainFactory";
 import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { SettingItem } from "@/components/ui/setting-item";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DEFAULT_OPEN_AREA, PLUS_UTM_MEDIUMS } from "@/constants";
-import { useTab } from "@/contexts/TabContext";
+import { createPlusPageUrl } from "@/plusUtils";
+import VectorStoreManager from "@/search/vectorStoreManager";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
-import { formatDateTime, checkModelApiKey } from "@/utils";
+import { PlusSettings } from "@/settings/v2/components/PlusSettings";
+import { checkModelApiKey, formatDateTime } from "@/utils";
 import { HelpCircle, Key, Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useState } from "react";
-import ApiKeyDialog from "./ApiKeyDialog";
-import { PlusSettings } from "@/settings/v2/components/PlusSettings";
-import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { createPlusPageUrl } from "@/plusUtils";
-import { getModelDisplayWithIcons } from "@/components/ui/model-display";
-import VectorStoreManager from "@/search/vectorStoreManager";
+import { ApiKeyDialog } from "./ApiKeyDialog";
+import { cn } from "@/lib/utils";
 
 const ChainType2Label: Record<ChainType, string> = {
   [ChainType.LLM_CHAIN]: "Chat",
   [ChainType.VAULT_QA_CHAIN]: "Vault QA (Basic)",
   [ChainType.COPILOT_PLUS_CHAIN]: "Copilot Plus (beta)",
+  [ChainType.PROJECT_CHAIN]: "Projects (alpha)",
 };
 
 export const BasicSettings: React.FC = () => {
-  const { modalContainer } = useTab();
   const settings = useSettingsValue();
-  const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
   const [conversationNoteName, setConversationNoteName] = useState(
     settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}"
@@ -99,33 +98,33 @@ export const BasicSettings: React.FC = () => {
     }));
 
   return (
-    <div className="space-y-4">
+    <div className="tw-space-y-4">
       <PlusSettings />
 
       {/* General Section */}
       <section>
-        <div className="text-xl font-bold mb-3">General</div>
-        <div className="space-y-4">
-          <div className="space-y-4">
+        <div className="tw-mb-3 tw-text-xl tw-font-bold">General</div>
+        <div className="tw-space-y-4">
+          <div className="tw-space-y-4">
             {/* API Key Section */}
             <SettingItem
               type="custom"
               title="API Keys"
               description={
-                <div className="flex items-center gap-1.5">
-                  <span className="leading-none">
+                <div className="tw-flex tw-items-center tw-gap-1.5">
+                  <span className="tw-leading-none">
                     Configure API keys for different AI providers
                   </span>
                   <TooltipProvider delayDuration={0}>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <HelpCircle className="size-4" />
+                        <HelpCircle className="tw-size-4" />
                       </TooltipTrigger>
-                      <TooltipContent className="max-w-96 flex flex-col gap-2 py-4">
-                        <div className="text-sm font-medium text-accent">
+                      <TooltipContent className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
+                        <div className="tw-text-sm tw-font-medium tw-text-accent">
                           API key required for chat and QA features
                         </div>
-                        <div className="text-xs text-muted">
+                        <div className="tw-text-xs tw-text-muted">
                           To enable chat and QA functionality, please provide an API key from your
                           selected provider.
                         </div>
@@ -136,23 +135,16 @@ export const BasicSettings: React.FC = () => {
               }
             >
               <Button
-                onClick={() => setIsApiKeyDialogOpen(true)}
+                onClick={() => {
+                  new ApiKeyDialog(app).open();
+                }}
                 variant="secondary"
-                className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start"
+                className="tw-flex tw-w-full tw-items-center tw-justify-center tw-gap-2 sm:tw-w-auto sm:tw-justify-start"
               >
                 Set Keys
-                <Key className="h-4 w-4" />
+                <Key className="tw-size-4" />
               </Button>
             </SettingItem>
-
-            {/* API Key Dialog */}
-            <ApiKeyDialog
-              open={isApiKeyDialogOpen}
-              onOpenChange={setIsApiKeyDialogOpen}
-              settings={settings}
-              updateSetting={updateSetting}
-              modalContainer={modalContainer}
-            />
           </div>
           <SettingItem
             type="select"
@@ -184,22 +176,22 @@ export const BasicSettings: React.FC = () => {
             type="select"
             title="Embedding Model"
             description={
-              <div className="space-y-2">
-                <div className="flex items-center gap-1.5">
-                  <span className="leading-none font-medium text-accent">
+              <div className="tw-space-y-2">
+                <div className="tw-flex tw-items-center tw-gap-1.5">
+                  <span className="tw-font-medium tw-leading-none tw-text-accent">
                     Core Feature: Powers Semantic Search & QA
                   </span>
                   <TooltipProvider delayDuration={0}>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <HelpCircle className="size-4" />
+                        <HelpCircle className="tw-size-4" />
                       </TooltipTrigger>
-                      <TooltipContent className="max-w-96 flex flex-col gap-2">
-                        <div className="text-sm text-muted pt-2">
+                      <TooltipContent className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
+                        <div className="tw-pt-2 tw-text-sm tw-text-muted">
                           This model converts text into vector representations, essential for
                           semantic search and QA functionality. Changing the embedding model will:
                         </div>
-                        <ul className="text-sm text-muted pl-4">
+                        <ul className="tw-pl-4 tw-text-sm tw-text-muted">
                           <li>Require rebuilding your vault&#39;s vector index</li>
                           <li>Affect semantic search quality</li>
                           <li>Impact QA feature performance</li>
@@ -224,15 +216,15 @@ export const BasicSettings: React.FC = () => {
             type="select"
             title="Default Mode"
             description={
-              <div className="flex items-center gap-1.5">
-                <span className="leading-none">Select the default chat mode</span>
+              <div className="tw-flex tw-items-center tw-gap-1.5">
+                <span className="tw-leading-none">Select the default chat mode</span>
                 <TooltipProvider delayDuration={0}>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <HelpCircle className="size-4" />
+                      <HelpCircle className="tw-size-4" />
                     </TooltipTrigger>
-                    <TooltipContent className="max-w-96 flex flex-col gap-2">
-                      <ul className="text-sm text-muted pl-4">
+                    <TooltipContent className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
+                      <ul className="tw-pl-4 tw-text-sm tw-text-muted">
                         <li>
                           <strong>Chat:</strong> Regular chat mode for general conversations and
                           tasks. <i>Free to use with your own API key.</i>
@@ -249,7 +241,7 @@ export const BasicSettings: React.FC = () => {
                             href={createPlusPageUrl(PLUS_UTM_MEDIUMS.MODE_SELECT_TOOLTIP)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-accent hover:text-accent-hover"
+                            className="tw-text-accent hover:tw-text-accent-hover"
                           >
                             obsidiancopilot.com
                           </a>{" "}
@@ -292,15 +284,6 @@ export const BasicSettings: React.FC = () => {
 
           <SettingItem
             type="text"
-            title="Custom Prompts Folder Name"
-            description="The default folder name where custom prompts will be saved. Default is 'copilot-custom-prompts'"
-            value={settings.customPromptsFolder}
-            onChange={(value) => updateSetting("customPromptsFolder", value)}
-            placeholder="copilot-custom-prompts"
-          />
-
-          <SettingItem
-            type="text"
             title="Default Conversation Tag"
             description="The default tag to be used when saving a conversation. Default is 'ai-conversations'"
             value={settings.defaultConversationTag}
@@ -312,22 +295,24 @@ export const BasicSettings: React.FC = () => {
             type="custom"
             title="Conversation Filename Template"
             description={
-              <div className="flex items-start gap-1.5 ">
-                <span className="leading-none">
+              <div className="tw-flex tw-items-start tw-gap-1.5 ">
+                <span className="tw-leading-none">
                   Customize the format of saved conversation note names.
                 </span>
                 <TooltipProvider delayDuration={0}>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <HelpCircle className="size-4" />
+                      <HelpCircle className="tw-size-4" />
                     </TooltipTrigger>
-                    <TooltipContent className="max-w-96 flex flex-col gap-2 py-4">
-                      <div className="text-sm font-medium text-accent">
+                    <TooltipContent className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
+                      <div className="tw-text-sm tw-font-medium tw-text-accent">
                         Note: All the following variables must be included in the template.
                       </div>
                       <div>
-                        <div className="text-sm font-medium text-muted">Available variables:</div>
-                        <ul className="text-sm text-muted pl-4">
+                        <div className="tw-text-sm tw-font-medium tw-text-muted">
+                          Available variables:
+                        </div>
+                        <ul className="tw-pl-4 tw-text-sm tw-text-muted">
                           <li>
                             <strong>{"{$date}"}</strong>: Date in YYYYMMDD format
                           </li>
@@ -338,7 +323,7 @@ export const BasicSettings: React.FC = () => {
                             <strong>{"{$topic}"}</strong>: Chat conversation topic
                           </li>
                         </ul>
-                        <i className="text-sm text-muted mt-2">
+                        <i className="tw-mt-2 tw-text-sm tw-text-muted">
                           Example: {"{$date}_{$time}__{$topic}"} →
                           20250114_153232__polish_this_article_[[Readme]]
                         </i>
@@ -349,10 +334,13 @@ export const BasicSettings: React.FC = () => {
               </div>
             }
           >
-            <div className="flex items-center gap-1.5 w-[320px]">
+            <div className="tw-flex tw-w-[320px] tw-items-center tw-gap-1.5">
               <Input
                 type="text"
-                className={`transition-all duration-200 flex-grow min-w-[80px] ${isChecking ? "w-[80px]" : "w-[120px]"}`}
+                className={cn(
+                  "tw-min-w-[80px] tw-grow tw-transition-all tw-duration-200",
+                  isChecking ? "tw-w-[80px]" : "tw-w-[120px]"
+                )}
                 placeholder="{$date}_{$time}__{$topic}"
                 value={conversationNoteName}
                 onChange={(e) => setConversationNoteName(e.target.value)}
@@ -366,7 +354,7 @@ export const BasicSettings: React.FC = () => {
               >
                 {isChecking ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="tw-mr-2 tw-size-4 tw-animate-spin" />
                     Apply
                   </>
                 ) : (
@@ -380,7 +368,7 @@ export const BasicSettings: React.FC = () => {
           <SettingItem
             type="switch"
             title="Autosave Chat"
-            description="Automatically save the chat when starting a new one or when the plugin reloads"
+            description="Automatically saves the chat after every user message and AI response."
             checked={settings.autosaveChat}
             onCheckedChange={(checked) => updateSetting("autosaveChat", checked)}
           />

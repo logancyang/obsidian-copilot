@@ -2,14 +2,15 @@ import { ResetSettingsConfirmModal } from "@/components/modals/ResetSettingsConf
 import { Button } from "@/components/ui/button";
 import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/ui/setting-tabs";
 import { TabProvider, useTab } from "@/contexts/TabContext";
+import { useLatestVersion } from "@/hooks/useLatestVersion";
 import CopilotPlugin from "@/main";
 import { resetSettings } from "@/settings/model";
 import { CommandSettings } from "@/settings/v2/components/CommandSettings";
-import { useLatestVersion } from "@/hooks/useLatestVersion";
-import { Cog, Command, Cpu, Database, Wrench } from "lucide-react";
+import { Cog, Command, Cpu, Database, Sparkles, Wrench } from "lucide-react";
 import React from "react";
 import { AdvancedSettings } from "./components/AdvancedSettings";
 import { BasicSettings } from "./components/BasicSettings";
+import { CopilotPlusSettings } from "./components/CopilotPlusSettings";
 import { ModelSettings } from "./components/ModelSettings";
 import { QASettings } from "./components/QASettings";
 import { SystemPromptsSection } from "./components/SystemPromptsSection";
@@ -25,6 +26,7 @@ const TAB_IDS = [
   "systemPrompts",
   "promptEnhancements",
   "ASR",
+  "plus",
 ] as const;
 type TabId = (typeof TAB_IDS)[number];
 
@@ -38,6 +40,7 @@ const icons: Record<TabId, JSX.Element> = {
   systemPrompts: <Cog className="w-5 h-5" />,
   promptEnhancements: <Cog className="w-5 h-5" />,
   ASR: <Cog className="w-5 h-5" />,
+  plus: <Sparkles className="tw-size-5" />,
 };
 
 // tabs
@@ -47,7 +50,7 @@ const tabs: TabItemType[] = TAB_IDS.map((id) => ({
   label: id.charAt(0).toUpperCase() + id.slice(1),
 }));
 
-const SettingsContent: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
+const SettingsContent: React.FC<{ plugin: CopilotPlugin }> = ({plugin}) => {
   const { selectedTab, setSelectedTab } = useTab();
 
   // tab components
@@ -60,10 +63,11 @@ const SettingsContent: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
     systemPrompts: () => <SystemPromptsSection />,
     promptEnhancements: () => <PromptEnhancementsSection />,
     ASR: () => <AsrSetting plugin={plugin} />,
+    plus: () => <CopilotPlusSettings />,
   };
   return (
-    <div className="flex flex-col">
-      <div className="inline-flex rounded-lg">
+    <div className="tw-flex tw-flex-col">
+      <div className="tw-inline-flex tw-rounded-lg">
         {tabs.map((tab, index) => (
           <TabItem
             key={tab.id}
@@ -75,7 +79,7 @@ const SettingsContent: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
           />
         ))}
       </div>
-      <div className="w-[100%] border border-solid" />
+      <div className="tw-w-full tw-border tw-border-solid" />
 
       <div>
         {TAB_IDS.map((id) => {
@@ -112,12 +116,12 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
   return (
     <TabProvider>
       <div>
-        <div className="flex flex-col gap-2">
-          <h1 className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <div className="flex items-center gap-2">
+        <div className="tw-flex tw-flex-col tw-gap-2">
+          <h1 className="tw-flex tw-flex-col tw-gap-2 sm:tw-flex-row sm:tw-items-center sm:tw-justify-between">
+            <div className="tw-flex tw-items-center tw-gap-2">
               <span>Copilot Settings</span>
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-muted">v{plugin.manifest.version}</span>
+              <div className="tw-flex tw-items-center tw-gap-1">
+                <span className="tw-text-xs tw-text-muted">v{plugin.manifest.version}</span>
                 {latestVersion && (
                   <>
                     {hasUpdate ? (
@@ -125,18 +129,18 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
                         href="obsidian://show-plugin?id=copilot"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-accent hover:underline"
+                        className="tw-text-xs tw-text-accent hover:tw-underline"
                       >
                         (Update to v{latestVersion})
                       </a>
                     ) : (
-                      <span className="text-xs text-normal"> (up to date)</span>
+                      <span className="tw-text-xs tw-text-normal"> (up to date)</span>
                     )}
                   </>
                 )}
               </div>
             </div>
-            <div className="self-end sm:self-auto">
+            <div className="tw-self-end sm:tw-self-auto">
               <Button variant="secondary" size="sm" onClick={handleReset}>
                 Reset Settings
               </Button>
@@ -144,7 +148,7 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
           </h1>
         </div>
         {/* Add the key prop to force re-render */}
-        <SettingsContent key={resetKey} plugin={plugin} />
+        <SettingsContent key={resetKey} plugin={plugin}/>
       </div>
     </TabProvider>
   );

@@ -4,12 +4,14 @@ export const getToolDescription = (tool: string): string => {
   switch (tool) {
     case "@vault":
       return "Search through your vault for relevant information";
-    case "@web":
+    case "@websearch":
       return "Search the web for information";
     case "@youtube":
       return "Get the transcript of a YouTube video. Example: @youtube <video_url>";
     case "@pomodoro":
       return "Start a pomodoro timer. Example: @pomodoro 25m";
+    case "@composer":
+      return "Edit existing notes or create new notes.";
     default:
       return "";
   }

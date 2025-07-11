@@ -43,7 +43,7 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
 }) => {
   return (
     <div
-      className={cn("flex gap-1", {
+      className={cn("tw-flex tw-gap-1", {
         "group-hover:opacity-100 opacity-0": !Platform.isMobile,
       })}
     >
@@ -51,8 +51,16 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
         <>
           <Tooltip>
             <TooltipTrigger asChild>
+              <Button variant="ghost2" size="fit" onClick={onCopy} title="Copy">
+                {isCopied ? <Check className="tw-size-4" /> : <Copy className="tw-size-4" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Copy</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
               <Button onClick={onEdit} variant="ghost2" size="fit" title="Edit">
-                <PenSquare className="size-4" />
+                <PenSquare className="tw-size-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Edit</TooltipContent>
@@ -60,7 +68,7 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={onDelete} variant="ghost2" size="fit" title="Delete">
-                <Trash2 className="size-4" />
+                <Trash2 className="tw-size-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Delete</TooltipContent>
@@ -72,7 +80,7 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button onClick={onShowSources} variant="ghost2" size="fit" title="Show Sources">
-                  <LibraryBig className="size-4" />
+                  <LibraryBig className="tw-size-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Show Sources</TooltipContent>
@@ -100,7 +108,7 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
                 size="fit"
                 title="Insert / Replace at cursor"
               >
-                <TextCursorInput className="size-4" />
+                <TextCursorInput className="tw-size-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Insert / Replace at cursor</TooltipContent>
@@ -108,7 +116,7 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost2" size="fit" onClick={onCopy} title="Copy">
-                {isCopied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                {isCopied ? <Check className="tw-size-4" /> : <Copy className="tw-size-4" />}
               </Button>
             </TooltipTrigger>
             <TooltipContent>Copy</TooltipContent>
@@ -116,7 +124,7 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={onRegenerate} variant="ghost2" size="fit" title="Regenerate">
-                <RotateCw className="size-4" />
+                <RotateCw className="tw-size-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Regenerate</TooltipContent>
@@ -124,7 +132,7 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={onDelete} variant="ghost2" size="fit" title="Delete">
-                <Trash2 className="size-4" />
+                <Trash2 className="tw-size-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Delete</TooltipContent>

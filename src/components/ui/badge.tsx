@@ -4,14 +4,14 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-md px-2.5 py-0.5 text-normal text-ui-smaller transition-colors focus:outline-none",
+  "tw-inline-flex tw-items-center tw-rounded-md tw-px-2.5 tw-py-0.5 tw-text-ui-smaller tw-text-normal tw-transition-colors focus:tw-outline-none",
   {
     variants: {
       variant: {
-        default: "bg-primary-alt shadow",
-        secondary: "bg-secondary-alt",
-        destructive: "bg-modifier-error shadow",
-        outline: "border border-border border-solid",
+        default: "tw-bg-primary-alt tw-shadow",
+        secondary: "tw-bg-secondary-alt",
+        destructive: "tw-bg-modifier-error tw-shadow",
+        outline: "tw-border tw-border-solid tw-border-border",
       },
     },
     defaultVariants: {

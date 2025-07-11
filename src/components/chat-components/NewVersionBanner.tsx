@@ -38,29 +38,29 @@ export function NewVersionBanner({ currentVersion }: NewVersionBannerProps) {
   return (
     <div
       className={cn(
-        "min-h-14 overflow-hidden",
+        "tw-min-h-14 tw-overflow-hidden",
         isVisible
-          ? "animate-in slide-in-from-top duration-300"
-          : "animate-out slide-out-to-top duration-300"
+          ? "tw-duration-300 tw-animate-in tw-slide-in-from-top"
+          : "tw-duration-300 tw-animate-out tw-slide-out-to-top"
       )}
     >
-      <div className="flex items-center justify-between gap-2 p-2 pl-3 mb-1 text-xs border border-border border-solid rounded-md">
-        <div className="flex items-center gap-2">
-          <span className="font-medium">Update available:</span>(
+      <div className="tw-mb-1 tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2 tw-pl-3 tw-text-xs">
+        <div className="tw-flex tw-items-center tw-gap-2">
+          <span className="tw-font-medium">Update available:</span>
           <a
             href={`https://github.com/logancyang/obsidian-copilot/releases/latest`}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-normal"
+            className="tw-text-normal"
           >
             v{latestVersion}
           </a>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="tw-flex tw-items-center tw-gap-2">
           <Button
             size="fit"
             variant="ghost2"
-            className="text-accent hover:text-accent-hover"
+            className="tw-text-accent hover:tw-text-accent-hover"
             onClick={() => {
               window.open(`obsidian://show-plugin?id=copilot`, "_blank");
               handleDismiss();
@@ -69,7 +69,7 @@ export function NewVersionBanner({ currentVersion }: NewVersionBannerProps) {
             Update
           </Button>
           <Button variant="ghost2" size="icon" onClick={handleDismiss}>
-            <XIcon className="size-4" />
+            <XIcon className="tw-size-4" />
           </Button>
         </div>
       </div>

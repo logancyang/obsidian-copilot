@@ -9,3 +9,9 @@ declare module "obsidian" {
     } | null;
   }
 }
+
+export enum PromptSortStrategy {
+  TIMESTAMP = "timestamp",
+  ALPHABETICAL = "alphabetical",
+  MANUAL = "manual",
+}

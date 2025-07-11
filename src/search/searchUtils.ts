@@ -5,7 +5,7 @@ import { getTagsFromNote, stripHash } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
 import { App, TFile } from "obsidian";
 
-interface PatternCategory {
+export interface PatternCategory {
   tagPatterns?: string[];
   extensionPatterns?: string[];
   folderPatterns?: string[];
@@ -70,7 +70,7 @@ export function getDecodedPatterns(value: string): string[] {
 }
 
 /**
- * Get the exclusion patterns the exclusion settings string.
+ * Get the exclusion patterns from the exclusion settings string.
  * @returns An array of exclusion patterns.
  */
 function getExclusionPatterns(): string[] {
@@ -94,18 +94,35 @@ function getInclusionPatterns(): string[] {
 }
 
 /**
- * Get the inclusion and exclusion patterns from the settings.
+ * Get the inclusion and exclusion patterns from the settings or provided values.
+ * NOTE: isProject is used to determine if the patterns should be used for a project, ignoring global inclusions and exclusions
+ * @param options - Optional parameters for inclusions and exclusions.
  * @returns An object containing the inclusions and exclusions patterns strings.
  */
-export function getMatchingPatterns(): {
+export function getMatchingPatterns(options?: {
+  inclusions?: string;
+  exclusions?: string;
+  isProject?: boolean;
+}): {
   inclusions: PatternCategory | null;
   exclusions: PatternCategory | null;
 } {
-  const inclusions = getInclusionPatterns();
-  const exclusions = getExclusionPatterns();
+  // For projects, don't fall back to global patterns
+  const inclusionPatterns = options?.inclusions
+    ? getDecodedPatterns(options.inclusions)
+    : options?.isProject
+      ? []
+      : getInclusionPatterns();
+
+  const exclusionPatterns = options?.exclusions
+    ? getDecodedPatterns(options.exclusions)
+    : options?.isProject
+      ? []
+      : getExclusionPatterns();
+
   return {
-    inclusions: inclusions.length > 0 ? categorizePatterns(inclusions) : null,
-    exclusions: exclusions.length > 0 ? categorizePatterns(exclusions) : null,
+    inclusions: inclusionPatterns.length > 0 ? categorizePatterns(inclusionPatterns) : null,
+    exclusions: exclusionPatterns.length > 0 ? categorizePatterns(exclusionPatterns) : null,
   };
 }
 
@@ -313,4 +330,16 @@ export function extractAppIgnoreSettings(app: App): string[] {
   }
 
   return appIgnoreFolders;
+}
+
+export function getTagPattern(tag: string): string {
+  return `#${tag}`;
+}
+
+export function getFilePattern(file: TFile): string {
+  return `[[${file.basename}]]`;
+}
+
+export function getExtensionPattern(extension: string): string {
+  return `*.${extension}`;
 }

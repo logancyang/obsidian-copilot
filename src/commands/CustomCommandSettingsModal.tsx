@@ -6,33 +6,30 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import React, { useState } from "react";
 import { createRoot, Root } from "react-dom/client";
-import {
-  getModelKeyFromModel,
-  InlineEditCommandSettings,
-  useSettingsValue,
-} from "@/settings/model";
-import { validateCommandName } from "@/commands/inlineEditCommandUtils";
+import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { getModelDisplayText } from "@/components/ui/model-display";
 import { cn } from "@/lib/utils";
 import { ChevronDown } from "lucide-react";
 import { logError } from "@/logger";
 import { CustomPromptSyntaxInstruction } from "@/components/CustomPromptSyntaxInstruction";
+import { CustomCommand } from "@/commands/type";
+import { validateCommandName } from "@/commands/customCommandUtils";
 
 type FormErrors = {
-  name?: string;
-  prompt?: string;
+  title?: string;
+  content?: string;
 };
 
-function InlineEditCommandSettingsModalContent({
+function CustomCommandSettingsModalContent({
+  commands,
   command: initialCommand,
   onConfirm,
   onCancel,
-  onRemove,
 }: {
-  command: InlineEditCommandSettings;
-  onConfirm: (command: InlineEditCommandSettings) => void;
+  commands: CustomCommand[];
+  command: CustomCommand;
+  onConfirm: (command: CustomCommand) => void;
   onCancel: () => void;
-  onRemove?: () => void;
 }) {
   const settings = useSettingsValue();
   const activeModels = settings.activeModels
@@ -44,7 +41,7 @@ function InlineEditCommandSettingsModalContent({
   const [command, setCommand] = useState(initialCommand);
   const [errors, setErrors] = useState<FormErrors>({});
 
-  const handleUpdate = (field: keyof InlineEditCommandSettings, value: any) => {
+  const handleUpdate = (field: keyof CustomCommand, value: any) => {
     setCommand((prev) => ({
       ...prev,
       [field]: value,
@@ -58,14 +55,13 @@ function InlineEditCommandSettingsModalContent({
   const handleSubmit = () => {
     const newErrors: FormErrors = {};
 
-    try {
-      validateCommandName(command.name, initialCommand.name);
-    } catch (e) {
-      newErrors.name = e.message;
+    const nameError = validateCommandName(command.title, commands, initialCommand.title);
+    if (nameError) {
+      newErrors.title = nameError;
     }
 
-    if (!command.prompt.trim()) {
-      newErrors.prompt = "Prompt is required";
+    if (!command.content.trim()) {
+      newErrors.content = "Prompt is required";
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -77,34 +73,34 @@ function InlineEditCommandSettingsModalContent({
   };
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="name">Name</Label>
+    <div className="tw-flex tw-flex-col tw-gap-4 tw-p-4">
+      <div className="tw-flex tw-flex-col tw-gap-2">
+        <Label htmlFor="title">Name</Label>
         <Input
-          id="name"
-          value={command.name}
-          onChange={(e) => handleUpdate("name", e.target.value)}
+          id="title"
+          value={command.title}
+          onChange={(e) => handleUpdate("title", e.target.value)}
           placeholder="Enter command name"
         />
-        {errors.name && <div className="text-error text-sm">{errors.name}</div>}
+        {errors.title && <div className="tw-text-sm tw-text-error">{errors.title}</div>}
       </div>
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="prompt">Prompt</Label>
+      <div className="tw-flex tw-flex-col tw-gap-2">
+        <Label htmlFor="content">Prompt</Label>
         <CustomPromptSyntaxInstruction />
         <Textarea
-          id="prompt"
-          value={command.prompt}
-          onChange={(e) => handleUpdate("prompt", e.target.value)}
+          id="content"
+          value={command.content}
+          onChange={(e) => handleUpdate("content", e.target.value)}
           placeholder="Enter command prompt"
-          className="min-h-[200px]"
+          className="tw-min-h-[200px]"
         />
-        {errors.prompt && <div className="text-error text-sm">{errors.prompt}</div>}
+        {errors.content && <div className="tw-text-sm tw-text-error">{errors.content}</div>}
       </div>
 
-      <div className="flex flex-col gap-2">
+      <div className="tw-flex tw-flex-col tw-gap-2">
         <Label htmlFor="modelKey">Model (Optional)</Label>
-        <div className="relative w-full group">
+        <div className="tw-group tw-relative tw-w-full">
           <select
             value={command.modelKey}
             onChange={(e) => {
@@ -122,12 +118,12 @@ function InlineEditCommandSettingsModalContent({
               handleUpdate("modelKey", e.target.value);
             }}
             className={cn(
-              "w-full appearance-none",
-              "flex h-9 rounded-md border border-solid border-border bg-dropdown px-3 py-1 pr-8",
-              "text-sm !shadow transition-colors",
-              "focus:outline-none focus:ring-1 focus:ring-ring",
-              "disabled:cursor-not-allowed disabled:opacity-50",
-              "hover:bg-interactive-hover hover:text-normal"
+              "tw-w-full tw-appearance-none",
+              "tw-flex tw-h-9 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-dropdown tw-px-3 tw-py-1 tw-pr-8",
+              "tw-text-sm !tw-shadow tw-transition-colors",
+              "focus:tw-outline-none focus:tw-ring-1 focus:tw-ring-ring",
+              "disabled:tw-cursor-not-allowed disabled:tw-opacity-50",
+              "hover:tw-bg-interactive-hover hover:tw-text-normal"
             )}
           >
             <option value="">Inherit from chat model</option>
@@ -139,16 +135,16 @@ function InlineEditCommandSettingsModalContent({
           </select>
           <div
             className={cn(
-              "pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2",
-              "transition-colors group-hover:[&>svg]:text-normal"
+              "tw-pointer-events-none tw-absolute tw-inset-y-0 tw-right-0 tw-flex tw-items-center tw-pr-2",
+              "tw-transition-colors group-hover:[&>svg]:tw-text-normal"
             )}
           >
-            <ChevronDown className="h-4 w-4" />
+            <ChevronDown className="tw-size-4" />
           </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="tw-flex tw-items-center tw-gap-2">
         <Checkbox
           id="showInContextMenu"
           checked={command.showInContextMenu}
@@ -157,7 +153,16 @@ function InlineEditCommandSettingsModalContent({
         <Label htmlFor="showInContextMenu">Show in context menu</Label>
       </div>
 
-      <div className="flex justify-end gap-2">
+      <div className="tw-flex tw-items-center tw-gap-2">
+        <Checkbox
+          id="showInSlashMenu"
+          checked={command.showInSlashMenu}
+          onCheckedChange={(checked) => handleUpdate("showInSlashMenu", checked)}
+        />
+        <Label htmlFor="showInSlashMenu">Show in slash menu</Label>
+      </div>
+
+      <div className="tw-flex tw-justify-end tw-gap-2">
         <Button variant="secondary" onClick={onCancel}>
           Cancel
         </Button>
@@ -169,14 +174,14 @@ function InlineEditCommandSettingsModalContent({
   );
 }
 
-export class InlineEditCommandSettingsModal extends Modal {
+export class CustomCommandSettingsModal extends Modal {
   private root: Root;
 
   constructor(
     app: App,
-    private command: InlineEditCommandSettings,
-    private onUpdate: (command: InlineEditCommandSettings) => void,
-    private onRemove?: () => void
+    private commands: CustomCommand[],
+    private command: CustomCommand,
+    private onUpdate: (command: CustomCommand) => void
   ) {
     super(app);
     // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
@@ -188,22 +193,17 @@ export class InlineEditCommandSettingsModal extends Modal {
     const { contentEl } = this;
     this.root = createRoot(contentEl);
 
-    const handleConfirm = (command: InlineEditCommandSettings) => {
+    const handleConfirm = (command: CustomCommand) => {
       this.onUpdate(command);
       this.close();
     };
 
-    const handleRemove = () => {
-      this.onRemove?.();
-      this.close();
-    };
-
     this.root.render(
-      <InlineEditCommandSettingsModalContent
+      <CustomCommandSettingsModalContent
+        commands={this.commands}
         command={this.command}
         onConfirm={handleConfirm}
         onCancel={() => this.close()}
-        onRemove={this.onRemove ? handleRemove : undefined}
       />
     );
   }

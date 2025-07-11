@@ -82,16 +82,6 @@ If your plugin does not need CSS, delete this file.
   width: 70%;
 }
 
-.bottom-container {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-end;
-  width: 100%;
-  flex: 0 0 auto;
-  box-sizing: border-box;
-}
-
 .chat-context-menu {
   display: flex;
   align-items: center;
@@ -448,12 +438,6 @@ If your plugin does not need CSS, delete this file.
 .message-content ol {
   padding-left: 20px;
   margin: 10px;
-}
-
-.message-content-items {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
 }
 
 .message-image-content {
@@ -863,24 +847,4 @@ If your plugin does not need CSS, delete this file.
 .model-delete-icon:hover {
   color: var(--text-error);
   opacity: 1;
-}
-
-/* Custom classes for ModelTable responsiveness */
-.copilot-model-table-desktop {
-  display: none;
-}
-
-.copilot-model-table-mobile {
-  display: block;
-}
-
-@media (min-width: 768px) {
-  /* md breakpoint */
-  .copilot-model-table-desktop {
-    display: block; /* Shown on medium screens and up */
-  }
-
-  .copilot-model-table-mobile {
-    display: none; /* Hidden on medium screens and up */
-  }
 }

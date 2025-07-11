@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { FormattedDateTime } from "./utils";
 import { TFile } from "obsidian";
+import CopilotPlugin from "@/main";
+
+export interface SelectedTextContext {
+  content: string;
+  noteTitle: string;
+  notePath: string;
+  startLine: number;
+  endLine: number;
+  id: string;
+}
 
 export interface ChatMessage {
   message: string;
@@ -13,15 +23,20 @@ export interface ChatMessage {
   context?: {
     notes: TFile[];
     urls: string[];
+    selectedTextContexts?: SelectedTextContext[];
   };
   isErrorMessage?: boolean;
 }
 
 class SharedState {
+  constructor(private plugin: CopilotPlugin) {
+    this.plugin = plugin;
+  }
   chatHistory: ChatMessage[] = [];
 
   addMessage(message: ChatMessage): void {
     this.chatHistory.push(message);
+    this.plugin.projectManager.getCurrentChainManager().addChatMessage(message);
   }
 
   getMessages(): ChatMessage[] {
@@ -30,6 +45,11 @@ class SharedState {
 
   clearChatHistory(): void {
     this.chatHistory = [];
+    this.plugin.projectManager.getCurrentChainManager().clearHistory();
+  }
+
+  replaceMessages(messages: ChatMessage[]): void {
+    this.chatHistory = [...messages];
   }
 }
 
@@ -48,8 +68,8 @@ export function useSharedState(
   // When there are no dependencies, the effect will only run once,
   // *right after the initial render* (similar to componentDidMount in class components).
   useEffect(() => {
-    setChatHistory(sharedState.getMessages());
-  }, [sharedState]);
+    setChatHistory([...sharedState.getMessages()]);
+  }, [sharedState, sharedState.chatHistory]);
 
   const addMessage = useCallback(
     (message: ChatMessage) => {

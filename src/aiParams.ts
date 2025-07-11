@@ -4,6 +4,7 @@ import { ChatPromptTemplate } from "@langchain/core/prompts";
 
 import { ModelCapability } from "@/constants";
 import { settingsAtom, settingsStore } from "@/settings/model";
+import { SelectedTextContext } from "@/sharedState";
 import { atom, useAtom } from "jotai";
 
 const userModelKeyAtom = atom<string | null>(null);
@@ -34,9 +35,34 @@ const chainTypeAtom = atom(
   }
 );
 
+const currentProjectAtom = atom<ProjectConfig | null>(null);
+const projectLoadingAtom = atom<boolean>(false);
+
+const selectedTextContextsAtom = atom<SelectedTextContext[]>([]);
+
+export interface ProjectConfig {
+  id: string;
+  name: string;
+  description?: string;
+  systemPrompt: string;
+  projectModelKey: string;
+  modelConfigs: {
+    temperature?: number;
+    maxTokens?: number;
+  };
+  contextSource: {
+    inclusions: string;
+    exclusions?: string;
+    webUrls?: string;
+    youtubeUrls?: string;
+  };
+  created: number;
+  UsageTimestamps: number;
+}
+
 export interface ModelConfig {
   modelName: string;
-  temperature: number;
+  temperature?: number;
   streaming: boolean;
   maxRetries: number;
   maxConcurrency: number;
@@ -79,7 +105,10 @@ export interface CustomModel {
   stream?: boolean;
   temperature?: number;
   maxTokens?: number;
-  context?: number;
+  topP?: number;
+  frequencyPenalty?: number;
+
+  projectEnabled?: boolean;
   plusExclusive?: boolean;
   believerExclusive?: boolean;
   capabilities?: ModelCapability[];
@@ -129,6 +158,80 @@ export function subscribeToChainTypeChange(callback: () => void): () => void {
 
 export function useChainType() {
   return useAtom(chainTypeAtom, {
+    store: settingsStore,
+  });
+}
+
+export function setCurrentProject(project: ProjectConfig | null) {
+  settingsStore.set(currentProjectAtom, project);
+}
+
+export function getCurrentProject(): ProjectConfig | null {
+  return settingsStore.get(currentProjectAtom);
+}
+
+export function subscribeToProjectChange(
+  callback: (project: ProjectConfig | null) => void
+): () => void {
+  return settingsStore.sub(currentProjectAtom, () => {
+    callback(settingsStore.get(currentProjectAtom));
+  });
+}
+
+export function useCurrentProject() {
+  return useAtom(currentProjectAtom, {
+    store: settingsStore,
+  });
+}
+
+export function setProjectLoading(loading: boolean) {
+  settingsStore.set(projectLoadingAtom, loading);
+}
+
+export function isProjectLoading(): boolean {
+  return settingsStore.get(projectLoadingAtom);
+}
+
+export function subscribeToProjectLoadingChange(callback: (loading: boolean) => void): () => void {
+  return settingsStore.sub(projectLoadingAtom, () => {
+    callback(settingsStore.get(projectLoadingAtom));
+  });
+}
+
+export function useProjectLoading() {
+  return useAtom(projectLoadingAtom, {
+    store: settingsStore,
+  });
+}
+
+export function isProjectMode() {
+  return getChainType() === ChainType.PROJECT_CHAIN;
+}
+
+export function setSelectedTextContexts(contexts: SelectedTextContext[]) {
+  settingsStore.set(selectedTextContextsAtom, contexts);
+}
+
+export function getSelectedTextContexts(): SelectedTextContext[] {
+  return settingsStore.get(selectedTextContextsAtom);
+}
+
+export function addSelectedTextContext(context: SelectedTextContext) {
+  const current = getSelectedTextContexts();
+  setSelectedTextContexts([...current, context]);
+}
+
+export function removeSelectedTextContext(id: string) {
+  const current = getSelectedTextContexts();
+  setSelectedTextContexts(current.filter((context) => context.id !== id));
+}
+
+export function clearSelectedTextContexts() {
+  setSelectedTextContexts([]);
+}
+
+export function useSelectedTextContexts() {
+  return useAtom(selectedTextContextsAtom, {
     store: settingsStore,
   });
 }

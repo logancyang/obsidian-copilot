@@ -1,25 +1,43 @@
-import { useChainType, useModelKey } from "@/aiParams";
+import {
+  clearSelectedTextContexts,
+  getCurrentProject,
+  ProjectConfig,
+  removeSelectedTextContext,
+  setCurrentProject,
+  useChainType,
+  useModelKey,
+  useSelectedTextContexts,
+} from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { updateChatMemory } from "@/chatUtils";
-import { ChatControls } from "@/components/chat-components/ChatControls";
+import { processPrompt } from "@/commands/customCommandUtils";
+import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
 import { NewVersionBanner } from "@/components/chat-components/NewVersionBanner";
+import { ProjectList } from "@/components/chat-components/ProjectList";
 import { ABORT_REASON, COMMAND_IDS, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
 import { ContextProcessor } from "@/contextProcessor";
-import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { getAIResponse } from "@/langchainStream";
 import ChainManager from "@/LLMProviders/chainManager";
 import CopilotPlugin from "@/main";
 import { Mention } from "@/mentions/Mention";
-import { getSettings, useSettingsValue } from "@/settings/model";
+import { useIsPlusUser } from "@/plusUtils";
+import {
+  getComposerOutputPrompt,
+  getSettings,
+  updateSetting,
+  useSettingsValue,
+} from "@/settings/model";
 import SharedState, { ChatMessage, useSharedState } from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { err2String, formatDateTime } from "@/utils";
 import { Buffer } from "buffer";
 import { Notice, TFile } from "obsidian";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
+
+type ChatMode = "default" | "project";
 
 interface ChatProps {
   sharedState: SharedState;
@@ -28,6 +46,7 @@ interface ChatProps {
   updateUserMessageHistory: (newMessage: string) => void;
   fileParserManager: FileParserManager;
   plugin: CopilotPlugin;
+  mode?: ChatMode;
 }
 
 const Chat: React.FC<ChatProps> = ({
@@ -48,10 +67,15 @@ const Chat: React.FC<ChatProps> = ({
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES.DEFAULT);
-  const [historyIndex, setHistoryIndex] = useState(-1);
   const [contextNotes, setContextNotes] = useState<TFile[]>([]);
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const [showChatUI, setShowChatUI] = useState(false);
+  const [selectedTextContexts] = useSelectedTextContexts();
+
+  const [previousMode, setPreviousMode] = useState<ChainType | null>(null);
+  const [selectedChain, setSelectedChain] = useChainType();
+  const isPlusUser = useIsPlusUser();
 
   const mention = Mention.getInstance();
 
@@ -121,7 +145,13 @@ const Chat: React.FC<ChatProps> = ({
 
     const notes = [...(passedContextNotes || [])];
     const activeNote = app.workspace.getActiveFile();
-    if (includeActiveNote && activeNote && !notes.some((note) => note.path === activeNote.path)) {
+    // Only include active note if not in Project mode
+    if (
+      includeActiveNote &&
+      selectedChain !== ChainType.PROJECT_CHAIN &&
+      activeNote &&
+      !notes.some((note) => note.path === activeNote.path)
+    ) {
       notes.push(activeNote);
     }
 
@@ -135,6 +165,7 @@ const Chat: React.FC<ChatProps> = ({
       context: {
         notes,
         urls: urls || [],
+        selectedTextContexts,
       },
     };
 
@@ -147,14 +178,20 @@ const Chat: React.FC<ChatProps> = ({
     setLoading(true);
     setLoadingMessage(LOADING_MESSAGES.DEFAULT);
 
-    // First, process the original user message for custom prompts
-    const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
-    const { processedPrompt: processedUserMessage, includedFiles } =
-      await customPromptProcessor.processCustomPrompt(
-        inputMessage || "",
-        "",
-        app.workspace.getActiveFile() as TFile | undefined
-      );
+    // First, add composer instruction if necessary
+    let processedInputMessage = inputMessage;
+    const composerPrompt = await getComposerOutputPrompt();
+    if (inputMessage.includes("@composer") && composerPrompt !== "") {
+      processedInputMessage =
+        inputMessage + "\n\n<output_format>\n" + composerPrompt + "\n</output_format>";
+    }
+    // process the original user message for custom prompts
+    const { processedPrompt: processedUserMessage, includedFiles } = await processPrompt(
+      processedInputMessage || "",
+      "",
+      app.vault,
+      app.workspace.getActiveFile()
+    );
 
     // Extract Mentions (such as URLs) from original input message only if using Copilot Plus chain
     const urlContextAddition =
@@ -176,9 +213,15 @@ const Chat: React.FC<ChatProps> = ({
       currentChain
     );
 
+    // Process selected text contexts
+    const selectedTextContextAddition = contextProcessor.processSelectedTextContexts();
+
     // Combine everything
     const finalProcessedMessage =
-      processedUserMessage + urlContextAddition.urlContext + noteContextAddition;
+      processedUserMessage +
+      urlContextAddition.urlContext +
+      noteContextAddition +
+      selectedTextContextAddition;
 
     let messageWithToolCalls = inputMessage;
     // Add tool calls last
@@ -199,6 +242,7 @@ const Chat: React.FC<ChatProps> = ({
           currentChain === ChainType.COPILOT_PLUS_CHAIN
             ? [...(urls || []), ...urlContextAddition.imageUrls]
             : urls || [],
+        selectedTextContexts,
       },
     };
 
@@ -208,7 +252,11 @@ const Chat: React.FC<ChatProps> = ({
     // Add to user message history if there's text
     if (inputMessage) {
       updateUserMessageHistory(inputMessage);
-      setHistoryIndex(-1);
+    }
+
+    // Autosave the chat if the setting is enabled
+    if (settings.autosaveChat) {
+      handleSaveAsNote();
     }
 
     await getAIResponse(
@@ -219,126 +267,113 @@ const Chat: React.FC<ChatProps> = ({
       setAbortController,
       { debug: settings.debug, updateLoadingMessage: setLoadingMessage }
     );
+    // Autosave the chat if the setting is enabled
+    if (settings.autosaveChat) {
+      handleSaveAsNote();
+    }
     setLoading(false);
     setLoadingMessage(LOADING_MESSAGES.DEFAULT);
   };
 
-  const navigateHistory = (direction: "up" | "down"): string => {
-    const history = plugin.userMessageHistory;
-    if (direction === "up" && historyIndex < history.length - 1) {
-      setHistoryIndex(historyIndex + 1);
-      return history[history.length - 1 - historyIndex - 1];
-    } else if (direction === "down" && historyIndex > -1) {
-      setHistoryIndex(historyIndex - 1);
-      return historyIndex === 0 ? "" : history[history.length - 1 - historyIndex + 1];
+  const handleSaveAsNote = useCallback(async () => {
+    if (!app) {
+      console.error("App instance is not available.");
+      return;
     }
-    return inputMessage;
-  };
 
-  const handleSaveAsNote = useCallback(
-    async (openNote = false) => {
-      if (!app) {
-        console.error("App instance is not available.");
-        return;
+    // Filter visible messages - use sharedState directly to ensure we get the latest messages
+    const visibleMessages = sharedState.getMessages().filter((message) => message.isVisible);
+
+    if (visibleMessages.length === 0) {
+      new Notice("No messages to save.");
+      return;
+    }
+
+    // Get the epoch of the first message
+    const firstMessageEpoch = visibleMessages[0].timestamp?.epoch || Date.now();
+
+    // Format the chat content
+    const chatContent = visibleMessages
+      .map(
+        (message) =>
+          `**${message.sender}**: ${message.message}\n[Timestamp: ${message.timestamp?.display}]`
+      )
+      .join("\n\n");
+
+    try {
+      // Check if the default folder exists or create it
+      const folder = app.vault.getAbstractFileByPath(settings.defaultSaveFolder);
+      if (!folder) {
+        await app.vault.createFolder(settings.defaultSaveFolder);
       }
 
-      // Filter visible messages
-      const visibleMessages = chatHistory.filter((message) => message.isVisible);
+      const { fileName: timestampFileName } = formatDateTime(new Date(firstMessageEpoch));
 
-      if (visibleMessages.length === 0) {
-        new Notice("No messages to save.");
-        return;
-      }
+      // Get the first user message
+      const firstUserMessage = visibleMessages.find((message) => message.sender === USER_SENDER);
 
-      // Get the epoch of the first message
-      const firstMessageEpoch = visibleMessages[0].timestamp?.epoch || Date.now();
+      // Get the first 10 words from the first user message and sanitize them
+      const firstTenWords = firstUserMessage
+        ? firstUserMessage.message
+            .split(/\s+/)
+            .slice(0, 10)
+            .join(" ")
+            .replace(/[\\/:*?"<>|]/g, "") // Remove invalid filename characters
+            .trim()
+        : "Untitled Chat";
 
-      // Format the chat content
-      const chatContent = visibleMessages
-        .map(
-          (message) =>
-            `**${message.sender}**: ${message.message}\n[Timestamp: ${message.timestamp?.display}]`
-        )
-        .join("\n\n");
+      // Parse the custom format and replace variables
+      let customFileName = settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}";
 
-      try {
-        // Check if the default folder exists or create it
-        const folder = app.vault.getAbstractFileByPath(settings.defaultSaveFolder);
-        if (!folder) {
-          await app.vault.createFolder(settings.defaultSaveFolder);
-        }
+      // Create the file name (limit to 100 characters to avoid excessively long names)
+      customFileName = customFileName
+        .replace("{$topic}", firstTenWords.slice(0, 100).replace(/\s+/g, "_"))
+        .replace("{$date}", timestampFileName.split("_")[0])
+        .replace("{$time}", timestampFileName.split("_")[1]);
 
-        const { fileName: timestampFileName } = formatDateTime(new Date(firstMessageEpoch));
+      // Sanitize the final filename
+      const sanitizedFileName = customFileName.replace(/[\\/:*?"<>|]/g, "_");
 
-        // Get the first user message
-        const firstUserMessage = visibleMessages.find((message) => message.sender === USER_SENDER);
+      // Add project ID as prefix for project-specific chat histories
+      const currentProject = getCurrentProject();
+      const filePrefix = currentProject ? `${currentProject.id}__` : "";
+      const noteFileName = `${settings.defaultSaveFolder}/${filePrefix}${sanitizedFileName}.md`;
 
-        // Get the first 10 words from the first user message and sanitize them
-        const firstTenWords = firstUserMessage
-          ? firstUserMessage.message
-              .split(/\s+/)
-              .slice(0, 10)
-              .join(" ")
-              .replace(/[\\/:*?"<>|]/g, "") // Remove invalid filename characters
-              .trim()
-          : "Untitled Chat";
-
-        // Parse the custom format and replace variables
-        let customFileName = settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}";
-
-        // Create the file name (limit to 100 characters to avoid excessively long names)
-        customFileName = customFileName
-          .replace("{$topic}", firstTenWords.slice(0, 100).replace(/\s+/g, "_"))
-          .replace("{$date}", timestampFileName.split("_")[0])
-          .replace("{$time}", timestampFileName.split("_")[1]);
-
-        // Sanitize the final filename
-        const sanitizedFileName = customFileName.replace(/[\\/:*?"<>|]/g, "_");
-        const noteFileName = `${settings.defaultSaveFolder}/${sanitizedFileName}.md`;
-
-        // Add the timestamp and model properties to the note content
-        const noteContentWithTimestamp = `---
+      // Add the timestamp, model, and project properties to the note content
+      const noteContentWithTimestamp = `---
 epoch: ${firstMessageEpoch}
 modelKey: ${currentModelKey}
+${currentProject ? `projectId: ${currentProject.id}` : ""}
+${currentProject ? `projectName: ${currentProject.name}` : ""}
 tags:
   - ${settings.defaultConversationTag}
+${currentProject ? `  - project-${currentProject.name}` : ""}
 ---
 
 ${chatContent}`;
 
-        // Check if the file already exists
-        const existingFile = app.vault.getAbstractFileByPath(noteFileName);
-        if (existingFile instanceof TFile) {
-          // If the file exists, update its content
-          await app.vault.modify(existingFile, noteContentWithTimestamp);
-          new Notice(`Chat updated in existing note: ${noteFileName}`);
-        } else {
-          // If the file doesn't exist, create a new one
-          await app.vault.create(noteFileName, noteContentWithTimestamp);
-          new Notice(`Chat saved as new note: ${noteFileName}`);
-        }
-
-        if (openNote) {
-          const file = app.vault.getAbstractFileByPath(noteFileName);
-          if (file instanceof TFile) {
-            const leaf = app.workspace.getLeaf();
-            leaf.openFile(file);
-          }
-        }
-      } catch (error) {
-        console.error("Error saving chat as note:", err2String(error));
-        new Notice("Failed to save chat as note. Check console for details.");
+      // Check if the file already exists
+      const existingFile = app.vault.getAbstractFileByPath(noteFileName);
+      if (existingFile instanceof TFile) {
+        // If the file exists, update its content
+        await app.vault.modify(existingFile, noteContentWithTimestamp);
+      } else {
+        // If the file doesn't exist, create a new one
+        await app.vault.create(noteFileName, noteContentWithTimestamp);
+        new Notice(`Chat saved as note: ${noteFileName}`);
       }
-    },
-    [
-      app,
-      chatHistory,
-      currentModelKey,
-      settings.defaultConversationTag,
-      settings.defaultSaveFolder,
-      settings.defaultConversationNoteName,
-    ]
-  );
+    } catch (error) {
+      console.error("Error saving chat as note:", err2String(error));
+      new Notice("Failed to save chat as note. Check console for details.");
+    }
+  }, [
+    app,
+    sharedState,
+    currentModelKey,
+    settings.defaultConversationTag,
+    settings.defaultSaveFolder,
+    settings.defaultConversationNoteName,
+  ]);
 
   const handleStopGenerating = useCallback(
     (reason?: ABORT_REASON) => {
@@ -348,6 +383,9 @@ ${chatContent}`;
         }
         abortController.abort(reason);
         setLoading(false);
+        setLoadingMessage(LOADING_MESSAGES.DEFAULT);
+        // Keep the partial AI message visible
+        // Don't clear setCurrentAiMessage here
       }
     },
     [abortController, settings.debug]
@@ -400,8 +438,21 @@ ${chatContent}`;
       } finally {
         setLoading(false);
       }
+
+      // Autosave the chat if the setting is enabled
+      if (settings.autosaveChat) {
+        handleSaveAsNote();
+      }
     },
-    [addMessage, chainManager, chatHistory, clearMessages, settings.debug]
+    [
+      addMessage,
+      chainManager,
+      chatHistory,
+      clearMessages,
+      settings.debug,
+      settings.autosaveChat,
+      handleSaveAsNote,
+    ]
   );
 
   const handleEdit = useCallback(
@@ -437,8 +488,21 @@ ${chatContent}`;
       ) {
         handleRegenerate(messageIndex + 1);
       }
+
+      // Autosave the chat if the setting is enabled
+      if (settings.autosaveChat) {
+        handleSaveAsNote();
+      }
     },
-    [addMessage, chainManager.memoryManager, chatHistory, clearMessages, handleRegenerate]
+    [
+      addMessage,
+      chainManager.memoryManager,
+      chatHistory,
+      clearMessages,
+      handleRegenerate,
+      settings.autosaveChat,
+      handleSaveAsNote,
+    ]
   );
 
   const createEffect = (
@@ -488,32 +552,17 @@ ${chatContent}`;
     };
   };
 
-  const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(
-    createEffect(COMMAND_IDS.APPLY_CUSTOM_PROMPT, async (selectedText, customPrompt) => {
-      if (!customPrompt) {
-        return selectedText;
-      }
-      const result = await customPromptProcessor.processCustomPrompt(
-        customPrompt,
-        selectedText,
-        app.workspace.getActiveFile() ?? undefined
-      );
-      return result.processedPrompt; // Extract just the processed prompt string
-    }),
-    []
-  );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(
     createEffect(COMMAND_IDS.APPLY_ADHOC_PROMPT, async (selectedText, customPrompt) => {
       if (!customPrompt) {
         return selectedText;
       }
-      const result = await customPromptProcessor.processCustomPrompt(
+      const result = await processPrompt(
         customPrompt,
         selectedText,
-        app.workspace.getActiveFile() as TFile | undefined
+        app.vault,
+        app.workspace.getActiveFile()
       );
       return result.processedPrompt; // Extract just the processed prompt string
     }),
@@ -544,46 +593,161 @@ ${chatContent}`;
     [addMessage, chainManager.memoryManager, chatHistory, clearMessages]
   );
 
+  const handleAddProject = useCallback(
+    (project: ProjectConfig) => {
+      const currentProjects = settings.projectList || [];
+      const existingIndex = currentProjects.findIndex((p) => p.name === project.name);
+
+      if (existingIndex >= 0) {
+        throw new Error(`Project "${project.name}" already exists, please use a different name`);
+      }
+
+      const newProjectList = [...currentProjects, project];
+      updateSetting("projectList", newProjectList);
+
+      // Check if this project is now the current project
+      const currentProject = getCurrentProject();
+      if (currentProject?.id === project.id) {
+        // Reload the project context for the newly added project
+        reloadCurrentProject()
+          .then(() => {
+            new Notice(`${project.name} added and context loaded`);
+          })
+          .catch((error: Error) => {
+            console.error("Error loading project context:", error);
+            new Notice(`${project.name} added but context loading failed`);
+          });
+      } else {
+        new Notice(`${project.name} added successfully`);
+      }
+
+      return true;
+    },
+    [settings.projectList]
+  );
+
+  const handleEditProject = useCallback(
+    (originP: ProjectConfig, updateP: ProjectConfig) => {
+      const currentProjects = settings.projectList || [];
+      const existingProject = currentProjects.find((p) => p.name === originP.name);
+
+      if (!existingProject) {
+        throw new Error(`Project "${originP.name}" does not exist`);
+      }
+
+      const newProjectList = currentProjects.map((p) => (p.name === originP.name ? updateP : p));
+      updateSetting("projectList", newProjectList);
+
+      // If this is the current project, update the current project atom
+      const currentProject = getCurrentProject();
+      if (currentProject?.id === originP.id) {
+        setCurrentProject(updateP);
+
+        // Reload the project context
+        reloadCurrentProject()
+          .then(() => {
+            new Notice(`${originP.name} updated and context reloaded`);
+          })
+          .catch((error: Error) => {
+            console.error("Error reloading project context:", error);
+            new Notice(`${originP.name} updated but context reload failed`);
+          });
+      } else {
+        new Notice(`${originP.name} updated successfully`);
+      }
+
+      return true;
+    },
+    [settings.projectList]
+  );
+
   const handleInsertToChat = useCallback((prompt: string) => {
     setInputMessage((prev) => `${prev} ${prompt} `);
   }, []);
 
+  const handleRemoveSelectedText = useCallback((id: string) => {
+    removeSelectedTextContext(id);
+  }, []);
+
   const handleNewChat = useCallback(async () => {
     handleStopGenerating(ABORT_REASON.NEW_CHAT);
-    if (settings.autosaveChat && chatHistory.length > 0) {
-      await handleSaveAsNote(true);
-    }
-    clearMessages();
-    chainManager.memoryManager.clearChatMemory();
+    // Delegate to the shared plugin method for consistent behavior
+    await plugin.handleNewChat();
+
+    // Additional UI state reset specific to this component
     setCurrentAiMessage("");
     setContextNotes([]);
-    setIncludeActiveNote(false);
-  }, [
-    handleStopGenerating,
-    settings.autosaveChat,
-    chatHistory.length,
-    clearMessages,
-    chainManager.memoryManager,
-    handleSaveAsNote,
-  ]);
+    clearSelectedTextContexts();
+    // Only modify includeActiveNote if in a non-COPILOT_PLUS_CHAIN mode
+    // In COPILOT_PLUS_CHAIN mode, respect the settings.includeActiveNoteAsContext value
+    if (selectedChain !== ChainType.COPILOT_PLUS_CHAIN) {
+      setIncludeActiveNote(false);
+    } else {
+      setIncludeActiveNote(settings.includeActiveNoteAsContext);
+    }
+  }, [handleStopGenerating, plugin, settings.includeActiveNoteAsContext, selectedChain]);
 
-  return (
-    <div className="flex flex-col size-full overflow-hidden">
-      <NewVersionBanner currentVersion={plugin.manifest.version} />
-      <ChatMessages
-        chatHistory={chatHistory}
-        currentAiMessage={currentAiMessage}
-        loading={loading}
-        loadingMessage={loadingMessage}
-        app={app}
-        onRegenerate={handleRegenerate}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-        onInsertToChat={handleInsertToChat}
-        onReplaceChat={setInputMessage}
-      />
-      <div className="bottom-container">
-        <ChatControls onNewChat={handleNewChat} onSaveAsNote={() => handleSaveAsNote(true)} />
+  const handleLoadHistory = useCallback(() => {
+    plugin.loadCopilotChatHistory();
+  }, [plugin]);
+
+  // Event listener for abort stream events
+  useEffect(() => {
+    const handleAbortStream = (event: CustomEvent) => {
+      const reason = event.detail?.reason || ABORT_REASON.NEW_CHAT;
+      handleStopGenerating(reason);
+    };
+
+    eventTarget?.addEventListener(EVENT_NAMES.ABORT_STREAM, handleAbortStream);
+
+    // Cleanup function
+    return () => {
+      eventTarget?.removeEventListener(EVENT_NAMES.ABORT_STREAM, handleAbortStream);
+    };
+  }, [eventTarget, handleStopGenerating]);
+
+  // Use the includeActiveNoteAsContext setting
+  useEffect(() => {
+    if (settings.includeActiveNoteAsContext !== undefined) {
+      // Only apply the setting if not in Project mode
+      if (selectedChain === ChainType.COPILOT_PLUS_CHAIN) {
+        setIncludeActiveNote(settings.includeActiveNoteAsContext);
+      } else {
+        // In other modes, always disable including active note
+        setIncludeActiveNote(false);
+      }
+    }
+  }, [settings.includeActiveNoteAsContext, selectedChain]);
+
+  const renderChatComponents = () => (
+    <>
+      <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
+        <NewVersionBanner currentVersion={plugin.manifest.version} />
+        <ChatMessages
+          chatHistory={chatHistory}
+          currentAiMessage={currentAiMessage}
+          loading={loading}
+          loadingMessage={loadingMessage}
+          app={app}
+          onRegenerate={handleRegenerate}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onInsertToChat={handleInsertToChat}
+          onReplaceChat={setInputMessage}
+          showHelperComponents={selectedChain !== ChainType.PROJECT_CHAIN}
+        />
+        <ChatControls
+          onNewChat={handleNewChat}
+          onSaveAsNote={() => handleSaveAsNote()}
+          onLoadHistory={handleLoadHistory}
+          onModeChange={(newMode) => {
+            setPreviousMode(selectedChain);
+            // Hide chat UI when switching to project mode
+            if (newMode === ChainType.PROJECT_CHAIN) {
+              setShowChatUI(false);
+            }
+          }}
+        />
         <ChatInput
           ref={inputRef}
           inputMessage={inputMessage}
@@ -592,7 +756,6 @@ ${chatContent}`;
           isGenerating={loading}
           onStopGenerating={() => handleStopGenerating(ABORT_REASON.USER_STOPPED)}
           app={app}
-          navigateHistory={navigateHistory}
           contextNotes={contextNotes}
           setContextNotes={setContextNotes}
           includeActiveNote={includeActiveNote}
@@ -602,7 +765,47 @@ ${chatContent}`;
           onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
           setSelectedImages={setSelectedImages}
           whisperPlugin={plugin} 
+          disableModelSwitch={selectedChain === ChainType.PROJECT_CHAIN}
+          selectedTextContexts={selectedTextContexts}
+          onRemoveSelectedText={handleRemoveSelectedText}
         />
+      </div>
+    </>
+  );
+
+  return (
+    <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
+      <div className="tw-h-full">
+        <div className="tw-relative tw-flex tw-h-full tw-flex-col">
+          {selectedChain === ChainType.PROJECT_CHAIN && (
+            <div className={`${selectedChain === ChainType.PROJECT_CHAIN ? "tw-z-modal" : ""}`}>
+              <ProjectList
+                projects={settings.projectList || []}
+                defaultOpen={true}
+                app={app}
+                hasMessages={false}
+                onProjectAdded={handleAddProject}
+                onEditProject={handleEditProject}
+                inputRef={inputRef}
+                onClose={() => {
+                  if (previousMode) {
+                    setSelectedChain(previousMode);
+                    setPreviousMode(null);
+                  } else {
+                    // default back to chat or plus mode
+                    setSelectedChain(
+                      isPlusUser ? ChainType.COPILOT_PLUS_CHAIN : ChainType.LLM_CHAIN
+                    );
+                  }
+                }}
+                showChatUI={(v) => setShowChatUI(v)}
+              />
+            </div>
+          )}
+          {(selectedChain !== ChainType.PROJECT_CHAIN ||
+            (selectedChain === ChainType.PROJECT_CHAIN && showChatUI)) &&
+            renderChatComponents()}
+        </div>
       </div>
     </div>
   );

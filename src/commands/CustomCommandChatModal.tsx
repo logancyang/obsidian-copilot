@@ -1,24 +1,24 @@
-import { useModelKey } from "@/aiParams";
-import { processCommandPrompt } from "@/commands/inlineEditCommandUtils";
+import { CustomModel, useModelKey } from "@/aiParams";
+import { processCommandPrompt } from "@/commands/customCommandUtils";
 import { Button } from "@/components/ui/button";
 import { getModelDisplayText } from "@/components/ui/model-display";
 import ChatModelManager from "@/LLMProviders/chatModelManager";
-import { InlineEditCommandSettings, useSettingsValue } from "@/settings/model";
+import { logError } from "@/logger";
 import { findCustomModel, insertIntoEditor } from "@/utils";
-import { Bot, Copy, PenLine, CornerDownLeft, Command, ArrowBigUp } from "lucide-react";
-import { App, Modal, Notice, Platform } from "obsidian";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createRoot, Root } from "react-dom/client";
 import {
   ChatPromptTemplate,
   HumanMessagePromptTemplate,
   MessagesPlaceholder,
   SystemMessagePromptTemplate,
 } from "@langchain/core/prompts";
-import { BaseChatMemory, BufferMemory } from "langchain/memory";
 import { RunnableSequence } from "@langchain/core/runnables";
-import { CustomModel } from "@/aiParams";
-import { logError } from "@/logger";
+import { BaseChatMemory, BufferMemory } from "langchain/memory";
+import { ArrowBigUp, Bot, Command, Copy, CornerDownLeft, PenLine } from "lucide-react";
+import { App, Modal, Notice, Platform } from "obsidian";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createRoot, Root } from "react-dom/client";
+import { CustomCommand } from "@/commands/type";
+import { useSettingsValue } from "@/settings/model";
 
 // Custom hook for managing chat chain
 function useChatChain(selectedModel: CustomModel) {
@@ -62,19 +62,19 @@ function useChatChain(selectedModel: CustomModel) {
   return { chatChain, chatMemory };
 }
 
-interface InlineEditModalContentProps {
+interface CustomCommandChatModalContentProps {
   originalText: string;
-  command: InlineEditCommandSettings;
+  command: CustomCommand;
   onInsert: (message: string) => void;
   onReplace: (message: string) => void;
 }
 
-function InlineEditModalContent({
+function CustomCommandChatModalContent({
   originalText,
   command,
   onInsert,
   onReplace,
-}: InlineEditModalContentProps) {
+}: CustomCommandChatModalContentProps) {
   const [aiCurrentMessage, setAiCurrentMessage] = useState<string | null>(null);
   const [processedMessage, setProcessedMessage] = useState<string | null>(null);
   const [followupInstruction, setFollowupInstruction] = useState<string>("");
@@ -90,7 +90,7 @@ function InlineEditModalContent({
 
   const { chatChain, chatMemory } = useChatChain(selectedModel);
 
-  const commandName = command.name;
+  const commandTitle = command.title;
 
   // Reusable function to handle streaming responses wrapped in useCallback
   const streamResponse = useCallback(
@@ -151,7 +151,7 @@ function InlineEditModalContent({
       }
 
       try {
-        const prompt = await processCommandPrompt(command.prompt, originalText);
+        const prompt = await processCommandPrompt(command.content, originalText);
         await streamResponse(prompt, abortController);
       } catch (error) {
         logError("Error in initial response:", error);
@@ -163,7 +163,7 @@ function InlineEditModalContent({
     return () => {
       abortController.abort();
     };
-  }, [command.prompt, originalText, chatChain, streamResponse]);
+  }, [command.content, originalText, chatChain, streamResponse]);
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -244,43 +244,45 @@ function InlineEditModalContent({
   const showFollowupSubmit = !generating && followupInstruction.trim().length > 0;
 
   return (
-    <div className="flex flex-col gap-4" onKeyDown={handleKeyDown}>
-      <div className="max-h-60 overflow-y-auto text-muted whitespace-pre-wrap">{originalText}</div>
-      <div className="flex flex-col gap-2">
-        {commandName && (
-          <div className="text-normal flex items-center gap-2 font-bold">
-            <PenLine className="w-4 h-4" />
-            {commandName}
+    <div className="tw-flex tw-flex-col tw-gap-4" onKeyDown={handleKeyDown}>
+      <div className="tw-max-h-60 tw-overflow-y-auto tw-whitespace-pre-wrap tw-text-muted">
+        {originalText}
+      </div>
+      <div className="tw-flex tw-flex-col tw-gap-2">
+        {commandTitle && (
+          <div className="tw-flex tw-items-center tw-gap-2 tw-font-bold tw-text-normal">
+            <PenLine className="tw-size-4" />
+            {commandTitle}
           </div>
         )}
       </div>
-      <div className="relative group">
+      <div className="tw-group tw-relative">
         <textarea
           ref={textareaRef}
-          className="w-full h-60 text-text peer"
+          className="tw-peer tw-h-60 tw-w-full tw-text-text"
           value={processedMessage ?? aiCurrentMessage ?? "loading..."}
           disabled={processedMessage == null}
           onChange={(e) => setProcessedMessage(e.target.value)}
         />
         {processedMessage && (
           <button
-            className="absolute top-2 right-2 opacity-0 peer-focus-visible:!opacity-0 group-hover:opacity-100 transition-opacity"
+            className="tw-absolute tw-right-2 tw-top-2 tw-opacity-0 tw-transition-opacity group-hover:tw-opacity-100 peer-focus-visible:!tw-opacity-0"
             onClick={() => {
               navigator.clipboard.writeText(processedMessage);
               new Notice("Copied to clipboard");
             }}
           >
-            <Copy className="w-4 h-4 text-muted-foreground hover:text-accent" />
+            <Copy className="tw-size-4 hover:tw-text-accent" />
           </button>
         )}
       </div>
 
       {!generating && processedMessage && (
-        <div className="flex flex-col gap-2">
+        <div className="tw-flex tw-flex-col tw-gap-2">
           <textarea
             autoFocus
             ref={followupRef}
-            className="w-full h-20 text-text"
+            className="tw-h-20 tw-w-full tw-text-text"
             placeholder="Enter follow-up instructions..."
             value={followupInstruction}
             onChange={(e) => setFollowupInstruction(e.target.value)}
@@ -288,12 +290,12 @@ function InlineEditModalContent({
         </div>
       )}
 
-      <div className="flex justify-between gap-2">
-        <div className="text-faint text-xs flex items-center gap-2 font-bold">
-          <Bot className="w-4 h-4" />
+      <div className="tw-flex tw-justify-between tw-gap-2">
+        <div className="tw-flex tw-items-center tw-gap-2 tw-text-xs tw-font-bold tw-text-faint">
+          <Bot className="tw-size-4" />
           {getModelDisplayText(selectedModel)}
         </div>
-        <div className="flex gap-2">
+        <div className="tw-flex tw-gap-2">
           {generating ? (
             // When generating, show Stop button
             <Button variant="secondary" onClick={handleStopGeneration}>
@@ -301,49 +303,49 @@ function InlineEditModalContent({
             </Button>
           ) : showFollowupSubmit ? (
             // When follow-up instruction has content, show Submit button with Enter shortcut
-            <Button onClick={handleFollowupSubmit} className="flex items-center gap-1">
+            <Button onClick={handleFollowupSubmit} className="tw-flex tw-items-center tw-gap-1">
               <span>Submit</span>
-              <CornerDownLeft className="size-3" />
+              <CornerDownLeft className="tw-size-3" />
             </Button>
           ) : (
             // Otherwise, show Insert and Replace buttons with shortcut indicators
             <>
               <Button
                 onClick={() => onInsert(processedMessage ?? "")}
-                className="flex items-center gap-1"
+                className="tw-flex tw-items-center tw-gap-1"
               >
                 <span>Insert</span>
-                <div className="flex items-center text-xs text-muted">
+                <div className="tw-flex tw-items-center tw-text-xs tw-text-normal">
                   {Platform.isMacOS ? (
                     <>
-                      <Command className="size-3" />
-                      <ArrowBigUp className="size-3" />
-                      <CornerDownLeft className="size-3" />
+                      <Command className="tw-size-3" />
+                      <ArrowBigUp className="tw-size-3" />
+                      <CornerDownLeft className="tw-size-3" />
                     </>
                   ) : (
                     <>
-                      <span className="text-xs">Ctrl</span>
-                      <ArrowBigUp className="size-3" />
-                      <CornerDownLeft className="size-3" />
+                      <span className="tw-text-xs">Ctrl</span>
+                      <ArrowBigUp className="tw-size-3" />
+                      <CornerDownLeft className="tw-size-3" />
                     </>
                   )}
                 </div>
               </Button>
               <Button
                 onClick={() => onReplace(processedMessage ?? "")}
-                className="flex items-center gap-1"
+                className="tw-flex tw-items-center tw-gap-1"
               >
                 <span>Replace</span>
-                <div className="flex items-center text-xs text-muted">
+                <div className="tw-flex tw-items-center tw-text-xs tw-text-normal">
                   {Platform.isMacOS ? (
                     <>
-                      <Command className="size-3" />
-                      <CornerDownLeft className="size-3" />
+                      <Command className="tw-size-3" />
+                      <CornerDownLeft className="tw-size-3" />
                     </>
                   ) : (
                     <>
-                      <span className="text-xs">Ctrl</span>
-                      <CornerDownLeft className="size-3" />
+                      <span className="tw-text-xs">Ctrl</span>
+                      <CornerDownLeft className="tw-size-3" />
                     </>
                   )}
                 </div>
@@ -356,14 +358,14 @@ function InlineEditModalContent({
   );
 }
 
-export class InlineEditModal extends Modal {
+export class CustomCommandChatModal extends Modal {
   private root: Root;
 
   constructor(
     app: App,
     private configs: {
       selectedText: string;
-      command: InlineEditCommandSettings;
+      command: CustomCommand;
     }
   ) {
     super(app);
@@ -385,7 +387,7 @@ export class InlineEditModal extends Modal {
     };
 
     this.root.render(
-      <InlineEditModalContent
+      <CustomCommandChatModalContent
         originalText={selectedText}
         command={command}
         onInsert={handleInsert}

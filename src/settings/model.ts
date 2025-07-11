@@ -1,18 +1,25 @@
-import { CustomModel } from "@/aiParams";
+import { CustomModel, ProjectConfig } from "@/aiParams";
 import { atom, createStore, useAtomValue } from "jotai";
 import { v4 as uuidv4 } from "uuid";
 
+import { AcceptKeyOption } from "@/autocomplete/codemirrorIntegration";
 import { type ChainType } from "@/chainFactory";
 import {
   BUILTIN_CHAT_MODELS,
   BUILTIN_EMBEDDING_MODELS,
+  COMPOSER_OUTPUT_INSTRUCTIONS,
   DEFAULT_OPEN_AREA,
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
   EmbeddingModelProviders,
 } from "@/constants";
 
-export interface InlineEditCommandSettings {
+/**
+ * We used to store commands in the settings file with the following interface.
+ * It has been migrated to CustomCommand. This interface is needed to migrate
+ * the legacy commands to the new format.
+ */
+export interface LegacyCommandSettings {
   /**
    * The name of the command. The name will be turned into id by replacing
    * spaces with underscores.
@@ -89,6 +96,7 @@ export interface CopilotSettings {
   defaultSaveFolder: string;
   defaultConversationTag: string;
   autosaveChat: boolean;
+  includeActiveNoteAsContext: boolean;
   customPromptsFolder: string;
   indexVaultToVectorStore: string;
   chatNoteContextPath: string;
@@ -103,6 +111,7 @@ export interface CopilotSettings {
   activeModels: Array<CustomModel>;
   activeEmbeddingModels: Array<CustomModel>;
   promptUsageTimestamps: Record<string, number>;
+  promptSortStrategy: string;
   embeddingRequestsPerMin: number;
   embeddingBatchSize: number;
   defaultOpenArea: DEFAULT_OPEN_AREA;
@@ -113,9 +122,16 @@ export interface CopilotSettings {
   defaultConversationNoteName: string;
   // undefined means never checked
   isPlusUser: boolean | undefined;
-  inlineEditCommands: InlineEditCommandSettings[] | undefined;
+  inlineEditCommands: LegacyCommandSettings[] | undefined;
+  enableAutocomplete: boolean;
+  autocompleteAcceptKey: AcceptKeyOption;
+  allowAdditionalContext: boolean;
+  enableWordCompletion: boolean;
+  projectList: Array<ProjectConfig>;
   passMarkdownImages: boolean;
   enableCustomPromptTemplating: boolean;
+  /** Whether we have suggested built-in default commands to the user once. */
+  suggestedDefaultCommands: boolean;
   systemPrompts?: {
     default: string;
     custom?: Record<string, string>;
@@ -285,6 +301,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     ? DEFAULT_SETTINGS.embeddingBatchSize
     : embeddingBatchSize;
 
+  // Ensure includeActiveNoteAsContext has a default value
+  if (typeof sanitizedSettings.includeActiveNoteAsContext !== "boolean") {
+    sanitizedSettings.includeActiveNoteAsContext = DEFAULT_SETTINGS.includeActiveNoteAsContext;
+  }
+
   // Ensure passMarkdownImages has a default value
   if (typeof sanitizedSettings.passMarkdownImages !== "boolean") {
     sanitizedSettings.passMarkdownImages = DEFAULT_SETTINGS.passMarkdownImages;
@@ -295,44 +316,68 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.enableCustomPromptTemplating = DEFAULT_SETTINGS.enableCustomPromptTemplating;
   }
 
+  // Ensure allowAdditionalContext has a default value
+  if (typeof sanitizedSettings.allowAdditionalContext !== "boolean") {
+    sanitizedSettings.allowAdditionalContext = DEFAULT_SETTINGS.allowAdditionalContext;
+  }
+
+  // Ensure enableWordCompletion has a default value
+  if (typeof sanitizedSettings.enableWordCompletion !== "boolean") {
+    sanitizedSettings.enableWordCompletion = DEFAULT_SETTINGS.enableWordCompletion;
+  }
+
   return sanitizedSettings;
 }
 
-export function getSystemPrompt(): string {
-  // const userPrompt = getSettings().userSystemPrompt;
-  // return userPrompt ? `${DEFAULT_SYSTEM_PROMPT}\n\n${userPrompt}` : DEFAULT_SYSTEM_PROMPT;
+export function getComposerOutputPrompt(): string {
+  const isPlusUser = getSettings().isPlusUser;
 
+  return isPlusUser ? COMPOSER_OUTPUT_INSTRUCTIONS : "";
+}
+
+export function getSystemPrompt(): string {
   const settings = getSettings();
   const userPrompt = settings.userSystemPrompt;
+  let basePrompt = DEFAULT_SYSTEM_PROMPT;
+  let customInstructions = "";
 
-  let basePrompt: string;
-
-  // 根据是否拼接默认提示词进行判断
-  if (settings.promptEnhancements?.appendDefaultPrompt === false) {
-    // 不拼接默认提示词
-    basePrompt = userPrompt || "";
-  } else {
-    // 拼接默认提示词
-    basePrompt = userPrompt ? `${DEFAULT_SYSTEM_PROMPT}\n\n${userPrompt}` : DEFAULT_SYSTEM_PROMPT;
+  // 收集所有需要放入user_custom_instructions的内容
+  if (userPrompt) {
+    customInstructions += userPrompt;
   }
 
-  // 如果自动衍生问题功能开启且设置了提示词
+  // 自动衍生问题提示词
   if (
     settings.promptEnhancements?.autoFollowUp?.enabled &&
     settings.promptEnhancements.autoFollowUp.prompt
   ) {
-    basePrompt += `\n\n${settings.promptEnhancements.autoFollowUp.prompt}`;
+    if (customInstructions) customInstructions += "\n\n";
+    customInstructions += settings.promptEnhancements.autoFollowUp.prompt;
   }
 
-  // 如果自动语音播放功能开启且设置了提示词
+  // 自动语音播放提示词
   if (
     settings.promptEnhancements?.autoSpeech?.useOralPrompt &&
     settings.promptEnhancements.autoSpeech.prompt
   ) {
-    basePrompt += `\n\n${settings.promptEnhancements.autoSpeech.prompt}`;
+    if (customInstructions) customInstructions += "\n\n";
+    customInstructions += settings.promptEnhancements.autoSpeech.prompt;
   }
 
-  return basePrompt;
+  // 根据是否拼接默认提示词进行判断
+  if (settings.promptEnhancements?.appendDefaultPrompt === false) {
+    // 不拼接默认提示词
+    return customInstructions ? `
+<user_custom_instructions>
+${customInstructions}
+</user_custom_instructions>` : "";
+  } else {
+    // 拼接默认提示词
+    return customInstructions ? `${basePrompt}
+<user_custom_instructions>
+${customInstructions}
+</user_custom_instructions>` : basePrompt;
+  }
 }
 
 function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {

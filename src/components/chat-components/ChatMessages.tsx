@@ -17,6 +17,7 @@ interface ChatMessagesProps {
   onDelete: (messageIndex: number) => void;
   onInsertToChat: (prompt: string) => void;
   onReplaceChat: (prompt: string) => void;
+  showHelperComponents: boolean;
 }
 
 const ChatMessages = memo(
@@ -31,6 +32,7 @@ const ChatMessages = memo(
     onDelete,
     onInsertToChat,
     onReplaceChat,
+    showHelperComponents = true,
   }: ChatMessagesProps) => {
     const [loadingDots, setLoadingDots] = useState("");
 
@@ -62,15 +64,17 @@ const ChatMessages = memo(
 
     if (!chatHistory.filter((message) => message.isVisible).length && !currentAiMessage) {
       return (
-        <div className="flex flex-col gap-2 overflow-y-auto w-full h-full">
-          {settings.showRelevantNotes && (
+        <div className="tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto">
+          {showHelperComponents && settings.showRelevantNotes && (
             <RelevantNotes
               onInsertToChat={onInsertToChat}
               defaultOpen={true}
               key="relevant-notes-before-chat"
             />
           )}
-          {settings.showSuggestedPrompts && <SuggestedPrompts onClick={onReplaceChat} />}
+          {showHelperComponents && settings.showSuggestedPrompts && (
+            <SuggestedPrompts onClick={onReplaceChat} />
+          )}
         </div>
       );
     }
@@ -80,10 +84,10 @@ const ChatMessages = memo(
     };
 
     return (
-      <div className="flex flex-col flex-1 h-full overflow-hidden">
-        {settings.showRelevantNotes && (
+      <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
+        {showHelperComponents && settings.showRelevantNotes && (
           <RelevantNotes
-            className="mb-4"
+            className="tw-mb-4"
             onInsertToChat={onInsertToChat}
             defaultOpen={false}
             key="relevant-notes-in-chat"
@@ -91,7 +95,7 @@ const ChatMessages = memo(
         )}
         <div
           data-testid="chat-messages"
-          className="flex flex-col items-start justify-start flex-1 overflow-y-auto w-full break-words text-[calc(var(--font-text-size)_-_2px)] box-border scroll-smooth mt-auto select-text"
+          className="tw-mt-auto tw-box-border tw-flex tw-w-full tw-flex-1 tw-select-text tw-flex-col tw-items-start tw-justify-start tw-overflow-y-auto tw-scroll-smooth tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)]"
         >
           {chatHistory.map(
             (message, index) =>
@@ -104,6 +108,7 @@ const ChatMessages = memo(
                   onRegenerate={() => onRegenerate(index)}
                   onEdit={(newMessage) => onEdit(index, newMessage)}
                   onDelete={() => onDelete(index)}
+                  chatHistory={chatHistory}
                 />
               )
           )}
@@ -119,6 +124,7 @@ const ChatMessages = memo(
               app={app}
               isStreaming={true}
               onDelete={() => {}}
+              chatHistory={chatHistory}
             />
           )}
         </div>
