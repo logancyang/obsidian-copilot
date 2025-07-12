@@ -222,16 +222,16 @@ export function SystemPromptsSection() {
         <CollapsibleContent className="tw-space-y-2">
           {/* 人设调试板 */}
           <div className="tw-border-t tw-pt-2">
-            <h3 className="tw-font-medium tw-mb-2 tw-text-lg">人设调试板</h3>
+            <h3 className="tw-mb-2 tw-text-lg tw-font-medium">人设调试板</h3>
 
             {/* 修改应用按钮区域 - 将添加人设按钮移到前面 */}
-            <div className="tw-flex tw-gap-2 tw-items-center tw-mb-4">
+            <div className="tw-mb-4 tw-flex tw-items-center tw-gap-2">
               {/* 添加 mb-4 下边距 */}
               <input
                 placeholder="人设名称（用于人设列表中标识系统提示词）"
                 value={presetName}
                 onChange={(e) => setPresetName(e.target.value)}
-                className="tw-w-[300px] tw-p-2 tw-border tw-rounded-md tw-text-sm"
+                className="tw-w-[300px] tw-rounded-md tw-border tw-p-2 tw-text-sm"
               />
               <Button onClick={applyCharacterSettings} disabled={!presetName.trim()}>
                 添加人设
@@ -251,12 +251,12 @@ export function SystemPromptsSection() {
       </Collapsible>
       {/* 人设列表 - 移出可折叠区域 */}
       <div className="tw-border-t tw-pt-6">
-        <h3 className="tw-text-lg tw-font-medium tw-mb-2">人设列表(展示已配置的系统提示词)</h3>
+        <h3 className="tw-mb-2 tw-text-lg tw-font-medium">人设列表(展示已配置的系统提示词)</h3>
         {presets.length > 0 ? (
           <div className="tw-space-y-2">
             {/* 缩小间距从space-y-4到space-y-2 */}
             {presets.map((preset) => (
-              <div key={preset.id} className="tw-p-3 tw-border tw-rounded">
+              <div key={preset.id} className="tw-rounded tw-border tw-p-3">
                 <div className="tw-flex tw-flex-col tw-gap-2">
                   <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
                     <div className="tw-flex tw-items-center tw-gap-2">
@@ -276,7 +276,7 @@ export function SystemPromptsSection() {
                   <textarea
                     value={preset.prompt}
                     onChange={(e) => handleUpdatePresetPrompt(preset.id, e.target.value)}
-                    className="tw-w-full tw-h-16 tw-p-2 tw-border tw-rounded"
+                    className="tw-h-16 tw-w-full tw-rounded tw-border tw-p-2"
                     placeholder="Character prompt..."
                   />
                 </div>
@@ -574,14 +574,14 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
                 onChange={(e) => handleCheckboxChange(key, e.target.checked)}
                 className="tw-size-4"
               />
-              <span className="tw-font-medium tw-inline-block tw-w-[100px] tw-truncate" title={key}>
+              <span className="tw-inline-block tw-w-[100px] tw-truncate tw-font-medium" title={key}>
                 {key} :
               </span>
               {/* 调整后的下拉框 */}
               <select
                 value={selectedValues[key] || ""}
                 onChange={(e) => handleValueSelectChange(key, e.target.value)}
-                className="tw-flex-1 tw-p-2 tw-border tw-rounded tw-max-w-xs" // 使用 max-w-xs 代替固定宽度
+                className="tw-max-w-xs tw-flex-1 tw-rounded tw-border tw-p-2" // 使用 max-w-xs 代替固定宽度
                 style={{
                   textOverflow: "ellipsis",
                   maxWidth: "400px", // 增加最大宽度
@@ -656,7 +656,7 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
             </div>
             {/* 编辑区域 */}
             {editingState.mode && editingState.key === key && (
-              <div className="tw-pl-2 tw-ml-10">
+              <div className="tw-ml-10 tw-pl-2">
                 <textarea
                   ref={(el) => {
                     if (el) {
@@ -675,14 +675,14 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
                     e.target.style.height = "auto";
                     e.target.style.height = e.target.scrollHeight + "px";
                   }}
-                  className="tw-w-full tw-min-w-[300px] tw-max-w-[650px] tw-p-2 tw-border tw-rounded"
+                  className="tw-w-full tw-min-w-[300px] tw-max-w-[650px] tw-rounded tw-border tw-p-2"
                   style={{
                     minHeight: "80px",
                     resize: "none", // 禁止手动调整
                     overflow: "hidden", // 隐藏滚动条
                   }}
                 />
-                <div className="tw-flex tw-gap-2 tw-mt-2">
+                <div className="tw-mt-2 tw-flex tw-gap-2">
                   <Button onClick={handleSave}>保存</Button>
                   <Button variant="secondary" onClick={handleCancel}>
                     取消
@@ -696,7 +696,7 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
 
       {/* 添加新特征的输入区域 */}
       <div className="tw-border-t tw-border-border tw-pt-4">
-        <div className="tw-flex tw-gap-2 tw-items-start">
+        <div className="tw-flex tw-items-start tw-gap-2">
           {/* 标签名称输入框容器 */}
           <div className="tw-relative tw-w-[180px]">
             {/* 添加 relative 定位 */}
@@ -707,11 +707,11 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
                 setNewKey(e.target.value);
                 setError(null);
               }}
-              className={`tw-w-full tw-p-2 tw-h-8 tw-border tw-rounded-md tw-text-sm focus:tw-ring-2 focus:tw-ring-ring`}
+              className={`tw-h-8 tw-w-full tw-rounded-md tw-border tw-p-2 tw-text-sm focus:tw-ring-2 focus:tw-ring-ring`}
             />
             {/* 绝对定位的错误提示 */}
             {error && (
-              <p className="tw-text-xs tw-mt-1 tw-absolute tw-left-0 tw-top-full tw-font-medium">
+              <p className="tw-absolute tw-left-0 tw-top-full tw-mt-1 tw-text-xs tw-font-medium">
                 {error}
               </p>
             )}
@@ -721,7 +721,7 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
             placeholder="标签内容 (如: 哲学家)，默认为空值"
             value={newValue}
             onChange={(e) => setNewValue(e.target.value)}
-            className="tw-flex-1 tw-h-8 tw-p-2 tw-text-sm tw-border tw-rounded-md focus:tw-ring-2 focus:tw-ring-ring"
+            className="tw-h-8 tw-flex-1 tw-rounded-md tw-border tw-p-2 tw-text-sm focus:tw-ring-2 focus:tw-ring-ring"
             style={{
               borderColor: "var(--background-modifier-border)",
               backgroundColor: "var(--background-primary)",
