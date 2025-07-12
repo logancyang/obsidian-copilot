@@ -9,12 +9,7 @@ import {
   COPILOT_COMMAND_MODEL_KEY,
   COPILOT_COMMAND_SLASH_ENABLED,
 } from "@/commands/constants";
-import {
-  createCachedCommand,
-  deleteCachedCommand,
-  updateCachedCommand,
-  updateCachedCommands,
-} from "./state";
+import { deleteCachedCommand, updateCachedCommand, updateCachedCommands } from "./state";
 
 export class CustomCommandManager {
   private static instance: CustomCommandManager;
@@ -27,9 +22,6 @@ export class CustomCommandManager {
   }
 
   async createCommand(command: CustomCommand, skipStoreUpdate = false): Promise<void> {
-    if (!skipStoreUpdate) {
-      command = createCachedCommand(command);
-    }
     const folderPath = getCustomCommandsFolder();
     const filePath = getCommandFilePath(command.title);
 

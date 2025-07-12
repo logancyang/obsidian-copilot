@@ -188,7 +188,7 @@ export const CommandSettings: React.FC = () => {
     // Reorder the existing commands so the order frontmatter is set to the
     // correct value. This allows the new command to always show up at the bottom
     // of the list.
-    reorderCommands(commands);
+    await reorderCommands(commands);
     await handleUpdate(newCommand, newCommand.title);
   };
 

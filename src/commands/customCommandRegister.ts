@@ -75,17 +75,61 @@ export class CustomCommandRegister {
     }
   );
 
+  /**
+   * Waits for the custom command file to have its frontmatter processed.
+   * Retries parsing the file until required frontmatter fields are present or max retries reached.
+   */
+  private async waitForFrontmatter(
+    file: TFile,
+    maxRetries = 10,
+    delayMs = 200
+  ): Promise<CustomCommand | null> {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      // Check if file still exists and is a custom command file
+      const currentFile = this.vault.getAbstractFileByPath(file.path);
+      if (!currentFile || !(currentFile instanceof TFile) || !isCustomCommandFile(currentFile)) {
+        return null; // File was deleted or is no longer a custom command file
+      }
+      try {
+        const customCommand = await parseCustomCommandFile(currentFile);
+        // Check for required frontmatter fields (e.g., showInContextMenu, showInSlashMenu, order, modelKey, lastUsedMs)
+        if (
+          typeof customCommand.showInContextMenu === "boolean" &&
+          typeof customCommand.showInSlashMenu === "boolean" &&
+          typeof customCommand.order === "number" &&
+          typeof customCommand.modelKey === "string" &&
+          typeof customCommand.lastUsedMs === "number"
+        ) {
+          return customCommand;
+        }
+      } catch {
+        // Ignore parse errors, will retry
+      }
+      // Wait before retrying
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    return null;
+  }
+
   private handleFileCreation = async (file: TFile) => {
     if (isCustomCommandFile(file)) {
-      setTimeout(async () => {
-        const customCommand = await parseCustomCommandFile(file);
-
+      try {
+        const customCommand = await this.waitForFrontmatter(file);
+        if (!customCommand) {
+          console.error(
+            `[CustomCommandRegister] Failed to process custom command file (frontmatter not ready): ${file.path}`
+          );
+          return;
+        }
         // Use updateCommand to ensure proper frontmatter is added
         await CustomCommandManager.getInstance().updateCommand(customCommand, customCommand.title);
-
         this.registerCommand(customCommand);
-        // We need to wait for the frontmatter to be updated
-      }, 1000);
+      } catch (error) {
+        console.error(
+          `[CustomCommandRegister] Error processing custom command file: ${file.path}`,
+          error
+        );
+      }
     }
   };
 
