@@ -188,7 +188,7 @@ export const CommandSettings: React.FC = () => {
     // Reorder the existing commands so the order frontmatter is set to the
     // correct value. This allows the new command to always show up at the bottom
     // of the list.
-    await reorderCommands(commands);
+    await CustomCommandManager.getInstance().reorderCommands(commands);
     await handleUpdate(newCommand, newCommand.title);
   };
 
@@ -218,14 +218,6 @@ export const CommandSettings: React.FC = () => {
     }
   };
 
-  const reorderCommands = async (newOrderedCommands: CustomCommand[]) => {
-    const newCommands = [...newOrderedCommands];
-    for (let i = 0; i < newCommands.length; i++) {
-      newCommands[i] = { ...newCommands[i], order: i * 10 };
-    }
-    await CustomCommandManager.getInstance().updateCommands(newCommands);
-  };
-
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
 
@@ -245,7 +237,7 @@ export const CommandSettings: React.FC = () => {
     const [movedCommand] = newCommands.splice(activeIndex, 1);
     newCommands.splice(overIndex, 0, movedCommand);
 
-    await reorderCommands(newCommands);
+    await CustomCommandManager.getInstance().reorderCommands(newCommands);
   };
 
   return (

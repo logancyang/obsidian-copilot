@@ -602,6 +602,7 @@ export const COMMAND_IDS = {
   TOGGLE_COPILOT_CHAT_WINDOW: "chat-toggle-window",
   TOGGLE_AUTOCOMPLETE: "toggle-autocomplete",
   ADD_SELECTION_TO_CHAT_CONTEXT: "add-selection-to-chat-context",
+  CREATE_CUSTOM_COMMAND: "create-custom-command",
 } as const;
 
 export const COMMAND_NAMES: Record<CommandId, string> = {
@@ -625,6 +626,7 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.TOGGLE_COPILOT_CHAT_WINDOW]: "Toggle Copilot Chat Window",
   [COMMAND_IDS.TOGGLE_AUTOCOMPLETE]: "Toggle autocomplete",
   [COMMAND_IDS.ADD_SELECTION_TO_CHAT_CONTEXT]: "Add selection to chat context",
+  [COMMAND_IDS.CREATE_CUSTOM_COMMAND]: "Create new custom command",
 };
 
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];

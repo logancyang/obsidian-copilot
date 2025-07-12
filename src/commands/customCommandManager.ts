@@ -96,6 +96,18 @@ export class CustomCommandManager {
     await Promise.all(commands.map((command) => this.updateCommand(command, command.title, true)));
   }
 
+  /**
+   * Reorders the given commands by setting their order property in increments of 10,
+   * then updates all commands in the manager.
+   */
+  async reorderCommands(commands: CustomCommand[]) {
+    const newCommands = [...commands];
+    for (let i = 0; i < newCommands.length; i++) {
+      newCommands[i] = { ...newCommands[i], order: i * 10 };
+    }
+    await this.updateCommands(newCommands);
+  }
+
   async deleteCommand(command: CustomCommand) {
     deleteCachedCommand(command.title);
     const file = app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
