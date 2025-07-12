@@ -50,9 +50,8 @@ export class CustomCommandManager {
 
   async updateCommand(command: CustomCommand, prevCommandTitle: string, skipStoreUpdate = false) {
     if (!skipStoreUpdate) {
-      updateCachedCommand(command, prevCommandTitle);
+      updateCachedCommand(command, command.title);
     }
-
     let commandFile = app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
     // Verify whether the title has changed to decide whether to rename the file
     if (command.title !== prevCommandTitle) {
@@ -67,11 +66,13 @@ export class CustomCommandManager {
       const prevCommandFile = app.vault.getAbstractFileByPath(prevFilePath);
       if (prevCommandFile instanceof TFile) {
         await app.vault.rename(prevCommandFile, newFilePath);
-        commandFile = prevCommandFile;
+        // Re-fetch the file object after renaming
+        commandFile = app.vault.getAbstractFileByPath(newFilePath);
       }
     }
 
     if (!commandFile) {
+      // Pass skipStoreUpdate to createCommand to avoid redundant cache update
       await this.createCommand(command, skipStoreUpdate);
       commandFile = app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
     }
@@ -85,9 +86,6 @@ export class CustomCommandManager {
         frontmatter[COPILOT_COMMAND_MODEL_KEY] = command.modelKey;
         frontmatter[COPILOT_COMMAND_LAST_USED] = command.lastUsedMs;
       });
-      if (!skipStoreUpdate) {
-        updateCachedCommand(command, command.title);
-      }
     }
   }
 

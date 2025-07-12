@@ -14,6 +14,7 @@ import {
   updateCachedCommand,
 } from "@/commands/state";
 import { CustomCommandManager } from "@/commands/customCommandManager";
+import { logInfo } from "@/logger";
 
 /** This manager is used to register custom commands as obsidian commands */
 export class CustomCommandRegister {
@@ -114,6 +115,7 @@ export class CustomCommandRegister {
   private handleFileCreation = async (file: TFile) => {
     if (isCustomCommandFile(file)) {
       try {
+        logInfo("new command file created", file.path);
         const customCommand = await this.waitForFrontmatter(file);
         if (!customCommand) {
           console.error(
@@ -151,10 +153,20 @@ export class CustomCommandRegister {
     }
     // Register the new command if it's still a custom command file
     if (isCustomCommandFile(file)) {
-      const customCommand = await parseCustomCommandFile(file);
-      // Use updateCommand to ensure proper frontmatter is added
-      await CustomCommandManager.getInstance().updateCommand(customCommand, customCommand.title);
-      this.registerCommand(customCommand);
+      logInfo("command file renamed", file.path);
+      const parsedCommand = await parseCustomCommandFile(file);
+      const cachedCommands = getCachedCustomCommands();
+      const latestCommand = cachedCommands.find((cmd) => cmd.title === parsedCommand.title);
+      logInfo("latestCommand", latestCommand);
+      if (latestCommand) {
+        // Use the latest command object to ensure latest edits are persisted
+        await CustomCommandManager.getInstance().updateCommand(latestCommand, latestCommand.title);
+      } else {
+        // Fallback: use the parsed file if no cached command exists
+        logInfo("no cached command found, using parsed command", parsedCommand);
+        await CustomCommandManager.getInstance().updateCommand(parsedCommand, parsedCommand.title);
+      }
+      this.registerCommand(parsedCommand);
     }
   };
 
