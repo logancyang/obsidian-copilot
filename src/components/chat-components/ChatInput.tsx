@@ -661,7 +661,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                       new Controls(whisperPlugin, { isCopilot: true }).open();
                     }}
                   >
-                    <Mic className="!size-3" />
+                    <Mic className="!tw-size-3" />
                     {<span>voice</span>}
                   </Button>
                 }

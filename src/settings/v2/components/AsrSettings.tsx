@@ -100,7 +100,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
                 onChange={(e) => handleToggleChange("Asr_useLocalService")(e.target.checked)}
                 className="tw-sr-only tw-peer"
               />
-              <div className="tw-w-11 tw-h-6 tw-bg-input peer-focus:tw-outline-none peer-focus:tw-ring-2 peer-focus:tw-ring-ring tw-rounded-full tw-peer tw-peer-checked:tw-after:tw-translate-x-full tw-peer-checked:tw-after:tw-border-background after:tw-content-[''] after:tw-absolute after:tw-top-[2px] after:tw-left-[2px] after:tw-bg-background after:tw-border after:tw-border-border after:tw-rounded-full after:tw-h-5 after:tw-w-5 after:tw-transition-all tw-peer-checked:tw-bg-primary"></div>
+              <div className="tw-w-11 tw-h-6 tw-bg-input peer-focus:tw-outline-none peer-focus:tw-ring-2 peer-focus:tw-ring-ring tw-rounded-full tw-peer tw-peer-checked:tw-after:tw-translate-x-full tw-peer-checked:tw-after:tw-border-background after:tw-content-[''] after:tw-absolute after:tw-top-[2px] after:tw-left-[2px] after:tw-bg-background after:tw-border after:tw-border-border after:tw-rounded-full after:tw-size-5 after:tw-transition-all tw-peer-checked:tw-bg-primary"></div>
             </label>
           </div>
 
@@ -210,7 +210,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
                 type="checkbox"
                 checked={plugin.asrSettings.Asr_encode}
                 onChange={(e) => handleToggleChange("Asr_encode")(e.target.checked)}
-                className="tw-h-4 tw-w-4 tw-text-primary tw-rounded tw-border-input focus:tw-ring-ring"
+                className="tw-size-4 tw-text-primary tw-rounded tw-border-input focus:tw-ring-ring"
               />
               <span className="tw-text-sm tw-text-muted-foreground">
                 Enable audio encoding for local service
@@ -226,7 +226,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
                 type="checkbox"
                 checked={plugin.asrSettings.Asr_vadFilter}
                 onChange={(e) => handleToggleChange("Asr_vadFilter")(e.target.checked)}
-                className="tw-h-4 tw-w-4 tw-text-primary tw-rounded tw-border-input focus:tw-ring-ring"
+                className="tw-size-4 tw-text-primary tw-rounded tw-border-input focus:tw-ring-ring"
               />
               <span className="tw-text-sm tw-text-muted-foreground">
                 Enable Voice Activity Detection filter
@@ -248,7 +248,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
                 type="checkbox"
                 checked={plugin.asrSettings.Asr_saveAudioFile}
                 onChange={(e) => handleToggleChange("Asr_saveAudioFile")(e.target.checked)}
-                className="tw-h-4 tw-w-4 tw-text-primary tw-rounded tw-border-input focus:tw-ring-ring"
+                className="tw-size-4 tw-text-primary tw-rounded tw-border-input focus:tw-ring-ring"
               />
               <span className="tw-text-sm tw-text-muted-foreground">
                 Turn on to save the audio file after sending it to the Whisper API
@@ -279,7 +279,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
                 onChange={(e) =>
                   handleToggleChange("Asr_createNewFileAfterRecording")(e.target.checked)
                 }
-                className="tw-h-4 tw-w-4 tw-text-primary tw-rounded tw-border-input focus:tw-ring-ring"
+                className="tw-size-4 tw-text-primary tw-rounded tw-border-input focus:tw-ring-ring"
               />
               <span className="tw-text-sm tw-text-muted-foreground">
                 Turn on to create a new file for each recording
@@ -418,7 +418,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
                 onChange={(e) => saveSetting({ Asr_timestamps: e.target.checked })}
                 className="tw-sr-only tw-peer"
               />
-              <div className="tw-w-11 tw-h-6 tw-bg-input peer-focus:tw-outline-none peer-focus:tw-ring-2 peer-focus:tw-ring-ring tw-rounded-full tw-peer tw-peer-checked:tw-after:tw-translate-x-full tw-peer-checked:tw-after:tw-border-background after:tw-content-[''] after:tw-absolute after:tw-top-[2px] after:tw-left-[2px] after:tw-bg-background after:tw-border after:tw-border-border after:tw-rounded-full after:tw-h-5 after:tw-w-5 after:tw-transition-all tw-peer-checked:tw-bg-primary"></div>
+              <div className="tw-w-11 tw-h-6 tw-bg-input peer-focus:tw-outline-none peer-focus:tw-ring-2 peer-focus:tw-ring-ring tw-rounded-full tw-peer tw-peer-checked:tw-after:tw-translate-x-full tw-peer-checked:tw-after:tw-border-background after:tw-content-[''] after:tw-absolute after:tw-top-[2px] after:tw-left-[2px] after:tw-bg-background after:tw-border after:tw-border-border after:tw-rounded-full after:tw-size-5 after:tw-transition-all tw-peer-checked:tw-bg-primary"></div>
             </label>
           </div>
 

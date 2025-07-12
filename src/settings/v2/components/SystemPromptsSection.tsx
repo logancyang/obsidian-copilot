@@ -222,7 +222,7 @@ export function SystemPromptsSection() {
         <CollapsibleContent className="tw-space-y-2">
           {/* 人设调试板 */}
           <div className="tw-border-t tw-pt-2">
-            <h3 className="tw-text-lg tw-font-medium tw-mb-2">人设调试板</h3>
+            <h3 className="tw-font-medium tw-mb-2 tw-text-lg">人设调试板</h3>
 
             {/* 修改应用按钮区域 - 将添加人设按钮移到前面 */}
             <div className="tw-flex tw-gap-2 tw-items-center tw-mb-4">
