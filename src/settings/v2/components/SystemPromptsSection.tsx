@@ -197,24 +197,20 @@ export function SystemPromptsSection() {
   };
 
   return (
-    <div className="tw-space-y-4 tw-border tw-border-red-500">
+    <div className="tw-space-y-4 tw-border">
       {/* 可折叠的高级管理区域 - 仅保留人设调试板 */}
       <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
         <div className="tw-flex tw-items-center tw-justify-between">
           <CollapsibleTrigger asChild>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="tw-text-muted-foreground tw-text-base"
-            >
+            <Button variant="ghost" size="sm" className="tw-text-muted-foreground tw-text-base">
               {isExpanded ? (
                 <>
-                  <ChevronUp className="tw-mr-2 tw-h-4 tw-w-4" />
+                  <ChevronUp className="tw-mr-2 tw-size-4" />
                   隐藏调试板
                 </>
               ) : (
                 <>
-                  <ChevronDown className="tw-mr-2 tw-h-4 tw-w-4" />
+                  <ChevronDown className="tw-mr-2 tw-size-4" />
                   打开调试板
                 </>
               )}
@@ -269,12 +265,12 @@ export function SystemPromptsSection() {
                         type="radio"
                         checked={preset.isActive}
                         onChange={() => handleSelectPreset(preset.id)}
-                        className="tw-h-4 tw-w-4"
+                        className="tw-size-4"
                       />
                       <span className="tw-font-medium">{preset.name}</span>
                     </div>
                     <Button variant="ghost" size="sm" onClick={() => handleDeletePreset(preset.id)}>
-                      <Trash2 className="tw-h-4 tw-w-4" />
+                      <Trash2 className="tw-size-4" />
                     </Button>
                   </div>
                   {/* 将文本框放在同一行并缩小高度 */}
@@ -567,17 +563,17 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
               {/* 新增排序按钮 */}
               <div className="tw-flex tw-flex-col tw-gap-1">
                 <Button variant="ghost" size="sm" onClick={() => moveTraitUp(key)}>
-                  <ChevronUp className="tw-h-3 tw-w-3" />
+                  <ChevronUp className="tw-size-3" />
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => moveTraitDown(key)}>
-                  <ChevronDown className="tw-h-3 tw-w-3" />
+                  <ChevronDown className="tw-size-3" />
                 </Button>
               </div>
               <input
                 type="checkbox"
                 checked={checkedItems[key] || false}
                 onChange={(e) => handleCheckboxChange(key, e.target.checked)}
-                className="tw-h-4 tw-w-4"
+                className="tw-size-4"
               />
               <span className="tw-font-medium tw-inline-block tw-w-[100px] tw-truncate" title={key}>
                 {key} :
@@ -619,13 +615,13 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
                 variant="ghost"
                 size="sm"
                 onClick={() => startEditing("add", key)}
-                className={`tw-h-8 tw-w-8 tw-p-0 ${
+                className={`tw-size-8 tw-p-0 ${
                   activeAddButton === key
                     ? "tw-bg-[var(--interactive-accent)] tw-text-[var(--text-on-accent)]"
                     : ""
                 }`}
               >
-                <Plus className="tw-h-4 tw-w-4" />
+                <Plus className="tw-size-4" />
               </Button>
 
               {/* 编辑按钮 */}
@@ -633,7 +629,7 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
                 variant="ghost"
                 size="sm"
                 onClick={() => startEditing("edit", key, selectedValues[key])}
-                className={`tw-h-8 tw-w-8 tw-p-0 ${
+                className={`tw-size-8 tw-p-0 ${
                   activeEditButton === key
                     ? "tw-bg-[var(--interactive-accent)] tw-text-[var(--text-on-accent)]"
                     : ""
@@ -656,7 +652,7 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
               </Button>
 
               <Button variant="ghost" size="sm" onClick={() => handleRemoveValue(key)}>
-                <Trash2 className="tw-h-4 tw-w-4" />
+                <Trash2 className="tw-size-4" />
               </Button>
             </div>
             {/* 编辑区域 */}
@@ -728,7 +724,11 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
             placeholder="标签内容 (如: 哲学家)，默认为空值"
             value={newValue}
             onChange={(e) => setNewValue(e.target.value)}
-            className="tw-flex-1 tw-p-2 tw-h-8 tw-border tw-border-input tw-rounded-md tw-bg-background tw-text-sm focus:tw-ring-2 focus:tw-ring-ring"
+            className="tw-flex-1 tw-h-8 tw-p-2 tw-text-sm tw-border tw-rounded-md focus:tw-ring-2 focus:tw-ring-ring"
+            style={{
+              borderColor: "var(--background-modifier-border)",
+              backgroundColor: "var(--background-primary)",
+            }}
           />
           {/* 新增标签按钮 - 保持固定高度 */}
           <Button
@@ -744,7 +744,7 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
             }}
             disabled={!newKey.trim()}
           >
-            <Plus className="tw-h-4 tw-w-4" />
+            <Plus className="tw-size-4" />
             新增标签
           </Button>
         </div>

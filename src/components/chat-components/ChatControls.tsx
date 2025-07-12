@@ -258,9 +258,9 @@ export function ChatControls({
         {/* // 在return语句中添加人设下拉框（与模式选择下拉框并列） */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost2" size="fit" className="ml-1">
+            <Button variant="ghost2" size="fit" className="tw-ml-1">
               {settings.systemPrompts?.presets?.find((p) => p.isActive)?.name || "选择人设"}
-              <ChevronDown className="size-5 mt-0.5" />
+              <ChevronDown className="tw-mt-0.5" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
@@ -286,15 +286,15 @@ export function ChatControls({
                 }}
               >
                 {preset.name}
-                {preset.isActive && <span className="ml-2 text-green-500">✓</span>}
+                {preset.isActive && <span className="tw-ml-2 tw-text-normal">✓</span>}
               </DropdownMenuItem>
             ))}
             {presets.length === 0 && <DropdownMenuItem disabled>尚未创建任何人设</DropdownMenuItem>}
           </DropdownMenuContent>
         </DropdownMenu>
-        </div>
-        {/* 新增的口语化提示词开关 */}
-        {/* <div className="tw-flex tw-items-center tw-gap-1">
+      </div>
+      {/* 新增的口语化提示词开关 */}
+      {/* <div className="tw-flex tw-items-center tw-gap-1">
           <span className="tw-text-sm">口语化</span>
           <SettingSwitch
             checked={settings.promptEnhancements?.autoSpeech?.useOralPrompt ?? true}
@@ -314,14 +314,14 @@ export function ChatControls({
         {/* 修改后的口语化开关按钮 */}
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button 
-              variant="ghost2" 
-              size="icon" 
-              className="tw-px-2 tw-w-auto tw-mr-1"  // 增加右间距
+            <Button
+              variant="ghost2"
+              size="icon"
+              className="tw-mr-1 tw-w-auto tw-px-2" // 增加右间距
             >
               <div className="tw-flex tw-items-center tw-gap-1">
                 <span className="tw-text-sm">口语化</span>
-                <SettingSwitch 
+                <SettingSwitch
                   checked={settings.promptEnhancements?.autoSpeech?.useOralPrompt ?? true}
                   onCheckedChange={(checked) => {
                     updateSetting("promptEnhancements", {
@@ -346,10 +346,10 @@ export function ChatControls({
                 <MessageCirclePlus className="tw-size-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-28">
+            <DropdownMenuContent align="end" className="tw-w-28">
               <DropdownMenuItem
                 onSelect={() => onNewChat()}
-                className="text-red-500 focus:text-red-500"
+                className="tw-text-normal focus:tw-text-normal"
               >
                 确认新建
               </DropdownMenuItem>
@@ -406,9 +406,9 @@ export function ChatControls({
                 <FileText className="tw-size-4" />
                 <span>启用默认提示词</span>
               </div>
-              <SettingSwitch 
+              <SettingSwitch
                 checked={settings.promptEnhancements?.appendDefaultPrompt !== false}
-                className="tw-ml-4"  // 增加左侧间距
+                className="tw-ml-4" // 增加左侧间距
               />
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -428,7 +428,7 @@ export function ChatControls({
                 <Volume2 className="tw-size-4" />
                 <span>自动语音播放</span>
               </div>
-              <SettingSwitch 
+              <SettingSwitch
                 checked={settings.promptEnhancements?.autoSpeech?.enabled || false}
                 className="tw-ml-4"
               />

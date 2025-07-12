@@ -83,8 +83,8 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
   };
 
   return (
-    <div className="tw-p-4 tw-bg-background tw-rounded-lg tw-border tw-border-border tw-max-w-3xl tw-mx-auto">
-      <h2 className="tw-text-xl tw-font-semibold tw-text-foreground tw-border-b tw-border-border tw-pb-2">
+    <div className="tw-p-4 tw-rounded-lg tw-border tw-border-border tw-max-w-3xl tw-mx-auto">
+      <h2 className="tw-text-xl tw-font-semibold text-foreground tw-border-b tw-border-border tw-pb-2">
         Settings for Transcription
       </h2>
 
@@ -92,7 +92,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
       <div className="tw-p-4 tw-bg-muted tw-rounded-md tw-mt-4">
         <div className="tw-flex tw-flex-col md:tw-flex-row md:tw-items-center tw-justify-between tw-gap-4">
           <div className="tw-flex tw-items-center tw-gap-3">
-            <span className="tw-text-sm tw-font-medium tw-text-foreground">Service Type</span>
+            <span className="tw-text-sm tw-font-medium text-foreground">Service Type</span>
             <label className="tw-relative tw-inline-flex tw-items-center tw-cursor-pointer">
               <input
                 type="checkbox"
@@ -122,7 +122,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
           Toggle to switch between OpenAI API or your local Whisper service
         </p>
         <div className="tw-space-y-2">
-          <label className="tw-block tw-text-sm tw-font-medium tw-text-foreground">
+          <label className="tw-block tw-text-sm tw-font-medium text-foreground">
             Transcription engine
           </label>
           <div className="tw-relative tw-z-10">
@@ -157,11 +157,11 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
       </div>
       {/* API 设置组 */}
       <div className="tw-p-4 tw-bg-muted tw-rounded-md">
-        <h3 className="tw-text-lg tw-font-medium tw-text-foreground tw-mb-3">API Settings</h3>
+        <h3 className="tw-text-lg tw-font-medium text-foreground tw-mb-3">API Settings</h3>
 
         <div className="tw-space-y-4">
           <div className="tw-grid tw-grid-cols-1 md:tw-grid-cols-3 tw-gap-4 tw-items-center">
-            <label className="tw-text-sm tw-font-medium tw-text-foreground">API Key</label>
+            <label className="tw-text-sm tw-font-medium text-foreground">API Key</label>
             <input
               type="text"
               placeholder="sk-...xxxx"
@@ -172,7 +172,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
           </div>
 
           <div className="tw-grid tw-grid-cols-1 md:tw-grid-cols-3 tw-gap-4 tw-items-center">
-            <label className="tw-text-sm tw-font-medium tw-text-foreground">API URL</label>
+            <label className="tw-text-sm tw-font-medium text-foreground">API URL</label>
             <input
               type="text"
               placeholder="https://api.your-custom-url.com"
@@ -185,16 +185,14 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
       </div>
       {/* 本地服务设置组 */}
       <div className="tw-p-4 tw-bg-muted tw-rounded-md">
-        <h3 className="tw-text-lg tw-font-medium tw-text-foreground tw-mb-3">
+        <h3 className="tw-text-lg tw-font-medium text-foreground tw-mb-3">
           Local Service Settings
         </h3>
 
         <div className="tw-space-y-4">
           {/* 本地服务URL输入 */}
           <div className="tw-grid tw-grid-cols-1 md:tw-grid-cols-3 tw-gap-4 tw-items-center">
-            <label className="tw-text-sm tw-font-medium tw-text-foreground">
-              Local Service URL
-            </label>
+            <label className="tw-text-sm tw-font-medium text-foreground">Local Service URL</label>
             <input
               type="text"
               placeholder={DEFAULT_SETTINGS.Asr_localServiceUrl}
@@ -206,7 +204,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
 
           {/* 音频编码复选框 */}
           <div className="tw-grid tw-grid-cols-1 md:tw-grid-cols-3 tw-gap-4 tw-items-center">
-            <label className="tw-text-sm tw-font-medium tw-text-foreground">Encode Audio</label>
+            <label className="tw-text-sm tw-font-medium text-foreground">Encode Audio</label>
             <div className="tw-col-span-2 tw-flex tw-items-center tw-gap-3">
               <input
                 type="checkbox"
@@ -222,7 +220,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
 
           {/* VAD过滤器复选框 */}
           <div className="tw-grid tw-grid-cols-1 md:tw-grid-cols-3 tw-gap-4 tw-items-center">
-            <label className="tw-text-sm tw-font-medium tw-text-foreground">VAD Filter</label>
+            <label className="tw-text-sm tw-font-medium text-foreground">VAD Filter</label>
             <div className="tw-col-span-2 tw-flex tw-items-center tw-gap-3">
               <input
                 type="checkbox"
@@ -239,14 +237,12 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
       </div>
       {/* 文件保存设置组 */}
       <div className="tw-p-4 tw-bg-muted tw-rounded-md">
-        <h3 className="tw-text-lg tw-font-medium tw-text-foreground tw-mb-3">
-          File Saving Settings
-        </h3>
+        <h3 className="tw-text-lg tw-font-medium text-foreground tw-mb-3">File Saving Settings</h3>
 
         <div className="tw-space-y-4">
           {/* 保存录音设置 */}
           <div className="tw-grid tw-grid-cols-1 md:tw-grid-cols-3 tw-gap-4 tw-items-center">
-            <label className="tw-text-sm tw-font-medium tw-text-foreground">Save recording</label>
+            <label className="tw-text-sm tw-font-medium text-foreground">Save recording</label>
             <div className="tw-col-span-2 tw-flex tw-items-center tw-gap-3">
               <input
                 type="checkbox"
@@ -262,9 +258,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
 
           {/* 录音文件夹设置 */}
           <div className="tw-grid tw-grid-cols-1 md:tw-grid-cols-3 tw-gap-4 tw-items-center">
-            <label className="tw-text-sm tw-font-medium tw-text-foreground">
-              Recordings folder
-            </label>
+            <label className="tw-text-sm tw-font-medium text-foreground">Recordings folder</label>
             <input
               type="text"
               placeholder="Example: folder/audio"
@@ -277,9 +271,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
 
           {/* 保存转录文本设置 */}
           <div className="tw-grid tw-grid-cols-1 md:tw-grid-cols-3 tw-gap-4 tw-items-center">
-            <label className="tw-text-sm tw-font-medium tw-text-foreground">
-              Save transcription
-            </label>
+            <label className="tw-text-sm tw-font-medium text-foreground">Save transcription</label>
             <div className="tw-col-span-2 tw-flex tw-items-center tw-gap-3">
               <input
                 type="checkbox"
@@ -297,7 +289,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
 
           {/* 转录文本文件夹设置 */}
           <div className="tw-grid tw-grid-cols-1 md:tw-grid-cols-3 tw-gap-4 tw-items-center">
-            <label className="tw-text-sm tw-font-medium tw-text-foreground">
+            <label className="tw-text-sm tw-font-medium text-foreground">
               Transcriptions folder
             </label>
             <input
@@ -315,7 +307,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
       </div>
       {/* General Settings Section */}
       <section className="tw-p-5 tw-bg-muted tw-rounded-lg">
-        <h3 className="tw-text-lg tw-font-semibold tw-text-foreground tw-mb-4 tw-flex tw-items-center">
+        <h3 className="tw-text-lg tw-font-semibold text-foreground tw-mb-4 tw-flex tw-items-center">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="16"
@@ -344,9 +336,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
         <div className="tw-space-y-4">
           {/* Language Selector */}
           <div className="tw-space-y-1">
-            <label className="tw-block tw-text-sm tw-font-medium tw-text-foreground">
-              Language
-            </label>
+            <label className="tw-block tw-text-sm tw-font-medium text-foreground">Language</label>
             <div className="tw-relative tw-z-10">
               <select
                 value={plugin.asrSettings.Asr_language}
@@ -384,7 +374,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
 
           {/* Line Spacing Selector */}
           <div className="tw-space-y-1">
-            <label className="tw-block tw-text-sm tw-font-medium tw-text-foreground">
+            <label className="tw-block tw-text-sm tw-font-medium text-foreground">
               Line Spacing
             </label>
             <div className="tw-relative tw-z-10">
@@ -420,9 +410,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
 
           {/* Enable Timestamps Toggle */}
           <div className="tw-flex tw-items-center tw-justify-between tw-py-2">
-            <label className="tw-text-sm tw-font-medium tw-text-foreground">
-              Enable timestamps
-            </label>
+            <label className="tw-text-sm tw-font-medium text-foreground">Enable timestamps</label>
             <label className="tw-relative tw-inline-flex tw-items-center tw-cursor-pointer">
               <input
                 type="checkbox"
@@ -438,7 +426,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
           <div
             className={`tw-space-y-1 ${!plugin.asrSettings.Asr_timestamps ? "tw-opacity-50 tw-pointer-events-none" : ""}`}
           >
-            <label className="tw-block tw-text-sm tw-font-medium tw-text-foreground">
+            <label className="tw-block tw-text-sm tw-font-medium text-foreground">
               Timestamp format
             </label>
             <div className="tw-relative tw-z-10">
@@ -479,7 +467,7 @@ const AsrSetting: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
           <div
             className={`tw-space-y-1 ${!plugin.asrSettings.Asr_timestamps ? "tw-opacity-50 tw-pointer-events-none" : ""}`}
           >
-            <label className="tw-block tw-text-sm tw-font-medium tw-text-foreground">
+            <label className="tw-block tw-text-sm tw-font-medium text-foreground">
               Timestamp interval
             </label>
             <div className="tw-relative tw-z-10">

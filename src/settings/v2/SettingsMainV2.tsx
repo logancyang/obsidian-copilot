@@ -32,14 +32,14 @@ type TabId = (typeof TAB_IDS)[number];
 
 // tab icons
 const icons: Record<TabId, JSX.Element> = {
-  basic: <Cog className="w-5 h-5" />,
-  model: <Cpu className="w-5 h-5" />,
-  QA: <Database className="w-5 h-5" />,
-  command: <Command className="w-5 h-5" />,
-  advanced: <Wrench className="w-5 h-5" />,
-  systemPrompts: <Cog className="w-5 h-5" />,
-  promptEnhancements: <Cog className="w-5 h-5" />,
-  ASR: <Cog className="w-5 h-5" />,
+  basic: <Cog className="tw-size-5" />,
+  model: <Cpu className="tw-size-5" />,
+  QA: <Database className="tw-size-5" />,
+  command: <Command className="tw-size-5" />,
+  advanced: <Wrench className="tw-size-5" />,
+  systemPrompts: <Cog className="tw-size-5" />,
+  promptEnhancements: <Cog className="tw-size-5" />,
+  ASR: <Cog className="tw-size-5" />,
   plus: <Sparkles className="tw-size-5" />,
 };
 
@@ -50,7 +50,7 @@ const tabs: TabItemType[] = TAB_IDS.map((id) => ({
   label: id.charAt(0).toUpperCase() + id.slice(1),
 }));
 
-const SettingsContent: React.FC<{ plugin: CopilotPlugin }> = ({plugin}) => {
+const SettingsContent: React.FC<{ plugin: CopilotPlugin }> = ({ plugin }) => {
   const { selectedTab, setSelectedTab } = useTab();
 
   // tab components
@@ -148,7 +148,7 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
           </h1>
         </div>
         {/* Add the key prop to force re-render */}
-        <SettingsContent key={resetKey} plugin={plugin}/>
+        <SettingsContent key={resetKey} plugin={plugin} />
       </div>
     </TabProvider>
   );

@@ -114,7 +114,7 @@ export function PromptEnhancementsSection() {
 
   return (
     <div className="tw-space-y-6">
-      <div className="tw-space-y-4 tw-p-4 tw-border tw-rounded-lg tw-bg-card">
+      <div className="tw-border tw-rounded-lg tw-bg-secondary tw-p-4 tw-space-y-4">
         <div className="tw-flex tw-items-center tw-justify-between">
           <SettingItem
             type="switch"
@@ -136,12 +136,14 @@ export function PromptEnhancementsSection() {
         {isPromptExpanded && (
           <div className="tw-mt-4 tw-p-4 tw-bg-gray-50 dark:tw-bg-gray-800 tw-rounded-md">
             <div className="tw-font-medium tw-text-sm tw-mb-2">默认系统提示词内容：</div>
-            <div className="tw-whitespace-pre-wrap tw-text-sm tw-max-w-3xl">{DEFAULT_SYSTEM_PROMPT}</div>
+            <div className="tw-whitespace-pre-wrap tw-text-sm tw-max-w-3xl">
+              {DEFAULT_SYSTEM_PROMPT}
+            </div>
           </div>
         )}
       </div>
       {/* 自动衍生问题部分 */}
-      <div className="tw-space-y-4 tw-p-4 tw-border tw-rounded-lg tw-bg-card">
+      <div className="tw-border tw-rounded-lg tw-bg-secondary tw-p-4 tw-space-y-4">
         <div className="tw-flex tw-items-center tw-justify-between">
           <SettingItem
             type="switch"
@@ -171,7 +173,7 @@ export function PromptEnhancementsSection() {
       </div>
 
       {/* 自动语音播放部分 */}
-      <div className="tw-space-y-4 tw-p-4 tw-border tw-rounded-lg tw-bg-card">
+      <div className="tw-border tw-rounded-lg tw-bg-secondary tw-p-4 tw-space-y-4">
         {/* 第一行：自动语音播放开关 */}
         <div className="tw-flex tw-items-center tw-justify-between">
           <SettingItem

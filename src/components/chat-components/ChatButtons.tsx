@@ -89,13 +89,13 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
           {/* 新增TTS播放按钮 */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button 
-                onClick={() => onSpeak?.(message.message)} 
-                variant="ghost2" 
-                size="fit" 
+              <Button
+                onClick={() => onSpeak?.(message.message)}
+                variant="ghost2"
+                size="fit"
                 title="Text-to-Speech"
               >
-                <Volume2 className="size-4" /> {/* 需要从lucide-react导入Volume2图标 */}
+                <Volume2 className="tw-size-4" /> {/* 需要从lucide-react导入Volume2图标 */}
               </Button>
             </TooltipTrigger>
             <TooltipContent>Read Aloud</TooltipContent>
