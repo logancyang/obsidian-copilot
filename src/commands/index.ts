@@ -17,6 +17,7 @@ import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModa
 import { EMPTY_COMMAND } from "@/commands/constants";
 import { getCachedCustomCommands } from "@/commands/state";
 import { CustomCommandManager } from "@/commands/customCommandManager";
+import { InlineEditCommand } from "@/commands/inlineEditCommand";
 
 /**
  * Add a command to the plugin.
@@ -358,5 +359,11 @@ export function registerCommands(
       }
     );
     modal.open();
+  });
+
+  // Add inline edit command
+  addEditorCommand(plugin, COMMAND_IDS.TRIGGER_INLINE_EDIT, (editor: Editor) => {
+    const inlineEditCommand = new InlineEditCommand(plugin);
+    inlineEditCommand.triggerInlineEdit(editor);
   });
 }

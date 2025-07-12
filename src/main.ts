@@ -40,6 +40,7 @@ import { migrateCommands, suggestDefaultCommands } from "@/commands/migrator";
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
 import { ChatUIState } from "@/state/ChatUIState";
+import { simpleInlineEditWidgetField } from "@/components/SimpleInlineEditWidget";
 
 export default class CopilotPlugin extends Plugin {
   // Plugin components
@@ -125,6 +126,10 @@ export default class CopilotPlugin extends Plugin {
 
     // Initialize autocomplete service
     this.autocompleteService = AutocompleteService.getInstance(this);
+
+    // Register simple inline edit widget extension
+    this.registerEditorExtension([simpleInlineEditWidgetField]);
+
     this.customCommandRegister = new CustomCommandRegister(this, this.app.vault);
     this.app.workspace.onLayoutReady(() => {
       this.customCommandRegister.initialize().then(migrateCommands).then(suggestDefaultCommands);
