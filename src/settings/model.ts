@@ -338,7 +338,7 @@ export function getComposerOutputPrompt(): string {
 export function getSystemPrompt(): string {
   const settings = getSettings();
   const userPrompt = settings.userSystemPrompt;
-  let basePrompt = DEFAULT_SYSTEM_PROMPT;
+  const basePrompt = DEFAULT_SYSTEM_PROMPT;
   let customInstructions = "";
 
   // 收集所有需要放入user_custom_instructions的内容
