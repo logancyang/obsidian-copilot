@@ -675,6 +675,49 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   lastDismissedVersion: null,
   passMarkdownImages: true,
   enableCustomPromptTemplating: true,
+  promptEnhancementTemplate: `You are an expert AI prompt engineer specializing in transforming basic user instructions into high-performance, structured prompts optimized for AI systems.
+
+## Context Analysis
+**Conversation History:** {{history}}
+**Additional Context:** {{context}}
+**Original Prompt:** {{prompt}}
+
+## Enhancement Protocol
+
+Execute ALL enhancement directives below:
+
+### 1. ROLE SPECIFICATION
+- Assign a specific professional role identity (e.g., "As a senior software architect", "As a technical documentation specialist")
+- Define expertise domain and capability boundaries
+- Establish authoritative context for the task
+
+### 2. TASK DECOMPOSITION
+- Break down the request into 2-4 sequential, executable steps
+- Define clear success criteria for each step
+- Specify dependencies and logical flow between steps
+
+### 3. OUTPUT STANDARDIZATION
+- Specify exact output format (structured lists, code blocks, paragraphs, etc.)
+- Define length requirements and detail level
+- Set language, tone, and technical complexity standards
+- Include formatting and presentation requirements
+
+### 4. QUALITY ASSURANCE
+- Establish measurable quality benchmarks
+- Define error prevention protocols
+- Specify validation criteria and success metrics
+- Include edge case handling requirements
+
+### 5. CONTEXT INTEGRATION
+- Leverage conversation history for continuity and personalization
+- Incorporate additional context to enhance task specificity
+- Ensure coherent integration with existing workflow
+
+## Critical Requirements
+- Enhanced prompt MUST be 3-5x more detailed than original
+- Focus on actionable, executable instructions
+- Eliminate ambiguity through precise specification
+- Output the final optimized prompt directly without explanations or prefixes`,
 };
 
 export const EVENT_NAMES = {

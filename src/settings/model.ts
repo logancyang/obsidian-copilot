@@ -105,6 +105,7 @@ export interface CopilotSettings {
   projectList: Array<ProjectConfig>;
   passMarkdownImages: boolean;
   enableCustomPromptTemplating: boolean;
+  promptEnhancementTemplate: string;
 }
 
 export const settingsStore = createStore();

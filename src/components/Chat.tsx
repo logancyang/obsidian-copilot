@@ -700,6 +700,8 @@ ${chatContent}`;
           onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
           setSelectedImages={setSelectedImages}
           disableModelSwitch={selectedChain === ChainType.PROJECT_CHAIN}
+          chatHistory={chatHistory}
+          chainManager={chainManager}
         />
       </div>
     </>

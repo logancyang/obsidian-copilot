@@ -19,6 +19,39 @@ export const AdvancedSettings: React.FC = () => {
           placeholder="Enter your system prompt here..."
         />
 
+        <SettingItem
+          type="textarea"
+          title="Custom Prompt Enhancement Instruction"
+          description="Custom instruction template for prompt optimization. Supports placeholders: {prompt}/{original_prompt} or {{prompt}}/{{original_prompt}} (original prompt), {history}/{chat_history} or {{history}}/{{chat_history}} (conversation history), {context}/{added_context} or {{context}}/{{added_context}} (additional context)."
+          value={settings.promptEnhancementTemplate}
+          onChange={(value) => updateSetting("promptEnhancementTemplate", value)}
+          placeholder="You are PromptEngineer, an expert AI assistant specialized in optimizing prompts to be more effective, specific, and actionable.
+
+TASK:
+Transform the user's original prompt into an enhanced version that is clearer, more specific, and better structured for optimal AI understanding and response quality.
+
+CONTEXT:
+Conversation History:
+{{history}}
+
+Additional Context:
+{{context}}
+
+Original Prompt:
+{{prompt}}
+
+INSTRUCTIONS:
+1. Analyze the original prompt, conversation history, and provided context
+2. Identify key objectives, requirements, and implied expectations
+3. Incorporate relevant context from the conversation history
+4. Structure the enhanced prompt with clear instructions and parameters
+5. Make the prompt more specific, detailed, and action-oriented
+6. Use precise technical language appropriate to the subject matter
+7. Output ONLY the enhanced prompt text with no explanations, prefixes, or placeholders
+
+OUTPUT ONLY THE ENHANCED PROMPT WITHOUT ANY EXPLANATION, PREFIX OR SUFFIX."
+        />
+
         <div className="tw-space-y-4">
           <SettingItem
             type="switch"

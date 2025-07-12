@@ -23,8 +23,12 @@ import { CustomPromptProcessor } from "@/customPromptProcessor";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
+import { ChatMessage } from "@/sharedState";
 import { getToolDescription } from "@/tools/toolManager";
 import { checkModelApiKey, err2String, extractNoteFiles, isNoteTitleUnique } from "@/utils";
+import { enhancePrompt } from "@/promptEnhancer";
+import { getSettings } from "@/settings/model";
+import ChainManager from "@/LLMProviders/chainManager";
 import {
   ArrowBigUp,
   ChevronDown,
@@ -32,9 +36,11 @@ import {
   CornerDownLeft,
   Image,
   Loader2,
+  Sparkles,
   StopCircle,
   X,
 } from "lucide-react";
+
 import { App, Notice, Platform, TFile } from "obsidian";
 import React, {
   forwardRef,
@@ -68,6 +74,8 @@ interface ChatInputProps {
   onAddImage: (files: File[]) => void;
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
   disableModelSwitch?: boolean;
+  chatHistory?: ChatMessage[];
+  chainManager?: ChainManager;
 }
 
 const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
@@ -88,6 +96,8 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       onAddImage,
       setSelectedImages,
       disableModelSwitch,
+      chatHistory = [],
+      chainManager,
     },
     ref
   ) => {
@@ -107,6 +117,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const isCopilotPlus =
       currentChain === ChainType.COPILOT_PLUS_CHAIN || currentChain === ChainType.PROJECT_CHAIN;
     const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+    const [isEnhancing, setIsEnhancing] = useState(false);
     const loadingMessages = [
       "Loading the project context...",
       "Processing context files...",
@@ -167,6 +178,76 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         contextNotes,
         urls: contextUrls,
       });
+    };
+
+    const handleEnhancePrompt = async () => {
+      if (!inputMessage.trim()) {
+        new Notice("请先输入提示词");
+        return;
+      }
+
+      if (isEnhancing) {
+        return;
+      }
+
+      setIsEnhancing(true);
+
+      try {
+        // 获取设置
+        const settings = getSettings();
+
+        // 收集添加的上下文
+        let addedContext = "";
+
+        // 添加上下文笔记内容
+        if (contextNotes.length > 0) {
+          const contextContents = await Promise.all(
+            contextNotes.map(async (note) => {
+              const content = await app.vault.read(note);
+              return `【${note.basename}】\n${content}`;
+            })
+          );
+          addedContext += contextContents.join("\n\n");
+        }
+
+        // 添加当前活动笔记内容（如果启用）
+        if (includeActiveNote && currentActiveNote) {
+          const activeNoteContent = await app.vault.read(currentActiveNote);
+          if (addedContext) addedContext += "\n\n";
+          addedContext += `【当前笔记：${currentActiveNote.basename}】\n${activeNoteContent}`;
+        }
+
+        // 添加 URL 上下文
+        if (contextUrls.length > 0) {
+          if (addedContext) addedContext += "\n\n";
+          addedContext += `【相关链接】\n${contextUrls.join("\n")}`;
+        }
+
+        // 调用增强功能
+        if (!chainManager) {
+          throw new Error("ChainManager 未初始化");
+        }
+
+        const result = await enhancePrompt({
+          originalPrompt: inputMessage,
+          chatHistory: chatHistory,
+          addedContext: addedContext || "（无额外上下文）",
+          chainManager: chainManager,
+          customInstructionTemplate: settings.promptEnhancementTemplate,
+        });
+
+        if (result.success) {
+          setInputMessage(result.enhancedPrompt);
+          new Notice("提示词已成功优化！");
+        } else {
+          throw new Error(result.error || "增强失败");
+        }
+      } catch (error) {
+        console.error("Prompt enhancement failed:", error);
+        new Notice(`优化失败: ${error instanceof Error ? error.message : "未知错误"}`);
+      } finally {
+        setIsEnhancing(false);
+      }
     };
 
     const handleInputChange = async (event: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -590,6 +671,21 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
               </Button>
             ) : (
               <>
+                {/* 增强按钮 */}
+                <Button
+                  variant="ghost2"
+                  size="fit"
+                  onClick={handleEnhancePrompt}
+                  disabled={isEnhancing || !inputMessage.trim()}
+                  title="增强提示词"
+                >
+                  {isEnhancing ? (
+                    <Loader2 className="tw-size-4 tw-animate-spin" />
+                  ) : (
+                    <Sparkles className="tw-size-4" />
+                  )}
+                </Button>
+
                 {isCopilotPlus && (
                   <Button
                     variant="ghost2"
