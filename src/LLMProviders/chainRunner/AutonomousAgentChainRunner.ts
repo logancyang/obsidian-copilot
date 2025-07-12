@@ -10,6 +10,7 @@ import {
   pomodoroTool,
 } from "@/tools/TimeTools";
 import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools";
+import { writeToFileTool } from "@/tools/ComposerTools";
 import { extractChatHistory, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
 import { messageRequiresTools, ModelAdapter, ModelAdapterFactory } from "./utils/modelAdapter";
@@ -37,6 +38,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       getTimeInfoByEpochTool,
       getTimeRangeMsTool,
       indexTool,
+      writeToFileTool,
     ];
 
     // Add file tree tool if available
@@ -56,12 +58,18 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         const params = schema.properties
           ? Object.entries(schema.properties)
               .map(
-                ([key, val]: [string, any]) => `  - ${key}: ${val.description || "No description"}`
+                ([key, val]: [string, any]) =>
+                  `<${key}> ${val.description || "No description"} </${key}>`
               )
               .join("\n")
           : "";
 
-        return `- ${tool.name}: ${tool.description}${params ? "\n" + params : ""}`;
+        return `<${tool.name}>
+<description>${tool.description}</description>
+<parameters>
+${params}
+</parameters>
+</${tool.name}>`;
       })
       .join("\n\n");
   }
