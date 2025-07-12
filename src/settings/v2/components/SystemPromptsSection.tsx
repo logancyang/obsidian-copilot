@@ -202,7 +202,7 @@ export function SystemPromptsSection() {
       <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
         <div className="tw-flex tw-items-center tw-justify-between">
           <CollapsibleTrigger asChild>
-            <Button variant="ghost" size="sm" className="tw-text-muted-foreground tw-text-base">
+            <Button variant="ghost" size="sm" className="tw-text-base">
               {isExpanded ? (
                 <>
                   <ChevronUp className="tw-mr-2 tw-size-4" />
@@ -231,15 +231,14 @@ export function SystemPromptsSection() {
                 placeholder="人设名称（用于人设列表中标识系统提示词）"
                 value={presetName}
                 onChange={(e) => setPresetName(e.target.value)}
-                // className="tw-w-[300px] tw-p-2 tw-border tw-rounded"
-                className="tw-w-[300px] tw-p-2 tw-border tw-border-input tw-rounded-md tw-bg-background tw-text-sm"
+                className="tw-w-[300px] tw-p-2 tw-border tw-rounded-md tw-text-sm"
               />
               <Button onClick={applyCharacterSettings} disabled={!presetName.trim()}>
                 添加人设
               </Button>
             </div>
             {/* 添加分隔线 */}
-            <div className="tw-border-b tw-border-blue-400/50 tw-pt-2"></div>
+            <div className="tw-border-b tw-pt-2"></div>
 
             <DynamicTraitEditor
               traits={settings.systemPrompts?.activeTraits || {}}
@@ -285,7 +284,7 @@ export function SystemPromptsSection() {
             ))}
           </div>
         ) : (
-          <div className="tw-text-muted-foreground">尚未创建任何人设,请在调试板进行配置。</div>
+          <div className="tw-text-base">尚未创建任何人设,请在调试板进行配置。</div>
         )}
       </div>
     </div>
@@ -657,7 +656,7 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
             </div>
             {/* 编辑区域 */}
             {editingState.mode && editingState.key === key && (
-              <div className="tw-ml-10 tw-pl-2 tw-border-l-2 tw-border-blue-200">
+              <div className="tw-pl-2 tw-ml-10">
                 <textarea
                   ref={(el) => {
                     if (el) {
@@ -708,13 +707,11 @@ const DynamicTraitEditor: React.FC<DynamicTraitEditorProps> = ({
                 setNewKey(e.target.value);
                 setError(null);
               }}
-              className={`tw-w-full tw-p-2 tw-h-8 tw-border ${
-                error ? "tw-border-destructive" : "tw-border-input"
-              } tw-rounded-md tw-bg-background tw-text-sm focus:tw-ring-2 focus:tw-ring-ring`}
+              className={`tw-w-full tw-p-2 tw-h-8 tw-border tw-rounded-md tw-text-sm focus:tw-ring-2 focus:tw-ring-ring`}
             />
             {/* 绝对定位的错误提示 */}
             {error && (
-              <p className="tw-text-destructive tw-text-xs tw-mt-1 tw-absolute tw-left-0 tw-top-full tw-font-medium">
+              <p className="tw-text-xs tw-mt-1 tw-absolute tw-left-0 tw-top-full tw-font-medium">
                 {error}
               </p>
             )}

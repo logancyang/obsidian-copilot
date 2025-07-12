@@ -134,7 +134,7 @@ export function PromptEnhancementsSection() {
         </div>
 
         {isPromptExpanded && (
-          <div className="tw-mt-4 tw-p-4 tw-bg-gray-50 dark:tw-bg-gray-800 tw-rounded-md">
+          <div className="tw-mt-4 tw-p-4 tw-rounded-md">
             <div className="tw-font-medium tw-text-sm tw-mb-2">默认系统提示词内容：</div>
             <div className="tw-whitespace-pre-wrap tw-text-sm tw-max-w-3xl">
               {DEFAULT_SYSTEM_PROMPT}
@@ -156,9 +156,7 @@ export function PromptEnhancementsSection() {
 
         {autoFollowUpEnabled && (
           <div className="tw-space-y-2">
-            <Label className="tw-block tw-text-sm tw-font-medium tw-text-foreground">
-              衍生问题提示词
-            </Label>
+            <Label className="tw-block tw-text-sm tw-font-medium">衍生问题提示词</Label>
             <Textarea
               value={followUpPrompt}
               onChange={(e) => setFollowUpPrompt(e.target.value)}
@@ -199,9 +197,7 @@ export function PromptEnhancementsSection() {
         {useOralPrompt && (
           <div className="tw-space-y-4">
             <div className="tw-space-y-2">
-              <Label className="tw-block tw-text-sm tw-font-medium tw-text-foreground">
-                语音提示词
-              </Label>
+              <Label className="tw-block tw-text-sm tw-font-medium">语音提示词</Label>
               <Textarea
                 value={speechPrompt}
                 onChange={(e) => setSpeechPrompt(e.target.value)}
