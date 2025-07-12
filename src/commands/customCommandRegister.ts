@@ -123,8 +123,18 @@ export class CustomCommandRegister {
           );
           return;
         }
-        // Use updateCommand to ensure proper frontmatter is added
-        await CustomCommandManager.getInstance().updateCommand(customCommand, customCommand.title);
+        const cachedCommands = getCachedCustomCommands();
+        const latestCommand = cachedCommands.find((cmd) => cmd.title === customCommand.title);
+        // The cache may have been updated since the file was created, so we need to
+        // check if the command exists in the cache. Only update the command if it doesn't
+        // exist in the cache.
+        if (!latestCommand) {
+          // Call updateCommand to ensure the command frontmatter is set correctly
+          await CustomCommandManager.getInstance().updateCommand(
+            customCommand,
+            customCommand.title
+          );
+        }
         this.registerCommand(customCommand);
       } catch (error) {
         console.error(
@@ -157,13 +167,11 @@ export class CustomCommandRegister {
       const parsedCommand = await parseCustomCommandFile(file);
       const cachedCommands = getCachedCustomCommands();
       const latestCommand = cachedCommands.find((cmd) => cmd.title === parsedCommand.title);
-      logInfo("latestCommand", latestCommand);
       if (latestCommand) {
         // Use the latest command object to ensure latest edits are persisted
         await CustomCommandManager.getInstance().updateCommand(latestCommand, latestCommand.title);
       } else {
         // Fallback: use the parsed file if no cached command exists
-        logInfo("no cached command found, using parsed command", parsedCommand);
         await CustomCommandManager.getInstance().updateCommand(parsedCommand, parsedCommand.title);
       }
       this.registerCommand(parsedCommand);

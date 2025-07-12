@@ -21,7 +21,12 @@ export class CustomCommandManager {
     return CustomCommandManager.instance;
   }
 
-  async createCommand(command: CustomCommand, skipStoreUpdate = false): Promise<void> {
+  // This method is private. To create a command, use updateCommand instead as
+  // it skips command creation if the command already exists.
+  private async createCommand(command: CustomCommand, skipStoreUpdate = false): Promise<void> {
+    if (!skipStoreUpdate) {
+      updateCachedCommand(command, command.title);
+    }
     const folderPath = getCustomCommandsFolder();
     const filePath = getCommandFilePath(command.title);
 
@@ -39,9 +44,6 @@ export class CustomCommandManager {
       frontmatter[COPILOT_COMMAND_MODEL_KEY] = command.modelKey;
       frontmatter[COPILOT_COMMAND_LAST_USED] = command.lastUsedMs;
     });
-    if (!skipStoreUpdate) {
-      updateCachedCommand(command, command.title);
-    }
   }
 
   async recordUsage(command: CustomCommand) {
@@ -50,7 +52,7 @@ export class CustomCommandManager {
 
   async updateCommand(command: CustomCommand, prevCommandTitle: string, skipStoreUpdate = false) {
     if (!skipStoreUpdate) {
-      updateCachedCommand(command, command.title);
+      updateCachedCommand(command, prevCommandTitle);
     }
     let commandFile = app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
     // Verify whether the title has changed to decide whether to rename the file

@@ -189,7 +189,7 @@ export const CommandSettings: React.FC = () => {
     // correct value. This allows the new command to always show up at the bottom
     // of the list.
     await CustomCommandManager.getInstance().reorderCommands(commands);
-    await handleUpdate(newCommand, newCommand.title);
+    await CustomCommandManager.getInstance().updateCommand(newCommand, newCommand.title);
   };
 
   const handleRemove = async (command: CustomCommand) => {
