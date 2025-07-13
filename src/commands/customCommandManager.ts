@@ -1,5 +1,9 @@
 import { TFile } from "obsidian";
-import { getCommandFilePath, getCustomCommandsFolder } from "@/commands/customCommandUtils";
+import {
+  getCommandFilePath,
+  getCustomCommandsFolder,
+  getNextCustomCommandOrder,
+} from "@/commands/customCommandUtils";
 import { CustomCommand } from "@/commands/type";
 import { CustomError } from "@/error";
 import {
@@ -12,7 +16,6 @@ import {
 import {
   addPendingFileWrite,
   deleteCachedCommand,
-  getCachedCustomCommands,
   removePendingFileWrite,
   updateCachedCommand,
   updateCachedCommands,
@@ -44,13 +47,7 @@ export class CustomCommandManager {
       addPendingFileWrite(filePath);
       let newOrder = command.order;
       if (mergedOptions.autoOrder) {
-        const commands = getCachedCustomCommands();
-        const lastOrder = commands.reduce(
-          (prev, curr) => (prev > curr.order ? prev : curr.order),
-          0
-        );
-        // If the last ordered command uses the max order, reuse the max order
-        newOrder = lastOrder === Number.MAX_SAFE_INTEGER ? Number.MAX_SAFE_INTEGER : lastOrder + 10;
+        newOrder = getNextCustomCommandOrder();
       }
       command = { ...command, order: newOrder };
 

@@ -10,7 +10,7 @@ import {
 import { CustomCommand } from "@/commands/type";
 import { normalizePath, Notice, TAbstractFile, TFile, Vault } from "obsidian";
 import { getSettings } from "@/settings/model";
-import { updateCachedCommands } from "./state";
+import { updateCachedCommands, getCachedCustomCommands } from "./state";
 import { PromptSortStrategy } from "@/types";
 import {
   extractNoteFiles,
@@ -414,4 +414,42 @@ export function generateCopyCommandName(
   }
 
   return copyName;
+}
+
+/**
+ * Returns the next order value for a new custom command, based on the cached commands.
+ * If the last order is Number.MAX_SAFE_INTEGER, returns Number.MAX_SAFE_INTEGER.
+ */
+export function getNextCustomCommandOrder(): number {
+  const commands = getCachedCustomCommands();
+  const lastOrder = commands.reduce(
+    (prev: number, curr: CustomCommand) => (prev > curr.order ? prev : curr.order),
+    0
+  );
+  return lastOrder === Number.MAX_SAFE_INTEGER ? Number.MAX_SAFE_INTEGER : lastOrder + 10;
+}
+
+/**
+ * Ensures that the required frontmatter fields exist on the given file. Only
+ * adds missing fields, does not overwrite existing values.
+ * This is idempotent and does not touch the file content.
+ */
+export async function ensureCommandFrontmatter(file: TFile, command: CustomCommand) {
+  await app.fileManager.processFrontMatter(file, (frontmatter) => {
+    if (frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] == null) {
+      frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = command.showInContextMenu;
+    }
+    if (frontmatter[COPILOT_COMMAND_SLASH_ENABLED] == null) {
+      frontmatter[COPILOT_COMMAND_SLASH_ENABLED] = command.showInSlashMenu;
+    }
+    if (frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] == null) {
+      frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] = command.order;
+    }
+    if (frontmatter[COPILOT_COMMAND_MODEL_KEY] == null) {
+      frontmatter[COPILOT_COMMAND_MODEL_KEY] = command.modelKey;
+    }
+    if (frontmatter[COPILOT_COMMAND_LAST_USED] == null) {
+      frontmatter[COPILOT_COMMAND_LAST_USED] = command.lastUsedMs;
+    }
+  });
 }

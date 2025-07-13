@@ -3,6 +3,8 @@ import {
   isCustomCommandFile,
   loadAllCustomCommands,
   parseCustomCommandFile,
+  getNextCustomCommandOrder,
+  ensureCommandFrontmatter,
 } from "@/commands/customCommandUtils";
 import { Editor, Plugin, TFile, Vault } from "obsidian";
 import { CustomCommandChatModal } from "@/commands/CustomCommandChatModal";
@@ -79,6 +81,7 @@ export class CustomCommandRegister {
     }
   );
 
+  // Note: This function is called when obsidian starts up.
   private handleFileCreation = async (file: TFile) => {
     if (!isCustomCommandFile(file) || isFileWritePending(file.path)) {
       return;
@@ -86,8 +89,11 @@ export class CustomCommandRegister {
     try {
       logInfo("new command file created", file.path);
       const customCommand = await parseCustomCommandFile(file);
-      await CustomCommandManager.getInstance().createCommand(customCommand);
-      this.registerCommand(customCommand);
+      // Compute the correct order for the new command
+      const newOrder = getNextCustomCommandOrder();
+      const commandWithOrder = { ...customCommand, order: newOrder };
+      await ensureCommandFrontmatter(file, commandWithOrder);
+      this.registerCommand(commandWithOrder);
     } catch (error) {
       logError(`Error processing custom command creation: ${file.path}`, error);
     }
@@ -117,8 +123,11 @@ export class CustomCommandRegister {
     if (isCustomCommandFile(file)) {
       logInfo("command file renamed", file.path);
       const parsedCommand = await parseCustomCommandFile(file);
+      const newOrder = getNextCustomCommandOrder();
+      const commandWithOrder = { ...parsedCommand, order: newOrder };
       this.registerCommand(parsedCommand);
       updateCachedCommand(parsedCommand, parsedCommand.title);
+      await ensureCommandFrontmatter(file, commandWithOrder);
     }
   };
 
