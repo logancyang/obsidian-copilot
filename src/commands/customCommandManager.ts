@@ -35,30 +35,26 @@ export class CustomCommandManager {
    */
   async createCommand(
     command: CustomCommand,
-    options: { skipStoreUpdate?: boolean; autoOrder?: boolean } = {
-      skipStoreUpdate: false,
-      autoOrder: true,
-    }
+    options: { skipStoreUpdate?: boolean; autoOrder?: boolean } = {}
   ): Promise<void> {
+    // Merge default options with provided options
+    const mergedOptions = { skipStoreUpdate: false, autoOrder: true, ...options };
     const filePath = getCommandFilePath(command.title);
     try {
       addPendingFileWrite(filePath);
       let newOrder = command.order;
-      if (options.autoOrder) {
+      if (mergedOptions.autoOrder) {
         const commands = getCachedCustomCommands();
-        const lastOrderedCommand = commands.reduce((prev, curr) =>
-          prev.order > curr.order ? prev : curr
+        const lastOrder = commands.reduce(
+          (prev, curr) => (prev > curr.order ? prev : curr.order),
+          0
         );
-        const lastOrderedOrder = lastOrderedCommand ? lastOrderedCommand.order : 0;
         // If the last ordered command uses the max order, reuse the max order
-        newOrder =
-          lastOrderedOrder === Number.MAX_SAFE_INTEGER
-            ? Number.MAX_SAFE_INTEGER
-            : lastOrderedOrder + 10;
+        newOrder = lastOrder === Number.MAX_SAFE_INTEGER ? Number.MAX_SAFE_INTEGER : lastOrder + 10;
       }
       command = { ...command, order: newOrder };
 
-      if (!options.skipStoreUpdate) {
+      if (!mergedOptions.skipStoreUpdate) {
         updateCachedCommand(command, command.title);
       }
 
