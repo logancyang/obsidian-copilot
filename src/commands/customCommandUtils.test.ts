@@ -688,7 +688,7 @@ describe("parseCustomCommandFile", () => {
       content: "Prompt content only, no frontmatter.",
       showInContextMenu: true,
       showInSlashMenu: true,
-      order: Number.MAX_SAFE_INTEGER,
+      order: 0,
       lastUsedMs: 0,
     });
   });

@@ -208,6 +208,9 @@ export const CommandSettings: React.FC = () => {
         title: copyName,
       };
       await CustomCommandManager.getInstance().createCommand(copiedCommand, {
+        // Explicitly make the new command the same order as the original command
+        // so it appears next to the original command in the menu. The extra
+        // suffix will ensure it is below the original command in the menu.
         autoOrder: false,
       });
     } catch (error) {

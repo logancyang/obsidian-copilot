@@ -114,7 +114,9 @@ export class CustomCommandManager {
 
       if (!commandFile) {
         // Pass skipStoreUpdate to createCommand to avoid redundant cache update
-        await this.createCommand(command, { skipStoreUpdate });
+        // When creating a new command, we want to auto-order it so it appears
+        // at the bottom of the menu.
+        await this.createCommand(command, { skipStoreUpdate, autoOrder: true });
         commandFile = app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
       }
 
