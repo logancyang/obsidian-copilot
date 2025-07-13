@@ -206,6 +206,7 @@ export const CommandSettings: React.FC = () => {
       const copiedCommand: CustomCommand = {
         ...command,
         title: copyName,
+        order: command.order + 1,
       };
       await CustomCommandManager.getInstance().createCommand(copiedCommand, {
         // Explicitly make the new command the same order as the original command
