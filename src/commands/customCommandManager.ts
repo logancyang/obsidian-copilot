@@ -9,7 +9,15 @@ import {
   COPILOT_COMMAND_MODEL_KEY,
   COPILOT_COMMAND_SLASH_ENABLED,
 } from "@/commands/constants";
-import { deleteCachedCommand, updateCachedCommand, updateCachedCommands } from "./state";
+import {
+  addPendingFileWrite,
+  deleteCachedCommand,
+  getCachedCustomCommands,
+  removePendingFileWrite,
+  updateCachedCommand,
+  updateCachedCommands,
+} from "./state";
+import { logError } from "@/logger";
 
 export class CustomCommandManager {
   private static instance: CustomCommandManager;
@@ -21,66 +29,51 @@ export class CustomCommandManager {
     return CustomCommandManager.instance;
   }
 
-  // This method is private. To create a command, use updateCommand instead as
-  // it skips command creation if the command already exists.
-  private async createCommand(command: CustomCommand, skipStoreUpdate = false): Promise<void> {
-    if (!skipStoreUpdate) {
-      updateCachedCommand(command, command.title);
+  /**
+   * Creates a new command file and caches the command in memory.
+   * If autoOrder is true, the order of the command is set to the next available order.
+   */
+  async createCommand(
+    command: CustomCommand,
+    options: { skipStoreUpdate?: boolean; autoOrder?: boolean } = {
+      skipStoreUpdate: false,
+      autoOrder: true,
     }
-    const folderPath = getCustomCommandsFolder();
+  ): Promise<void> {
     const filePath = getCommandFilePath(command.title);
-
-    // Check if the folder exists and create it if it doesn't
-    const folderExists = await app.vault.adapter.exists(folderPath);
-    if (!folderExists) {
-      await app.vault.createFolder(folderPath);
-    }
-
-    const file = await app.vault.create(filePath, command.content);
-    await app.fileManager.processFrontMatter(file, (frontmatter) => {
-      frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = command.showInContextMenu;
-      frontmatter[COPILOT_COMMAND_SLASH_ENABLED] = command.showInSlashMenu;
-      frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] = command.order;
-      frontmatter[COPILOT_COMMAND_MODEL_KEY] = command.modelKey;
-      frontmatter[COPILOT_COMMAND_LAST_USED] = command.lastUsedMs;
-    });
-  }
-
-  async recordUsage(command: CustomCommand) {
-    this.updateCommand({ ...command, lastUsedMs: Date.now() }, command.title);
-  }
-
-  async updateCommand(command: CustomCommand, prevCommandTitle: string, skipStoreUpdate = false) {
-    if (!skipStoreUpdate) {
-      updateCachedCommand(command, prevCommandTitle);
-    }
-    let commandFile = app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
-    // Verify whether the title has changed to decide whether to rename the file
-    if (command.title !== prevCommandTitle) {
-      const newFilePath = getCommandFilePath(command.title);
-      const newFileExists = app.vault.getAbstractFileByPath(newFilePath);
-      if (newFileExists) {
-        throw new CustomError(
-          "Error saving custom prompt. Please check if the title already exists."
+    try {
+      addPendingFileWrite(filePath);
+      let newOrder = command.order;
+      if (options.autoOrder) {
+        const commands = getCachedCustomCommands();
+        const lastOrderedCommand = commands.reduce((prev, curr) =>
+          prev.order > curr.order ? prev : curr
         );
+        const lastOrderedOrder = lastOrderedCommand ? lastOrderedCommand.order : 0;
+        // If the last ordered command uses the max order, reuse the max order
+        newOrder =
+          lastOrderedOrder === Number.MAX_SAFE_INTEGER
+            ? Number.MAX_SAFE_INTEGER
+            : lastOrderedOrder + 10;
       }
-      const prevFilePath = getCommandFilePath(prevCommandTitle);
-      const prevCommandFile = app.vault.getAbstractFileByPath(prevFilePath);
-      if (prevCommandFile instanceof TFile) {
-        await app.vault.rename(prevCommandFile, newFilePath);
-        // Re-fetch the file object after renaming
-        commandFile = app.vault.getAbstractFileByPath(newFilePath);
+      command = { ...command, order: newOrder };
+
+      if (!options.skipStoreUpdate) {
+        updateCachedCommand(command, command.title);
       }
-    }
 
-    if (!commandFile) {
-      // Pass skipStoreUpdate to createCommand to avoid redundant cache update
-      await this.createCommand(command, skipStoreUpdate);
-      commandFile = app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
-    }
+      const folderPath = getCustomCommandsFolder();
+      // Check if the folder exists and create it if it doesn't
+      const folderExists = await app.vault.adapter.exists(folderPath);
+      if (!folderExists) {
+        await app.vault.createFolder(folderPath);
+      }
 
-    if (commandFile instanceof TFile) {
-      await app.vault.modify(commandFile, command.content);
+      let commandFile = app.vault.getAbstractFileByPath(filePath) as TFile;
+      if (!commandFile || !(commandFile instanceof TFile)) {
+        commandFile = await app.vault.create(filePath, command.content);
+      }
+
       await app.fileManager.processFrontMatter(commandFile, (frontmatter) => {
         frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = command.showInContextMenu;
         frontmatter[COPILOT_COMMAND_SLASH_ENABLED] = command.showInSlashMenu;
@@ -88,6 +81,60 @@ export class CustomCommandManager {
         frontmatter[COPILOT_COMMAND_MODEL_KEY] = command.modelKey;
         frontmatter[COPILOT_COMMAND_LAST_USED] = command.lastUsedMs;
       });
+    } finally {
+      removePendingFileWrite(filePath);
+    }
+  }
+
+  async recordUsage(command: CustomCommand) {
+    this.updateCommand({ ...command, lastUsedMs: Date.now() }, command.title);
+  }
+
+  async updateCommand(command: CustomCommand, prevCommandTitle: string, skipStoreUpdate = false) {
+    const filePath = getCommandFilePath(command.title);
+    try {
+      addPendingFileWrite(filePath);
+      if (!skipStoreUpdate) {
+        updateCachedCommand(command, prevCommandTitle);
+      }
+      let commandFile = app.vault.getAbstractFileByPath(filePath);
+      // Verify whether the title has changed to decide whether to rename the file
+      if (command.title !== prevCommandTitle) {
+        const newFileExists = app.vault.getAbstractFileByPath(filePath);
+        if (newFileExists) {
+          throw new CustomError(
+            "Error saving custom prompt. Please check if the title already exists."
+          );
+        }
+        const prevFilePath = getCommandFilePath(prevCommandTitle);
+        const prevCommandFile = app.vault.getAbstractFileByPath(prevFilePath);
+        if (prevCommandFile instanceof TFile) {
+          await app.vault.rename(prevCommandFile, filePath);
+          // Re-fetch the file object after renaming
+          commandFile = app.vault.getAbstractFileByPath(filePath);
+        }
+      }
+
+      if (!commandFile) {
+        // Pass skipStoreUpdate to createCommand to avoid redundant cache update
+        await this.createCommand(command, { skipStoreUpdate });
+        commandFile = app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
+      }
+
+      if (commandFile instanceof TFile) {
+        await app.vault.modify(commandFile, command.content);
+        await app.fileManager.processFrontMatter(commandFile, (frontmatter) => {
+          frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = command.showInContextMenu;
+          frontmatter[COPILOT_COMMAND_SLASH_ENABLED] = command.showInSlashMenu;
+          frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] = command.order;
+          frontmatter[COPILOT_COMMAND_MODEL_KEY] = command.modelKey;
+          frontmatter[COPILOT_COMMAND_LAST_USED] = command.lastUsedMs;
+        });
+      }
+    } catch (error) {
+      logError("Error updating command", error);
+    } finally {
+      removePendingFileWrite(filePath);
     }
   }
 
@@ -109,10 +156,16 @@ export class CustomCommandManager {
   }
 
   async deleteCommand(command: CustomCommand) {
-    deleteCachedCommand(command.title);
-    const file = app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
-    if (file instanceof TFile) {
-      await app.vault.delete(file);
+    const filePath = getCommandFilePath(command.title);
+    try {
+      addPendingFileWrite(filePath);
+      deleteCachedCommand(command.title);
+      const file = app.vault.getAbstractFileByPath(filePath);
+      if (file instanceof TFile) {
+        await app.vault.delete(file);
+      }
+    } finally {
+      removePendingFileWrite(filePath);
     }
   }
 }

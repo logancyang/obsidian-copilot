@@ -185,11 +185,7 @@ export const CommandSettings: React.FC = () => {
   };
 
   const handleCreate = async (newCommand: CustomCommand) => {
-    // Reorder the existing commands so the order frontmatter is set to the
-    // correct value. This allows the new command to always show up at the bottom
-    // of the list.
-    await CustomCommandManager.getInstance().reorderCommands(commands);
-    await CustomCommandManager.getInstance().updateCommand(newCommand, newCommand.title);
+    await CustomCommandManager.getInstance().createCommand(newCommand);
   };
 
   const handleRemove = async (command: CustomCommand) => {
@@ -210,8 +206,11 @@ export const CommandSettings: React.FC = () => {
       const copiedCommand: CustomCommand = {
         ...command,
         title: copyName,
+        order: command.order + 1,
       };
-      await CustomCommandManager.getInstance().updateCommand(copiedCommand, copiedCommand.title);
+      await CustomCommandManager.getInstance().createCommand(copiedCommand, {
+        autoOrder: false,
+      });
     } catch (error) {
       console.error("Failed to copy command:", error);
       new Notice("Failed to copy command. Please try again.");

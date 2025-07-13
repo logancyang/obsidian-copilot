@@ -11,10 +11,11 @@ import { CustomCommand } from "@/commands/type";
 import {
   deleteCachedCommand,
   getCachedCustomCommands,
+  isFileWritePending,
   updateCachedCommand,
 } from "@/commands/state";
 import { CustomCommandManager } from "@/commands/customCommandManager";
-import { logInfo } from "@/logger";
+import { logError, logInfo } from "@/logger";
 
 /** This manager is used to register custom commands as obsidian commands */
 export class CustomCommandRegister {
@@ -61,11 +62,13 @@ export class CustomCommandRegister {
 
   private handleFileModify = debounce(
     async (file: TFile) => {
-      if (isCustomCommandFile(file)) {
-        const customCommand = await parseCustomCommandFile(file);
-        this.registerCommand(customCommand);
-        updateCachedCommand(customCommand, customCommand.title);
+      if (!isCustomCommandFile(file) || isFileWritePending(file.path)) {
+        return;
       }
+      const customCommand = await parseCustomCommandFile(file);
+      logInfo("command file modified", file.path, customCommand);
+      this.registerCommand(customCommand);
+      updateCachedCommand(customCommand, customCommand.title);
     },
     1000,
     {
@@ -76,84 +79,33 @@ export class CustomCommandRegister {
     }
   );
 
-  /**
-   * Waits for the custom command file to have its frontmatter processed.
-   * Retries parsing the file until required frontmatter fields are present or max retries reached.
-   */
-  private async waitForFrontmatter(
-    file: TFile,
-    maxRetries = 10,
-    delayMs = 200
-  ): Promise<CustomCommand | null> {
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      // Check if file still exists and is a custom command file
-      const currentFile = this.vault.getAbstractFileByPath(file.path);
-      if (!currentFile || !(currentFile instanceof TFile) || !isCustomCommandFile(currentFile)) {
-        return null; // File was deleted or is no longer a custom command file
-      }
-      try {
-        const customCommand = await parseCustomCommandFile(currentFile);
-        // Check for required frontmatter fields (e.g., showInContextMenu, showInSlashMenu, order, modelKey, lastUsedMs)
-        if (
-          typeof customCommand.showInContextMenu === "boolean" &&
-          typeof customCommand.showInSlashMenu === "boolean" &&
-          typeof customCommand.order === "number" &&
-          typeof customCommand.modelKey === "string" &&
-          typeof customCommand.lastUsedMs === "number"
-        ) {
-          return customCommand;
-        }
-      } catch {
-        // Ignore parse errors, will retry
-      }
-      // Wait before retrying
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
-    return null;
-  }
-
   private handleFileCreation = async (file: TFile) => {
-    if (isCustomCommandFile(file)) {
-      try {
-        logInfo("new command file created", file.path);
-        const customCommand = await this.waitForFrontmatter(file);
-        if (!customCommand) {
-          console.error(
-            `[CustomCommandRegister] Failed to process custom command file (frontmatter not ready): ${file.path}`
-          );
-          return;
-        }
-        const cachedCommands = getCachedCustomCommands();
-        const latestCommand = cachedCommands.find((cmd) => cmd.title === customCommand.title);
-        // The cache may have been updated since the file was created, so we need to
-        // check if the command exists in the cache. Only update the command if it doesn't
-        // exist in the cache.
-        if (!latestCommand) {
-          // Call updateCommand to ensure the command frontmatter is set correctly
-          await CustomCommandManager.getInstance().updateCommand(
-            customCommand,
-            customCommand.title
-          );
-        }
-        this.registerCommand(customCommand);
-      } catch (error) {
-        console.error(
-          `[CustomCommandRegister] Error processing custom command file: ${file.path}`,
-          error
-        );
-      }
+    if (!isCustomCommandFile(file) || isFileWritePending(file.path)) {
+      return;
+    }
+    try {
+      logInfo("new command file created", file.path);
+      const customCommand = await parseCustomCommandFile(file);
+      await CustomCommandManager.getInstance().createCommand(customCommand);
+      this.registerCommand(customCommand);
+    } catch (error) {
+      logError(`Error processing custom command creation: ${file.path}`, error);
     }
   };
 
   private handleFileDeletion = async (file: TFile) => {
-    if (isCustomCommandFile(file)) {
-      const commandId = getCommandId(file.basename);
-      (this.plugin as any).removeCommand(commandId);
-      deleteCachedCommand(file.basename);
+    if (!isCustomCommandFile(file) || isFileWritePending(file.path)) {
+      return;
     }
+    const commandId = getCommandId(file.basename);
+    (this.plugin as any).removeCommand(commandId);
+    deleteCachedCommand(file.basename);
   };
 
   private handleFileRename = async (file: TFile, oldPath: string) => {
+    if (isFileWritePending(file.path)) {
+      return;
+    }
     // Remove the old command
     const oldFilename = oldPath.split("/").pop()?.replace(/\.md$/, "");
     if (oldFilename) {
@@ -165,15 +117,7 @@ export class CustomCommandRegister {
     if (isCustomCommandFile(file)) {
       logInfo("command file renamed", file.path);
       const parsedCommand = await parseCustomCommandFile(file);
-      const cachedCommands = getCachedCustomCommands();
-      const latestCommand = cachedCommands.find((cmd) => cmd.title === parsedCommand.title);
-      if (latestCommand) {
-        // Use the latest command object to ensure latest edits are persisted
-        await CustomCommandManager.getInstance().updateCommand(latestCommand, latestCommand.title);
-      } else {
-        // Fallback: use the parsed file if no cached command exists
-        await CustomCommandManager.getInstance().updateCommand(parsedCommand, parsedCommand.title);
-      }
+      await CustomCommandManager.getInstance().createCommand(parsedCommand);
       this.registerCommand(parsedCommand);
     }
   };

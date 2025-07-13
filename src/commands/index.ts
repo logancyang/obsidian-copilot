@@ -346,7 +346,7 @@ export function registerCommands(
   });
 
   // Add command to create a new custom command
-  addCommand(plugin, COMMAND_IDS.CREATE_CUSTOM_COMMAND, async () => {
+  addCommand(plugin, COMMAND_IDS.ADD_CUSTOM_COMMAND, async () => {
     const commands = getCachedCustomCommands();
     const newCommand = { ...EMPTY_COMMAND };
     const modal = new CustomCommandSettingsModal(
@@ -354,11 +354,7 @@ export function registerCommands(
       commands,
       newCommand,
       async (updatedCommand) => {
-        await CustomCommandManager.getInstance().reorderCommands(commands);
-        await CustomCommandManager.getInstance().updateCommand(
-          updatedCommand,
-          updatedCommand.title
-        );
+        await CustomCommandManager.getInstance().createCommand(updatedCommand);
       }
     );
     modal.open();
