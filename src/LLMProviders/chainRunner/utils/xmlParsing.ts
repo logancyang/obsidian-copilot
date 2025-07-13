@@ -6,8 +6,8 @@ export interface ToolCall {
 }
 
 /**
- * Parses XML tool call blocks from AI responses
- * Format: <use_tool><name>toolName</name><args>{...}</args></use_tool>
+ * Parses XML tool call blocks from AI responses using pure XML format
+ * Format: <use_tool><name>toolName</name><param1>value1</param1><arrayParam><item>val1</item><item>val2</item></arrayParam></use_tool>
  */
 export function parseXMLToolCalls(text: string): ToolCall[] {
   const toolCalls: ToolCall[] = [];
@@ -19,7 +19,6 @@ export function parseXMLToolCalls(text: string): ToolCall[] {
     while ((match = regex.exec(text)) !== null) {
       const content = match[1];
       const nameMatch = content.match(/<name>([\s\S]*?)<\/name>/);
-      const argsMatch = content.match(/<args>([\s\S]*?)<\/args>/);
 
       if (nameMatch) {
         const name = nameMatch[1].trim();
@@ -30,19 +29,25 @@ export function parseXMLToolCalls(text: string): ToolCall[] {
           continue;
         }
 
-        let args = {};
+        // Parse individual XML parameters using pure XML approach
+        const args: any = {};
 
-        if (argsMatch) {
-          try {
-            const argsText = argsMatch[1].trim();
-            if (argsText) {
-              args = JSON.parse(argsText);
-            }
-          } catch (e) {
-            logError("Failed to parse tool arguments:", e);
-            // Use the raw string as args if JSON parsing fails
-            args = { raw: argsMatch[1].trim() };
-          }
+        // Remove the name tag from content to avoid matching it
+        const contentWithoutName = content.replace(/<name>[\s\S]*?<\/name>/, "");
+
+        // Find all parameter tags
+        const paramRegex = /<([^>]+)>([\s\S]*?)<\/\1>/g;
+        let paramMatch;
+
+        while ((paramMatch = paramRegex.exec(contentWithoutName)) !== null) {
+          const paramName = paramMatch[1].trim();
+          const paramContent = paramMatch[2].trim();
+
+          // Skip empty parameter names
+          if (!paramName) continue;
+
+          // Parse parameter content as pure XML
+          args[paramName] = parseParameterContent(paramContent, paramName);
         }
 
         toolCalls.push({ name, args });
@@ -55,6 +60,71 @@ export function parseXMLToolCalls(text: string): ToolCall[] {
   }
 
   return toolCalls;
+}
+
+/**
+ * Parses parameter content using hybrid approach
+ * - JSON arrays/objects: ["item1", "item2"] or {"key": "value"}
+ * - Pure XML arrays: <item>value1</item><item>value2</item>
+ * - Pure XML objects: <key1>value1</key1><key2>value2</key2>
+ * - Simple strings: just the text value
+ * - Empty content: returns appropriate empty value based on parameter name
+ */
+function parseParameterContent(content: string, parameterName?: string): any {
+  if (!content) {
+    // Special handling for known array parameters that should default to empty arrays
+    if (parameterName === "chatHistory" || parameterName === "salientTerms") {
+      return [];
+    }
+    return "";
+  }
+
+  // Check if content contains XML tags
+  const hasXmlTags = /<[^>]+>/.test(content);
+
+  if (!hasXmlTags) {
+    // Try to parse as JSON if it looks like a JSON array/object
+    if (
+      (content.startsWith("[") && content.endsWith("]")) ||
+      (content.startsWith("{") && content.endsWith("}"))
+    ) {
+      try {
+        return JSON.parse(content);
+      } catch {
+        // If JSON parsing fails, use as string
+        return content;
+      }
+    }
+    // Simple string value
+    return content;
+  }
+
+  // Check if it's an array format with <item> tags
+  const itemMatches = content.match(/<item>([\s\S]*?)<\/item>/g);
+  if (itemMatches) {
+    return itemMatches.map((match) => {
+      const itemContent = match.replace(/<\/?item>/g, "").trim();
+      return parseParameterContent(itemContent); // Recursive for nested structures
+    });
+  }
+
+  // Check if it's an object format with key-value pairs
+  const objectRegex = /<([^>]+)>([\s\S]*?)<\/\1>/g;
+  const objectEntries: [string, any][] = [];
+  let objectMatch;
+
+  while ((objectMatch = objectRegex.exec(content)) !== null) {
+    const key = objectMatch[1].trim();
+    const value = objectMatch[2].trim();
+    objectEntries.push([key, parseParameterContent(value)]);
+  }
+
+  if (objectEntries.length > 0) {
+    return Object.fromEntries(objectEntries);
+  }
+
+  // Fallback to string if we can't parse as structured data
+  return content;
 }
 
 /**

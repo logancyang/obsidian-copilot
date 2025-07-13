@@ -78,12 +78,8 @@ You are now in autonomous agent mode. You can use tools to gather information an
 When you need to use a tool, format it EXACTLY like this:
 <use_tool>
 <name>tool_name_here</name>
-<args>
-{
-  "param1": "value1",
-  "param2": "value2"
-}
-</args>
+<param1>value1</param1>
+<arrayParam>["item1", "item2"]</arrayParam>
 </use_tool>
 
 ## Important Tool Usage Examples:
@@ -91,31 +87,20 @@ When you need to use a tool, format it EXACTLY like this:
 For localSearch (searching notes in the vault):
 <use_tool>
 <name>localSearch</name>
-<args>
-{
-  "query": "piano learning",
-  "salientTerms": ["piano", "learning", "practice", "music"]
-}
-</args>
+<query>piano learning</query>
+<salientTerms>["piano", "learning", "practice", "music"]</salientTerms>
 </use_tool>
 
-For webSearch:
+For webSearch (with empty chat history):
 <use_tool>
 <name>webSearch</name>
-<args>
-{
-  "query": "piano learning techniques",
-  "chatHistory": []
-}
-</args>
+<query>piano learning techniques</query>
+<chatHistory>[]</chatHistory>
 </use_tool>
 
 For getFileTree:
 <use_tool>
 <name>getFileTree</name>
-<args>
-{}
-</args>
 </use_tool>
 
 For writeToFile:
@@ -141,7 +126,9 @@ You can use multiple tools in sequence. After each tool execution, you'll receiv
 Always explain your reasoning before using tools. Be conversational and clear about what you're doing.
 When you've gathered enough information, provide your final response without any tool calls.
 
-IMPORTANT: Do not include any code blocks (\`\`\`) or tool_code blocks in your responses. Only use the <use_tool> format for tool calls.`;
+IMPORTANT: Do not include any code blocks (\`\`\`) or tool_code blocks in your responses. Only use the <use_tool> format for tool calls.
+
+NOTE: Use individual XML parameter tags. For arrays, use JSON format like ["item1", "item2"].`;
   }
 
   enhanceUserMessage(message: string, requiresTools: boolean): string {
@@ -170,12 +157,8 @@ EXAMPLE OF CORRECT RESPONSE:
 
 <use_tool>
 <name>localSearch</name>
-<args>
-{
-  "query": "piano learning",
-  "salientTerms": ["piano", "learning", "practice", "technique"]
-}
-</args>
+<query>piano learning</query>
+<salientTerms>["piano", "learning", "practice", "technique"]</salientTerms>
 </use_tool>"
 
 EXAMPLE OF INCORRECT RESPONSE (DO NOT DO THIS):
@@ -288,12 +271,14 @@ I'll search your vault and the web for piano practice information.
 
 <use_tool>
 <name>localSearch</name>
-<args>{"query": "piano learning", "salientTerms": ["piano", "learning"]}</args>
+<query>piano learning</query>
+<salientTerms>["piano", "learning"]</salientTerms>
 </use_tool>
 
 <use_tool>
 <name>webSearch</name>
-<args>{"query": "piano techniques", "chatHistory": []}</args>
+<query>piano techniques</query>
+<chatHistory>[]</chatHistory>
 </use_tool>
 
 [RESPONSE ENDS HERE - NO MORE TEXT]
@@ -303,7 +288,8 @@ Let me gather more specific information about practice routines.
 
 <use_tool>
 <name>localSearch</name>
-<args>{"query": "practice schedule", "salientTerms": ["practice", "routine", "schedule"]}</args>
+<query>practice schedule</query>
+<salientTerms>["practice", "routine", "schedule"]</salientTerms>
 </use_tool>
 
 [RESPONSE ENDS HERE - NO MORE TEXT]
@@ -485,12 +471,8 @@ When the user asks to "search the web", you MUST immediately use the webSearch t
 ✅ CORRECT (what you MUST do):
 <use_tool>
 <name>localSearch</name>
-<args>
-{
-  "query": "piano",
-  "salientTerms": ["piano", "practice", "notes", "learning"]
-}
-</args>
+<query>piano</query>
+<salientTerms>["piano", "practice", "notes", "learning"]</salientTerms>
 </use_tool>
 
 GEMINI SPECIFIC RULES:
@@ -505,11 +487,13 @@ User: "based on my X notes, search the web for Y and create Z"
 Your response:
 <use_tool>
 <name>localSearch</name>
-<args>{"query": "X", "salientTerms": ["X", "related", "terms"]}</args>
+<query>X</query>
+<salientTerms>["X", "related", "terms"]</salientTerms>
 </use_tool>
 <use_tool>
 <name>webSearch</name>
-<args>{"query": "Y", "chatHistory": []}</args>
+<query>Y</query>
+<chatHistory>[]</chatHistory>
 </use_tool>
 
 Remember: The user has already told you what to do. Execute it NOW with the tools.`;

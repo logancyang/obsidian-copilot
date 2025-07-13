@@ -7,7 +7,7 @@ This directory contains the refactored chain runner system for Obsidian Copilot,
 The chain runner system provides two distinct tool calling approaches:
 
 1. **Legacy Tool Calling** (CopilotPlusChainRunner) - Uses Brevilabs API for intent analysis
-2. **Autonomous Agent** (AutonomousAgentChainRunner) - Uses XML-based tool calling inspired by Cline
+2. **Autonomous Agent** (AutonomousAgentChainRunner) - Uses XML-based tool calling
 
 ## Architecture
 
