@@ -17,7 +17,6 @@ import {
   updateCachedCommand,
   updateCachedCommands,
 } from "./state";
-import { logError } from "@/logger";
 
 export class CustomCommandManager {
   private static instance: CustomCommandManager;
@@ -89,21 +88,25 @@ export class CustomCommandManager {
 
   async updateCommand(command: CustomCommand, prevCommandTitle: string, skipStoreUpdate = false) {
     const filePath = getCommandFilePath(command.title);
+    const prevFilePath = getCommandFilePath(prevCommandTitle);
+    const isRename = command.title !== prevCommandTitle;
     try {
       addPendingFileWrite(filePath);
+      if (isRename) {
+        addPendingFileWrite(prevFilePath);
+      }
       if (!skipStoreUpdate) {
         updateCachedCommand(command, prevCommandTitle);
       }
       let commandFile = app.vault.getAbstractFileByPath(filePath);
       // Verify whether the title has changed to decide whether to rename the file
-      if (command.title !== prevCommandTitle) {
+      if (isRename) {
         const newFileExists = app.vault.getAbstractFileByPath(filePath);
         if (newFileExists) {
           throw new CustomError(
             "Error saving custom prompt. Please check if the title already exists."
           );
         }
-        const prevFilePath = getCommandFilePath(prevCommandTitle);
         const prevCommandFile = app.vault.getAbstractFileByPath(prevFilePath);
         if (prevCommandFile instanceof TFile) {
           await app.vault.rename(prevCommandFile, filePath);
@@ -128,10 +131,11 @@ export class CustomCommandManager {
           frontmatter[COPILOT_COMMAND_LAST_USED] = command.lastUsedMs;
         });
       }
-    } catch (error) {
-      logError("Error updating command", error);
     } finally {
       removePendingFileWrite(filePath);
+      if (isRename) {
+        removePendingFileWrite(prevFilePath);
+      }
     }
   }
 
