@@ -117,8 +117,8 @@ export class CustomCommandRegister {
     if (isCustomCommandFile(file)) {
       logInfo("command file renamed", file.path);
       const parsedCommand = await parseCustomCommandFile(file);
-      await CustomCommandManager.getInstance().createCommand(parsedCommand);
       this.registerCommand(parsedCommand);
+      updateCachedCommand(parsedCommand, parsedCommand.title);
     }
   };
 

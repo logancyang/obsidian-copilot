@@ -32,6 +32,7 @@ export class CustomCommandManager {
   /**
    * Creates a new command file and caches the command in memory.
    * If autoOrder is true, the order of the command is set to the next available order.
+   * If autoOrder is false (default), preserves the order from the command object/frontmatter.
    */
   async createCommand(
     command: CustomCommand,
