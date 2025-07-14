@@ -10,7 +10,12 @@ import {
 import { CustomCommand } from "@/commands/type";
 import { normalizePath, Notice, TAbstractFile, TFile, Vault } from "obsidian";
 import { getSettings } from "@/settings/model";
-import { updateCachedCommands, getCachedCustomCommands } from "./state";
+import {
+  updateCachedCommands,
+  getCachedCustomCommands,
+  addPendingFileWrite,
+  removePendingFileWrite,
+} from "./state";
 import { PromptSortStrategy } from "@/types";
 import {
   extractNoteFiles,
@@ -435,21 +440,26 @@ export function getNextCustomCommandOrder(): number {
  * This is idempotent and does not touch the file content.
  */
 export async function ensureCommandFrontmatter(file: TFile, command: CustomCommand) {
-  await app.fileManager.processFrontMatter(file, (frontmatter) => {
-    if (frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] == null) {
-      frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = command.showInContextMenu;
-    }
-    if (frontmatter[COPILOT_COMMAND_SLASH_ENABLED] == null) {
-      frontmatter[COPILOT_COMMAND_SLASH_ENABLED] = command.showInSlashMenu;
-    }
-    if (frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] == null) {
-      frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] = command.order;
-    }
-    if (frontmatter[COPILOT_COMMAND_MODEL_KEY] == null) {
-      frontmatter[COPILOT_COMMAND_MODEL_KEY] = command.modelKey;
-    }
-    if (frontmatter[COPILOT_COMMAND_LAST_USED] == null) {
-      frontmatter[COPILOT_COMMAND_LAST_USED] = command.lastUsedMs;
-    }
-  });
+  try {
+    addPendingFileWrite(file.path);
+    await app.fileManager.processFrontMatter(file, (frontmatter) => {
+      if (frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] == null) {
+        frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = command.showInContextMenu;
+      }
+      if (frontmatter[COPILOT_COMMAND_SLASH_ENABLED] == null) {
+        frontmatter[COPILOT_COMMAND_SLASH_ENABLED] = command.showInSlashMenu;
+      }
+      if (frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] == null) {
+        frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] = command.order;
+      }
+      if (frontmatter[COPILOT_COMMAND_MODEL_KEY] == null) {
+        frontmatter[COPILOT_COMMAND_MODEL_KEY] = command.modelKey;
+      }
+      if (frontmatter[COPILOT_COMMAND_LAST_USED] == null) {
+        frontmatter[COPILOT_COMMAND_LAST_USED] = command.lastUsedMs;
+      }
+    });
+  } finally {
+    removePendingFileWrite(file.path);
+  }
 }

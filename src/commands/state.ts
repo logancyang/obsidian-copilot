@@ -4,23 +4,18 @@ import { CustomCommand } from "./type";
 
 const customCommandsStore = createStore();
 const customCommandsAtom = atom<CustomCommand[]>([]);
-const pendingFileWritesAtom = atom<Set<string>>(new Set<string>());
+const pendingFileWritesAtom = new Set<string>();
 
 export function addPendingFileWrite(filePath: string) {
-  const pendingFileWrites = customCommandsStore.get(pendingFileWritesAtom);
-  pendingFileWrites.add(filePath);
-  customCommandsStore.set(pendingFileWritesAtom, pendingFileWrites);
+  pendingFileWritesAtom.add(filePath);
 }
 
 export function removePendingFileWrite(filePath: string) {
-  const pendingFileWrites = customCommandsStore.get(pendingFileWritesAtom);
-  pendingFileWrites.delete(filePath);
-  customCommandsStore.set(pendingFileWritesAtom, pendingFileWrites);
+  pendingFileWritesAtom.delete(filePath);
 }
 
 export function isFileWritePending(filePath: string) {
-  const pendingFileWrites = customCommandsStore.get(pendingFileWritesAtom);
-  return pendingFileWrites.has(filePath);
+  return pendingFileWritesAtom.has(filePath);
 }
 
 export function createCachedCommand(command: CustomCommand): CustomCommand {

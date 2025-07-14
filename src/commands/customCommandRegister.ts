@@ -93,6 +93,7 @@ export class CustomCommandRegister {
       const newOrder = getNextCustomCommandOrder();
       const commandWithOrder = { ...customCommand, order: newOrder };
       await ensureCommandFrontmatter(file, commandWithOrder);
+      updateCachedCommand(commandWithOrder, commandWithOrder.title);
       this.registerCommand(commandWithOrder);
     } catch (error) {
       logError(`Error processing custom command creation: ${file.path}`, error);
@@ -123,11 +124,9 @@ export class CustomCommandRegister {
     if (isCustomCommandFile(file)) {
       logInfo("command file renamed", file.path);
       const parsedCommand = await parseCustomCommandFile(file);
-      const newOrder = getNextCustomCommandOrder();
-      const commandWithOrder = { ...parsedCommand, order: newOrder };
       this.registerCommand(parsedCommand);
       updateCachedCommand(parsedCommand, parsedCommand.title);
-      await ensureCommandFrontmatter(file, commandWithOrder);
+      await ensureCommandFrontmatter(file, parsedCommand);
     }
   };
 
