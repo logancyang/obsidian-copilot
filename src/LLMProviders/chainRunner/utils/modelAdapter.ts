@@ -120,6 +120,7 @@ ${toolDescriptions}
 # CRITICAL Guidelines for calling tools
 - For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings). Extract key terms from the query for salientTerms.
 - When you need to call writeToFile, NEVER display the file content directly. Always only pass the file content to wirteToFile.
+- you MUST explicitly call writeToFile for any intent of updating or creating files.
 
 You can use multiple tools in sequence. After each tool execution, you'll receive the results and can decide whether to use more tools or provide your final response.
 
