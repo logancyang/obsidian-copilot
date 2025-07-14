@@ -5,6 +5,7 @@ import {
   parseCustomCommandFile,
   getNextCustomCommandOrder,
   ensureCommandFrontmatter,
+  hasOrderFrontmatter,
 } from "@/commands/customCommandUtils";
 import { Editor, Plugin, TFile, Vault } from "obsidian";
 import { CustomCommandChatModal } from "@/commands/CustomCommandChatModal";
@@ -88,13 +89,15 @@ export class CustomCommandRegister {
     }
     try {
       logInfo("new command file created", file.path);
-      const customCommand = await parseCustomCommandFile(file);
-      // Compute the correct order for the new command
-      const newOrder = getNextCustomCommandOrder();
-      const commandWithOrder = { ...customCommand, order: newOrder };
-      await ensureCommandFrontmatter(file, commandWithOrder);
-      updateCachedCommand(commandWithOrder, commandWithOrder.title);
-      this.registerCommand(commandWithOrder);
+      let customCommand = await parseCustomCommandFile(file);
+      if (!hasOrderFrontmatter(file)) {
+        // Compute the correct order for the new command
+        const newOrder = getNextCustomCommandOrder();
+        customCommand = { ...customCommand, order: newOrder };
+      }
+      await ensureCommandFrontmatter(file, customCommand);
+      updateCachedCommand(customCommand, customCommand.title);
+      this.registerCommand(customCommand);
     } catch (error) {
       logError(`Error processing custom command creation: ${file.path}`, error);
     }

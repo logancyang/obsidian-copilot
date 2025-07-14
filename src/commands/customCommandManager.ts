@@ -51,10 +51,6 @@ export class CustomCommandManager {
       }
       command = { ...command, order: newOrder };
 
-      if (!mergedOptions.skipStoreUpdate) {
-        updateCachedCommand(command, command.title);
-      }
-
       const folderPath = getCustomCommandsFolder();
       // Check if the folder exists and create it if it doesn't
       const folderExists = await app.vault.adapter.exists(folderPath);
@@ -65,6 +61,8 @@ export class CustomCommandManager {
       let commandFile = app.vault.getAbstractFileByPath(filePath) as TFile;
       if (!commandFile || !(commandFile instanceof TFile)) {
         commandFile = await app.vault.create(filePath, command.content);
+      } else {
+        await app.vault.modify(commandFile, command.content);
       }
 
       await app.fileManager.processFrontMatter(commandFile, (frontmatter) => {
@@ -74,6 +72,10 @@ export class CustomCommandManager {
         frontmatter[COPILOT_COMMAND_MODEL_KEY] = command.modelKey;
         frontmatter[COPILOT_COMMAND_LAST_USED] = command.lastUsedMs;
       });
+
+      if (!mergedOptions.skipStoreUpdate) {
+        updateCachedCommand(command, command.title);
+      }
     } finally {
       removePendingFileWrite(filePath);
     }
@@ -93,6 +95,7 @@ export class CustomCommandManager {
         addPendingFileWrite(prevFilePath);
       }
       if (!skipStoreUpdate) {
+        // Update the cached command first to make UI update immediately.
         updateCachedCommand(command, prevCommandTitle);
       }
       let commandFile = app.vault.getAbstractFileByPath(filePath);

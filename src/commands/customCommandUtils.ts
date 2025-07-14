@@ -98,6 +98,11 @@ function stripFrontmatter(content: string): string {
   return content;
 }
 
+export function hasOrderFrontmatter(file: TFile): boolean {
+  const metadata = app.metadataCache.getFileCache(file);
+  return metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ORDER] != null;
+}
+
 /**
  * Parse a TFile as a CustomCommand by reading its content and extracting frontmatter.
  */
