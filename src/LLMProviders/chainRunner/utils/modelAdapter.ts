@@ -106,12 +106,8 @@ For getFileTree:
 For writeToFile:
 <use_tool>
 <name>writeToFile</name>
-<args>
-{
-  "path": "path/to/note.md"
-  "content": "FULL CONTENT OF THE NOTE"
-}
-</args>
+<path>path/to/note.md </path>
+<content>FULL CONTENT OF THE NOTE</content>
 </use_tool>
 
 Available tools:

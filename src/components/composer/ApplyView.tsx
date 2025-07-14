@@ -14,6 +14,7 @@ export const APPLY_VIEW_TYPE = "obsidian-copilot-apply-view";
 export interface ApplyViewState {
   changes: Change[];
   path: string;
+  decisionCallback?: (decision: "accepted" | "rejected" | "aborted") => void;
 }
 
 // Extended Change interface to track user decisions
@@ -142,9 +143,11 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
       );
 
       await applyDecidedChangesToFile(updatedDiff);
+      state.decisionCallback?.("accepted");
     } catch (error) {
       logError("Error applying changes:", error);
       new Notice(`Error applying changes: ${error.message}`);
+      state.decisionCallback?.("aborted");
     }
   };
 
@@ -157,9 +160,11 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
       );
 
       await applyDecidedChangesToFile(updatedDiff);
+      state.decisionCallback?.("rejected");
     } catch (error) {
       logError("Error applying changes:", error);
       new Notice(`Error applying changes: ${error.message}`);
+      state.decisionCallback?.("aborted");
     }
   };
 

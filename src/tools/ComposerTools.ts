@@ -5,7 +5,10 @@ import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
 import { z } from "zod";
 import { diffTrimmedLines } from "diff";
 
-async function show_preview(file_path: string, content: string) {
+async function show_preview(
+  file_path: string,
+  content: string
+): Promise<"accepted" | "rejected" | "aborted"> {
   let file = app.vault.getAbstractFileByPath(file_path);
   let isNewFile = false;
 
@@ -26,20 +29,20 @@ async function show_preview(file_path: string, content: string) {
         isNewFile = true;
       } else {
         new Notice(`Failed to create file: ${file_path}`);
-        return;
+        return "aborted";
       }
 
       isNewFile = true;
     } catch (createError) {
       logError("Error creating file:", createError);
       new Notice(`Failed to create file: ${createError.message}`);
-      return;
+      return "aborted";
     }
   }
 
   if (!(file instanceof TFile)) {
     new Notice(`Path is not a file: ${file_path}`);
-    return;
+    return "aborted";
   }
 
   // Check if the current active note is the same as the target note
@@ -52,29 +55,35 @@ async function show_preview(file_path: string, content: string) {
 
   // If the file is newly created, don't show the apply view
   if (isNewFile) {
-    return;
+    return "accepted";
   }
 
   const originalContent = await app.vault.read(file);
   const changes = diffTrimmedLines(originalContent, content, {
     newlineIsToken: true,
   });
-  // Open the Apply View in a new leaf with the processed content
-  const leaf = app.workspace.getLeaf(true);
-  await leaf.setViewState({
-    type: APPLY_VIEW_TYPE,
-    active: true,
-    state: {
-      changes: changes,
-      path: file_path,
-    },
+  // Return a promise that resolves when the user makes a decision
+  return new Promise((resolve) => {
+    // Open the Apply View in a new leaf with the processed content and the callback
+    const leaf = app.workspace.getLeaf(true);
+    leaf.setViewState({
+      type: APPLY_VIEW_TYPE,
+      active: true,
+      state: {
+        changes: changes,
+        path: file_path,
+        decisionCallback: (decision: "accepted" | "rejected" | "aborted") => {
+          resolve(decision);
+        },
+      },
+    });
   });
 }
 
 const writeToFileTool = tool(
   async ({ path, content }: { path: string; content: string }) => {
-    await show_preview(path, content);
-    return "New file content are being displayed in the Apply View.";
+    const decision = await show_preview(path, content);
+    return `User ${decision} the file change`;
   },
   {
     name: "writeToFile",
@@ -93,7 +102,6 @@ const writeToFileTool = tool(
       content: z.string().describe(`(Required) The content to write to the file. 
           ALWAYS provide the COMPLETE intended content of the file, without any truncation or omissions. 
           You MUST include ALL parts of the file, even if they haven't been modified.
-          Properly escape all special characters in the content field, especially backticks and quotes.
 
           # Rules for Obsidian Canvas content
           * For canvas files, both 'nodes' and 'edges' arrays must be properly closed with ]

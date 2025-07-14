@@ -111,6 +111,16 @@ export function getToolEmoji(toolName: string): string {
 }
 
 /**
+ * Get user confirmation message for tool call
+ */
+export function getToolConfirmtionMessage(toolName: string): string | null {
+  if (toolName == "writeToFile") {
+    return "Waiting user to approve or reject the change";
+  }
+  return null;
+}
+
+/**
  * Log tool call details for debugging
  */
 export function logToolCall(toolCall: ToolCall, iteration: number): void {

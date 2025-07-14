@@ -18,6 +18,7 @@ import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import {
   deduplicateSources,
   executeSequentialToolCall,
+  getToolConfirmtionMessage,
   getToolDisplayName,
   getToolEmoji,
   logToolCall,
@@ -243,9 +244,13 @@ ${params}
           // Create tool calling message with better spacing and display name
           const toolEmoji = getToolEmoji(toolCall.name);
           const toolDisplayName = getToolDisplayName(toolCall.name);
-          const toolCallingMessage = `<br/>\n\n${toolEmoji} *Calling ${toolDisplayName}...*\n\n<br/>`;
+          let toolMessage = `${toolEmoji} *Calling ${toolDisplayName}...*`;
+          const confirmationMessage = getToolConfirmtionMessage(toolCall.name);
+          if (confirmationMessage) {
+            toolMessage += `\n⏳ *${confirmationMessage}...*`;
+          }
+          const toolCallingMessage = `<br/>\n\n${toolMessage}\n\n<br/>`;
           toolCallMessages.push(toolCallingMessage);
-
           // Show all history plus all tool call messages
           const currentDisplay = [...iterationHistory, ...toolCallMessages].join("\n\n");
           updateCurrentAiMessage(currentDisplay);
