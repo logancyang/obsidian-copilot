@@ -3,18 +3,22 @@ import {
   isCustomCommandFile,
   loadAllCustomCommands,
   parseCustomCommandFile,
+  getNextCustomCommandOrder,
+  ensureCommandFrontmatter,
+  hasOrderFrontmatter,
 } from "@/commands/customCommandUtils";
 import { Editor, Plugin, TFile, Vault } from "obsidian";
 import { CustomCommandChatModal } from "@/commands/CustomCommandChatModal";
 import debounce from "lodash.debounce";
 import { CustomCommand } from "@/commands/type";
 import {
-  createCachedCommand,
   deleteCachedCommand,
   getCachedCustomCommands,
+  isFileWritePending,
   updateCachedCommand,
 } from "@/commands/state";
 import { CustomCommandManager } from "@/commands/customCommandManager";
+import { logError, logInfo } from "@/logger";
 
 /** This manager is used to register custom commands as obsidian commands */
 export class CustomCommandRegister {
@@ -61,13 +65,15 @@ export class CustomCommandRegister {
 
   private handleFileModify = debounce(
     async (file: TFile) => {
-      if (isCustomCommandFile(file)) {
-        const customCommand = await parseCustomCommandFile(file);
-        this.registerCommand(customCommand);
-        updateCachedCommand(customCommand, customCommand.title);
+      if (!isCustomCommandFile(file) || isFileWritePending(file.path)) {
+        return;
       }
+      const customCommand = await parseCustomCommandFile(file);
+      logInfo("command file modified", file.path, customCommand);
+      this.registerCommand(customCommand);
+      updateCachedCommand(customCommand, customCommand.title);
     },
-    3000,
+    1000,
     {
       // We cannot use leading: true because frontmatter is not updated
       // immediately when modify event is triggered.
@@ -76,23 +82,40 @@ export class CustomCommandRegister {
     }
   );
 
+  // Note: This function is called when obsidian starts up.
   private handleFileCreation = async (file: TFile) => {
-    if (isCustomCommandFile(file)) {
-      const customCommand = await parseCustomCommandFile(file);
+    if (!isCustomCommandFile(file) || isFileWritePending(file.path)) {
+      return;
+    }
+    try {
+      logInfo("new command file created", file.path);
+      let customCommand = await parseCustomCommandFile(file);
+      if (!hasOrderFrontmatter(file)) {
+        // Compute the correct order for the new command
+        const newOrder = getNextCustomCommandOrder();
+        customCommand = { ...customCommand, order: newOrder };
+      }
+      await ensureCommandFrontmatter(file, customCommand);
+      updateCachedCommand(customCommand, customCommand.title);
       this.registerCommand(customCommand);
-      createCachedCommand(customCommand.title);
+    } catch (error) {
+      logError(`Error processing custom command creation: ${file.path}`, error);
     }
   };
 
   private handleFileDeletion = async (file: TFile) => {
-    if (isCustomCommandFile(file)) {
-      const commandId = getCommandId(file.basename);
-      (this.plugin as any).removeCommand(commandId);
-      deleteCachedCommand(file.basename);
+    if (!isCustomCommandFile(file) || isFileWritePending(file.path)) {
+      return;
     }
+    const commandId = getCommandId(file.basename);
+    (this.plugin as any).removeCommand(commandId);
+    deleteCachedCommand(file.basename);
   };
 
   private handleFileRename = async (file: TFile, oldPath: string) => {
+    if (isFileWritePending(file.path)) {
+      return;
+    }
     // Remove the old command
     const oldFilename = oldPath.split("/").pop()?.replace(/\.md$/, "");
     if (oldFilename) {
@@ -102,9 +125,11 @@ export class CustomCommandRegister {
     }
     // Register the new command if it's still a custom command file
     if (isCustomCommandFile(file)) {
-      const customCommand = await parseCustomCommandFile(file);
-      this.registerCommand(customCommand);
-      updateCachedCommand(customCommand, customCommand.title);
+      logInfo("command file renamed", file.path);
+      const parsedCommand = await parseCustomCommandFile(file);
+      this.registerCommand(parsedCommand);
+      updateCachedCommand(parsedCommand, parsedCommand.title);
+      await ensureCommandFrontmatter(file, parsedCommand);
     }
   };
 

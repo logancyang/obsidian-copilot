@@ -1,17 +1,31 @@
 import { atom, createStore } from "jotai";
 import { useAtomValue } from "jotai";
 import { CustomCommand } from "./type";
-import { EMPTY_COMMAND } from "@/commands/constants";
 
 const customCommandsStore = createStore();
 const customCommandsAtom = atom<CustomCommand[]>([]);
+const pendingFileWritesAtom = new Set<string>();
 
-export function createCachedCommand(title: string) {
+export function addPendingFileWrite(filePath: string) {
+  pendingFileWritesAtom.add(filePath);
+}
+
+export function removePendingFileWrite(filePath: string) {
+  pendingFileWritesAtom.delete(filePath);
+}
+
+export function isFileWritePending(filePath: string) {
+  return pendingFileWritesAtom.has(filePath);
+}
+
+export function createCachedCommand(command: CustomCommand): CustomCommand {
   const commands = customCommandsStore.get(customCommandsAtom);
-  if (commands.some((command) => command.title === title)) {
-    return;
+  const existingCommand = commands.find((c) => c.title === command.title);
+  if (existingCommand) {
+    return existingCommand;
   }
-  customCommandsStore.set(customCommandsAtom, [...commands, { ...EMPTY_COMMAND, title }]);
+  customCommandsStore.set(customCommandsAtom, [...commands, command]);
+  return command;
 }
 
 export function deleteCachedCommand(title: string) {

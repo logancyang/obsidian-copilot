@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { useCustomCommands } from "@/commands/state";
-import { Lightbulb, GripVertical, Trash2, Plus, Info, PenLine } from "lucide-react";
+import { Lightbulb, GripVertical, Trash2, Plus, Info, PenLine, Copy } from "lucide-react";
 
 import {
   Table,
@@ -32,29 +32,29 @@ import { cn } from "@/lib/utils";
 import { useSettingsValue } from "@/settings/model";
 import { updateSetting } from "@/settings/model";
 import { PromptSortStrategy } from "@/types";
-import { useContainerContext } from "@/settings/v2/components/ContainerContext";
-import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Input } from "@/components/ui/input";
+
 import { Notice } from "obsidian";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CustomCommand } from "@/commands/type";
 import {
   loadAllCustomCommands,
   sortCommandsByOrder,
-  validateCommandName,
+  generateCopyCommandName,
 } from "@/commands/customCommandUtils";
 import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
 import { SettingItem } from "@/components/ui/setting-item";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { generateDefaultCommands } from "@/commands/migrator";
+import { EMPTY_COMMAND } from "@/commands/constants";
 
 const SortableTableRow: React.FC<{
   command: CustomCommand;
   commands: CustomCommand[];
   onUpdate: (newCommand: CustomCommand, prevCommandTitle: string) => void;
   onRemove: (command: CustomCommand) => void;
-}> = ({ command, commands, onUpdate, onRemove }) => {
+  onCopy: (command: CustomCommand) => void;
+}> = ({ command, commands, onUpdate, onRemove, onCopy }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: command.title,
   });
@@ -137,6 +137,9 @@ const SortableTableRow: React.FC<{
           >
             <PenLine className="tw-size-4" />
           </Button>
+          <Button variant="ghost" size="icon" onClick={() => onCopy(command)} title="Copy command">
+            <Copy className="tw-size-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -165,8 +168,6 @@ export const CommandSettings: React.FC = () => {
     return sortCommandsByOrder([...rawCommands]);
   }, [rawCommands]);
 
-  const [newCommandName, setNewCommandName] = React.useState("");
-
   const settings = useSettingsValue();
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -179,24 +180,12 @@ export const CommandSettings: React.FC = () => {
     })
   );
 
-  const validationError = validateCommandName(newCommandName, commands);
-  const canCreate = !validationError && newCommandName.trim() !== "";
-
-  const handleCreateCommand = async () => {
-    if (!canCreate) return;
-
-    try {
-      await CustomCommandManager.getInstance().createCommand(newCommandName.trim(), "");
-      setNewCommandName("");
-      new Notice(`Command "${newCommandName.trim()}" created successfully!`);
-    } catch (error) {
-      console.error("Failed to create command:", error);
-      new Notice("Failed to create command. Please try again.");
-    }
-  };
-
   const handleUpdate = async (newCommand: CustomCommand, prevCommandTitle: string) => {
     await CustomCommandManager.getInstance().updateCommand(newCommand, prevCommandTitle);
+  };
+
+  const handleCreate = async (newCommand: CustomCommand) => {
+    await CustomCommandManager.getInstance().createCommand(newCommand);
   };
 
   const handleRemove = async (command: CustomCommand) => {
@@ -208,6 +197,25 @@ export const CommandSettings: React.FC = () => {
       console.error("Failed to delete command:", error);
       new Notice("Failed to delete command. Please try again.");
       throw error;
+    }
+  };
+
+  const handleCopy = async (command: CustomCommand) => {
+    try {
+      const copyName = generateCopyCommandName(command.title, commands);
+      const copiedCommand: CustomCommand = {
+        ...command,
+        title: copyName,
+      };
+      await CustomCommandManager.getInstance().createCommand(copiedCommand, {
+        // Explicitly make the new command the same order as the original command
+        // so it appears next to the original command in the menu. The extra
+        // suffix will ensure it is below the original command in the menu.
+        autoOrder: false,
+      });
+    } catch (error) {
+      console.error("Failed to copy command:", error);
+      new Notice("Failed to copy command. Please try again.");
     }
   };
 
@@ -230,14 +238,8 @@ export const CommandSettings: React.FC = () => {
     const [movedCommand] = newCommands.splice(activeIndex, 1);
     newCommands.splice(overIndex, 0, movedCommand);
 
-    for (let i = 0; i < newCommands.length; i++) {
-      newCommands[i] = { ...newCommands[i], order: i * 10 };
-    }
-
-    await CustomCommandManager.getInstance().updateCommands(newCommands);
+    await CustomCommandManager.getInstance().reorderCommands(newCommands);
   };
-
-  const container = useContainerContext();
 
   return (
     <div className="tw-space-y-4">
@@ -284,7 +286,7 @@ export const CommandSettings: React.FC = () => {
           ]}
         />
 
-        <div className="tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-4 tw-text-muted">
+        <div className="tw-mb-4 tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-4 tw-text-muted">
           <Lightbulb className="tw-size-5" />{" "}
           <div>
             Commands are automatically loaded from .md files in your custom prompts folder{" "}
@@ -294,6 +296,44 @@ export const CommandSettings: React.FC = () => {
         </div>
 
         <div className="tw-flex tw-flex-col tw-gap-4">
+          <div className="tw-flex tw-w-full tw-justify-between">
+            <div>
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  new ConfirmModal(
+                    app,
+                    generateDefaultCommands,
+                    "This will add default commands to your custom prompts folder. Do you want to continue?",
+                    "Generate Default Commands"
+                  ).open()
+                }
+              >
+                Generate Default Commands
+              </Button>
+            </div>
+            <Button
+              variant="default"
+              className="tw-gap-2"
+              onClick={() => {
+                const newCommand: CustomCommand = {
+                  ...EMPTY_COMMAND,
+                };
+                const modal = new CustomCommandSettingsModal(
+                  app,
+                  commands,
+                  newCommand,
+                  async (updatedCommand) => {
+                    await handleCreate(updatedCommand);
+                  }
+                );
+                modal.open();
+              }}
+            >
+              <Plus className="tw-size-4" />
+              Add Command
+            </Button>
+          </div>
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -358,6 +398,7 @@ export const CommandSettings: React.FC = () => {
                         commands={commands}
                         onUpdate={handleUpdate}
                         onRemove={handleRemove}
+                        onCopy={handleCopy}
                       />
                     ))
                   )}
@@ -365,77 +406,6 @@ export const CommandSettings: React.FC = () => {
               </SortableContext>
             </Table>
           </DndContext>
-          <div className="tw-flex tw-w-full tw-justify-between">
-            <div>
-              <Button
-                variant="secondary"
-                onClick={() =>
-                  new ConfirmModal(
-                    app,
-                    generateDefaultCommands,
-                    "This will add default commands to your custom prompts folder. Do you want to continue?",
-                    "Generate Default Commands"
-                  ).open()
-                }
-              >
-                Generate Default Commands
-              </Button>
-            </div>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="default" className="tw-gap-2">
-                  <Plus className="tw-size-4" />
-                  Add Command
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent container={container} className="tw-w-80" align="end">
-                <div className="tw-flex tw-flex-col tw-gap-4">
-                  <div className="tw-space-y-2">
-                    <div className="tw-text-lg tw-font-medium tw-leading-none">
-                      Create New Command
-                    </div>
-                    <p className="tw-text-sm tw-text-muted">
-                      Enter a name for your new custom command. A markdown file will be created in
-                      your custom prompts folder.
-                    </p>
-                  </div>
-                  <div className="tw-space-y-2">
-                    <Input
-                      placeholder="Command name"
-                      value={newCommandName}
-                      onChange={(e) => setNewCommandName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && canCreate) {
-                          handleCreateCommand();
-                        }
-                      }}
-                    />
-                    {validationError && (
-                      <p className="tw-text-sm tw-text-error">{validationError}</p>
-                    )}
-                  </div>
-                  <div className="tw-flex tw-justify-end tw-gap-2">
-                    <PopoverClose asChild>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => {
-                          setNewCommandName("");
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                    </PopoverClose>
-                    <PopoverClose asChild>
-                      <Button size="sm" onClick={handleCreateCommand} disabled={!canCreate}>
-                        Create
-                      </Button>
-                    </PopoverClose>
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
-          </div>
         </div>
       </section>
     </div>

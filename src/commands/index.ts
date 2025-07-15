@@ -13,6 +13,10 @@ import { SelectedTextContext } from "@/sharedState";
 import { Editor, Notice, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";
+import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
+import { EMPTY_COMMAND } from "@/commands/constants";
+import { getCachedCustomCommands } from "@/commands/state";
+import { CustomCommandManager } from "@/commands/customCommandManager";
 
 /**
  * Add a command to the plugin.
@@ -339,5 +343,20 @@ export function registerCommands(
 
     // Open chat window to show the context was added
     plugin.activateView();
+  });
+
+  // Add command to create a new custom command
+  addCommand(plugin, COMMAND_IDS.ADD_CUSTOM_COMMAND, async () => {
+    const commands = getCachedCustomCommands();
+    const newCommand = { ...EMPTY_COMMAND };
+    const modal = new CustomCommandSettingsModal(
+      plugin.app,
+      commands,
+      newCommand,
+      async (updatedCommand) => {
+        await CustomCommandManager.getInstance().createCommand(updatedCommand);
+      }
+    );
+    modal.open();
   });
 }
