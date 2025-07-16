@@ -73,6 +73,8 @@ const Chat: React.FC<ChatProps> = ({
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [showChatUI, setShowChatUI] = useState(false);
+  const [hiddenCard, setHiddenCard] = useState(false);
+
   const [selectedTextContexts] = useSelectedTextContexts();
   const [isProjectLoading] = useProjectLoading();
 
@@ -727,9 +729,9 @@ ${chatContent}`;
           onReplaceChat={setInputMessage}
           showHelperComponents={selectedChain !== ChainType.PROJECT_CHAIN}
         />
-        {isProjectLoading ? (
+        {isProjectLoading && !hiddenCard ? (
           <div className="tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-xl">
-            <ProgressCard plugin={plugin} />
+            <ProgressCard plugin={plugin} hiddenCard={hiddenCard} setHiddenCard={setHiddenCard} />
           </div>
         ) : (
           <>
@@ -797,6 +799,9 @@ ${chatContent}`;
                   }
                 }}
                 showChatUI={(v) => setShowChatUI(v)}
+                onProjectClose={() => {
+                  setHiddenCard(false);
+                }}
               />
             </div>
           )}

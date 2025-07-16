@@ -1,6 +1,6 @@
 import {
-  getCurrentProject,
   ProjectConfig,
+  getCurrentProject,
   subscribeToProjectChange,
   useChainType,
   useModelKey,
@@ -113,6 +113,12 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const settings = useSettingsValue();
     const isCopilotPlus =
       currentChain === ChainType.COPILOT_PLUS_CHAIN || currentChain === ChainType.PROJECT_CHAIN;
+    const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+    const loadingMessages = [
+      "Loading the project context...",
+      "Processing context files...",
+      "If you have many files in context, this can take a while...",
+    ];
 
     useImperativeHandle(ref, () => ({
       focus: () => {
@@ -135,6 +141,16 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         setSelectedProject(null);
       }
     }, [currentChain]);
+
+    useEffect(() => {
+      if (!isProjectLoading) return;
+
+      const interval = setInterval(() => {
+        setLoadingMessageIndex((prev) => (prev + 1) % loadingMessages.length);
+      }, 3000);
+
+      return () => clearInterval(interval);
+    }, [isProjectLoading, loadingMessages.length]);
 
     const getDisplayModelKey = (): string => {
       if (
@@ -499,6 +515,14 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         )}
 
         <div className="tw-relative" {...(isCopilotPlus ? getRootProps() : {})}>
+          {isProjectLoading && (
+            <div className="tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-bg-primary tw-opacity-80 tw-backdrop-blur-sm">
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <Loader2 className="tw-size-4 tw-animate-spin" />
+                <span className="tw-text-sm">{loadingMessages[loadingMessageIndex]}</span>
+              </div>
+            </div>
+          )}
           <textarea
             ref={textAreaRef}
             className="tw-max-h-40 tw-min-h-[60px] tw-w-full tw-resize-none tw-overflow-y-auto tw-rounded-md tw-border-none tw-bg-transparent tw-px-2 tw-text-sm tw-text-normal focus-visible:tw-ring-0"

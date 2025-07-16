@@ -3,7 +3,15 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { AlertCircle, ChevronDown, ChevronRight, FileText, Loader2, RotateCcw } from "lucide-react";
+import {
+  AlertCircle,
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  Loader2,
+  RotateCcw,
+  X,
+} from "lucide-react";
 import { FailedItem, useProjectContextLoad, useProjectLoading } from "@/aiParams";
 import { Button } from "@/components/ui/button";
 import { TruncatedText } from "@/components/TruncatedText";
@@ -12,9 +20,11 @@ import { logError } from "@/logger";
 
 interface ProgressCardProps {
   plugin?: CopilotPlugin;
+  hiddenCard: boolean;
+  setHiddenCard: (hidden: boolean) => void;
 }
 
-export default function ProgressCard({ plugin }: ProgressCardProps) {
+export default function ProgressCard({ plugin, hiddenCard, setHiddenCard }: ProgressCardProps) {
   const [contextLoadState] = useProjectContextLoad();
   const totalFiles = contextLoadState.total;
   const successFiles = contextLoadState.success;
@@ -81,6 +91,10 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
     }
   }, [processedFilesLen, totalFiles.length, processingFiles.length, setLoading, successFiles]);
 
+  if (hiddenCard) {
+    return null;
+  }
+
   return (
     <Card className="tw-w-full tw-border tw-border-solid tw-border-border tw-bg-transparent tw-shadow-none">
       <CardHeader>
@@ -89,7 +103,15 @@ export default function ProgressCard({ plugin }: ProgressCardProps) {
             <FileText className="tw-size-5" />
             Context Loading
           </div>
-          {/*start chat*/}
+          <Button
+            size="sm"
+            variant="ghost2"
+            className="tw-size-6 tw-p-0 tw-text-muted"
+            title="Close Progress Bar"
+            onClick={() => setHiddenCard(true)}
+          >
+            <X className="tw-size-4" />
+          </Button>
         </CardTitle>
       </CardHeader>
       <CardContent className="tw-space-y-6">
