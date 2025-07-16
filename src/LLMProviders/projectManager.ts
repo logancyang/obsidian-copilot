@@ -17,7 +17,7 @@ import CopilotPlugin from "@/main";
 import { Mention } from "@/mentions/Mention";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
-import { ChatMessage } from "@/sharedState";
+import { ChatMessage } from "@/types/message";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { err2String } from "@/utils";
 import { isRateLimitError } from "@/utils/rateLimitUtils";
@@ -121,6 +121,10 @@ export default class ProjectManager {
 
   public getCurrentChainManager(): ChainManager {
     return this.chainMangerInstance;
+  }
+
+  public getCurrentProjectId(): string | null {
+    return this.currentProjectId;
   }
 
   public async switchProject(project: ProjectConfig | null): Promise<void> {

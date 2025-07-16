@@ -18,7 +18,7 @@ import { logError, logInfo } from "@/logger";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings, getSystemPrompt, subscribeToSettingsChange } from "@/settings/model";
-import { ChatMessage } from "@/sharedState";
+import { ChatMessage } from "@/types/message";
 import { findCustomModel, isOSeriesModel, isSupportedChain } from "@/utils";
 import {
   ChatPromptTemplate,

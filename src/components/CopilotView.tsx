@@ -3,8 +3,8 @@ import Chat from "@/components/Chat";
 import { CHAT_VIEWTYPE } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
 import CopilotPlugin from "@/main";
-import SharedState from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
+import { ChatMessage } from "@/types/message";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
@@ -18,7 +18,7 @@ export default class CopilotView extends ItemView {
   private fileParserManager: FileParserManager;
   private root: Root | null = null;
   private handleSaveAsNote: (() => Promise<void>) | null = null;
-  sharedState: SharedState;
+  private pendingMessages: ChatMessage[] | null = null;
   eventTarget: EventTarget;
 
   constructor(
@@ -26,7 +26,6 @@ export default class CopilotView extends ItemView {
     private plugin: CopilotPlugin
   ) {
     super(leaf);
-    this.sharedState = plugin.sharedState;
     this.app = plugin.app;
     this.fileParserManager = plugin.fileParserManager;
     this.eventTarget = new EventTarget();
@@ -75,12 +74,15 @@ export default class CopilotView extends ItemView {
           <React.StrictMode>
             <Tooltip.Provider delayDuration={0}>
               <Chat
-                sharedState={this.sharedState}
                 chainManager={this.chainManager}
                 updateUserMessageHistory={updateUserMessageHistory}
                 fileParserManager={this.fileParserManager}
                 plugin={this.plugin}
                 onSaveChat={handleSaveAsNote}
+                pendingMessages={this.pendingMessages}
+                onPendingMessagesProcessed={() => {
+                  this.pendingMessages = null;
+                }}
               />
             </Tooltip.Provider>
           </React.StrictMode>
@@ -96,11 +98,8 @@ export default class CopilotView extends ItemView {
   }
 
   updateView(): void {
-    // load currentChainManager chatMessages
-    this.sharedState.replaceMessages(
-      this.plugin.projectManager.getCurrentChainManager().getChatMessages()
-    );
-
+    // Note: The new architecture handles message loading through ChatManager
+    // The messages will be loaded when the Chat component initializes
     const handleSaveAsNote = (saveFunction: () => Promise<void>) => {
       this.handleSaveAsNote = saveFunction;
     };
@@ -116,5 +115,9 @@ export default class CopilotView extends ItemView {
       this.root.unmount();
       this.root = null;
     }
+  }
+
+  setPendingMessages(messages: ChatMessage[]): void {
+    this.pendingMessages = messages;
   }
 }

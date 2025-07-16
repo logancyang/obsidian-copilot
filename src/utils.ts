@@ -12,7 +12,7 @@ import {
 } from "@/constants";
 import { logInfo } from "@/logger";
 import { CopilotSettings } from "@/settings/model";
-import { ChatMessage } from "@/sharedState";
+import { ChatMessage } from "@/types/message";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { MemoryVariables } from "@langchain/core/memory";
 import { RunnableSequence } from "@langchain/core/runnables";

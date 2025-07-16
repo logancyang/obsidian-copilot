@@ -3,7 +3,7 @@ import { TFile } from "obsidian";
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { SelectedTextContext } from "@/sharedState";
+import { SelectedTextContext } from "@/types/message";
 
 interface ChatContextMenuProps {
   activeNote: TFile | null;

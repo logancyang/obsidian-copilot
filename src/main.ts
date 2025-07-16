@@ -23,7 +23,6 @@ import {
   setSettings,
   subscribeToSettingsChange,
 } from "@/settings/model";
-import SharedState from "@/sharedState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import {
   Editor,
@@ -40,9 +39,7 @@ import { CustomCommandRegister } from "@/commands/customCommandRegister";
 import { migrateCommands, suggestDefaultCommands } from "@/commands/migrator";
 
 export default class CopilotPlugin extends Plugin {
-  // A chat history that stores the messages sent and received
-  // Only reset when the user explicitly clicks "New Chat"
-  sharedState: SharedState;
+  // Plugin components
   projectManager: ProjectManager;
   brevilabsClient: BrevilabsClient;
   userMessageHistory: string[] = [];
@@ -64,8 +61,7 @@ export default class CopilotPlugin extends Plugin {
     });
     this.addSettingTab(new CopilotSettingTab(this.app, this));
 
-    // Always have one instance of sharedState in the plugin
-    this.sharedState = new SharedState(this);
+    // Core plugin initialization
 
     this.vectorStoreManager = VectorStoreManager.getInstance();
 
@@ -148,7 +144,7 @@ export default class CopilotPlugin extends Plugin {
   async autosaveCurrentChat() {
     if (getSettings().autosaveChat) {
       const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view as CopilotView;
-      if (chatView && chatView.sharedState.chatHistory.length > 0) {
+      if (chatView) {
         await chatView.saveChat();
       }
     }
@@ -334,8 +330,6 @@ export default class CopilotPlugin extends Plugin {
 
     const content = await this.app.vault.read(file);
     const messages = parseChatContent(content);
-    this.sharedState.clearChatHistory();
-    messages.forEach((message) => this.sharedState.addMessage(message));
 
     // Update the chain's memory with the loaded messages
     await updateChatMemory(messages, this.projectManager.getCurrentChainManager().memoryManager);
@@ -345,9 +339,13 @@ export default class CopilotPlugin extends Plugin {
     if (!existingView) {
       // Only activate the view if it's not already open
       this.activateView();
-    } else {
-      // If the view is already open, just update its content
-      const copilotView = existingView.view as CopilotView;
+    }
+
+    // Get the active CopilotView and set pending messages
+    const copilotView = (existingView || this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0])
+      ?.view as CopilotView;
+    if (copilotView) {
+      copilotView.setPendingMessages(messages);
       copilotView.updateView();
     }
   }
@@ -367,13 +365,10 @@ export default class CopilotPlugin extends Plugin {
       copilotView.eventTarget.dispatchEvent(abortEvent);
     }
 
-    // Clear chat history
-    this.sharedState.clearChatHistory();
-
     // Clear chain memory
     this.projectManager.getCurrentChainManager().memoryManager.clearChatMemory();
 
-    // Update view if it exists
+    // Update view if it exists (Chat component will handle clearing its own state)
     if (existingView) {
       const copilotView = existingView.view as CopilotView;
       copilotView.updateView();
