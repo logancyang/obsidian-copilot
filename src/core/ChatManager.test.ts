@@ -17,6 +17,12 @@ jest.mock("@/chainFactory", () => ({
   },
 }));
 
+jest.mock("./ChatPersistenceManager", () => ({
+  ChatPersistenceManager: jest.fn().mockImplementation(() => ({
+    saveChat: jest.fn().mockResolvedValue({ success: true, path: "/test/path.md" }),
+  })),
+}));
+
 import { ChatManager } from "./ChatManager";
 import { MessageRepository } from "./MessageRepository";
 import { ContextManager } from "./ContextManager";
@@ -59,6 +65,7 @@ describe("ChatManager", () => {
       getLLMMessage: jest.fn(),
       editMessage: jest.fn(),
       getDebugInfo: jest.fn(),
+      truncateAfter: jest.fn(),
     } as any;
 
     mockChainManager = {
@@ -78,6 +85,8 @@ describe("ChatManager", () => {
       },
       projectManager: {
         getCurrentChainManager: jest.fn().mockReturnValue(mockChainManager),
+        getCurrentProjectId: jest.fn().mockReturnValue(null),
+        getCachedMessages: jest.fn().mockReturnValue(null),
       },
     };
 
@@ -260,6 +269,7 @@ describe("ChatManager", () => {
       mockMessageRepo.getMessage.mockReturnValue(mockAiMessage);
       mockMessageRepo.getDisplayMessages.mockReturnValue([mockUserMessage, mockAiMessage]);
       mockMessageRepo.getLLMMessage.mockReturnValue(mockLLMMessage);
+      mockMessageRepo.truncateAfter.mockReturnValue(undefined);
       mockChainManager.runChain.mockResolvedValue(undefined);
 
       const mockUpdateMessage = jest.fn();
@@ -272,7 +282,7 @@ describe("ChatManager", () => {
       );
 
       expect(result).toBe(true);
-      expect(mockMessageRepo.truncateAfterMessageId).toHaveBeenCalledWith("msg-1");
+      expect(mockMessageRepo.truncateAfter).toHaveBeenCalledWith(0);
       expect(mockChainManager.runChain).toHaveBeenCalledWith(
         mockLLMMessage,
         expect.any(AbortController),
@@ -566,12 +576,13 @@ describe("ChatManager", () => {
         mockMessageRepo.getMessage.mockReturnValue(mockAiMessage);
         mockMessageRepo.getDisplayMessages.mockReturnValue([mockUserMessage, mockAiMessage]);
         mockMessageRepo.getLLMMessage.mockReturnValue(mockLLMMessage);
+        mockMessageRepo.truncateAfter.mockReturnValue(undefined);
         mockChainManager.runChain.mockResolvedValue(undefined);
 
         const result = await chatManager.regenerateMessage("msg-2", jest.fn(), jest.fn());
 
         expect(result).toBe(true);
-        expect(mockMessageRepo.truncateAfterMessageId).toHaveBeenCalledWith("msg-1");
+        expect(mockMessageRepo.truncateAfter).toHaveBeenCalledWith(0);
         expect(mockChainManager.runChain).toHaveBeenCalledWith(
           mockLLMMessage,
           expect.any(AbortController),

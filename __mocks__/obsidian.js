@@ -32,4 +32,18 @@ module.exports = {
   parseYaml: jest.fn().mockImplementation((content) => {
     return yaml.load(content);
   }),
+  Modal: jest.fn().mockImplementation(function () {
+    this.open = jest.fn();
+    this.close = jest.fn();
+    this.onOpen = jest.fn();
+    this.onClose = jest.fn();
+  }),
+  App: jest.fn().mockImplementation(() => ({
+    workspace: {
+      getActiveFile: jest.fn(),
+    },
+    vault: {
+      read: jest.fn(),
+    },
+  })),
 };
