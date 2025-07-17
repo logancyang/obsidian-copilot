@@ -1,6 +1,6 @@
 # Message Architecture & Context Design
 
-This document describes the new message management and context processing architecture that replaced the legacy SharedState system. The new design follows clean architecture principles with a single source of truth and computed views.
+This document describes the new message management and context processing architecture that replaced the legacy SharedState system. The new design follows clean architecture principles with a single source of truth, computed views, and complete project isolation.
 
 ## Architecture Principles
 
@@ -13,7 +13,9 @@ This document describes the new message management and context processing archit
 ### Clean Architecture Flow
 
 ```
-User Input → ChatUIState → ChatManager → MessageRepository + ContextManager
+User Input → ChatUIState → ChatManager → getCurrentMessageRepo() → MessageRepository + ContextManager
+                                   ↓                                        ↓
+                         ChatPersistenceManager                    Project-specific storage
                 ↓
 UI Components ← ChatUIState ← Computed Views ← MessageRepository
                 ↓
@@ -25,6 +27,13 @@ LLM Processing ← Chain Memory ← getLLMMessages() ← MessageRepository
 - Context is reprocessed when messages are edited
 - No stale context issues from cached processing
 - Ensures accurate context for LLM interactions
+
+### Project Isolation
+
+- Each project maintains its own isolated chat history
+- Automatic detection and switching when project changes
+- Zero configuration required - works automatically
+- Non-project chats use a default repository
 
 ## Core Components
 
@@ -67,6 +76,8 @@ loadMessages(messages: ChatMessage[]): void
 - Handles all message CRUD operations with proper error handling
 - Synchronizes with chain memory for conversation history
 - Manages context processing lifecycle
+- **Project Isolation**: Maintains separate MessageRepository per project
+- **Persistence**: Integrates with ChatPersistenceManager for saving/loading
 
 **Key Operations**:
 
@@ -82,6 +93,35 @@ async regenerateMessage(messageId: string, onUpdateMessage: Function, onAddMessa
 
 // Memory synchronization
 private async updateChainMemory(): Promise<void>
+
+// Project management
+private getCurrentMessageRepo(): MessageRepository  // Auto-detects current project
+async handleProjectSwitch(): Promise<void>          // Forces project detection
+
+// Persistence
+async saveChat(modelKey: string): Promise<{ success: boolean; path?: string; error?: string }>
+```
+
+**Project Isolation Implementation**:
+
+```typescript
+// Internal structure
+private projectMessageRepos: Map<string, MessageRepository>
+
+// Automatic project detection
+getCurrentMessageRepo() {
+  const currentProjectId = ProjectManager.getCurrentProjectId() || defaultProjectKey;
+  if (!this.projectMessageRepos.has(currentProjectId)) {
+    // Create new repository and load existing messages from cache
+    const repo = new MessageRepository();
+    const cachedMessages = ProjectManager.getCachedMessages(currentProjectId);
+    if (cachedMessages) {
+      repo.loadMessages(cachedMessages);
+    }
+    this.projectMessageRepos.set(currentProjectId, repo);
+  }
+  return this.projectMessageRepos.get(currentProjectId)!;
+}
 ```
 
 ### 3. ChatUIState (`src/state/ChatUIState.ts`)
@@ -104,6 +144,15 @@ subscribe(listener: () => void): () => void
 async sendMessage(displayText: string, context: MessageContext, chainType: ChainType, includeActiveNote?: boolean): Promise<string>
 getMessages(): ChatMessage[]  // Computed view for UI
 
+// Project and persistence operations
+async handleProjectSwitch(): Promise<void>  // Handle UI updates for project switch
+async saveChat(modelKey: string): Promise<{ success: boolean; path?: string; error?: string }>
+
+// Legacy compatibility (for backward compatibility)
+get chatHistory(): ChatMessage[]
+addMessage(message: ChatMessage): void
+clearChatHistory(): void
+
 // Notify React components of changes
 private notifyListeners(): void
 ```
@@ -117,6 +166,169 @@ private notifyListeners(): void
 - Processes message context (notes, URLs, selected text)
 - Reprocesses context when messages are edited
 - Ensures fresh context for LLM processing
+
+### 5. ChatPersistenceManager (`src/core/ChatPersistenceManager.ts`)
+
+**Purpose**: Handles saving and loading chat history to/from markdown files
+
+**Key Features**:
+
+- Project-aware file naming (prefixes with project ID)
+- Filters chat history files based on current project
+- Parses and formats chat content for storage
+- Integrated with ChatManager for seamless persistence
+
+**Core Methods**:
+
+```typescript
+// Save chat to markdown file
+async saveChat(messages: ChatMessage[], modelKey: string, projectId?: string): Promise<{ success: boolean; path?: string; error?: string }>
+
+// Get available chat history files
+async getChatHistoryFiles(): Promise<TFile[]>
+
+// File naming convention
+// Project chats: `[projectId]-[timestamp]-[modelKey]-chat.md`
+// Non-project chats: `[timestamp]-[modelKey]-chat.md`
+```
+
+## Architecture Diagrams
+
+### Complete System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                   User Interface Layer                               │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                      │
+│  ┌─────────────────┐                          ┌──────────────────┐                 │
+│  │   Chat.tsx      │ ◄────── uses ──────────► │  CopilotView.tsx │                 │
+│  │                 │                           │                  │                 │
+│  └────────┬────────┘                          └──────────────────┘                 │
+│           │                                                                         │
+│           │ subscribes to & calls                                                   │
+│           ▼                                                                         │
+└───────────┬─────────────────────────────────────────────────────────────────────────┘
+            │
+┌───────────┴─────────────────────────────────────────────────────────────────────────┐
+│                                    State Layer                                       │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│           │                                                                         │
+│  ┌────────▼────────┐                                                               │
+│  │  ChatUIState    │  - React state management                                     │
+│  │                 │  - Subscription mechanism for UI updates                       │
+│  │                 │  - Delegates all business logic to ChatManager                │
+│  └────────┬────────┘                                                               │
+│           │                                                                         │
+└───────────┴─────────────────────────────────────────────────────────────────────────┘
+            │ delegates to
+┌───────────▼─────────────────────────────────────────────────────────────────────────┐
+│                               Business Logic Layer                                   │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                      │
+│  ┌─────────────────┐         orchestrates        ┌─────────────────────────────┐   │
+│  │   ChatManager   │ ◄──────────────────────────► │  ContextManager (singleton) │   │
+│  │                 │                              │                             │   │
+│  │ - Message CRUD  │                              │ - Process message context  │   │
+│  │ - Project       │                              │ - Handle note attachments  │   │
+│  │   isolation     │                              │ - Reprocess on edit        │   │
+│  │ - Memory sync   │                              └─────────────────────────────┘   │
+│  └────────┬────────┘                                                               │
+│           │                                                                         │
+│           │ manages                               ┌─────────────────────────────┐   │
+│           │                                       │  ChatPersistenceManager     │   │
+│           ├──────────────────────────────────────►│                             │   │
+│           │                                       │ - Save/load chat history    │   │
+│           │                                       │ - Project-aware file naming │   │
+│           │                                       └─────────────────────────────┘   │
+│           │                                                                         │
+│           │ coordinates                           ┌─────────────────────────────┐   │
+│           ├──────────────────────────────────────►│     ChainManager           │   │
+│           │                                       │                             │   │
+│           │                                       │ - Memory management         │   │
+│           │                                       │ - LLM chain operations     │   │
+│           │                                       └──────────┬──────────────────┘   │
+│           │                                                  │                      │
+│           │                                                  ▼                      │
+│           │                                       ┌─────────────────────────────┐   │
+│           │                                       │    MemoryManager            │   │
+│           │                                       │                             │   │
+│           │                                       │ - Chain memory storage      │   │
+│           │                                       │ - Conversation history      │   │
+│           │                                       └─────────────────────────────┘   │
+└───────────┴─────────────────────────────────────────────────────────────────────────┘
+            │
+┌───────────▼─────────────────────────────────────────────────────────────────────────┐
+│                                  Data Storage Layer                                  │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                      │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐   │
+│  │                          MessageRepository                                   │   │
+│  │                                                                             │   │
+│  │  ┌─────────────────┐    Computed Views    ┌────────────────────────────┐  │   │
+│  │  │ StoredMessage[] │ ──────────────────────► │ getDisplayMessages()     │  │   │
+│  │  │                 │                       │ (for UI rendering)       │  │   │
+│  │  │ - id            │                       └────────────────────────────┘  │   │
+│  │  │ - displayText   │                                                        │   │
+│  │  │ - processedText │ ──────────────────────► ┌────────────────────────────┐  │   │
+│  │  │ - sender        │                       │ getLLMMessages()         │  │   │
+│  │  │ - timestamp     │                       │ (for AI processing)      │  │   │
+│  │  │ - context       │                       └────────────────────────────┘  │   │
+│  │  └─────────────────┘                                                        │   │
+│  │                                                                             │   │
+│  │  Single source of truth - no dual storage!                                 │   │
+│  └─────────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Project Isolation Architecture
+
+### Multi-Repository Design
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                              ChatManager                                             │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                      │
+│  projectMessageRepos: Map<string, MessageRepository>                                │
+│                                                                                      │
+│  ┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐          │
+│  │ "defaultProject" │     │   "project-1"    │     │   "project-2"    │          │
+│  │                  │     │                  │     │                  │          │
+│  │ MessageRepo      │     │ MessageRepo      │     │ MessageRepo      │          │
+│  │ - Non-project    │     │ - Project 1      │     │ - Project 2      │          │
+│  │   messages       │     │   messages only  │     │   messages only  │          │
+│  └──────────────────┘     └──────────────────┘     └──────────────────┘          │
+│           ▲                         ▲                         ▲                     │
+│           │                         │                         │                     │
+│           └─────────────────────────┴─────────────────────────┘                     │
+│                                     │                                               │
+│                        getCurrentMessageRepo()                                      │
+│                        (auto-detects active project)                                │
+│                                                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Project Switch Flow
+
+```
+Project Switch Detected (via Obsidian workspace)
+    ↓
+ProjectManager.getCurrentProjectId() returns new ID
+    ↓
+ChatManager.getCurrentMessageRepo()
+    ↓
+Check if repository exists for project
+    ↓ (if not)
+Create new MessageRepository
+    ↓
+Load cached messages from ProjectManager
+    ↓
+Store in projectMessageRepos Map
+    ↓
+Return project-specific repository
+```
 
 ## Message Lifecycle
 
@@ -167,9 +379,47 @@ ChatUIState.getMessages()
     ↓
 ChatManager.getDisplayMessages()
     ↓
+ChatManager.getCurrentMessageRepo() // Project-aware
+    ↓
 MessageRepository.getDisplayMessages() // Computed view
     ↓
 Filter visible messages → Map to ChatMessage format
+```
+
+### 4. Saving Chat History
+
+```
+User Save Action
+    ↓
+Chat.tsx → ChatUIState.saveChat(modelKey)
+    ↓
+ChatManager.saveChat(modelKey)
+    ↓
+Get current project ID and messages
+    ↓
+ChatPersistenceManager.saveChat(messages, modelKey, projectId)
+    ↓
+Create markdown file with project prefix
+    ↓
+Return success with file path
+```
+
+### 5. Project Switch
+
+```
+Project Change in Obsidian
+    ↓
+ChatUIState.handleProjectSwitch()
+    ↓
+ChatManager.handleProjectSwitch()
+    ↓
+Force getCurrentMessageRepo() to re-detect project
+    ↓
+Switch to different MessageRepository
+    ↓
+Update chain memory with new project's messages
+    ↓
+Notify UI listeners for refresh
 ```
 
 ## Data Structures
@@ -240,6 +490,14 @@ ChatUIState.loadMessages()
 onPendingMessagesProcessed() callback clears pending
 ```
 
+### Project-Aware Loading
+
+When loading chat history:
+
+1. ChatPersistenceManager filters files based on current project
+2. Only shows chat files prefixed with current project ID
+3. Non-project chats visible when no project is active
+
 ## Testing Strategy
 
 ### Unit Tests
@@ -295,19 +553,22 @@ const llmMessages = chatManager.getLLMMessages();   // For AI
 - Unique keys prevent React reconciliation issues
 - State changes are batched through ChatUIState
 
-## Future Considerations
+## Key Architectural Features
 
-### Extensibility
+### Project Isolation Benefits
 
-- Easy to add new message types via StoredMessage interface
-- Context processing can be extended without affecting storage
-- Clean separation allows for new UI patterns
+1. **Complete Separation**: Each project has entirely separate chat history
+2. **Automatic Management**: No user configuration needed
+3. **Seamless Switching**: Instant context switch when changing projects
+4. **Backward Compatible**: Loads existing messages from ProjectManager cache
+5. **Memory Efficient**: Only active project's messages in memory
 
-### Persistence
+### Persistence Integration
 
-- Single source of truth simplifies persistence logic
-- MessageRepository can be easily backed by different storage mechanisms
-- Chat history format remains stable
+1. **Project-Aware Naming**: Files prefixed with project ID
+2. **Filtered File Lists**: Only shows relevant chat files
+3. **Consistent Format**: Same markdown format across all projects
+4. **Error Handling**: Graceful fallbacks for save/load failures
 
 ## Troubleshooting
 
@@ -317,6 +578,8 @@ const llmMessages = chatManager.getLLMMessages();   // For AI
 2. **UI not refreshing**: Ensure `notifyListeners()` is called after state changes
 3. **Memory count mismatch**: Verify `truncateAfterMessageId()` updates chain memory
 4. **Duplicate context badges**: Check React keys in MessageContext component
+5. **Wrong project messages**: Check `getCurrentProjectId()` returns expected value
+6. **Missing chat history**: Verify project ID in filename matches current project
 
 ### Debug Methods
 
@@ -332,6 +595,14 @@ console.log({
   display: chatUIState.getMessages().length,
   llm: chatManager.getLLMMessages().length,
 });
+
+// Check current project and repository
+const debugInfo = chatManager.getDebugInfo();
+console.log({
+  currentProject: debugInfo.currentProjectId,
+  totalProjects: debugInfo.projectCount,
+  messagesByProject: debugInfo.messageCountByProject,
+});
 ```
 
 ## Related Files
@@ -339,9 +610,10 @@ console.log({
 ### Core Implementation
 
 - `src/core/MessageRepository.ts` - Message storage
-- `src/core/ChatManager.ts` - Business logic
+- `src/core/ChatManager.ts` - Business logic with project isolation
 - `src/state/ChatUIState.ts` - UI state management
 - `src/core/ContextManager.ts` - Context processing
+- `src/core/ChatPersistenceManager.ts` - Chat history persistence
 
 ### React Integration
 
