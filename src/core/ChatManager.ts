@@ -54,22 +54,6 @@ export class ChatManager {
     if (!this.projectMessageRepos.has(projectKey)) {
       logInfo(`[ChatManager] Creating new message repository for project: ${projectKey}`);
       const newRepo = new MessageRepository();
-
-      // Try to load existing messages from ProjectManager's cache
-      try {
-        const existingMessages = this.plugin.projectManager
-          .getCurrentChainManager()
-          .getChatMessages();
-        if (existingMessages.length > 0) {
-          logInfo(
-            `[ChatManager] Loading ${existingMessages.length} existing messages for project: ${projectKey}`
-          );
-          existingMessages.forEach((msg) => newRepo.addFullMessage(msg));
-        }
-      } catch (error) {
-        logInfo(`[ChatManager] Could not load existing messages for project ${projectKey}:`, error);
-      }
-
       this.projectMessageRepos.set(projectKey, newRepo);
     }
 
@@ -413,5 +397,25 @@ export class ChatManager {
       currentProject: this.plugin.projectManager.getCurrentProjectId(),
       totalProjects: this.projectMessageRepos.size,
     };
+  }
+
+  /**
+   * Force a project switch refresh
+   * This ensures the UI gets the correct messages when switching projects
+   */
+  async handleProjectSwitch(): Promise<void> {
+    const currentProjectId = this.plugin.projectManager.getCurrentProjectId();
+    logInfo(`[ChatManager] Handling project switch to: ${currentProjectId}`);
+
+    // Force detection of project change
+    this.lastKnownProjectId = null; // Reset to force change detection
+    const currentRepo = this.getCurrentMessageRepo();
+
+    // Sync chain memory with the current project's messages
+    await this.updateChainMemory();
+
+    logInfo(
+      `[ChatManager] Project switch complete. Messages: ${currentRepo.getDisplayMessages().length}`
+    );
   }
 }

@@ -242,4 +242,12 @@ export class ChatUIState {
     this.chatManager.loadMessages(messages);
     this.notifyListeners();
   }
+
+  /**
+   * Handle project switch
+   */
+  async handleProjectSwitch(): Promise<void> {
+    await this.chatManager.handleProjectSwitch();
+    this.notifyListeners();
+  }
 }

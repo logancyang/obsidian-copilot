@@ -17,8 +17,6 @@ import { NewVersionBanner } from "@/components/chat-components/NewVersionBanner"
 import { ProjectList } from "@/components/chat-components/ProjectList";
 import { ABORT_REASON, COMMAND_IDS, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
-import { ChatManager } from "@/core/ChatManager";
-import { MessageRepository } from "@/core/MessageRepository";
 import { useChatManager } from "@/hooks/useChatManager";
 import { getAIResponse } from "@/langchainStream";
 import ChainManager from "@/LLMProviders/chainManager";
@@ -33,7 +31,6 @@ import {
 } from "@/settings/model";
 import { ChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
-import { ChatMessage } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
 import { Buffer } from "buffer";
 import { Notice, TFile } from "obsidian";
@@ -48,8 +45,7 @@ interface ChatProps {
   fileParserManager: FileParserManager;
   plugin: CopilotPlugin;
   mode?: ChatMode;
-  pendingMessages?: ChatMessage[] | null;
-  onPendingMessagesProcessed?: () => void;
+  chatUIState: ChatUIState;
 }
 
 const Chat: React.FC<ChatProps> = ({
@@ -58,18 +54,10 @@ const Chat: React.FC<ChatProps> = ({
   updateUserMessageHistory,
   fileParserManager,
   plugin,
-  pendingMessages,
-  onPendingMessagesProcessed,
+  chatUIState,
 }) => {
   const settings = useSettingsValue();
   const eventTarget = useContext(EventTargetContext);
-
-  // Create new architecture instances
-  const [chatUIState] = useState(() => {
-    const messageRepo = new MessageRepository();
-    const chatManager = new ChatManager(messageRepo, chainManager, fileParserManager, plugin);
-    return new ChatUIState(chatManager);
-  });
 
   const { messages: chatHistory, addMessage } = useChatManager(chatUIState);
   const [currentModelKey] = useModelKey();
@@ -688,13 +676,8 @@ ${chatContent}`;
     }
   }, [settings.includeActiveNoteAsContext, selectedChain]);
 
-  // Load pending messages when component initializes
-  useEffect(() => {
-    if (pendingMessages && pendingMessages.length > 0) {
-      chatUIState.loadMessages(pendingMessages);
-      onPendingMessagesProcessed?.();
-    }
-  }, [pendingMessages, chatUIState, onPendingMessagesProcessed]);
+  // Note: pendingMessages loading has been removed as ChatManager now handles
+  // message persistence and loading automatically based on project context
 
   const renderChatComponents = () => (
     <>

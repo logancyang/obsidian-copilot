@@ -9,7 +9,6 @@ import {
 } from "@/aiParams";
 import { ContextCache, ProjectContextCache } from "@/cache/projectContextCache";
 import { ChainType } from "@/chainFactory";
-import { updateChatMemory } from "@/chatUtils";
 import CopilotView from "@/components/CopilotView";
 import { CHAT_VIEWTYPE, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { logError, logInfo, logWarn } from "@/logger";
@@ -17,7 +16,6 @@ import CopilotPlugin from "@/main";
 import { Mention } from "@/mentions/Mention";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
-import { ChatMessage } from "@/types/message";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { err2String } from "@/utils";
 import { isRateLimitError } from "@/utils/rateLimitUtils";
@@ -33,8 +31,6 @@ export default class ProjectManager {
   private plugin: CopilotPlugin;
   private readonly chainMangerInstance: ChainManager;
   private readonly projectContextCache: ProjectContextCache;
-  private chatMessageCache: Map<string, ChatMessage[]>;
-  private defaultProjectKey: string = "defaultProjectKey";
   private fileParserManager: FileParserManager;
 
   private constructor(app: App, vectorStoreManager: VectorStoreManager, plugin: CopilotPlugin) {
@@ -43,7 +39,6 @@ export default class ProjectManager {
     this.currentProjectId = null;
     this.chainMangerInstance = new ChainManager(app, vectorStoreManager);
     this.projectContextCache = ProjectContextCache.getInstance();
-    this.chatMessageCache = new Map();
     this.fileParserManager = new FileParserManager(
       BrevilabsClient.getInstance(),
       this.app.vault,
@@ -179,26 +174,16 @@ export default class ProjectManager {
   }
 
   private async saveCurrentProjectMessage() {
-    // save show message
-    this.chatMessageCache.set(
-      this.currentProjectId ? this.currentProjectId : this.defaultProjectKey,
-      this.getCurrentChainManager().getChatMessages()
-    );
-
-    // TODO(emt-lin): do this or not?
+    // The new ChatManager handles message persistence internally
+    // during project switches, so we just need to trigger autosave
     await this.plugin.autosaveCurrentChat();
   }
 
   private async loadNextProjectMessage() {
-    const chainManager = this.getCurrentChainManager();
-
-    const messages =
-      this.chatMessageCache.get(
-        this.currentProjectId ? this.currentProjectId : this.defaultProjectKey
-      ) ?? [];
-
-    chainManager.setChatMessages(messages);
-    await updateChatMemory(messages, chainManager.memoryManager);
+    // Notify ChatUIState about the project switch
+    // This will trigger ChatManager to switch to the correct message repository
+    // and update the UI with the appropriate messages
+    await this.plugin.chatUIState.handleProjectSwitch();
   }
 
   private async loadProjectContext(project: ProjectConfig): Promise<ContextCache | null> {

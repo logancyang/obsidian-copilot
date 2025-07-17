@@ -37,6 +37,9 @@ import {
 import { IntentAnalyzer } from "./LLMProviders/intentAnalyzer";
 import { CustomCommandRegister } from "@/commands/customCommandRegister";
 import { migrateCommands, suggestDefaultCommands } from "@/commands/migrator";
+import { ChatManager } from "@/core/ChatManager";
+import { MessageRepository } from "@/core/MessageRepository";
+import { ChatUIState } from "@/state/ChatUIState";
 
 export default class CopilotPlugin extends Plugin {
   // Plugin components
@@ -48,6 +51,7 @@ export default class CopilotPlugin extends Plugin {
   customCommandRegister: CustomCommandRegister;
   settingsUnsubscriber?: () => void;
   private autocompleteService: AutocompleteService;
+  chatUIState: ChatUIState;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -75,6 +79,12 @@ export default class CopilotPlugin extends Plugin {
 
     // Initialize FileParserManager early with other core services
     this.fileParserManager = new FileParserManager(this.brevilabsClient, this.app.vault);
+
+    // Initialize ChatUIState with new architecture
+    const messageRepo = new MessageRepository();
+    const chainManager = this.projectManager.getCurrentChainManager();
+    const chatManager = new ChatManager(messageRepo, chainManager, this.fileParserManager, this);
+    this.chatUIState = new ChatUIState(chatManager);
 
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
     this.registerView(APPLY_VIEW_TYPE, (leaf: WorkspaceLeaf) => new ApplyView(leaf));
@@ -341,11 +351,13 @@ export default class CopilotPlugin extends Plugin {
       this.activateView();
     }
 
-    // Get the active CopilotView and set pending messages
+    // Load messages into ChatUIState
+    this.chatUIState.loadMessages(messages);
+
+    // Update the view
     const copilotView = (existingView || this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0])
       ?.view as CopilotView;
     if (copilotView) {
-      copilotView.setPendingMessages(messages);
       copilotView.updateView();
     }
   }
@@ -365,10 +377,10 @@ export default class CopilotPlugin extends Plugin {
       copilotView.eventTarget.dispatchEvent(abortEvent);
     }
 
-    // Clear chain memory
-    this.projectManager.getCurrentChainManager().memoryManager.clearChatMemory();
+    // Clear messages through ChatUIState (which also clears chain memory)
+    this.chatUIState.clearMessages();
 
-    // Update view if it exists (Chat component will handle clearing its own state)
+    // Update view if it exists
     if (existingView) {
       const copilotView = existingView.view as CopilotView;
       copilotView.updateView();
