@@ -1,9 +1,13 @@
-import { Plus, X } from "lucide-react";
+import { AlertCircle, CheckCircle, Database, Loader2, Plus, X } from "lucide-react";
 import { TFile } from "obsidian";
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SelectedTextContext } from "@/sharedState";
+import { ChainType } from "@/chainFactory";
+import { Separator } from "@/components/ui/separator";
+import { useChainType } from "@/aiParams";
+import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
 
 interface ChatContextMenuProps {
   activeNote: TFile | null;
@@ -103,6 +107,9 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   onRemoveUrl,
   onRemoveSelectedText,
 }) => {
+  const [currentChain] = useChainType();
+  const contextStatus = useProjectContextStatus();
+
   const uniqueNotes = React.useMemo(() => {
     const notesMap = new Map(contextNotes.map((note) => [note.path, note]));
 
@@ -124,6 +131,20 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
     uniqueUrls.length > 0 ||
     selectedTextContexts.length > 0 ||
     !!activeNote;
+
+  // Get contextStatus from the shared hook
+  const getContextStatusIcon = () => {
+    switch (contextStatus) {
+      case "success":
+        return <CheckCircle className="tw-size-4 tw-text-success" />;
+      case "loading":
+        return <Loader2 className="tw-size-4 tw-animate-spin tw-text-loading" />;
+      case "error":
+        return <AlertCircle className="tw-size-4 tw-text-error" />;
+      case "initial":
+        return <Database className="tw-size-4 tw-text-faint" />;
+    }
+  };
 
   return (
     <div className="tw-flex tw-w-full tw-items-center tw-gap-1">
@@ -166,6 +187,15 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
           />
         ))}
       </div>
+      <Separator orientation="vertical" />
+      {currentChain === ChainType.PROJECT_CHAIN && (
+        <div className="">
+          <Button variant="ghost2" size="fit" className="tw-text-muted" onClick={() => {}}>
+            {getContextStatusIcon()}
+            <span className="tw-hidden tw-text-xs sm:tw-inline">Context</span>
+          </Button>
+        </div>
+      )}
     </div>
   );
 };

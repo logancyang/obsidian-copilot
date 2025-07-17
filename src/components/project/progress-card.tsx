@@ -134,39 +134,41 @@ export default function ProgressCard({ plugin, hiddenCard, setHiddenCard }: Prog
         </div>
 
         {/* Currently processing file */}
-        <div className="tw-space-y-3">
-          <div
-            className="tw--m-1 tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-p-1 tw-transition-colors hover:tw-bg-muted/10"
-            onClick={() => setIsProcessingExpanded(!isProcessingExpanded)}
-          >
-            <Loader2 className="tw-size-4 tw-animate-spin tw-text-accent" />
-            <span className="tw-text-sm tw-font-medium">Processing</span>
-            <Badge variant="secondary" className="tw-text-xs  tw-bg-muted/10">
-              {processingFiles.length} files
-            </Badge>
-            {isProcessingExpanded ? (
-              <ChevronDown className="tw-ml-auto tw-size-4" />
-            ) : (
-              <ChevronRight className="tw-ml-auto tw-size-4" />
+        {processingFiles.length > 0 && (
+          <div className="tw-space-y-3">
+            <div
+              className="tw--m-1 tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-p-1 tw-transition-colors hover:tw-bg-muted/10"
+              onClick={() => setIsProcessingExpanded(!isProcessingExpanded)}
+            >
+              <Loader2 className="tw-size-4 tw-animate-spin tw-text-accent" />
+              <span className="tw-text-sm tw-font-medium">Processing</span>
+              <Badge variant="secondary" className="tw-text-xs  tw-bg-muted/10">
+                {processingFiles.length} files
+              </Badge>
+              {isProcessingExpanded ? (
+                <ChevronDown className="tw-ml-auto tw-size-4" />
+              ) : (
+                <ChevronRight className="tw-ml-auto tw-size-4" />
+              )}
+            </div>
+
+            {isProcessingExpanded && (
+              <div className="tw-max-h-32 tw-space-y-2 tw-overflow-y-auto">
+                {processingFiles.map((fileName, index) => (
+                  <div
+                    key={index}
+                    className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-p-2 tw-text-sm tw-bg-faint/10"
+                  >
+                    <div className="tw-size-2 tw-animate-pulse tw-rounded-full tw-bg-interactive-accent" />
+                    <TruncatedText className="tw-flex-1" title={fileName}>
+                      {fileName}
+                    </TruncatedText>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
-
-          {isProcessingExpanded && (
-            <div className="tw-max-h-32 tw-space-y-2 tw-overflow-y-auto">
-              {processingFiles.map((fileName, index) => (
-                <div
-                  key={index}
-                  className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-p-2 tw-text-sm tw-bg-faint/10"
-                >
-                  <div className="tw-size-2 tw-animate-pulse tw-rounded-full tw-bg-interactive-accent" />
-                  <TruncatedText className="tw-flex-1" title={fileName}>
-                    {fileName}
-                  </TruncatedText>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        )}
 
         {/* Failed to process the file */}
         {failedFiles.length > 0 && (

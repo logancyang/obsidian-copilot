@@ -129,6 +129,8 @@ export default class ProjectManager {
 
   public async switchProject(project: ProjectConfig | null): Promise<void> {
     try {
+      // Clear all project context loading states
+      this.loadTracker.clearAllLoadStates();
       setProjectLoading(true);
       logInfo("Project loading started...");
 
@@ -174,8 +176,9 @@ export default class ProjectManager {
       logError(`Failed to switch project: ${error}`);
       throw error;
     } finally {
+      setProjectLoading(false);
       // setTimeout(() => {
-      //   setProjectLoading(false);
+      //
       // }, 1000)
     }
   }

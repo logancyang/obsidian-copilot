@@ -1,11 +1,12 @@
 import {
-  ProjectConfig,
   getCurrentProject,
+  ProjectConfig,
   subscribeToProjectChange,
   useChainType,
   useModelKey,
   useProjectLoading,
 } from "@/aiParams";
+import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
 import { ChainType } from "@/chainFactory";
 import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
 import { AddImageModal } from "@/components/modals/AddImageModal";
@@ -27,10 +28,13 @@ import { SelectedTextContext } from "@/sharedState";
 import { getToolDescription } from "@/tools/toolManager";
 import { checkModelApiKey, err2String, extractNoteFiles, isNoteTitleUnique } from "@/utils";
 import {
+  AlertCircle,
   ArrowBigUp,
+  CheckCircle,
   ChevronDown,
   Command,
   CornerDownLeft,
+  Database,
   Image,
   Loader2,
   StopCircle,
@@ -50,6 +54,7 @@ import { useDropzone } from "react-dropzone";
 import ContextControl from "./ContextControl";
 import { getCachedCustomCommands } from "@/commands/state";
 import { sortSlashCommands } from "@/commands/customCommandUtils";
+import { Separator } from "@/components/ui/separator";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -73,6 +78,7 @@ interface ChatInputProps {
   disableModelSwitch?: boolean;
   selectedTextContexts?: SelectedTextContext[];
   onRemoveSelectedText?: (id: string) => void;
+  showProgressCard: () => void;
 }
 
 const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
@@ -95,6 +101,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       disableModelSwitch,
       selectedTextContexts,
       onRemoveSelectedText,
+      showProgressCard,
     },
     ref
   ) => {
@@ -106,6 +113,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const [modelError, setModelError] = useState<string | null>(null);
     const [currentChain] = useChainType();
     const [isProjectLoading] = useProjectLoading();
+    const contextStatus = useProjectContextStatus();
     const [currentActiveNote, setCurrentActiveNote] = useState<TFile | null>(
       app.workspace.getActiveFile()
     );
@@ -474,6 +482,20 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       [contextNotes, includeActiveNote, currentActiveNote]
     );
 
+    // Get contextStatus from the shared hook
+    const getContextStatusIcon = () => {
+      switch (contextStatus) {
+        case "success":
+          return <CheckCircle className="tw-size-4 tw-text-success" />;
+        case "loading":
+          return <Loader2 className="tw-size-4 tw-animate-spin tw-text-loading" />;
+        case "error":
+          return <AlertCircle className="tw-size-4 tw-text-error" />;
+        case "initial":
+          return <Database className="tw-size-4 tw-text-faint" />;
+      }
+    };
+
     return (
       <div
         className="tw-flex tw-w-full tw-flex-col tw-gap-0.5 tw-rounded-md tw-border tw-border-solid tw-border-border tw-px-1 tw-pb-1 tw-pt-2 tw-@container/chat-input"
@@ -636,6 +658,20 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
               </Button>
             ) : (
               <>
+                {currentChain === ChainType.PROJECT_CHAIN && (
+                  <>
+                    <Button
+                      variant="ghost2"
+                      size="fit"
+                      className="tw-text-muted"
+                      onClick={() => showProgressCard()}
+                    >
+                      {getContextStatusIcon()}
+                      <span className="tw-hidden tw-text-xs sm:tw-inline">Context</span>
+                    </Button>
+                    <Separator orientation="vertical" />
+                  </>
+                )}
                 {isCopilotPlus && (
                   <Button
                     variant="ghost2"

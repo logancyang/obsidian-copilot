@@ -6,9 +6,9 @@ import {
   setCurrentProject,
   useChainType,
   useModelKey,
-  useProjectLoading,
   useSelectedTextContexts,
 } from "@/aiParams";
+import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
 import { ChainType } from "@/chainFactory";
 import { updateChatMemory } from "@/chatUtils";
 import { processPrompt } from "@/commands/customCommandUtils";
@@ -76,7 +76,7 @@ const Chat: React.FC<ChatProps> = ({
   const [hiddenCard, setHiddenCard] = useState(false);
 
   const [selectedTextContexts] = useSelectedTextContexts();
-  const [isProjectLoading] = useProjectLoading();
+  const projectContextStatus = useProjectContextStatus();
 
   const [previousMode, setPreviousMode] = useState<ChainType | null>(null);
   const [selectedChain, setSelectedChain] = useChainType();
@@ -729,7 +729,9 @@ ${chatContent}`;
           onReplaceChat={setInputMessage}
           showHelperComponents={selectedChain !== ChainType.PROJECT_CHAIN}
         />
-        {isProjectLoading && !hiddenCard ? (
+        {selectedChain === ChainType.PROJECT_CHAIN &&
+        (projectContextStatus === "loading" || projectContextStatus === "error") &&
+        !hiddenCard ? (
           <div className="tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-xl">
             <ProgressCard plugin={plugin} hiddenCard={hiddenCard} setHiddenCard={setHiddenCard} />
           </div>
@@ -766,6 +768,9 @@ ${chatContent}`;
               disableModelSwitch={selectedChain === ChainType.PROJECT_CHAIN}
               selectedTextContexts={selectedTextContexts}
               onRemoveSelectedText={handleRemoveSelectedText}
+              showProgressCard={() => {
+                setHiddenCard(false);
+              }}
             />
           </>
         )}
