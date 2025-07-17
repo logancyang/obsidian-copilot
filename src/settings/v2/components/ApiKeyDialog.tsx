@@ -10,6 +10,7 @@ import ProjectManager from "@/LLMProviders/projectManager";
 import { logError, logInfo } from "@/logger";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { parseModelsResponse, StandardModel } from "@/settings/providerModels";
+import { GitHubCopilotProvider } from "@/LLMProviders/githubCopilotProvider";
 import {
   err2String,
   getNeedSetKeyProvider,
@@ -265,6 +266,53 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
     }
   };
 
+  const [copilotProvider] = useState(() => new GitHubCopilotProvider());
+  const [authStep, setAuthStep] = useState<
+    "idle" | "pending" | "user" | "polling" | "done" | "error"
+  >("idle");
+  const [userCode, setUserCode] = useState<string | null>(null);
+  const [verificationUri, setVerificationUri] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const state = copilotProvider.getAuthState();
+    if (state.status === "authenticated") {
+      setAuthStep("done");
+    }
+  }, [copilotProvider]);
+
+  // Handler for authentication
+  const handleCopilotAuth = async () => {
+    new Notice("Starting GitHub authentication...");
+    setAuthStep("pending");
+    setError(null);
+    try {
+      const { userCode, verificationUri } = await copilotProvider.startDeviceCodeFlow();
+      new Notice("Please check your browser to authorize Obsidian Copilot.");
+      setUserCode(userCode);
+      setVerificationUri(verificationUri);
+      setAuthStep("user");
+
+      await copilotProvider.pollForAccessToken();
+      new Notice("Access token received!");
+
+      await copilotProvider.fetchCopilotToken();
+      new Notice("Github Copilot token received! Authentication complete.");
+
+      setAuthStep("done");
+    } catch (e: any) {
+      new Notice(`Authentication failed: ${e.message}`);
+      setError(e.message);
+      setAuthStep("error");
+    }
+  };
+
+  const handleCopilotReset = () => {
+    copilotProvider.resetAuth();
+    setAuthStep("idle");
+    new Notice("GitHub Copilot authentication has been reset.");
+  };
+
   return (
     <div className="tw-max-h-[600px] tw-overflow-y-auto tw-p-4 sm:tw-max-w-[500px]">
       <div className="tw-mb-4">
@@ -461,6 +509,68 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
               </Collapsible>
             </React.Fragment>
           ))}
+          {/* GitHub Copilot Onboarding Section */}
+          <section>
+            <div className="tw-mb-2 tw-flex tw-items-end tw-gap-2 tw-truncate tw-text-xl tw-font-medium">
+              GitHub Copilot
+            </div>
+            <div className="tw-space-y-2 tw-rounded-md tw-border tw-p-4">
+              <p className="tw-text-sm tw-text-muted">
+                Authenticate with your GitHub account to use Github Copilot models for chat.
+              </p>
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <Button
+                  onClick={handleCopilotAuth}
+                  disabled={authStep === "pending" || authStep === "polling" || authStep === "done"}
+                >
+                  {authStep === "pending" || authStep === "polling"
+                    ? "Authenticating..."
+                    : authStep === "done"
+                      ? "Authenticated"
+                      : "Setup GitHub Copilot"}
+                </Button>
+                {authStep === "done" && (
+                  <Button onClick={handleCopilotReset} variant="secondary">
+                    Reset
+                  </Button>
+                )}
+              </div>
+              {authStep === "user" && userCode && verificationUri && (
+                <div className="tw-mt-2 tw-space-y-1 tw-text-xs">
+                  <div>
+                    1. Go to{" "}
+                    <a
+                      href={verificationUri}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="tw-underline"
+                    >
+                      {verificationUri}
+                    </a>
+                  </div>
+                  <div className="tw-flex tw-items-center tw-gap-2">
+                    2. Enter code:
+                    <input
+                      className="tw-w-auto tw-select-all tw-rounded tw-border tw-bg-transparent tw-px-2 tw-py-1 tw-font-mono tw-text-xs tw-font-bold"
+                      style={{ width: `${userCode.length + 2}ch` }}
+                      value={userCode}
+                      readOnly
+                      onFocus={(e) => e.target.select()}
+                      aria-label="GitHub Device Code"
+                    />
+                  </div>
+                </div>
+              )}
+              {/* info */}
+              {authStep === "done" && (
+                <div className="tw-mt-2 tw-text-xs tw-text-success">
+                  Successfully authenticated! You can now add a GitHub Copilot model in the
+                  &quot;Model&quot; tab.
+                </div>
+              )}
+              {error && <div className="tw-mt-2 tw-text-xs tw-text-error">{error}</div>}
+            </div>
+          </section>
         </div>
       </div>
 
