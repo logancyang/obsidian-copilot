@@ -8,6 +8,7 @@ import { updateChatMemory } from "@/chatUtils";
 import CopilotPlugin from "@/main";
 import { ContextManager } from "./ContextManager";
 import { MessageRepository } from "./MessageRepository";
+import { ChatPersistenceManager } from "./ChatPersistenceManager";
 import { USER_SENDER } from "@/constants";
 
 /**
@@ -22,6 +23,7 @@ export class ChatManager {
   private projectMessageRepos: Map<string, MessageRepository> = new Map();
   private defaultProjectKey = "defaultProjectKey";
   private lastKnownProjectId: string | null = null;
+  private persistenceManager: ChatPersistenceManager;
 
   constructor(
     private messageRepo: MessageRepository,
@@ -32,6 +34,8 @@ export class ChatManager {
     this.contextManager = ContextManager.getInstance();
     // Initialize default project repository
     this.projectMessageRepos.set(this.defaultProjectKey, messageRepo);
+    // Initialize persistence manager with default repository
+    this.persistenceManager = new ChatPersistenceManager(plugin.app, messageRepo);
   }
 
   /**
@@ -57,7 +61,12 @@ export class ChatManager {
       this.projectMessageRepos.set(projectKey, newRepo);
     }
 
-    return this.projectMessageRepos.get(projectKey)!;
+    const currentRepo = this.projectMessageRepos.get(projectKey)!;
+
+    // Update persistence manager to use current repository
+    this.persistenceManager = new ChatPersistenceManager(this.plugin.app, currentRepo);
+
+    return currentRepo;
   }
 
   /**
@@ -112,9 +121,6 @@ export class ChatManager {
       // Update the processed content
       currentRepo.updateProcessedText(messageId, processedContent);
 
-      // Update project persistence
-      this.syncToProjectPersistence();
-
       logInfo(`[ChatManager] Successfully sent message ${messageId}`);
       return messageId;
     } catch (error) {
@@ -156,9 +162,6 @@ export class ChatManager {
 
       // Update chain memory with fresh LLM messages
       await this.updateChainMemory();
-
-      // Update project persistence
-      this.syncToProjectPersistence();
 
       logInfo(`[ChatManager] Successfully edited message ${messageId}`);
       return true;
@@ -230,9 +233,6 @@ export class ChatManager {
         { debug: getSettings().debug }
       );
 
-      // Update project persistence
-      this.syncToProjectPersistence();
-
       logInfo(`[ChatManager] Successfully regenerated message ${messageId}`);
       return true;
     } catch (error) {
@@ -257,9 +257,6 @@ export class ChatManager {
       // Update chain memory
       await this.updateChainMemory();
 
-      // Update project persistence
-      this.syncToProjectPersistence();
-
       logInfo(`[ChatManager] Successfully deleted message ${messageId}`);
       return true;
     } catch (error) {
@@ -274,7 +271,6 @@ export class ChatManager {
   addDisplayMessage(text: string, sender: string, id?: string): string {
     const currentRepo = this.getCurrentMessageRepo();
     const messageId = currentRepo.addDisplayOnlyMessage(text, sender, id);
-    this.syncToProjectPersistence();
     return messageId;
   }
 
@@ -284,7 +280,6 @@ export class ChatManager {
   addFullMessage(message: ChatMessage): string {
     const currentRepo = this.getCurrentMessageRepo();
     const messageId = currentRepo.addFullMessage(message);
-    this.syncToProjectPersistence();
     return messageId;
   }
 
@@ -294,7 +289,8 @@ export class ChatManager {
   clearMessages(): void {
     const currentRepo = this.getCurrentMessageRepo();
     currentRepo.clear();
-    this.plugin.projectManager.getCurrentChainManager().clearHistory();
+    // Clear chain memory directly
+    this.chainManager.memoryManager.clearChatMemory();
     logInfo(`[ChatManager] Cleared all messages`);
   }
 
@@ -308,7 +304,6 @@ export class ChatManager {
     // Update chain memory with the truncated messages
     await this.updateChainMemory();
 
-    this.syncToProjectPersistence();
     logInfo(`[ChatManager] Truncated messages after ${messageId}`);
   }
 
@@ -359,31 +354,26 @@ export class ChatManager {
   }
 
   /**
-   * Sync current state to project persistence
+   * Load messages from saved chat
    */
-  private syncToProjectPersistence(): void {
-    try {
-      const currentRepo = this.getCurrentMessageRepo();
-      const displayMessages = currentRepo.getDisplayMessages();
-      this.plugin.projectManager.getCurrentChainManager().clearHistory();
-      displayMessages.forEach((msg) => {
-        this.plugin.projectManager.getCurrentChainManager().addChatMessage(msg);
-      });
-    } catch (error) {
-      logInfo(`[ChatManager] Error syncing to project persistence:`, error);
-    }
-  }
-
-  /**
-   * Load messages from project persistence
-   */
-  loadMessages(messages: ChatMessage[]): void {
+  async loadMessages(messages: ChatMessage[]): Promise<void> {
     const currentRepo = this.getCurrentMessageRepo();
     currentRepo.clear();
     messages.forEach((msg) => {
       currentRepo.addFullMessage(msg);
     });
-    logInfo(`[ChatManager] Loaded ${messages.length} messages from persistence`);
+
+    // Update chain memory with loaded messages
+    await this.updateChainMemory();
+
+    logInfo(`[ChatManager] Loaded ${messages.length} messages`);
+  }
+
+  /**
+   * Save current chat history
+   */
+  async saveChat(modelKey: string): Promise<void> {
+    await this.persistenceManager.saveChat(modelKey);
   }
 
   /**
@@ -393,7 +383,6 @@ export class ChatManager {
     const currentRepo = this.getCurrentMessageRepo();
     return {
       ...currentRepo.getDebugInfo(),
-      chainMessages: this.plugin.projectManager.getCurrentChainManager().getChatMessages().length,
       currentProject: this.plugin.projectManager.getCurrentProjectId(),
       totalProjects: this.projectMessageRepos.size,
     };

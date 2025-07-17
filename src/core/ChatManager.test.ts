@@ -1,12 +1,4 @@
-import { ChatManager } from "./ChatManager";
-import { MessageRepository } from "./MessageRepository";
-import { ContextManager } from "./ContextManager";
-import { ChainType } from "@/chainFactory";
-import { ChatMessage, MessageContext } from "@/types/message";
-import { USER_SENDER } from "@/constants";
-import { TFile } from "obsidian";
-
-// Mock dependencies
+// Mock dependencies first to avoid circular dependencies
 jest.mock("./MessageRepository");
 jest.mock("./ContextManager");
 jest.mock("@/logger", () => ({
@@ -16,6 +8,23 @@ jest.mock("@/logger", () => ({
 jest.mock("@/chatUtils", () => ({
   updateChatMemory: jest.fn(),
 }));
+
+jest.mock("@/chainFactory", () => ({
+  ChainType: {
+    LLM_CHAIN: "llm_chain",
+    COPILOT_PLUS_CHAIN: "copilot_plus_chain",
+    PROJECT_CHAIN: "project_chain",
+  },
+}));
+
+import { ChatManager } from "./ChatManager";
+import { MessageRepository } from "./MessageRepository";
+import { ContextManager } from "./ContextManager";
+import { ChainType } from "@/chainFactory";
+import { ChatMessage, MessageContext } from "@/types/message";
+import { TFile } from "obsidian";
+
+const USER_SENDER = "user";
 
 describe("ChatManager", () => {
   let chatManager: ChatManager;
@@ -53,9 +62,6 @@ describe("ChatManager", () => {
     } as any;
 
     mockChainManager = {
-      clearHistory: jest.fn(),
-      addChatMessage: jest.fn(),
-      getChatMessages: jest.fn().mockReturnValue([]),
       memoryManager: {
         clearChatMemory: jest.fn(),
       },
@@ -136,7 +142,7 @@ describe("ChatManager", () => {
 
     it("should include active note in context when includeActiveNote is true", async () => {
       const mockActiveFile = { path: "active.md", basename: "active" } as TFile;
-      const mockMessage = { id: "msg-1", message: "Hello", sender: USER_SENDER };
+      const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
       const context: MessageContext = {
         notes: [],
         urls: [],
@@ -160,7 +166,7 @@ describe("ChatManager", () => {
     });
 
     it("should handle case when no active file exists", async () => {
-      const mockMessage = { id: "msg-1", message: "Hello", sender: USER_SENDER };
+      const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
       const context: MessageContext = {
         notes: [],
         urls: [],
@@ -378,7 +384,7 @@ describe("ChatManager", () => {
       chatManager.clearMessages();
 
       expect(mockMessageRepo.clear).toHaveBeenCalled();
-      expect(mockChainManager.clearHistory).toHaveBeenCalled();
+      expect(mockChainManager.memoryManager.clearChatMemory).toHaveBeenCalled();
     });
   });
 
@@ -483,7 +489,7 @@ describe("ChatManager", () => {
     describe("Context Badge Bug Prevention", () => {
       it("should include active note in context when includeActiveNote is true", async () => {
         const mockActiveFile = { path: "lesson4.md", basename: "Lesson 4" } as TFile;
-        const mockMessage = { id: "msg-1", message: "Hello", sender: USER_SENDER };
+        const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = {
           notes: [],
           urls: [],

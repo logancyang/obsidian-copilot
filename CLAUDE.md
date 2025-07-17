@@ -109,6 +109,118 @@ Copilot for Obsidian is an AI-powered assistant plugin that integrates various L
 
 ## Message Management Architecture
 
+### Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                   User Interface Layer                               │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                      │
+│  ┌─────────────────┐                          ┌──────────────────┐                 │
+│  │   Chat.tsx      │ ◄────── uses ──────────► │  CopilotView.tsx │                 │
+│  │                 │                           │                  │                 │
+│  └────────┬────────┘                          └──────────────────┘                 │
+│           │                                                                         │
+│           │ subscribes to & calls                                                   │
+│           ▼                                                                         │
+└───────────┬─────────────────────────────────────────────────────────────────────────┘
+            │
+┌───────────┴─────────────────────────────────────────────────────────────────────────┐
+│                                    State Layer                                       │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│           │                                                                         │
+│  ┌────────▼────────┐                                                               │
+│  │  ChatUIState    │  - React state management                                     │
+│  │                 │  - Subscription mechanism for UI updates                       │
+│  │                 │  - Delegates all business logic to ChatManager                │
+│  └────────┬────────┘                                                               │
+│           │                                                                         │
+└───────────┴─────────────────────────────────────────────────────────────────────────┘
+            │ delegates to
+┌───────────▼─────────────────────────────────────────────────────────────────────────┐
+│                               Business Logic Layer                                   │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                      │
+│  ┌─────────────────┐         orchestrates        ┌─────────────────────────────┐   │
+│  │   ChatManager   │ ◄──────────────────────────► │  ContextManager (singleton) │   │
+│  │                 │                              │                             │   │
+│  │ - Message CRUD  │                              │ - Process message context  │   │
+│  │ - Project       │                              │ - Handle note attachments  │   │
+│  │   isolation     │                              │ - Reprocess on edit        │   │
+│  │ - Memory sync   │                              └─────────────────────────────┘   │
+│  └────────┬────────┘                                                               │
+│           │                                                                         │
+│           │ manages                               ┌─────────────────────────────┐   │
+│           │                                       │  ChatPersistenceManager     │   │
+│           ├──────────────────────────────────────►│                             │   │
+│           │                                       │ - Save/load chat history    │   │
+│           │                                       │ - Project-aware file naming │   │
+│           │                                       └─────────────────────────────┘   │
+│           │                                                                         │
+│           │ coordinates                           ┌─────────────────────────────┐   │
+│           ├──────────────────────────────────────►│     ChainManager           │   │
+│           │                                       │                             │   │
+│           │                                       │ - Memory management         │   │
+│           │                                       │ - LLM chain operations     │   │
+│           │                                       └──────────┬──────────────────┘   │
+│           │                                                  │                      │
+│           │                                                  ▼                      │
+│           │                                       ┌─────────────────────────────┐   │
+│           │                                       │    MemoryManager            │   │
+│           │                                       │                             │   │
+│           │                                       │ - Chain memory storage      │   │
+│           │                                       │ - Conversation history      │   │
+│           │                                       └─────────────────────────────┘   │
+└───────────┴─────────────────────────────────────────────────────────────────────────┘
+            │
+┌───────────▼─────────────────────────────────────────────────────────────────────────┐
+│                                  Data Storage Layer                                  │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                      │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐   │
+│  │                          MessageRepository                                   │   │
+│  │                                                                             │   │
+│  │  ┌─────────────────┐    Computed Views    ┌────────────────────────────┐  │   │
+│  │  │ StoredMessage[] │ ──────────────────────► │ getDisplayMessages()     │  │   │
+│  │  │                 │                       │ (for UI rendering)       │  │   │
+│  │  │ - id            │                       └────────────────────────────┘  │   │
+│  │  │ - displayText   │                                                        │   │
+│  │  │ - processedText │ ──────────────────────► ┌────────────────────────────┐  │   │
+│  │  │ - sender        │                       │ getLLMMessages()         │  │   │
+│  │  │ - timestamp     │                       │ (for AI processing)      │  │   │
+│  │  │ - context       │                       └────────────────────────────┘  │   │
+│  │  └─────────────────┘                                                        │   │
+│  │                                                                             │   │
+│  │  Single source of truth - no dual storage!                                 │   │
+│  └─────────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+
+### Project Isolation Architecture
+
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                              ChatManager                                             │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                      │
+│  projectMessageRepos: Map<string, MessageRepository>                                │
+│                                                                                      │
+│  ┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐          │
+│  │ "defaultProject" │     │   "project-1"    │     │   "project-2"    │          │
+│  │                  │     │                  │     │                  │          │
+│  │ MessageRepo      │     │ MessageRepo      │     │ MessageRepo      │          │
+│  │ - Non-project    │     │ - Project 1      │     │ - Project 2      │          │
+│  │   messages       │     │   messages only  │     │   messages only  │          │
+│  └──────────────────┘     └──────────────────┘     └──────────────────┘          │
+│           ▲                         ▲                         ▲                     │
+│           │                         │                         │                     │
+│           └─────────────────────────┴─────────────────────────┘                     │
+│                                     │                                               │
+│                        getCurrentMessageRepo()                                      │
+│                        (auto-detects active project)                                │
+│                                                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+```
+
 ### Core Classes and Flow
 
 1. **MessageRepository** (`src/core/MessageRepository.ts`)
@@ -138,9 +250,16 @@ Copilot for Obsidian is an AI-powered assistant plugin that integrates various L
    - Replaces legacy SharedState with minimal, focused approach
 
 4. **ContextManager** (`src/core/ContextManager.ts`)
+
    - Handles context processing (notes, URLs, selected text)
    - Reprocesses context when messages are edited
    - Ensures fresh context for LLM processing
+
+5. **ChatPersistenceManager** (`src/core/ChatPersistenceManager.ts`)
+   - Handles saving and loading chat history to/from markdown files
+   - Project-aware file naming (prefixes with project ID)
+   - Parses and formats chat content for storage
+   - Integrated with ChatManager for seamless persistence
 
 ### Message Flow
 
@@ -148,6 +267,8 @@ Copilot for Obsidian is an AI-powered assistant plugin that integrates various L
 2. **Display**: MessageRepository.getDisplayMessages() → ChatUIState → React Components
 3. **LLM Processing**: MessageRepository.getLLMMessages() → Chain Memory → LLM Providers
 4. **Editing**: ChatUIState → ChatManager → MessageRepository + ContextManager (reprocessing)
+5. **Saving**: User → Chat.tsx → ChatUIState → ChatManager → ChatPersistenceManager → Vault
+6. **Loading**: User → LoadChatHistoryModal → main.ts → ChatUIState → ChatManager → MessageRepository
 
 ### Testing
 

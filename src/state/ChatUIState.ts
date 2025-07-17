@@ -238,8 +238,8 @@ export class ChatUIState {
   /**
    * Load messages from persistence
    */
-  loadMessages(messages: ChatMessage[]): void {
-    this.chatManager.loadMessages(messages);
+  async loadMessages(messages: ChatMessage[]): Promise<void> {
+    await this.chatManager.loadMessages(messages);
     this.notifyListeners();
   }
 
@@ -249,5 +249,12 @@ export class ChatUIState {
   async handleProjectSwitch(): Promise<void> {
     await this.chatManager.handleProjectSwitch();
     this.notifyListeners();
+  }
+
+  /**
+   * Save current chat history
+   */
+  async saveChat(modelKey: string): Promise<void> {
+    await this.chatManager.saveChat(modelKey);
   }
 }

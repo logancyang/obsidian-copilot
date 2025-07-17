@@ -2,7 +2,7 @@ import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ProjectManager from "@/LLMProviders/projectManager";
 import { CustomModel, getCurrentProject } from "@/aiParams";
 import { AutocompleteService } from "@/autocomplete/autocompleteService";
-import { parseChatContent, updateChatMemory } from "@/chatUtils";
+import { parseChatContent } from "@/chatUtils";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
@@ -341,9 +341,6 @@ export default class CopilotPlugin extends Plugin {
     const content = await this.app.vault.read(file);
     const messages = parseChatContent(content);
 
-    // Update the chain's memory with the loaded messages
-    await updateChatMemory(messages, this.projectManager.getCurrentChainManager().memoryManager);
-
     // Check if the Copilot view is already active
     const existingView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0];
     if (!existingView) {
@@ -351,8 +348,8 @@ export default class CopilotPlugin extends Plugin {
       this.activateView();
     }
 
-    // Load messages into ChatUIState
-    this.chatUIState.loadMessages(messages);
+    // Load messages into ChatUIState (which now handles memory updates)
+    await this.chatUIState.loadMessages(messages);
 
     // Update the view
     const copilotView = (existingView || this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0])

@@ -31,7 +31,7 @@ import {
 } from "@/settings/model";
 import { ChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
-import { err2String, formatDateTime } from "@/utils";
+import { err2String } from "@/utils";
 import { Buffer } from "buffer";
 import { Notice, TFile } from "obsidian";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
@@ -215,98 +215,14 @@ const Chat: React.FC<ChatProps> = ({
       return;
     }
 
-    // Filter visible messages - use chatUIState to get the latest messages
-    const visibleMessages = chatUIState.getMessages();
-
-    if (visibleMessages.length === 0) {
-      new Notice("No messages to save.");
-      return;
-    }
-
-    // Get the epoch of the first message
-    const firstMessageEpoch = visibleMessages[0].timestamp?.epoch || Date.now();
-
-    // Format the chat content
-    const chatContent = visibleMessages
-      .map(
-        (message) =>
-          `**${message.sender}**: ${message.message}\n[Timestamp: ${message.timestamp?.display}]`
-      )
-      .join("\n\n");
-
     try {
-      // Check if the default folder exists or create it
-      const folder = app.vault.getAbstractFileByPath(settings.defaultSaveFolder);
-      if (!folder) {
-        await app.vault.createFolder(settings.defaultSaveFolder);
-      }
-
-      const { fileName: timestampFileName } = formatDateTime(new Date(firstMessageEpoch));
-
-      // Get the first user message
-      const firstUserMessage = visibleMessages.find((message) => message.sender === USER_SENDER);
-
-      // Get the first 10 words from the first user message and sanitize them
-      const firstTenWords = firstUserMessage
-        ? firstUserMessage.message
-            .split(/\s+/)
-            .slice(0, 10)
-            .join(" ")
-            .replace(/[\\/:*?"<>|]/g, "") // Remove invalid filename characters
-            .trim()
-        : "Untitled Chat";
-
-      // Parse the custom format and replace variables
-      let customFileName = settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}";
-
-      // Create the file name (limit to 100 characters to avoid excessively long names)
-      customFileName = customFileName
-        .replace("{$topic}", firstTenWords.slice(0, 100).replace(/\s+/g, "_"))
-        .replace("{$date}", timestampFileName.split("_")[0])
-        .replace("{$time}", timestampFileName.split("_")[1]);
-
-      // Sanitize the final filename
-      const sanitizedFileName = customFileName.replace(/[\\/:*?"<>|]/g, "_");
-
-      // Add project ID as prefix for project-specific chat histories
-      const currentProject = getCurrentProject();
-      const filePrefix = currentProject ? `${currentProject.id}__` : "";
-      const noteFileName = `${settings.defaultSaveFolder}/${filePrefix}${sanitizedFileName}.md`;
-
-      // Add the timestamp, model, and project properties to the note content
-      const noteContentWithTimestamp = `---
-epoch: ${firstMessageEpoch}
-modelKey: ${currentModelKey}
-${currentProject ? `projectId: ${currentProject.id}` : ""}
-${currentProject ? `projectName: ${currentProject.name}` : ""}
-tags:
-  - ${settings.defaultConversationTag}
----
-
-${chatContent}`;
-
-      // Check if the file already exists
-      const existingFile = app.vault.getAbstractFileByPath(noteFileName);
-      if (existingFile instanceof TFile) {
-        // If the file exists, update its content
-        await app.vault.modify(existingFile, noteContentWithTimestamp);
-      } else {
-        // If the file doesn't exist, create a new one
-        await app.vault.create(noteFileName, noteContentWithTimestamp);
-        new Notice(`Chat saved as note: ${noteFileName}`);
-      }
+      // Use the new ChatManager persistence functionality
+      await chatUIState.saveChat(currentModelKey);
     } catch (error) {
       console.error("Error saving chat as note:", err2String(error));
       new Notice("Failed to save chat as note. Check console for details.");
     }
-  }, [
-    app,
-    chatUIState,
-    currentModelKey,
-    settings.defaultConversationTag,
-    settings.defaultSaveFolder,
-    settings.defaultConversationNoteName,
-  ]);
+  }, [app, chatUIState, currentModelKey]);
 
   const handleStopGenerating = useCallback(
     (reason?: ABORT_REASON) => {
