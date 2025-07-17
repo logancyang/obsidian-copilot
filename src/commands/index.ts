@@ -9,7 +9,7 @@ import { RemoveFromIndexModal } from "@/components/modals/RemoveFromIndexModal";
 import CopilotPlugin from "@/main";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { CopilotSettings, getSettings, updateSetting } from "@/settings/model";
-import { SelectedTextContext } from "@/sharedState";
+import { SelectedTextContext } from "@/types/message";
 import { Editor, Notice, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";

@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
-import { ChatMessage } from "@/sharedState";
+import { ChatMessage } from "@/types/message";
 import {
   Check,
   Copy,

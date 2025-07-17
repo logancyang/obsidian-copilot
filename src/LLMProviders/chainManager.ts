@@ -18,7 +18,7 @@ import { logError, logInfo } from "@/logger";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings, getSystemPrompt, subscribeToSettingsChange } from "@/settings/model";
-import { ChatMessage } from "@/sharedState";
+import { ChatMessage } from "@/types/message";
 import { findCustomModel, isOSeriesModel, isSupportedChain } from "@/utils";
 import {
   ChatPromptTemplate,
@@ -48,13 +48,7 @@ export default class ChainManager {
   public memoryManager: MemoryManager;
   public promptManager: PromptManager;
 
-  // A chat history that stores the messages sent and received
-  // Only reset when the user explicitly clicks "New Chat"
-  private chatMessages: ChatMessage[] = [];
-
   constructor(app: App, vectorStoreManager: VectorStoreManager) {
-    this.chatMessages = [];
-
     // Instantiate singletons
     this.app = app;
     this.vectorStoreManager = vectorStoreManager;
@@ -358,21 +352,5 @@ export default class ChainManager {
           .saveContext({ input: userMsg.message }, { output: aiMsg.message });
       }
     }
-  }
-
-  public clearHistory() {
-    this.chatMessages = [];
-  }
-
-  public getChatMessages(): ChatMessage[] {
-    return this.chatMessages;
-  }
-
-  public setChatMessages(messages: ChatMessage[]) {
-    this.chatMessages = [...messages];
-  }
-
-  public addChatMessage(message: ChatMessage) {
-    this.chatMessages.push(message);
   }
 }

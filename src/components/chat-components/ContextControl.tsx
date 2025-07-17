@@ -4,7 +4,7 @@ import React from "react";
 
 import { ChainType } from "@/chainFactory";
 import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
-import { SelectedTextContext } from "@/sharedState";
+import { SelectedTextContext } from "@/types/message";
 import { TFile } from "obsidian";
 import { ChatContextMenu } from "./ChatContextMenu";
 

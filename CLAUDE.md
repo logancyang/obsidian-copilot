@@ -60,25 +60,96 @@ Copilot for Obsidian is an AI-powered assistant plugin that integrates various L
    - Chat interface with streaming support
    - Settings UI with versioned components
 
-5. **State Management**
+5. **Message Management Architecture** (`src/core/`, `src/state/`)
 
-   - Jotai for atomic state management
+   - **MessageRepository** (`src/core/MessageRepository.ts`): Single source of truth for all messages
+     - Stores each message once with both `displayText` and `processedText`
+     - Provides computed views for UI display and LLM processing
+     - No complex dual-array synchronization
+   - **ChatManager** (`src/core/ChatManager.ts`): Central business logic coordinator
+     - Orchestrates MessageRepository, ContextManager, and LLM operations
+     - Handles message sending, editing, regeneration, and deletion
+     - Manages context processing and chain memory synchronization
+     - **Project Chat Isolation**: Maintains separate MessageRepository per project
+       - Automatically detects project switches via `getCurrentMessageRepo()`
+       - Each project has its own isolated message history
+       - Non-project chats use `defaultProjectKey` repository
+   - **ChatUIState** (`src/state/ChatUIState.ts`): Clean UI-only state manager
+     - Delegates all business logic to ChatManager
+     - Provides React integration with subscription mechanism
+     - Replaces legacy SharedState with minimal, focused approach
+   - **ContextManager** (`src/core/ContextManager.ts`): Handles context processing
+     - Processes message context (notes, URLs, selected text)
+     - Reprocesses context when messages are edited
+
+6. **Settings Management**
+
+   - Jotai for atomic settings state management
    - React contexts for feature-specific state
-   - Shared state utilities in `src/sharedState.ts`
 
-6. **Plugin Integration**
+7. **Plugin Integration**
    - Main entry: `src/main.ts` extends Obsidian Plugin
    - Command registration system
    - Event handling for Obsidian lifecycle
    - Settings persistence and migration
+   - Chat history loading via pending message mechanism
 
 ### Key Patterns
 
+- **Single Source of Truth**: MessageRepository stores each message once with computed views
+- **Clean Architecture**: Repository → Manager → UIState → React Components
+- **Context Reprocessing**: Automatic context updates when messages are edited
+- **Computed Views**: Display messages for UI, LLM messages for AI processing
+- **Project Isolation**: Each project maintains its own MessageRepository instance
 - **Error Handling**: Custom error types with detailed interfaces
 - **Async Operations**: Consistent async/await pattern with proper error boundaries
 - **Caching**: Multi-layer caching for files, PDFs, and API responses
 - **Streaming**: Real-time streaming for LLM responses
 - **Testing**: Unit tests adjacent to implementation, integration tests for API calls
+
+## Message Management Architecture
+
+For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE.md`](./MESSAGE_ARCHITECTURE.md).
+
+### Core Classes and Flow
+
+1. **MessageRepository** (`src/core/MessageRepository.ts`)
+
+   - Single source of truth for all messages
+   - Stores `StoredMessage` objects with both `displayText` and `processedText`
+   - Provides computed views via `getDisplayMessages()` and `getLLMMessages()`
+   - No complex dual-array synchronization or ID matching
+
+2. **ChatManager** (`src/core/ChatManager.ts`)
+
+   - Central business logic coordinator
+   - Orchestrates MessageRepository, ContextManager, and LLM operations
+   - Handles all message CRUD operations with proper error handling
+   - Synchronizes with chain memory for conversation history
+   - **Project Chat Isolation Implementation**:
+     - Maintains `projectMessageRepos: Map<string, MessageRepository>` for project-specific storage
+     - `getCurrentMessageRepo()` automatically detects current project and returns correct repository
+     - Seamlessly switches between project repositories when project changes
+     - Creates new empty repository for each project (no message caching)
+
+3. **ChatUIState** (`src/state/ChatUIState.ts`)
+
+   - Clean UI-only state manager
+   - Delegates all business logic to ChatManager
+   - Provides React integration with subscription mechanism
+   - Replaces legacy SharedState with minimal, focused approach
+
+4. **ContextManager** (`src/core/ContextManager.ts`)
+
+   - Handles context processing (notes, URLs, selected text)
+   - Reprocesses context when messages are edited
+   - Ensures fresh context for LLM processing
+
+5. **ChatPersistenceManager** (`src/core/ChatPersistenceManager.ts`)
+   - Handles saving and loading chat history to/from markdown files
+   - Project-aware file naming (prefixes with project ID)
+   - Parses and formats chat content for storage
+   - Integrated with ChatManager for seamless persistence
 
 ## Code Style Guidelines
 
@@ -162,3 +233,17 @@ This helps ensure thorough testing and provides documentation for QA.
 - Settings are versioned - migrations may be needed
 - Local model support available via Ollama/LM Studio
 - Rate limiting is implemented for all API calls
+
+### Architecture Migration Notes
+
+- **SharedState Removed**: The legacy `src/sharedState.ts` has been completely removed
+- **Clean Architecture**: New architecture follows Repository → Manager → UIState → UI pattern
+- **Single Source of Truth**: All messages stored once in MessageRepository with computed views
+- **Context Always Fresh**: Context is reprocessed when messages are edited to ensure accuracy
+- **Chat History Loading**: Uses pending message mechanism through CopilotView → Chat component props
+- **Project Chat Isolation**: Each project now has completely isolated chat history
+  - Automatic detection of project switches via `ProjectManager.getCurrentProjectId()`
+  - Separate MessageRepository instances per project ID
+  - Non-project chats stored in default repository
+  - Backwards compatible - loads existing messages from ProjectManager cache
+  - Zero configuration required - works automatically

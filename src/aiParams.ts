@@ -4,7 +4,7 @@ import { ChatPromptTemplate } from "@langchain/core/prompts";
 
 import { ModelCapability } from "@/constants";
 import { settingsAtom, settingsStore } from "@/settings/model";
-import { SelectedTextContext } from "@/sharedState";
+import { SelectedTextContext } from "@/types/message";
 import { atom, useAtom } from "jotai";
 
 const userModelKeyAtom = atom<string | null>(null);

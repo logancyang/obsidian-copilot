@@ -2,7 +2,7 @@ import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { SuggestedPrompts } from "@/components/chat-components/SuggestedPrompts";
 import { useSettingsValue } from "@/settings/model";
-import { ChatMessage } from "@/sharedState";
+import { ChatMessage } from "@/types/message";
 import { App } from "obsidian";
 import React, { memo, useEffect, useState } from "react";
 

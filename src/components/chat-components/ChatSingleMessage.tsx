@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
-import { ChatMessage } from "@/sharedState";
+import { ChatMessage } from "@/types/message";
 import { insertIntoEditor } from "@/utils";
 import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
@@ -14,14 +14,14 @@ import { createRoot, Root } from "react-dom/client";
 import { ComposerCodeBlock } from "./ComposerCodeBlock";
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
-  if (!context || (context.notes.length === 0 && context.urls.length === 0)) {
+  if (!context || (!context.notes?.length && !context.urls?.length)) {
     return null;
   }
 
   return (
     <div className="tw-flex tw-flex-wrap tw-gap-2">
-      {context.notes.map((note) => (
-        <Tooltip key={note.path}>
+      {context.notes.map((note, index) => (
+        <Tooltip key={`${index}-${note.path}`}>
           <TooltipTrigger asChild>
             <Badge variant="secondary">
               <span className="tw-max-w-40 tw-truncate">{note.basename}</span>
@@ -30,8 +30,8 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
           <TooltipContent>{note.path}</TooltipContent>
         </Tooltip>
       ))}
-      {context.urls.map((url) => (
-        <Tooltip key={url}>
+      {context.urls.map((url, index) => (
+        <Tooltip key={`${index}-${url}`}>
           <TooltipTrigger asChild>
             <Badge variant="secondary">
               <span className="tw-max-w-40 tw-truncate">{url}</span>
