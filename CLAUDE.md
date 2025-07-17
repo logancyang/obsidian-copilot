@@ -130,7 +130,7 @@ For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE
      - Maintains `projectMessageRepos: Map<string, MessageRepository>` for project-specific storage
      - `getCurrentMessageRepo()` automatically detects current project and returns correct repository
      - Seamlessly switches between project repositories when project changes
-     - Loads existing messages from ProjectManager cache when creating new repository
+     - Creates new empty repository for each project (no message caching)
 
 3. **ChatUIState** (`src/state/ChatUIState.ts`)
 

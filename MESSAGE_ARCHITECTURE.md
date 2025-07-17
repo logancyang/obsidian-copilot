@@ -112,12 +112,8 @@ private projectMessageRepos: Map<string, MessageRepository>
 getCurrentMessageRepo() {
   const currentProjectId = ProjectManager.getCurrentProjectId() || defaultProjectKey;
   if (!this.projectMessageRepos.has(currentProjectId)) {
-    // Create new repository and load existing messages from cache
+    // Create new repository for this project
     const repo = new MessageRepository();
-    const cachedMessages = ProjectManager.getCachedMessages(currentProjectId);
-    if (cachedMessages) {
-      repo.loadMessages(cachedMessages);
-    }
     this.projectMessageRepos.set(currentProjectId, repo);
   }
   return this.projectMessageRepos.get(currentProjectId)!;
@@ -322,8 +318,6 @@ ChatManager.getCurrentMessageRepo()
 Check if repository exists for project
     ↓ (if not)
 Create new MessageRepository
-    ↓
-Load cached messages from ProjectManager
     ↓
 Store in projectMessageRepos Map
     ↓
@@ -560,8 +554,8 @@ const llmMessages = chatManager.getLLMMessages();   // For AI
 1. **Complete Separation**: Each project has entirely separate chat history
 2. **Automatic Management**: No user configuration needed
 3. **Seamless Switching**: Instant context switch when changing projects
-4. **Backward Compatible**: Loads existing messages from ProjectManager cache
-5. **Memory Efficient**: Only active project's messages in memory
+4. **Memory Efficient**: Only active project's messages in memory
+5. **Fresh Start**: Each project starts with empty chat history
 
 ### Persistence Integration
 
