@@ -104,7 +104,7 @@ export class IntentAnalyzer {
     const { timeRange, salientTerms } = context;
 
     // Handle @vault command
-    if (message.includes("@vault") && (salientTerms.length > 0 || timeRange)) {
+    if (message.includes("@vault")) {
       // Remove all @commands from the query
       const cleanQuery = this.removeAtCommands(originalMessage);
 

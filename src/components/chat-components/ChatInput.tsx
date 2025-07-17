@@ -7,6 +7,9 @@ import {
   useProjectLoading,
 } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
+import { CustomCommandManager } from "@/commands/customCommandManager";
+import { sortSlashCommands } from "@/commands/customCommandUtils";
+import { getCachedCustomCommands } from "@/commands/state";
 import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
 import { AddImageModal } from "@/components/modals/AddImageModal";
 import { ListPromptModal } from "@/components/modals/ListPromptModal";
@@ -19,7 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ModelDisplay } from "@/components/ui/model-display";
 import { ContextProcessor } from "@/contextProcessor";
-import { CustomCommandManager } from "@/commands/customCommandManager";
+import { cn } from "@/lib/utils";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
@@ -33,10 +36,10 @@ import {
   isNoteTitleUnique,
 } from "@/utils";
 import {
-  ArrowBigUp,
   ChevronDown,
-  Command,
   CornerDownLeft,
+  Database,
+  Globe,
   Image,
   Loader2,
   StopCircle,
@@ -54,8 +57,6 @@ import React, {
 } from "react";
 import { useDropzone } from "react-dropzone";
 import ContextControl from "./ContextControl";
-import { getCachedCustomCommands } from "@/commands/state";
-import { sortSlashCommands } from "@/commands/customCommandUtils";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -120,6 +121,10 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const settings = useSettingsValue();
     const isCopilotPlus =
       currentChain === ChainType.COPILOT_PLUS_CHAIN || currentChain === ChainType.PROJECT_CHAIN;
+
+    // Toggle states for vault and web search
+    const [vaultToggle, setVaultToggle] = useState(false);
+    const [webToggle, setWebToggle] = useState(false);
     const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
     const loadingMessages = [
       "Loading the project context...",
@@ -170,14 +175,19 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       return currentModelKey;
     };
 
-    const onSendMessage = (includeVault: boolean) => {
+    const onSendMessage = () => {
       if (!isCopilotPlus) {
         handleSendMessage();
         return;
       }
 
+      // Build tool calls based on toggle states
+      const toolCalls: string[] = [];
+      if (vaultToggle) toolCalls.push("@vault");
+      if (webToggle) toolCalls.push("@websearch");
+
       handleSendMessage({
-        toolCalls: includeVault ? ["@vault"] : [],
+        toolCalls,
         contextNotes,
         urls: contextUrls,
       });
@@ -336,14 +346,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.nativeEvent.isComposing) return;
 
-      // Check for Cmd+Shift+Enter (Mac) or Ctrl+Shift+Enter (Windows)
-      if (e.key === "Enter" && e.shiftKey && (Platform.isMacOS ? e.metaKey : e.ctrlKey)) {
-        e.preventDefault();
-        e.stopPropagation();
-        onSendMessage(true);
-        return;
-      }
-
       if (e.key === "Enter") {
         /**
          * send msg:
@@ -359,7 +361,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         }
 
         e.preventDefault();
-        onSendMessage(false);
+        onSendMessage();
       }
     };
 
@@ -643,13 +645,45 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
               </Button>
             ) : (
               <>
+                {/* Toggle buttons for vault and web search - only show when Autonomous Agent is off */}
+                {!settings.enableAutonomousAgent && (
+                  <>
+                    <Button
+                      variant="ghost2"
+                      size="fit"
+                      onClick={() => setVaultToggle(!vaultToggle)}
+                      className={cn(
+                        "tw-mr-2 tw-text-muted hover:tw-text-accent",
+                        vaultToggle && "tw-text-accent tw-bg-accent/10"
+                      )}
+                      title="Toggle vault search"
+                    >
+                      <Database className="tw-size-4" />
+                    </Button>
+                    <Button
+                      variant="ghost2"
+                      size="fit"
+                      onClick={() => setWebToggle(!webToggle)}
+                      className={cn(
+                        "tw-mr-2 tw-text-muted hover:tw-text-accent",
+                        webToggle && "tw-text-accent tw-bg-accent/10"
+                      )}
+                      title="Toggle web search"
+                    >
+                      <Globe className="tw-size-4" />
+                    </Button>
+                  </>
+                )}
+
                 {isCopilotPlus && (
                   <Button
                     variant="ghost2"
                     size="fit"
+                    className="tw-text-muted hover:tw-text-accent"
                     onClick={() => {
                       new AddImageModal(app, onAddImage).open();
                     }}
+                    title="Add image(s)"
                   >
                     <Image className="tw-size-4" />
                   </Button>
@@ -658,37 +692,11 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                   variant="ghost2"
                   size="fit"
                   className="tw-text-muted"
-                  onClick={() => onSendMessage(false)}
+                  onClick={() => onSendMessage()}
                 >
                   <CornerDownLeft className="!tw-size-3" />
                   <span>chat</span>
                 </Button>
-
-                {currentChain === "copilot_plus" && (
-                  <Button
-                    variant="ghost2"
-                    size="fit"
-                    className="tw-hidden tw-text-muted @xs/chat-input:tw-inline-flex"
-                    onClick={() => onSendMessage(true)}
-                  >
-                    <div className="tw-flex tw-items-center tw-gap-1">
-                      {Platform.isMacOS ? (
-                        <div className="tw-flex tw-items-center">
-                          <Command className="!tw-size-3" />
-                          <ArrowBigUp className="!tw-size-3" />
-                          <CornerDownLeft className="!tw-size-3" />
-                        </div>
-                      ) : (
-                        <div className="tw-flex tw-items-center">
-                          <span>Ctrl</span>
-                          <ArrowBigUp className="tw-size-4" />
-                          <CornerDownLeft className="!tw-size-3" />
-                        </div>
-                      )}
-                      <span>vault</span>
-                    </div>
-                  </Button>
-                )}
               </>
             )}
           </div>

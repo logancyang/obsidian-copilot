@@ -22,7 +22,6 @@ jest.mock("./ChatPersistenceManager", () => ({
     saveChat: jest.fn().mockResolvedValue({ success: true, path: "/test/path.md" }),
   })),
 }));
-
 import { ChatManager } from "./ChatManager";
 import { MessageRepository } from "./MessageRepository";
 import { ContextManager } from "./ContextManager";

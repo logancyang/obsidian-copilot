@@ -109,6 +109,7 @@ export interface CopilotSettings {
   enableWordCompletion: boolean;
   projectList: Array<ProjectConfig>;
   passMarkdownImages: boolean;
+  enableAutonomousAgent: boolean;
   enableCustomPromptTemplating: boolean;
   /** Whether we have suggested built-in default commands to the user once. */
   suggestedDefaultCommands: boolean;

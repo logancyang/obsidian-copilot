@@ -97,6 +97,16 @@ export const CopilotPlusSettings: React.FC = () => {
             }}
           />
 
+          <SettingItem
+            type="switch"
+            title="Autonomous Agent"
+            description="Enable autonomous agent mode in Plus chat. The AI will reason step-by-step and decide which tools to use automatically, improving response quality for complex queries."
+            checked={settings.enableAutonomousAgent}
+            onCheckedChange={(checked) => {
+              updateSetting("enableAutonomousAgent", checked);
+            }}
+          />
+
           <div className="tw-pt-4 tw-text-xl tw-font-semibold">Autocomplete</div>
 
           <SettingItem
