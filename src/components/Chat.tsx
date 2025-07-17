@@ -377,7 +377,7 @@ const Chat: React.FC<ChatProps> = ({
           );
 
           // Get the LLM message for AI processing
-          const llmMessage = chatUIState.getMessage(messageId);
+          const llmMessage = chatUIState.getLLMMessage(messageId);
           if (llmMessage) {
             setLoading(true);
             await getAIResponse(
