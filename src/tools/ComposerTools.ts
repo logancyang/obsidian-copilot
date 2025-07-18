@@ -96,6 +96,6 @@ const writeToFileTool = tool(
   }
 );
 // Attach custom timeout property for toolExecution.ts
-(writeToFileTool as any).timeoutMs = 0;
+(writeToFileTool as typeof writeToFileTool & { timeoutMs: number }).timeoutMs = 0;
 
 export { writeToFileTool };
