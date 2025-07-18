@@ -45,9 +45,9 @@ const writeToFileTool = tool(
   async ({ path, content }: { path: string; content: string }) => {
     const result = await show_preview(path, content);
     // Return tool result and also instruct the model do not retry this tool call for failed result.
-    return `File change result: ${result}` + result === "accepted"
+    return `File change result: ${result}` + (result === "accepted"
       ? ""
-      : "Do not call writeToFile again for this operation.";
+      : "Do not call writeToFile again for this operation.");
   },
   {
     name: "writeToFile",
