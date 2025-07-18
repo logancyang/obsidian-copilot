@@ -3,6 +3,11 @@ import { MessageContext } from "@/types/message";
 import { TFile } from "obsidian";
 import { MessageRepository } from "./MessageRepository";
 
+// Mock the settings module
+jest.mock("@/settings/model", () => ({
+  getSettings: jest.fn(() => ({ debug: false })),
+}));
+
 /**
  * This test file demonstrates the complete message lifecycle with context notes.
  * It serves as both a test and documentation of how messages flow through the system.

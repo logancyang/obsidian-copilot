@@ -49,8 +49,15 @@ describe("processedPrompt()", () => {
     // Set default implementations for critical mocks
     (extractNoteFiles as jest.Mock).mockReturnValue([]);
 
-    // Create mock objects
-    mockVault = {} as Vault;
+    // Create mock objects with adapter.stat
+    mockVault = {
+      adapter: {
+        stat: jest.fn().mockResolvedValue({
+          ctime: Date.now(),
+          mtime: Date.now(),
+        }),
+      },
+    } as unknown as Vault;
     mockActiveNote = {
       path: "path/to/active/note.md",
       basename: "Active Note",
@@ -282,9 +289,11 @@ describe("processedPrompt()", () => {
     const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote);
 
     expect(result.processedPrompt).toContain("Content of [[Test Note]] is important");
-    expect(result.processedPrompt).toContain(
-      "Title: [[Test Note]]\nPath: Test Note.md\n\nTest note content"
-    );
+    expect(result.processedPrompt).toContain("<note_context>");
+    expect(result.processedPrompt).toContain("<title>Test Note</title>");
+    expect(result.processedPrompt).toContain("<path>Test Note.md</path>");
+    expect(result.processedPrompt).toContain("Test note content");
+    expect(result.processedPrompt).toContain("</note_context>");
     expect(result.includedFiles).toContain(mockTestNote);
   });
 
@@ -356,7 +365,11 @@ describe("processedPrompt()", () => {
       "{[[Note1]]} content and [[Note2]] are both important"
     );
     expect(result.processedPrompt).toContain("## Note1\n\nNote1 content");
-    expect(result.processedPrompt).toContain("Title: [[Note2]]\nPath: Note2.md\n\nNote2 content");
+    expect(result.processedPrompt).toContain("<note_context>");
+    expect(result.processedPrompt).toContain("<title>Note2</title>");
+    expect(result.processedPrompt).toContain("<path>Note2.md</path>");
+    expect(result.processedPrompt).toContain("Note2 content");
+    expect(result.processedPrompt).toContain("</note_context>");
     // Note2 is added via [[Note2]] processing
     expect(result.includedFiles).toEqual(expect.arrayContaining([mockNote1, mockNote2]));
     expect(result.includedFiles.length).toBe(2);
@@ -385,9 +398,17 @@ describe("processedPrompt()", () => {
     const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote);
 
     expect(result.processedPrompt).toContain("[[Note1]] is related to [[Note2]] and [[Note3]].");
-    expect(result.processedPrompt).toContain("Title: [[Note1]]\nPath: Note1.md\n\nNote1 content");
-    expect(result.processedPrompt).toContain("Title: [[Note2]]\nPath: Note2.md\n\nNote2 content");
-    expect(result.processedPrompt).toContain("Title: [[Note3]]\nPath: Note3.md\n\nNote3 content");
+    // All notes should be in note_context format
+    expect(result.processedPrompt).toContain("<note_context>");
+    expect(result.processedPrompt).toContain("<title>Note1</title>");
+    expect(result.processedPrompt).toContain("<path>Note1.md</path>");
+    expect(result.processedPrompt).toContain("Note1 content");
+    expect(result.processedPrompt).toContain("<title>Note2</title>");
+    expect(result.processedPrompt).toContain("<path>Note2.md</path>");
+    expect(result.processedPrompt).toContain("Note2 content");
+    expect(result.processedPrompt).toContain("<title>Note3</title>");
+    expect(result.processedPrompt).toContain("<path>Note3.md</path>");
+    expect(result.processedPrompt).toContain("Note3 content");
     expect(result.includedFiles).toEqual(expect.arrayContaining([mockNote1, mockNote2, mockNote3]));
     expect(result.includedFiles.length).toBe(3);
   });
