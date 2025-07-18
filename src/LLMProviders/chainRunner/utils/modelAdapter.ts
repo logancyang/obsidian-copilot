@@ -103,10 +103,22 @@ For getFileTree:
 <name>getFileTree</name>
 </use_tool>
 
+For writeToFile:
+<use_tool>
+<name>writeToFile</name>
+<path>path/to/note.md </path>
+<content>FULL CONTENT OF THE NOTE</content>
+</use_tool>
+
 Available tools:
 ${toolDescriptions}
 
-CRITICAL: For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings). Extract key terms from the query for salientTerms.
+# CRITICAL Guidelines for calling tools
+- For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings). Extract key terms from the query for salientTerms.
+- When you need to call writeToFile, NEVER display the file content directly. Always only pass the file content to wirteToFile.
+- you MUST explicitly call writeToFile for any intent of updating or creating files.
+- Do not call writeToFile tool again if the result is not accepted.
+- Do not call writeToFile tool if no change needs to be made.
 
 You can use multiple tools in sequence. After each tool execution, you'll receive the results and can decide whether to use more tools or provide your final response.
 

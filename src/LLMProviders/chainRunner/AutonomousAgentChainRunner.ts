@@ -24,6 +24,8 @@ import {
   ToolExecutionResult,
 } from "./utils/toolExecution";
 import { parseXMLToolCalls, stripToolCallXML } from "./utils/xmlParsing";
+import { writeToFileTool } from "@/tools/ComposerTools";
+import { getToolConfirmtionMessage } from "./utils/toolExecution";
 
 export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private getAvailableTools(): any[] {
@@ -37,6 +39,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       getTimeInfoByEpochTool,
       getTimeRangeMsTool,
       indexTool,
+      writeToFileTool,
     ];
 
     // Add file tree tool if available
@@ -61,7 +64,12 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
               .join("\n")
           : "";
 
-        return `- ${tool.name}: ${tool.description}${params ? "\n" + params : ""}`;
+        return `<${tool.name}>
++<description>${tool.description}</description>
++<parameters>
++${params}
++</parameters>
++</${tool.name}>`;
       })
       .join("\n\n");
   }
@@ -235,7 +243,12 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           // Create tool calling message with better spacing and display name
           const toolEmoji = getToolEmoji(toolCall.name);
           const toolDisplayName = getToolDisplayName(toolCall.name);
-          const toolCallingMessage = `<br/>\n\n${toolEmoji} *Calling ${toolDisplayName}...*\n\n<br/>`;
+          let toolMessage = `${toolEmoji} *Calling ${toolDisplayName}...*`;
+          const confirmationMessage = getToolConfirmtionMessage(toolCall.name);
+          if (confirmationMessage) {
+            toolMessage += `\n⏳ *${confirmationMessage}...*`;
+          }
+          const toolCallingMessage = `<br/>\n\n${toolMessage}\n\n<br/>`;
           toolCallMessages.push(toolCallingMessage);
 
           // Show all history plus all tool call messages
