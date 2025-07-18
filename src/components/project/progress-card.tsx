@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +12,7 @@ import {
   RotateCcw,
   X,
 } from "lucide-react";
-import { FailedItem, useProjectContextLoad, useProjectLoading } from "@/aiParams";
+import { FailedItem, useProjectContextLoad } from "@/aiParams";
 import { Button } from "@/components/ui/button";
 import { TruncatedText } from "@/components/TruncatedText";
 import CopilotPlugin from "@/main";
@@ -20,11 +20,10 @@ import { logError } from "@/logger";
 
 interface ProgressCardProps {
   plugin?: CopilotPlugin;
-  hiddenCard: boolean;
   setHiddenCard: (hidden: boolean) => void;
 }
 
-export default function ProgressCard({ plugin, hiddenCard, setHiddenCard }: ProgressCardProps) {
+export default function ProgressCard({ plugin, setHiddenCard }: ProgressCardProps) {
   const [contextLoadState] = useProjectContextLoad();
   const totalFiles = contextLoadState.total;
   const successFiles = contextLoadState.success;
@@ -35,29 +34,15 @@ export default function ProgressCard({ plugin, hiddenCard, setHiddenCard }: Prog
   const [isProcessingExpanded, setIsProcessingExpanded] = useState(false);
   const [isFailedExpanded, setIsFailedExpanded] = useState(false);
 
-  // Use project loading state hook
-  const [, setLoading] = useProjectLoading();
-
   const processedFilesLen = successFiles.length + failedFiles.length;
   const progressPercentage =
     totalFiles.length > 0 ? Math.round((processedFilesLen / totalFiles.length) * 100) : 0;
 
   const getFailedItemDisplayName = (item: FailedItem): string => {
     return item.path;
-    // if (item.type === 'web' || item.type === 'youtube') {
-    //   // For URLs, display simplified name or domain
-    //   try {
-    //     const url = new URL(item.path);
-    //     return url.hostname + (url.pathname !== '/' ? url.pathname.substring(0, 20) + '...' : '');
-    //   } catch {
-    //     return item.path.substring(0, 30) + (item.path.length > 30 ? '...' : '');
-    //   }
-    // }
-    // // For files, display the file name
-    // const pathParts = item.path.split('/');
-    // return pathParts[pathParts.length - 1];
   };
 
+  // TODO(emt-lin): maybe use it in the future
   /*const handleRetryAllFailed = () => {
     console.log("Retrying all failed items");
   };*/
@@ -74,26 +59,6 @@ export default function ProgressCard({ plugin, hiddenCard, setHiddenCard }: Prog
       logError(`Error retrying failed item: ${error}`);
     }
   };
-
-  // Monitor loading status and set loading to false with delay when all files are processed
-  useEffect(() => {
-    // Check if all files are processed or there are no files to process
-    const allFilesProcessed =
-      totalFiles.length === 0 || // No files to process
-      (successFiles.length === totalFiles.length && totalFiles.length > 0); // All files are processed
-    console.log("useEffect=================", successFiles);
-    if (allFilesProcessed && processingFiles.length === 0) {
-      const timer = setTimeout(() => {
-        // setLoading(false);
-      }, 500);
-
-      return () => clearTimeout(timer);
-    }
-  }, [processedFilesLen, totalFiles.length, processingFiles.length, setLoading, successFiles]);
-
-  if (hiddenCard) {
-    return null;
-  }
 
   return (
     <Card className="tw-w-full tw-border tw-border-solid tw-border-border tw-bg-transparent tw-shadow-none">

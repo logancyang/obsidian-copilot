@@ -177,9 +177,6 @@ export default class ProjectManager {
       throw error;
     } finally {
       setProjectLoading(false);
-      // setTimeout(() => {
-      //
-      // }, 1000)
     }
   }
 
@@ -207,6 +204,9 @@ export default class ProjectManager {
   }
 
   private async loadProjectContext(project: ProjectConfig): Promise<ContextCache | null> {
+    // Clear all project context loading states
+    this.loadTracker.clearAllLoadStates();
+
     // for update context condition
     setProjectLoading(true);
 
@@ -217,8 +217,6 @@ export default class ProjectManager {
       }
       logInfo(`[loadProjectContext] Starting for project: ${project.name}`);
 
-      // Clear all project context loading states
-      this.loadTracker.clearAllLoadStates();
       logInfo(
         `[loadProjectContext] Project ${project.name}: Cleared all project context load states`
       );

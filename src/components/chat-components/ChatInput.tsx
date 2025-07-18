@@ -513,6 +513,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           onRemoveUrl={(url: string) => setContextUrls((prev) => prev.filter((u) => u !== url))}
           selectedTextContexts={selectedTextContexts}
           onRemoveSelectedText={onRemoveSelectedText}
+          showProgressCard={showProgressCard}
         />
 
         {selectedImages.length > 0 && (

@@ -73,10 +73,29 @@ const Chat: React.FC<ChatProps> = ({
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [showChatUI, setShowChatUI] = useState(false);
-  const [hiddenCard, setHiddenCard] = useState(false);
+  // null: keep default behavior; true: show; false: hide
+  const [progressCardVisible, setProgressCardVisible] = useState<boolean | null>(null);
 
   const [selectedTextContexts] = useSelectedTextContexts();
   const projectContextStatus = useProjectContextStatus();
+
+  // Calculate whether to show ProgressCard based on status and user preference
+  const shouldShowProgressCard = () => {
+    if (selectedChain !== ChainType.PROJECT_CHAIN) return false;
+
+    // If user has explicitly set visibility, respect that choice
+    if (progressCardVisible !== null) {
+      return progressCardVisible;
+    }
+
+    // Default behavior: show for loading/error, hide for success
+    return projectContextStatus === "loading" || projectContextStatus === "error";
+  };
+
+  // Reset user preference when status changes to allow default behavior
+  useEffect(() => {
+    setProgressCardVisible(null);
+  }, [projectContextStatus]);
 
   const [previousMode, setPreviousMode] = useState<ChainType | null>(null);
   const [selectedChain, setSelectedChain] = useChainType();
@@ -729,11 +748,14 @@ ${chatContent}`;
           onReplaceChat={setInputMessage}
           showHelperComponents={selectedChain !== ChainType.PROJECT_CHAIN}
         />
-        {selectedChain === ChainType.PROJECT_CHAIN &&
-        (projectContextStatus === "loading" || projectContextStatus === "error") &&
-        !hiddenCard ? (
+        {shouldShowProgressCard() ? (
           <div className="tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-xl">
-            <ProgressCard plugin={plugin} hiddenCard={hiddenCard} setHiddenCard={setHiddenCard} />
+            <ProgressCard
+              plugin={plugin}
+              setHiddenCard={() => {
+                setProgressCardVisible(false);
+              }}
+            />
           </div>
         ) : (
           <>
@@ -769,7 +791,7 @@ ${chatContent}`;
               selectedTextContexts={selectedTextContexts}
               onRemoveSelectedText={handleRemoveSelectedText}
               showProgressCard={() => {
-                setHiddenCard(false);
+                setProgressCardVisible(true);
               }}
             />
           </>
@@ -805,7 +827,7 @@ ${chatContent}`;
                 }}
                 showChatUI={(v) => setShowChatUI(v)}
                 onProjectClose={() => {
-                  setHiddenCard(false);
+                  setProgressCardVisible(null);
                 }}
               />
             </div>

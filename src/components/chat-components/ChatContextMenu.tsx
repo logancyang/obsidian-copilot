@@ -18,6 +18,7 @@ interface ChatContextMenuProps {
   onRemoveContext: (path: string) => void;
   onRemoveUrl: (url: string) => void;
   onRemoveSelectedText?: (id: string) => void;
+  showProgressCard: () => void;
 }
 
 function ContextNote({
@@ -106,6 +107,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   onRemoveContext,
   onRemoveUrl,
   onRemoveSelectedText,
+  showProgressCard,
 }) => {
   const [currentChain] = useChainType();
   const contextStatus = useProjectContextStatus();
@@ -187,14 +189,22 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
           />
         ))}
       </div>
-      <Separator orientation="vertical" />
+
       {currentChain === ChainType.PROJECT_CHAIN && (
-        <div className="">
-          <Button variant="ghost2" size="fit" className="tw-text-muted" onClick={() => {}}>
-            {getContextStatusIcon()}
-            <span className="tw-hidden tw-text-xs sm:tw-inline">Context</span>
-          </Button>
-        </div>
+        <>
+          <Separator orientation="vertical" />
+          <div className="">
+            <Button
+              variant="ghost2"
+              size="fit"
+              className="tw-text-muted"
+              onClick={() => showProgressCard()}
+            >
+              {getContextStatusIcon()}
+              <span className="tw-hidden tw-text-xs sm:tw-inline">Context</span>
+            </Button>
+          </div>
+        </>
       )}
     </div>
   );
