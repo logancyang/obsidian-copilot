@@ -4,6 +4,7 @@ import {
   LOADING_MESSAGES,
   MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT,
   ModelCapability,
+  COMPOSER_OUTPUT_INSTRUCTIONS,
 } from "@/constants";
 import {
   ImageBatchProcessor,
@@ -142,6 +143,18 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     return this.hasCapability(model, ModelCapability.VISION);
   }
 
+  /**
+   * If userMessage.message contains '@composer', append COMPOSER_OUTPUT_INSTRUCTIONS to the text content.
+   * Handles both string and MessageContent[] types.
+   */
+  private appendComposerInstructionsIfNeeded(content: string, userMessage: ChatMessage): string {
+    if (!userMessage.message || !userMessage.message.includes("@composer")) {
+      return content;
+    }
+    const composerPrompt = `<OUTPUT_FORMAT>\n${COMPOSER_OUTPUT_INSTRUCTIONS}\n</OUTPUT_FORMAT>`;
+    return `${content}\n\n${composerPrompt}`;
+  }
+
   private async streamMultimodalResponse(
     textContent: string,
     userMessage: ChatMessage,
@@ -186,7 +199,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     const isMultimodalCurrent = this.isMultimodalModel(chatModelCurrent);
 
     // Build message content with text and images for multimodal models, or just text for text-only models
-    const content = isMultimodalCurrent
+    const content: string | MessageContent[] = isMultimodalCurrent
       ? await this.buildMessageContent(textContent, userMessage)
       : textContent;
 
@@ -335,12 +348,13 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
 
         logInfo(context);
         logInfo("==== Step 5: Invoking QA Chain ====");
-        const qaPrompt = await this.chainManager.promptManager.getQAPrompt({
+        let qaPrompt = await this.chainManager.promptManager.getQAPrompt({
           question: enhancedQuestion,
           context,
           systemMessage: "", // System prompt is added separately in streamMultimodalResponse
         });
-
+        // Append composer instruction to the end of text prompt to enhance instruction following.
+        qaPrompt = this.appendComposerInstructionsIfNeeded(qaPrompt, userMessage);
         fullAIResponse = await this.streamMultimodalResponse(
           qaPrompt,
           userMessage,
@@ -352,9 +366,11 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         sources = this.getSources(documents);
       } else {
         // Enhance with tool outputs.
-        const enhancedUserMessage = this.prepareEnhancedUserMessage(
-          cleanedUserMessage,
-          toolOutputs
+        let enhancedUserMessage = this.prepareEnhancedUserMessage(cleanedUserMessage, toolOutputs);
+        // Append composer instruction to the end of text prompt to enhance instruction following.
+        enhancedUserMessage = this.appendComposerInstructionsIfNeeded(
+          enhancedUserMessage,
+          userMessage
         );
         // If no results, default to LLM Chain
         logInfo("No local search results. Using standard LLM Chain.");

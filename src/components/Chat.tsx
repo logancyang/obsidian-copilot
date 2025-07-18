@@ -23,12 +23,7 @@ import ChainManager from "@/LLMProviders/chainManager";
 import CopilotPlugin from "@/main";
 import { Mention } from "@/mentions/Mention";
 import { useIsPlusUser } from "@/plusUtils";
-import {
-  getComposerOutputPrompt,
-  getSettings,
-  updateSetting,
-  useSettingsValue,
-} from "@/settings/model";
+import { getSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import { ChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { err2String } from "@/utils";
@@ -141,11 +136,6 @@ const Chat: React.FC<ChatProps> = ({
 
       // Handle composer prompt
       let displayText = inputMessage;
-      const composerPrompt = await getComposerOutputPrompt();
-      if (inputMessage.includes("@composer") && composerPrompt !== "") {
-        displayText =
-          inputMessage + "\n\n<output_format>\n" + composerPrompt + "\n</output_format>";
-      }
 
       // Add tool calls if present
       if (toolCalls) {
