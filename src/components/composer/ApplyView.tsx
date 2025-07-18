@@ -8,13 +8,14 @@ import { createRoot } from "react-dom/client";
 import { Button } from "../ui/button";
 import { useState } from "react";
 import { getChangeBlocks } from "@/composerUtils";
+import { ApplyViewResult } from "@/types";
 
 export const APPLY_VIEW_TYPE = "obsidian-copilot-apply-view";
 
 export interface ApplyViewState {
   changes: Change[];
   path: string;
-  resultCallback?: (result: "accepted" | "rejected" | "aborted" | "failed") => void;
+  resultCallback?: (result: ApplyViewResult) => void;
 }
 
 // Extended Change interface to track user acceptance
@@ -25,7 +26,7 @@ interface ExtendedChange extends Change {
 export class ApplyView extends ItemView {
   private root: ReturnType<typeof createRoot> | null = null;
   private state: ApplyViewState | null = null;
-  private result: "accepted" | "rejected" | "failed" | null = null;
+  private result: ApplyViewResult | null = null;
 
   constructor(leaf: WorkspaceLeaf) {
     super(leaf);
@@ -87,7 +88,7 @@ export class ApplyView extends ItemView {
 interface ApplyViewRootProps {
   app: App;
   state: ApplyViewState;
-  close: (result: "accepted" | "rejected" | "failed") => void;
+  close: (result: ApplyViewResult) => void;
 }
 
 // Convert renderWordDiff to a React component
@@ -179,6 +180,22 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     }
   };
 
+  const getFile = async (file_path: string) => {
+    const file = app.vault.getAbstractFileByPath(file_path);
+    if (file) {
+      return file;
+    }
+    // Create the folder if it doesn't exist
+    if (file_path.includes("/")) {
+      const folderPath = file_path.split("/").slice(0, -1).join("/");
+      const folder = app.vault.getAbstractFileByPath(folderPath);
+      if (!folder) {
+        await app.vault.createFolder(folderPath);
+      }
+    }
+    return await app.vault.create(file_path, "");
+  };
+
   // Shared function to apply changes to file
   const applyDecidedChangesToFile = async (updatedDiff: ExtendedChange[]) => {
     // Apply changes based on their accepted status
@@ -191,9 +208,10 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
       .map((change) => change.value)
       .join("");
 
-    const file = app.vault.getAbstractFileByPath(state.path);
+    const file = await getFile(state.path);
     if (!file || !(file instanceof TFile)) {
-      new Notice("File not found:" + state.path);
+      logError("Error in getting file", state.path);
+      new Notice("Failed to create file");
       return false;
     }
 

@@ -1,64 +1,25 @@
-import { logError } from "@/logger";
 import { tool } from "@langchain/core/tools";
 import { Notice, TFile } from "obsidian";
 import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
 import { z } from "zod";
 import { diffTrimmedLines } from "diff";
+import { ApplyViewResult } from "@/types";
 
-async function show_preview(
-  file_path: string,
-  content: string
-): Promise<"accepted" | "rejected" | "aborted" | "failed"> {
-  let file = app.vault.getAbstractFileByPath(file_path);
-  let isNewFile = false;
-
-  // If file doesn't exist, create it
-  if (!file) {
-    try {
-      // Create the folder if it doesn't exist
-      if (file_path.includes("/")) {
-        const folderPath = file_path.split("/").slice(0, -1).join("/");
-        const folder = app.vault.getAbstractFileByPath(folderPath);
-        if (!folder) {
-          await app.vault.createFolder(folderPath);
-        }
-      }
-      file = await app.vault.create(file_path, content);
-      if (file) {
-        new Notice(`Created new file: ${file_path}`);
-        isNewFile = true;
-      } else {
-        new Notice(`Failed to create file: ${file_path}`);
-        return "aborted";
-      }
-
-      isNewFile = true;
-    } catch (createError) {
-      logError("Error creating file:", createError);
-      new Notice(`Failed to create file: ${createError.message}`);
-      return "aborted";
-    }
-  }
-
-  if (!(file instanceof TFile)) {
-    new Notice(`Path is not a file: ${file_path}`);
-    return "aborted";
-  }
+async function show_preview(file_path: string, content: string): Promise<ApplyViewResult> {
+  const file = app.vault.getAbstractFileByPath(file_path);
 
   // Check if the current active note is the same as the target note
   const activeFile = app.workspace.getActiveFile();
-  if (!activeFile || activeFile.path !== file_path) {
+  if (file && (!activeFile || activeFile.path !== file_path)) {
     // If not, open the target file in the current leaf
-    await app.workspace.getLeaf().openFile(file);
+    await app.workspace.getLeaf().openFile(file as TFile);
     new Notice(`Switched to ${file.name}`);
   }
 
-  // If the file is newly created, don't show the apply view
-  if (isNewFile) {
-    return "accepted";
+  let originalContent = "";
+  if (file) {
+    originalContent = await app.vault.read(file as TFile);
   }
-
-  const originalContent = await app.vault.read(file);
   const changes = diffTrimmedLines(originalContent, content, {
     newlineIsToken: true,
   });
@@ -72,7 +33,7 @@ async function show_preview(
       state: {
         changes: changes,
         path: file_path,
-        resultCallback: (result: "accepted" | "rejected" | "aborted" | "failed") => {
+        resultCallback: (result: ApplyViewResult) => {
           resolve(result);
         },
       },
@@ -83,7 +44,7 @@ async function show_preview(
 const writeToFileTool = tool(
   async ({ path, content }: { path: string; content: string }) => {
     const result = await show_preview(path, content);
-    return `Result of the file changes: ${result}`;
+    return `Result of the file changes: ${result}. DO NOT retry calling writeToFile!`;
   },
   {
     name: "writeToFile",
