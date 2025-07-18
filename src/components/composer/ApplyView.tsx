@@ -8,15 +8,17 @@ import { createRoot } from "react-dom/client";
 import { Button } from "../ui/button";
 import { useState } from "react";
 import { getChangeBlocks } from "@/composerUtils";
+import { ApplyViewResult } from "@/types";
 
 export const APPLY_VIEW_TYPE = "obsidian-copilot-apply-view";
 
 export interface ApplyViewState {
   changes: Change[];
   path: string;
+  resultCallback?: (result: ApplyViewResult) => void;
 }
 
-// Extended Change interface to track user decisions
+// Extended Change interface to track user acceptance
 interface ExtendedChange extends Change {
   accepted: boolean | null;
 }
@@ -24,6 +26,7 @@ interface ExtendedChange extends Change {
 export class ApplyView extends ItemView {
   private root: ReturnType<typeof createRoot> | null = null;
   private state: ApplyViewState | null = null;
+  private result: ApplyViewResult | null = null;
 
   constructor(leaf: WorkspaceLeaf) {
     super(leaf);
@@ -51,6 +54,8 @@ export class ApplyView extends ItemView {
       this.root.unmount();
       this.root = null;
     }
+
+    this.state?.resultCallback?.(this.result ? this.result : "aborted");
   }
 
   private render() {
@@ -66,8 +71,16 @@ export class ApplyView extends ItemView {
       this.root = createRoot(rootEl);
     }
 
+    // Pass a close function that takes a result
     this.root.render(
-      <ApplyViewRoot app={this.app} state={this.state} close={() => this.leaf.detach()} />
+      <ApplyViewRoot
+        app={this.app}
+        state={this.state}
+        close={(result) => {
+          this.result = result;
+          this.leaf.detach();
+        }}
+      />
     );
   }
 }
@@ -75,7 +88,7 @@ export class ApplyView extends ItemView {
 interface ApplyViewRootProps {
   app: App;
   state: ApplyViewState;
-  close: () => void;
+  close: (result: ApplyViewResult) => void;
 }
 
 // Convert renderWordDiff to a React component
@@ -126,7 +139,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     return (
       <div className="tw-flex tw-h-full tw-flex-col tw-items-center tw-justify-center">
         <div className="tw-text-error">Error: Invalid state - missing changes</div>
-        <Button onClick={close} className="tw-mt-4">
+        <Button onClick={() => close("failed")} className="tw-mt-4">
           Close
         </Button>
       </div>
@@ -141,10 +154,12 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
         change.accepted === null ? { ...change, accepted: true } : change
       );
 
-      await applyDecidedChangesToFile(updatedDiff);
+      const result = await applyDecidedChangesToFile(updatedDiff);
+      close(result ? "accepted" : "failed"); // Pass result
     } catch (error) {
       logError("Error applying changes:", error);
       new Notice(`Error applying changes: ${error.message}`);
+      close("failed"); // fallback, but you may want to handle this differently
     }
   };
 
@@ -156,11 +171,29 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
         change.accepted === null ? { ...change, accepted: false } : change
       );
 
-      await applyDecidedChangesToFile(updatedDiff);
+      const result = await applyDecidedChangesToFile(updatedDiff);
+      close(result ? "rejected" : "failed"); // Pass result
     } catch (error) {
       logError("Error applying changes:", error);
       new Notice(`Error applying changes: ${error.message}`);
+      close("failed");
     }
+  };
+
+  const getFile = async (file_path: string) => {
+    const file = app.vault.getAbstractFileByPath(file_path);
+    if (file) {
+      return file;
+    }
+    // Create the folder if it doesn't exist
+    if (file_path.includes("/")) {
+      const folderPath = file_path.split("/").slice(0, -1).join("/");
+      const folder = app.vault.getAbstractFileByPath(folderPath);
+      if (!folder) {
+        await app.vault.createFolder(folderPath);
+      }
+    }
+    return await app.vault.create(file_path, "");
   };
 
   // Shared function to apply changes to file
@@ -175,16 +208,16 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
       .map((change) => change.value)
       .join("");
 
-    const file = app.vault.getAbstractFileByPath(state.path);
+    const file = await getFile(state.path);
     if (!file || !(file instanceof TFile)) {
-      new Notice("File not found:" + state.path);
-      close();
-      return;
+      logError("Error in getting file", state.path);
+      new Notice("Failed to create file");
+      return false;
     }
 
     await app.vault.modify(file, newContent);
     new Notice("Changes applied successfully");
-    close();
+    return true;
   };
 
   // Function to focus on the next change block or scroll to top if it's the last block
@@ -285,7 +318,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
           // Check if this block contains any changes (added or removed)
           const hasChanges = block.some((change) => change.added || change.removed);
 
-          // Get the decision status for this block
+          // Get the result status for this block
           const blockStatus = hasChanges
             ? block.every(
                 (change) =>
