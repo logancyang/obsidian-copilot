@@ -85,7 +85,7 @@ export class Mention {
     // Append all processed content
     processedUrls.forEach((urlData) => {
       if (urlData?.processed) {
-        urlContext += `\n\nContent from ${urlData.original}:\n${urlData.processed}`;
+        urlContext += `\n\n<url_content>\n<url>${urlData.original}</url>\n<content>\n${urlData.processed}\n</content>\n</url_content>`;
       }
     });
 

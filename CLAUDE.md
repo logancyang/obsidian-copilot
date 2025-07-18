@@ -233,6 +233,7 @@ This helps ensure thorough testing and provides documentation for QA.
 - Settings are versioned - migrations may be needed
 - Local model support available via Ollama/LM Studio
 - Rate limiting is implemented for all API calls
+- For technical debt and known issues, see [`TODO.md`](./TODO.md)
 
 ### Architecture Migration Notes
 
