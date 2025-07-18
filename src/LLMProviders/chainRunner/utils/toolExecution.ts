@@ -16,7 +16,7 @@ export async function executeSequentialToolCall(
   toolCall: ToolCall,
   availableTools: any[]
 ): Promise<ToolExecutionResult> {
-  const TOOL_TIMEOUT = 30000; // 30 seconds timeout per tool
+  const DEFAULT_TOOL_TIMEOUT = 30000; // 30 seconds timeout per tool
 
   try {
     // Validate tool call
@@ -40,16 +40,28 @@ export async function executeSequentialToolCall(
       };
     }
 
-    // Execute the tool with timeout
-    const result = await Promise.race([
-      ToolManager.callTool(tool, toolCall.args),
-      new Promise((_, reject) =>
-        setTimeout(
-          () => reject(new Error(`Tool execution timed out after ${TOOL_TIMEOUT}ms`)),
-          TOOL_TIMEOUT
-        )
-      ),
-    ]);
+    // Determine timeout for this tool
+    let timeout = DEFAULT_TOOL_TIMEOUT;
+    if (typeof tool.timeoutMs === "number") {
+      timeout = tool.timeoutMs;
+    }
+
+    let result;
+    if (!timeout || timeout === Infinity) {
+      // No timeout for this tool
+      result = await ToolManager.callTool(tool, toolCall.args);
+    } else {
+      // Use timeout
+      result = await Promise.race([
+        ToolManager.callTool(tool, toolCall.args),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`Tool execution timed out after ${timeout}ms`)),
+            timeout
+          )
+        ),
+      ]);
+    }
 
     // Validate result
     if (result === null || result === undefined) {
@@ -108,6 +120,16 @@ export function getToolEmoji(toolName: string): string {
   };
 
   return emojiMap[toolName] || "🔧";
+}
+
+/**
+ * Get user confirmation message for tool call
+ */
+export function getToolConfirmtionMessage(toolName: string): string | null {
+  if (toolName == "writeToFile") {
+    return "Please accept or reject the changes in the Preview UI";
+  }
+  return null;
 }
 
 /**
