@@ -176,7 +176,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     } catch (error) {
       logError("Error applying changes:", error);
       new Notice(`Error applying changes: ${error.message}`);
-      close("failed"); // fallback, but you may want to handle this differently
+      close("failed");
     }
   };
 
