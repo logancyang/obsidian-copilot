@@ -388,7 +388,12 @@ export async function processPrompt(
     if (!includedFiles.has(noteFile)) {
       const noteContent = await getFileContent(noteFile, vault);
       if (noteContent) {
-        const noteContext = `<${NOTE_CONTEXT_PROMPT_TAG}> \n Title: [[${noteFile.basename}]]\nPath: ${noteFile.path}\n\n${noteContent}\n</${NOTE_CONTEXT_PROMPT_TAG}>`;
+        // Get file metadata
+        const stats = await vault.adapter.stat(noteFile.path);
+        const ctime = stats ? new Date(stats.ctime).toISOString() : "Unknown";
+        const mtime = stats ? new Date(stats.mtime).toISOString() : "Unknown";
+
+        const noteContext = `<${NOTE_CONTEXT_PROMPT_TAG}>\n<title>${noteFile.basename}</title>\n<path>${noteFile.path}</path>\n<ctime>${ctime}</ctime>\n<mtime>${mtime}</mtime>\n<content>\n${noteContent}\n</content>\n</${NOTE_CONTEXT_PROMPT_TAG}>`;
         if (additionalInfo) {
           additionalInfo += `\n\n`;
         }
