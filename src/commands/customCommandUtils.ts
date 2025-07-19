@@ -31,7 +31,7 @@ import {
   VARIABLE_TAG,
   VARIABLE_NOTE_TAG,
 } from "@/constants";
-import { escapeXml, escapeXmlAttribute } from "@/utils/xmlUtils";
+import { escapeXml, escapeXmlAttribute } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 
 export function validateCommandName(
   name: string,

@@ -3,7 +3,7 @@ import { ChainType } from "@/chainFactory";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { TFile, Vault } from "obsidian";
 import { NOTE_CONTEXT_PROMPT_TAG, EMBEDDED_PDF_TAG } from "./constants";
-import { escapeXml } from "./utils/xmlUtils";
+import { escapeXml } from "./LLMProviders/chainRunner/utils/xmlParsing";
 
 export class ContextProcessor {
   private static instance: ContextProcessor;

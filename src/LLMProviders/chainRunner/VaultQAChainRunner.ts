@@ -1,5 +1,5 @@
 import { ABORT_REASON, EMPTY_INDEX_ERROR_MESSAGE, RETRIEVED_DOCUMENT_TAG } from "@/constants";
-import { escapeXml } from "@/utils/xmlUtils";
+import { escapeXml } from "./utils/xmlParsing";
 import { logInfo } from "@/logger";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { getSettings, getSystemPrompt } from "@/settings/model";

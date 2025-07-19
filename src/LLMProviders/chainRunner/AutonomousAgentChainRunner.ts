@@ -23,7 +23,7 @@ import {
   logToolResult,
   ToolExecutionResult,
 } from "./utils/toolExecution";
-import { parseXMLToolCalls, stripToolCallXML } from "./utils/xmlParsing";
+import { parseXMLToolCalls, stripToolCallXML, escapeXml } from "./utils/xmlParsing";
 import { writeToFileTool } from "@/tools/ComposerTools";
 import { getToolConfirmtionMessage } from "./utils/toolExecution";
 
