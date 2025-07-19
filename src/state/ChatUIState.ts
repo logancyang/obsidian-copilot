@@ -15,7 +15,12 @@ import { ChatMessage, MessageContext } from "@/types/message";
 export class ChatUIState {
   private listeners: Set<() => void> = new Set();
 
-  constructor(private chatManager: ChatManager) {}
+  constructor(private chatManager: ChatManager) {
+    // Set up callback for immediate UI updates when messages are created
+    this.chatManager.setOnMessageCreatedCallback(() => {
+      this.notifyListeners();
+    });
+  }
 
   // ================================
   // UI STATE MANAGEMENT
