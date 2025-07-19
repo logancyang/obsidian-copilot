@@ -24,6 +24,7 @@ export class ChatManager {
   private defaultProjectKey = "defaultProjectKey";
   private lastKnownProjectId: string | null = null;
   private persistenceManager: ChatPersistenceManager;
+  private onMessageCreatedCallback?: (messageId: string) => void;
 
   constructor(
     private messageRepo: MessageRepository,
@@ -70,6 +71,13 @@ export class ChatManager {
   }
 
   /**
+   * Set callback for when a message is created (before context processing)
+   */
+  setOnMessageCreatedCallback(callback: (messageId: string) => void): void {
+    this.onMessageCreatedCallback = callback;
+  }
+
+  /**
    * Send a new message with context processing
    */
   async sendMessage(
@@ -101,6 +109,11 @@ export class ChatManager {
         USER_SENDER,
         updatedContext
       );
+
+      // Notify that message was created (for immediate UI update)
+      if (this.onMessageCreatedCallback) {
+        this.onMessageCreatedCallback(messageId);
+      }
 
       // Get the message for context processing
       const message = currentRepo.getMessage(messageId);
