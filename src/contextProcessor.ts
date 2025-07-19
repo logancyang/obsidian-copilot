@@ -2,7 +2,7 @@ import { getSelectedTextContexts } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { TFile, Vault } from "obsidian";
-import { NOTE_CONTEXT_PROMPT_TAG } from "./constants";
+import { NOTE_CONTEXT_PROMPT_TAG, EMBEDDED_PDF_TAG } from "./constants";
 
 export class ContextProcessor {
   private static instance: ContextProcessor;
@@ -31,12 +31,15 @@ export class ContextProcessor {
       if (pdfFile instanceof TFile) {
         try {
           const pdfContent = await fileParserManager.parseFile(pdfFile, vault);
-          content = content.replace(match[0], `\n\nEmbedded PDF (${pdfName}):\n${pdfContent}\n\n`);
+          content = content.replace(
+            match[0],
+            `\n\n<${EMBEDDED_PDF_TAG}>\n<name>${pdfName}</name>\n<content>\n${pdfContent}\n</content>\n</${EMBEDDED_PDF_TAG}>\n\n`
+          );
         } catch (error) {
           console.error(`Error processing embedded PDF ${pdfName}:`, error);
           content = content.replace(
             match[0],
-            `\n\nEmbedded PDF (${pdfName}): [Error: Could not process PDF]\n\n`
+            `\n\n<${EMBEDDED_PDF_TAG}>\n<name>${pdfName}</name>\n<error>Could not process PDF</error>\n</${EMBEDDED_PDF_TAG}>\n\n`
           );
         }
       }

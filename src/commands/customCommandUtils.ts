@@ -25,7 +25,12 @@ import {
   getNotesFromTags,
   processVariableNameForNotePath,
 } from "@/utils";
-import { NOTE_CONTEXT_PROMPT_TAG } from "@/constants";
+import {
+  NOTE_CONTEXT_PROMPT_TAG,
+  SELECTED_TEXT_TAG,
+  VARIABLE_TAG,
+  VARIABLE_NOTE_TAG,
+} from "@/constants";
 
 export function validateCommandName(
   name: string,
@@ -257,7 +262,7 @@ async function extractVariablesFromPrompt(
       if (activeNote) {
         const content = await getFileContent(activeNote, vault);
         if (content) {
-          variableResult.content = `## ${getFileName(activeNote)}\n\n${content}`;
+          variableResult.content = `<${VARIABLE_NOTE_TAG}>\n## ${getFileName(activeNote)}\n\n${content}\n</${VARIABLE_NOTE_TAG}>`;
           variableResult.files.push(activeNote);
         }
       } else {
@@ -274,7 +279,9 @@ async function extractVariablesFromPrompt(
       for (const file of noteFiles) {
         const content = await getFileContent(file, vault);
         if (content) {
-          notesContent.push(`## ${getFileName(file)}\n\n${content}`);
+          notesContent.push(
+            `<${VARIABLE_NOTE_TAG}>\n## ${getFileName(file)}\n\n${content}\n</${VARIABLE_NOTE_TAG}>`
+          );
           variableResult.files.push(file);
         }
       }
@@ -286,7 +293,9 @@ async function extractVariablesFromPrompt(
       for (const file of noteFiles) {
         const content = await getFileContent(file, vault);
         if (content) {
-          notesContent.push(`## ${getFileName(file)}\n\n${content}`);
+          notesContent.push(
+            `<${VARIABLE_NOTE_TAG}>\n## ${getFileName(file)}\n\n${content}\n</${VARIABLE_NOTE_TAG}>`
+          );
           variableResult.files.push(file);
         }
       }
@@ -355,14 +364,14 @@ export async function processPrompt(
   if (processedPrompt.includes("{}")) {
     processedPrompt = processedPrompt.replace(/\{\}/g, "{selectedText}");
     if (selectedText) {
-      additionalInfo += `selectedText:\n\n${selectedText}`;
+      additionalInfo += `<${SELECTED_TEXT_TAG}>\n${selectedText}\n</${SELECTED_TEXT_TAG}>`;
       // Note: selectedText doesn't directly correspond to a file inclusion here
     } else if (activeNote) {
       activeNoteContent = await getFileContent(activeNote, vault);
-      additionalInfo += `selectedText (entire active note):\n\n${activeNoteContent}`;
+      additionalInfo += `<${SELECTED_TEXT_TAG} type="active_note">\n${activeNoteContent}\n</${SELECTED_TEXT_TAG}>`;
       includedFiles.add(activeNote); // Ensure active note is tracked if used for {}
     } else {
-      additionalInfo += `selectedText:\n\n(No selected text or active note available)`;
+      additionalInfo += `<${SELECTED_TEXT_TAG}>\n(No selected text or active note available)\n</${SELECTED_TEXT_TAG}>`;
     }
   }
 
@@ -374,9 +383,9 @@ export async function processPrompt(
       continue;
     }
     if (additionalInfo) {
-      additionalInfo += `\n\n${varName}:\n\n${content}`;
+      additionalInfo += `\n\n<${VARIABLE_TAG} name="${varName}">\n${content}\n</${VARIABLE_TAG}>`;
     } else {
-      additionalInfo += `${varName}:\n\n${content}`;
+      additionalInfo += `<${VARIABLE_TAG} name="${varName}">\n${content}\n</${VARIABLE_TAG}>`;
     }
   }
 

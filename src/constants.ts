@@ -91,6 +91,12 @@ export const COMPOSER_OUTPUT_INSTRUCTIONS = `Return the new note content or canv
     - Edge fromNode and toNode must reference existing node IDs`;
 
 export const NOTE_CONTEXT_PROMPT_TAG = "note_context";
+export const SELECTED_TEXT_TAG = "selected_text";
+export const VARIABLE_TAG = "variable";
+export const VARIABLE_NOTE_TAG = "variable_note";
+export const EMBEDDED_PDF_TAG = "embedded_pdf";
+export const VAULT_NOTE_TAG = "vault_note";
+export const RETRIEVED_DOCUMENT_TAG = "retrieved_document";
 export const EMPTY_INDEX_ERROR_MESSAGE =
   "Copilot index does not exist. Please index your vault first!\n\n1. Set a working embedding model in QA settings. If it's not a local model, don't forget to set the API key. \n\n2. Click 'Refresh Index for Vault' and wait for indexing to complete. If you encounter the rate limiting error, please turn your request per second down in QA setting.";
 export const CHUNK_SIZE = 6000;

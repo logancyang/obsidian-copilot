@@ -291,16 +291,20 @@ export function isAllowedFileForContext(file: TFile | null): boolean {
 }
 
 export async function getAllNotesContent(vault: Vault): Promise<string> {
-  let allContent = "";
+  const vaultNotes: string[] = [];
 
   const markdownFiles = vault.getMarkdownFiles();
 
   for (const file of markdownFiles) {
     const fileContent = await vault.cachedRead(file);
-    allContent += fileContent + " ";
+    // Import is not available at the top level due to circular dependency
+    const { VAULT_NOTE_TAG } = await import("@/constants");
+    vaultNotes.push(
+      `<${VAULT_NOTE_TAG}>\n<path>${file.path}</path>\n<content>\n${fileContent}\n</content>\n</${VAULT_NOTE_TAG}>`
+    );
   }
 
-  return allContent;
+  return vaultNotes.join("\n\n");
 }
 
 export function areEmbeddingModelsSame(
