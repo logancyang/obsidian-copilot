@@ -1,4 +1,5 @@
-import { ABORT_REASON, EMPTY_INDEX_ERROR_MESSAGE } from "@/constants";
+import { ABORT_REASON, EMPTY_INDEX_ERROR_MESSAGE, RETRIEVED_DOCUMENT_TAG } from "@/constants";
+import { escapeXml } from "./utils/xmlParsing";
 import { logInfo } from "@/logger";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { getSettings, getSystemPrompt } from "@/settings/model";
@@ -66,8 +67,13 @@ export class VaultQAChainRunner extends BaseChainRunner {
       // Store retrieved documents for sources
       this.chainManager.storeRetrieverDocuments(retrievedDocs);
 
-      // Format documents as context
-      const context = retrievedDocs.map((doc: any) => doc.pageContent).join("\n\n");
+      // Format documents as context with XML tags
+      const context = retrievedDocs
+        .map(
+          (doc: any) =>
+            `<${RETRIEVED_DOCUMENT_TAG}>\n${escapeXml(doc.pageContent)}\n</${RETRIEVED_DOCUMENT_TAG}>`
+        )
+        .join("\n\n");
 
       // Create messages array
       const messages: any[] = [];

@@ -88,7 +88,7 @@ describe("processedPrompt()", () => {
     const result = await processPrompt(doc.content, selectedText, mockVault, mockActiveNote);
 
     expect(result.processedPrompt).toBe(
-      "This is a {variable} and {selectedText}.\n\nselectedText:\n\nhere is some selected text 12345\n\nvariable:\n\n## Variable Note\n\nhere is the note content for note0"
+      'This is a {variable} and {selectedText}.\n\n<selected_text>\nhere is some selected text 12345\n</selected_text>\n\n<variable name="variable">\n<variable_note>\n## Variable Note\n\nhere is the note content for note0\n</variable_note>\n</variable>'
     );
     expect(result.includedFiles).toContain(mockActiveNote);
   });
@@ -121,7 +121,7 @@ describe("processedPrompt()", () => {
     const result = await processPrompt(doc.content, selectedText, mockVault, mockActiveNote);
 
     expect(result.processedPrompt).toBe(
-      "This is a {variable1} and {variable2}.\n\nvariable1:\n\n## Variable1 Note\n\nhere is the note content for note0\n\nvariable2:\n\n## Variable2 Note\n\nnote content for note1"
+      'This is a {variable1} and {variable2}.\n\n<variable name="variable1">\n<variable_note>\n## Variable1 Note\n\nhere is the note content for note0\n</variable_note>\n</variable>\n\n<variable name="variable2">\n<variable_note>\n## Variable2 Note\n\nnote content for note1\n</variable_note>\n</variable>'
     );
     expect(result.includedFiles).toContain(mockNote1);
     expect(result.includedFiles).toContain(mockNote2);
@@ -142,7 +142,7 @@ describe("processedPrompt()", () => {
     const result = await processPrompt(doc.content, selectedText, mockVault, mockActiveNote);
 
     expect(result.processedPrompt).toBe(
-      "Rewrite the following text {selectedText}\n\nselectedText:\n\nhere is some selected text 12345"
+      "Rewrite the following text {selectedText}\n\n<selected_text>\nhere is some selected text 12345\n</selected_text>"
     );
     expect(result.includedFiles).toEqual([]);
   });
@@ -166,7 +166,7 @@ describe("processedPrompt()", () => {
     const result = await processPrompt(doc.content, selectedText, mockVault, mockActiveNote);
 
     expect(result.processedPrompt).toBe(
-      "This is the active note: {activenote}\n\nactivenote:\n\n## Active Note\n\nContent of the active note"
+      'This is the active note: {activenote}\n\n<variable name="activenote">\n<variable_note>\n## Active Note\n\nContent of the active note\n</variable_note>\n</variable>'
     );
     expect(result.includedFiles).toContain(mockActiveNote);
     expect(getFileContent).toHaveBeenCalledWith(mockActiveNote, mockVault);
@@ -232,7 +232,7 @@ describe("processedPrompt()", () => {
     const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote);
 
     expect(result.processedPrompt).toBe(
-      "Notes related to {#tag} are:\n\n#tag:\n\n## Tagged Note\n\nNote content for #tag"
+      'Notes related to {#tag} are:\n\n<variable name="#tag">\n<variable_note>\n## Tagged Note\n\nNote content for #tag\n</variable_note>\n</variable>'
     );
     expect(result.includedFiles).toContain(mockNoteForTag);
   });
@@ -271,7 +271,7 @@ describe("processedPrompt()", () => {
     const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote);
 
     expect(result.processedPrompt).toBe(
-      "Notes related to {#tag1,#tag2,#tag3} are:\n\n#tag1,#tag2,#tag3:\n\n## Tagged Note 1\n\nNote content for #tag1\n\n## Tagged Note 2\n\nNote content for #tag2"
+      'Notes related to {#tag1,#tag2,#tag3} are:\n\n<variable name="#tag1,#tag2,#tag3">\n<variable_note>\n## Tagged Note 1\n\nNote content for #tag1\n</variable_note>\n\n<variable_note>\n## Tagged Note 2\n\nNote content for #tag2\n</variable_note>\n</variable>'
     );
     expect(result.includedFiles).toContain(mockNoteForTag1);
     expect(result.includedFiles).toContain(mockNoteForTag2);
@@ -320,7 +320,7 @@ describe("processedPrompt()", () => {
     const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote);
 
     expect(result.processedPrompt).toBe(
-      "Content of {[[Test Note]]} is important. Look at [[Test Note]].\n\n[[Test Note]]:\n\n## Test Note\n\nTest note content"
+      'Content of {[[Test Note]]} is important. Look at [[Test Note]].\n\n<variable name="[[Test Note]]">\n<variable_note>\n## Test Note\n\nTest note content\n</variable_note>\n</variable>'
     );
     // Note: extractNoteFiles will still find [[Test Note]], but processPrompt should skip adding it again because it's already in includedFiles from the variable processing
     expect(result.includedFiles).toEqual([mockNoteFile]);
@@ -449,7 +449,7 @@ describe("processedPrompt()", () => {
     // Check that getFileContent was called with the active note at least once
     expect(getFileContent).toHaveBeenCalledWith(mockActiveNote, mockVault);
     expect(result.processedPrompt).toBe(
-      "This is the active note: {activeNote}. And again: {activeNote}\n\nactiveNote:\n\n## Active Note\n\nContent of the active note"
+      'This is the active note: {activeNote}. And again: {activeNote}\n\n<variable name="activeNote">\n<variable_note>\n## Active Note\n\nContent of the active note\n</variable_note>\n</variable>'
     );
     expect(result.includedFiles).toContain(mockActiveNote);
   });
@@ -471,7 +471,7 @@ describe("processedPrompt()", () => {
     const result = await processPrompt(doc.content, selectedText, mockVault, mockActiveNote);
 
     expect(result.processedPrompt).toBe(
-      "Summarize this: {selectedText}\n\nselectedText (entire active note):\n\nContent of the active note"
+      'Summarize this: {selectedText}\n\n<selected_text type="active_note">\nContent of the active note\n</selected_text>'
     );
     // Active note should be included because of {}
     expect(result.includedFiles).toContain(mockActiveNote);
@@ -497,7 +497,7 @@ describe("processedPrompt()", () => {
     const result = await processPrompt(doc.content, selectedText, mockVault, mockActiveNote);
 
     expect(result.processedPrompt).toBe(
-      "Summarize this: {selectedText}. Additional info: {activeNote}\n\nselectedText (entire active note):\n\nContent of the active note"
+      'Summarize this: {selectedText}. Additional info: {activeNote}\n\n<selected_text type="active_note">\nContent of the active note\n</selected_text>'
     );
     // Ensure getFileContent was called for the {} replacement
     expect(getFileContent).toHaveBeenCalledWith(mockActiveNote, mockVault);
@@ -522,7 +522,7 @@ describe("processedPrompt()", () => {
     const result = await processPrompt(doc.content, selectedText, mockVault, mockActiveNote);
 
     expect(result.processedPrompt).toBe(
-      "Analyze this: {selectedText}\n\nselectedText:\n\nThis is the selected text"
+      "Analyze this: {selectedText}\n\n<selected_text>\nThis is the selected text\n</selected_text>"
     );
     // Active note should not be included when selected text is present for {}
     expect(result.includedFiles).toEqual([]);
@@ -560,7 +560,7 @@ describe("processedPrompt()", () => {
     const result = await processPrompt(doc.content, selectedText, mockVault, mockActiveNote);
 
     expect(result.processedPrompt).toBe(
-      "This is a test prompt with {invalidVariable} name and {activeNote}\n\nactiveNote:\n\n## Active Note\n\nActive Note Content"
+      'This is a test prompt with {invalidVariable} name and {activeNote}\n\n<variable name="activeNote">\n<variable_note>\n## Active Note\n\nActive Note Content\n</variable_note>\n</variable>'
     );
     expect(result.includedFiles).toContain(mockActiveNote);
     // Expect the warning for the invalid variable

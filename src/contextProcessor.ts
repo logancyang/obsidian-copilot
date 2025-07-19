@@ -2,7 +2,8 @@ import { getSelectedTextContexts } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { TFile, Vault } from "obsidian";
-import { NOTE_CONTEXT_PROMPT_TAG } from "./constants";
+import { NOTE_CONTEXT_PROMPT_TAG, EMBEDDED_PDF_TAG } from "./constants";
+import { escapeXml } from "./LLMProviders/chainRunner/utils/xmlParsing";
 
 export class ContextProcessor {
   private static instance: ContextProcessor;
@@ -31,12 +32,15 @@ export class ContextProcessor {
       if (pdfFile instanceof TFile) {
         try {
           const pdfContent = await fileParserManager.parseFile(pdfFile, vault);
-          content = content.replace(match[0], `\n\nEmbedded PDF (${pdfName}):\n${pdfContent}\n\n`);
+          content = content.replace(
+            match[0],
+            `\n\n<${EMBEDDED_PDF_TAG}>\n<name>${escapeXml(pdfName)}</name>\n<content>\n${escapeXml(pdfContent)}\n</content>\n</${EMBEDDED_PDF_TAG}>\n\n`
+          );
         } catch (error) {
           console.error(`Error processing embedded PDF ${pdfName}:`, error);
           content = content.replace(
             match[0],
-            `\n\nEmbedded PDF (${pdfName}): [Error: Could not process PDF]\n\n`
+            `\n\n<${EMBEDDED_PDF_TAG}>\n<name>${escapeXml(pdfName)}</name>\n<error>Could not process PDF</error>\n</${EMBEDDED_PDF_TAG}>\n\n`
           );
         }
       }
@@ -111,10 +115,10 @@ export class ContextProcessor {
         const ctime = stats ? new Date(stats.ctime).toISOString() : "Unknown";
         const mtime = stats ? new Date(stats.mtime).toISOString() : "Unknown";
 
-        additionalContext += `\n\n<${prompt_tag}>\n<title>${note.basename}</title>\n<path>${note.path}</path>\n<ctime>${ctime}</ctime>\n<mtime>${mtime}</mtime>\n<content>\n${content}\n</content>\n</${prompt_tag}>`;
+        additionalContext += `\n\n<${prompt_tag}>\n<title>${escapeXml(note.basename)}</title>\n<path>${escapeXml(note.path)}</path>\n<ctime>${escapeXml(ctime)}</ctime>\n<mtime>${escapeXml(mtime)}</mtime>\n<content>\n${escapeXml(content)}\n</content>\n</${prompt_tag}>`;
       } catch (error) {
         console.error(`Error processing file ${note.path}:`, error);
-        additionalContext += `\n\n<${prompt_tag}_error>\n<title>${note.basename}</title>\n<path>${note.path}</path>\n<error>[Error: Could not process file]</error>\n</${prompt_tag}_error>`;
+        additionalContext += `\n\n<${prompt_tag}_error>\n<title>${escapeXml(note.basename)}</title>\n<path>${escapeXml(note.path)}</path>\n<error>[Error: Could not process file]</error>\n</${prompt_tag}_error>`;
       }
     };
 
@@ -185,7 +189,7 @@ export class ContextProcessor {
     let additionalContext = "";
 
     for (const selectedText of selectedTextContexts) {
-      additionalContext += `\n\n<selected_text>\n<title>${selectedText.noteTitle}</title>\n<path>${selectedText.notePath}</path>\n<start_line>${selectedText.startLine}</start_line>\n<end_line>${selectedText.endLine}</end_line>\n<content>\n${selectedText.content}\n</content>\n</selected_text>`;
+      additionalContext += `\n\n<selected_text>\n<title>${escapeXml(selectedText.noteTitle)}</title>\n<path>${escapeXml(selectedText.notePath)}</path>\n<start_line>${escapeXml(selectedText.startLine.toString())}</start_line>\n<end_line>${escapeXml(selectedText.endLine.toString())}</end_line>\n<content>\n${escapeXml(selectedText.content)}\n</content>\n</selected_text>`;
     }
 
     return additionalContext;
