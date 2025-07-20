@@ -1,5 +1,5 @@
 import { MessageRepository } from "./MessageRepository";
-import { USER_SENDER } from "@/constants";
+import { USER_SENDER, SELECTED_TEXT_TAG } from "@/constants";
 import { MessageContext } from "@/types/message";
 import { TFile } from "obsidian";
 
@@ -145,7 +145,7 @@ function fibonacci(n) {
     messageRepository.addMessage(userMessage, processedText, USER_SENDER, context);
 
     const llmMessages = messageRepository.getLLMMessages();
-    expect(llmMessages[0].message).toContain("<selected_text>");
+    expect(llmMessages[0].message).toContain(`<${SELECTED_TEXT_TAG}>`);
     expect(llmMessages[0].message).toContain("<title>Recursion Examples</title>");
     expect(llmMessages[0].message).toContain("<path>algorithms/recursion.md</path>");
     expect(llmMessages[0].message).toContain("<start_line>45</start_line>");
@@ -153,7 +153,7 @@ function fibonacci(n) {
     expect(llmMessages[0].message).toContain("<content>");
     expect(llmMessages[0].message).toContain("function fibonacci");
     expect(llmMessages[0].message).toContain("</content>");
-    expect(llmMessages[0].message).toContain("</selected_text>");
+    expect(llmMessages[0].message).toContain(`</${SELECTED_TEXT_TAG}>`);
   });
 
   it("should handle multiple contexts with proper XML structure", () => {
@@ -222,13 +222,15 @@ The Single Responsibility Principle states that a class should have only one rea
     expect(message).toContain("</note_context>");
     expect(message).toContain("<url_content>");
     expect(message).toContain("</url_content>");
-    expect(message).toContain("<selected_text>");
-    expect(message).toContain("</selected_text>");
+    expect(message).toContain(`<${SELECTED_TEXT_TAG}>`);
+    expect(message).toContain(`</${SELECTED_TEXT_TAG}>`);
 
     // Verify proper nesting and structure
     expect(message.indexOf("<note_context>")).toBeLessThan(message.indexOf("</note_context>"));
     expect(message.indexOf("<url_content>")).toBeLessThan(message.indexOf("</url_content>"));
-    expect(message.indexOf("<selected_text>")).toBeLessThan(message.indexOf("</selected_text>"));
+    expect(message.indexOf(`<${SELECTED_TEXT_TAG}>`)).toBeLessThan(
+      message.indexOf(`</${SELECTED_TEXT_TAG}>`)
+    );
   });
 
   it("should handle error cases with proper XML tags", () => {

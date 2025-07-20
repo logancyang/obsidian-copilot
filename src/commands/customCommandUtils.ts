@@ -202,8 +202,8 @@ export async function processCommandPrompt(
 
   const processedPrompt = result.processedPrompt;
 
-  if (processedPrompt.includes("{selectedText}") || skipAppendingSelectedText) {
-    // Containing {selectedText} means the prompt was using the custom prompt
+  if (processedPrompt.includes(`{${SELECTED_TEXT_TAG}}`) || skipAppendingSelectedText) {
+    // Containing {selected_text} means the prompt was using the custom prompt
     // processor way of handling the selected text. No need to go through the
     // legacy placeholder.
     return processedPrompt;
@@ -218,7 +218,16 @@ export async function processCommandPrompt(
   // `{copilot-selection}` is found, append the selected text to the prompt.
   const index = processedPrompt.indexOf(LEGACY_SELECTED_TEXT_PLACEHOLDER);
   if (index === -1 && selectedText.trim()) {
-    return processedPrompt + "\n\n<selectedText>" + selectedText + "</selectedText>";
+    return (
+      processedPrompt +
+      "\n\n<" +
+      SELECTED_TEXT_TAG +
+      ">" +
+      selectedText +
+      "</" +
+      SELECTED_TEXT_TAG +
+      ">"
+    );
   }
   return (
     processedPrompt.slice(0, index) +
@@ -364,7 +373,7 @@ export async function processPrompt(
   let activeNoteContent: string | null = null;
 
   if (processedPrompt.includes("{}")) {
-    processedPrompt = processedPrompt.replace(/\{\}/g, "{selectedText}");
+    processedPrompt = processedPrompt.replace(/\{\}/g, `{${SELECTED_TEXT_TAG}}`);
     if (selectedText) {
       additionalInfo += `<${SELECTED_TEXT_TAG}>\n${escapeXml(selectedText)}\n</${SELECTED_TEXT_TAG}>`;
       // Note: selectedText doesn't directly correspond to a file inclusion here
