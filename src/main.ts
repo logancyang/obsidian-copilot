@@ -40,6 +40,8 @@ import { migrateCommands, suggestDefaultCommands } from "@/commands/migrator";
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
 import { ChatUIState } from "@/state/ChatUIState";
+import { createQuickCommandContainer } from "@/components/QuickCommand";
+import { QUICK_COMMAND_CODE_BLOCK } from "@/commands/constants";
 
 export default class CopilotPlugin extends Plugin {
   // Plugin components
@@ -96,6 +98,18 @@ export default class CopilotPlugin extends Plugin {
     });
 
     registerCommands(this, undefined, getSettings());
+
+    this.registerMarkdownCodeBlockProcessor(QUICK_COMMAND_CODE_BLOCK, (_, el) => {
+      createQuickCommandContainer({
+        plugin: this,
+        element: el,
+      });
+
+      // Remove parent element class names to clear default code block styling
+      if (el.parentElement) {
+        el.parentElement.className = "";
+      }
+    });
 
     IntentAnalyzer.initTools(this.app.vault);
 

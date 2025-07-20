@@ -6,9 +6,10 @@ import {
   COPILOT_COMMAND_SLASH_ENABLED,
   EMPTY_COMMAND,
   LEGACY_SELECTED_TEXT_PLACEHOLDER,
+  QUICK_COMMAND_CODE_BLOCK,
 } from "@/commands/constants";
 import { CustomCommand } from "@/commands/type";
-import { normalizePath, Notice, TAbstractFile, TFile, Vault } from "obsidian";
+import { normalizePath, Notice, TAbstractFile, TFile, Vault, Editor } from "obsidian";
 import { getSettings } from "@/settings/model";
 import {
   updateCachedCommands,
@@ -201,8 +202,8 @@ export async function processCommandPrompt(
 
   const processedPrompt = result.processedPrompt;
 
-  if (processedPrompt.includes("{selectedText}") || skipAppendingSelectedText) {
-    // Containing {selectedText} means the prompt was using the custom prompt
+  if (processedPrompt.includes(`{${SELECTED_TEXT_TAG}}`) || skipAppendingSelectedText) {
+    // Containing {selected_text} means the prompt was using the custom prompt
     // processor way of handling the selected text. No need to go through the
     // legacy placeholder.
     return processedPrompt;
@@ -217,7 +218,16 @@ export async function processCommandPrompt(
   // `{copilot-selection}` is found, append the selected text to the prompt.
   const index = processedPrompt.indexOf(LEGACY_SELECTED_TEXT_PLACEHOLDER);
   if (index === -1 && selectedText.trim()) {
-    return processedPrompt + "\n\n<selectedText>" + selectedText + "</selectedText>";
+    return (
+      processedPrompt +
+      "\n\n<" +
+      SELECTED_TEXT_TAG +
+      ">" +
+      selectedText +
+      "</" +
+      SELECTED_TEXT_TAG +
+      ">"
+    );
   }
   return (
     processedPrompt.slice(0, index) +
@@ -363,7 +373,7 @@ export async function processPrompt(
   let activeNoteContent: string | null = null;
 
   if (processedPrompt.includes("{}")) {
-    processedPrompt = processedPrompt.replace(/\{\}/g, "{selectedText}");
+    processedPrompt = processedPrompt.replace(/\{\}/g, `{${SELECTED_TEXT_TAG}}`);
     if (selectedText) {
       additionalInfo += `<${SELECTED_TEXT_TAG}>\n${escapeXml(selectedText)}\n</${SELECTED_TEXT_TAG}>`;
       // Note: selectedText doesn't directly correspond to a file inclusion here
@@ -482,4 +492,69 @@ export async function ensureCommandFrontmatter(file: TFile, command: CustomComma
   } finally {
     removePendingFileWrite(file.path);
   }
+}
+
+/**
+ * Removes all quick command code blocks from the editor while preserving cursor position and selection
+ * @param editor - The Obsidian editor instance
+ * @returns true if any blocks were removed, false otherwise
+ */
+export function removeQuickCommandBlocks(editor: Editor): boolean {
+  // Store original selection positions
+  const originalFrom = editor.getCursor("from");
+  const originalTo = editor.getCursor("to");
+
+  const content = editor.getValue();
+  const lines = content.split("\n");
+  let hasExisting = false;
+  const newLines = [];
+  let removedLinesBeforeFrom = 0;
+  let removedLinesBeforeTo = 0;
+  let i = 0;
+
+  while (i < lines.length) {
+    if (lines[i].trim() === `\`\`\`${QUICK_COMMAND_CODE_BLOCK}`) {
+      hasExisting = true;
+      const blockStartLine = i;
+
+      // Skip the opening line
+      i++;
+      // Skip until we find the closing ```
+      while (i < lines.length && lines[i].trim() !== "```") {
+        i++;
+      }
+      // Skip the closing line
+      i++;
+
+      const removedLineCount = i - blockStartLine;
+
+      // Calculate how many lines were removed before the selection positions
+      if (blockStartLine <= originalFrom.line) {
+        removedLinesBeforeFrom += removedLineCount;
+      }
+      if (blockStartLine <= originalTo.line) {
+        removedLinesBeforeTo += removedLineCount;
+      }
+    } else {
+      newLines.push(lines[i]);
+      i++;
+    }
+  }
+
+  // Update editor content and restore selection if we removed existing blocks
+  if (hasExisting) {
+    editor.setValue(newLines.join("\n"));
+
+    // Calculate new selection positions accounting for removed lines
+    const newFromLine = Math.max(0, originalFrom.line - removedLinesBeforeFrom);
+    const newToLine = Math.max(0, originalTo.line - removedLinesBeforeTo);
+
+    // Restore the selection
+    editor.setSelection(
+      { line: newFromLine, ch: originalFrom.ch },
+      { line: newToLine, ch: originalTo.ch }
+    );
+  }
+
+  return hasExisting;
 }

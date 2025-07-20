@@ -2,7 +2,7 @@ import { getSelectedTextContexts } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { TFile, Vault } from "obsidian";
-import { NOTE_CONTEXT_PROMPT_TAG, EMBEDDED_PDF_TAG } from "./constants";
+import { NOTE_CONTEXT_PROMPT_TAG, EMBEDDED_PDF_TAG, SELECTED_TEXT_TAG } from "./constants";
 import { escapeXml } from "./LLMProviders/chainRunner/utils/xmlParsing";
 
 export class ContextProcessor {
@@ -189,7 +189,7 @@ export class ContextProcessor {
     let additionalContext = "";
 
     for (const selectedText of selectedTextContexts) {
-      additionalContext += `\n\n<selected_text>\n<title>${escapeXml(selectedText.noteTitle)}</title>\n<path>${escapeXml(selectedText.notePath)}</path>\n<start_line>${escapeXml(selectedText.startLine.toString())}</start_line>\n<end_line>${escapeXml(selectedText.endLine.toString())}</end_line>\n<content>\n${escapeXml(selectedText.content)}\n</content>\n</selected_text>`;
+      additionalContext += `\n\n<${SELECTED_TEXT_TAG}>\n<title>${escapeXml(selectedText.noteTitle)}</title>\n<path>${escapeXml(selectedText.notePath)}</path>\n<start_line>${escapeXml(selectedText.startLine.toString())}</start_line>\n<end_line>${escapeXml(selectedText.endLine.toString())}</end_line>\n<content>\n${escapeXml(selectedText.content)}\n</content>\n</${SELECTED_TEXT_TAG}>`;
     }
 
     return additionalContext;

@@ -18,7 +18,7 @@ import {
   updateCachedCommand,
 } from "@/commands/state";
 import { CustomCommandManager } from "@/commands/customCommandManager";
-import { logError, logInfo } from "@/logger";
+import { logError } from "@/logger";
 
 /** This manager is used to register custom commands as obsidian commands */
 export class CustomCommandRegister {
@@ -69,7 +69,6 @@ export class CustomCommandRegister {
         return;
       }
       const customCommand = await parseCustomCommandFile(file);
-      logInfo("command file modified", file.path, customCommand);
       this.registerCommand(customCommand);
       updateCachedCommand(customCommand, customCommand.title);
     },
@@ -88,7 +87,6 @@ export class CustomCommandRegister {
       return;
     }
     try {
-      logInfo("new command file created", file.path);
       let customCommand = await parseCustomCommandFile(file);
       if (!hasOrderFrontmatter(file)) {
         // Compute the correct order for the new command
@@ -125,7 +123,6 @@ export class CustomCommandRegister {
     }
     // Register the new command if it's still a custom command file
     if (isCustomCommandFile(file)) {
-      logInfo("command file renamed", file.path);
       const parsedCommand = await parseCustomCommandFile(file);
       this.registerCommand(parsedCommand);
       updateCachedCommand(parsedCommand, parsedCommand.title);
