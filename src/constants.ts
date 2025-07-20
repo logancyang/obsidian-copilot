@@ -593,7 +593,7 @@ export enum DEFAULT_OPEN_AREA {
 }
 
 export const COMMAND_IDS = {
-  APPLY_ADHOC_PROMPT: "apply-adhoc-prompt",
+  TRIGGER_QUICK_COMMAND: "trigger-quick-command",
   CLEAR_LOCAL_COPILOT_INDEX: "clear-local-copilot-index",
   CLEAR_COPILOT_CACHE: "clear-copilot-cache",
   COUNT_WORD_AND_TOKENS_SELECTION: "count-word-and-tokens-selection",
@@ -616,7 +616,7 @@ export const COMMAND_IDS = {
 } as const;
 
 export const COMMAND_NAMES: Record<CommandId, string> = {
-  [COMMAND_IDS.APPLY_ADHOC_PROMPT]: "Apply ad-hoc custom prompt",
+  [COMMAND_IDS.TRIGGER_QUICK_COMMAND]: "Trigger quick command",
   [COMMAND_IDS.CLEAR_LOCAL_COPILOT_INDEX]: "Clear local Copilot index",
   [COMMAND_IDS.CLEAR_COPILOT_CACHE]: "Clear Copilot cache",
   [COMMAND_IDS.COUNT_TOTAL_VAULT_TOKENS]: "Count total tokens in your vault",

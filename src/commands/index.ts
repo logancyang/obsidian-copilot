@@ -2,7 +2,7 @@ import { addSelectedTextContext, getChainType } from "@/aiParams";
 import { FileCache } from "@/cache/fileCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { ChainType } from "@/chainFactory";
-import { AdhocPromptModal } from "@/components/modals/AdhocPromptModal";
+
 import { DebugSearchModal } from "@/components/modals/DebugSearchModal";
 import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
 import { RemoveFromIndexModal } from "@/components/modals/RemoveFromIndexModal";
@@ -17,6 +17,8 @@ import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModa
 import { EMPTY_COMMAND } from "@/commands/constants";
 import { getCachedCustomCommands } from "@/commands/state";
 import { CustomCommandManager } from "@/commands/customCommandManager";
+import { QUICK_COMMAND_CODE_BLOCK } from "@/commands/constants";
+import { removeQuickCommandBlocks } from "@/commands/customCommandUtils";
 
 /**
  * Add a command to the plugin.
@@ -98,17 +100,23 @@ export function registerCommands(
     plugin.newChat();
   });
 
-  addCommand(plugin, COMMAND_IDS.APPLY_ADHOC_PROMPT, async () => {
-    const modal = new AdhocPromptModal(plugin.app, async (adhocPrompt: string) => {
-      try {
-        plugin.processCustomPrompt(COMMAND_IDS.APPLY_ADHOC_PROMPT, adhocPrompt);
-      } catch (err) {
-        console.error(err);
-        new Notice("An error occurred.");
-      }
-    });
+  addEditorCommand(plugin, COMMAND_IDS.TRIGGER_QUICK_COMMAND, async (editor: Editor) => {
+    const selectedText = editor.getSelection();
 
-    modal.open();
+    if (!selectedText.trim()) {
+      new Notice("Please select some text first. Selected text is required for quick commands.");
+      return;
+    }
+
+    removeQuickCommandBlocks(editor);
+
+    // Get the current cursor/selection position (after potential content update)
+    const cursor = editor.getCursor("from");
+    const line = cursor.line;
+
+    // Insert the quick command code block above the selected text
+    const codeBlock = `\`\`\`${QUICK_COMMAND_CODE_BLOCK}\n\`\`\`\n`;
+    editor.replaceRange(codeBlock, { line, ch: 0 });
   });
 
   addCommand(plugin, COMMAND_IDS.CLEAR_LOCAL_COPILOT_INDEX, async () => {

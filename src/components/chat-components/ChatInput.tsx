@@ -14,38 +14,18 @@ import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
 import { AddImageModal } from "@/components/modals/AddImageModal";
 import { ListPromptModal } from "@/components/modals/ListPromptModal";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { ModelDisplay } from "@/components/ui/model-display";
+import { ModelSelector } from "@/components/ui/ModelSelector";
 import { ContextProcessor } from "@/contextProcessor";
 import { cn } from "@/lib/utils";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
-import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
+
+import { useSettingsValue } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
 import { getToolDescription } from "@/tools/toolManager";
-import {
-  checkModelApiKey,
-  err2String,
-  extractNoteFiles,
-  isAllowedFileForContext,
-  isNoteTitleUnique,
-} from "@/utils";
-import {
-  ChevronDown,
-  CornerDownLeft,
-  Database,
-  Globe,
-  Image,
-  Loader2,
-  StopCircle,
-  X,
-} from "lucide-react";
-import { App, Notice, Platform, TFile } from "obsidian";
+import { extractNoteFiles, isAllowedFileForContext, isNoteTitleUnique } from "@/utils";
+import { CornerDownLeft, Database, Globe, Image, Loader2, StopCircle, X } from "lucide-react";
+import { App, Platform, TFile } from "obsidian";
 import React, {
   forwardRef,
   useCallback,
@@ -105,20 +85,18 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     },
     ref
   ) => {
-    const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
     const [contextUrls, setContextUrls] = useState<string[]>([]);
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [currentModelKey, setCurrentModelKey] = useModelKey();
-    const [modelError, setModelError] = useState<string | null>(null);
     const [currentChain] = useChainType();
     const [isProjectLoading] = useProjectLoading();
+    const settings = useSettingsValue();
     const [currentActiveNote, setCurrentActiveNote] = useState<TFile | null>(() => {
       const activeFile = app.workspace.getActiveFile();
       return isAllowedFileForContext(activeFile) ? activeFile : null;
     });
     const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
-    const settings = useSettingsValue();
     const isCopilotPlus =
       currentChain === ChainType.COPILOT_PLUS_CHAIN || currentChain === ChainType.PROJECT_CHAIN;
 
@@ -565,71 +543,19 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
               <span>Generating...</span>
             </div>
           ) : (
-            <DropdownMenu open={isModelDropdownOpen} onOpenChange={setIsModelDropdownOpen}>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost2" size="fit" disabled={disableModelSwitch}>
-                  {modelError ? (
-                    <span className="tw-text-error">Model Load Failed</span>
-                  ) : settings.activeModels.find(
-                      (model) =>
-                        model.enabled && getModelKeyFromModel(model) === getDisplayModelKey()
-                    ) ? (
-                    <ModelDisplay
-                      model={
-                        settings.activeModels.find(
-                          (model) =>
-                            model.enabled && getModelKeyFromModel(model) === getDisplayModelKey()
-                        )!
-                      }
-                      iconSize={8}
-                    />
-                  ) : (
-                    "Select Model"
-                  )}
-                  {!disableModelSwitch && <ChevronDown className="tw-mt-0.5 tw-size-5" />}
-                </Button>
-              </DropdownMenuTrigger>
-
-              <DropdownMenuContent align="start">
-                {!disableModelSwitch &&
-                  settings.activeModels
-                    .filter((model) => model.enabled)
-                    .map((model) => {
-                      const { hasApiKey, errorNotice } = checkModelApiKey(model, settings);
-                      return (
-                        <DropdownMenuItem
-                          key={getModelKeyFromModel(model)}
-                          onSelect={async (event) => {
-                            if (!hasApiKey && errorNotice) {
-                              event.preventDefault();
-                              new Notice(errorNotice);
-                              return;
-                            }
-
-                            try {
-                              setModelError(null);
-                              setCurrentModelKey(getModelKeyFromModel(model));
-                            } catch (error) {
-                              const msg = `Model switch failed: ` + err2String(error);
-                              setModelError(msg);
-                              new Notice(msg);
-                              // Restore to the last valid model
-                              const lastValidModel = settings.activeModels.find(
-                                (m) => m.enabled && getModelKeyFromModel(m) === currentModelKey
-                              );
-                              if (lastValidModel) {
-                                setCurrentModelKey(getModelKeyFromModel(lastValidModel));
-                              }
-                            }
-                          }}
-                          className={!hasApiKey ? "tw-cursor-not-allowed tw-opacity-50" : ""}
-                        >
-                          <ModelDisplay model={model} iconSize={12} />
-                        </DropdownMenuItem>
-                      );
-                    })}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <ModelSelector
+              variant="ghost2"
+              size="fit"
+              disabled={disableModelSwitch}
+              value={getDisplayModelKey()}
+              onChange={(modelKey) => {
+                // In project mode, we don't update the global model key
+                // as the project model takes precedence
+                if (currentChain !== ChainType.PROJECT_CHAIN) {
+                  setCurrentModelKey(modelKey);
+                }
+              }}
+            />
           )}
 
           <div className="tw-flex tw-items-center tw-gap-1">
