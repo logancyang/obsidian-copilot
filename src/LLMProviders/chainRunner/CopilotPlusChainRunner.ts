@@ -1,10 +1,10 @@
 import { getStandaloneQuestion } from "@/chainUtils";
 import {
   ABORT_REASON,
+  COMPOSER_OUTPUT_INSTRUCTIONS,
   LOADING_MESSAGES,
   MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT,
   ModelCapability,
-  COMPOSER_OUTPUT_INSTRUCTIONS,
 } from "@/constants";
 import {
   ImageBatchProcessor,
@@ -15,8 +15,8 @@ import {
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings, getSystemPrompt } from "@/settings/model";
-import { ChatMessage } from "@/types/message";
 import { ToolManager } from "@/tools/toolManager";
+import { ChatMessage } from "@/types/message";
 import {
   extractChatHistory,
   extractYoutubeUrl,
@@ -25,9 +25,9 @@ import {
   withSuppressedTokenWarnings,
 } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "../intentAnalyzer";
 import { BaseChainRunner } from "./BaseChainRunner";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
-import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "../intentAnalyzer";
 
 export class CopilotPlusChainRunner extends BaseChainRunner {
   private isYoutubeOnlyMessage(message: string): boolean {
@@ -65,11 +65,33 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     return processedImages;
   }
 
-  private async extractEmbeddedImages(content: string): Promise<string[]> {
+  private async extractEmbeddedImages(content: string, sourcePath?: string): Promise<string[]> {
     const imageRegex = /!\[\[(.*?\.(png|jpg|jpeg|gif|webp|bmp|svg))\]\]/g;
     const matches = [...content.matchAll(imageRegex)];
-    const images = matches.map((match) => match[1]);
-    return images;
+    const resolvedImages: string[] = [];
+
+    for (const match of matches) {
+      const imageName = match[1];
+
+      // If we have a source path and access to the app, resolve the wikilink
+      if (sourcePath) {
+        const resolvedFile = app.metadataCache.getFirstLinkpathDest(imageName, sourcePath);
+
+        if (resolvedFile) {
+          // Use the resolved path
+          resolvedImages.push(resolvedFile.path);
+        } else {
+          // If file not found, log a warning but still include the raw filename
+          logWarn(`Could not resolve embedded image: ${imageName} from source: ${sourcePath}`);
+          resolvedImages.push(imageName);
+        }
+      } else {
+        // Fallback to raw filename if no source path available
+        resolvedImages.push(imageName);
+      }
+    }
+
+    return resolvedImages;
   }
 
   private async buildMessageContent(
@@ -91,7 +113,22 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
 
     // Process embedded images only if setting is enabled
     if (settings.passMarkdownImages) {
-      const embeddedImages = await this.extractEmbeddedImages(textContent);
+      // Determine source path for resolving wikilinks
+      let sourcePath: string | undefined;
+
+      // First, check if we have context notes
+      if (userMessage.context?.notes && userMessage.context.notes.length > 0) {
+        // Use the first note in context as the source path
+        sourcePath = userMessage.context.notes[0].path;
+      } else {
+        // Fallback to active file if no context notes
+        const activeFile = this.chainManager.app?.workspace.getActiveFile();
+        if (activeFile) {
+          sourcePath = activeFile.path;
+        }
+      }
+
+      const embeddedImages = await this.extractEmbeddedImages(textContent, sourcePath);
       if (embeddedImages.length > 0) {
         imageSources.push({ urls: embeddedImages, type: "embedded" });
       }
