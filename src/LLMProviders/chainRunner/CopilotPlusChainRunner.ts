@@ -319,69 +319,63 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         .trim();
 
       const toolOutputs = await this.executeToolCalls(toolCalls, updateLoadingMessage);
+
+      // Extract sources from localSearch if present
       const localSearchResult = toolOutputs.find(
         (output) => output.tool === "localSearch" && output.output && output.output.length > 0
       );
+
+      if (localSearchResult) {
+        try {
+          const documents = JSON.parse(localSearchResult.output);
+          sources = this.getSources(documents);
+        } catch (e) {
+          logWarn("Failed to parse localSearch results for sources:", e);
+        }
+      }
 
       // Format chat history from memory
       const memory = this.chainManager.memoryManager.getMemory();
       const memoryVariables = await memory.loadMemoryVariables({});
       const chatHistory = extractChatHistory(memoryVariables);
 
-      if (localSearchResult) {
-        logInfo("==== Step 2: Processing local search results ====");
-        const documents = JSON.parse(localSearchResult.output);
-
-        logInfo("==== Step 3: Condensing Question ====");
-        const standaloneQuestion = await getStandaloneQuestion(cleanedUserMessage, chatHistory);
-        logInfo("Condensed standalone question: ", standaloneQuestion);
-
-        logInfo("==== Step 4: Preparing context ====");
-        const timeExpression = this.getTimeExpression(toolCalls);
-        const context = this.prepareLocalSearchResult(documents, timeExpression);
-
-        const currentTimeOutputs = toolOutputs.filter((output) => output.tool === "getCurrentTime");
-        const enhancedQuestion = this.prepareEnhancedUserMessage(
-          standaloneQuestion,
-          currentTimeOutputs
-        );
-
-        logInfo(context);
-        logInfo("==== Step 5: Invoking QA Chain ====");
-        let qaPrompt = await this.chainManager.promptManager.getQAPrompt({
-          question: enhancedQuestion,
-          context,
-          systemMessage: "", // System prompt is added separately in streamMultimodalResponse
-        });
-        // Append composer instruction to the end of text prompt to enhance instruction following.
-        qaPrompt = this.appendComposerInstructionsIfNeeded(qaPrompt, userMessage);
-        fullAIResponse = await this.streamMultimodalResponse(
-          qaPrompt,
-          userMessage,
-          abortController,
-          trackAndUpdateAiMessage
-        );
-
-        // Append sources to the response
-        sources = this.getSources(documents);
-      } else {
-        // Enhance with tool outputs.
-        let enhancedUserMessage = this.prepareEnhancedUserMessage(cleanedUserMessage, toolOutputs);
-        // Append composer instruction to the end of text prompt to enhance instruction following.
-        enhancedUserMessage = this.appendComposerInstructionsIfNeeded(
-          enhancedUserMessage,
-          userMessage
-        );
-        // If no results, default to LLM Chain
-        logInfo("No local search results. Using standard LLM Chain.");
-
-        fullAIResponse = await this.streamMultimodalResponse(
-          enhancedUserMessage,
-          userMessage,
-          abortController,
-          trackAndUpdateAiMessage
-        );
+      // Get standalone question if we have chat history
+      let questionForEnhancement = cleanedUserMessage;
+      if (chatHistory.length > 0) {
+        logInfo("==== Condensing Question ====");
+        questionForEnhancement = await getStandaloneQuestion(cleanedUserMessage, chatHistory);
+        logInfo("Condensed standalone question: ", questionForEnhancement);
       }
+
+      // Enhance with ALL tool outputs including localSearch
+      let enhancedUserMessage = this.prepareEnhancedUserMessage(
+        questionForEnhancement,
+        toolOutputs,
+        toolCalls
+      );
+
+      // If localSearch has results and no other tools, add QA-style instruction to maintain same behavior
+      const hasOtherTools = toolOutputs.some(
+        (output) => output.tool !== "localSearch" && output.output != null
+      );
+      if (localSearchResult && !hasOtherTools) {
+        // The QA format is already handled in prepareEnhancedUserMessage, just add the instruction
+        enhancedUserMessage = `Answer the question with as detailed as possible based only on the following context:\n${enhancedUserMessage}`;
+      }
+
+      // Append composer instruction to the end of text prompt to enhance instruction following.
+      enhancedUserMessage = this.appendComposerInstructionsIfNeeded(
+        enhancedUserMessage,
+        userMessage
+      );
+
+      logInfo("==== Invoking LLM with all tool results ====");
+      fullAIResponse = await this.streamMultimodalResponse(
+        enhancedUserMessage,
+        userMessage,
+        abortController,
+        trackAndUpdateAiMessage
+      );
     } catch (error: any) {
       // Reset loading message to default
       updateLoadingMessage?.(LOADING_MESSAGES.DEFAULT);
@@ -472,21 +466,67 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     return toolOutputs;
   }
 
-  private prepareEnhancedUserMessage(userMessage: string, toolOutputs: any[]) {
+  private prepareEnhancedUserMessage(userMessage: string, toolOutputs: any[], toolCalls?: any[]) {
     let context = "";
+    const hasLocalSearch = toolOutputs.some(
+      (output) => output.tool === "localSearch" && output.output != null
+    );
+
     if (toolOutputs.length > 0) {
       const validOutputs = toolOutputs.filter((output) => output.output != null);
       if (validOutputs.length > 0) {
+        // Don't add "Additional context" header if only localSearch to maintain QA format
+        const contextHeader =
+          hasLocalSearch && validOutputs.length === 1 ? "" : "\n\n# Additional context:\n\n";
         context =
-          "\n\n# Additional context:\n\n" +
+          contextHeader +
           validOutputs
-            .map(
-              (output) =>
-                `<${output.tool}>\n${typeof output.output !== "string" ? JSON.stringify(output.output) : output.output}\n</${output.tool}>`
-            )
+            .map((output) => {
+              let content = output.output;
+
+              // Special formatting for localSearch results
+              if (output.tool === "localSearch" && typeof content === "string") {
+                try {
+                  const documents = JSON.parse(content);
+                  if (Array.isArray(documents) && documents.length > 0) {
+                    // Get time expression from toolCalls if available
+                    const timeExpression = toolCalls ? this.getTimeExpression(toolCalls) : "";
+                    const formattedContent = this.prepareLocalSearchResult(
+                      documents,
+                      timeExpression
+                    );
+                    content = formattedContent;
+                  }
+                } catch (e) {
+                  // If parsing fails, use the raw output
+                  logWarn("Failed to parse localSearch output for formatting:", e);
+                }
+              }
+
+              // Ensure content is string
+              if (typeof content !== "string") {
+                content = JSON.stringify(content);
+              }
+
+              // Only wrap in XML tags if there are multiple tools
+              if (validOutputs.length > 1) {
+                return `<${output.tool}>\n${content}\n</${output.tool}>`;
+              } else if (output.tool === "localSearch") {
+                // For localSearch only, don't wrap in XML to maintain QA format
+                return content;
+              } else {
+                return `<${output.tool}>\n${content}\n</${output.tool}>`;
+              }
+            })
             .join("\n\n");
       }
     }
+
+    // For QA format when only localSearch is present
+    if (hasLocalSearch && toolOutputs.filter((o) => o.output != null).length === 1) {
+      return `${context}\n\nQuestion: ${userMessage}`;
+    }
+
     return `${userMessage}${context}`;
   }
 
