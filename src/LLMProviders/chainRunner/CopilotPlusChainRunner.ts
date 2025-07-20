@@ -322,15 +322,19 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
 
       // Extract sources from localSearch if present
       const localSearchResult = toolOutputs.find(
-        (output) => output.tool === "localSearch" && output.output && output.output.length > 0
+        (output) => output.tool === "localSearch" && output.output != null
       );
 
+      let hasLocalSearchWithResults = false;
       if (localSearchResult) {
         try {
           const documents = JSON.parse(localSearchResult.output);
-          sources = this.getSources(documents);
-        } catch (e) {
-          logWarn("Failed to parse localSearch results for sources:", e);
+          if (Array.isArray(documents) && documents.length > 0) {
+            hasLocalSearchWithResults = true;
+            sources = this.getSources(documents);
+          }
+        } catch (error) {
+          logWarn("Failed to parse localSearch results for sources:", error);
         }
       }
 
@@ -354,11 +358,11 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         toolCalls
       );
 
-      // If localSearch has results and no other tools, add QA-style instruction to maintain same behavior
+      // If localSearch has actual results and no other tools, add QA-style instruction to maintain same behavior
       const hasOtherTools = toolOutputs.some(
         (output) => output.tool !== "localSearch" && output.output != null
       );
-      if (localSearchResult && !hasOtherTools) {
+      if (hasLocalSearchWithResults && !hasOtherTools) {
         // The QA format is already handled in prepareEnhancedUserMessage, just add the instruction
         enhancedUserMessage = `Answer the question with as detailed as possible based only on the following context:\n${enhancedUserMessage}`;
       }
@@ -468,16 +472,32 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
 
   private prepareEnhancedUserMessage(userMessage: string, toolOutputs: any[], toolCalls?: any[]) {
     let context = "";
-    const hasLocalSearch = toolOutputs.some(
+    let hasLocalSearchWithResults = false;
+
+    // Check if localSearch has actual results (non-empty documents array)
+    const localSearchOutput = toolOutputs.find(
       (output) => output.tool === "localSearch" && output.output != null
     );
+
+    if (localSearchOutput && typeof localSearchOutput.output === "string") {
+      try {
+        const documents = JSON.parse(localSearchOutput.output);
+        if (Array.isArray(documents) && documents.length > 0) {
+          hasLocalSearchWithResults = true;
+        }
+      } catch {
+        // Invalid JSON or parsing error
+      }
+    }
 
     if (toolOutputs.length > 0) {
       const validOutputs = toolOutputs.filter((output) => output.output != null);
       if (validOutputs.length > 0) {
-        // Don't add "Additional context" header if only localSearch to maintain QA format
+        // Don't add "Additional context" header if only localSearch with results to maintain QA format
         const contextHeader =
-          hasLocalSearch && validOutputs.length === 1 ? "" : "\n\n# Additional context:\n\n";
+          hasLocalSearchWithResults && validOutputs.length === 1
+            ? ""
+            : "\n\n# Additional context:\n\n";
         context =
           contextHeader +
           validOutputs
@@ -497,9 +517,9 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
                     );
                     content = formattedContent;
                   }
-                } catch (e) {
+                } catch (error) {
                   // If parsing fails, use the raw output
-                  logWarn("Failed to parse localSearch output for formatting:", e);
+                  logWarn("Failed to parse localSearch output for formatting:", error);
                 }
               }
 
@@ -511,8 +531,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
               // Only wrap in XML tags if there are multiple tools
               if (validOutputs.length > 1) {
                 return `<${output.tool}>\n${content}\n</${output.tool}>`;
-              } else if (output.tool === "localSearch") {
-                // For localSearch only, don't wrap in XML to maintain QA format
+              } else if (output.tool === "localSearch" && hasLocalSearchWithResults) {
+                // For localSearch with results only, don't wrap in XML to maintain QA format
                 return content;
               } else {
                 return `<${output.tool}>\n${content}\n</${output.tool}>`;
@@ -522,8 +542,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       }
     }
 
-    // For QA format when only localSearch is present
-    if (hasLocalSearch && toolOutputs.filter((o) => o.output != null).length === 1) {
+    // For QA format when only localSearch with results is present
+    if (hasLocalSearchWithResults && toolOutputs.filter((o) => o.output != null).length === 1) {
       return `${context}\n\nQuestion: ${userMessage}`;
     }
 
