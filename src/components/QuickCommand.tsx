@@ -67,7 +67,22 @@ Response format: Match the format implied by the user's request (e.g., if they a
 
     let userContent = prompt;
     if (includeActiveNote) {
-      userContent += `\n\n{}\n\n{activeNote}`;
+      // Check if placeholders already exist to avoid duplication
+      const hasSelectedTextPlaceholder = userContent.includes("{}");
+      const hasActiveNotePlaceholder = /\{activenote\}/i.test(userContent);
+
+      // Only append placeholders that don't already exist
+      const placeholdersToAdd = [];
+      if (!hasSelectedTextPlaceholder) {
+        placeholdersToAdd.push("{}");
+      }
+      if (!hasActiveNotePlaceholder) {
+        placeholdersToAdd.push("{activeNote}");
+      }
+
+      if (placeholdersToAdd.length > 0) {
+        userContent += `\n\n${placeholdersToAdd.join("\n\n")}`;
+      }
     }
 
     const quickCommand: CustomCommand = {
