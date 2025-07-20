@@ -91,6 +91,13 @@ For localSearch (searching notes in the vault):
 <salientTerms>["piano", "learning", "practice", "music"]</salientTerms>
 </use_tool>
 
+For localSearch with non-English query (PRESERVE ORIGINAL LANGUAGE):
+<use_tool>
+<name>localSearch</name>
+<query>钢琴学习</query>
+<salientTerms>["钢琴", "学习", "练习", "音乐"]</salientTerms>
+</use_tool>
+
 For webSearch (with empty chat history):
 <use_tool>
 <name>webSearch</name>
@@ -114,7 +121,7 @@ Available tools:
 ${toolDescriptions}
 
 # CRITICAL Guidelines for calling tools
-- For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings). Extract key terms from the query for salientTerms.
+- For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings). Extract key terms from the query for salientTerms, preserving the original language - do NOT translate terms to English.
 - When you need to call writeToFile, NEVER display the file content directly. Always only pass the file content to wirteToFile.
 - you MUST explicitly call writeToFile for any intent of updating or creating files.
 - Do not call writeToFile tool again if the result is not accepted.
@@ -272,6 +279,13 @@ I'll search your vault and the web for piano practice information.
 <name>localSearch</name>
 <query>piano learning</query>
 <salientTerms>["piano", "learning"]</salientTerms>
+</use_tool>
+
+🌐 MULTILINGUAL EXAMPLE (PRESERVE ORIGINAL LANGUAGE):
+<use_tool>
+<name>localSearch</name>
+<query>ピアノの練習方法</query>
+<salientTerms>["ピアノ", "練習", "方法", "音楽"]</salientTerms>
 </use_tool>
 
 <use_tool>
