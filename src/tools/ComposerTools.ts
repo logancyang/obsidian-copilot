@@ -47,7 +47,9 @@ const writeToFileTool = tool(
     // Return tool result and also instruct the model do not retry this tool call for failed result.
     return (
       `File change result: ${result}` +
-      (result === "accepted" ? "" : "Do not call writeToFile again for this operation.")
+      (result === "accepted"
+        ? ""
+        : ". The user has rejected this file change. Do not retry or attempt alternative approaches to modify this file in response to the current user request.")
     );
   },
   {

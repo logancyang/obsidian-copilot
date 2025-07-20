@@ -28,6 +28,7 @@ import { writeToFileTool } from "@/tools/ComposerTools";
 import { getToolConfirmtionMessage } from "./utils/toolExecution";
 
 export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
+  private llmFormattedMessages: string[] = []; // Track LLM-formatted messages for memory
   private getAvailableTools(): any[] {
     // Get tools from the existing IntentAnalyzer
     const tools: any[] = [
@@ -119,6 +120,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     const conversationMessages: any[] = [];
     const iterationHistory: string[] = []; // Track all iterations for display
     const collectedSources: { title: string; score: number }[] = []; // Collect sources from localSearch
+    this.llmFormattedMessages = []; // Reset LLM messages for this run
 
     try {
       // Get chat history from memory
@@ -214,6 +216,9 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           // Strip any tool call XML from final response but preserve think blocks
           const cleanedResponse = stripToolCallXML(response);
           fullAIResponse = [...iterationHistory, cleanedResponse].join("\n\n");
+
+          // Add final response to LLM messages
+          this.llmFormattedMessages.push(response);
           break;
         }
 
@@ -286,6 +291,18 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
         // Don't add tool results to display - they're internal only
 
+        // Track LLM-formatted messages for memory
+        // Add the assistant's response with tool calls
+        this.llmFormattedMessages.push(response);
+
+        // Add tool results in LLM format
+        if (toolResults.length > 0) {
+          const toolResultsForLLM = toolResults
+            .map((result) => `Tool '${result.toolName}' result: ${result.result}`)
+            .join("\n\n");
+          this.llmFormattedMessages.push(toolResultsForLLM);
+        }
+
         // Add AI response to conversation for next iteration
         conversationMessages.push({
           role: "assistant",
@@ -337,13 +354,18 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
     // Handle response like the parent class, with sources if we found any
     const uniqueSources = deduplicateSources(collectedSources);
+
+    // Create LLM-formatted output for memory
+    const llmFormattedOutput = this.llmFormattedMessages.join("\n\n");
+
     return this.handleResponse(
       fullAIResponse,
       userMessage,
       abortController,
       addMessage,
       updateCurrentAiMessage,
-      uniqueSources.length > 0 ? uniqueSources : undefined
+      uniqueSources.length > 0 ? uniqueSources : undefined,
+      llmFormattedOutput
     );
   }
 

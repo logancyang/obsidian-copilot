@@ -44,7 +44,8 @@ export abstract class BaseChainRunner implements ChainRunner {
     abortController: AbortController,
     addMessage: (message: ChatMessage) => void,
     updateCurrentAiMessage: (message: string) => void,
-    sources?: { title: string; score: number }[]
+    sources?: { title: string; score: number }[],
+    llmFormattedOutput?: string
   ) {
     // Save to memory and add message if we have a response
     // Skip only if it's a NEW_CHAT abort (clearing everything)
@@ -54,7 +55,10 @@ export abstract class BaseChainRunner implements ChainRunner {
     ) {
       await this.chainManager.memoryManager
         .getMemory()
-        .saveContext({ input: userMessage.message }, { output: fullAIResponse });
+        .saveContext(
+          { input: userMessage.message },
+          { output: llmFormattedOutput || fullAIResponse }
+        );
 
       addMessage({
         message: fullAIResponse,
