@@ -208,7 +208,12 @@ export class ChatUIState {
    */
   addMessage(message: ChatMessage): void {
     if (message.isVisible) {
-      this.addDisplayMessage(message.message, message.sender, message.id);
+      // If the message has sources or other metadata, use addFullMessage to preserve them
+      if (message.sources || message.content) {
+        this.addFullMessage(message);
+      } else {
+        this.addDisplayMessage(message.message, message.sender, message.id);
+      }
     } else {
       this.addFullMessage(message);
     }
