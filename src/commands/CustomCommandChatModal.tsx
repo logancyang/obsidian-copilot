@@ -300,12 +300,16 @@ function CustomCommandChatModalContent({
         <div className="tw-flex tw-gap-2">
           {generating ? (
             // When generating, show Stop button
-            <Button variant="secondary" onClick={handleStopGeneration}>
+            <Button size="sm" variant="secondary" onClick={handleStopGeneration}>
               Stop
             </Button>
           ) : showFollowupSubmit ? (
             // When follow-up instruction has content, show Submit button with Enter shortcut
-            <Button onClick={handleFollowupSubmit} className="tw-flex tw-items-center tw-gap-1">
+            <Button
+              size="sm"
+              onClick={handleFollowupSubmit}
+              className="tw-flex tw-items-center tw-gap-1"
+            >
               <span>Submit</span>
               <CornerDownLeft className="tw-size-3" />
             </Button>
@@ -313,11 +317,12 @@ function CustomCommandChatModalContent({
             // Otherwise, show Insert and Replace buttons with shortcut indicators
             <>
               <Button
+                size="sm"
                 onClick={() => onInsert(processedMessage ?? "")}
                 className="tw-flex tw-items-center tw-gap-1"
               >
                 <span>Insert</span>
-                <div className="tw-flex tw-items-center tw-text-xs tw-text-normal">
+                <div className="tw-flex tw-items-center tw-text-xs">
                   {Platform.isMacOS ? (
                     <>
                       <Command className="tw-size-3" />
@@ -334,11 +339,12 @@ function CustomCommandChatModalContent({
                 </div>
               </Button>
               <Button
+                size="sm"
                 onClick={() => onReplace(processedMessage ?? "")}
                 className="tw-flex tw-items-center tw-gap-1"
               >
                 <span>Replace</span>
-                <div className="tw-flex tw-items-center tw-text-xs tw-text-normal">
+                <div className="tw-flex tw-items-center tw-text-xs">
                   {Platform.isMacOS ? (
                     <>
                       <Command className="tw-size-3" />

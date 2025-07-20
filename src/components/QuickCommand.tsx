@@ -98,7 +98,7 @@ export function QuickCommand({ plugin, onRemove }: QuickCommandProps) {
           ref={textareaRef}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Enter your command..."
+          placeholder="Ask me anything..."
           className="tw-min-h-24 tw-resize-none"
           rows={3}
         />
