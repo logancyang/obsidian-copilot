@@ -119,7 +119,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     let fullAIResponse = "";
     const conversationMessages: any[] = [];
     const iterationHistory: string[] = []; // Track all iterations for display
-    const collectedSources: { title: string; score: number }[] = []; // Collect sources from localSearch
+    const collectedSources: { title: string; path: string; score: number }[] = []; // Collect sources from localSearch
     this.llmFormattedMessages = []; // Reset LLM messages for this run
 
     try {
@@ -274,6 +274,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
               if (Array.isArray(searchResults)) {
                 const sources = searchResults.map((doc: any) => ({
                   title: doc.title || doc.path,
+                  path: doc.path,
                   score: doc.rerank_score || doc.score || 0,
                 }));
                 collectedSources.push(...sources);
