@@ -3,9 +3,9 @@ import { CONTEXT_SCORE_THRESHOLD } from "@/constants";
 import { App, Modal } from "obsidian";
 
 export class SourcesModal extends Modal {
-  sources: { title: string; score: number }[];
+  sources: { title: string; path: string; score: number }[];
 
-  constructor(app: App, sources: { title: string; score: number }[]) {
+  constructor(app: App, sources: { title: string; path: string; score: number }[]) {
     super(app);
     this.sources = sources;
   }
@@ -31,7 +31,10 @@ export class SourcesModal extends Modal {
     }
   }
 
-  private createSourceList(container: HTMLElement, sources: { title: string; score: number }[]) {
+  private createSourceList(
+    container: HTMLElement,
+    sources: { title: string; path: string; score: number }[]
+  ) {
     const list = container.createEl("ul");
     list.style.listStyleType = "none";
     list.style.padding = "0";
@@ -40,13 +43,20 @@ export class SourcesModal extends Modal {
       const item = list.createEl("li");
       item.style.marginBottom = "1em";
 
+      // Display title, but show path in parentheses if there are duplicates
+      const displayText =
+        source.path && source.path !== source.title
+          ? `${source.title} (${source.path})`
+          : source.title;
+
       const link = item.createEl("a", {
-        href: `obsidian://open?vault=${encodeURIComponent(this.app.vault.getName())}&file=${encodeURIComponent(source.title)}`,
-        text: source.title,
+        href: `obsidian://open?vault=${encodeURIComponent(this.app.vault.getName())}&file=${encodeURIComponent(source.path || source.title)}`,
+        text: displayText,
       });
       link.addEventListener("click", (e) => {
         e.preventDefault();
-        this.app.workspace.openLinkText(source.title, "");
+        // Use the path if available, otherwise fall back to title
+        this.app.workspace.openLinkText(source.path || source.title, "");
       });
       if (source.score && source.score <= 1) {
         item.appendChild(document.createTextNode(` - Relevance score: ${source.score.toFixed(3)}`));

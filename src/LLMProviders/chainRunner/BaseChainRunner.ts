@@ -44,7 +44,7 @@ export abstract class BaseChainRunner implements ChainRunner {
     abortController: AbortController,
     addMessage: (message: ChatMessage) => void,
     updateCurrentAiMessage: (message: string) => void,
-    sources?: { title: string; score: number }[],
+    sources?: { title: string; path: string; score: number }[],
     llmFormattedOutput?: string
   ) {
     // Save to memory and add message if we have a response

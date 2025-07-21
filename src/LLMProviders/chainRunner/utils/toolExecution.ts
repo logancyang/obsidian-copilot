@@ -172,17 +172,20 @@ export function logToolResult(toolName: string, result: ToolExecutionResult): vo
 }
 
 /**
- * Deduplicate sources by title, keeping highest score
+ * Deduplicate sources by path, keeping highest score
+ * If path is not available, falls back to title
  */
 export function deduplicateSources(
-  sources: { title: string; score: number }[]
-): { title: string; score: number }[] {
-  const uniqueSources = new Map<string, { title: string; score: number }>();
+  sources: { title: string; path: string; score: number }[]
+): { title: string; path: string; score: number }[] {
+  const uniqueSources = new Map<string, { title: string; path: string; score: number }>();
 
   for (const source of sources) {
-    const existing = uniqueSources.get(source.title);
+    // Use path as the unique key, falling back to title if path is not available
+    const key = source.path || source.title;
+    const existing = uniqueSources.get(key);
     if (!existing || source.score > existing.score) {
-      uniqueSources.set(source.title, source);
+      uniqueSources.set(key, source);
     }
   }
 
