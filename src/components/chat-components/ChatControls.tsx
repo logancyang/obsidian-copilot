@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { Notice } from "obsidian";
 import React from "react";
-
+import { findAllWorkspaces, WorkspaceInfo } from "@/utils/workspaceUtils";
 export async function refreshVaultIndex() {
   try {
     await VectorStoreManager.getInstance().indexVaultToVectorStore();
@@ -164,6 +164,19 @@ export function ChatControls({
   const [selectedChain, setSelectedChain] = useChainType();
   const isPlusUser = useIsPlusUser();
 
+  const [workspaces, setWorkspaces] = React.useState<WorkspaceInfo[]>([]);
+  const [selectedWorkspace, setSelectedWorkspace] = React.useState<string>('/');
+
+  // 加载工作区列表
+  React.useEffect(() => {
+    if (selectedChain === ChainType.VAULT_QA_CHAIN) {
+      findAllWorkspaces(app, {
+        configFileName: 'data.md',
+        recursive: true,
+        maxDepth: 5
+      }).then(setWorkspaces);
+    }
+  }, [selectedChain]);
   const handleModeChange = (chainType: ChainType) => {
     setSelectedChain(chainType);
     onModeChange(chainType);
@@ -292,24 +305,34 @@ export function ChatControls({
             {presets.length === 0 && <DropdownMenuItem disabled>尚未创建任何人设</DropdownMenuItem>}
           </DropdownMenuContent>
         </DropdownMenu>
+        {/* 新增工作区选择下拉框 - 仅在VAULT_QA模式下显示 */}
+        {selectedChain === ChainType.VAULT_QA_CHAIN && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost2" size="fit" className="tw-ml-1">
+                {selectedWorkspace === '/' ? '根目录' : selectedWorkspace}
+                <ChevronDown className="tw-mt-0.5 tw-size-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem
+                onSelect={() => setSelectedWorkspace('/')}
+              >
+                根目录
+              </DropdownMenuItem>
+              {workspaces.map((workspace) => (
+                <DropdownMenuItem
+                  key={workspace.relativePath}
+                  onSelect={() => setSelectedWorkspace(workspace.relativePath)}
+                >
+                  {workspace.relativePath}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
-      {/* 新增的口语化提示词开关 */}
-      {/* <div className="tw-flex tw-items-center tw-gap-1">
-          <span className="tw-text-sm">口语化</span>
-          <SettingSwitch
-            checked={settings.promptEnhancements?.autoSpeech?.useOralPrompt ?? true}
-            onCheckedChange={(checked) => {
-              updateSetting("promptEnhancements", {
-                ...settings.promptEnhancements,
-                autoSpeech: {
-                  ...settings.promptEnhancements?.autoSpeech, // 保留其他属性
-                  useOralPrompt: checked,
-                },
-              });
-            }}
-            className="tw-scale-75" // 缩小开关尺寸
-          />
-        </div> */}
+
       <div>
         {/* 修改后的口语化开关按钮 */}
         <Tooltip>
