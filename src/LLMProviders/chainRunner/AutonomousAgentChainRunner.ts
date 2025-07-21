@@ -274,7 +274,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
               if (Array.isArray(searchResults)) {
                 const sources = searchResults.map((doc: any) => ({
                   title: doc.title || doc.path,
-                  path: doc.path,
+                  path: doc.path || doc.title || "",
                   score: doc.rerank_score || doc.score || 0,
                 }));
                 collectedSources.push(...sources);
