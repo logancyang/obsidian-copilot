@@ -109,6 +109,10 @@ export class ChatUIState {
       (message) => {
         onAddMessage(message);
         this.notifyListeners();
+      },
+      () => {
+        // Notify immediately after truncation
+        this.notifyListeners();
       }
     );
     if (success) {
