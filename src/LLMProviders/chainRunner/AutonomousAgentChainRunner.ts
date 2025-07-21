@@ -26,6 +26,7 @@ import {
 import { parseXMLToolCalls, stripToolCallXML, escapeXml } from "./utils/xmlParsing";
 import { writeToFileTool } from "@/tools/ComposerTools";
 import { getToolConfirmtionMessage } from "./utils/toolExecution";
+import { MessageContent } from "@/imageProcessing/imageProcessor";
 
 export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private llmFormattedMessages: string[] = []; // Track LLM-formatted messages for memory
@@ -145,13 +146,21 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         conversationMessages.push({ role: entry.role, content: entry.content });
       }
 
+      // Check if the model supports multimodal (vision) capability
+      const isMultimodal = this.isMultimodalModel(chatModel);
+
       // Add current user message with model-specific enhancements
       const requiresTools = messageRequiresTools(userMessage.message);
       const enhancedUserMessage = adapter.enhanceUserMessage(userMessage.message, requiresTools);
 
+      // Build message content with images if multimodal, otherwise just use text
+      const content: string | MessageContent[] = isMultimodal
+        ? await this.buildMessageContent(enhancedUserMessage, userMessage)
+        : enhancedUserMessage;
+
       conversationMessages.push({
         role: "user",
-        content: enhancedUserMessage,
+        content,
       });
 
       // Autonomous agent loop
