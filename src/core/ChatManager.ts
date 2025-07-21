@@ -84,7 +84,8 @@ export class ChatManager {
     displayText: string,
     context: MessageContext,
     chainType: ChainType,
-    includeActiveNote: boolean = false
+    includeActiveNote: boolean = false,
+    content?: any[]
   ): Promise<string> {
     try {
       logInfo(`[ChatManager] Sending message: "${displayText}"`);
@@ -107,7 +108,8 @@ export class ChatManager {
         displayText,
         displayText, // Will be updated with processed content
         USER_SENDER,
-        updatedContext
+        updatedContext,
+        content
       );
 
       // Notify that message was created (for immediate UI update)

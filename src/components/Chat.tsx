@@ -160,7 +160,8 @@ const Chat: React.FC<ChatProps> = ({
         displayText,
         context,
         currentChain,
-        includeActiveNote
+        includeActiveNote,
+        content.length > 0 ? content : undefined
       );
 
       // Add to user message history

@@ -30,7 +30,8 @@ export class MessageRepository {
     displayText: string,
     processedText: string,
     sender: string,
-    context?: MessageContext
+    context?: MessageContext,
+    content?: any[]
   ): string {
     const id = this.generateId();
     const timestamp = formatDateTime(new Date());
@@ -44,6 +45,7 @@ export class MessageRepository {
       context,
       isVisible: true,
       isErrorMessage: false,
+      content,
     };
 
     this.messages.push(message);
