@@ -60,13 +60,15 @@ export class ChatUIState {
     displayText: string,
     context: MessageContext,
     chainType: ChainType,
-    includeActiveNote: boolean = false
+    includeActiveNote: boolean = false,
+    content?: any[]
   ): Promise<string> {
     const messageId = await this.chatManager.sendMessage(
       displayText,
       context,
       chainType,
-      includeActiveNote
+      includeActiveNote,
+      content
     );
     this.notifyListeners();
     return messageId;
