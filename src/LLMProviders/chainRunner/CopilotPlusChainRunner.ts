@@ -96,7 +96,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     return resolvedImages;
   }
 
-  private async buildMessageContent(
+  protected async buildMessageContent(
     textContent: string,
     userMessage: ChatMessage
   ): Promise<MessageContent[]> {
@@ -178,7 +178,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     return customModel?.capabilities?.includes(capability) ?? false;
   }
 
-  private isMultimodalModel(model: BaseChatModel): boolean {
+  protected isMultimodalModel(model: BaseChatModel): boolean {
     return this.hasCapability(model, ModelCapability.VISION);
   }
 
