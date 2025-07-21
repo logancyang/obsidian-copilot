@@ -192,7 +192,8 @@ export class ChatManager {
   async regenerateMessage(
     messageId: string,
     onUpdateCurrentMessage: (message: string) => void,
-    onAddMessage: (message: ChatMessage) => void
+    onAddMessage: (message: ChatMessage) => void,
+    onTruncate?: () => void
   ): Promise<boolean> {
     try {
       logInfo(`[ChatManager] Regenerating message ${messageId}`);
@@ -222,6 +223,11 @@ export class ChatManager {
 
       // Truncate messages after the user message
       currentRepo.truncateAfter(messageIndex - 1);
+
+      // Notify that truncation happened
+      if (onTruncate) {
+        onTruncate();
+      }
 
       // Update chain memory
       await this.updateChainMemory();

@@ -244,6 +244,8 @@ const Chat: React.FC<ChatProps> = ({
         return;
       }
 
+      // Clear current AI message and set loading state
+      setCurrentAiMessage("");
       setLoading(true);
       try {
         const success = await chatUIState.regenerateMessage(
