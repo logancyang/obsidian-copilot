@@ -285,7 +285,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
   ): Promise<string> {
     const { updateLoadingMessage } = options;
     let fullAIResponse = "";
-    let sources: { title: string; score: number }[] = [];
+    let sources: { title: string; path: string; score: number }[] = [];
     let currentPartialResponse = "";
 
     // Wrapper to track partial response
@@ -451,7 +451,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     );
   }
 
-  private getSources(documents: any): { title: string; score: number }[] {
+  private getSources(documents: any): { title: string; path: string; score: number }[] {
     if (!documents || !Array.isArray(documents)) {
       logWarn("No valid documents provided to getSources");
       return [];
@@ -469,14 +469,17 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         continue;
       }
 
-      const currentDoc = uniqueDocs.get(doc.title);
+      // Use path as the unique key, falling back to title if path is not available
+      const key = doc.path || doc.title;
+      const currentDoc = uniqueDocs.get(key);
       const isReranked = doc && "rerank_score" in doc;
       const docScore = isReranked ? doc.rerank_score : doc.score;
 
-      // If the title doesn't exist in the map, or if the new doc has a higher score, update the map
+      // If the document doesn't exist in the map, or if the new doc has a higher score, update the map
       if (!currentDoc || docScore > (currentDoc.score ?? 0)) {
-        uniqueDocs.set(doc.title, {
+        uniqueDocs.set(key, {
           title: doc.title,
+          path: doc.path || doc.title, // Use path if available, otherwise use title
           score: docScore,
           isReranked: isReranked,
         });
