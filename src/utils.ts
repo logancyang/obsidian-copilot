@@ -869,3 +869,10 @@ export async function withSuppressedTokenWarnings<T>(fn: () => Promise<T>): Prom
     console.warn = originalWarn;
   }
 }
+
+/**
+ * Check if the current Obsidian editor setting is in live preview mode
+ */
+export function isLivePreviewModeOn(): boolean {
+  return !!(app.vault as any).config?.livePreview;
+}

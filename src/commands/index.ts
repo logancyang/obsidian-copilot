@@ -10,7 +10,7 @@ import CopilotPlugin from "@/main";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { CopilotSettings, getSettings, updateSetting } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
-import { Editor, Notice, TFile } from "obsidian";
+import { Editor, Notice, TFile, MarkdownView } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";
 import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
@@ -19,6 +19,7 @@ import { getCachedCustomCommands } from "@/commands/state";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { QUICK_COMMAND_CODE_BLOCK } from "@/commands/constants";
 import { removeQuickCommandBlocks } from "@/commands/customCommandUtils";
+import { isLivePreviewModeOn } from "@/utils";
 
 /**
  * Add a command to the plugin.
@@ -100,12 +101,32 @@ export function registerCommands(
     plugin.newChat();
   });
 
-  addEditorCommand(plugin, COMMAND_IDS.TRIGGER_QUICK_COMMAND, async (editor: Editor) => {
+  addCheckCommand(plugin, COMMAND_IDS.TRIGGER_QUICK_COMMAND, (checking: boolean) => {
+    const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
+
+    if (checking) {
+      // Return true only if we're in live preview mode
+      return !!(isLivePreviewModeOn() && activeView && activeView.editor);
+    }
+
+    // Need to check this again because it can still be triggered via shortcut.
+    if (!isLivePreviewModeOn()) {
+      new Notice("Quick commands are only available in live preview mode.");
+      return false;
+    }
+
+    // When not checking, execute the command
+    if (!activeView || !activeView.editor) {
+      new Notice("No active editor found.");
+      return false;
+    }
+
+    const editor = activeView.editor;
     const selectedText = editor.getSelection();
 
     if (!selectedText.trim()) {
       new Notice("Please select some text first. Selected text is required for quick commands.");
-      return;
+      return false;
     }
 
     removeQuickCommandBlocks(editor);
@@ -117,6 +138,8 @@ export function registerCommands(
     // Insert the quick command code block above the selected text
     const codeBlock = `\`\`\`${QUICK_COMMAND_CODE_BLOCK}\n\`\`\`\n`;
     editor.replaceRange(codeBlock, { line, ch: 0 });
+
+    return true;
   });
 
   addCommand(plugin, COMMAND_IDS.CLEAR_LOCAL_COPILOT_INDEX, async () => {
