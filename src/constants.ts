@@ -36,7 +36,7 @@ export const COMPOSER_OUTPUT_INSTRUCTIONS = `Return the new note content or canv
   3. If still failed to find the target note or the note path, ask the user to specify the target note.
 
   # XML Format
-  Provide the content in a plan XML:
+  Provide the content in a plain XML:
 
   For a single markdown file:
   <writeToFile>
