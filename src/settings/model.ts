@@ -158,7 +158,7 @@ export interface CopilotSettings {
 }
 
 // 用于人设列表
-interface CharacterPresetItem {
+export interface CharacterPresetItem {
   id: string;
   name: string;
   prompt: string;
