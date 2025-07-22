@@ -8,10 +8,8 @@ import { ChatMessage } from "@/types/message";
 import { insertIntoEditor } from "@/utils";
 import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
-import { diffTrimmedLines, Change } from "diff";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { createRoot, Root } from "react-dom/client";
-import { ComposerCodeBlock } from "./ComposerCodeBlock";
+import { Root } from "react-dom/client";
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
   if (!context || (!context.notes?.length && !context.urls?.length)) {
@@ -126,35 +124,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         });
       };
 
-      // Showing loading placeholders for composer output during streaming
-      const processComposerCodeBlocks = (text: string): string => {
-        // Helper function to create the loading placeholder
-        const createPlaceholder = (path: string) => {
-          return `⏳ Generating changes for ${path}...`;
-        };
-
-        if (isStreaming) {
-          // Look for any content containing "type": "composer"
-          const composerRegex = /(\{[\s\S]*?"type"\s*:\s*"composer"[\s\S]*?)(?=\}|$)/g;
-
-          let match;
-          while ((match = composerRegex.exec(text)) !== null) {
-            const jsonStr = match[1];
-            const start = match.index;
-
-            // Try to extract the path if available
-            const pathMatch = jsonStr.match(/"path"\s*:\s*"([^"]+)"/);
-            const path = pathMatch ? pathMatch[1].trim() : "...";
-
-            // Replace from the start of the JSON to the end of the text
-            text = text.substring(0, start) + createPlaceholder(path);
-            break; // Only process the first match
-          }
-        }
-
-        return text;
-      };
-
       const replaceLinks = (text: string, regex: RegExp, template: (file: TFile) => string) => {
         // Split text into code blocks and non-code blocks
         const parts = text.split(/(```[\s\S]*?```|`[^`]*`)/g);
@@ -182,12 +151,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         .replace(/\\\(\s*/g, "$")
         .replace(/\s*\\\)/g, "$");
 
-      // Process code blocks first for streaming case
-      const codeBlocksProcessed = processComposerCodeBlocks(latexProcessed);
-
       // Process only Obsidian internal images (starting with ![[)
       const noteImageProcessed = replaceLinks(
-        codeBlocksProcessed,
+        latexProcessed,
         /!\[\[(.*?)]]/g,
         (file) => `![](${app.vault.getResourcePath(file)})`
       );
@@ -257,92 +223,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           "", // Empty string for sourcePath as we don't have a specific source file
           componentRef.current
         );
-
-        // Only process code blocks with file paths after streaming is complete
-        if (!isStreaming) {
-          // Process code blocks after rendering
-          const codeBlocks = contentRef.current.querySelectorAll("pre");
-          if (codeBlocks.length > 0) {
-            codeBlocks.forEach((pre) => {
-              if (isUnmounting) return;
-
-              const codeElement = pre.querySelector("code");
-              if (!codeElement) return;
-
-              const originalCode = codeElement.textContent || "";
-
-              // Check for JSON composer format
-              try {
-                // Look for complete JSON objects
-                if (originalCode.trim().startsWith("{") && originalCode.trim().endsWith("}")) {
-                  const composerData = JSON.parse(originalCode);
-                  if (
-                    composerData.type === "composer" &&
-                    composerData.path &&
-                    // `content` and `canvas_json` should never exist together
-                    (typeof composerData.content === "string" ||
-                      typeof composerData.canvas_json === "object")
-                  ) {
-                    let newContent;
-                    if (typeof composerData.content === "string") {
-                      newContent = composerData.content;
-                    } else {
-                      newContent = JSON.stringify(composerData.canvas_json);
-                    }
-                    let path = composerData.path.trim();
-                    // If path starts with a /, remove it
-                    if (path.startsWith("/")) {
-                      path = path.slice(1);
-                    }
-
-                    // Create a container for the React component
-                    const container = document.createElement("div");
-                    pre.parentNode?.replaceChild(container, pre);
-
-                    // Create a root and render the CodeBlock component
-                    const root = createRoot(container);
-                    roots.push(root);
-                    const file = app.vault.getAbstractFileByPath(path);
-                    let note_changes: Change[] = [];
-
-                    // Use async IIFE here
-                    (async () => {
-                      if (file instanceof TFile) {
-                        // Update existing file
-                        const originalContent = await app.vault.read(file);
-                        note_changes = diffTrimmedLines(originalContent, newContent, {
-                          newlineIsToken: true,
-                        });
-                      } else {
-                        // Create new file
-                        // get the file name from `path` without the extension
-                        const fileName = path.split("/").pop()?.split(".")[0];
-                        // Check first line of content for `# ${fileName}\n` and remove it
-                        const lines = newContent.split("\n");
-                        if (lines[0] === `# ${fileName}\n` || lines[0] === `## ${fileName}`) {
-                          lines.shift();
-                        }
-                        newContent = lines.join("\n");
-                      }
-
-                      if (!isUnmounting) {
-                        root.render(
-                          <ComposerCodeBlock
-                            note_path={path}
-                            note_content={newContent}
-                            note_changes={note_changes}
-                          />
-                        );
-                      }
-                    })();
-                  }
-                }
-              } catch (e) {
-                console.error("Failed to parse composer JSON:", e);
-              }
-            });
-          }
-        }
       }
     }
 
