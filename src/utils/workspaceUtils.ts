@@ -1,4 +1,5 @@
 import { App, TFolder, TAbstractFile, TFile } from "obsidian";
+import { CharacterPresetItem } from "@/settings/model";
 
 /**
  * Workspace information interface
@@ -8,8 +9,34 @@ export interface WorkspaceInfo {
   name: string;
   /** Relative path from project root */
   relativePath: string;
-  /** Full workspace folder object */
-  folder: TFolder;
+}
+
+export interface WorkspaceConfig {
+  version: string;
+  excludedPaths?: string[];
+  personas?: PersonaConfig[];
+}
+
+// export interface PersonaConfig {
+//   id: string;
+//   name: string;
+//   description: string;
+// }
+
+export interface PersonaConfig {
+  id: string;
+  name: string;
+  prompt: string;
+}
+
+export async function convertToPersonaConfig(item: PersonaConfig | CharacterPresetItem): Promise<PersonaConfig> {
+  
+  const personaConfig: PersonaConfig = {
+    id: item.id,
+    name: item.name,
+    prompt: item.prompt,
+  };
+  return personaConfig;
 }
 
 /**
@@ -34,19 +61,32 @@ export interface WorkspaceDetectionOptions {
 export async function isWorkspaceFolder(
   app: App,
   folder: TFolder,
-  configFileName: string = "workspace_config"
+  configFileName: string = "data.md"
 ): Promise<boolean> {
   try {
     // Check if the configuration file exists in the folder
-    const configPath = `${folder.path}/${configFileName}`;
+    // 根目录特殊处理
+    const configPath = folder.path === "/" ? configFileName : `${folder.path}/${configFileName}`;
     const configFile = app.vault.getAbstractFileByPath(configPath);
-    
+
     // Return true if file exists and is actually a file (not a folder)
     return configFile !== null && configFile instanceof TFile;
   } catch (error) {
     console.error(`Error checking workspace folder ${folder.path}:`, error);
     return false;
   }
+}
+
+export async function getWorkspaceConfig(app: App, filePath: string): Promise<WorkspaceConfig> {
+  const configPath = filePath === "/" ? "data.md" : `${filePath}/data.md`;
+  const configFile = app.vault.getAbstractFileByPath(configPath);
+  
+  if (!(configFile instanceof TFile)) {
+    throw new Error(`Config file not found at ${configPath}`);
+  }
+
+  const content = await app.vault.read(configFile);
+  return JSON.parse(content) as WorkspaceConfig;
 }
 
 /**
@@ -64,19 +104,18 @@ async function searchWorkspacesInFolder(
   currentDepth: number = 0
 ): Promise<WorkspaceInfo[]> {
   const workspaces: WorkspaceInfo[] = [];
-  const { configFileName = "workspace_config", recursive = true, maxDepth = 10 } = options;
+  const { configFileName = "data.md", recursive = true, maxDepth = 10 } = options;
 
   // Check depth limit
   if (currentDepth >= maxDepth) {
     return workspaces;
   }
-
+  console.log(`name: ${folder.name}, Searching in folder: ${folder.path}, depth: ${currentDepth}`);
   // Check if current folder is a workspace
   if (await isWorkspaceFolder(app, folder, configFileName)) {
     workspaces.push({
       name: folder.name,
       relativePath: folder.path,
-      folder: folder
     });
   }
 
@@ -110,7 +149,10 @@ export async function findAllWorkspaces(
 ): Promise<WorkspaceInfo[]> {
   try {
     const rootFolder = app.vault.getRoot();
-    return await searchWorkspacesInFolder(app, rootFolder, options);
+
+    const result = await searchWorkspacesInFolder(app, rootFolder, options);
+    console.log(`Found ${result.length} workspaces in project root:`, result);
+    return result
   } catch (error) {
     console.error("Error finding workspaces:", error);
     return [];
@@ -165,7 +207,6 @@ export async function getWorkspaceInfo(
       return {
         name: folder.name,
         relativePath: folder.path,
-        folder: folder
       };
     }
 

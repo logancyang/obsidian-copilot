@@ -28,9 +28,9 @@ import {
   SquareArrowOutUpRight,
   Volume2, // 新增
 } from "lucide-react";
-import { Notice } from "obsidian";
+import { Notice, Workspace } from "obsidian";
 import React from "react";
-import { findAllWorkspaces, WorkspaceInfo } from "@/utils/workspaceUtils";
+import { findAllWorkspaces, WorkspaceInfo, getWorkspaceConfig, PersonaConfig, convertToPersonaConfig } from "@/utils/workspaceUtils";
 export async function refreshVaultIndex() {
   try {
     await VectorStoreManager.getInstance().indexVaultToVectorStore();
@@ -165,19 +165,83 @@ export function ChatControls({
   const isPlusUser = useIsPlusUser();
 
   const [workspaces, setWorkspaces] = React.useState<WorkspaceInfo[]>([]);
-  const [selectedWorkspace, setSelectedWorkspace] = React.useState<string>('/');
+  const [selectedWorkspace, setSelectedWorkspace] = React.useState<string>('无工作区');
+  const [workspacePersonas, setWorkspacePersonas] = React.useState<PersonaConfig[]>([]);
+  const [selectedPersona, setSelectedPersona] = React.useState<PersonaConfig  | null>(null); // 新增状态
 
-  // 加载工作区列表
+
+  // 获取人设列表
+  const presets = settings.systemPrompts?.presets || [];
+  // 合并系统人设和工作区人设
+  const allPersonas = [...presets, ...workspacePersonas];
+
+  // 加载工作区列表和人设配置
   React.useEffect(() => {
-    if (selectedChain === ChainType.VAULT_QA_CHAIN) {
-      findAllWorkspaces(app, {
-        configFileName: 'data.md',
-        recursive: true,
-        maxDepth: 5
-      }).then(setWorkspaces);
+    const loadWorkspaceData = async () => {
+      if (selectedChain === ChainType.VAULT_QA_CHAIN) {
+        // 1. 加载工作区列表
+        const workspaces = await findAllWorkspaces(app, {
+          configFileName: 'data.md',
+          recursive: true,
+          maxDepth: 5
+        });
+        setWorkspaces(workspaces);
+
+        if (workspaces.length > 0 && selectedWorkspace === '无工作区'){
+          setSelectedWorkspace(workspaces[0].relativePath);
+        }
+        
+        // 2. 如果有选中的工作区，加载其人设配置
+        if (selectedWorkspace !== '无工作区') {
+          try {
+            const config = await getWorkspaceConfig(app, selectedWorkspace);
+            setWorkspacePersonas(config.personas || []);
+          } catch (error) {
+            console.error('Failed to load workspace config:', error);
+            setWorkspacePersonas([]);
+          }
+        }
+      }
+    };
+
+    loadWorkspaceData();
+  }, [selectedChain, selectedWorkspace]);
+
+  // 初始化或恢复人设选择
+  React.useEffect(() => {
+    if (allPersonas.length > 0) {
+      // 如果已有人设选择且仍在列表中，保持选择
+      if (selectedPersona && allPersonas.some(p => p.id === selectedPersona.id)) {
+        return;
+      }
+      // 否则选择第一个可用人设
+      convertToPersonaConfig(allPersonas[0]).then(persona => {
+        setSelectedPersona(persona);
+        updateSystemPrompt(persona);
+      });
     }
-  }, [selectedChain]);
-  const handleModeChange = (chainType: ChainType) => {
+  }, [allPersonas, selectedPersona]);
+
+  // 更新系统提示词的公共方法
+  const updateSystemPrompt = (persona: PersonaConfig) => {
+    updateSetting("systemPrompts", {
+      ...settings.systemPrompts,
+      default: persona.prompt || '',
+    });
+    updateSetting("userSystemPrompt", persona.prompt || '');
+  };
+  // 切换工作区时仅加载配置，不自动选择人设
+  const handleWorkspaceChange = async (workspaceName: string, filePath: string) => {
+    setSelectedWorkspace(workspaceName);
+    try {
+      const config = await getWorkspaceConfig(app, filePath);
+      setWorkspacePersonas(config.personas || []); // 仅更新人设列表
+    } catch (error) {
+      console.error('Failed to load workspace config:', error);
+      setWorkspacePersonas([]); // 失败时清空人设列表
+    }
+  };
+  const handleModeChange = async (chainType: ChainType) => {
     setSelectedChain(chainType);
     onModeChange(chainType);
     if (chainType !== ChainType.PROJECT_CHAIN) {
@@ -186,8 +250,7 @@ export function ChatControls({
     }
   };
 
-  // 获取人设列表
-  const presets = settings.systemPrompts?.presets || [];
+
 
   return (
     <div className="tw-flex tw-w-full tw-items-center tw-justify-between tw-p-1">
@@ -272,12 +335,35 @@ export function ChatControls({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost2" size="fit" className="tw-ml-1">
-              {settings.systemPrompts?.presets?.find((p) => p.isActive)?.name || "选择人设"}
-              <ChevronDown className="tw-mt-0.5" />
+              {selectedPersona?.name || '选择人设'}
+              <ChevronDown className="tw-mt-0.5 tw-size-5" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            {presets.map((preset) => (
+            {allPersonas.map((persona) => (
+              <DropdownMenuItem
+                key={persona.id}
+                onSelect={() => {
+                  convertToPersonaConfig(persona).then(p => {
+                    setSelectedPersona(p);
+                    // 更新系统设置
+                    updateSetting("systemPrompts", {
+                      ...settings.systemPrompts,
+                      default: p.prompt || '', // 将选中人设的提示词设为默认
+                    });
+                    // 同时更新用户系统提示词
+                    updateSetting("userSystemPrompt", p.prompt || '');
+                  });
+                }}
+                className="tw-flex tw-justify-between"  // 新增flex布局
+              >
+                <span>{persona.name}</span>  {/* 名称用span包裹 */}
+                {selectedPersona?.name === persona.name && (  // 改用id比较更准确
+                  <span className="tw-text-normal">✓</span>  // 去掉左边距
+                )}
+              </DropdownMenuItem>
+            ))}
+            {/* {presets.map((preset) => (
               <DropdownMenuItem
                 key={preset.id}
                 onSelect={() => {
@@ -301,8 +387,8 @@ export function ChatControls({
                 {preset.name}
                 {preset.isActive && <span className="tw-ml-2 tw-text-normal">✓</span>}
               </DropdownMenuItem>
-            ))}
-            {presets.length === 0 && <DropdownMenuItem disabled>尚未创建任何人设</DropdownMenuItem>}
+            ))} */}
+            {allPersonas.length === 0 && <DropdownMenuItem disabled>尚未创建任何人设</DropdownMenuItem>}
           </DropdownMenuContent>
         </DropdownMenu>
         {/* 新增工作区选择下拉框 - 仅在VAULT_QA模式下显示 */}
@@ -310,24 +396,27 @@ export function ChatControls({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost2" size="fit" className="tw-ml-1">
-                {selectedWorkspace === '/' ? '根目录' : selectedWorkspace}
+                {selectedWorkspace}
                 <ChevronDown className="tw-mt-0.5 tw-size-5" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuItem
-                onSelect={() => setSelectedWorkspace('/')}
-              >
-                根目录
-              </DropdownMenuItem>
-              {workspaces.map((workspace) => (
-                <DropdownMenuItem
-                  key={workspace.relativePath}
-                  onSelect={() => setSelectedWorkspace(workspace.relativePath)}
-                >
-                  {workspace.relativePath}
-                </DropdownMenuItem>
-              ))}
+              {workspaces.length > 0 ? (
+                workspaces.map((workspace) => (
+                  <DropdownMenuItem
+                    key={workspace.relativePath}
+                    onSelect={() => handleWorkspaceChange(workspace.relativePath, workspace.relativePath)}
+                    className="tw-flex tw-justify-between"  // 新增flex布局
+                  >
+                    <span>{workspace.relativePath}</span>
+                    {selectedWorkspace === workspace.relativePath && (
+                      <span className="tw-text-normal">✓</span>  // 去掉左边距
+                    )}
+                  </DropdownMenuItem>
+                ))
+              ) : (
+                <DropdownMenuItem disabled>无工作区</DropdownMenuItem>
+              )}  
             </DropdownMenuContent>
           </DropdownMenu>
         )}
