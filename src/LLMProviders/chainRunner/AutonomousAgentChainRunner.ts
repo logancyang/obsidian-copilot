@@ -10,7 +10,12 @@ import {
   pomodoroTool,
 } from "@/tools/TimeTools";
 import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools";
-import { extractChatHistory, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
+import {
+  extractAllYoutubeUrls,
+  extractChatHistory,
+  getMessageRole,
+  withSuppressedTokenWarnings,
+} from "@/utils";
 import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
 import { messageRequiresTools, ModelAdapter, ModelAdapterFactory } from "./utils/modelAdapter";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
@@ -30,6 +35,73 @@ import { MessageContent } from "@/imageProcessing/imageProcessor";
 
 export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private llmFormattedMessages: string[] = []; // Track LLM-formatted messages for memory
+
+  /**
+   * Process YouTube URLs in the user message and fetch transcriptions
+   * @returns Array of conversation messages to add to the context
+   */
+  private async processYouTubeUrls(
+    userMessage: string,
+    updateCurrentAiMessage: (message: string) => void
+  ): Promise<Array<{ role: string; content: string }>> {
+    const youtubeUrls = extractAllYoutubeUrls(userMessage);
+    if (youtubeUrls.length === 0) {
+      return [];
+    }
+
+    updateCurrentAiMessage("🎥 Fetching YouTube transcription...");
+    const transcriptions: string[] = [];
+
+    for (const url of youtubeUrls) {
+      try {
+        const result = await simpleYoutubeTranscriptionTool.invoke({ url });
+        const parsedResult = JSON.parse(result);
+
+        if (parsedResult.success) {
+          transcriptions.push(
+            `<youtube_transcription>\n` +
+              `<url>${escapeXml(url)}</url>\n` +
+              `<transcript>\n${escapeXml(parsedResult.transcript)}\n</transcript>\n` +
+              `</youtube_transcription>`
+          );
+        } else {
+          transcriptions.push(
+            `<youtube_transcription>\n` +
+              `<url>${escapeXml(url)}</url>\n` +
+              `<error>${escapeXml(parsedResult.message)}</error>\n` +
+              `</youtube_transcription>`
+          );
+        }
+      } catch (error) {
+        logInfo(`Error transcribing YouTube video ${url}:`, error);
+        transcriptions.push(
+          `<youtube_transcription>\n` +
+            `<url>${escapeXml(url)}</url>\n` +
+            `<error>Failed to fetch transcription</error>\n` +
+            `</youtube_transcription>`
+        );
+      }
+    }
+
+    if (transcriptions.length === 0) {
+      return [];
+    }
+
+    // Return the conversation messages to add
+    const transcriptionContext = transcriptions.join("\n\n");
+    return [
+      {
+        role: "assistant",
+        content: `I've fetched the YouTube transcription(s):\n\n${transcriptionContext}`,
+      },
+      {
+        role: "user",
+        content:
+          "Please analyze or respond to my original request using the YouTube transcription(s) provided above.",
+      },
+    ];
+  }
+
   private getAvailableTools(): any[] {
     // Get tools from the existing IntentAnalyzer
     const tools: any[] = [
@@ -162,6 +234,13 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         role: "user",
         content,
       });
+
+      // Process YouTube URLs if present
+      const youtubeMessages = await this.processYouTubeUrls(
+        userMessage.message,
+        updateCurrentAiMessage
+      );
+      conversationMessages.push(...youtubeMessages);
 
       // Autonomous agent loop
       const maxIterations = 4; // Prevent infinite loops while allowing sufficient reasoning
