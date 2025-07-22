@@ -31,6 +31,7 @@ import {
 import { Notice, Workspace } from "obsidian";
 import React from "react";
 import { findAllWorkspaces, WorkspaceInfo, getWorkspaceConfig, PersonaConfig, convertToPersonaConfig } from "@/utils/workspaceUtils";
+import { workspaceManager } from "@/utils/workspaceUtils";
 export async function refreshVaultIndex() {
   try {
     await VectorStoreManager.getInstance().indexVaultToVectorStore();
@@ -232,6 +233,7 @@ export function ChatControls({
   };
   // 切换工作区时仅加载配置，不自动选择人设
   const handleWorkspaceChange = async (workspaceName: string, filePath: string) => {
+    workspaceManager.setCurrentWorkspace(filePath);
     setSelectedWorkspace(workspaceName);
     try {
       const config = await getWorkspaceConfig(app, filePath);
@@ -249,8 +251,6 @@ export function ChatControls({
       onCloseProject?.();
     }
   };
-
-
 
   return (
     <div className="tw-flex tw-w-full tw-items-center tw-justify-between tw-p-1">

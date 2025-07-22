@@ -216,3 +216,33 @@ export async function getWorkspaceInfo(
     return null;
   }
 } 
+
+export interface WorkspaceState {
+  currentWorkspacePath: string | null;
+}
+
+class WorkspaceManager {
+  private static instance: WorkspaceManager;
+  private state: WorkspaceState = {
+    currentWorkspacePath: null
+  };
+
+  private constructor() {}
+
+  public static getInstance(): WorkspaceManager {
+    if (!WorkspaceManager.instance) {
+      WorkspaceManager.instance = new WorkspaceManager();
+    }
+    return WorkspaceManager.instance;
+  }
+
+  public setCurrentWorkspace(path: string | null): void {
+    this.state.currentWorkspacePath = path;
+  }
+
+  public getCurrentWorkspace(): WorkspaceState {
+    return this.state;
+  }
+}
+
+export const workspaceManager = WorkspaceManager.getInstance();
