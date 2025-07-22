@@ -73,7 +73,7 @@ export const COMPOSER_OUTPUT_INSTRUCTIONS = `Return the new note content or canv
   </writeToFile>
 
   # Important
-  # For canvas files, the content is in JSON format
+  # While the overall format is XML, the content within the <content> tags for canvas files is in JSON format.
   * For canvas files, both 'nodes' and 'edges' arrays must be properly closed with ]
   * Prefer to create new files in existing folders or root folder unless the user's request specifies otherwise
   * File paths must end with a .md or .canvas extension
