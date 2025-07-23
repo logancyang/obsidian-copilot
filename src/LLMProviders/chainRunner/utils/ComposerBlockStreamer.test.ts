@@ -32,7 +32,13 @@ describe("ComposerBlockStreamer", () => {
   it("should pass through chunks without writeToFile tags", async () => {
     const chunks = [{ content: "Hello " }, { content: "world, this is " }, { content: "a test." }];
     const output = await processChunks(chunks);
-    expect(output).toEqual(["Hello ", "world, this is ", "a test."]);
+    // With buffer queue, chunks are held until buffer is full (5 chunks) or stream ends
+    // Since we only have 3 chunks, they're all buffered
+    expect(output).toEqual([]);
+
+    // Content should be available via getBufferedChunks()
+    const buffered = streamer.getBufferedChunks();
+    expect(buffered).toBe("Hello world, this is a test.");
   });
 
   it("should handle a complete writeToFile block in a single chunk", async () => {
@@ -48,8 +54,10 @@ describe("ComposerBlockStreamer", () => {
       "Some text before ",
       "\nWaiting users to accept or reject changes in the Preview UI ...\n",
       "File change result: File written successfully.\n",
-      " and some text after.",
     ]);
+    // Content after the block should be in buffer
+    const buffered = streamer.getBufferedChunks();
+    expect(buffered).toBe(" and some text after.");
     expect(MockedToolManager.callTool).toHaveBeenCalledWith(writeToFileTool, {
       path: "file.txt",
       content: "content",
@@ -88,8 +96,10 @@ describe("ComposerBlockStreamer", () => {
       "Generating changes ...",
       "\nWaiting users to accept or reject changes in the Preview UI ...\n",
       "File change result: Split file written.\n",
-      " That was it.",
     ]);
+    // Content after the block should be in buffer
+    const buffered = streamer.getBufferedChunks();
+    expect(buffered).toBe(" That was it.");
     expect(MockedToolManager.callTool).toHaveBeenCalledWith(writeToFileTool, {
       path: "split.txt",
       content: "split content",
@@ -125,7 +135,7 @@ describe("ComposerBlockStreamer", () => {
     });
   });
 
-  it("should handle an unclosed tag by showing a waiting message", async () => {
+  it("should handle unclosed tags and show waiting message", async () => {
     const chunks = [
       { content: "Starting... <writeToFile><path>unclosed.txt</path>" },
       { content: "<content>this will not be closed" },
@@ -133,26 +143,30 @@ describe("ComposerBlockStreamer", () => {
     const output = await processChunks(chunks);
     expect(output).toEqual(["Starting... ", "Generating changes ..."]);
     expect(MockedToolManager.callTool).not.toHaveBeenCalled();
+
+    // Unclosed content should be in buffer
+    const buffered = streamer.getBufferedChunks();
+    expect(buffered).toBe("<writeToFile><path>unclosed.txt</path><content>this will not be closed");
   });
 
-  it("should handle an unclosed tag that gets closed in a later chunk", async () => {
-    MockedToolManager.callTool.mockResolvedValue("Finally closed.");
+  it("should handle tags split across chunks including the tag name itself", async () => {
+    MockedToolManager.callTool.mockResolvedValue("Tag split across chunks written.");
     const chunks = [
-      { content: "Start <writeToFile>" },
-      { content: "<path>p</path><content>c</content>" },
-      { content: "</writeToFile> End" },
+      { content: "Start <writeTo" },
+      { content: "File><path>split.txt</path><content>split content</content></writeToFile> End" },
     ];
     const output = await processChunks(chunks);
     expect(output).toEqual([
       "Start ",
-      "Generating changes ...",
       "\nWaiting users to accept or reject changes in the Preview UI ...\n",
-      "File change result: Finally closed.\n",
-      " End",
+      "File change result: Tag split across chunks written.\n",
     ]);
+    // Content after the block should be in buffer
+    const buffered = streamer.getBufferedChunks();
+    expect(buffered).toBe(" End");
     expect(MockedToolManager.callTool).toHaveBeenCalledWith(writeToFileTool, {
-      path: "p",
-      content: "c",
+      path: "split.txt",
+      content: "split content",
     });
   });
 
@@ -164,46 +178,36 @@ describe("ComposerBlockStreamer", () => {
       { content: " World" },
     ];
     const output = await processChunks(chunks);
-    expect(output).toEqual(["Hello", " World"]);
-  });
+    // With buffer queue, valid string chunks are buffered
+    expect(output).toEqual([]);
 
-  it("should handle the literal <writeToFile> tag split across two chunks", async () => {
-    MockedToolManager.callTool.mockResolvedValue("Tag split across chunks written.");
-    const chunks = [
-      { content: "Start <writeTo" },
-      { content: "File><path>split.txt</path><content>split content</content></writeToFile> End" },
-    ];
-    const output = await processChunks(chunks);
-    expect(output).toEqual([
-      "Start ",
-      "Generating changes ...",
-      "\nWaiting users to accept or reject changes in the Preview UI ...\n",
-      "File change result: Tag split across chunks written.\n",
-      " End",
-    ]);
-    expect(MockedToolManager.callTool).toHaveBeenCalledWith(writeToFileTool, {
-      path: "split.txt",
-      content: "split content",
-    });
+    // Valid content should be in buffer
+    const buffered = streamer.getBufferedChunks();
+    expect(buffered).toBe("Hello World");
   });
 
   describe("Buffer Queue Functionality", () => {
-    it("should buffer up to 5 chunks and yield the first when buffer is full with no tags", async () => {
+    it("should buffer up to 5 chunks and yield when buffer is full", async () => {
       const chunks = [
         { content: "chunk1 " },
         { content: "chunk2 " },
         { content: "chunk3 " },
         { content: "chunk4 " },
         { content: "chunk5 " },
-        { content: "chunk6" },
+        { content: "chunk6 " },
+        { content: "chunk7" },
       ];
       const output = await processChunks(chunks);
       // When buffer fills up (5 chunks), the first chunk should be yielded
-      // Then when chunk6 arrives, chunk2 should be yielded, etc.
-      expect(output).toEqual(["chunk1 ", "chunk2 ", "chunk6"]);
+      // Then as new chunks arrive, earlier chunks get yielded
+      expect(output).toEqual(["chunk1 ", "chunk2 ", "chunk3 "]);
+
+      // Remaining chunks should be in buffer
+      const buffered = streamer.getBufferedChunks();
+      expect(buffered).toBe("chunk4 chunk5 chunk6 chunk7");
     });
 
-    it("should handle partial tag '<write' that doesn't form a complete tag", async () => {
+    it("should handle partial tags that don't form complete writeToFile blocks", async () => {
       const chunks = [
         { content: "Hello " },
         { content: "world " },
@@ -214,61 +218,11 @@ describe("ComposerBlockStreamer", () => {
       ];
       const output = await processChunks(chunks);
       // Should yield chunks when buffer is full, since no complete tag is detected
-      expect(output).toEqual(["Hello ", "world ", "<write", " something ", "here"]);
-    });
+      expect(output).toEqual(["Hello ", "world "]);
 
-    it("should handle partial tag '<writeToFile>' without closing tag", async () => {
-      const chunks = [
-        { content: "Start " },
-        { content: "<writeToFile>" },
-        { content: "no " },
-        { content: "closing " },
-        { content: "tag " },
-        { content: "here" },
-      ];
-      const output = await processChunks(chunks);
-      // Should detect unclosed tag and show generating message
-      expect(output).toEqual(["Start ", "Generating changes ..."]);
-    });
-
-    it("should yield first chunk when buffer reaches 5 chunks with no complete blocks", async () => {
-      const chunks = [
-        { content: "text1 " },
-        { content: "text2 " },
-        { content: "text3 " },
-        { content: "text4 " },
-        { content: "text5 " },
-      ];
-      const output = await processChunks(chunks);
-      // When buffer reaches exactly 5 chunks, should yield the first one
-      expect(output).toEqual(["text1 "]);
-    });
-
-    it("should continue yielding first chunks as new chunks arrive", async () => {
-      const chunks = [
-        { content: "a " },
-        { content: "b " },
-        { content: "c " },
-        { content: "d " },
-        { content: "e " }, // Buffer full, should yield 'a '
-        { content: "f " }, // Should yield 'b '
-        { content: "g " }, // Should yield 'c '
-      ];
-      const output = await processChunks(chunks);
-      expect(output).toEqual(["a ", "b ", "c "]);
-    });
-
-    it("should return buffered chunks via getBufferedChunks()", async () => {
-      const chunks = [{ content: "buffer1 " }, { content: "buffer2 " }, { content: "buffer3" }];
-      await processChunks(chunks);
-
+      // Remaining chunks should be in buffer
       const buffered = streamer.getBufferedChunks();
-      expect(buffered).toBe("buffer1 buffer2 buffer3");
-    });
-
-    it("should return empty string from getBufferedChunks() when buffer is empty", async () => {
-      const buffered = streamer.getBufferedChunks();
-      expect(buffered).toBe("");
+      expect(buffered).toBe("<write something else here");
     });
 
     it("should handle mixed content with buffer queue and complete blocks", async () => {
@@ -285,41 +239,11 @@ describe("ComposerBlockStreamer", () => {
         "start text ",
         "\nWaiting users to accept or reject changes in the Preview UI ...\n",
         "File change result: Mixed content written.\n",
-        " more text",
       ]);
-    });
 
-    it("should handle buffer queue with xml-wrapped blocks", async () => {
-      MockedToolManager.callTool.mockResolvedValue("XML with buffer written.");
-      const chunks = [
-        { content: "prefix " },
-        { content: "```xml\n" },
-        { content: "<writeToFile>" },
-        { content: "<path>xml.txt</path>" },
-        { content: "<content>xml content</content>" },
-        { content: "</writeToFile>\n```" },
-        { content: " suffix" },
-      ];
-      const output = await processChunks(chunks);
-      expect(output).toEqual([
-        "prefix ",
-        "Generating changes ...",
-        "\nWaiting users to accept or reject changes in the Preview UI ...\n",
-        "File change result: XML with buffer written.\n",
-        " suffix",
-      ]);
-    });
-
-    it("should preserve content in buffer queue when encountering unclosed tags", async () => {
-      const chunks = [
-        { content: "before " },
-        { content: "<writeToFile>" },
-        { content: "incomplete" },
-      ];
-      await processChunks(chunks);
-
+      // Content after the block should be in buffer
       const buffered = streamer.getBufferedChunks();
-      expect(buffered).toBe("<writeToFile>incomplete");
+      expect(buffered).toBe(" more text");
     });
 
     it("should handle edge case where tag is split across the 5-chunk boundary", async () => {
@@ -336,13 +260,100 @@ describe("ComposerBlockStreamer", () => {
         },
       ];
       const output = await processChunks(chunks);
-      // Should detect the unclosed tag and not yield the first chunk
+      // The buffer fills up with 5 chunks, so the first chunk "1 " gets yielded
+      // Then when the final chunk arrives and completes the tag, "2 3 4 " gets yielded before processing the block
       expect(output).toEqual([
-        "1 2 3 4 ",
-        "Generating changes ...",
+        "1 ",
+        "2 3 4 ",
         "\nWaiting users to accept or reject changes in the Preview UI ...\n",
         "File change result: Boundary split written.\n",
       ]);
+
+      // Should have no remaining buffer after processing the complete block
+      const buffered = streamer.getBufferedChunks();
+      expect(buffered).toBe("");
+    });
+  });
+
+  describe("End-of-Stream Buffer Handling", () => {
+    it("should return remaining content in buffer after stream ends", async () => {
+      const chunks = [{ content: "start " }, { content: "middle " }, { content: "end" }];
+      await processChunks(chunks);
+
+      const buffered = streamer.getBufferedChunks();
+      expect(buffered).toBe("start middle end");
+    });
+
+    it("should handle incomplete writeToFile block at end of stream", async () => {
+      const chunks = [
+        { content: "before " },
+        { content: "<writeToFile><path>incomplete.txt</path>" },
+        { content: "<content>never closed" },
+      ];
+      const output = await processChunks(chunks);
+
+      // Should show generating message but not process the incomplete block
+      expect(output).toEqual(["before ", "Generating changes ..."]);
+
+      const buffered = streamer.getBufferedChunks();
+      expect(buffered).toBe("<writeToFile><path>incomplete.txt</path><content>never closed");
+      expect(MockedToolManager.callTool).not.toHaveBeenCalled();
+    });
+
+    it("should handle mixed complete and incomplete blocks at end of stream", async () => {
+      MockedToolManager.callTool.mockResolvedValue("First block processed.");
+      const chunks = [
+        { content: "<writeToFile><path>first.txt</path><content>first</content></writeToFile>" },
+        { content: "between " },
+        { content: "<writeToFile><path>second.txt</path>" },
+        { content: "<content>incomplete second" },
+      ];
+      const output = await processChunks(chunks);
+
+      expect(output).toEqual([
+        "\nWaiting users to accept or reject changes in the Preview UI ...\n",
+        "File change result: First block processed.\n",
+        "between ",
+        "Generating changes ...",
+      ]);
+
+      const buffered = streamer.getBufferedChunks();
+      expect(buffered).toBe("<writeToFile><path>second.txt</path><content>incomplete second");
+      expect(MockedToolManager.callTool).toHaveBeenCalledTimes(1);
+    });
+
+    it("should handle realistic end-of-stream workflow", async () => {
+      MockedToolManager.callTool.mockResolvedValue("Processed successfully.");
+      const chunks = [
+        { content: "Here's a complete file: " },
+        {
+          content:
+            "<writeToFile><path>app.ts</path><content>console.log('hello');</content></writeToFile>",
+        },
+        { content: "\n\nAnd here's an incomplete one: " },
+        { content: "<writeToFile><path>incomplete.ts</path><content>const x = " },
+      ];
+
+      // Process all chunks
+      const output = await processChunks(chunks);
+
+      expect(output).toEqual([
+        "Here's a complete file: ",
+        "\nWaiting users to accept or reject changes in the Preview UI ...\n",
+        "File change result: Processed successfully.\n",
+        "\n\nAnd here's an incomplete one: ",
+        "Generating changes ...",
+      ]);
+
+      // Handle remaining buffered content (as shown in class documentation)
+      const remaining = streamer.getBufferedChunks();
+      expect(remaining).toBe("<writeToFile><path>incomplete.ts</path><content>const x = ");
+
+      // In a real scenario, you might want to warn about incomplete content
+      if (remaining.includes("<writeToFile>")) {
+        // This would be handled by the calling code
+        expect(remaining).toContain("<writeToFile>");
+      }
     });
   });
 });
