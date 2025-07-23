@@ -33,16 +33,18 @@ export class ActionBlockStreamer {
   }
 
   async *processChunk(chunk: any): AsyncGenerator<any, void, unknown> {
-    // Add to buffer
-    this.buffer += chunk.content;
+    // Add to buffer - fix buffer corruption by checking for null/undefined content
+    if (chunk.content != null) {
+      this.buffer += chunk.content;
+    }
 
     // Yield the original chunk as-is
     yield chunk;
 
-    // Check for complete block
-    const blockInfo = this.findCompleteBlock(this.buffer);
+    // Process all complete blocks in the buffer
+    let blockInfo = this.findCompleteBlock(this.buffer);
 
-    if (blockInfo) {
+    while (blockInfo) {
       const { block, endIdx, isXml } = blockInfo;
 
       // Extract content from the block
@@ -71,6 +73,9 @@ export class ActionBlockStreamer {
 
       // Remove processed block from buffer
       this.buffer = this.buffer.substring(endIdx);
+
+      // Check for another complete block in the remaining buffer
+      blockInfo = this.findCompleteBlock(this.buffer);
     }
   }
 }
