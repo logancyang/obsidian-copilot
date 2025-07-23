@@ -28,7 +28,7 @@ import {
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "../intentAnalyzer";
 import { BaseChainRunner } from "./BaseChainRunner";
-import { ComposerBlockStreamer } from "./utils/ComposerBlockStreamer";
+import { ActionBlockStreamer } from "./utils/ActionBlockStreamer";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 
 export class CopilotPlusChainRunner extends BaseChainRunner {
@@ -251,7 +251,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     const enhancedUserMessage = content instanceof Array ? (content[0] as any).text : content;
     logInfo("Enhanced user message: ", enhancedUserMessage);
     logInfo("==== Final Request to AI ====\n", messages);
-    const composerStreamer = new ComposerBlockStreamer(ToolManager, writeToFileTool);
+    const composerStreamer = new ActionBlockStreamer(ToolManager, writeToFileTool);
     const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage);
 
     // Wrap the stream call with warning suppression
@@ -274,13 +274,6 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         }
       }
     }
-
-    // Process any remaining buffered chunks from the composer streamer
-    const bufferedContent = composerStreamer.getBufferedChunks();
-    if (bufferedContent) {
-      thinkStreamer.processChunk({ content: bufferedContent });
-    }
-
     return thinkStreamer.close();
   }
 

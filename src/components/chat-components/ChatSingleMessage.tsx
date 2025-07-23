@@ -87,41 +87,93 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       const activeFile = app.workspace.getActiveFile();
       const sourcePath = activeFile ? activeFile.path : "";
 
-      const processThinkSection = (content: string): string => {
+      const processCollapsibleSection = (
+        content: string,
+        tagName: string,
+        summaryText: string,
+        streamingSummaryText: string
+      ): string => {
         // Common styles as template strings
         const detailsStyle = `margin: 0.5rem 0 1.5rem; padding: 0.75rem; border: 1px solid var(--background-modifier-border); border-radius: 4px; background-color: var(--background-secondary)`;
         const summaryStyle = `cursor: pointer; color: var(--text-muted); font-size: 0.8em; margin-bottom: 0.5rem; user-select: none`;
         const contentStyle = `margin-top: 0.75rem; padding: 0.75rem; border-radius: 4px; background-color: var(--background-primary)`;
 
-        // During streaming, if we find any think tag that's either unclosed or being processed
-        if (isStreaming && content.includes("<think>")) {
-          // Replace any complete think sections first
-          content = content.replace(/<think>([\s\S]*?)<\/think>/g, (match, thinkContent) => {
+        const openTag = `<${tagName}>`;
+
+        // During streaming, if we find any tag that's either unclosed or being processed
+        if (isStreaming && content.includes(openTag)) {
+          // Replace any complete sections first
+          const completeRegex = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "g");
+          content = content.replace(completeRegex, (match, sectionContent) => {
             return `<details style="${detailsStyle}">
-              <summary style="${summaryStyle}">Thought for a second</summary>
-              <div class="tw-text-muted" style="${contentStyle}">${thinkContent.trim()}</div>
+              <summary style="${summaryStyle}">${summaryText}</summary>
+              <div class="tw-text-muted" style="${contentStyle}">${sectionContent.trim()}</div>
             </details>\n\n`;
           });
 
-          // Then handle any unclosed think tag, but preserve the streamed content
+          // Then handle any unclosed tag, but preserve the streamed content
+          const unClosedRegex = new RegExp(`<${tagName}>([\\s\\S]*)$`);
           content = content.replace(
-            /<think>([\s\S]*)$/,
+            unClosedRegex,
             (match, partialContent) => `<div style="${detailsStyle}">
-              <div style="${summaryStyle}">Thinking...</div>
+              <div style="${summaryStyle}">${streamingSummaryText}</div>
               <div class="tw-text-muted" style="${contentStyle}">${partialContent.trim()}</div>
             </div>`
           );
           return content;
         }
 
-        // Not streaming, process all think sections normally
-        const thinkRegex = /<think>([\s\S]*?)<\/think>/g;
-        return content.replace(thinkRegex, (match, thinkContent) => {
+        // Not streaming, process all sections normally
+        const regex = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "g");
+        return content.replace(regex, (match, sectionContent) => {
           return `<details style="${detailsStyle}">
-            <summary style="${summaryStyle}">Thought for a second</summary>
-            <div class="tw-text-muted" style="${contentStyle}">${thinkContent.trim()}</div>
+            <summary style="${summaryStyle}">${summaryText}</summary>
+            <div class="tw-text-muted" style="${contentStyle}">${sectionContent.trim()}</div>
           </details>\n\n`;
         });
+      };
+
+      const processThinkSection = (content: string): string => {
+        return processCollapsibleSection(content, "think", "Thought for a second", "Thinking...");
+      };
+
+      const processWriteToFileSection = (content: string): string => {
+        // First, unwrap any XML codeblocks that contain writeToFile tags
+        const unwrapXmlCodeblocks = (text: string): string => {
+          // Pattern to match XML codeblocks that contain writeToFile tags
+          const xmlCodeblockRegex =
+            /```xml\s*([\s\S]*?<writeToFile>[\s\S]*?<\/writeToFile>[\s\S]*?)\s*```/g;
+
+          return text.replace(xmlCodeblockRegex, (match, xmlContent) => {
+            // Extract just the content inside the codeblock and return it without the codeblock wrapper
+            return xmlContent.trim();
+          });
+        };
+
+        // During streaming, also handle unclosed writeToFile tags in XML codeblocks
+        const unwrapStreamingXmlCodeblocks = (text: string): string => {
+          if (!isStreaming) return text;
+
+          // Pattern to match XML codeblocks that contain unclosed writeToFile tags
+          const streamingXmlCodeblockRegex = /```xml\s*([\s\S]*?<writeToFile>[\s\S]*?)$/g;
+
+          return text.replace(streamingXmlCodeblockRegex, (match, xmlContent) => {
+            // Extract the content and return it without the codeblock wrapper
+            return xmlContent.trim();
+          });
+        };
+
+        // Unwrap XML codeblocks first
+        let processedContent = unwrapXmlCodeblocks(content);
+        processedContent = unwrapStreamingXmlCodeblocks(processedContent);
+
+        // Then process the writeToFile sections normally
+        return processCollapsibleSection(
+          processedContent,
+          "writeToFile",
+          "Generated new content",
+          "Generating changes..."
+        );
       };
 
       const replaceLinks = (text: string, regex: RegExp, template: (file: TFile) => string) => {
@@ -161,8 +213,11 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       // Process think sections
       const thinkSectionProcessed = processThinkSection(noteImageProcessed);
 
+      // Process writeToFile sections
+      const writeToFileSectionProcessed = processWriteToFileSection(thinkSectionProcessed);
+
       // Transform markdown sources section into HTML structure
-      const sourcesSectionProcessed = processSourcesSection(thinkSectionProcessed);
+      const sourcesSectionProcessed = processSourcesSection(writeToFileSectionProcessed);
 
       // Transform [[link]] to clickable format but exclude ![[]] image links
       const noteLinksProcessed = replaceLinks(
