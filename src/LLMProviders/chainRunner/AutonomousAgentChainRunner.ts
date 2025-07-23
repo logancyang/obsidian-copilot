@@ -416,9 +416,18 @@ ${params}
         logInfo("Tool results added to conversation:", toolResultsForConversation);
       }
 
-      // If we hit max iterations, the last response becomes the final one
+      // If we hit max iterations, add a message explaining the limit was reached
       if (iteration >= maxIterations && !fullAIResponse) {
-        fullAIResponse = iterationHistory.join("\n\n");
+        logWarn(
+          `Autonomous agent reached maximum iterations (${maxIterations}) without completing the task`
+        );
+
+        const limitMessage =
+          `\n\nI've reached the maximum number of iterations (${maxIterations}) for this task. ` +
+          "I attempted to gather information using various tools but couldn't complete the analysis within the iteration limit. " +
+          "You may want to try a more specific question or break down your request into smaller parts.";
+
+        fullAIResponse = iterationHistory.join("\n\n") + limitMessage;
       }
     } catch (error: any) {
       if (error.name === "AbortError" || abortController.signal.aborted) {
