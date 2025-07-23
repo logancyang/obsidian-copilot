@@ -37,14 +37,17 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private llmFormattedMessages: string[] = []; // Track LLM-formatted messages for memory
 
   /**
-   * Process YouTube URLs in the user message and fetch transcriptions
+   * Process YouTube URLs in the original user prompt and fetch transcriptions
+   * Only processes URLs from the user's direct input, not from attached context
+   * @param originalUserPrompt The original user message before context processing
+   * @param updateCurrentAiMessage Callback to update the current AI message display
    * @returns Array of conversation messages to add to the context
    */
   private async processYouTubeUrls(
-    userMessage: string,
+    originalUserPrompt: string,
     updateCurrentAiMessage: (message: string) => void
   ): Promise<Array<{ role: string; content: string }>> {
-    const youtubeUrls = extractAllYoutubeUrls(userMessage);
+    const youtubeUrls = extractAllYoutubeUrls(originalUserPrompt);
     if (youtubeUrls.length === 0) {
       return [];
     }
@@ -235,9 +238,10 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         content,
       });
 
-      // Process YouTube URLs if present
+      // Process YouTube URLs if present (only from original user prompt, not context)
+      const originalUserPrompt = userMessage.originalMessage || userMessage.message;
       const youtubeMessages = await this.processYouTubeUrls(
-        userMessage.message,
+        originalUserPrompt,
         updateCurrentAiMessage
       );
       conversationMessages.push(...youtubeMessages);
