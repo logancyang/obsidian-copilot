@@ -265,7 +265,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
       exclusionPatterns: PatternCategory | null
     ): GroupListItem => {
       const projectAllFiles = appFiles.filter((file) =>
-        shouldIndexFile(file, inclusionPatterns, exclusionPatterns)
+        shouldIndexFile(file, inclusionPatterns, exclusionPatterns, true)
       );
 
       const processPatternGroup = (
@@ -278,7 +278,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
           patterns.forEach((pattern) => {
             const singlePatternConfig = { [patternType]: [pattern] };
             if (
-              shouldIndexFile(file, singlePatternConfig, null) &&
+              shouldIndexFile(file, singlePatternConfig, null, true) &&
               !targetGroup[pattern].some((item) => item.id === file.path)
             ) {
               targetGroup[pattern].push({
@@ -325,7 +325,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
         // note/file
         if (
           inclusionPatterns?.notePatterns &&
-          shouldIndexFile(file, { notePatterns: inclusionPatterns.notePatterns }, null) &&
+          shouldIndexFile(file, { notePatterns: inclusionPatterns.notePatterns }, null, true) &&
           !notes.some((item) => item.id === file.path)
         ) {
           notes.push({
@@ -352,7 +352,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
   const [ignoreItems, setIgnoreItems] = useState<IgnoreItems>(() => {
     // init exclude files
     const excludeFiles = appAllFiles.filter(
-      (file) => exclusionPatterns && shouldIndexFile(file, exclusionPatterns, null)
+      (file) => exclusionPatterns && shouldIndexFile(file, exclusionPatterns, null, true)
     );
     return {
       files: new Set<TFile>(excludeFiles),
@@ -592,7 +592,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
     ) => {
       const getMatchingFilesFromApp = (patterns: PatternCategory): GroupItem[] => {
         return appAllFiles
-          .filter((file) => shouldIndexFile(file, patterns, null))
+          .filter((file) => shouldIndexFile(file, patterns, null, true))
           .map((file) => ({
             id: file.path,
             name: file.basename,
