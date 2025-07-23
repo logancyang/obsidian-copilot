@@ -423,7 +423,7 @@ ${params}
         );
 
         const limitMessage =
-          "\n\nI've reached the maximum number of iterations (4) for this task. " +
+          `\n\nI've reached the maximum number of iterations (${maxIterations}) for this task. ` +
           "I attempted to gather information using various tools but couldn't complete the analysis within the iteration limit. " +
           "You may want to try a more specific question or break down your request into smaller parts.";
 
