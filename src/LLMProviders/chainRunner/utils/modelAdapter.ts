@@ -78,9 +78,11 @@ You are now in autonomous agent mode. You can use tools to gather information an
 When you need to use a tool, format it EXACTLY like this:
 <use_tool>
 <name>tool_name_here</name>
-<param1>value1</param1>
-<arrayParam>["item1", "item2"]</arrayParam>
+<parameter_name>value</parameter_name>
+<another_parameter>["array", "values"]</another_parameter>
 </use_tool>
+
+IMPORTANT: Use the EXACT parameter names as shown in the tool descriptions below. Do NOT use generic names like "param1" or "param".
 
 ## Important Tool Usage Examples:
 

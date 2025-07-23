@@ -34,7 +34,6 @@ const simpleYoutubeTranscriptionTool = tool(
     description: "Get the transcript of a YouTube video",
     schema: z.object({
       url: z.string().describe("The YouTube video URL"),
-      brevilabsClient: z.any().describe("The BrevilabsClient instance"),
     }),
   }
 );

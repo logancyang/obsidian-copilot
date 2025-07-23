@@ -9,7 +9,7 @@ import {
   getTimeRangeMsTool,
   pomodoroTool,
 } from "@/tools/TimeTools";
-import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools";
+import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools"; // Used in processYouTubeUrls
 import {
   extractAllYoutubeUrls,
   extractChatHistory,
@@ -111,7 +111,8 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       localSearchTool,
       webSearchTool,
       pomodoroTool,
-      simpleYoutubeTranscriptionTool,
+      // YouTube transcription is handled automatically in processYouTubeUrls
+      // simpleYoutubeTranscriptionTool,
       getCurrentTimeTool,
       getTimeInfoByEpochTool,
       getTimeRangeMsTool,
@@ -143,11 +144,11 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           : "";
 
         return `<${escapeXml(tool.name)}>
-+<description>${escapeXml(tool.description)}</description>
-+<parameters>
-+${params}
-+</parameters>
-+</${escapeXml(tool.name)}>`;
+<description>${escapeXml(tool.description)}</description>
+<parameters>
+${params}
+</parameters>
+</${escapeXml(tool.name)}>`;
       })
       .join("\n\n");
   }
