@@ -14,9 +14,12 @@ import { ToolManager } from "@/tools/toolManager";
  * 1. **Buffering**: Incoming chunks are added to a queue (max 5 chunks)
  * 2. **Block Detection**: The combined buffer is searched for complete writeToFile blocks
  * 3. **Tag Processing**: Complete blocks are processed and their content is yielded
- * 4. **Unclosed Tag Handling**: Partial/unclosed tags trigger a "Generating changes..." message
- * 5. **Safe Yielding**: When buffer is full (5 chunks) with no tags, the first chunk is safe to yield
- * 6. **Cleanup**: Remaining buffered content can be retrieved via getBufferedChunks()
+ * 4. **Buffer Rebuilding**: After processing a block, the `bufferQueue` is rebuilt
+ *    from the remaining content. This allows for multiple blocks within the same
+ *    buffer to be handled iteratively.
+ * 5. **Unclosed Tag Handling**: Partial/unclosed tags trigger a "Generating changes..." message
+ * 6. **Safe Yielding**: When buffer is full (5 chunks) with no tags, the first chunk is safe to yield
+ * 7. **Cleanup**: Remaining buffered content can be retrieved via getBufferedChunks()
  *
  * ### Supported Formats:
  * - `<writeToFile><path>...</path><content>...</content></writeToFile>`
@@ -46,8 +49,9 @@ import { ToolManager } from "@/tools/toolManager";
  * ```
  */
 export class ComposerBlockStreamer {
+  // Define a constant for the max buffer size
+  private static readonly MAX_BUFFER_SIZE = 5;
   private bufferQueue: string[] = [];
-  private bufferSize = 5;
   private waitingMessagePrinted = false;
 
   constructor(
@@ -83,9 +87,6 @@ export class ComposerBlockStreamer {
     }
     // Add new chunk to the buffer queue
     this.bufferQueue.push(chunk.content);
-    if (this.bufferQueue.length > this.bufferSize) {
-      this.bufferQueue.shift();
-    }
     let buffer = this.bufferQueue.join("");
 
     let blockInfo;
@@ -159,8 +160,8 @@ export class ComposerBlockStreamer {
       }
     }
 
-    // If buffer is full (5 chunks) and no open tag found, yield the first chunk
-    if (this.bufferQueue.length === this.bufferSize) {
+    // If buffer is full and no open tag found, yield the first chunk
+    while (this.bufferQueue.length >= ComposerBlockStreamer.MAX_BUFFER_SIZE) {
       const firstChunk = this.bufferQueue.shift()!;
       yield { ...chunk, content: firstChunk };
     }
