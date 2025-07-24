@@ -18,7 +18,7 @@ export class ActionBlockStreamer {
 
   private findCompleteBlock(str: string) {
     // Regex for both formats
-    const regex = /(```xml\s*)?<writeToFile>[\s\S]*?<\/writeToFile>(\s*```)?/;
+    const regex = /<writeToFile>[\s\S]*?<\/writeToFile>/;
     const match = str.match(regex);
 
     if (!match || match.index === undefined) {
@@ -28,7 +28,6 @@ export class ActionBlockStreamer {
     return {
       block: match[0],
       endIdx: match.index + match[0].length,
-      isXml: !!match[1],
     };
   }
 
@@ -45,16 +44,11 @@ export class ActionBlockStreamer {
     let blockInfo = this.findCompleteBlock(this.buffer);
 
     while (blockInfo) {
-      const { block, endIdx, isXml } = blockInfo;
+      const { block, endIdx } = blockInfo;
 
       // Extract content from the block
-      let innerBlock = block;
-      if (isXml) {
-        innerBlock = innerBlock.replace(/^```xml\n/, "").replace(/\n```$/, "");
-      }
-
-      const pathMatch = innerBlock.match(/<path>([\s\S]*?)<\/path>/);
-      const contentMatch = innerBlock.match(/<content>([\s\S]*?)<\/content>/);
+      const pathMatch = block.match(/<path>([\s\S]*?)<\/path>/);
+      const contentMatch = block.match(/<content>([\s\S]*?)<\/content>/);
       const filePath = pathMatch ? pathMatch[1].trim() : undefined;
       const fileContent = contentMatch ? contentMatch[1].trim() : undefined;
 

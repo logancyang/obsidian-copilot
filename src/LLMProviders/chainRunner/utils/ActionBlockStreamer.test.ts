@@ -18,12 +18,11 @@ describe("ActionBlockStreamer", () => {
 
   // Helper function to process chunks and collect results
   async function processChunks(chunks: { content: string | null }[]) {
-    const outputContents: string[] = [];
+    const outputContents: any[] = [];
     for (const chunk of chunks) {
       for await (const result of streamer.processChunk(chunk)) {
-        if (result.content) {
-          outputContents.push(result.content);
-        }
+        // Always push the content, even if it's null, undefined, or empty string
+        outputContents.push(result.content);
       }
     }
     return outputContents;
@@ -182,7 +181,7 @@ describe("ActionBlockStreamer", () => {
     ];
     const output = await processChunks(chunks);
 
-    // Should yield all chunks as-is, including null and empty
+    // Should yield all chunks as-is, null content is yielded but not added to buffer
     expect(output).toEqual(["Hello", null, "", " World"]);
   });
 
@@ -203,6 +202,7 @@ describe("ActionBlockStreamer", () => {
   });
 
   it("should handle malformed blocks gracefully", async () => {
+    MockedToolManager.callTool.mockResolvedValue("Malformed handled.");
     const chunks = [
       {
         content: "<writeToFile><path>missing-content.txt</path></writeToFile>",
@@ -210,8 +210,11 @@ describe("ActionBlockStreamer", () => {
     ];
     const output = await processChunks(chunks);
 
-    // Should yield chunk as-is
-    expect(output).toEqual(["<writeToFile><path>missing-content.txt</path></writeToFile>"]);
+    // Should yield chunk as-is plus tool result
+    expect(output).toEqual([
+      "<writeToFile><path>missing-content.txt</path></writeToFile>",
+      "\nFile change result: Malformed handled.\n",
+    ]);
 
     // Tool should be called with undefined content
     expect(MockedToolManager.callTool).toHaveBeenCalledWith(writeToFileTool, {
