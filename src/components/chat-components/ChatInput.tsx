@@ -1,6 +1,6 @@
 import {
-  ProjectConfig,
   getCurrentProject,
+  ProjectConfig,
   subscribeToProjectChange,
   useChainType,
   useModelKey,
@@ -71,6 +71,7 @@ interface ChatInputProps {
   disableModelSwitch?: boolean;
   selectedTextContexts?: SelectedTextContext[];
   onRemoveSelectedText?: (id: string) => void;
+  showProgressCard: () => void;
 }
 
 const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
@@ -93,6 +94,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       disableModelSwitch,
       selectedTextContexts,
       onRemoveSelectedText,
+      showProgressCard,
     },
     ref
   ) => {
@@ -509,6 +511,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           onRemoveUrl={(url: string) => setContextUrls((prev) => prev.filter((u) => u !== url))}
           selectedTextContexts={selectedTextContexts}
           onRemoveSelectedText={onRemoveSelectedText}
+          showProgressCard={showProgressCard}
         />
 
         {selectedImages.length > 0 && (
