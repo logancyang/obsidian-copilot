@@ -251,7 +251,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     const enhancedUserMessage = content instanceof Array ? (content[0] as any).text : content;
     logInfo("Enhanced user message: ", enhancedUserMessage);
     logInfo("==== Final Request to AI ====\n", messages);
-    const composerStreamer = new ActionBlockStreamer(ToolManager, writeToFileTool);
+    const actionStreamer = new ActionBlockStreamer(ToolManager, writeToFileTool);
     const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage);
 
     // Wrap the stream call with warning suppression
@@ -268,10 +268,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         });
         break;
       }
-      for await (const processedChunk of composerStreamer.processChunk(chunk)) {
-        if (processedChunk) {
-          thinkStreamer.processChunk(processedChunk);
-        }
+      for await (const processedChunk of actionStreamer.processChunk(chunk)) {
+        thinkStreamer.processChunk(processedChunk);
       }
     }
     return thinkStreamer.close();
