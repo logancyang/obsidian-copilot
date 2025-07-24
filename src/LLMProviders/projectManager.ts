@@ -907,10 +907,6 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
   }
 
   private getProjectAllFiles(project: ProjectConfig) {
-    if (!project.contextSource) {
-      project.contextSource = {};
-    }
-
     // NOTE: Must not fallback to GLOBAL inclusions and exclusions in Copilot settings in Projects!
     // This is to avoid project inclusions in the project that conflict with the global ones
     // Project UI should be the ONLY source of truth for project inclusions and exclusions
