@@ -147,7 +147,7 @@ export function shouldIndexFile(
     return false;
   }
 
-  // Project：Only the included files need to be processed.
+  // Project: Only the included files need to be processed.
   if (isProject && !inclusions) {
     return false;
   }
