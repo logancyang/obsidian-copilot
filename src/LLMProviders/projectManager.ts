@@ -584,18 +584,23 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
       // processWebUrlContext itself should log errors if a specific URL fetch fails.
       const webContext = await this.processWebUrlContext(url);
       if (webContext) {
-        contextCache.webContexts[url] = webContext;
         logInfo(
           `[processWebUrls] Project ${project.name}: Successfully fetched content for URL: ${url.substring(0, 50)}...`
         );
-      } else {
+      }
+      return { url, context: webContext };
+    });
+
+    const results = await Promise.all(webContextPromises);
+    results.forEach((result) => {
+      if (result && result.context) {
+        contextCache.webContexts[result.url] = result.context;
+      } else if (result && !result.context) {
         logWarn(
-          `[processWebUrls] Project ${project.name}: Fetched empty content for Web URL: ${url}`
+          `[processWebUrls] Project ${project.name}: Fetched empty content for Web URL: ${result.url}`
         );
       }
     });
-
-    await Promise.all(webContextPromises);
     logInfo(
       `[processWebUrls] Completed for project: ${project.name}. Total Web contexts: ${Object.keys(contextCache.webContexts).length}`
     );
@@ -645,18 +650,23 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
     const youtubeContextPromises = urlsToFetch.map(async (url) => {
       const youtubeContext = await this.processYoutubeUrlContext(url);
       if (youtubeContext) {
-        contextCache.youtubeContexts[url] = youtubeContext;
         logInfo(
           `[processYoutubeUrls] Project ${project.name}: Successfully fetched transcript for YouTube URL: ${url.substring(0, 50)}...`
         );
-      } else {
+      }
+      return { url, context: youtubeContext };
+    });
+
+    const results = await Promise.all(youtubeContextPromises);
+    results.forEach((result) => {
+      if (result && result.context) {
+        contextCache.youtubeContexts[result.url] = result.context;
+      } else if (result && !result.context) {
         logWarn(
-          `[processYoutubeUrls] Project ${project.name}: Fetched empty transcript for YouTube URL: ${url}`
+          `[processYoutubeUrls] Project ${project.name}: Fetched empty transcript for YouTube URL: ${result.url}`
         );
       }
     });
-
-    await Promise.all(youtubeContextPromises);
     logInfo(
       `[processYoutubeUrls] Completed for project: ${project.name}. Total YouTube contexts: ${Object.keys(contextCache.youtubeContexts).length}`
     );
