@@ -718,7 +718,7 @@ export class ProjectContextCache {
    * Removes references to files that no longer match patterns, but keeps their content cached.
    */
   async cleanupProjectFileReferences(project: ProjectConfig): Promise<void> {
-    logInfo("[cleanupProjectFileReferences] Starting for project: ${project.name}");
+    logInfo(`[cleanupProjectFileReferences] Starting for project: ${project.name}`);
     try {
       await this.updateCacheSafely(
         project,
