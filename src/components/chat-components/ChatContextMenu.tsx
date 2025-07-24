@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle, Database, Loader2, Plus, X } from "lucide-react";
+import { AlertCircle, CheckCircle, CircleDashed, Loader2, Plus, X } from "lucide-react";
 import { TFile } from "obsidian";
 import React from "react";
 import { Button } from "@/components/ui/button";
@@ -144,7 +144,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
       case "error":
         return <AlertCircle className="tw-size-4 tw-text-error" />;
       case "initial":
-        return <Database className="tw-size-4 tw-text-faint" />;
+        return <CircleDashed className="tw-size-4 tw-text-faint" />;
     }
   };
 
