@@ -144,6 +144,13 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
               return `<${escapeXml(key)}>${escapeXml(description)}</${escapeXml(key)}>`;
             })
             .join("\n");
+        } else if (schema.properties) {
+          params = Object.entries(schema.properties)
+            .map(
+              ([key, val]: [string, any]) =>
+                `<${escapeXml(key)}>${escapeXml(val.description || "No description")}</${escapeXml(key)}>`
+            )
+            .join("\n");
         } else {
           logError("Tool schema not found for tool:", tool.name);
         }
