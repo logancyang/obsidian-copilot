@@ -212,7 +212,6 @@ ${params}
 
       // Build initial conversation messages
       const customSystemPrompt = this.generateSystemPrompt();
-      console.log("customSystemPrompt", customSystemPrompt);
       const chatModel = this.chainManager.chatModelManager.getChatModel();
       const adapter = ModelAdapterFactory.createAdapter(chatModel);
 
