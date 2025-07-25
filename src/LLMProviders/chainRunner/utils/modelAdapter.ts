@@ -129,6 +129,17 @@ ${toolDescriptions}
 - Do not call writeToFile tool again if the result is not accepted.
 - Do not call writeToFile tool if no change needs to be made.
 
+## Web Search Usage Policy
+IMPORTANT: The webSearch tool should ONLY be used when the user explicitly requests web/internet search using phrases like:
+- "search the web for..."
+- "search online for..."
+- "look up on the internet..."
+- "find online information about..."
+- "check the web for..."
+- "search Google for..." (or any search engine)
+
+Do NOT automatically use webSearch just because information might be available online. Only use it when explicitly requested by the user.
+
 You can use multiple tools in sequence. After each tool execution, you'll receive the results and can decide whether to use more tools or provide your final response.
 
 Always explain your reasoning before using tools. Be conversational and clear about what you're doing.
@@ -477,8 +488,7 @@ class GeminiModelAdapter extends BaseModelAdapter {
 
 You MUST use tools to complete tasks. DO NOT ask the user questions about how to search.
 
-When the user mentions "my notes" or "my vault", you MUST immediately use the localSearch tool.
-When the user asks to "search the web", you MUST immediately use the webSearch tool.
+When the user mentions "my notes" or "my vault", use the localSearch tool.
 
 ❌ WRONG (what you just did):
 "Let's start by searching your notes. What kind of information should I look for?"
@@ -492,23 +502,17 @@ When the user asks to "search the web", you MUST immediately use the webSearch t
 
 GEMINI SPECIFIC RULES:
 1. When user mentions "my notes" about X → use localSearch with query "X"
-2. When user says "search the web" → use webSearch tool immediately
-3. DO NOT ask clarifying questions about search terms
-4. DO NOT wait for permission to use tools
-5. Use tools IMMEDIATELY based on the user's request
+2. DO NOT ask clarifying questions about search terms
+3. DO NOT wait for permission to use tools
+4. Use tools based on the user's request
 
 PATTERN FOR MULTI-STEP REQUESTS:
-User: "based on my X notes, search the web for Y and create Z"
+User: "based on my X notes and create Z"
 Your response:
 <use_tool>
 <name>localSearch</name>
 <query>X</query>
 <salientTerms>["X", "related", "terms"]</salientTerms>
-</use_tool>
-<use_tool>
-<name>webSearch</name>
-<query>Y</query>
-<chatHistory>[]</chatHistory>
 </use_tool>
 
 Remember: The user has already told you what to do. Execute it NOW with the tools.`;
@@ -519,7 +523,7 @@ Remember: The user has already told you what to do. Execute it NOW with the tool
   enhanceUserMessage(message: string, requiresTools: boolean): string {
     if (requiresTools) {
       // Add explicit reminder for Gemini
-      return `${message}\n\nREMINDER: Use the tools immediately. Do not ask questions. For "my notes", use localSearch. For "search the web", use webSearch.`;
+      return `${message}\n\nREMINDER: Use the tools immediately. Do not ask questions. For "my notes", use localSearch.`;
     }
     return message;
   }
