@@ -153,7 +153,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
             )
             .join("\n");
         } else {
-          logError("Tool schema not found for tool:", tool.name);
+          params = "No parameters";
         }
 
         // Handle Zod schemas (which have a 'shape' property)

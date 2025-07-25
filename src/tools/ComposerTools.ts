@@ -197,7 +197,11 @@ function parseSearchReplaceBlocks(
   diff: string
 ): Array<{ searchText: string; replaceText: string }> {
   const blocks: Array<{ searchText: string; replaceText: string }> = [];
-  const blockRegex = /------- SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n\+\+\+\+\+\+\+ REPLACE/g;
+  // More flexible regex that accepts:
+  // - 3+ dashes followed by optional space and "SEARCH"
+  // - 3+ equals signs as separator
+  // - 3+ plus signs followed by optional space and "REPLACE"
+  const blockRegex = /-{3,}\s*SEARCH\s*\n([\s\S]*?)\n={3,}\s*\n([\s\S]*?)\n\+{3,}\s*REPLACE/g;
 
   let match;
   while ((match = blockRegex.exec(diff)) !== null) {
