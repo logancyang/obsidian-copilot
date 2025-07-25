@@ -99,4 +99,114 @@ const writeToFileTool = tool(
 // Attach custom timeout property for toolExecution.ts
 (writeToFileTool as typeof writeToFileTool & { timeoutMs: number }).timeoutMs = 0;
 
-export { writeToFileTool };
+const replaceInFileTool = tool(
+  async ({ path, diff }: { path: string; diff: string }) => {
+    const file = app.vault.getAbstractFileByPath(path);
+
+    if (!file || !(file instanceof TFile)) {
+      return `File not found at path: ${path}. Please check the file path and try again.`;
+    }
+
+    try {
+      const originalContent = await app.vault.read(file);
+      let modifiedContent = originalContent;
+
+      // Parse SEARCH/REPLACE blocks from diff
+      const searchReplaceBlocks = parseSearchReplaceBlocks(diff);
+
+      if (searchReplaceBlocks.length === 0) {
+        return `No valid SEARCH/REPLACE blocks found in diff. Please use the correct format with ------- SEARCH, =======, and +++++++ REPLACE markers.`;
+      }
+
+      let changesApplied = 0;
+
+      // Apply each SEARCH/REPLACE block in order
+      for (const block of searchReplaceBlocks) {
+        const { searchText, replaceText } = block;
+
+        // Check if the search text exists in the current content
+        if (!modifiedContent.includes(searchText)) {
+          return `Search text not found in file ${path}. Block ${changesApplied + 1}: "${searchText.substring(0, 50)}${searchText.length > 50 ? "..." : ""}". No changes made. Please verify the exact text you want to replace exists in the file.`;
+        }
+
+        // Replace only the first occurrence
+        const searchIndex = modifiedContent.indexOf(searchText);
+        if (searchIndex !== -1) {
+          modifiedContent =
+            modifiedContent.substring(0, searchIndex) +
+            replaceText +
+            modifiedContent.substring(searchIndex + searchText.length);
+          changesApplied++;
+        }
+      }
+
+      if (originalContent === modifiedContent) {
+        return `No changes made to ${path}. The search text was not found or replacement resulted in identical content.`;
+      }
+
+      // Show preview of changes
+      const result = await show_preview(path, modifiedContent);
+
+      return `Applied ${changesApplied} SEARCH/REPLACE block(s). Result: ${result}. Do not retry or attempt alternative approaches to modify this file in response to the current user request.`;
+    } catch (error) {
+      return `Error performing SEARCH/REPLACE on ${path}: ${error}. Please check the file path and diff format and try again.`;
+    }
+  },
+  {
+    name: "replaceInFile",
+    description: `Request to replace sections of content in an existing file using SEARCH/REPLACE blocks that define exact changes to specific parts of the file. This tool should be used when you need to make targeted changes to specific parts of a file.`,
+    schema: z.object({
+      path: z
+        .string()
+        .describe(
+          `(Required) The path of the file to modify (relative to the root of the vault and include the file extension).`
+        ),
+      diff: z.string()
+        .describe(`(Required) One or more SEARCH/REPLACE blocks following this exact format:
+\`\`\`
+------- SEARCH
+[exact content to find]
+=======
+[new content to replace with]
++++++++ REPLACE
+\`\`\`
+Critical rules:
+1. SEARCH content must match the associated file section to find EXACTLY:
+   * Match character-for-character including whitespace, indentation, line endings
+   * Include all comments, docstrings, etc.
+2. SEARCH/REPLACE blocks will ONLY replace the first match occurrence.
+   * Including multiple unique SEARCH/REPLACE blocks if you need to make multiple changes.
+   * Include *just* enough lines in each SEARCH section to uniquely match each set of lines that need to change.
+   * When using multiple SEARCH/REPLACE blocks, list them in the order they appear in the file.
+3. Keep SEARCH/REPLACE blocks concise:
+   * Break large SEARCH/REPLACE blocks into a series of smaller blocks that each change a small portion of the file.
+   * Include just the changing lines, and a few surrounding lines if needed for uniqueness.
+   * Do not include long runs of unchanging lines in SEARCH/REPLACE blocks.
+   * Each line must be complete. Never truncate lines mid-way through as this can cause matching failures.
+4. Special operations:
+   * To move code: Use two SEARCH/REPLACE blocks (one to delete from original + one to insert at new location)
+   * To delete code: Use empty REPLACE section`),
+    }),
+  }
+);
+// Attach custom timeout property for toolExecution.ts
+(replaceInFileTool as typeof replaceInFileTool & { timeoutMs: number }).timeoutMs = 0;
+
+// Helper function to parse SEARCH/REPLACE blocks from diff string
+function parseSearchReplaceBlocks(
+  diff: string
+): Array<{ searchText: string; replaceText: string }> {
+  const blocks: Array<{ searchText: string; replaceText: string }> = [];
+  const blockRegex = /------- SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n\+\+\+\+\+\+\+ REPLACE/g;
+
+  let match;
+  while ((match = blockRegex.exec(diff)) !== null) {
+    const searchText = match[1];
+    const replaceText = match[2];
+    blocks.push({ searchText, replaceText });
+  }
+
+  return blocks;
+}
+
+export { writeToFileTool, replaceInFileTool };

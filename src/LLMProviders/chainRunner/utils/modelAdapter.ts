@@ -125,9 +125,8 @@ ${toolDescriptions}
 # CRITICAL Guidelines for calling tools
 - For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings). Extract key terms from the query for salientTerms, preserving the original language - do NOT translate terms to English.
 - When you need to call writeToFile, NEVER display the file content directly. Always only pass the file content to wirteToFile.
-- you MUST explicitly call writeToFile for any intent of updating or creating files.
-- Do not call writeToFile tool again if the result is not accepted.
-- Do not call writeToFile tool if no change needs to be made.
+- Use replaceInFile when you want to make small edits to large files (changing specific text patterns) or just removing specific text while preserving the rest of the file content.
+- Use writeToFile for major structural changes to files or when adding new content sections or the exact text to replace is uncertain.
 
 You can use multiple tools in sequence. After each tool execution, you'll receive the results and can decide whether to use more tools or provide your final response.
 
