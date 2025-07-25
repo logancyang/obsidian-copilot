@@ -197,6 +197,17 @@ IMPORTANT: The webSearch tool should ONLY be used when the user explicitly reque
 
 Do NOT automatically use webSearch just because information might be available online. Only use it when explicitly requested by the user.
 
+## Web Search Usage Policy
+IMPORTANT: The webSearch tool should ONLY be used when the user explicitly requests web/internet search using phrases like:
+- "search the web for..."
+- "search online for..."
+- "look up on the internet..."
+- "find online information about..."
+- "check the web for..."
+- "search Google for..." (or any search engine)
+
+Do NOT automatically use webSearch just because information might be available online. Only use it when explicitly requested by the user.
+
 You can use multiple tools in sequence. After each tool execution, you'll receive the results and can decide whether to use more tools or provide your final response.
 
 Always explain your reasoning before using tools. Be conversational and clear about what you're doing.
