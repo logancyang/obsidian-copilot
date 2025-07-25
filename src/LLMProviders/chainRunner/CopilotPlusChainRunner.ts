@@ -16,6 +16,7 @@ import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings, getSystemPrompt } from "@/settings/model";
 import { ToolManager } from "@/tools/toolManager";
+import { writeToFileTool } from "@/tools/ComposerTools";
 import { ChatMessage } from "@/types/message";
 import {
   extractChatHistory,
@@ -27,6 +28,7 @@ import {
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "../intentAnalyzer";
 import { BaseChainRunner } from "./BaseChainRunner";
+import { ActionBlockStreamer } from "./utils/ActionBlockStreamer";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 
 export class CopilotPlusChainRunner extends BaseChainRunner {
@@ -249,7 +251,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     const enhancedUserMessage = content instanceof Array ? (content[0] as any).text : content;
     logInfo("Enhanced user message: ", enhancedUserMessage);
     logInfo("==== Final Request to AI ====\n", messages);
-    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage);
+    const actionStreamer = new ActionBlockStreamer(ToolManager, writeToFileTool);
+    const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage);
 
     // Wrap the stream call with warning suppression
     const chatStream = await withSuppressedTokenWarnings(() =>
@@ -265,10 +268,11 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         });
         break;
       }
-      streamer.processChunk(chunk);
+      for await (const processedChunk of actionStreamer.processChunk(chunk)) {
+        thinkStreamer.processChunk(processedChunk);
+      }
     }
-
-    return streamer.close();
+    return thinkStreamer.close();
   }
 
   async run(

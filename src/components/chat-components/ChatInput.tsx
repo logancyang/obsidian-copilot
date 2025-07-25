@@ -24,7 +24,17 @@ import { useSettingsValue } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
 import { getToolDescription } from "@/tools/toolManager";
 import { extractNoteFiles, isAllowedFileForContext, isNoteTitleUnique } from "@/utils";
-import { CornerDownLeft, Database, Globe, Image, Loader2, StopCircle, X } from "lucide-react";
+import {
+  CornerDownLeft,
+  Database,
+  Globe,
+  Image,
+  Loader2,
+  StopCircle,
+  X,
+  Pen,
+  Sparkles,
+} from "lucide-react";
 import { App, Platform, TFile } from "obsidian";
 import React, {
   forwardRef,
@@ -100,9 +110,10 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const isCopilotPlus =
       currentChain === ChainType.COPILOT_PLUS_CHAIN || currentChain === ChainType.PROJECT_CHAIN;
 
-    // Toggle states for vault and web search
+    // Toggle states for vault, web search, and composer
     const [vaultToggle, setVaultToggle] = useState(false);
     const [webToggle, setWebToggle] = useState(false);
+    const [composerToggle, setComposerToggle] = useState(false);
     const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
     const loadingMessages = [
       "Loading the project context...",
@@ -163,6 +174,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       const toolCalls: string[] = [];
       if (vaultToggle) toolCalls.push("@vault");
       if (webToggle) toolCalls.push("@websearch");
+      if (composerToggle) toolCalls.push("@composer");
 
       handleSendMessage({
         toolCalls,
@@ -571,7 +583,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
               </Button>
             ) : (
               <>
-                {/* Toggle buttons for vault and web search - only show when Autonomous Agent is off */}
+                {/* Toggle buttons for vault, web search, and composer - only show when Autonomous Agent is off */}
                 {!settings.enableAutonomousAgent && (
                   <>
                     <Button
@@ -597,6 +609,21 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                       title="Toggle web search"
                     >
                       <Globe className="tw-size-4" />
+                    </Button>
+                    <Button
+                      variant="ghost2"
+                      size="fit"
+                      onClick={() => setComposerToggle(!composerToggle)}
+                      className={cn(
+                        "tw-mr-2 tw-text-muted hover:tw-text-accent",
+                        composerToggle && "tw-text-accent tw-bg-accent/10"
+                      )}
+                      title="Toggle composer (note editing)"
+                    >
+                      <span className="tw-flex tw-items-center tw-gap-0.5">
+                        <Sparkles className="tw-size-2" />
+                        <Pen className="tw-size-3" />
+                      </span>
                     </Button>
                   </>
                 )}

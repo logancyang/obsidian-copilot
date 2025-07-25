@@ -29,67 +29,63 @@ export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assist
   13. If the user mentions "tags", it most likely means tags in Obsidian note properties.
   14. YouTube URLs: If the user provides YouTube URLs in their message, transcriptions will be automatically fetched and provided to you. You don't need to do anything special - just use the transcription content if available.`;
 
-export const COMPOSER_OUTPUT_INSTRUCTIONS = `Return the new note content or canvas JSON in a special JSON format.
+export const COMPOSER_OUTPUT_INSTRUCTIONS = `Return the new note content or canvas JSON in <writeToFile> tags.
 
   # Steps to find the the target notes
   1. Extract the target note information from user message and find out the note path from the context below.
   2. If target note is not specified, use the <active_note> as the target note.
   3. If still failed to find the target note or the note path, ask the user to specify the target note.
 
-  # JSON Format
-  Provide the content in JSON format and wrap it in a code block with the following structure:
+  # Examples
 
-  For a single markdown file:
-  \`\`\`json
-  {
-    "type": "composer",
-    "path": "path/to/file.md",
-    "content": "The FULL CONTENT of the md note goes here"
-  }
-  \`\`\`
+  Input: Add a new section to note A
+  Output:
+  <writeToFile>
+  <path>path/to/file.md</path>
+  <content>The FULL CONTENT of the note A with added section goes here</content>
+  </writeToFile>
 
-  For a canvas file:
-  \`\`\`json
+  Input: Create a new canvas with "Hello, world!"
+  Output:
+  <writeToFile>
+  <path>path/to/file.canvas</path>
+  <content>
   {
-    "type": "composer",
-    "path": "path/to/file.canvas",
-    "canvas_json": {
-      "nodes": [
-        {
-          "id": "1",
-          "type": "text",
-          "text": "Hello, world!",
-          "x": 0,
-          "y": 0,
-          "width": 200,
-          "height": 50
-        }
-      ],
-      "edges": [
-        {
-          "id": "e1-2",
-          "fromNode": "1",
-          "toNode": "2",
-          "label": "connects to"
-        }
-      ]
-    }
+    "nodes": [
+      {
+        "id": "1",
+        "type": "text",
+        "text": "Hello, world!",
+        "x": 0,
+        "y": 0,
+        "width": 200,
+        "height": 50
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1-2",
+        "fromNode": "1",
+        "toNode": "2",
+        "label": "connects to"
+      }
+    ]
   }
-  \`\`\`
+  </content>
+  </writeToFile>
 
   # Important
-  * ALL JSON objects must be complete and valid - ensure all arrays and objects have matching closing brackets
+  # The content within the <content> tags for canvas files is in JSON format.
   * For canvas files, both 'nodes' and 'edges' arrays must be properly closed with ]
-  * Properly escape all special characters in the content field, especially backticks and quotes
   * Prefer to create new files in existing folders or root folder unless the user's request specifies otherwise
   * File paths must end with a .md or .canvas extension
-  * When generating changes on multiple files, output multiple JSON objects
-  * Each JSON object must be parseable independently
+  * When generating changes on multiple files, output multiple <writeToFile> tags
   * For canvas files:
     - Every node must have: id, type, x, y, width, height
     - Every edge must have: id, fromNode, toNode
     - All IDs must be unique
-    - Edge fromNode and toNode must reference existing node IDs`;
+    - Edge fromNode and toNode must reference existing node IDs.
+  `;
 
 export const NOTE_CONTEXT_PROMPT_TAG = "note_context";
 export const SELECTED_TEXT_TAG = "selected_text";
