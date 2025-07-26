@@ -89,15 +89,45 @@ IMPORTANT: Use the EXACT parameter names as shown in the tool descriptions below
 For localSearch (searching notes in the vault):
 <use_tool>
 <name>localSearch</name>
-<query>piano learning</query>
-<salientTerms>["piano", "learning", "practice", "music"]</salientTerms>
+<query>piano learning practice</query>
+<salientTerms>["piano", "learning", "practice"]</salientTerms>
+</use_tool>
+
+For localSearch with time range (e.g., "what did I do last week"):
+Step 1 - Get time range:
+<use_tool>
+<name>getTimeRangeMs</name>
+<timeExpression>last week</timeExpression>
+</use_tool>
+
+Step 2 - Search with time range (after receiving time range result):
+<use_tool>
+<name>localSearch</name>
+<query>what did I do</query>
+<salientTerms>[]</salientTerms>
+<timeRange>{"startTime": {...}, "endTime": {...}}</timeRange>
+</use_tool>
+
+For localSearch with meaningful terms (e.g., "python debugging notes from yesterday"):
+Step 1 - Get time range:
+<use_tool>
+<name>getTimeRangeMs</name>
+<timeExpression>yesterday</timeExpression>
+</use_tool>
+
+Step 2 - Search with time range:
+<use_tool>
+<name>localSearch</name>
+<query>python debugging notes</query>
+<salientTerms>["python", "debugging", "notes"]</salientTerms>
+<timeRange>{"startTime": {...}, "endTime": {...}}</timeRange>
 </use_tool>
 
 For localSearch with non-English query (PRESERVE ORIGINAL LANGUAGE):
 <use_tool>
 <name>localSearch</name>
 <query>钢琴学习</query>
-<salientTerms>["钢琴", "学习", "练习", "音乐"]</salientTerms>
+<salientTerms>["钢琴", "学习"]</salientTerms>
 </use_tool>
 
 For webSearch (with empty chat history):
@@ -123,11 +153,49 @@ Available tools:
 ${toolDescriptions}
 
 # CRITICAL Guidelines for calling tools
-- For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings). Extract key terms from the query for salientTerms, preserving the original language - do NOT translate terms to English.
+
+## Time-based Queries
+When users ask about temporal periods (e.g., "what did I do last month", "show me notes from last week"), you MUST:
+1. First call getTimeRangeMs to convert the time expression to a proper time range
+2. Then use localSearch with the timeRange parameter from step 1
+3. For salientTerms, ONLY use words that exist in the user's original query (excluding time expressions)
+
+Example for "what did I do last month":
+1. Call getTimeRangeMs with timeExpression: "last month"
+2. Use localSearch with query matching the user's question
+3. salientTerms: [] - empty because "what", "I", "do" are not meaningful search terms
+
+Example for "meetings about project X last week":
+1. Call getTimeRangeMs with timeExpression: "last week"
+2. Use localSearch with query "meetings about project X"
+3. salientTerms: ["meetings", "project", "X"] - these words exist in the original query
+
+## Understanding salientTerms for localSearch
+- salientTerms MUST be extracted from the user's original query - never invent new terms
+- They are keywords used for BM25 full-text search to find notes containing those exact words
+- Extract meaningful content words from the query (nouns, verbs, names, etc.)
+- Exclude common words like "what", "I", "do", "the", "a", etc.
+- Exclude time expressions like "last month", "yesterday", "last week"
+- Preserve the original language - do NOT translate terms to English
+
+## General Guidelines
+- For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings).
 - When you need to call writeToFile, NEVER display the file content directly. Always only pass the file content to wirteToFile.
 - you MUST explicitly call writeToFile for any intent of updating or creating files.
 - Do not call writeToFile tool again if the result is not accepted.
 - Do not call writeToFile tool if no change needs to be made.
+- NEVER mention tool names like "localSearch", "webSearch", etc. in your responses. Use natural language like "searching your vault", "searching the web", etc.
+
+## Web Search Usage Policy
+IMPORTANT: The webSearch tool should ONLY be used when the user explicitly requests web/internet search using phrases like:
+- "search the web for..."
+- "search online for..."
+- "look up on the internet..."
+- "find online information about..."
+- "check the web for..."
+- "search Google for..." (or any search engine)
+
+Do NOT automatically use webSearch just because information might be available online. Only use it when explicitly requested by the user.
 
 You can use multiple tools in sequence. After each tool execution, you'll receive the results and can decide whether to use more tools or provide your final response.
 
@@ -166,7 +234,7 @@ EXAMPLE OF CORRECT RESPONSE:
 <use_tool>
 <name>localSearch</name>
 <query>piano learning</query>
-<salientTerms>["piano", "learning", "practice", "technique"]</salientTerms>
+<salientTerms>["piano", "learning"]</salientTerms>
 </use_tool>"
 
 EXAMPLE OF INCORRECT RESPONSE (DO NOT DO THIS):
@@ -275,19 +343,19 @@ CORRECT: Using tools first, then providing answer based on results`;
 - More tool calls OR final answer
 
 🎯 CORRECT FIRST RESPONSE PATTERN (when tools needed):
-I'll search your vault and the web for piano practice information.
+I'll search your vault for piano practice information.
 
 <use_tool>
 <name>localSearch</name>
-<query>piano learning</query>
-<salientTerms>["piano", "learning"]</salientTerms>
+<query>piano practice</query>
+<salientTerms>["piano", "practice"]</salientTerms>
 </use_tool>
 
 🌐 MULTILINGUAL EXAMPLE (PRESERVE ORIGINAL LANGUAGE):
 <use_tool>
 <name>localSearch</name>
 <query>ピアノの練習方法</query>
-<salientTerms>["ピアノ", "練習", "方法", "音楽"]</salientTerms>
+<salientTerms>["ピアノ", "練習", "方法"]</salientTerms>
 </use_tool>
 
 <use_tool>
@@ -299,12 +367,12 @@ I'll search your vault and the web for piano practice information.
 [RESPONSE ENDS HERE - NO MORE TEXT]
 
 🎯 CORRECT FOLLOW-UP RESPONSE PATTERN:
-Let me gather more specific information about practice routines.
+Let me gather more specific information about practice schedules.
 
 <use_tool>
 <name>localSearch</name>
 <query>practice schedule</query>
-<salientTerms>["practice", "routine", "schedule"]</salientTerms>
+<salientTerms>["practice", "schedule"]</salientTerms>
 </use_tool>
 
 [RESPONSE ENDS HERE - NO MORE TEXT]
@@ -477,8 +545,7 @@ class GeminiModelAdapter extends BaseModelAdapter {
 
 You MUST use tools to complete tasks. DO NOT ask the user questions about how to search.
 
-When the user mentions "my notes" or "my vault", you MUST immediately use the localSearch tool.
-When the user asks to "search the web", you MUST immediately use the webSearch tool.
+When the user mentions "my notes" or "my vault", use the localSearch tool.
 
 ❌ WRONG (what you just did):
 "Let's start by searching your notes. What kind of information should I look for?"
@@ -487,28 +554,22 @@ When the user asks to "search the web", you MUST immediately use the webSearch t
 <use_tool>
 <name>localSearch</name>
 <query>piano</query>
-<salientTerms>["piano", "practice", "notes", "learning"]</salientTerms>
+<salientTerms>["piano"]</salientTerms>
 </use_tool>
 
 GEMINI SPECIFIC RULES:
 1. When user mentions "my notes" about X → use localSearch with query "X"
-2. When user says "search the web" → use webSearch tool immediately
-3. DO NOT ask clarifying questions about search terms
-4. DO NOT wait for permission to use tools
-5. Use tools IMMEDIATELY based on the user's request
+2. DO NOT ask clarifying questions about search terms
+3. DO NOT wait for permission to use tools
+4. Use tools based on the user's request
 
 PATTERN FOR MULTI-STEP REQUESTS:
-User: "based on my X notes, search the web for Y and create Z"
+User: "based on my project roadmap notes and create summary"
 Your response:
 <use_tool>
 <name>localSearch</name>
-<query>X</query>
-<salientTerms>["X", "related", "terms"]</salientTerms>
-</use_tool>
-<use_tool>
-<name>webSearch</name>
-<query>Y</query>
-<chatHistory>[]</chatHistory>
+<query>project roadmap</query>
+<salientTerms>["project", "roadmap"]</salientTerms>
 </use_tool>
 
 Remember: The user has already told you what to do. Execute it NOW with the tools.`;
@@ -519,7 +580,7 @@ Remember: The user has already told you what to do. Execute it NOW with the tool
   enhanceUserMessage(message: string, requiresTools: boolean): string {
     if (requiresTools) {
       // Add explicit reminder for Gemini
-      return `${message}\n\nREMINDER: Use the tools immediately. Do not ask questions. For "my notes", use localSearch. For "search the web", use webSearch.`;
+      return `${message}\n\nREMINDER: Use the tools immediately. Do not ask questions. For "my notes", use localSearch.`;
     }
     return message;
   }

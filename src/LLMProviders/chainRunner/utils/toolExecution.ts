@@ -97,9 +97,15 @@ export function getToolDisplayName(toolName: string): string {
     webSearch: "web search",
     getFileTree: "file tree",
     getCurrentTime: "current time",
+    getTimeRangeMs: "time range",
+    getTimeInfoByEpoch: "time info",
+    startPomodoro: "pomodoro timer",
     pomodoroTool: "pomodoro timer",
     simpleYoutubeTranscriptionTool: "YouTube transcription",
+    youtubeTranscription: "YouTube transcription",
+    indexVault: "vault indexing",
     indexTool: "index",
+    writeToFile: "file editor",
   };
 
   return displayNameMap[toolName] || toolName;
@@ -114,9 +120,15 @@ export function getToolEmoji(toolName: string): string {
     webSearch: "🌐",
     getFileTree: "📁",
     getCurrentTime: "🕒",
+    getTimeRangeMs: "📅",
+    getTimeInfoByEpoch: "🕰️",
+    startPomodoro: "⏱️",
     pomodoroTool: "⏱️",
     simpleYoutubeTranscriptionTool: "📺",
+    youtubeTranscription: "📺",
+    indexVault: "📚",
     indexTool: "📚",
+    writeToFile: "✏️",
   };
 
   return emojiMap[toolName] || "🔧";

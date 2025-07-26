@@ -9,21 +9,27 @@ import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings } from "@/settings/model";
-import { TimeInfo } from "@/tools/TimeTools";
-import { ChatHistoryEntry } from "@/utils";
-import { tool } from "@langchain/core/tools";
 import { z } from "zod";
+import { createTool, SimpleTool } from "./SimpleTool";
 
-const localSearchTool = tool(
-  async ({
-    timeRange,
-    query,
-    salientTerms,
-  }: {
-    timeRange?: { startTime: TimeInfo; endTime: TimeInfo };
-    query: string;
-    salientTerms: string[];
-  }) => {
+// Define Zod schema for localSearch
+const localSearchSchema = z.object({
+  query: z.string().min(1).describe("The search query"),
+  salientTerms: z.array(z.string()).describe("List of salient terms extracted from the query"),
+  timeRange: z
+    .object({
+      startTime: z.any(), // TimeInfo type
+      endTime: z.any(), // TimeInfo type
+    })
+    .optional()
+    .describe("Time range for search"),
+});
+
+const localSearchTool = createTool({
+  name: "localSearch",
+  description: "Search for notes based on the time range and query",
+  schema: localSearchSchema,
+  handler: async ({ timeRange, query, salientTerms }) => {
     const indexEmpty = await VectorStoreManager.getInstance().isIndexEmpty();
     if (indexEmpty) {
       throw new CustomError(EMPTY_INDEX_ERROR_MESSAGE);
@@ -71,24 +77,13 @@ const localSearchTool = tool(
 
     return JSON.stringify(formattedResults);
   },
-  {
-    name: "localSearch",
-    description: "Search for notes based on the time range and query",
-    schema: z.object({
-      timeRange: z
-        .object({
-          startTime: z.any(),
-          endTime: z.any(),
-        })
-        .optional(),
-      query: z.string().describe("The search query"),
-      salientTerms: z.array(z.string()).describe("List of salient terms extracted from the query"),
-    }),
-  }
-);
+});
 
-const indexTool = tool(
-  async () => {
+const indexTool = createTool({
+  name: "indexVault",
+  description: "Index the vault to the Copilot index",
+  schema: z.void(), // No parameters
+  handler: async () => {
     try {
       const indexedCount = await VectorStoreManager.getInstance().indexVaultToVectorStore();
       const indexResultPrompt = `Please report whether the indexing was successful.\nIf success is true, just say it is successful. If 0 files is indexed, say there are no new files to index.`;
@@ -110,15 +105,28 @@ const indexTool = tool(
       });
     }
   },
-  {
-    name: "indexVault",
-    description: "Index the vault to the Copilot index",
-  }
-);
+  isBackground: true,
+});
+
+// Define Zod schema for webSearch
+const webSearchSchema = z.object({
+  query: z.string().min(1).describe("The search query"),
+  chatHistory: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string(),
+      })
+    )
+    .describe("Previous conversation turns"),
+});
 
 // Add new web search tool
-const webSearchTool = tool(
-  async ({ query, chatHistory }: { query: string; chatHistory: ChatHistoryEntry[] }) => {
+const webSearchTool = createTool({
+  name: "webSearch",
+  description: "Search the web for information",
+  schema: webSearchSchema,
+  handler: async ({ query, chatHistory }) => {
     try {
       // Get standalone question considering chat history
       const standaloneQuestion = await getStandaloneQuestion(query, chatHistory);
@@ -140,21 +148,7 @@ const webSearchTool = tool(
       return "";
     }
   },
-  {
-    name: "webSearch",
-    description: "Search the web for information",
-    schema: z.object({
-      query: z.string().describe("The search query"),
-      chatHistory: z
-        .array(
-          z.object({
-            role: z.enum(["user", "assistant"]),
-            content: z.string(),
-          })
-        )
-        .describe("Previous conversation turns"),
-    }),
-  }
-);
+});
 
 export { indexTool, localSearchTool, webSearchTool };
+export type { SimpleTool };

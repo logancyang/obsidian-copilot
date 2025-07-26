@@ -3,7 +3,7 @@ import { getTimeRangeMsTool } from "./TimeTools";
 
 // Helper function to extract the tool function
 const getTimeRangeMs = async (timeExpression: string) => {
-  return await getTimeRangeMsTool.func({ timeExpression });
+  return await getTimeRangeMsTool.call({ timeExpression });
 };
 
 // Helper to verify date ranges
