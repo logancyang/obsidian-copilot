@@ -111,7 +111,14 @@ const indexTool = createTool({
 // Define Zod schema for webSearch
 const webSearchSchema = z.object({
   query: z.string().min(1).describe("The search query"),
-  chatHistory: z.array(z.any()).describe("Previous conversation turns"),
+  chatHistory: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string(),
+      })
+    )
+    .describe("Previous conversation turns"),
 });
 
 // Add new web search tool
