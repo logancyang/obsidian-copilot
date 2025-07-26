@@ -1,8 +1,8 @@
-import { tool } from "@langchain/core/tools";
 import * as chrono from "chrono-node";
 import { DateTime } from "luxon";
 import { Notice } from "obsidian";
 import { z } from "zod";
+import { createTool, CommonSchemas } from "./SimpleTool";
 
 export interface TimeInfo {
   epoch: number;
@@ -35,10 +35,12 @@ async function getCurrentTime(): Promise<TimeInfo> {
   };
 }
 
-const getCurrentTimeTool = tool(async () => getCurrentTime(), {
+const getCurrentTimeTool = createTool({
   name: "getCurrentTime",
   description: "Get the current time in various formats, including timezone information",
-  schema: z.object({}), // No input required
+  schema: CommonSchemas.emptyParams,
+  handler: async () => getCurrentTime(),
+  isBackground: true,
 });
 
 const monthNames = {
@@ -407,20 +409,17 @@ function convertToTimeInfo(dateTime: DateTime): TimeInfo {
   };
 }
 
-const getTimeRangeMsTool = tool(
-  async ({ timeExpression }: { timeExpression: string }) => getTimeRangeMs(timeExpression),
-  {
-    name: "getTimeRangeMs",
-    description: "Get a time range in milliseconds based on a natural language time expression",
-    schema: z.object({
-      timeExpression: z
-        .string()
-        .describe(
-          "A natural language time expression (e.g., 'last week', 'from July 1 to July 15')"
-        ),
-    }),
-  }
-);
+const getTimeRangeMsTool = createTool({
+  name: "getTimeRangeMs",
+  description: "Get a time range in milliseconds based on a natural language time expression",
+  schema: z.object({
+    timeExpression: z
+      .string()
+      .describe("A natural language time expression (e.g., 'last week', 'from July 1 to July 15')"),
+  }),
+  handler: async ({ timeExpression }) => getTimeRangeMs(timeExpression),
+  isBackground: true,
+});
 
 function getTimeInfoByEpoch(epoch: number): TimeInfo {
   // Check if the epoch is in seconds (10 digits) or milliseconds (13 digits)
@@ -429,17 +428,15 @@ function getTimeInfoByEpoch(epoch: number): TimeInfo {
   return convertToTimeInfo(dateTime);
 }
 
-const getTimeInfoByEpochTool = tool(
-  async ({ epoch }: { epoch: number }) => getTimeInfoByEpoch(epoch),
-  {
-    name: "getTimeInfoByEpoch",
-    description:
-      "Convert a Unix timestamp (in seconds or milliseconds) to detailed time information",
-    schema: z.object({
-      epoch: z.number().describe("Unix timestamp in seconds or milliseconds"),
-    }),
-  }
-);
+const getTimeInfoByEpochTool = createTool({
+  name: "getTimeInfoByEpoch",
+  description: "Convert a Unix timestamp (in seconds or milliseconds) to detailed time information",
+  schema: z.object({
+    epoch: z.number().describe("Unix timestamp in seconds or milliseconds"),
+  }),
+  handler: async ({ epoch }) => getTimeInfoByEpoch(epoch),
+  isBackground: true,
+});
 
 function parseTimeInterval(interval: string): number {
   const match = interval.match(/^(\d+)\s*(s|sec|seconds?|m|min|minutes?|h|hr|hours?)$/i);
@@ -482,21 +479,19 @@ async function startPomodoro(interval = "25min"): Promise<void> {
   });
 }
 
-const pomodoroTool = tool(
-  async ({ interval = "25min" }: { interval?: string }) => {
+const pomodoroTool = createTool({
+  name: "startPomodoro",
+  description: "Start a Pomodoro timer with a customizable interval",
+  schema: z.object({
+    interval: z
+      .string()
+      .default("25min")
+      .describe("Time interval (e.g., '25min', '5s', '1h'). Default is 25min."),
+  }),
+  handler: async ({ interval }) => {
     startPomodoro(interval);
     return `Pomodoro timer started. It will end in ${interval}.`;
   },
-  {
-    name: "startPomodoro",
-    description: "Start a Pomodoro timer with a customizable interval",
-    schema: z.object({
-      interval: z
-        .string()
-        .optional()
-        .describe("Time interval (e.g., '25min', '5s', '1h'). Default is 25min."),
-    }),
-  }
-);
+});
 
 export { getCurrentTimeTool, getTimeInfoByEpochTool, getTimeRangeMsTool, pomodoroTool };

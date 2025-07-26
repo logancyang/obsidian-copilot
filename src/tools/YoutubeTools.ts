@@ -1,9 +1,14 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import { tool } from "@langchain/core/tools";
 import { z } from "zod";
+import { createTool } from "./SimpleTool";
 
-const simpleYoutubeTranscriptionTool = tool(
-  async ({ url }: { url: string }) => {
+const simpleYoutubeTranscriptionTool = createTool({
+  name: "youtubeTranscription",
+  description: "Get the transcript of a YouTube video",
+  schema: z.object({
+    url: z.string().url().describe("The YouTube video URL"),
+  }),
+  handler: async ({ url }) => {
     try {
       const response = await BrevilabsClient.getInstance().youtube4llm(url);
 
@@ -29,13 +34,6 @@ const simpleYoutubeTranscriptionTool = tool(
       });
     }
   },
-  {
-    name: "youtubeTranscription",
-    description: "Get the transcript of a YouTube video",
-    schema: z.object({
-      url: z.string().describe("The YouTube video URL"),
-    }),
-  }
-);
+});
 
 export { simpleYoutubeTranscriptionTool };

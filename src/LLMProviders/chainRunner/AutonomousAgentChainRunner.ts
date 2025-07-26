@@ -3,6 +3,7 @@ import { getSystemPrompt } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { createGetFileTreeTool } from "@/tools/FileTreeTools";
 import { indexTool, localSearchTool, webSearchTool } from "@/tools/SearchTools";
+import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
 import {
   getCurrentTimeTool,
   getTimeInfoByEpochTool,
@@ -57,7 +58,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
     for (const url of youtubeUrls) {
       try {
-        const result = await simpleYoutubeTranscriptionTool.invoke({ url });
+        const result = await simpleYoutubeTranscriptionTool.call({ url });
         const parsedResult = JSON.parse(result);
 
         if (parsedResult.success) {
@@ -105,9 +106,9 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     ];
   }
 
-  private getAvailableTools(): any[] {
+  private getAvailableTools(): SimpleTool<any, any>[] {
     // Get tools from the existing IntentAnalyzer
-    const tools: any[] = [
+    const tools: SimpleTool<any, any>[] = [
       localSearchTool,
       webSearchTool,
       pomodoroTool,
@@ -133,26 +134,17 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     const tools = this.getAvailableTools();
     return tools
       .map((tool) => {
-        const schema = tool.schema || {};
         let params = "";
 
-        // Handle Zod schemas (which have a 'shape' property)
-        if (schema.shape) {
-          params = Object.entries(schema.shape)
-            .map(([key, zodSchema]: [string, any]) => {
-              const description = zodSchema._def?.description || "No description";
-              return `<${escapeXml(key)}>${escapeXml(description)}</${escapeXml(key)}>`;
-            })
-            .join("\n");
-        } else if (schema.properties) {
-          params = Object.entries(schema.properties)
+        // All tools now have Zod schema
+        const parameters = extractParametersFromZod(tool.schema);
+        if (Object.keys(parameters).length > 0) {
+          params = Object.entries(parameters)
             .map(
-              ([key, val]: [string, any]) =>
-                `<${escapeXml(key)}>${escapeXml(val.description || "No description")}</${escapeXml(key)}>`
+              ([key, description]) =>
+                `<${escapeXml(key)}>${escapeXml(description)}</${escapeXml(key)}>`
             )
             .join("\n");
-        } else {
-          logError("Tool schema not found for tool:", tool.name);
         }
 
         return `<${escapeXml(tool.name)}>
@@ -351,22 +343,30 @@ ${params}
           // Log tool call details for debugging
           logToolCall(toolCall, iteration);
 
-          // Create tool calling message with better spacing and display name
-          const toolEmoji = getToolEmoji(toolCall.name);
-          const toolDisplayName = getToolDisplayName(toolCall.name);
-          let toolMessage = `${toolEmoji} *Calling ${toolDisplayName}...*`;
-          const confirmationMessage = getToolConfirmtionMessage(toolCall.name);
-          if (confirmationMessage) {
-            toolMessage += `\n⏳ *${confirmationMessage}...*`;
+          // Find the tool to check if it's a background tool
+          const availableTools = this.getAvailableTools();
+          const tool = availableTools.find((t) => t.name === toolCall.name);
+          const isBackgroundTool = tool?.isBackground || false;
+
+          // Only show tool calling message for non-background tools
+          if (!isBackgroundTool) {
+            // Create tool calling message with better spacing and display name
+            const toolEmoji = getToolEmoji(toolCall.name);
+            const toolDisplayName = getToolDisplayName(toolCall.name);
+            let toolMessage = `${toolEmoji} *Calling ${toolDisplayName}...*`;
+            const confirmationMessage = getToolConfirmtionMessage(toolCall.name);
+            if (confirmationMessage) {
+              toolMessage += `\n⏳ *${confirmationMessage}...*`;
+            }
+            const toolCallingMessage = `<br/>\n\n${toolMessage}\n\n<br/>`;
+            toolCallMessages.push(toolCallingMessage);
+
+            // Show all history plus all tool call messages
+            const currentDisplay = [...iterationHistory, ...toolCallMessages].join("\n\n");
+            updateCurrentAiMessage(currentDisplay);
           }
-          const toolCallingMessage = `<br/>\n\n${toolMessage}\n\n<br/>`;
-          toolCallMessages.push(toolCallingMessage);
 
-          // Show all history plus all tool call messages
-          const currentDisplay = [...iterationHistory, ...toolCallMessages].join("\n\n");
-          updateCurrentAiMessage(currentDisplay);
-
-          const result = await executeSequentialToolCall(toolCall, this.getAvailableTools());
+          const result = await executeSequentialToolCall(toolCall, availableTools);
           toolResults.push(result);
 
           // Log tool result
