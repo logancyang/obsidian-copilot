@@ -210,7 +210,7 @@ export class Docs4LLMParser implements FileParser {
         throw new Error("No project context provided for file parsing");
       }
 
-      const cachedContent = await this.projectContextCache.getFileContext(
+      const cachedContent = await this.projectContextCache.getOrReuseFileContext(
         this.currentProject,
         file.path
       );
