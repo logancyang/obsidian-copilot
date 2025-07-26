@@ -56,7 +56,30 @@ const writeToFileSchema = z.object({
           * Every node must have: id, type, x, y, width, height
           * Every edge must have: id, fromNode, toNode
           * All IDs must be unique
-          * Edge fromNode and toNode must reference existing node IDs`),
+          * Edge fromNode and toNode must reference existing node IDs
+          
+          # Example content of a canvas file
+          {
+            "nodes": [
+              {
+                "id": "1",
+                "type": "text",
+                "text": "Hello, world!",
+                "x": 0,
+                "y": 0,
+                "width": 200,
+                "height": 50
+              }
+            ],
+            "edges": [
+              {
+                "id": "e1-2",
+                "fromNode": "1",
+                "toNode": "2",
+                "label": "connects to"
+              }
+            ]
+          }`),
 });
 
 const writeToFileTool = createTool({
