@@ -132,7 +132,8 @@ describe("ChatManager", () => {
         "Hello",
         "Hello",
         USER_SENDER,
-        context
+        context,
+        undefined
       );
       expect(mockContextManager.processMessageContext).toHaveBeenCalledWith(
         mockMessage,
@@ -166,11 +167,17 @@ describe("ChatManager", () => {
       await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN, true);
 
       // Should have called addMessage with updated context that includes active note
-      expect(mockMessageRepo.addMessage).toHaveBeenCalledWith("Hello", "Hello", USER_SENDER, {
-        notes: [mockActiveFile],
-        urls: [],
-        selectedTextContexts: [],
-      });
+      expect(mockMessageRepo.addMessage).toHaveBeenCalledWith(
+        "Hello",
+        "Hello",
+        USER_SENDER,
+        {
+          notes: [mockActiveFile],
+          urls: [],
+          selectedTextContexts: [],
+        },
+        undefined
+      );
     });
 
     it("should handle case when no active file exists", async () => {
@@ -195,7 +202,8 @@ describe("ChatManager", () => {
         "Hello",
         "Hello",
         USER_SENDER,
-        context
+        context,
+        undefined
       );
     });
 
@@ -514,11 +522,17 @@ describe("ChatManager", () => {
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN, true);
 
         // Verify that active note was added to context
-        expect(mockMessageRepo.addMessage).toHaveBeenCalledWith("Hello", "Hello", USER_SENDER, {
-          notes: [mockActiveFile],
-          urls: [],
-          selectedTextContexts: [],
-        });
+        expect(mockMessageRepo.addMessage).toHaveBeenCalledWith(
+          "Hello",
+          "Hello",
+          USER_SENDER,
+          {
+            notes: [mockActiveFile],
+            urls: [],
+            selectedTextContexts: [],
+          },
+          undefined
+        );
       });
     });
 
