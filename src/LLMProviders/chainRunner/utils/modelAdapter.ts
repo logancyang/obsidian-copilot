@@ -142,24 +142,36 @@ For getFileTree:
 <name>getFileTree</name>
 </use_tool>
 
-For time queries:
+For time queries (IMPORTANT: Always use UTC offsets, not timezone names):
 Example 1 - "what time is it" (local time):
 <use_tool>
 <name>getCurrentTime</name>
 </use_tool>
 
-Example 2 - "what time is it in Tokyo":
+Example 2 - "what time is it in Tokyo" (UTC+9):
 <use_tool>
 <name>getCurrentTime</name>
-<timezone>Asia/Tokyo</timezone>
+<timezoneOffset>+9</timezoneOffset>
 </use_tool>
 
-Example 3 - "what time is 6pm PT in Tokyo":
+Example 3 - "what time is it in Beijing" (UTC+8):
+<use_tool>
+<name>getCurrentTime</name>
+<timezoneOffset>+8</timezoneOffset>
+</use_tool>
+
+Example 4 - "what time is it in New York" (UTC-5 or UTC-4 depending on DST):
+<use_tool>
+<name>getCurrentTime</name>
+<timezoneOffset>-5</timezoneOffset>
+</use_tool>
+
+Example 5 - "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9):
 <use_tool>
 <name>convertTimeBetweenTimezones</name>
 <time>6pm</time>
-<fromTimezone>PT</fromTimezone>
-<toTimezone>Asia/Tokyo</toTimezone>
+<fromOffset>-8</fromOffset>
+<toOffset>+9</toOffset>
 </use_tool>
 
 For writeToFile:
