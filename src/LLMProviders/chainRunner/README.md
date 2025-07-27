@@ -73,7 +73,7 @@ const response = await this.streamMultimodalResponse(enhancedMessage, ...);
 
 **How it works:**
 
-- **No LangChain tool calling system** - Uses XML-based tool calling
+- **No LangChain dependency** - Uses simple tool interface with XML-based tool calling
 - AI decides autonomously which tools to use via structured XML format
 - Iterative loop where AI can call multiple tools in sequence
 - Each tool result informs the next decision
@@ -131,10 +131,245 @@ while (iteration < maxIterations) {
 | ------------------ | ----------------------- | ------------------------------------- |
 | **Tool Decision**  | Brevilabs API analysis  | AI decides autonomously               |
 | **Tool Execution** | Pre-LLM, synchronous    | During conversation, iterative        |
-| **Tool Format**    | LangChain tool objects  | XML-based structured format           |
+| **Tool Format**    | SimpleTool interface    | XML-based structured format           |
 | **Reasoning**      | Intent analysis → tools | AI reasoning → tools → more reasoning |
 | **Iterations**     | Single pass             | Up to 4 iterations                    |
 | **Tool Chaining**  | Limited                 | Full chaining support                 |
+
+## SimpleTool Interface
+
+### Overview
+
+The SimpleTool interface provides a clean, type-safe way to define tools with Zod validation:
+
+```typescript
+interface SimpleTool<TSchema extends z.ZodType = z.ZodVoid> {
+  name: string;
+  description: string;
+  schema: TSchema;
+  call: (args: z.infer<TSchema>) => Promise<any>;
+  timeoutMs?: number;
+  isBackground?: boolean;
+}
+```
+
+### Creating Tools
+
+All tools are created using the unified `createTool` function with Zod schemas:
+
+#### Tool with No Parameters
+
+```typescript
+const indexTool = createTool({
+  name: "indexVault",
+  description: "Index the vault to the Copilot index",
+  schema: z.void(), // No parameters
+  handler: async () => {
+    // Tool implementation
+    return "Indexing complete";
+  },
+  isBackground: true, // Optional: hide from user
+});
+```
+
+#### Tool with Parameters
+
+```typescript
+// Define schema with validation rules
+const searchSchema = z.object({
+  query: z.string().min(1).describe("The search query"),
+  salientTerms: z.array(z.string()).min(1).describe("Key terms extracted from query"),
+  timeRange: z
+    .object({
+      startTime: z.any(),
+      endTime: z.any(),
+    })
+    .optional()
+    .describe("Time range for search"),
+});
+
+// Create tool with automatic validation
+const searchTool = createTool({
+  name: "localSearch",
+  description: "Search for notes based on query and time range",
+  schema: searchSchema,
+  handler: async ({ query, salientTerms, timeRange }) => {
+    // Handler receives fully typed and validated arguments
+    // TypeScript knows the exact types from the schema
+    return performSearch(query, salientTerms, timeRange);
+  },
+  timeoutMs: 30000, // Optional: custom timeout
+});
+```
+
+### Benefits of Unified Zod Approach
+
+1. **Type Safety**: Full TypeScript type inference from schemas
+2. **Runtime Validation**: All inputs validated before reaching handler
+3. **Consistent Interface**: One way to create all tools
+4. **Better Error Messages**: Zod provides detailed validation errors
+5. **No Any Types**: Everything is properly typed
+6. **Simpler Codebase**: No need to maintain multiple tool creation methods
+
+### Advanced Zod Patterns
+
+#### Complex Validation
+
+```typescript
+const emailToolSchema = z.object({
+  to: z.string().email().describe("Recipient email"),
+  subject: z.string().min(1).max(100).describe("Email subject"),
+  body: z.string().min(1).describe("Email content"),
+  cc: z.array(z.string().email()).optional().describe("CC recipients"),
+});
+```
+
+#### Union Types for Actions
+
+```typescript
+const actionSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("search"),
+    query: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("create"),
+    content: z.string().min(1),
+    tags: z.array(z.string()).default([]),
+  }),
+  z.object({
+    type: z.literal("delete"),
+    id: z.string().uuid(),
+  }),
+]);
+
+const actionTool = createTool({
+  name: "performAction",
+  description: "Perform various actions",
+  schema: actionSchema,
+  handler: async (action) => {
+    // TypeScript knows exactly which type based on discriminator
+    switch (action.type) {
+      case "search":
+        return search(action.query);
+      case "create":
+        return create(action.content, action.tags);
+      case "delete":
+        return deleteItem(action.id);
+    }
+  },
+});
+```
+
+#### Custom Validation
+
+```typescript
+const filePathSchema = z
+  .string()
+  .refine((val) => val.endsWith(".md") || val.endsWith(".canvas"), {
+    message: "File must be .md or .canvas",
+  })
+  .refine((val) => !val.includes(".."), { message: "Path traversal not allowed" })
+  .describe("Path to markdown or canvas file");
+```
+
+#### Transformations
+
+```typescript
+const dateToolSchema = z.object({
+  date: z
+    .string()
+    .describe("Date in ISO format or natural language")
+    .transform((str) => new Date(str)),
+  timezone: z.string().default("UTC").describe("Timezone identifier"),
+});
+```
+
+### Schema Composition
+
+```typescript
+// Base schemas that can be reused
+const timeRangeSchema = z
+  .object({
+    startTime: z.date(),
+    endTime: z.date(),
+  })
+  .refine((data) => data.endTime > data.startTime, {
+    message: "End time must be after start time",
+  });
+
+const paginationSchema = z.object({
+  page: z.number().int().positive().default(1),
+  pageSize: z.number().int().positive().max(100).default(20),
+});
+
+// Compose into larger schemas
+const searchWithPaginationSchema = z.object({
+  query: z.string().min(1).describe("Search query"),
+  filters: z.record(z.string()).optional().describe("Additional filters"),
+  timeRange: timeRangeSchema.optional(),
+  pagination: paginationSchema,
+});
+```
+
+### Default Values
+
+```typescript
+const configSchema = z.object({
+  temperature: z.number().min(0).max(2).default(0.7),
+  maxTokens: z.number().int().positive().default(1000),
+  model: z.enum(["gpt-4", "gpt-3.5-turbo"]).default("gpt-4"),
+});
+
+// Handler receives object with defaults applied
+const configTool = createTool({
+  name: "updateConfig",
+  schema: configSchema,
+  handler: async (config) => {
+    // config.temperature is always defined (0.7 if not provided)
+    // config.maxTokens is always defined (1000 if not provided)
+    // config.model is always defined ("gpt-4" if not provided)
+    return updateConfiguration(config);
+  },
+});
+```
+
+### Handling Validation Errors with Retry
+
+When AI-generated parameters fail Zod validation, the tool execution will return a formatted error. The autonomous agent automatically handles this through its iterative loop:
+
+```typescript
+// Example tool with strict validation
+const searchToolWithValidation = createTool({
+  name: "searchNotes",
+  description: "Search notes with specific criteria",
+  schema: z.object({
+    query: z.string().min(2, "Query must be at least 2 characters"),
+    limit: z.number().int().min(1).max(100),
+    sortBy: z.enum(["relevance", "date", "title"]),
+  }),
+  handler: async ({ query, limit, sortBy }) => {
+    return performSearch(query, limit, sortBy);
+  },
+});
+
+// When the AI provides invalid parameters:
+// Input: { query: "a", limit: 200, sortBy: "random" }
+//
+// The flow:
+// 1. Tool execution catches Zod validation error
+// 2. Returns: "Tool searchNotes validation failed: query: Query must be at least 2 characters,
+//             limit: Number must be less than or equal to 100, sortBy: Invalid enum value"
+// 3. This error is added to the conversation as a user message
+// 4. The AI sees the error in the next iteration and can retry with corrected parameters
+// 5. The autonomous agent continues up to 4 iterations, allowing multiple retry attempts
+
+// Example conversation flow:
+// Iteration 1: AI calls tool with invalid params → receives error
+// Iteration 2: AI understands error and retries with { query: "search term", limit: 50, sortBy: "date" } → success
+```
+
+The validation errors are automatically formatted to be clear and actionable, helping the AI self-correct. The autonomous agent's iterative design naturally provides retry capability with the AI learning from each error.
 
 ## XML Tool Calling Details
 
