@@ -62,7 +62,8 @@ async function getCurrentTime(timezone?: string): Promise<TimeInfo> {
   }
 
   const jsDate = dt.toJSDate();
-  const timezoneOffset = jsDate.getTimezoneOffset();
+  // Use Luxon's offset which is in minutes and already has the correct sign
+  const timezoneOffset = dt.offset;
   const timezoneAbbr = dt.offsetNameShort || "Unknown";
 
   return {
@@ -70,7 +71,7 @@ async function getCurrentTime(timezone?: string): Promise<TimeInfo> {
     isoString: jsDate.toISOString(),
     userLocaleString: dt.toLocaleString(DateTime.DATETIME_FULL),
     localDateString: dt.toISODate() || "",
-    timezoneOffset: -timezoneOffset,
+    timezoneOffset: timezoneOffset,
     timezone: timezoneAbbr,
   };
 }
@@ -436,22 +437,16 @@ function getTimeRangeMs(timeExpression: string) {
 
 function convertToTimeInfo(dateTime: DateTime): TimeInfo {
   const jsDate = dateTime.toJSDate();
-  const timezoneOffset = jsDate.getTimezoneOffset();
-  const timezoneAbbr =
-    new Intl.DateTimeFormat("en", { timeZoneName: "short" })
-      .formatToParts(jsDate)
-      .find((part) => part.type === "timeZoneName")?.value || "Unknown";
+  // Use Luxon's offset which is in minutes and already has the correct sign
+  const timezoneOffset = dateTime.offset;
+  const timezoneAbbr = dateTime.offsetNameShort || "Unknown";
 
   return {
     epoch: Math.floor(jsDate.getTime()),
     isoString: jsDate.toISOString(),
-    userLocaleString: jsDate.toLocaleString(),
-    localDateString: jsDate.toLocaleDateString("en-CA", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }),
-    timezoneOffset: -timezoneOffset,
+    userLocaleString: dateTime.toLocaleString(DateTime.DATETIME_FULL),
+    localDateString: dateTime.toISODate() || "",
+    timezoneOffset: timezoneOffset,
     timezone: timezoneAbbr,
   };
 }
@@ -607,14 +602,15 @@ async function convertTimeBetweenTimezones(
     }
 
     const jsDate = targetDt.toJSDate();
-    const timezoneOffset = jsDate.getTimezoneOffset();
+    // Use Luxon's offset which is in minutes and already has the correct sign
+    const timezoneOffset = targetDt.offset;
 
     return {
       epoch: Math.floor(jsDate.getTime()),
       isoString: jsDate.toISOString(),
       userLocaleString: targetDt.toLocaleString(DateTime.DATETIME_FULL),
       localDateString: targetDt.toISODate() || "",
-      timezoneOffset: -timezoneOffset,
+      timezoneOffset: timezoneOffset,
       timezone: targetDt.offsetNameShort || targetTz,
       originalTime: sourceDt.toLocaleString(DateTime.TIME_SIMPLE) + " " + sourceDt.offsetNameShort,
       convertedTime: targetDt.toLocaleString(DateTime.TIME_SIMPLE) + " " + targetDt.offsetNameShort,

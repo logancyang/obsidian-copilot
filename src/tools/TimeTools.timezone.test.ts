@@ -52,6 +52,18 @@ describe("TimeTools Timezone Tests", () => {
         "Unknown timezone: Invalid/Timezone"
       );
     });
+
+    it("should return correct timezone offset for Tokyo", async () => {
+      const result = await getCurrentTimeTool.call({ timezone: "Asia/Tokyo" });
+      // Tokyo is UTC+9, so offset should be 540 minutes (9 * 60)
+      expect(result.timezoneOffset).toBe(540);
+    });
+
+    it("should return correct timezone offset for New York", async () => {
+      const result = await getCurrentTimeTool.call({ timezone: "America/New_York" });
+      // New York is UTC-5 (EST) or UTC-4 (EDT), so offset should be -300 or -240
+      expect([-300, -240]).toContain(result.timezoneOffset);
+    });
   });
 
   describe("convertTimeBetweenTimezonesTool", () => {
