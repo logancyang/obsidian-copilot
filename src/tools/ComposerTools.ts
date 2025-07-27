@@ -1,4 +1,5 @@
 import { tool } from "@langchain/core/tools";
+import { logWarn } from "@/logger";
 import { Notice, TFile } from "obsidian";
 import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
 import { z } from "zod";
@@ -126,7 +127,10 @@ const replaceInFileTool = tool(
 
         // Check if the search text exists in the current content
         if (!modifiedContent.includes(searchText)) {
-          return `Search text not found in file ${path}. Block ${changesApplied + 1}: "${searchText.substring(0, 50)}${searchText.length > 50 ? "..." : ""}". No changes made. Please verify the exact text you want to replace exists in the file.`;
+          logWarn(
+            `Search text not found in file ${path}. Block ${changesApplied + 1}: "${searchText.substring(0, 50)}${searchText.length > 50 ? "..." : ""}".`
+          );
+          continue;
         }
 
         // Replace only the first occurrence
