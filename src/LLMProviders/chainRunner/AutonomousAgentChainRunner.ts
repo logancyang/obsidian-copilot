@@ -30,7 +30,7 @@ import {
   ToolExecutionResult,
 } from "./utils/toolExecution";
 import { parseXMLToolCalls, stripToolCallXML, escapeXml } from "./utils/xmlParsing";
-import { writeToFileTool } from "@/tools/ComposerTools";
+import { writeToFileTool, replaceInFileTool } from "@/tools/ComposerTools";
 import { getToolConfirmtionMessage } from "./utils/toolExecution";
 import { MessageContent } from "@/imageProcessing/imageProcessor";
 
@@ -119,6 +119,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       getTimeRangeMsTool,
       indexTool,
       writeToFileTool,
+      replaceInFileTool,
     ];
 
     // Add file tree tool if available
