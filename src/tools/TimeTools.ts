@@ -587,12 +587,7 @@ async function convertTimeBetweenTimezones(
     }
 
     // Create DateTime in source timezone
-    let sourceDt = DateTime.fromJSDate(parsedDate).setZone(sourceTz);
-
-    // If the parsed time is before now in source timezone, assume it's for today
-    if (sourceDt < baseDate) {
-      sourceDt = sourceDt.plus({ days: 1 });
-    }
+    const sourceDt = DateTime.fromJSDate(parsedDate).setZone(sourceTz);
 
     // Convert to target timezone
     const targetDt = sourceDt.setZone(targetTz);
