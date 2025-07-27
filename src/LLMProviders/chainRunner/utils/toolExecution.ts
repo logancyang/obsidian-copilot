@@ -1,4 +1,5 @@
 import { logError, logInfo, logWarn } from "@/logger";
+import { checkIsPlusUser } from "@/plusUtils";
 import { ToolManager } from "@/tools/toolManager";
 import { err2String } from "@/utils";
 import { ToolCall } from "./xmlParsing";
@@ -38,6 +39,18 @@ export async function executeSequentialToolCall(
         result: `Error: Tool '${toolCall.name}' not found. Available tools: ${availableToolNames}`,
         success: false,
       };
+    }
+
+    // Check if tool requires Plus subscription
+    if (tool.isPlusOnly) {
+      const isPlusUser = await checkIsPlusUser();
+      if (!isPlusUser) {
+        return {
+          toolName: toolCall.name,
+          result: `Error: ${getToolDisplayName(toolCall.name)} requires a Copilot Plus subscription`,
+          success: false,
+        };
+      }
     }
 
     // Determine timeout for this tool
