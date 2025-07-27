@@ -33,6 +33,7 @@ import { parseXMLToolCalls, stripToolCallXML, escapeXml } from "./utils/xmlParsi
 import { writeToFileTool } from "@/tools/ComposerTools";
 import { getToolConfirmtionMessage } from "./utils/toolExecution";
 import { MessageContent } from "@/imageProcessing/imageProcessor";
+import { checkIsPlusUser } from "@/plusUtils";
 
 export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private llmFormattedMessages: string[] = []; // Track LLM-formatted messages for memory
@@ -202,6 +203,11 @@ ${params}
     const iterationHistory: string[] = []; // Track all iterations for display
     const collectedSources: { title: string; path: string; score: number }[] = []; // Collect sources from localSearch
     this.llmFormattedMessages = []; // Reset LLM messages for this run
+    const isPlusUser = await checkIsPlusUser();
+    if (!isPlusUser) {
+      await this.handleError(new Error("Invalid license key"), addMessage, updateCurrentAiMessage);
+      return "";
+    }
 
     try {
       // Get chat history from memory
