@@ -9,6 +9,7 @@ import {
   getTimeInfoByEpochTool,
   getTimeRangeMsTool,
   pomodoroTool,
+  convertTimeBetweenTimezonesTool,
 } from "@/tools/TimeTools";
 import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools"; // Used in processYouTubeUrls
 import {
@@ -118,6 +119,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       getCurrentTimeTool,
       getTimeInfoByEpochTool,
       getTimeRangeMsTool,
+      convertTimeBetweenTimezonesTool,
       indexTool,
       writeToFileTool,
     ];

@@ -2,7 +2,7 @@ import * as chrono from "chrono-node";
 import { DateTime } from "luxon";
 import { Notice } from "obsidian";
 import { z } from "zod";
-import { createTool, CommonSchemas } from "./SimpleTool";
+import { createTool } from "./SimpleTool";
 
 export interface TimeInfo {
   epoch: number;
@@ -13,33 +13,81 @@ export interface TimeInfo {
   timezone: string;
 }
 
-async function getCurrentTime(): Promise<TimeInfo> {
-  const now = new Date();
-  const timezoneOffset = now.getTimezoneOffset();
-  const timezoneAbbr =
-    new Intl.DateTimeFormat("en", { timeZoneName: "short" })
-      .formatToParts(now)
-      .find((part) => part.type === "timeZoneName")?.value || "Unknown";
+/**
+ * Parse timezone offset string to a valid UTC offset
+ * Supports formats like: "+8", "-5", "+08:00", "-05:30", "UTC+8", "GMT-5"
+ * Returns a normalized UTC offset string like "UTC+8" or "UTC-5:30"
+ */
+function parseTimezoneOffset(offset: string): string {
+  // Extract the numeric offset from various formats
+  const offsetMatch = offset.match(/^(?:UTC|GMT)?([-+]?\d{1,2})(?::(\d{2}))?$/i);
+  if (!offsetMatch) {
+    throw new Error(
+      `Invalid timezone offset format: ${offset}. Use formats like '+8', '-5', '+5:30', 'UTC+8', 'GMT-5'`
+    );
+  }
+
+  const hours = parseInt(offsetMatch[1]);
+  const minutes = parseInt(offsetMatch[2] || "0");
+
+  // Validate the offset range
+  if (Math.abs(hours) > 14 || minutes >= 60) {
+    throw new Error(
+      `Invalid timezone offset: ${offset}. Hours must be between -14 and +14, minutes must be less than 60`
+    );
+  }
+
+  // Create a normalized UTC offset string
+  const sign = hours >= 0 ? "+" : "";
+  const minutesStr = minutes > 0 ? `:${minutes.toString().padStart(2, "0")}` : "";
+
+  return `UTC${sign}${hours}${minutesStr}`;
+}
+
+async function getCurrentTime(timezoneOffset?: string): Promise<TimeInfo> {
+  let dt: DateTime = DateTime.now();
+
+  // If timezone offset is provided, convert to that timezone
+  if (timezoneOffset) {
+    try {
+      const parsedOffset = parseTimezoneOffset(timezoneOffset);
+      const newDt = dt.setZone(parsedOffset);
+      if (!newDt.isValid) {
+        throw new Error(`Failed to apply timezone offset: ${timezoneOffset}`);
+      }
+      dt = newDt;
+    } catch (error) {
+      throw new Error(`${error.message}`);
+    }
+  }
+
+  const jsDate = dt.toJSDate();
+  // Use Luxon's offset which is in minutes and already has the correct sign
+  const offsetMinutes = dt.offset;
+  const timezoneAbbr = dt.offsetNameShort || "Unknown";
 
   return {
-    epoch: Math.floor(now.getTime()),
-    isoString: now.toISOString(),
-    userLocaleString: now.toLocaleString(),
-    localDateString: now.toLocaleDateString("en-CA", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }),
-    timezoneOffset: -timezoneOffset, // Invert the offset to match common conventions
+    epoch: Math.floor(jsDate.getTime()),
+    isoString: jsDate.toISOString(),
+    userLocaleString: dt.toLocaleString(DateTime.DATETIME_FULL),
+    localDateString: dt.toISODate() || "",
+    timezoneOffset: offsetMinutes,
     timezone: timezoneAbbr,
   };
 }
 
 const getCurrentTimeTool = createTool({
   name: "getCurrentTime",
-  description: "Get the current time in various formats, including timezone information",
-  schema: CommonSchemas.emptyParams,
-  handler: async () => getCurrentTime(),
+  description: "Get the current time in local timezone or at a specified UTC offset",
+  schema: z.object({
+    timezoneOffset: z
+      .string()
+      .optional()
+      .describe(
+        "Optional UTC offset (e.g., '+8', '-5', '+5:30', 'UTC+8', 'GMT-5'). Must be a numeric offset, not a timezone name."
+      ),
+  }),
+  handler: async ({ timezoneOffset }) => getCurrentTime(timezoneOffset),
   isBackground: true,
 });
 
@@ -389,22 +437,16 @@ function getTimeRangeMs(timeExpression: string) {
 
 function convertToTimeInfo(dateTime: DateTime): TimeInfo {
   const jsDate = dateTime.toJSDate();
-  const timezoneOffset = jsDate.getTimezoneOffset();
-  const timezoneAbbr =
-    new Intl.DateTimeFormat("en", { timeZoneName: "short" })
-      .formatToParts(jsDate)
-      .find((part) => part.type === "timeZoneName")?.value || "Unknown";
+  // Use Luxon's offset which is in minutes and already has the correct sign
+  const offsetMinutes = dateTime.offset;
+  const timezoneAbbr = dateTime.offsetNameShort || "Unknown";
 
   return {
     epoch: Math.floor(jsDate.getTime()),
     isoString: jsDate.toISOString(),
-    userLocaleString: jsDate.toLocaleString(),
-    localDateString: jsDate.toLocaleDateString("en-CA", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }),
-    timezoneOffset: -timezoneOffset,
+    userLocaleString: dateTime.toLocaleString(DateTime.DATETIME_FULL),
+    localDateString: dateTime.toISODate() || "",
+    timezoneOffset: offsetMinutes,
     timezone: timezoneAbbr,
   };
 }
@@ -494,4 +536,81 @@ const pomodoroTool = createTool({
   },
 });
 
-export { getCurrentTimeTool, getTimeInfoByEpochTool, getTimeRangeMsTool, pomodoroTool };
+/**
+ * Convert a time from one UTC offset to another
+ * @param time - Time expression like "6pm", "18:00", "3:30 PM"
+ * @param fromOffset - Source UTC offset (e.g., "+8", "-5", "UTC+8")
+ * @param toOffset - Target UTC offset (e.g., "+9", "-5", "UTC+9")
+ * @returns Time information in the target timezone
+ */
+async function convertTimeBetweenTimezones(
+  time: string,
+  fromOffset: string,
+  toOffset: string
+): Promise<TimeInfo & { originalTime: string; convertedTime: string }> {
+  // Parse timezone offsets
+  const sourceTz = parseTimezoneOffset(fromOffset);
+  const targetTz = parseTimezoneOffset(toOffset);
+
+  try {
+    // Parse the time string using chrono
+    const baseDate = DateTime.now().setZone(sourceTz);
+    const parsedDate = chrono.parseDate(time, baseDate.toJSDate());
+
+    if (!parsedDate) {
+      throw new Error(`Could not parse time: ${time}`);
+    }
+
+    // Create DateTime interpreting the parsed date as already being in source timezone
+    const sourceDt = DateTime.fromJSDate(parsedDate, { zone: sourceTz });
+
+    // Convert to target timezone
+    const targetDt = sourceDt.setZone(targetTz);
+
+    if (!targetDt.isValid) {
+      throw new Error(`Invalid timezone conversion`);
+    }
+
+    const jsDate = targetDt.toJSDate();
+    // Use Luxon's offset which is in minutes and already has the correct sign
+    const offsetMinutes = targetDt.offset;
+
+    return {
+      epoch: Math.floor(jsDate.getTime()),
+      isoString: jsDate.toISOString(),
+      userLocaleString: targetDt.toLocaleString(DateTime.DATETIME_FULL),
+      localDateString: targetDt.toISODate() || "",
+      timezoneOffset: offsetMinutes,
+      timezone: targetDt.offsetNameShort || targetTz,
+      originalTime: sourceDt.toLocaleString(DateTime.TIME_SIMPLE) + " " + sourceDt.offsetNameShort,
+      convertedTime: targetDt.toLocaleString(DateTime.TIME_SIMPLE) + " " + targetDt.offsetNameShort,
+    };
+  } catch (error) {
+    throw new Error(`Failed to convert time: ${error.message}`);
+  }
+}
+
+const convertTimeBetweenTimezonesTool = createTool({
+  name: "convertTimeBetweenTimezones",
+  description: "Convert a specific time from one UTC offset to another",
+  schema: z.object({
+    time: z.string().describe("Time to convert (e.g., '6pm', '18:00', '3:30 PM')"),
+    fromOffset: z
+      .string()
+      .describe("Source UTC offset (e.g., '+8', '-5', '+5:30', 'UTC+8'). Must be numeric offset."),
+    toOffset: z
+      .string()
+      .describe("Target UTC offset (e.g., '+9', '-5', '+5:30', 'UTC+9'). Must be numeric offset."),
+  }),
+  handler: async ({ time, fromOffset, toOffset }) =>
+    convertTimeBetweenTimezones(time, fromOffset, toOffset),
+  isBackground: true,
+});
+
+export {
+  getCurrentTimeTool,
+  getTimeInfoByEpochTool,
+  getTimeRangeMsTool,
+  pomodoroTool,
+  convertTimeBetweenTimezonesTool,
+};
