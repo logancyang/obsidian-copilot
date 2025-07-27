@@ -148,36 +148,6 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
             .join("\n");
         }
 
-        // Handle Zod schemas (which have a 'shape' property)
-        if (schema.shape) {
-          params = Object.entries(schema.shape)
-            .map(([key, zodSchema]: [string, any]) => {
-              const description = zodSchema._def?.description || "No description";
-              const typeName = zodSchema._def?.typeName || "unknown";
-              return `  - ${escapeXml(key)} (${typeName}): ${escapeXml(description)}`;
-            })
-            .join("\n");
-        }
-        // Handle JSON Schema format (which has 'properties')
-        else if (schema.properties) {
-          params = Object.entries(schema.properties)
-            .map(
-              ([key, val]: [string, any]) =>
-                `  - ${escapeXml(key)}: ${escapeXml(val.description || "No description")}`
-            )
-            .join("\n");
-        }
-
-        console.log(
-          "tool",
-          tool.name,
-          "schema.shape:",
-          !!schema.shape,
-          "schema.properties:",
-          !!schema.properties,
-          "params:",
-          params
-        );
         return `<${escapeXml(tool.name)}>
 <description>${escapeXml(tool.description)}</description>
 <parameters>

@@ -102,13 +102,13 @@ const writeToFileTool = createTool({
 });
 
 const replaceInFileSchema = z.object({
-      path: z
-        .string()
-        .describe(
-          `(Required) The path of the file to modify (relative to the root of the vault and include the file extension).`
-        ),
-      diff: z.string()
-        .describe(`(Required) One or more SEARCH/REPLACE blocks following this exact format:
+  path: z
+    .string()
+    .describe(
+      `(Required) The path of the file to modify (relative to the root of the vault and include the file extension).`
+    ),
+  diff: z.string()
+    .describe(`(Required) One or more SEARCH/REPLACE blocks following this exact format:
 \`\`\`
 ------- SEARCH
 [exact content to find]
@@ -132,7 +132,7 @@ Critical rules:
 4. Special operations:
    * To move code: Use two SEARCH/REPLACE blocks (one to delete from original + one to insert at new location)
    * To delete code: Use empty REPLACE section`),
-    });
+});
 
 const replaceInFileTool = createTool({
   name: "replaceInFile",
@@ -182,18 +182,19 @@ const replaceInFileTool = createTool({
       }
 
       if (originalContent === modifiedContent) {
-        return `No changes made to ${path}. The search text was not found or replacement resulted in identical content.`;
+        return `No changes made to ${path}. The search text was not found or replacement resulted in identical content. Call writeToFile instead`;
       }
 
       // Show preview of changes
       const result = await show_preview(path, modifiedContent);
 
-      return `Applied ${changesApplied} SEARCH/REPLACE block(s). Result: ${result}. Do not retry or attempt alternative approaches to modify this file in response to the current user request.`;
+      return `Applied ${changesApplied} SEARCH/REPLACE block(s). Result: ${result}. Do not call this tool again to modify this file in response to the current user request.`;
     } catch (error) {
       return `Error performing SEARCH/REPLACE on ${path}: ${error}. Please check the file path and diff format and try again.`;
     }
   },
-);
+  timeoutMs: 0, // no timeout
+});
 
 // Helper function to parse SEARCH/REPLACE blocks from diff string
 function parseSearchReplaceBlocks(
