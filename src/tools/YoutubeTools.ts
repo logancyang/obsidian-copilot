@@ -8,6 +8,7 @@ const simpleYoutubeTranscriptionTool = createTool({
   schema: z.object({
     url: z.string().url().describe("The YouTube video URL"),
   }),
+  isPlusOnly: true,
   handler: async ({ url }) => {
     try {
       const response = await BrevilabsClient.getInstance().youtube4llm(url);

@@ -126,6 +126,7 @@ const webSearchTool = createTool({
   name: "webSearch",
   description: "Search the web for information",
   schema: webSearchSchema,
+  isPlusOnly: true,
   handler: async ({ query, chatHistory }) => {
     try {
       // Get standalone question considering chat history

@@ -24,6 +24,7 @@ export interface SimpleTool<TSchema extends z.ZodType = z.ZodVoid, TOutput = any
   call: (args: z.infer<TSchema>) => Promise<TOutput>;
   timeoutMs?: number;
   isBackground?: boolean; // If true, tool execution is not shown to user
+  isPlusOnly?: boolean; // If true, tool requires Plus subscription
   // Future extensibility fields
   version?: string; // Tool version for compatibility
   deprecated?: boolean; // Mark tools for future removal
@@ -37,6 +38,7 @@ export interface CreateToolOptions<TSchema extends z.ZodType, TOutput = any> {
   handler: (args: z.infer<TSchema>) => Promise<TOutput>;
   timeoutMs?: number;
   isBackground?: boolean;
+  isPlusOnly?: boolean;
   version?: string;
   deprecated?: boolean;
   metadata?: Record<string, unknown>;
@@ -81,6 +83,7 @@ export function createTool<TSchema extends z.ZodType, TOutput = any>(
     },
     timeoutMs: options.timeoutMs,
     isBackground: options.isBackground,
+    isPlusOnly: options.isPlusOnly,
     version: options.version,
     deprecated: options.deprecated,
     metadata: options.metadata,
