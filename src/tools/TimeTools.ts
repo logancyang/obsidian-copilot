@@ -2,7 +2,7 @@ import * as chrono from "chrono-node";
 import { DateTime } from "luxon";
 import { Notice } from "obsidian";
 import { z } from "zod";
-import { createTool, CommonSchemas } from "./SimpleTool";
+import { createTool } from "./SimpleTool";
 
 export interface TimeInfo {
   epoch: number;
@@ -13,33 +13,80 @@ export interface TimeInfo {
   timezone: string;
 }
 
-async function getCurrentTime(): Promise<TimeInfo> {
-  const now = new Date();
-  const timezoneOffset = now.getTimezoneOffset();
-  const timezoneAbbr =
-    new Intl.DateTimeFormat("en", { timeZoneName: "short" })
-      .formatToParts(now)
-      .find((part) => part.type === "timeZoneName")?.value || "Unknown";
+async function getCurrentTime(timezone?: string): Promise<TimeInfo> {
+  let dt: DateTime = DateTime.now();
+
+  // If timezone is provided, convert to that timezone
+  if (timezone) {
+    try {
+      const newDt = dt.setZone(timezone);
+      if (!newDt.isValid) {
+        throw new Error(`Invalid timezone: ${timezone}`);
+      }
+      dt = newDt;
+    } catch {
+      // If timezone parsing fails, try common timezone mappings
+      const tzMappings: Record<string, string> = {
+        PT: "America/Los_Angeles",
+        PST: "America/Los_Angeles",
+        PDT: "America/Los_Angeles",
+        ET: "America/New_York",
+        EST: "America/New_York",
+        EDT: "America/New_York",
+        CT: "America/Chicago",
+        CST: "America/Chicago",
+        CDT: "America/Chicago",
+        MT: "America/Denver",
+        MST: "America/Denver",
+        MDT: "America/Denver",
+        GMT: "GMT",
+        UTC: "UTC",
+        JST: "Asia/Tokyo",
+        IST: "Asia/Kolkata",
+        CET: "Europe/Paris",
+        CEST: "Europe/Paris",
+      };
+
+      const mappedTz = tzMappings[timezone.toUpperCase()];
+      if (mappedTz) {
+        const newDt = dt.setZone(mappedTz);
+        if (newDt.isValid) {
+          dt = newDt;
+        } else {
+          throw new Error(`Failed to set timezone: ${mappedTz}`);
+        }
+      } else {
+        throw new Error(`Unknown timezone: ${timezone}`);
+      }
+    }
+  }
+
+  const jsDate = dt.toJSDate();
+  const timezoneOffset = jsDate.getTimezoneOffset();
+  const timezoneAbbr = dt.offsetNameShort || "Unknown";
 
   return {
-    epoch: Math.floor(now.getTime()),
-    isoString: now.toISOString(),
-    userLocaleString: now.toLocaleString(),
-    localDateString: now.toLocaleDateString("en-CA", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }),
-    timezoneOffset: -timezoneOffset, // Invert the offset to match common conventions
+    epoch: Math.floor(jsDate.getTime()),
+    isoString: jsDate.toISOString(),
+    userLocaleString: dt.toLocaleString(DateTime.DATETIME_FULL),
+    localDateString: dt.toISODate() || "",
+    timezoneOffset: -timezoneOffset,
     timezone: timezoneAbbr,
   };
 }
 
 const getCurrentTimeTool = createTool({
   name: "getCurrentTime",
-  description: "Get the current time in various formats, including timezone information",
-  schema: CommonSchemas.emptyParams,
-  handler: async () => getCurrentTime(),
+  description: "Get the current time in local timezone or a specified timezone",
+  schema: z.object({
+    timezone: z
+      .string()
+      .optional()
+      .describe(
+        "Optional timezone (e.g., 'America/New_York', 'Asia/Tokyo', 'Europe/London', 'PT', 'EST')"
+      ),
+  }),
+  handler: async ({ timezone }) => getCurrentTime(timezone),
   isBackground: true,
 });
 
@@ -494,4 +541,110 @@ const pomodoroTool = createTool({
   },
 });
 
-export { getCurrentTimeTool, getTimeInfoByEpochTool, getTimeRangeMsTool, pomodoroTool };
+/**
+ * Convert a time from one timezone to another
+ * @param time - Time expression like "6pm", "18:00", "3:30 PM"
+ * @param fromTimezone - Source timezone (e.g., "PT", "America/Los_Angeles")
+ * @param toTimezone - Target timezone (e.g., "JST", "Asia/Tokyo")
+ * @returns Time information in the target timezone
+ */
+async function convertTimeBetweenTimezones(
+  time: string,
+  fromTimezone: string,
+  toTimezone: string
+): Promise<TimeInfo & { originalTime: string; convertedTime: string }> {
+  // Common timezone mappings
+  const tzMappings: Record<string, string> = {
+    PT: "America/Los_Angeles",
+    PST: "America/Los_Angeles",
+    PDT: "America/Los_Angeles",
+    ET: "America/New_York",
+    EST: "America/New_York",
+    EDT: "America/New_York",
+    CT: "America/Chicago",
+    CST: "America/Chicago",
+    CDT: "America/Chicago",
+    MT: "America/Denver",
+    MST: "America/Denver",
+    MDT: "America/Denver",
+    GMT: "GMT",
+    UTC: "UTC",
+    JST: "Asia/Tokyo",
+    IST: "Asia/Kolkata",
+    CET: "Europe/Paris",
+    CEST: "Europe/Paris",
+    KST: "Asia/Seoul",
+    AEST: "Australia/Sydney",
+    AEDT: "Australia/Sydney",
+  };
+
+  // Resolve timezone abbreviations to full names
+  const sourceTz = tzMappings[fromTimezone.toUpperCase()] || fromTimezone;
+  const targetTz = tzMappings[toTimezone.toUpperCase()] || toTimezone;
+
+  try {
+    // Parse the time string using chrono
+    const baseDate = DateTime.now().setZone(sourceTz);
+    const parsedDate = chrono.parseDate(time, baseDate.toJSDate());
+
+    if (!parsedDate) {
+      throw new Error(`Could not parse time: ${time}`);
+    }
+
+    // Create DateTime in source timezone
+    let sourceDt = DateTime.fromJSDate(parsedDate).setZone(sourceTz);
+
+    // If the parsed time is before now in source timezone, assume it's for today
+    if (sourceDt < baseDate) {
+      sourceDt = sourceDt.plus({ days: 1 });
+    }
+
+    // Convert to target timezone
+    const targetDt = sourceDt.setZone(targetTz);
+
+    if (!targetDt.isValid) {
+      throw new Error(`Invalid timezone conversion`);
+    }
+
+    const jsDate = targetDt.toJSDate();
+    const timezoneOffset = jsDate.getTimezoneOffset();
+
+    return {
+      epoch: Math.floor(jsDate.getTime()),
+      isoString: jsDate.toISOString(),
+      userLocaleString: targetDt.toLocaleString(DateTime.DATETIME_FULL),
+      localDateString: targetDt.toISODate() || "",
+      timezoneOffset: -timezoneOffset,
+      timezone: targetDt.offsetNameShort || targetTz,
+      originalTime: sourceDt.toLocaleString(DateTime.TIME_SIMPLE) + " " + sourceDt.offsetNameShort,
+      convertedTime: targetDt.toLocaleString(DateTime.TIME_SIMPLE) + " " + targetDt.offsetNameShort,
+    };
+  } catch (error) {
+    throw new Error(`Failed to convert time: ${error.message}`);
+  }
+}
+
+const convertTimeBetweenTimezonesTool = createTool({
+  name: "convertTimeBetweenTimezones",
+  description: "Convert a specific time from one timezone to another",
+  schema: z.object({
+    time: z.string().describe("Time to convert (e.g., '6pm', '18:00', '3:30 PM')"),
+    fromTimezone: z
+      .string()
+      .describe("Source timezone (e.g., 'PT', 'America/Los_Angeles', 'EST', 'Europe/London')"),
+    toTimezone: z
+      .string()
+      .describe("Target timezone (e.g., 'JST', 'Asia/Tokyo', 'UTC', 'Australia/Sydney')"),
+  }),
+  handler: async ({ time, fromTimezone, toTimezone }) =>
+    convertTimeBetweenTimezones(time, fromTimezone, toTimezone),
+  isBackground: true,
+});
+
+export {
+  getCurrentTimeTool,
+  getTimeInfoByEpochTool,
+  getTimeRangeMsTool,
+  pomodoroTool,
+  convertTimeBetweenTimezonesTool,
+};

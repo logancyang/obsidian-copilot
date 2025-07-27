@@ -142,6 +142,26 @@ For getFileTree:
 <name>getFileTree</name>
 </use_tool>
 
+For time queries:
+Example 1 - "what time is it" (local time):
+<use_tool>
+<name>getCurrentTime</name>
+</use_tool>
+
+Example 2 - "what time is it in Tokyo":
+<use_tool>
+<name>getCurrentTime</name>
+<timezone>Asia/Tokyo</timezone>
+</use_tool>
+
+Example 3 - "what time is 6pm PT in Tokyo":
+<use_tool>
+<name>convertTimeBetweenTimezones</name>
+<time>6pm</time>
+<fromTimezone>PT</fromTimezone>
+<toTimezone>Asia/Tokyo</toTimezone>
+</use_tool>
+
 For writeToFile:
 <use_tool>
 <name>writeToFile</name>
