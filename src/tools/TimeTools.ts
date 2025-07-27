@@ -561,8 +561,8 @@ async function convertTimeBetweenTimezones(
       throw new Error(`Could not parse time: ${time}`);
     }
 
-    // Create DateTime in source timezone
-    const sourceDt = DateTime.fromJSDate(parsedDate).setZone(sourceTz);
+    // Create DateTime interpreting the parsed date as already being in source timezone
+    const sourceDt = DateTime.fromJSDate(parsedDate, { zone: sourceTz });
 
     // Convert to target timezone
     const targetDt = sourceDt.setZone(targetTz);
