@@ -170,7 +170,7 @@ const replaceInFileTool = createTool({
           continue;
         }
 
-        // Replace only the first occurrence
+        // Replace only the first occurrence. This behavior is intentional and documented in the tool's schema description.
         const searchIndex = modifiedContent.indexOf(searchText);
         if (searchIndex !== -1) {
           modifiedContent =
