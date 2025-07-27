@@ -165,7 +165,7 @@ const replaceInFileTool = createTool({
         // Check if the search text exists in the current content
         if (!modifiedContent.includes(searchText)) {
           logWarn(
-            `Search text not found in file ${path}. Block ${changesApplied + 1}: "${searchText.substring(0, 50)}${searchText.length > 50 ? "..." : ""}".`
+            `Search text not found in file ${path}. Block ${changesApplied + 1}: "${searchText}".`
           );
           continue;
         }
