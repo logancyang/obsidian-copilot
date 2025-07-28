@@ -19,7 +19,6 @@ import { ToolManager } from "@/tools/toolManager";
 import { writeToFileTool } from "@/tools/ComposerTools";
 import { ChatMessage } from "@/types/message";
 import {
-  extractChatHistory,
   extractYoutubeUrl,
   getApiErrorMessage,
   getMessageRole,
@@ -30,7 +29,11 @@ import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "../intentAnalyzer";
 import { BaseChainRunner } from "./BaseChainRunner";
 import { ActionBlockStreamer } from "./utils/ActionBlockStreamer";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
-import { addChatHistoryToMessages } from "./utils/chatHistoryUtils";
+import {
+  addChatHistoryToMessages,
+  processRawChatHistory,
+  processedMessagesToTextOnly,
+} from "./utils/chatHistoryUtils";
 
 export class CopilotPlusChainRunner extends BaseChainRunner {
   private isYoutubeOnlyMessage(message: string): boolean {
@@ -387,8 +390,11 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       // Format chat history from memory
       const memory = this.chainManager.memoryManager.getMemory();
       const memoryVariables = await memory.loadMemoryVariables({});
-      // For condensing questions, we need text-only history
-      const chatHistory = extractChatHistory(memoryVariables);
+      const rawHistory = memoryVariables.history || [];
+
+      // Process history consistently - same data used for both LLM and question condensing
+      const processedHistory = processRawChatHistory(rawHistory);
+      const chatHistory = processedMessagesToTextOnly(processedHistory);
 
       // Get standalone question if we have chat history
       let questionForEnhancement = cleanedUserMessage;

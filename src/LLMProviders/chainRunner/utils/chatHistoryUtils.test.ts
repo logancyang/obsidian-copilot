@@ -1,4 +1,8 @@
-import { processRawChatHistory, addChatHistoryToMessages } from "./chatHistoryUtils";
+import {
+  processRawChatHistory,
+  addChatHistoryToMessages,
+  processedMessagesToTextOnly,
+} from "./chatHistoryUtils";
 
 describe("chatHistoryUtils", () => {
   describe("processRawChatHistory", () => {
@@ -167,6 +171,75 @@ describe("chatHistoryUtils", () => {
         { role: "system", content: "You are helpful" },
         { role: "user", content: "Hello" },
       ]);
+    });
+  });
+
+  describe("processedMessagesToTextOnly", () => {
+    it("should handle string content", () => {
+      const processedMessages = [
+        { role: "user" as const, content: "Hello" },
+        { role: "assistant" as const, content: "Hi there!" },
+      ];
+
+      const result = processedMessagesToTextOnly(processedMessages);
+
+      expect(result).toEqual([
+        { role: "user", content: "Hello" },
+        { role: "assistant", content: "Hi there!" },
+      ]);
+    });
+
+    it("should extract text from multimodal content", () => {
+      const processedMessages = [
+        {
+          role: "user" as const,
+          content: [
+            { type: "text", text: "What is this?" },
+            { type: "image_url", image_url: { url: "data:image/jpeg;base64,..." } },
+          ],
+        },
+        {
+          role: "assistant" as const,
+          content: "This is a cat.",
+        },
+      ];
+
+      const result = processedMessagesToTextOnly(processedMessages);
+
+      expect(result).toEqual([
+        { role: "user", content: "What is this?" },
+        { role: "assistant", content: "This is a cat." },
+      ]);
+    });
+
+    it("should handle multiple text parts in multimodal content", () => {
+      const processedMessages = [
+        {
+          role: "user" as const,
+          content: [
+            { type: "text", text: "First part." },
+            { type: "image_url", image_url: { url: "data:image/jpeg;base64,..." } },
+            { type: "text", text: "Second part." },
+          ],
+        },
+      ];
+
+      const result = processedMessagesToTextOnly(processedMessages);
+
+      expect(result).toEqual([{ role: "user", content: "First part. Second part." }]);
+    });
+
+    it("should handle image-only content", () => {
+      const processedMessages = [
+        {
+          role: "user" as const,
+          content: [{ type: "image_url", image_url: { url: "data:image/jpeg;base64,..." } }],
+        },
+      ];
+
+      const result = processedMessagesToTextOnly(processedMessages);
+
+      expect(result).toEqual([{ role: "user", content: "[Image content]" }]);
     });
   });
 });

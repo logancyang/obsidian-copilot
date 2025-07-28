@@ -72,3 +72,41 @@ export function addChatHistoryToMessages(rawHistory: any[], messages: any[]): vo
     messages.push({ role: msg.role, content: msg.content });
   }
 }
+
+export interface ChatHistoryEntry {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/**
+ * Convert processed messages to text-only format for question condensing
+ * This extracts just the text content from potentially multimodal messages
+ *
+ * @param processedMessages Messages processed by processRawChatHistory
+ * @returns Array of text-only chat history entries
+ */
+export function processedMessagesToTextOnly(
+  processedMessages: ProcessedMessage[]
+): ChatHistoryEntry[] {
+  return processedMessages.map((msg) => {
+    let textContent: string;
+
+    if (typeof msg.content === "string") {
+      textContent = msg.content;
+    } else if (Array.isArray(msg.content)) {
+      // Extract text from multimodal content
+      const textParts = msg.content
+        .filter((item: any) => item.type === "text")
+        .map((item: any) => item.text || "")
+        .join(" ");
+      textContent = textParts || "[Image content]";
+    } else {
+      textContent = String(msg.content || "");
+    }
+
+    return {
+      role: msg.role,
+      content: textContent,
+    };
+  });
+}
