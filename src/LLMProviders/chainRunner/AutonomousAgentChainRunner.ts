@@ -12,15 +12,11 @@ import {
   convertTimeBetweenTimezonesTool,
 } from "@/tools/TimeTools";
 import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools"; // Used in processYouTubeUrls
-import {
-  extractAllYoutubeUrls,
-  extractChatHistory,
-  getMessageRole,
-  withSuppressedTokenWarnings,
-} from "@/utils";
+import { extractAllYoutubeUrls, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
 import { messageRequiresTools, ModelAdapter, ModelAdapterFactory } from "./utils/modelAdapter";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
+import { addChatHistoryToMessages } from "./utils/chatHistoryUtils";
 import {
   deduplicateSources,
   executeSequentialToolCall,
@@ -215,7 +211,8 @@ ${params}
       // Get chat history from memory
       const memory = this.chainManager.memoryManager.getMemory();
       const memoryVariables = await memory.loadMemoryVariables({});
-      const chatHistory = extractChatHistory(memoryVariables);
+      // Use raw history to preserve multimodal content
+      const rawHistory = memoryVariables.history || [];
 
       // Build initial conversation messages
       const customSystemPrompt = this.generateSystemPrompt();
@@ -229,10 +226,8 @@ ${params}
         });
       }
 
-      // Add chat history
-      for (const entry of chatHistory) {
-        conversationMessages.push({ role: entry.role, content: entry.content });
-      }
+      // Add chat history - safely handle different message formats
+      addChatHistoryToMessages(rawHistory, conversationMessages);
 
       // Check if the model supports multimodal (vision) capability
       const isMultimodal = this.isMultimodalModel(chatModel);

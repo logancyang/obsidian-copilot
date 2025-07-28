@@ -377,6 +377,17 @@ export interface ChatHistoryEntry {
   content: string;
 }
 
+/**
+ * Extract text-only chat history from memory variables.
+ * This function pairs messages by index (i, i+1) and returns only string content.
+ *
+ * Note: For multimodal chains (CopilotPlus, AutonomousAgent), use
+ * chatHistoryUtils.processRawChatHistory instead to preserve image content.
+ *
+ * @param memoryVariables Memory variables from LangChain memory
+ * @returns Array of text-only chat history entries
+ */
+// TODO: Deprecated, use chatHistoryUtils.processRawChatHistory instead
 export function extractChatHistory(memoryVariables: MemoryVariables): ChatHistoryEntry[] {
   const chatHistory: ChatHistoryEntry[] = [];
   const { history } = memoryVariables;
