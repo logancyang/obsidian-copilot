@@ -16,6 +16,7 @@ import { extractAllYoutubeUrls, getMessageRole, withSuppressedTokenWarnings } fr
 import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
 import { messageRequiresTools, ModelAdapter, ModelAdapterFactory } from "./utils/modelAdapter";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
+import { addChatHistoryToMessages } from "./utils/chatHistoryUtils";
 import {
   deduplicateSources,
   executeSequentialToolCall,
@@ -225,15 +226,8 @@ ${params}
         });
       }
 
-      // Add chat history - preserve multimodal content from BaseMessage objects
-      for (const message of rawHistory) {
-        const messageType = message._getType();
-        const role =
-          messageType === "human" ? "user" : messageType === "ai" ? "assistant" : messageType;
-
-        // Preserve the full content (string or MessageContent[])
-        conversationMessages.push({ role, content: message.content });
-      }
+      // Add chat history - safely handle different message formats
+      addChatHistoryToMessages(rawHistory, conversationMessages);
 
       // Check if the model supports multimodal (vision) capability
       const isMultimodal = this.isMultimodalModel(chatModel);

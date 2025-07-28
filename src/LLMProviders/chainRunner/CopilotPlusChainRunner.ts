@@ -30,6 +30,7 @@ import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "../intentAnalyzer";
 import { BaseChainRunner } from "./BaseChainRunner";
 import { ActionBlockStreamer } from "./utils/ActionBlockStreamer";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
+import { addChatHistoryToMessages } from "./utils/chatHistoryUtils";
 
 export class CopilotPlusChainRunner extends BaseChainRunner {
   private isYoutubeOnlyMessage(message: string): boolean {
@@ -229,16 +230,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       });
     }
 
-    // Add chat history - preserve multimodal content from BaseMessage objects
-    for (const message of rawHistory) {
-      // BaseMessage objects have 'content' and '_getType()' method
-      const messageType = message._getType();
-      const role =
-        messageType === "human" ? "user" : messageType === "ai" ? "assistant" : messageType;
-
-      // Preserve the full content (string or MessageContent[])
-      messages.push({ role, content: message.content });
-    }
+    // Add chat history - safely handle different message formats
+    addChatHistoryToMessages(rawHistory, messages);
 
     // Get the current chat model
     const chatModelCurrent = this.chainManager.chatModelManager.getChatModel();
