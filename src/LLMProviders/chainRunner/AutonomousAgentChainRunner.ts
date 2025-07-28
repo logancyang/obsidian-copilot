@@ -12,12 +12,7 @@ import {
   convertTimeBetweenTimezonesTool,
 } from "@/tools/TimeTools";
 import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools"; // Used in processYouTubeUrls
-import {
-  extractAllYoutubeUrls,
-  extractChatHistory,
-  getMessageRole,
-  withSuppressedTokenWarnings,
-} from "@/utils";
+import { extractAllYoutubeUrls, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
 import { messageRequiresTools, ModelAdapter, ModelAdapterFactory } from "./utils/modelAdapter";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
@@ -215,7 +210,8 @@ ${params}
       // Get chat history from memory
       const memory = this.chainManager.memoryManager.getMemory();
       const memoryVariables = await memory.loadMemoryVariables({});
-      const chatHistory = extractChatHistory(memoryVariables);
+      // Use raw history to preserve multimodal content
+      const rawHistory = memoryVariables.history || [];
 
       // Build initial conversation messages
       const customSystemPrompt = this.generateSystemPrompt();
@@ -229,9 +225,14 @@ ${params}
         });
       }
 
-      // Add chat history
-      for (const entry of chatHistory) {
-        conversationMessages.push({ role: entry.role, content: entry.content });
+      // Add chat history - preserve multimodal content from BaseMessage objects
+      for (const message of rawHistory) {
+        const messageType = message._getType();
+        const role =
+          messageType === "human" ? "user" : messageType === "ai" ? "assistant" : messageType;
+
+        // Preserve the full content (string or MessageContent[])
+        conversationMessages.push({ role, content: message.content });
       }
 
       // Check if the model supports multimodal (vision) capability
@@ -250,6 +251,11 @@ ${params}
         role: "user",
         content,
       });
+
+      // Store the multimodal content in userMessage for later saving to memory
+      if (isMultimodal && Array.isArray(content)) {
+        userMessage.content = content;
+      }
 
       // Process YouTube URLs if present (only from original user prompt, not context)
       const originalUserPrompt = userMessage.originalMessage || userMessage.message;

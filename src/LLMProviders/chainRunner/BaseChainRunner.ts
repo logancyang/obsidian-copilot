@@ -4,6 +4,7 @@ import { ChatMessage } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
 import { Notice } from "obsidian";
 import ChainManager from "../chainManager";
+import { HumanMessage, AIMessage } from "@langchain/core/messages";
 
 export interface ChainRunner {
   run(
@@ -53,12 +54,18 @@ export abstract class BaseChainRunner implements ChainRunner {
       fullAIResponse &&
       !(abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT)
     ) {
-      await this.chainManager.memoryManager
-        .getMemory()
-        .saveContext(
-          { input: userMessage.message },
-          { output: llmFormattedOutput || fullAIResponse }
-        );
+      // Create proper BaseMessage objects to preserve multimodal content
+      const humanMessage = new HumanMessage({
+        content: userMessage.content || userMessage.message,
+      });
+      const aiMessage = new AIMessage({
+        content: llmFormattedOutput || fullAIResponse,
+      });
+
+      // Add messages directly to chat history to preserve multimodal content
+      const memory = this.chainManager.memoryManager.getMemory();
+      await memory.chatHistory.addMessage(humanMessage);
+      await memory.chatHistory.addMessage(aiMessage);
 
       addMessage({
         message: fullAIResponse,

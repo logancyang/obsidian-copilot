@@ -203,7 +203,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     // Get chat history
     const memory = this.chainManager.memoryManager.getMemory();
     const memoryVariables = await memory.loadMemoryVariables({});
-    const chatHistory = extractChatHistory(memoryVariables);
+    // Use the raw history array which contains BaseMessage objects
+    const rawHistory = memoryVariables.history || [];
 
     // Create messages array starting with system message
     const messages: any[] = [];
@@ -212,7 +213,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     let fullSystemMessage = await this.getSystemPrompt();
 
     // Add chat history context to system message if exists
-    if (chatHistory.length > 0) {
+    if (rawHistory.length > 0) {
       fullSystemMessage +=
         "\n\nThe following is the relevant conversation history. Use this context to maintain consistency in your responses:";
     }
@@ -228,9 +229,15 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       });
     }
 
-    // Add chat history
-    for (const entry of chatHistory) {
-      messages.push({ role: entry.role, content: entry.content });
+    // Add chat history - preserve multimodal content from BaseMessage objects
+    for (const message of rawHistory) {
+      // BaseMessage objects have 'content' and '_getType()' method
+      const messageType = message._getType();
+      const role =
+        messageType === "human" ? "user" : messageType === "ai" ? "assistant" : messageType;
+
+      // Preserve the full content (string or MessageContent[])
+      messages.push({ role, content: message.content });
     }
 
     // Get the current chat model
@@ -247,6 +254,11 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       role: "user",
       content,
     });
+
+    // Store the multimodal content in userMessage for later saving to memory
+    if (isMultimodalCurrent && Array.isArray(content)) {
+      userMessage.content = content;
+    }
 
     const enhancedUserMessage = content instanceof Array ? (content[0] as any).text : content;
     logInfo("Enhanced user message: ", enhancedUserMessage);
@@ -382,6 +394,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       // Format chat history from memory
       const memory = this.chainManager.memoryManager.getMemory();
       const memoryVariables = await memory.loadMemoryVariables({});
+      // For condensing questions, we need text-only history
       const chatHistory = extractChatHistory(memoryVariables);
 
       // Get standalone question if we have chat history
