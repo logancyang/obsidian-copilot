@@ -251,11 +251,6 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       content,
     });
 
-    // Store the multimodal content in userMessage for later saving to memory
-    if (isMultimodalCurrent && Array.isArray(content)) {
-      userMessage.content = content;
-    }
-
     const enhancedUserMessage = content instanceof Array ? (content[0] as any).text : content;
     logInfo("Enhanced user message: ", enhancedUserMessage);
     logInfo("==== Final Request to AI ====\n", messages);

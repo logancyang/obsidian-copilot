@@ -246,11 +246,6 @@ ${params}
         content,
       });
 
-      // Store the multimodal content in userMessage for later saving to memory
-      if (isMultimodal && Array.isArray(content)) {
-        userMessage.content = content;
-      }
-
       // Process YouTube URLs if present (only from original user prompt, not context)
       const originalUserPrompt = userMessage.originalMessage || userMessage.message;
       const youtubeMessages = await this.processYouTubeUrls(
