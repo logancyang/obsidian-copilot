@@ -35,8 +35,8 @@ export class LoadChatHistoryModal extends FuzzySuggestModal<TFile> {
     let title: string;
 
     // First check if there's a custom topic in frontmatter
-    if (frontmatter?.topic) {
-      title = frontmatter.topic;
+    if (frontmatter?.topic && typeof frontmatter.topic === "string" && frontmatter.topic.trim()) {
+      title = frontmatter.topic.trim();
     } else {
       // Fallback to extracting from filename
       // First, remove project ID prefix if it exists (format: projectId__)

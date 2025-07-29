@@ -228,11 +228,19 @@ export class ChatPersistenceManager {
         return undefined;
       }
 
-      // Get conversation content for topic generation
-      const conversationSummary = messages
-        .slice(0, 6) // Use first few messages for context
-        .map((m) => `${m.sender}: ${m.message.slice(0, 200)}`)
-        .join("\n");
+      // Constants for topic generation
+      const TOPIC_GENERATION_MESSAGE_LIMIT = 6;
+      const TOPIC_GENERATION_CHAR_LIMIT = 200;
+
+      // Get conversation content for topic generation - using reduce for efficiency
+      const conversationSummary = messages.reduce((acc, m, i) => {
+        if (i >= TOPIC_GENERATION_MESSAGE_LIMIT) return acc;
+        return (
+          acc +
+          (acc ? "\n" : "") +
+          `${m.sender}: ${m.message.slice(0, TOPIC_GENERATION_CHAR_LIMIT)}`
+        );
+      }, "");
 
       const prompt = `Generate a concise title (max 5 words) for this conversation based on its content. Return only the title without any explanation or quotes.
 
