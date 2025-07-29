@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
 
-import { useSettingsValue } from "@/settings/model";
+import { updateSetting, useSettingsValue } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
 import { getToolDescription } from "@/tools/toolManager";
 import { extractNoteFiles, isAllowedFileForContext, isNoteTitleUnique } from "@/utils";
@@ -34,6 +34,7 @@ import {
   X,
   Pen,
   Sparkles,
+  Brain,
 } from "lucide-react";
 import { App, Platform, TFile } from "obsidian";
 import React, {
@@ -110,10 +111,13 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const isCopilotPlus =
       currentChain === ChainType.COPILOT_PLUS_CHAIN || currentChain === ChainType.PROJECT_CHAIN;
 
-    // Toggle states for vault, web search, and composer
+    // Toggle states for vault, web search, composer, and autonomous agent
     const [vaultToggle, setVaultToggle] = useState(false);
     const [webToggle, setWebToggle] = useState(false);
     const [composerToggle, setComposerToggle] = useState(false);
+    const [autonomousAgentToggle, setAutonomousAgentToggle] = useState(
+      settings.enableAutonomousAgent
+    );
     const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
     const loadingMessages = [
       "Loading the project context...",
@@ -126,6 +130,11 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         textAreaRef.current?.focus();
       },
     }));
+
+    // Sync autonomous agent toggle with settings
+    useEffect(() => {
+      setAutonomousAgentToggle(settings.enableAutonomousAgent);
+    }, [settings.enableAutonomousAgent]);
 
     useEffect(() => {
       if (currentChain === ChainType.PROJECT_CHAIN) {
@@ -172,9 +181,13 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
       // Build tool calls based on toggle states
       const toolCalls: string[] = [];
-      if (vaultToggle) toolCalls.push("@vault");
-      if (webToggle) toolCalls.push("@websearch");
-      if (composerToggle) toolCalls.push("@composer");
+      if (autonomousAgentToggle) {
+        toolCalls.push("@autonomousagent");
+      } else {
+        if (vaultToggle) toolCalls.push("@vault");
+        if (webToggle) toolCalls.push("@websearch");
+        if (composerToggle) toolCalls.push("@composer");
+      }
 
       handleSendMessage({
         toolCalls,
@@ -583,8 +596,28 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
               </Button>
             ) : (
               <>
+                {/* Autonomous Agent button - only show in Copilot Plus mode */}
+                {isCopilotPlus && (
+                  <Button
+                    variant="ghost2"
+                    size="fit"
+                    onClick={() => {
+                      const newValue = !autonomousAgentToggle;
+                      setAutonomousAgentToggle(newValue);
+                      updateSetting("enableAutonomousAgent", newValue);
+                    }}
+                    className={cn(
+                      "tw-mr-2 tw-text-muted hover:tw-text-accent",
+                      autonomousAgentToggle && "tw-text-accent tw-bg-accent/10"
+                    )}
+                    title="Toggle autonomous agent mode"
+                  >
+                    <Brain className="tw-size-4" />
+                  </Button>
+                )}
+
                 {/* Toggle buttons for vault, web search, and composer - only show when Autonomous Agent is off */}
-                {!settings.enableAutonomousAgent && (
+                {!autonomousAgentToggle && isCopilotPlus && (
                   <>
                     <Button
                       variant="ghost2"
