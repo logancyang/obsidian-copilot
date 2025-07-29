@@ -29,21 +29,30 @@ export class LoadChatHistoryModal extends FuzzySuggestModal<TFile> {
   }
 
   getItemText(file: TFile): string {
-    // First, remove project ID prefix if it exists (format: projectId__)
-    const basename = file.basename.replace(/^[a-zA-Z0-9-]+__/, "");
+    // Read the file's front matter
+    const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
 
-    // Remove {$date} and {$time} parts from the filename
-    const title = basename
-      .replace(/\{\$date}|\d{8}/g, "") // Remove {$date} or date in format YYYYMMDD
-      .replace(/\{\$time}|\d{6}/g, "") // Remove {$time} or time in format HHMMSS
-      .replace(/[@_]/g, " ") // Replace @ and _ with spaces
-      .replace(/\s+/g, " ") // Replace multiple spaces with single space
-      .trim();
+    let title: string;
+
+    // First check if there's a custom topic in frontmatter
+    if (frontmatter?.topic) {
+      title = frontmatter.topic;
+    } else {
+      // Fallback to extracting from filename
+      // First, remove project ID prefix if it exists (format: projectId__)
+      const basename = file.basename.replace(/^[a-zA-Z0-9-]+__/, "");
+
+      // Remove {$date} and {$time} parts from the filename
+      title = basename
+        .replace(/\{\$date}|\d{8}/g, "") // Remove {$date} or date in format YYYYMMDD
+        .replace(/\{\$time}|\d{6}/g, "") // Remove {$time} or time in format HHMMSS
+        .replace(/[@_]/g, " ") // Replace @ and _ with spaces
+        .replace(/\s+/g, " ") // Replace multiple spaces with single space
+        .trim();
+    }
 
     let formattedDateTime: FormattedDateTime;
 
-    // Read the file's front matter
-    const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
     if (frontmatter && frontmatter.epoch) {
       // Use the epoch from front matter if available
       formattedDateTime = formatDateTime(new Date(frontmatter.epoch));

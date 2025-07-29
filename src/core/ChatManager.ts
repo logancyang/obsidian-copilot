@@ -36,7 +36,7 @@ export class ChatManager {
     // Initialize default project repository
     this.projectMessageRepos.set(this.defaultProjectKey, messageRepo);
     // Initialize persistence manager with default repository
-    this.persistenceManager = new ChatPersistenceManager(plugin.app, messageRepo);
+    this.persistenceManager = new ChatPersistenceManager(plugin.app, messageRepo, chainManager);
   }
 
   /**
@@ -65,7 +65,11 @@ export class ChatManager {
     const currentRepo = this.projectMessageRepos.get(projectKey)!;
 
     // Update persistence manager to use current repository
-    this.persistenceManager = new ChatPersistenceManager(this.plugin.app, currentRepo);
+    this.persistenceManager = new ChatPersistenceManager(
+      this.plugin.app,
+      currentRepo,
+      this.chainManager
+    );
 
     return currentRepo;
   }
