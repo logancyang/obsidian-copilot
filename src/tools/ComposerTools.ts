@@ -205,7 +205,13 @@ function parseSearchReplaceBlocks(
   // - 3+ dashes followed by optional space and "SEARCH"
   // - 3+ equals signs as separator
   // - 3+ plus signs followed by optional space and "REPLACE"
-  const blockRegex = /-{3,}\s*SEARCH\s*\n([\s\S]*?)\n={3,}\s*\n([\s\S]*?)\n\+{3,}\s*REPLACE/g;
+  const SEARCH_MARKER = /-{3,}\s*SEARCH\s*\n/;
+  const SEPARATOR = /\n={3,}\s*\n/;
+  const REPLACE_MARKER = /\n\+{3,}\s*REPLACE/;
+  const blockRegex = new RegExp(
+    `${SEARCH_MARKER.source}([\s\S]*?)${SEPARATOR.source}([\s\S]*?)${REPLACE_MARKER.source}`,
+    "g"
+  );
 
   let match;
   while ((match = blockRegex.exec(diff)) !== null) {
