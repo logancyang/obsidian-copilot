@@ -387,7 +387,9 @@ ${params}
         // Add tool results in LLM format (truncated for memory)
         if (toolResults.length > 0) {
           const toolResultsForLLM = processToolResults(toolResults, true); // truncated for memory
-          this.llmFormattedMessages.push(toolResultsForLLM);
+          if (toolResultsForLLM) {
+            this.llmFormattedMessages.push(toolResultsForLLM);
+          }
         }
 
         // Add AI response to conversation for next iteration
