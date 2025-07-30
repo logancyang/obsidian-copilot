@@ -181,9 +181,9 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
       // Build tool calls based on toggle states
       const toolCalls: string[] = [];
-      if (autonomousAgentToggle) {
-        toolCalls.push("@autonomousagent");
-      } else {
+      // Only add tool calls when autonomous agent is off
+      // When autonomous agent is on, it handles all tools internally
+      if (!autonomousAgentToggle) {
         if (vaultToggle) toolCalls.push("@vault");
         if (webToggle) toolCalls.push("@websearch");
         if (composerToggle) toolCalls.push("@composer");

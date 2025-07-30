@@ -1,15 +1,23 @@
 import { ChatButtons } from "@/components/chat-components/ChatButtons";
+import { ToolCallBanner } from "@/components/chat-components/ToolCallBanner";
 import { SourcesModal } from "@/components/modals/SourcesModal";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
+import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
 import { ChatMessage } from "@/types/message";
 import { insertIntoEditor } from "@/utils";
 import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Root } from "react-dom/client";
+import ReactDOM, { Root } from "react-dom/client";
+
+declare global {
+  interface Window {
+    __copilotToolCallRoots?: Map<string, Map<string, Root>>;
+  }
+}
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
   if (!context || (!context.notes?.length && !context.urls?.length)) {
@@ -67,6 +75,30 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Use a stable ID for the message to preserve tool call roots across re-renders
+  const messageId = useRef(
+    message.timestamp?.epoch
+      ? String(message.timestamp.epoch)
+      : `temp-${Date.now()}-${Math.random()}`
+  );
+
+  // Store roots in a global map to preserve them across component instances
+  const getGlobalRootsMap = () => {
+    if (!window.__copilotToolCallRoots) {
+      window.__copilotToolCallRoots = new Map<string, Map<string, Root>>();
+    }
+    return window.__copilotToolCallRoots;
+  };
+
+  const getRootsForMessage = () => {
+    const globalMap = getGlobalRootsMap();
+    if (!globalMap.has(messageId.current)) {
+      globalMap.set(messageId.current, new Map<string, Root>());
+    }
+    return globalMap.get(messageId.current)!;
+  };
+
+  const rootsRef = useRef<Map<string, Root>>(getRootsForMessage());
 
   const copyToClipboard = () => {
     if (!navigator.clipboard || !navigator.clipboard.writeText) {
@@ -257,51 +289,187 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   };
 
   useEffect(() => {
-    const roots: Root[] = [];
     let isUnmounting = false;
 
     if (contentRef.current && message.sender !== USER_SENDER) {
-      contentRef.current.innerHTML = "";
-
       // Create a new Component instance if it doesn't exist
       if (!componentRef.current) {
         componentRef.current = new Component();
       }
 
       const processedMessage = preprocess(message.message);
+      const parsedMessage = parseToolCallMarkers(processedMessage);
 
       if (!isUnmounting) {
-        // Use Obsidian's MarkdownRenderer to render the message
-        MarkdownRenderer.renderMarkdown(
-          processedMessage,
-          contentRef.current,
-          "", // Empty string for sourcePath as we don't have a specific source file
-          componentRef.current
+        // Track existing tool call IDs
+        const existingToolCallIds = new Set<string>();
+        const existingElements = contentRef.current.querySelectorAll('[id^="tool-call-"]');
+        existingElements.forEach((el) => {
+          const id = el.id.replace("tool-call-", "");
+          existingToolCallIds.add(id);
+        });
+
+        // Clear only text content divs, preserve tool call containers
+        const textDivs = contentRef.current.querySelectorAll(".message-segment");
+        textDivs.forEach((div) => div.remove());
+
+        // Process segments and only update what's needed
+        let currentIndex = 0;
+        parsedMessage.segments.forEach((segment, index) => {
+          if (segment.type === "text" && segment.content.trim()) {
+            // Find where to insert this text segment
+            const insertBefore = contentRef.current!.children[currentIndex];
+
+            const textDiv = document.createElement("div");
+            textDiv.className = "message-segment";
+
+            if (insertBefore) {
+              contentRef.current!.insertBefore(textDiv, insertBefore);
+            } else {
+              contentRef.current!.appendChild(textDiv);
+            }
+
+            MarkdownRenderer.renderMarkdown(segment.content, textDiv, "", componentRef.current!);
+            currentIndex++;
+          } else if (segment.type === "toolCall" && segment.toolCall) {
+            const toolCallId = segment.toolCall.id;
+            const existingDiv = document.getElementById(`tool-call-${toolCallId}`);
+
+            if (existingDiv) {
+              // Update existing tool call
+              const root = rootsRef.current.get(toolCallId);
+              if (root) {
+                root.render(
+                  <ToolCallBanner
+                    toolName={segment.toolCall.toolName}
+                    displayName={segment.toolCall.displayName}
+                    emoji={segment.toolCall.emoji}
+                    isExecuting={segment.toolCall.isExecuting}
+                    result={segment.toolCall.result || null}
+                    confirmationMessage={segment.toolCall.confirmationMessage}
+                  />
+                );
+              }
+              currentIndex++;
+            } else {
+              // Create new tool call
+              const insertBefore = contentRef.current!.children[currentIndex];
+              const toolDiv = document.createElement("div");
+              toolDiv.className = "tool-call-container";
+              toolDiv.id = `tool-call-${toolCallId}`;
+
+              if (insertBefore) {
+                contentRef.current!.insertBefore(toolDiv, insertBefore);
+              } else {
+                contentRef.current!.appendChild(toolDiv);
+              }
+
+              const root = ReactDOM.createRoot(toolDiv);
+              rootsRef.current.set(toolCallId, root);
+
+              root.render(
+                <ToolCallBanner
+                  toolName={segment.toolCall.toolName}
+                  displayName={segment.toolCall.displayName}
+                  emoji={segment.toolCall.emoji}
+                  isExecuting={segment.toolCall.isExecuting}
+                  result={segment.toolCall.result || null}
+                  confirmationMessage={segment.toolCall.confirmationMessage}
+                />
+              );
+              currentIndex++;
+            }
+          }
+        });
+
+        // Clean up any tool calls that no longer exist
+        const currentToolCallIds = new Set(
+          parsedMessage.segments
+            .filter((s) => s.type === "toolCall" && s.toolCall)
+            .map((s) => s.toolCall!.id)
         );
+
+        existingToolCallIds.forEach((id) => {
+          if (!currentToolCallIds.has(id)) {
+            const element = document.getElementById(`tool-call-${id}`);
+            if (element) {
+              const root = rootsRef.current.get(id);
+              if (root) {
+                root.unmount();
+                rootsRef.current.delete(id);
+              }
+              element.remove();
+            }
+          }
+        });
       }
     }
 
     // Cleanup function
     return () => {
       isUnmounting = true;
-
-      // Schedule cleanup to run after current render cycle
-      setTimeout(() => {
-        if (componentRef.current) {
-          componentRef.current.unload();
-          componentRef.current = null;
-        }
-
-        roots.forEach((root) => {
-          try {
-            root.unmount();
-          } catch {
-            // Ignore unmount errors during cleanup
-          }
-        });
-      }, 0);
     };
   }, [message, app, componentRef, isStreaming, preprocess]);
+
+  // Cleanup effect that only runs on component unmount
+  useEffect(() => {
+    const currentComponentRef = componentRef;
+    const currentMessageId = messageId.current;
+
+    // Clean up old message roots to prevent memory leaks (older than 1 hour)
+    const cleanupOldRoots = () => {
+      const globalMap = getGlobalRootsMap();
+      const oneHourAgo = Date.now() - 60 * 60 * 1000;
+
+      globalMap.forEach((roots, msgId) => {
+        // Extract timestamp from message ID if it's in epoch format
+        const timestamp = parseInt(msgId);
+        if (!isNaN(timestamp) && timestamp < oneHourAgo) {
+          roots.forEach((root) => {
+            try {
+              root.unmount();
+            } catch {
+              // Ignore errors
+            }
+          });
+          globalMap.delete(msgId);
+        }
+      });
+    };
+
+    // Run cleanup on mount
+    cleanupOldRoots();
+
+    return () => {
+      // Defer cleanup to avoid React rendering conflicts
+      setTimeout(() => {
+        // Clean up component
+        if (currentComponentRef.current) {
+          currentComponentRef.current.unload();
+          currentComponentRef.current = null;
+        }
+
+        // Only clean up roots if this is a temporary message (streaming message)
+        // Permanent messages keep their roots to preserve tool call banners
+        if (currentMessageId.startsWith("temp-")) {
+          const globalMap = getGlobalRootsMap();
+          const messageRoots = globalMap.get(currentMessageId);
+
+          if (messageRoots) {
+            messageRoots.forEach((root) => {
+              try {
+                root.unmount();
+              } catch (error) {
+                // Ignore unmount errors during cleanup
+                console.debug("Error unmounting React root during cleanup:", error);
+              }
+            });
+            globalMap.delete(currentMessageId);
+          }
+        }
+      }, 0);
+    };
+  }, []); // Empty dependency array ensures this only runs on unmount
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
