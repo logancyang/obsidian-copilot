@@ -379,31 +379,30 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     // Cleanup function
     return () => {
       isUnmounting = true;
-
-      // Only clean up on final unmount
-      if (!isStreaming) {
-        // Copy refs to avoid exhaustive-deps warning
-        const currentComponent = componentRef.current;
-        const currentRootsRef = rootsRef;
-
-        setTimeout(() => {
-          if (currentComponent) {
-            currentComponent.unload();
-            componentRef.current = null;
-          }
-
-          currentRootsRef.current.forEach((root) => {
-            try {
-              root.unmount();
-            } catch {
-              // Ignore unmount errors during cleanup
-            }
-          });
-          currentRootsRef.current.clear();
-        }, 0);
-      }
     };
   }, [message, app, componentRef, isStreaming, preprocess]);
+
+  // Cleanup effect that only runs on component unmount
+  useEffect(() => {
+    return () => {
+      // Clean up React roots and component when component unmounts
+      const currentComponent = componentRef.current;
+      const currentRootsRef = rootsRef;
+
+      if (currentComponent) {
+        currentComponent.unload();
+      }
+
+      currentRootsRef.current.forEach((root) => {
+        try {
+          root.unmount();
+        } catch {
+          // Ignore unmount errors during cleanup
+        }
+      });
+      currentRootsRef.current.clear();
+    };
+  }, []); // Empty dependency array ensures this only runs on unmount
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
