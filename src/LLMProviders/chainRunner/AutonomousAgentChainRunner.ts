@@ -11,8 +11,8 @@ import {
   pomodoroTool,
   convertTimeBetweenTimezonesTool,
 } from "@/tools/TimeTools";
-import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools"; // Used in processYouTubeUrls
-import { extractAllYoutubeUrls, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
+import { youtubeTranscriptionTool } from "@/tools/YoutubeTools";
+import { getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
 import { messageRequiresTools, ModelAdapter, ModelAdapterFactory } from "./utils/modelAdapter";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
@@ -36,83 +36,13 @@ import { checkIsPlusUser } from "@/plusUtils";
 export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private llmFormattedMessages: string[] = []; // Track LLM-formatted messages for memory
 
-  /**
-   * Process YouTube URLs in the original user prompt and fetch transcriptions
-   * Only processes URLs from the user's direct input, not from attached context
-   * @param originalUserPrompt The original user message before context processing
-   * @param updateCurrentAiMessage Callback to update the current AI message display
-   * @returns Array of conversation messages to add to the context
-   */
-  private async processYouTubeUrls(
-    originalUserPrompt: string,
-    updateCurrentAiMessage: (message: string) => void
-  ): Promise<Array<{ role: string; content: string }>> {
-    const youtubeUrls = extractAllYoutubeUrls(originalUserPrompt);
-    if (youtubeUrls.length === 0) {
-      return [];
-    }
-
-    updateCurrentAiMessage("🎥 Fetching YouTube transcription...");
-    const transcriptions: string[] = [];
-
-    for (const url of youtubeUrls) {
-      try {
-        const result = await simpleYoutubeTranscriptionTool.call({ url });
-        const parsedResult = JSON.parse(result);
-
-        if (parsedResult.success) {
-          transcriptions.push(
-            `<youtube_transcription>\n` +
-              `<url>${escapeXml(url)}</url>\n` +
-              `<transcript>\n${escapeXml(parsedResult.transcript)}\n</transcript>\n` +
-              `</youtube_transcription>`
-          );
-        } else {
-          transcriptions.push(
-            `<youtube_transcription>\n` +
-              `<url>${escapeXml(url)}</url>\n` +
-              `<error>${escapeXml(parsedResult.message)}</error>\n` +
-              `</youtube_transcription>`
-          );
-        }
-      } catch (error) {
-        logInfo(`Error transcribing YouTube video ${url}:`, error);
-        transcriptions.push(
-          `<youtube_transcription>\n` +
-            `<url>${escapeXml(url)}</url>\n` +
-            `<error>Failed to fetch transcription</error>\n` +
-            `</youtube_transcription>`
-        );
-      }
-    }
-
-    if (transcriptions.length === 0) {
-      return [];
-    }
-
-    // Return the conversation messages to add
-    const transcriptionContext = transcriptions.join("\n\n");
-    return [
-      {
-        role: "assistant",
-        content: `I've fetched the YouTube transcription(s):\n\n${transcriptionContext}`,
-      },
-      {
-        role: "user",
-        content:
-          "Please analyze or respond to my original request using the YouTube transcription(s) provided above.",
-      },
-    ];
-  }
-
   private getAvailableTools(): SimpleTool<any, any>[] {
     // Get tools from the existing IntentAnalyzer
     const tools: SimpleTool<any, any>[] = [
       localSearchTool,
       webSearchTool,
       pomodoroTool,
-      // YouTube transcription is handled automatically in processYouTubeUrls
-      // simpleYoutubeTranscriptionTool,
+      youtubeTranscriptionTool,
       getCurrentTimeTool,
       getTimeInfoByEpochTool,
       getTimeRangeMsTool,
@@ -247,13 +177,8 @@ ${params}
         content,
       });
 
-      // Process YouTube URLs if present (only from original user prompt, not context)
+      // Store original user prompt for tools that need it
       const originalUserPrompt = userMessage.originalMessage || userMessage.message;
-      const youtubeMessages = await this.processYouTubeUrls(
-        originalUserPrompt,
-        updateCurrentAiMessage
-      );
-      conversationMessages.push(...youtubeMessages);
 
       // Autonomous agent loop
       const maxIterations = 4; // Prevent infinite loops while allowing sufficient reasoning
@@ -397,7 +322,11 @@ ${params}
             updateCurrentAiMessage(currentDisplay);
           }
 
-          const result = await executeSequentialToolCall(toolCall, availableTools);
+          const result = await executeSequentialToolCall(
+            toolCall,
+            availableTools,
+            originalUserPrompt
+          );
           toolResults.push(result);
 
           // Update the tool call marker with the result if we have an ID

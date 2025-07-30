@@ -221,20 +221,41 @@ export class ToolResultFormatter {
   }
 
   private static formatYoutubeTranscription(result: any): string {
+    // Handle both string and object results
+    let parsed: any;
+
     if (typeof result === "string") {
       try {
-        const parsed = JSON.parse(result);
+        parsed = JSON.parse(result);
+      } catch {
+        // If not JSON, return as is
+        return result;
+      }
+    } else if (typeof result === "object") {
+      parsed = result;
+    } else {
+      return String(result);
+    }
 
-        if (parsed.success === false) {
-          return `📺 YouTube Transcription Failed\n\n${parsed.message}`;
-        }
+    // Handle error case
+    if (parsed.success === false) {
+      return `📺 YouTube Transcription Failed\n\n${parsed.message}`;
+    }
 
-        if (parsed.transcript) {
-          const output: string[] = ["📺 YouTube Transcript"];
+    // Handle new multi-URL format
+    if (parsed.results && Array.isArray(parsed.results)) {
+      const output: string[] = [
+        `📺 YouTube Transcripts (${parsed.total_urls} video${parsed.total_urls > 1 ? "s" : ""})`,
+      ];
+      output.push("");
+
+      for (const videoResult of parsed.results) {
+        if (videoResult.success) {
+          output.push(`📹 Video: ${videoResult.url}`);
           output.push("");
 
-          // Split transcript into manageable chunks
-          const lines = parsed.transcript.split("\n");
+          // Format transcript
+          const lines = videoResult.transcript.split("\n");
           let formattedLines = 0;
 
           for (const line of lines) {
@@ -250,7 +271,7 @@ export class ToolResultFormatter {
               formattedLines++;
 
               // Limit output to prevent overwhelming display
-              if (formattedLines > 50) {
+              if (formattedLines > 30) {
                 output.push("");
                 output.push("... (transcript truncated for display)");
                 break;
@@ -258,18 +279,63 @@ export class ToolResultFormatter {
             }
           }
 
-          if (parsed.elapsed_time_ms) {
+          if (videoResult.elapsed_time_ms) {
             output.push("");
-            output.push(`Processing time: ${(parsed.elapsed_time_ms / 1000).toFixed(1)}s`);
+            output.push(`Processing time: ${(videoResult.elapsed_time_ms / 1000).toFixed(1)}s`);
           }
-
-          return output.join("\n");
+        } else {
+          output.push(`❌ Failed to transcribe: ${videoResult.url}`);
+          output.push(`   ${videoResult.message}`);
         }
-      } catch {
-        // If not JSON, return as is
+
+        output.push("");
+        output.push("---");
+        output.push("");
       }
+
+      return output.join("\n").trimEnd();
     }
-    return result;
+
+    // Handle old single-video format
+    if (parsed.transcript) {
+      const output: string[] = ["📺 YouTube Transcript"];
+      output.push("");
+
+      // Split transcript into manageable chunks
+      const lines = parsed.transcript.split("\n");
+      let formattedLines = 0;
+
+      for (const line of lines) {
+        if (line.trim()) {
+          // Check if line starts with a timestamp pattern [MM:SS]
+          const timestampMatch = line.match(/^\[(\d+:\d+)\]/);
+          if (timestampMatch) {
+            if (formattedLines > 0) output.push(""); // Add spacing
+            output.push(`⏰ ${line}`);
+          } else {
+            output.push(`   ${line.trim()}`);
+          }
+          formattedLines++;
+
+          // Limit output to prevent overwhelming display
+          if (formattedLines > 50) {
+            output.push("");
+            output.push("... (transcript truncated for display)");
+            break;
+          }
+        }
+      }
+
+      if (parsed.elapsed_time_ms) {
+        output.push("");
+        output.push(`Processing time: ${(parsed.elapsed_time_ms / 1000).toFixed(1)}s`);
+      }
+
+      return output.join("\n");
+    }
+
+    // If we can't format it, return as string
+    return typeof result === "object" ? JSON.stringify(result, null, 2) : String(result);
   }
 
   private static formatWriteToFile(result: any): string {
