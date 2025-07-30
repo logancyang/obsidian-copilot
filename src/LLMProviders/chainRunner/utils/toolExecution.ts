@@ -163,7 +163,7 @@ export function getToolEmoji(toolName: string): string {
  */
 export function getToolConfirmtionMessage(toolName: string): string | null {
   if (toolName == "writeToFile") {
-    return "Please accept or reject the changes in the Preview UI";
+    return "Accept / reject in the Preview";
   }
   return null;
 }

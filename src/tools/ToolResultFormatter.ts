@@ -3,6 +3,19 @@
  * Each formatter should return a user-friendly representation of the tool result
  */
 export class ToolResultFormatter {
+  /**
+   * Try to parse JSON string, returns array of parsed objects
+   * @param json JSON string to parse
+   * @returns Array containing parsed object(s), or empty array if parsing fails
+   */
+  private static tryParseJson(json: string): any[] {
+    try {
+      const parsed = JSON.parse(json);
+      return Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+      return [];
+    }
+  }
   static format(toolName: string, result: string): string {
     try {
       // Try to parse the result as JSON first
@@ -47,37 +60,28 @@ export class ToolResultFormatter {
       return result;
     }
 
-    // Since the JSON contains HTML with quotes, we need a more robust approach
-    const searchResults: any[] = [];
+    // Try standard JSON parsing first
+    let searchResults = this.tryParseJson(result);
 
+    // If parsing failed, try regex extraction for malformed JSON
     try {
-      // First, try to parse as regular JSON (handles both single objects and arrays)
-      if (trimmedResult.startsWith("{")) {
-        // Single object case
-        try {
-          const obj = JSON.parse(result);
-          searchResults.push(obj);
-        } catch {
-          // If JSON parsing fails, continue with regex extraction
-        }
-      }
-
-      // If no results yet or starts with array, try regex extraction
       if (searchResults.length === 0) {
         // Match individual JSON objects (works for arrays or malformed JSON)
         const objectRegex = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
         const matches = result.match(objectRegex);
 
         if (matches) {
+          const regexResults: any[] = [];
           for (const match of matches) {
             try {
               // Parse each object individually
               const obj = JSON.parse(match);
-              searchResults.push(obj);
+              regexResults.push(obj);
             } catch {
               // Skip malformed objects
             }
           }
+          searchResults = regexResults;
         }
       }
 
@@ -105,7 +109,7 @@ export class ToolResultFormatter {
         }
 
         if (results.length > 0) {
-          searchResults.push(...results);
+          searchResults = results;
         }
       }
     } catch {

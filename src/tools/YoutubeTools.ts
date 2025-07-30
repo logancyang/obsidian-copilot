@@ -4,10 +4,10 @@ import { z } from "zod";
 import { createTool } from "./SimpleTool";
 
 // Maximum input length to prevent potential DoS attacks
-const MAX_USER_MESSAGE_LENGTH = 50000; // ~50KB limit
+const MAX_USER_MESSAGE_LENGTH = 50000; // Maximum number of characters
 
 interface YouTubeHandlerArgs {
-  _userMessageContent?: string;
+  _userMessageContent: string;
 }
 
 const youtubeTranscriptionTool = createTool({
@@ -18,14 +18,7 @@ const youtubeTranscriptionTool = createTool({
   requiresUserMessageContent: true,
   handler: async (args: YouTubeHandlerArgs) => {
     // The _userMessageContent is injected by the tool execution system
-    const _userMessageContent = args._userMessageContent;
-
-    if (!_userMessageContent) {
-      return JSON.stringify({
-        success: false,
-        message: "Internal error: User message content not provided",
-      });
-    }
+    const { _userMessageContent } = args;
 
     // Input validation
     if (typeof _userMessageContent !== "string") {
