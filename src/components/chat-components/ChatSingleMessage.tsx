@@ -1,15 +1,17 @@
 import { ChatButtons } from "@/components/chat-components/ChatButtons";
+import { ToolCallBanner } from "@/components/chat-components/ToolCallBanner";
 import { SourcesModal } from "@/components/modals/SourcesModal";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
+import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
 import { ChatMessage } from "@/types/message";
 import { insertIntoEditor } from "@/utils";
 import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Root } from "react-dom/client";
+import ReactDOM, { Root } from "react-dom/client";
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
   if (!context || (!context.notes?.length && !context.urls?.length)) {
@@ -67,6 +69,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const rootsRef = useRef<Map<string, Root>>(new Map());
 
   const copyToClipboard = () => {
     if (!navigator.clipboard || !navigator.clipboard.writeText) {
@@ -257,27 +260,119 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   };
 
   useEffect(() => {
-    const roots: Root[] = [];
     let isUnmounting = false;
 
     if (contentRef.current && message.sender !== USER_SENDER) {
-      contentRef.current.innerHTML = "";
-
       // Create a new Component instance if it doesn't exist
       if (!componentRef.current) {
         componentRef.current = new Component();
       }
 
       const processedMessage = preprocess(message.message);
+      const parsedMessage = parseToolCallMarkers(processedMessage);
 
       if (!isUnmounting) {
-        // Use Obsidian's MarkdownRenderer to render the message
-        MarkdownRenderer.renderMarkdown(
-          processedMessage,
-          contentRef.current,
-          "", // Empty string for sourcePath as we don't have a specific source file
-          componentRef.current
+        // Track existing tool call IDs
+        const existingToolCallIds = new Set<string>();
+        const existingElements = contentRef.current.querySelectorAll('[id^="tool-call-"]');
+        existingElements.forEach((el) => {
+          const id = el.id.replace("tool-call-", "");
+          existingToolCallIds.add(id);
+        });
+
+        // Clear only text content divs, preserve tool call containers
+        const textDivs = contentRef.current.querySelectorAll(".message-segment");
+        textDivs.forEach((div) => div.remove());
+
+        // Process segments and only update what's needed
+        let currentIndex = 0;
+        parsedMessage.segments.forEach((segment, index) => {
+          if (segment.type === "text" && segment.content.trim()) {
+            // Find where to insert this text segment
+            const insertBefore = contentRef.current!.children[currentIndex];
+
+            const textDiv = document.createElement("div");
+            textDiv.className = "message-segment";
+
+            if (insertBefore) {
+              contentRef.current!.insertBefore(textDiv, insertBefore);
+            } else {
+              contentRef.current!.appendChild(textDiv);
+            }
+
+            MarkdownRenderer.renderMarkdown(segment.content, textDiv, "", componentRef.current!);
+            currentIndex++;
+          } else if (segment.type === "toolCall" && segment.toolCall) {
+            const toolCallId = segment.toolCall.id;
+            const existingDiv = document.getElementById(`tool-call-${toolCallId}`);
+
+            if (existingDiv) {
+              // Update existing tool call
+              const root = rootsRef.current.get(toolCallId);
+              if (root) {
+                root.render(
+                  <ToolCallBanner
+                    toolName={segment.toolCall.toolName}
+                    displayName={segment.toolCall.displayName}
+                    emoji={segment.toolCall.emoji}
+                    isExecuting={segment.toolCall.isExecuting}
+                    result={segment.toolCall.result || null}
+                    confirmationMessage={segment.toolCall.confirmationMessage}
+                  />
+                );
+              }
+              currentIndex++;
+            } else {
+              // Create new tool call
+              const insertBefore = contentRef.current!.children[currentIndex];
+              const toolDiv = document.createElement("div");
+              toolDiv.className = "tool-call-container";
+              toolDiv.id = `tool-call-${toolCallId}`;
+
+              if (insertBefore) {
+                contentRef.current!.insertBefore(toolDiv, insertBefore);
+              } else {
+                contentRef.current!.appendChild(toolDiv);
+              }
+
+              const root = ReactDOM.createRoot(toolDiv);
+              rootsRef.current.set(toolCallId, root);
+
+              root.render(
+                <ToolCallBanner
+                  toolName={segment.toolCall.toolName}
+                  displayName={segment.toolCall.displayName}
+                  emoji={segment.toolCall.emoji}
+                  isExecuting={segment.toolCall.isExecuting}
+                  result={segment.toolCall.result || null}
+                  confirmationMessage={segment.toolCall.confirmationMessage}
+                />
+              );
+              currentIndex++;
+            }
+          }
+        });
+
+        // Clean up any tool calls that no longer exist
+        const currentToolCallIds = new Set(
+          parsedMessage.segments
+            .filter((s) => s.type === "toolCall" && s.toolCall)
+            .map((s) => s.toolCall!.id)
         );
+
+        existingToolCallIds.forEach((id) => {
+          if (!currentToolCallIds.has(id)) {
+            const element = document.getElementById(`tool-call-${id}`);
+            if (element) {
+              const root = rootsRef.current.get(id);
+              if (root) {
+                root.unmount();
+                rootsRef.current.delete(id);
+              }
+              element.remove();
+            }
+          }
+        });
       }
     }
 
@@ -285,21 +380,28 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     return () => {
       isUnmounting = true;
 
-      // Schedule cleanup to run after current render cycle
-      setTimeout(() => {
-        if (componentRef.current) {
-          componentRef.current.unload();
-          componentRef.current = null;
-        }
+      // Only clean up on final unmount
+      if (!isStreaming) {
+        // Copy refs to avoid exhaustive-deps warning
+        const currentComponent = componentRef.current;
+        const currentRootsRef = rootsRef;
 
-        roots.forEach((root) => {
-          try {
-            root.unmount();
-          } catch {
-            // Ignore unmount errors during cleanup
+        setTimeout(() => {
+          if (currentComponent) {
+            currentComponent.unload();
+            componentRef.current = null;
           }
-        });
-      }, 0);
+
+          currentRootsRef.current.forEach((root) => {
+            try {
+              root.unmount();
+            } catch {
+              // Ignore unmount errors during cleanup
+            }
+          });
+          currentRootsRef.current.clear();
+        }, 0);
+      }
     };
   }, [message, app, componentRef, isStreaming, preprocess]);
 

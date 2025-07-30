@@ -114,7 +114,7 @@ const ChatMessages = memo(
           )}
           {(currentAiMessage || loading) && (
             <ChatSingleMessage
-              key={`ai_message_${currentAiMessage}`}
+              key="ai_message_streaming"
               message={{
                 sender: "AI",
                 message: currentAiMessage || getLoadingMessage(),

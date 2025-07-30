@@ -27,6 +27,7 @@ import {
   ToolExecutionResult,
 } from "./utils/toolExecution";
 import { parseXMLToolCalls, stripToolCallXML, escapeXml } from "./utils/xmlParsing";
+import { createToolCallMarker, updateToolCallMarker } from "./utils/toolCallParser";
 import { writeToFileTool } from "@/tools/ComposerTools";
 import { getToolConfirmtionMessage } from "./utils/toolExecution";
 import { MessageContent } from "@/imageProcessing/imageProcessor";
@@ -266,6 +267,9 @@ ${params}
         iteration++;
         logInfo(`=== Autonomous Agent Iteration ${iteration} ===`);
 
+        // Store tool call messages for this iteration (declared here so it's accessible in the streaming callback)
+        const currentIterationToolCallMessages: string[] = [];
+
         // Get AI response
         const response = await this.streamResponse(
           conversationMessages,
@@ -273,7 +277,23 @@ ${params}
           (message) => {
             // Show tool calls as indicators during streaming for clarity, preserve think blocks
             const cleanedMessage = stripToolCallXML(message);
-            const currentDisplay = [...iterationHistory, cleanedMessage].join("\n\n");
+            // Build display with ALL content including tool calls from history
+            const displayParts = [];
+
+            // Add all iteration history (which includes tool call markers)
+            displayParts.push(...iterationHistory);
+
+            // Add current iteration's tool calls if any
+            if (currentIterationToolCallMessages.length > 0) {
+              displayParts.push(currentIterationToolCallMessages.join("\n"));
+            }
+
+            // Add the current streaming message
+            if (cleanedMessage.trim()) {
+              displayParts.push(cleanedMessage);
+            }
+
+            const currentDisplay = displayParts.join("\n\n");
             updateCurrentAiMessage(currentDisplay);
           },
           adapter
@@ -283,11 +303,6 @@ ${params}
 
         // Parse tool calls from the response
         const toolCalls = parseXMLToolCalls(response);
-
-        // Debug logging for tool call parsing
-        logInfo(`=== Iteration ${iteration} Response Analysis ===`);
-        logInfo(`Response length: ${response.length} characters`);
-        logInfo(`Parsed tool calls: ${toolCalls.length}`);
 
         // Use model adapter to detect and handle premature responses
         const prematureResponseResult = adapter.detectPrematureResponse?.(response);
@@ -302,20 +317,16 @@ ${params}
         }
 
         if (toolCalls.length === 0) {
-          logInfo("No XML tool calls found in response:");
-          logInfo(response.substring(0, 500) + (response.length > 500 ? "..." : ""));
-        } else {
-          logInfo(
-            "Found tool calls:",
-            toolCalls.map((tc) => tc.name)
-          );
-        }
-
-        if (toolCalls.length === 0) {
           // No tool calls, this is the final response
           // Strip any tool call XML from final response but preserve think blocks
           const cleanedResponse = stripToolCallXML(response);
-          fullAIResponse = [...iterationHistory, cleanedResponse].join("\n\n");
+
+          // Build full response from history (which includes tool call markers) and final response
+          const allParts = [...iterationHistory];
+          if (cleanedResponse.trim()) {
+            allParts.push(cleanedResponse);
+          }
+          fullAIResponse = allParts.join("\n\n");
 
           // Add final response to LLM messages
           this.llmFormattedMessages.push(response);
@@ -338,9 +349,10 @@ ${params}
 
         // Execute tool calls and show progress
         const toolResults: ToolExecutionResult[] = [];
-        const toolCallMessages: string[] = [];
+        const toolCallIdMap = new Map<number, string>(); // Map index to tool call ID
 
-        for (const toolCall of toolCalls) {
+        for (let i = 0; i < toolCalls.length; i++) {
+          const toolCall = toolCalls[i];
           if (abortController.signal.aborted) break;
 
           // Log tool call details for debugging
@@ -351,26 +363,63 @@ ${params}
           const tool = availableTools.find((t) => t.name === toolCall.name);
           const isBackgroundTool = tool?.isBackground || false;
 
+          let toolCallId: string | undefined;
+
           // Only show tool calling message for non-background tools
           if (!isBackgroundTool) {
-            // Create tool calling message with better spacing and display name
+            // Create tool calling message with structured marker
             const toolEmoji = getToolEmoji(toolCall.name);
             const toolDisplayName = getToolDisplayName(toolCall.name);
-            let toolMessage = `${toolEmoji} *Calling ${toolDisplayName}...*`;
             const confirmationMessage = getToolConfirmtionMessage(toolCall.name);
-            if (confirmationMessage) {
-              toolMessage += `\n⏳ *${confirmationMessage}...*`;
-            }
-            const toolCallingMessage = `<br/>\n\n${toolMessage}\n\n<br/>`;
-            toolCallMessages.push(toolCallingMessage);
+
+            // Generate unique ID for this tool call
+            toolCallId = `${toolCall.name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            toolCallIdMap.set(i, toolCallId);
+
+            // Create structured tool call marker
+            const toolCallMarker = createToolCallMarker(
+              toolCallId,
+              toolCall.name,
+              toolDisplayName,
+              toolEmoji,
+              confirmationMessage || "",
+              true, // isExecuting
+              "", // content (empty for now)
+              "" // result (empty until execution completes)
+            );
+
+            currentIterationToolCallMessages.push(toolCallMarker);
 
             // Show all history plus all tool call messages
-            const currentDisplay = [...iterationHistory, ...toolCallMessages].join("\n\n");
+            const currentDisplay = [...iterationHistory, ...currentIterationToolCallMessages].join(
+              "\n\n"
+            );
             updateCurrentAiMessage(currentDisplay);
           }
 
           const result = await executeSequentialToolCall(toolCall, availableTools);
           toolResults.push(result);
+
+          // Update the tool call marker with the result if we have an ID
+          if (toolCallId && !isBackgroundTool) {
+            // Update the specific tool call message
+            const messageIndex = currentIterationToolCallMessages.findIndex((msg) =>
+              msg.includes(toolCallId)
+            );
+            if (messageIndex !== -1) {
+              currentIterationToolCallMessages[messageIndex] = updateToolCallMarker(
+                currentIterationToolCallMessages[messageIndex],
+                toolCallId,
+                result.result
+              );
+            }
+
+            // Update the display with the result
+            const currentDisplay = [...iterationHistory, ...currentIterationToolCallMessages].join(
+              "\n\n"
+            );
+            updateCurrentAiMessage(currentDisplay);
+          }
 
           // Log tool result
           logToolResult(toolCall.name, result);
@@ -394,8 +443,9 @@ ${params}
         }
 
         // Add all tool call messages to history so they persist
-        if (toolCallMessages.length > 0) {
-          iterationHistory.push(toolCallMessages.join("\n"));
+        if (currentIterationToolCallMessages.length > 0) {
+          const toolCallsString = currentIterationToolCallMessages.join("\n");
+          iterationHistory.push(toolCallsString);
         }
 
         // Don't add tool results to display - they're internal only
@@ -475,6 +525,12 @@ ${params}
 
     // Create LLM-formatted output for memory
     const llmFormattedOutput = this.llmFormattedMessages.join("\n\n");
+
+    // If we somehow don't have a fullAIResponse but have iteration history, use that
+    if (!fullAIResponse && iterationHistory.length > 0) {
+      logWarn("fullAIResponse was empty, using iteration history");
+      fullAIResponse = iterationHistory.join("\n\n");
+    }
 
     return this.handleResponse(
       fullAIResponse,

@@ -440,6 +440,10 @@ If your plugin does not need CSS, delete this file.
   margin: 10px;
 }
 
+.tool-call-container {
+  margin: 0.75rem 0;
+}
+
 .message-image-content {
   width: 100%;
   max-width: 400px;
@@ -459,6 +463,16 @@ If your plugin does not need CSS, delete this file.
   flex-direction: column;
   align-items: center;
   gap: 10px;
+}
+
+/* Custom animations */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .copilot-command-input-container {
@@ -771,6 +785,11 @@ If your plugin does not need CSS, delete this file.
   .model-select-content [role="menuitem"]:hover,
   .chain-select-content [role="menuitem"]:hover {
     background: var(--background-modifier-hover);
+  }
+
+  /* Tool call banner responsive styles */
+  .tool-call-container {
+    margin: 0.5rem 0;
   }
 }
 
