@@ -13,6 +13,7 @@ import {
 } from "@/tools/TimeTools";
 import { youtubeTranscriptionTool } from "@/tools/YoutubeTools";
 import { getMessageRole, withSuppressedTokenWarnings } from "@/utils";
+import { processToolResults } from "@/utils/toolResultUtils";
 import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
 import { messageRequiresTools, ModelAdapter, ModelAdapterFactory } from "./utils/modelAdapter";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
@@ -383,12 +384,12 @@ ${params}
         // Add the assistant's response with tool calls
         this.llmFormattedMessages.push(response);
 
-        // Add tool results in LLM format
+        // Add tool results in LLM format (truncated for memory)
         if (toolResults.length > 0) {
-          const toolResultsForLLM = toolResults
-            .map((result) => `Tool '${result.toolName}' result: ${result.result}`)
-            .join("\n\n");
-          this.llmFormattedMessages.push(toolResultsForLLM);
+          const toolResultsForLLM = processToolResults(toolResults, true); // truncated for memory
+          if (toolResultsForLLM) {
+            this.llmFormattedMessages.push(toolResultsForLLM);
+          }
         }
 
         // Add AI response to conversation for next iteration
@@ -397,10 +398,8 @@ ${params}
           content: response,
         });
 
-        // Add tool results as user messages for next iteration
-        const toolResultsForConversation = toolResults
-          .map((result) => `Tool '${result.toolName}' result: ${result.result}`)
-          .join("\n\n");
+        // Add tool results as user messages for next iteration (full results for current turn)
+        const toolResultsForConversation = processToolResults(toolResults, false); // full results
 
         conversationMessages.push({
           role: "user",
