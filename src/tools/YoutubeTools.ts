@@ -3,13 +3,20 @@ import { extractAllYoutubeUrls } from "@/utils";
 import { z } from "zod";
 import { createTool } from "./SimpleTool";
 
+// Maximum input length to prevent potential DoS attacks
+const MAX_USER_MESSAGE_LENGTH = 50000; // ~50KB limit
+
+interface YouTubeHandlerArgs {
+  _userMessageContent?: string;
+}
+
 const youtubeTranscriptionTool = createTool({
   name: "youtubeTranscription",
   description: "Get transcripts of YouTube videos when the user provides YouTube URLs",
   schema: z.object({}), // Empty schema - the tool will receive _userMessageContent internally
   isPlusOnly: true,
   requiresUserMessageContent: true,
-  handler: async (args: any) => {
+  handler: async (args: YouTubeHandlerArgs) => {
     // The _userMessageContent is injected by the tool execution system
     const _userMessageContent = args._userMessageContent;
 
@@ -17,6 +24,21 @@ const youtubeTranscriptionTool = createTool({
       return JSON.stringify({
         success: false,
         message: "Internal error: User message content not provided",
+      });
+    }
+
+    // Input validation
+    if (typeof _userMessageContent !== "string") {
+      return JSON.stringify({
+        success: false,
+        message: "Invalid input: User message must be a string",
+      });
+    }
+
+    if (_userMessageContent.length > MAX_USER_MESSAGE_LENGTH) {
+      return JSON.stringify({
+        success: false,
+        message: `Input too long: Maximum allowed length is ${MAX_USER_MESSAGE_LENGTH} characters`,
       });
     }
 
@@ -64,8 +86,11 @@ const youtubeTranscriptionTool = createTool({
       })
     );
 
+    // Check if at least one transcription was successful
+    const hasSuccessfulTranscriptions = results.some((result) => result.success);
+
     return JSON.stringify({
-      success: true,
+      success: hasSuccessfulTranscriptions,
       results,
       total_urls: urls.length,
     });

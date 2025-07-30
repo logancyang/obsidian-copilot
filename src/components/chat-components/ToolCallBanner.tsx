@@ -4,6 +4,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { cn } from "@/lib/utils";
 import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
 
+// Animation constants
+// The shimmer keyframe is defined in the global CSS (see styles.css)
+const SHIMMER_ANIMATION = "shimmer 2s ease-in-out infinite";
+
 interface ToolCallBannerProps {
   toolName: string;
   displayName: string;
@@ -35,6 +39,7 @@ export const ToolCallBanner: React.FC<ToolCallBannerProps> = ({
       open={isOpen}
       onOpenChange={setIsOpen}
       disabled={!canExpand}
+      aria-disabled={!canExpand}
       className="tw-my-3 tw-w-full sm:tw-max-w-sm"
     >
       <div
@@ -51,7 +56,7 @@ export const ToolCallBanner: React.FC<ToolCallBannerProps> = ({
               style={{
                 background:
                   "linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%)",
-                animation: "shimmer 2s ease-in-out infinite",
+                animation: SHIMMER_ANIMATION,
               }}
             />
           </div>

@@ -41,28 +41,42 @@ export class ToolResultFormatter {
       return typeof result === "object" ? JSON.stringify(result, null, 2) : String(result);
     }
 
-    // Check if it looks like a JSON array
-    if (!result.trim().startsWith("[")) {
+    // Check if it looks like JSON (array or object)
+    const trimmedResult = result.trim();
+    if (!trimmedResult.startsWith("[") && !trimmedResult.startsWith("{")) {
       return result;
     }
 
     // Since the JSON contains HTML with quotes, we need a more robust approach
-    // Try to extract individual objects using regex
     const searchResults: any[] = [];
 
     try {
-      // Match individual JSON objects in the array
-      const objectRegex = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
-      const matches = result.match(objectRegex);
+      // First, try to parse as regular JSON (handles both single objects and arrays)
+      if (trimmedResult.startsWith("{")) {
+        // Single object case
+        try {
+          const obj = JSON.parse(result);
+          searchResults.push(obj);
+        } catch {
+          // If JSON parsing fails, continue with regex extraction
+        }
+      }
 
-      if (matches) {
-        for (const match of matches) {
-          try {
-            // Parse each object individually
-            const obj = JSON.parse(match);
-            searchResults.push(obj);
-          } catch {
-            // Skip malformed objects
+      // If no results yet or starts with array, try regex extraction
+      if (searchResults.length === 0) {
+        // Match individual JSON objects (works for arrays or malformed JSON)
+        const objectRegex = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
+        const matches = result.match(objectRegex);
+
+        if (matches) {
+          for (const match of matches) {
+            try {
+              // Parse each object individually
+              const obj = JSON.parse(match);
+              searchResults.push(obj);
+            } catch {
+              // Skip malformed objects
+            }
           }
         }
       }
