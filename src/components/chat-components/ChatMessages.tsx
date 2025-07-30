@@ -101,7 +101,7 @@ const ChatMessages = memo(
             (message, index) =>
               message.isVisible && (
                 <ChatSingleMessage
-                  key={index}
+                  key={`message-${message.timestamp?.epoch || index}`}
                   message={message}
                   app={app}
                   isStreaming={false}

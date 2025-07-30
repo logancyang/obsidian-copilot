@@ -13,6 +13,12 @@ import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian"
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import ReactDOM, { Root } from "react-dom/client";
 
+declare global {
+  interface Window {
+    __copilotToolCallRoots?: Map<string, Map<string, Root>>;
+  }
+}
+
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
   if (!context || (!context.notes?.length && !context.urls?.length)) {
     return null;
@@ -69,7 +75,30 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const rootsRef = useRef<Map<string, Root>>(new Map());
+  // Use a stable ID for the message to preserve tool call roots across re-renders
+  const messageId = useRef(
+    message.timestamp?.epoch
+      ? String(message.timestamp.epoch)
+      : `temp-${Date.now()}-${Math.random()}`
+  );
+
+  // Store roots in a global map to preserve them across component instances
+  const getGlobalRootsMap = () => {
+    if (!window.__copilotToolCallRoots) {
+      window.__copilotToolCallRoots = new Map<string, Map<string, Root>>();
+    }
+    return window.__copilotToolCallRoots;
+  };
+
+  const getRootsForMessage = () => {
+    const globalMap = getGlobalRootsMap();
+    if (!globalMap.has(messageId.current)) {
+      globalMap.set(messageId.current, new Map<string, Root>());
+    }
+    return globalMap.get(messageId.current)!;
+  };
+
+  const rootsRef = useRef<Map<string, Root>>(getRootsForMessage());
 
   const copyToClipboard = () => {
     if (!navigator.clipboard || !navigator.clipboard.writeText) {
@@ -384,23 +413,61 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
   // Cleanup effect that only runs on component unmount
   useEffect(() => {
-    return () => {
-      // Clean up React roots and component when component unmounts
-      const currentComponent = componentRef.current;
-      const currentRootsRef = rootsRef;
+    const currentComponentRef = componentRef;
+    const currentMessageId = messageId.current;
 
-      if (currentComponent) {
-        currentComponent.unload();
-      }
+    // Clean up old message roots to prevent memory leaks (older than 1 hour)
+    const cleanupOldRoots = () => {
+      const globalMap = getGlobalRootsMap();
+      const oneHourAgo = Date.now() - 60 * 60 * 1000;
 
-      currentRootsRef.current.forEach((root) => {
-        try {
-          root.unmount();
-        } catch {
-          // Ignore unmount errors during cleanup
+      globalMap.forEach((roots, msgId) => {
+        // Extract timestamp from message ID if it's in epoch format
+        const timestamp = parseInt(msgId);
+        if (!isNaN(timestamp) && timestamp < oneHourAgo) {
+          roots.forEach((root) => {
+            try {
+              root.unmount();
+            } catch {
+              // Ignore errors
+            }
+          });
+          globalMap.delete(msgId);
         }
       });
-      currentRootsRef.current.clear();
+    };
+
+    // Run cleanup on mount
+    cleanupOldRoots();
+
+    return () => {
+      // Defer cleanup to avoid React rendering conflicts
+      setTimeout(() => {
+        // Clean up component
+        if (currentComponentRef.current) {
+          currentComponentRef.current.unload();
+          currentComponentRef.current = null;
+        }
+
+        // Only clean up roots if this is a temporary message (streaming message)
+        // Permanent messages keep their roots to preserve tool call banners
+        if (currentMessageId.startsWith("temp-")) {
+          const globalMap = getGlobalRootsMap();
+          const messageRoots = globalMap.get(currentMessageId);
+
+          if (messageRoots) {
+            messageRoots.forEach((root) => {
+              try {
+                root.unmount();
+              } catch (error) {
+                // Ignore unmount errors during cleanup
+                console.debug("Error unmounting React root during cleanup:", error);
+              }
+            });
+            globalMap.delete(currentMessageId);
+          }
+        }
+      }, 0);
     };
   }, []); // Empty dependency array ensures this only runs on unmount
 
