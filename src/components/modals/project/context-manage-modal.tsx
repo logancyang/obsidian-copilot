@@ -220,7 +220,6 @@ function ItemCard({ item, viewMode, onDelete }: ItemCardProps) {
   );
 }
 
-// the CategoryItemCard component for displaying category items in overview mode
 function CategoryItemCard({
   item,
   onClick,
@@ -248,9 +247,6 @@ function CategoryItemCard({
       IconComponent = XIcon;
       iconColorClassName = "tw-text-context-manager-red";
       break;
-    default:
-      IconComponent = FileText;
-      iconColorClassName = "";
   }
 
   return (
