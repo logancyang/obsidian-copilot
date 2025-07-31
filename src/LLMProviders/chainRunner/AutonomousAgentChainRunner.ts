@@ -1,61 +1,57 @@
+import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { logError, logInfo, logWarn } from "@/logger";
-import { getSystemPrompt } from "@/settings/model";
-import { ChatMessage } from "@/types/message";
+import { checkIsPlusUser } from "@/plusUtils";
+import { getSettings, getSystemPrompt } from "@/settings/model";
+import { writeToFileTool } from "@/tools/ComposerTools";
 import { createGetFileTreeTool } from "@/tools/FileTreeTools";
-import { indexTool, localSearchTool, webSearchTool } from "@/tools/SearchTools";
+import { localSearchTool, webSearchTool } from "@/tools/SearchTools";
 import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
-import {
-  getCurrentTimeTool,
-  getTimeInfoByEpochTool,
-  getTimeRangeMsTool,
-  pomodoroTool,
-  convertTimeBetweenTimezonesTool,
-} from "@/tools/TimeTools";
+import { pomodoroTool } from "@/tools/TimeTools";
 import { youtubeTranscriptionTool } from "@/tools/YoutubeTools";
+import { ChatMessage } from "@/types/message";
 import { getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { processToolResults } from "@/utils/toolResultUtils";
 import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
+import { addChatHistoryToMessages } from "./utils/chatHistoryUtils";
 import { messageRequiresTools, ModelAdapter, ModelAdapterFactory } from "./utils/modelAdapter";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
-import { addChatHistoryToMessages } from "./utils/chatHistoryUtils";
+import { createToolCallMarker, updateToolCallMarker } from "./utils/toolCallParser";
 import {
   deduplicateSources,
   executeSequentialToolCall,
+  getToolConfirmtionMessage,
   getToolDisplayName,
   getToolEmoji,
   logToolCall,
   logToolResult,
   ToolExecutionResult,
 } from "./utils/toolExecution";
-import { parseXMLToolCalls, stripToolCallXML, escapeXml } from "./utils/xmlParsing";
-import { createToolCallMarker, updateToolCallMarker } from "./utils/toolCallParser";
-import { writeToFileTool } from "@/tools/ComposerTools";
-import { getToolConfirmtionMessage } from "./utils/toolExecution";
-import { MessageContent } from "@/imageProcessing/imageProcessor";
-import { checkIsPlusUser } from "@/plusUtils";
+import { escapeXml, parseXMLToolCalls, stripToolCallXML } from "./utils/xmlParsing";
 
 export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private llmFormattedMessages: string[] = []; // Track LLM-formatted messages for memory
 
   private getAvailableTools(): SimpleTool<any, any>[] {
-    // Get tools from the existing IntentAnalyzer
-    const tools: SimpleTool<any, any>[] = [
-      localSearchTool,
-      webSearchTool,
-      pomodoroTool,
-      youtubeTranscriptionTool,
-      getCurrentTimeTool,
-      getTimeInfoByEpochTool,
-      getTimeRangeMsTool,
-      convertTimeBetweenTimezonesTool,
-      indexTool,
-      writeToFileTool,
-    ];
+    const settings = getSettings();
+    const toolConfig = settings.autonomousAgentTools;
 
-    // Add file tree tool if available
-    if (this.chainManager.app?.vault) {
-      const fileTreeTool = createGetFileTreeTool(this.chainManager.app.vault.getRoot());
-      tools.push(fileTreeTool);
+    // Map of tool names to tool instances
+    const toolMap: Record<string, SimpleTool<any, any>> = {
+      localSearch: localSearchTool,
+      webSearch: webSearchTool,
+      pomodoro: pomodoroTool,
+      youtubeTranscription: youtubeTranscriptionTool,
+      writeToFile: writeToFileTool,
+    };
+
+    // Filter enabled tools
+    const tools = Object.entries(toolMap)
+      .filter(([key]) => toolConfig[key as keyof typeof toolConfig])
+      .map(([, tool]) => tool);
+
+    // Add file tree tool if available and enabled
+    if (toolConfig.getFileTree && this.chainManager.app?.vault) {
+      tools.push(createGetFileTreeTool(this.chainManager.app.vault.getRoot()));
     }
 
     return tools;
@@ -108,12 +104,14 @@ ${params}
   private generateSystemPrompt(): string {
     const basePrompt = getSystemPrompt();
     const toolDescriptions = this.generateToolDescriptions();
+    const availableTools = this.getAvailableTools();
+    const toolNames = availableTools.map((tool) => tool.name);
 
     // Use model adapter for clean model-specific handling
     const chatModel = this.chainManager.chatModelManager.getChatModel();
     const adapter = ModelAdapterFactory.createAdapter(chatModel);
 
-    return adapter.enhanceSystemPrompt(basePrompt, toolDescriptions);
+    return adapter.enhanceSystemPrompt(basePrompt, toolDescriptions, toolNames);
   }
 
   async run(
@@ -182,7 +180,7 @@ ${params}
       const originalUserPrompt = userMessage.originalMessage || userMessage.message;
 
       // Autonomous agent loop
-      const maxIterations = 4; // Prevent infinite loops while allowing sufficient reasoning
+      const maxIterations = getSettings().autonomousAgentMaxIterations; // Get from settings
       let iteration = 0;
 
       while (iteration < maxIterations) {

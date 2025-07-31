@@ -112,6 +112,15 @@ export interface CopilotSettings {
   enableCustomPromptTemplating: boolean;
   /** Whether we have suggested built-in default commands to the user once. */
   suggestedDefaultCommands: boolean;
+  autonomousAgentMaxIterations: number;
+  autonomousAgentTools: {
+    localSearch: boolean;
+    webSearch: boolean;
+    pomodoro: boolean;
+    youtubeTranscription: boolean;
+    writeToFile: boolean;
+    getFileTree: boolean;
+  };
 }
 
 export const settingsStore = createStore();
@@ -252,6 +261,39 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure enableWordCompletion has a default value
   if (typeof sanitizedSettings.enableWordCompletion !== "boolean") {
     sanitizedSettings.enableWordCompletion = DEFAULT_SETTINGS.enableWordCompletion;
+  }
+
+  // Ensure autonomousAgentMaxIterations has a valid value
+  const autonomousAgentMaxIterations = Number(settingsToSanitize.autonomousAgentMaxIterations);
+  if (
+    isNaN(autonomousAgentMaxIterations) ||
+    autonomousAgentMaxIterations < 4 ||
+    autonomousAgentMaxIterations > 8
+  ) {
+    sanitizedSettings.autonomousAgentMaxIterations = DEFAULT_SETTINGS.autonomousAgentMaxIterations;
+  } else {
+    sanitizedSettings.autonomousAgentMaxIterations = autonomousAgentMaxIterations;
+  }
+
+  // Ensure autonomousAgentTools has all required properties
+  if (
+    !sanitizedSettings.autonomousAgentTools ||
+    typeof sanitizedSettings.autonomousAgentTools !== "object"
+  ) {
+    sanitizedSettings.autonomousAgentTools = DEFAULT_SETTINGS.autonomousAgentTools;
+  } else {
+    // Ensure all tool properties exist with default values
+    const defaultTools = DEFAULT_SETTINGS.autonomousAgentTools;
+    sanitizedSettings.autonomousAgentTools = {
+      localSearch: sanitizedSettings.autonomousAgentTools.localSearch ?? defaultTools.localSearch,
+      webSearch: sanitizedSettings.autonomousAgentTools.webSearch ?? defaultTools.webSearch,
+      pomodoro: sanitizedSettings.autonomousAgentTools.pomodoro ?? defaultTools.pomodoro,
+      youtubeTranscription:
+        sanitizedSettings.autonomousAgentTools.youtubeTranscription ??
+        defaultTools.youtubeTranscription,
+      writeToFile: sanitizedSettings.autonomousAgentTools.writeToFile ?? defaultTools.writeToFile,
+      getFileTree: sanitizedSettings.autonomousAgentTools.getFileTree ?? defaultTools.getFileTree,
+    };
   }
 
   return sanitizedSettings;

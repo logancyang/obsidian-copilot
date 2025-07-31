@@ -713,6 +713,15 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableAutonomousAgent: false,
   enableCustomPromptTemplating: true,
   suggestedDefaultCommands: false,
+  autonomousAgentMaxIterations: 4,
+  autonomousAgentTools: {
+    localSearch: true,
+    webSearch: true,
+    pomodoro: true,
+    youtubeTranscription: true,
+    writeToFile: true,
+    getFileTree: true,
+  },
 };
 
 export const EVENT_NAMES = {
