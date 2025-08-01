@@ -134,6 +134,47 @@ Critical rules:
    * To delete code: Use empty REPLACE section`),
 });
 
+/**
+ * Normalizes line endings to LF (\n) for consistent string matching.
+ * This helps avoid issues with mixed line endings (CRLF vs LF).
+ */
+function normalizeLineEndings(text: string): string {
+  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+/**
+ * Performs line ending aware text replacement.
+ * Normalizes line endings for matching but preserves the original line ending style.
+ */
+function replaceWithLineEndingAwareness(
+  content: string,
+  searchText: string,
+  replaceText: string
+): string {
+  // Detect the predominant line ending style in the original content
+  const crlfCount = (content.match(/\r\n/g) || []).length;
+  const lfCount = (content.match(/(?<!\r)\n/g) || []).length;
+  const usesCrlf = crlfCount > lfCount;
+
+  // Normalize for matching
+  const normalizedContent = normalizeLineEndings(content);
+  const normalizedSearchText = normalizeLineEndings(searchText);
+  const normalizedReplaceText = normalizeLineEndings(replaceText);
+
+  // Perform replacement on normalized content
+  const resultNormalized = normalizedContent.replaceAll(
+    normalizedSearchText,
+    normalizedReplaceText
+  );
+
+  // Convert back to original line ending style if CRLF was predominant
+  if (usesCrlf) {
+    return resultNormalized.replace(/\n/g, "\r\n");
+  }
+
+  return resultNormalized;
+}
+
 const replaceInFileTool = createTool({
   name: "replaceInFile",
   description: `Request to replace sections of content in an existing file using SEARCH/REPLACE blocks that define exact changes to specific parts of the file. This tool should be used when you need to make targeted changes to specific parts of a file.`,
@@ -162,17 +203,20 @@ const replaceInFileTool = createTool({
       for (const block of searchReplaceBlocks) {
         const { searchText, replaceText } = block;
 
-        // Check if the search text exists in the current content
-        if (!modifiedContent.includes(searchText)) {
+        // Check if the search text exists in the current content (with line ending normalization)
+        const normalizedContent = normalizeLineEndings(modifiedContent);
+        const normalizedSearchText = normalizeLineEndings(searchText);
+
+        if (!normalizedContent.includes(normalizedSearchText)) {
           logWarn(
             `Search text not found in file ${path}. Block ${changesApplied + 1}: "${searchText}".`
           );
           continue;
         }
 
-        // Replace all occurrences of the search text
+        // Replace all occurrences using line ending aware replacement
         const beforeReplace = modifiedContent;
-        modifiedContent = modifiedContent.replaceAll(searchText, replaceText);
+        modifiedContent = replaceWithLineEndingAwareness(modifiedContent, searchText, replaceText);
 
         // Check if any replacements were made
         if (modifiedContent !== beforeReplace) {
@@ -246,6 +290,7 @@ function parseSearchReplaceBlocks(
   const SEARCH_MARKER = /-{3,}\s*SEARCH\s*(?:\r?\n)?/;
   const SEPARATOR = /(?:\r?\n)?={3,}\s*(?:\r?\n)?/;
   const REPLACE_MARKER = /(?:\r?\n)?\+{3,}\s*REPLACE/;
+
   const blockRegex = new RegExp(
     SEARCH_MARKER.source +
       "([\\s\\S]*?)" +
@@ -265,4 +310,10 @@ function parseSearchReplaceBlocks(
   return blocks;
 }
 
-export { writeToFileTool, replaceInFileTool, parseSearchReplaceBlocks };
+export {
+  writeToFileTool,
+  replaceInFileTool,
+  parseSearchReplaceBlocks,
+  normalizeLineEndings,
+  replaceWithLineEndingAwareness,
+};

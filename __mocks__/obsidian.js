@@ -46,4 +46,47 @@ module.exports = {
       read: jest.fn(),
     },
   })),
+  ItemView: jest.fn().mockImplementation(function () {
+    this.containerEl = document.createElement("div");
+    this.onOpen = jest.fn();
+    this.onClose = jest.fn();
+    this.getDisplayText = jest.fn().mockReturnValue("Mock View");
+    this.getViewType = jest.fn().mockReturnValue("mock-view");
+    this.getIcon = jest.fn().mockReturnValue("document");
+  }),
+  Notice: jest.fn().mockImplementation(function (message) {
+    this.message = message;
+    this.noticeEl = document.createElement("div");
+    this.hide = jest.fn();
+  }),
+  TFile: jest.fn().mockImplementation(function (path) {
+    this.path = path;
+    this.name = path.split("/").pop();
+    this.basename = this.name.replace(/\.[^/.]+$/, "");
+    this.extension = path.split(".").pop();
+  }),
+  WorkspaceLeaf: jest.fn().mockImplementation(function () {
+    this.view = null;
+    this.setViewState = jest.fn();
+    this.detach = jest.fn();
+    this.getViewState = jest.fn().mockReturnValue({});
+  }),
+};
+
+// Mock the global app object
+global.app = {
+  vault: {
+    getAbstractFileByPath: jest.fn().mockReturnValue({
+      name: "test-file.md",
+      path: "test-file.md",
+    }),
+    read: jest.fn().mockResolvedValue("test content"),
+    modify: jest.fn().mockResolvedValue(undefined),
+  },
+  workspace: {
+    getActiveFile: jest.fn().mockReturnValue(null),
+    getLeaf: jest.fn().mockReturnValue({
+      openFile: jest.fn().mockResolvedValue(undefined),
+    }),
+  },
 };
