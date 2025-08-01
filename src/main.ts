@@ -24,6 +24,7 @@ import {
   subscribeToSettingsChange,
 } from "@/settings/model";
 import { FileParserManager } from "@/tools/FileParserManager";
+import { initializeBuiltinTools } from "@/tools/builtinTools";
 import {
   Editor,
   MarkdownView,
@@ -68,6 +69,9 @@ export default class CopilotPlugin extends Plugin {
     this.addSettingTab(new CopilotSettingTab(this.app, this));
 
     // Core plugin initialization
+
+    // Initialize built-in tools with vault access
+    initializeBuiltinTools(this.app.vault);
 
     this.vectorStoreManager = VectorStoreManager.getInstance();
 

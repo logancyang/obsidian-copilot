@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { SettingItem } from "@/components/ui/setting-item";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ToolSettingsSection } from "./ToolSettingsSection";
 import { AUTOCOMPLETE_CONFIG } from "@/constants";
 import { cn } from "@/lib/utils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
@@ -97,15 +98,23 @@ export const CopilotPlusSettings: React.FC = () => {
             }}
           />
 
+          <div className="tw-pt-4 tw-text-xl tw-font-semibold">Autonomous Agent</div>
+
           <SettingItem
             type="switch"
-            title="Autonomous Agent"
+            title="Enable Autonomous Agent"
             description="Enable autonomous agent mode in Plus chat. The AI will reason step-by-step and decide which tools to use automatically, improving response quality for complex queries."
             checked={settings.enableAutonomousAgent}
             onCheckedChange={(checked) => {
               updateSetting("enableAutonomousAgent", checked);
             }}
           />
+
+          {settings.enableAutonomousAgent && (
+            <>
+              <ToolSettingsSection />
+            </>
+          )}
 
           <div className="tw-pt-4 tw-text-xl tw-font-semibold">Autocomplete</div>
 
