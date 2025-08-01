@@ -6,7 +6,13 @@ import { writeToFileTool } from "@/tools/ComposerTools";
 import { createGetFileTreeTool } from "@/tools/FileTreeTools";
 import { localSearchTool, webSearchTool } from "@/tools/SearchTools";
 import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
-import { pomodoroTool } from "@/tools/TimeTools";
+import {
+  getCurrentTimeTool,
+  getTimeInfoByEpochTool,
+  getTimeRangeMsTool,
+  pomodoroTool,
+  convertTimeBetweenTimezonesTool,
+} from "@/tools/TimeTools";
 import { youtubeTranscriptionTool } from "@/tools/YoutubeTools";
 import { ChatMessage } from "@/types/message";
 import { getMessageRole, withSuppressedTokenWarnings } from "@/utils";
@@ -35,8 +41,16 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     const settings = getSettings();
     const toolConfig = settings.autonomousAgentTools;
 
-    // Map of tool names to tool instances
-    const toolMap: Record<string, SimpleTool<any, any>> = {
+    // Tools that are always available (not controlled by settings)
+    const alwaysAvailableTools: SimpleTool<any, any>[] = [
+      getCurrentTimeTool,
+      getTimeInfoByEpochTool,
+      getTimeRangeMsTool,
+      convertTimeBetweenTimezonesTool,
+    ];
+
+    // Map of setting-controlled tools
+    const settingControlledTools: Record<string, SimpleTool<any, any>> = {
       localSearch: localSearchTool,
       webSearch: webSearchTool,
       pomodoro: pomodoroTool,
@@ -44,17 +58,18 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       writeToFile: writeToFileTool,
     };
 
-    // Filter enabled tools
-    const tools = Object.entries(toolMap)
+    // Filter enabled tools from settings
+    const enabledTools = Object.entries(settingControlledTools)
       .filter(([key]) => toolConfig[key as keyof typeof toolConfig])
       .map(([, tool]) => tool);
 
     // Add file tree tool if available and enabled
     if (toolConfig.getFileTree && this.chainManager.app?.vault) {
-      tools.push(createGetFileTreeTool(this.chainManager.app.vault.getRoot()));
+      enabledTools.push(createGetFileTreeTool(this.chainManager.app.vault.getRoot()));
     }
 
-    return tools;
+    // Combine always available tools with enabled tools
+    return [...alwaysAvailableTools, ...enabledTools];
   }
 
   private generateToolDescriptions(): string {

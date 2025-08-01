@@ -80,77 +80,6 @@ class BaseModelAdapter implements ModelAdapter {
   ): string {
     const tools = availableToolNames || [];
 
-    let toolExamples = "";
-
-    // Only include examples for available tools
-    if (tools.includes("localSearch")) {
-      toolExamples += `
-For localSearch (searching notes in the vault):
-<use_tool>
-<name>localSearch</name>
-<query>piano learning practice</query>
-<salientTerms>["piano", "learning", "practice"]</salientTerms>
-</use_tool>
-
-For localSearch with non-English query (PRESERVE ORIGINAL LANGUAGE):
-<use_tool>
-<name>localSearch</name>
-<query>钢琴学习</query>
-<salientTerms>["钢琴", "学习"]</salientTerms>
-</use_tool>`;
-    }
-
-    if (tools.includes("webSearch")) {
-      toolExamples += `
-
-For webSearch (with empty chat history):
-<use_tool>
-<name>webSearch</name>
-<query>piano learning techniques</query>
-<chatHistory>[]</chatHistory>
-</use_tool>`;
-    }
-
-    if (tools.includes("getFileTree")) {
-      toolExamples += `
-
-For getFileTree:
-<use_tool>
-<name>getFileTree</name>
-</use_tool>`;
-    }
-
-    if (tools.includes("writeToFile")) {
-      toolExamples += `
-
-For writeToFile:
-<use_tool>
-<name>writeToFile</name>
-<path>path/to/note.md </path>
-<content>FULL CONTENT OF THE NOTE</content>
-</use_tool>`;
-    }
-
-    if (tools.includes("youtubeTranscription")) {
-      toolExamples += `
-
-For youtubeTranscription (when user provides YouTube URLs):
-<use_tool>
-<name>youtubeTranscription</name>
-</use_tool>`;
-    }
-
-    if (tools.includes("pomodoro")) {
-      toolExamples += `
-
-For pomodoro:
-<use_tool>
-<name>pomodoro</name>
-<task>Study piano techniques</task>
-<duration>25</duration>
-</use_tool>`;
-    }
-
     return `${basePrompt}
 
 # Autonomous Agent Mode
@@ -167,12 +96,148 @@ When you need to use a tool, format it EXACTLY like this:
 IMPORTANT: Use the EXACT parameter names as shown in the tool descriptions below. Do NOT use generic names like "param1" or "param".
 
 ## Important Tool Usage Examples:
-${toolExamples}
+${
+  tools.includes("localSearch")
+    ? `
+For localSearch (searching notes in the vault):
+<use_tool>
+<name>localSearch</name>
+<query>piano learning practice</query>
+<salientTerms>["piano", "learning", "practice"]</salientTerms>
+</use_tool>
+
+For localSearch with time range (e.g., "what did I do last week"):
+Step 1 - Get time range:
+<use_tool>
+<name>getTimeRangeMs</name>
+<timeExpression>last week</timeExpression>
+</use_tool>
+
+Step 2 - Search with time range (after receiving time range result):
+<use_tool>
+<name>localSearch</name>
+<query>what did I do</query>
+<salientTerms>[]</salientTerms>
+<timeRange>{"startTime": {...}, "endTime": {...}}</timeRange>
+</use_tool>
+
+For localSearch with meaningful terms (e.g., "python debugging notes from yesterday"):
+Step 1 - Get time range:
+<use_tool>
+<name>getTimeRangeMs</name>
+<timeExpression>yesterday</timeExpression>
+</use_tool>
+
+Step 2 - Search with time range:
+<use_tool>
+<name>localSearch</name>
+<query>python debugging notes</query>
+<salientTerms>["python", "debugging", "notes"]</salientTerms>
+<timeRange>{"startTime": {...}, "endTime": {...}}</timeRange>
+</use_tool>
+
+For localSearch with non-English query (PRESERVE ORIGINAL LANGUAGE):
+<use_tool>
+<name>localSearch</name>
+<query>钢琴学习</query>
+<salientTerms>["钢琴", "学习"]</salientTerms>
+</use_tool>
+`
+    : ""
+}${
+      tools.includes("webSearch")
+        ? `
+For webSearch (with empty chat history):
+<use_tool>
+<name>webSearch</name>
+<query>piano learning techniques</query>
+<chatHistory>[]</chatHistory>
+</use_tool>
+`
+        : ""
+    }${
+      tools.includes("getFileTree")
+        ? `
+For getFileTree:
+<use_tool>
+<name>getFileTree</name>
+</use_tool>
+`
+        : ""
+    }
+For time queries (IMPORTANT: Always use UTC offsets, not timezone names):
+Example 1 - "what time is it" (local time):
+<use_tool>
+<name>getCurrentTime</name>
+</use_tool>
+
+Example 2 - "what time is it in Tokyo" (UTC+9):
+<use_tool>
+<name>getCurrentTime</name>
+<timezoneOffset>+9</timezoneOffset>
+</use_tool>
+
+Example 3 - "what time is it in Beijing" (UTC+8):
+<use_tool>
+<name>getCurrentTime</name>
+<timezoneOffset>+8</timezoneOffset>
+</use_tool>
+
+Example 4 - "what time is it in New York" (UTC-5 or UTC-4 depending on DST):
+<use_tool>
+<name>getCurrentTime</name>
+<timezoneOffset>-5</timezoneOffset>
+</use_tool>
+
+Example 5 - "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9):
+<use_tool>
+<name>convertTimeBetweenTimezones</name>
+<time>6pm</time>
+<fromOffset>-8</fromOffset>
+<toOffset>+9</toOffset>
+</use_tool>
+${
+  tools.includes("writeToFile")
+    ? `
+For writeToFile:
+<use_tool>
+<name>writeToFile</name>
+<path>path/to/note.md </path>
+<content>FULL CONTENT OF THE NOTE</content>
+</use_tool>
+`
+    : ""
+}${
+      tools.includes("youtubeTranscription")
+        ? `
+For youtubeTranscription (when user provides YouTube URLs):
+<use_tool>
+<name>youtubeTranscription</name>
+</use_tool>
+`
+        : ""
+    }
 
 Available tools:
 ${toolDescriptions}
 
 # CRITICAL Guidelines for calling tools
+
+## Time-based Queries
+When users ask about temporal periods (e.g., "what did I do last month", "show me notes from last week"), you MUST:
+1. First call getTimeRangeMs to convert the time expression to a proper time range
+2. Then use localSearch with the timeRange parameter from step 1
+3. For salientTerms, ONLY use words that exist in the user's original query (excluding time expressions)
+
+Example for "what did I do last month":
+1. Call getTimeRangeMs with timeExpression: "last month"
+2. Use localSearch with query matching the user's question
+3. salientTerms: [] - empty because "what", "I", "do" are not meaningful search terms
+
+Example for "meetings about project X last week":
+1. Call getTimeRangeMs with timeExpression: "last week"
+2. Use localSearch with query "meetings about project X"
+3. salientTerms: ["meetings", "project", "X"] - these words exist in the original query
 ${
   tools.includes("localSearch")
     ? `
@@ -183,21 +248,16 @@ ${
 - Exclude common words like "what", "I", "do", "the", "a", etc.
 - Exclude time expressions like "last month", "yesterday", "last week"
 - Preserve the original language - do NOT translate terms to English
-- For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings).
 `
     : ""
 }
-${
-  tools.includes("writeToFile")
-    ? `
-## File Writing Guidelines
-- When you need to call writeToFile, NEVER display the file content directly. Always only pass the file content to writeToFile.
-- you MUST explicitly call writeToFile for any intent of updating or creating files.
-- Do not call writeToFile tool again if the result is not accepted.
-- Do not call writeToFile tool if no change needs to be made.
-`
-    : ""
-}
+## General Guidelines
+- ${tools.includes("localSearch") ? 'For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings).' : ""}
+- ${tools.includes("writeToFile") ? "When you need to call writeToFile, NEVER display the file content directly. Always only pass the file content to wirteToFile." : ""}
+- ${tools.includes("writeToFile") ? "you MUST explicitly call writeToFile for any intent of updating or creating files." : ""}
+- ${tools.includes("writeToFile") ? "Do not call writeToFile tool again if the result is not accepted." : ""}
+- ${tools.includes("writeToFile") ? "Do not call writeToFile tool if no change needs to be made." : ""}
+- NEVER mention tool names like "localSearch", "webSearch", etc. in your responses. Use natural language like "searching your vault", "searching the web", etc.
 ${
   tools.includes("youtubeTranscription")
     ? `
@@ -207,10 +267,20 @@ ${
 - Use this tool to fetch transcripts for analysis, summarization, or answering questions about video content
 `
     : ""
-}
-${
-  tools.includes("webSearch")
-    ? `
+}${
+      tools.includes("webSearch")
+        ? `
+## Web Search Usage Policy
+IMPORTANT: The webSearch tool should ONLY be used when the user explicitly requests web/internet search using phrases like:
+- "search the web for..."
+- "search online for..."
+- "look up on the internet..."
+- "find online information about..."
+- "check the web for..."
+- "search Google for..." (or any search engine)
+
+Do NOT automatically use webSearch just because information might be available online. Only use it when explicitly requested by the user.
+
 ## Web Search Usage Policy
 IMPORTANT: The webSearch tool should ONLY be used when the user explicitly requests web/internet search using phrases like:
 - "search the web for..."
@@ -222,11 +292,8 @@ IMPORTANT: The webSearch tool should ONLY be used when the user explicitly reque
 
 Do NOT automatically use webSearch just because information might be available online. Only use it when explicitly requested by the user.
 `
-    : ""
-}
-
-## General Guidelines
-- NEVER mention tool names like "${tools.join('", "')}" in your responses. Use natural language like "searching your vault", "searching the web", etc.
+        : ""
+    }
 
 You can use multiple tools in sequence. After each tool execution, you'll receive the results and can decide whether to use more tools or provide your final response.
 
@@ -268,15 +335,16 @@ class GPTModelAdapter extends BaseModelAdapter {
 CRITICAL FOR GPT MODELS: You MUST ALWAYS include XML tool calls in your response. Do not just describe what you plan to do - you MUST include the actual XML tool call blocks.
 
 EXAMPLE OF CORRECT RESPONSE:
-"I'll ${availableToolNames?.includes("localSearch") ? "search your vault" : "help you"} with that.
+"I'll search your vault for piano learning notes.
 
 <use_tool>
-<name>${availableToolNames?.[0] || "tool_name"}</name>
-<parameter>value</parameter>
+<name>localSearch</name>
+<query>piano learning</query>
+<salientTerms>["piano", "learning"]</salientTerms>
 </use_tool>"
 
 EXAMPLE OF INCORRECT RESPONSE (DO NOT DO THIS):
-"I'll ${availableToolNames?.includes("localSearch") ? "search your vault" : "help you"} with that."
+"I'll search your vault for piano learning notes."
 (Missing the XML tool call)
 
 FINAL REMINDER FOR GPT MODELS: If the user asks you to search, find, or look up anything, you MUST include the appropriate <use_tool> XML block in your very next response. Do not wait for another turn.`;
@@ -389,21 +457,36 @@ CORRECT: Using tools first, then providing answer based on results`;
 - More tool calls OR final answer
 
 🎯 CORRECT FIRST RESPONSE PATTERN (when tools needed):
-I'll ${availableToolNames?.includes("localSearch") ? "search your vault for relevant information" : "help you with that"}.
+I'll search your vault for piano practice information.
 
 <use_tool>
-<name>${availableToolNames?.[0] || "tool_name"}</name>
-${availableToolNames?.includes("localSearch") ? '<query>relevant query</query>\n<salientTerms>["relevant", "terms"]</salientTerms>' : "<parameter>value</parameter>"}
+<name>localSearch</name>
+<query>piano practice</query>
+<salientTerms>["piano", "practice"]</salientTerms>
+</use_tool>
+
+🌐 MULTILINGUAL EXAMPLE (PRESERVE ORIGINAL LANGUAGE):
+<use_tool>
+<name>localSearch</name>
+<query>ピアノの練習方法</query>
+<salientTerms>["ピアノ", "練習", "方法"]</salientTerms>
+</use_tool>
+
+<use_tool>
+<name>webSearch</name>
+<query>piano techniques</query>
+<chatHistory>[]</chatHistory>
 </use_tool>
 
 [RESPONSE ENDS HERE - NO MORE TEXT]
 
 🎯 CORRECT FOLLOW-UP RESPONSE PATTERN:
-Let me gather more specific information.
+Let me gather more specific information about practice schedules.
 
 <use_tool>
-<name>${availableToolNames?.[0] || "tool_name"}</name>
-${availableToolNames?.includes("localSearch") ? '<query>more specific query</query>\n<salientTerms>["specific", "terms"]</salientTerms>' : "<parameter>value</parameter>"}
+<name>localSearch</name>
+<query>practice schedule</query>
+<salientTerms>["practice", "schedule"]</salientTerms>
 </use_tool>
 
 [RESPONSE ENDS HERE - NO MORE TEXT]
@@ -604,10 +687,19 @@ When the user mentions "my notes" or "my vault", use the localSearch tool.
     : ""
 }
 GEMINI SPECIFIC RULES:
-1. ${hasLocalSearch ? `When user mentions "my notes" about X → use localSearch with query "X"` : "Use available tools based on the user's request"}
-2. DO NOT ask clarifying questions
+1. When user mentions "my notes" about X → use localSearch with query "X"
+2. DO NOT ask clarifying questions about search terms
 3. DO NOT wait for permission to use tools
-4. Execute immediately based on the user's request
+4. Use tools based on the user's request
+
+PATTERN FOR MULTI-STEP REQUESTS:
+User: "based on my project roadmap notes and create summary"
+Your response:
+<use_tool>
+<name>localSearch</name>
+<query>project roadmap</query>
+<salientTerms>["project", "roadmap"]</salientTerms>
+</use_tool>
 
 Remember: The user has already told you what to do. Execute it NOW with the available tools.`;
 
