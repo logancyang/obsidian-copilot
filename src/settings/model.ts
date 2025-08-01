@@ -119,7 +119,6 @@ export interface CopilotSettings {
     pomodoro: boolean;
     youtubeTranscription: boolean;
     writeToFile: boolean;
-    getFileTree: boolean;
   };
 }
 
@@ -292,7 +291,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
         sanitizedSettings.autonomousAgentTools.youtubeTranscription ??
         defaultTools.youtubeTranscription,
       writeToFile: sanitizedSettings.autonomousAgentTools.writeToFile ?? defaultTools.writeToFile,
-      getFileTree: sanitizedSettings.autonomousAgentTools.getFileTree ?? defaultTools.getFileTree,
     };
   }
 

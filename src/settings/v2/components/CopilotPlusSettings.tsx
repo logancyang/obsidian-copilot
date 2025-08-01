@@ -194,19 +194,6 @@ export const CopilotPlusSettings: React.FC = () => {
                     });
                   }}
                 />
-
-                <SettingItem
-                  type="switch"
-                  title="File Tree"
-                  description="Browse vault file structure"
-                  checked={settings.autonomousAgentTools.getFileTree}
-                  onCheckedChange={(checked) => {
-                    updateSetting("autonomousAgentTools", {
-                      ...settings.autonomousAgentTools,
-                      getFileTree: checked,
-                    });
-                  }}
-                />
               </div>
             </>
           )}

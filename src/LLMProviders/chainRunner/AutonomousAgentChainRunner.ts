@@ -49,6 +49,11 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       convertTimeBetweenTimezonesTool,
     ];
 
+    // Add file tree tool if vault is available
+    if (this.chainManager.app?.vault) {
+      alwaysAvailableTools.push(createGetFileTreeTool(this.chainManager.app.vault.getRoot()));
+    }
+
     // Map of setting-controlled tools
     const settingControlledTools: Record<string, SimpleTool<any, any>> = {
       localSearch: localSearchTool,
@@ -62,11 +67,6 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     const enabledTools = Object.entries(settingControlledTools)
       .filter(([key]) => toolConfig[key as keyof typeof toolConfig])
       .map(([, tool]) => tool);
-
-    // Add file tree tool if available and enabled
-    if (toolConfig.getFileTree && this.chainManager.app?.vault) {
-      enabledTools.push(createGetFileTreeTool(this.chainManager.app.vault.getRoot()));
-    }
 
     // Combine always available tools with enabled tools
     return [...alwaysAvailableTools, ...enabledTools];

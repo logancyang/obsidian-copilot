@@ -720,7 +720,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     pomodoro: true,
     youtubeTranscription: true,
     writeToFile: true,
-    getFileTree: true,
   },
 };
 

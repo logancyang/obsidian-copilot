@@ -155,16 +155,12 @@ For webSearch (with empty chat history):
 </use_tool>
 `
         : ""
-    }${
-      tools.includes("getFileTree")
-        ? `
+    }
 For getFileTree:
 <use_tool>
 <name>getFileTree</name>
 </use_tool>
-`
-        : ""
-    }
+
 For time queries (IMPORTANT: Always use UTC offsets, not timezone names):
 Example 1 - "what time is it" (local time):
 <use_tool>
@@ -252,11 +248,15 @@ ${
     : ""
 }
 ## General Guidelines
-- ${tools.includes("localSearch") ? 'For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings).' : ""}
-- ${tools.includes("writeToFile") ? "When you need to call writeToFile, NEVER display the file content directly. Always only pass the file content to wirteToFile." : ""}
-- ${tools.includes("writeToFile") ? "you MUST explicitly call writeToFile for any intent of updating or creating files." : ""}
-- ${tools.includes("writeToFile") ? "Do not call writeToFile tool again if the result is not accepted." : ""}
-- ${tools.includes("writeToFile") ? "Do not call writeToFile tool if no change needs to be made." : ""}
+- ${tools.includes("localSearch") ? 'For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings).' : ""}${
+      tools.includes("writeToFile")
+        ? `
+- When you need to call writeToFile, NEVER display the file content directly. Always only pass the file content to writeToFile.
+- You MUST explicitly call writeToFile for any intent of updating or creating files.
+- Do not call writeToFile tool again if the result is not accepted.
+- Do not call writeToFile tool if no change needs to be made.`
+        : ""
+    }
 - NEVER mention tool names like "localSearch", "webSearch", etc. in your responses. Use natural language like "searching your vault", "searching the web", etc.
 ${
   tools.includes("youtubeTranscription")
