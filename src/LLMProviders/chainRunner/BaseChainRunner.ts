@@ -53,6 +53,8 @@ export abstract class BaseChainRunner implements ChainRunner {
       fullAIResponse &&
       !(abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT)
     ) {
+      // Use saveContext for atomic operation and proper memory management
+      // Note: LangChain's memory expects text content, not multimodal arrays, so multimodal content is not saved
       await this.chainManager.memoryManager
         .getMemory()
         .saveContext(

@@ -11,9 +11,14 @@ export interface ModelAdapter {
    * Enhance system prompt with model-specific instructions
    * @param basePrompt - The base system prompt to enhance
    * @param toolDescriptions - Available tool descriptions to include
+   * @param availableToolNames - List of enabled tool names
    * @returns The enhanced system prompt
    */
-  enhanceSystemPrompt(basePrompt: string, toolDescriptions: string): string;
+  enhanceSystemPrompt(
+    basePrompt: string,
+    toolDescriptions: string,
+    availableToolNames?: string[]
+  ): string;
 
   /**
    * Enhance user message if needed for specific models
@@ -68,7 +73,13 @@ export interface ModelAdapter {
 class BaseModelAdapter implements ModelAdapter {
   constructor(protected modelName: string) {}
 
-  enhanceSystemPrompt(basePrompt: string, toolDescriptions: string): string {
+  enhanceSystemPrompt(
+    basePrompt: string,
+    toolDescriptions: string,
+    availableToolNames?: string[]
+  ): string {
+    const tools = availableToolNames || [];
+
     return `${basePrompt}
 
 # Autonomous Agent Mode
@@ -85,7 +96,9 @@ When you need to use a tool, format it EXACTLY like this:
 IMPORTANT: Use the EXACT parameter names as shown in the tool descriptions below. Do NOT use generic names like "param1" or "param".
 
 ## Important Tool Usage Examples:
-
+${
+  tools.includes("localSearch")
+    ? `
 For localSearch (searching notes in the vault):
 <use_tool>
 <name>localSearch</name>
@@ -129,25 +142,77 @@ For localSearch with non-English query (PRESERVE ORIGINAL LANGUAGE):
 <query>钢琴学习</query>
 <salientTerms>["钢琴", "学习"]</salientTerms>
 </use_tool>
-
+`
+    : ""
+}${
+      tools.includes("webSearch")
+        ? `
 For webSearch (with empty chat history):
 <use_tool>
 <name>webSearch</name>
 <query>piano learning techniques</query>
 <chatHistory>[]</chatHistory>
 </use_tool>
-
+`
+        : ""
+    }
 For getFileTree:
 <use_tool>
 <name>getFileTree</name>
 </use_tool>
 
+For time queries (IMPORTANT: Always use UTC offsets, not timezone names):
+Example 1 - "what time is it" (local time):
+<use_tool>
+<name>getCurrentTime</name>
+</use_tool>
+
+Example 2 - "what time is it in Tokyo" (UTC+9):
+<use_tool>
+<name>getCurrentTime</name>
+<timezoneOffset>+9</timezoneOffset>
+</use_tool>
+
+Example 3 - "what time is it in Beijing" (UTC+8):
+<use_tool>
+<name>getCurrentTime</name>
+<timezoneOffset>+8</timezoneOffset>
+</use_tool>
+
+Example 4 - "what time is it in New York" (UTC-5 or UTC-4 depending on DST):
+<use_tool>
+<name>getCurrentTime</name>
+<timezoneOffset>-5</timezoneOffset>
+</use_tool>
+
+Example 5 - "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9):
+<use_tool>
+<name>convertTimeBetweenTimezones</name>
+<time>6pm</time>
+<fromOffset>-8</fromOffset>
+<toOffset>+9</toOffset>
+</use_tool>
+${
+  tools.includes("writeToFile")
+    ? `
 For writeToFile:
 <use_tool>
 <name>writeToFile</name>
 <path>path/to/note.md </path>
 <content>FULL CONTENT OF THE NOTE</content>
 </use_tool>
+`
+    : ""
+}${
+      tools.includes("youtubeTranscription")
+        ? `
+For youtubeTranscription (when user provides YouTube URLs):
+<use_tool>
+<name>youtubeTranscription</name>
+</use_tool>
+`
+        : ""
+    }
 
 Available tools:
 ${toolDescriptions}
@@ -169,7 +234,9 @@ Example for "meetings about project X last week":
 1. Call getTimeRangeMs with timeExpression: "last week"
 2. Use localSearch with query "meetings about project X"
 3. salientTerms: ["meetings", "project", "X"] - these words exist in the original query
-
+${
+  tools.includes("localSearch")
+    ? `
 ## Understanding salientTerms for localSearch
 - salientTerms MUST be extracted from the user's original query - never invent new terms
 - They are keywords used for BM25 full-text search to find notes containing those exact words
@@ -177,14 +244,31 @@ Example for "meetings about project X last week":
 - Exclude common words like "what", "I", "do", "the", "a", etc.
 - Exclude time expressions like "last month", "yesterday", "last week"
 - Preserve the original language - do NOT translate terms to English
-
+`
+    : ""
+}
 ## General Guidelines
-- For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings).
-- When you need to call writeToFile, NEVER display the file content directly. Always only pass the file content to wirteToFile.
-- Use replaceInFile when you want to make small edits to large files (changing specific text patterns) or just removing specific text while preserving the rest of the file content.
-- Use writeToFile for major structural changes to files or when adding new content sections or the exact text to replace is uncertain.
+${tools.includes("localSearch") ? '- For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings).' : ""}
+${tools.includes("writeToFile") ? `
+- When you need to call writeToFile, NEVER display the file content directly. Always only pass the file content to writeToFile.
+- Use writeToFile for major structural changes to files or when adding new content sections or the exact text to replace is uncertain.`
+        : ""
+    }
+ ${tools.includes("replaceInFile") ? "- Use replaceInFile when you want to make small edits to large files (changing specific text patterns) or just removing specific text while preserving the rest of the file content." : ""}
+    
 - NEVER mention tool names like "localSearch", "webSearch", etc. in your responses. Use natural language like "searching your vault", "searching the web", etc.
-
+${
+  tools.includes("youtubeTranscription")
+    ? `
+## YouTube Transcription Usage
+- The youtubeTranscription tool should be used when the user provides YouTube URLs (youtube.com or youtu.be)
+- This tool automatically extracts URLs from the user's message - you don't need to pass any parameters
+- Use this tool to fetch transcripts for analysis, summarization, or answering questions about video content
+`
+    : ""
+}${
+      tools.includes("webSearch")
+        ? `
 ## Web Search Usage Policy
 IMPORTANT: The webSearch tool should ONLY be used when the user explicitly requests web/internet search using phrases like:
 - "search the web for..."
@@ -206,6 +290,9 @@ IMPORTANT: The webSearch tool should ONLY be used when the user explicitly reque
 - "search Google for..." (or any search engine)
 
 Do NOT automatically use webSearch just because information might be available online. Only use it when explicitly requested by the user.
+`
+        : ""
+    }
 
 You can use multiple tools in sequence. After each tool execution, you'll receive the results and can decide whether to use more tools or provide your final response.
 
@@ -230,8 +317,16 @@ NOTE: Use individual XML parameter tags. For arrays, use JSON format like ["item
  * GPT-specific adapter with aggressive prompting
  */
 class GPTModelAdapter extends BaseModelAdapter {
-  enhanceSystemPrompt(basePrompt: string, toolDescriptions: string): string {
-    const baseSystemPrompt = super.enhanceSystemPrompt(basePrompt, toolDescriptions);
+  enhanceSystemPrompt(
+    basePrompt: string,
+    toolDescriptions: string,
+    availableToolNames?: string[]
+  ): string {
+    const baseSystemPrompt = super.enhanceSystemPrompt(
+      basePrompt,
+      toolDescriptions,
+      availableToolNames
+    );
 
     // Insert GPT-specific instructions after the base prompt
     const gptSpecificSection = `
@@ -304,8 +399,16 @@ class ClaudeModelAdapter extends BaseModelAdapter {
     );
   }
 
-  enhanceSystemPrompt(basePrompt: string, toolDescriptions: string): string {
-    const baseSystemPrompt = super.enhanceSystemPrompt(basePrompt, toolDescriptions);
+  enhanceSystemPrompt(
+    basePrompt: string,
+    toolDescriptions: string,
+    availableToolNames?: string[]
+  ): string {
+    const baseSystemPrompt = super.enhanceSystemPrompt(
+      basePrompt,
+      toolDescriptions,
+      availableToolNames
+    );
 
     // Add specific instructions for thinking models
     if (this.isThinkingModel()) {
@@ -545,28 +648,43 @@ REMEMBER: One brief sentence before tools is perfect. Nothing after tool calls.`
  * Gemini adapter with aggressive tool calling prompts
  */
 class GeminiModelAdapter extends BaseModelAdapter {
-  enhanceSystemPrompt(basePrompt: string, toolDescriptions: string): string {
-    const baseSystemPrompt = super.enhanceSystemPrompt(basePrompt, toolDescriptions);
+  enhanceSystemPrompt(
+    basePrompt: string,
+    toolDescriptions: string,
+    availableToolNames?: string[]
+  ): string {
+    const baseSystemPrompt = super.enhanceSystemPrompt(
+      basePrompt,
+      toolDescriptions,
+      availableToolNames
+    );
 
     // Gemini needs very explicit instructions about tool usage
+    const tools = availableToolNames || [];
+    const hasLocalSearch = tools.includes("localSearch");
+
     const geminiSpecificSection = `
 
 🚨 CRITICAL INSTRUCTIONS FOR GEMINI - AUTONOMOUS AGENT MODE 🚨
 
-You MUST use tools to complete tasks. DO NOT ask the user questions about how to search.
-
+You MUST use tools to complete tasks. DO NOT ask the user questions about how to proceed.
+${
+  hasLocalSearch
+    ? `
 When the user mentions "my notes" or "my vault", use the localSearch tool.
 
-❌ WRONG (what you just did):
+❌ WRONG:
 "Let's start by searching your notes. What kind of information should I look for?"
 
-✅ CORRECT (what you MUST do):
+✅ CORRECT:
 <use_tool>
 <name>localSearch</name>
 <query>piano</query>
 <salientTerms>["piano"]</salientTerms>
 </use_tool>
-
+`
+    : ""
+}
 GEMINI SPECIFIC RULES:
 1. When user mentions "my notes" about X → use localSearch with query "X"
 2. DO NOT ask clarifying questions about search terms
@@ -582,7 +700,7 @@ Your response:
 <salientTerms>["project", "roadmap"]</salientTerms>
 </use_tool>
 
-Remember: The user has already told you what to do. Execute it NOW with the tools.`;
+Remember: The user has already told you what to do. Execute it NOW with the available tools.`;
 
     return baseSystemPrompt + geminiSpecificSection;
   }

@@ -112,6 +112,8 @@ export interface CopilotSettings {
   enableCustomPromptTemplating: boolean;
   /** Whether we have suggested built-in default commands to the user once. */
   suggestedDefaultCommands: boolean;
+  autonomousAgentMaxIterations: number;
+  autonomousAgentEnabledToolIds: string[];
 }
 
 export const settingsStore = createStore();
@@ -252,6 +254,24 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure enableWordCompletion has a default value
   if (typeof sanitizedSettings.enableWordCompletion !== "boolean") {
     sanitizedSettings.enableWordCompletion = DEFAULT_SETTINGS.enableWordCompletion;
+  }
+
+  // Ensure autonomousAgentMaxIterations has a valid value
+  const autonomousAgentMaxIterations = Number(settingsToSanitize.autonomousAgentMaxIterations);
+  if (
+    isNaN(autonomousAgentMaxIterations) ||
+    autonomousAgentMaxIterations < 4 ||
+    autonomousAgentMaxIterations > 8
+  ) {
+    sanitizedSettings.autonomousAgentMaxIterations = DEFAULT_SETTINGS.autonomousAgentMaxIterations;
+  } else {
+    sanitizedSettings.autonomousAgentMaxIterations = autonomousAgentMaxIterations;
+  }
+
+  // Ensure autonomousAgentEnabledToolIds is an array
+  if (!Array.isArray(sanitizedSettings.autonomousAgentEnabledToolIds)) {
+    sanitizedSettings.autonomousAgentEnabledToolIds =
+      DEFAULT_SETTINGS.autonomousAgentEnabledToolIds;
   }
 
   return sanitizedSettings;

@@ -19,7 +19,6 @@ import { ToolManager } from "@/tools/toolManager";
 import { writeToFileTool } from "@/tools/ComposerTools";
 import { ChatMessage } from "@/types/message";
 import {
-  extractChatHistory,
   extractYoutubeUrl,
   getApiErrorMessage,
   getMessageRole,
@@ -30,6 +29,11 @@ import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "../intentAnalyzer";
 import { BaseChainRunner } from "./BaseChainRunner";
 import { ActionBlockStreamer } from "./utils/ActionBlockStreamer";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
+import {
+  addChatHistoryToMessages,
+  processRawChatHistory,
+  processedMessagesToTextOnly,
+} from "./utils/chatHistoryUtils";
 
 export class CopilotPlusChainRunner extends BaseChainRunner {
   private isYoutubeOnlyMessage(message: string): boolean {
@@ -203,7 +207,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     // Get chat history
     const memory = this.chainManager.memoryManager.getMemory();
     const memoryVariables = await memory.loadMemoryVariables({});
-    const chatHistory = extractChatHistory(memoryVariables);
+    // Use the raw history array which contains BaseMessage objects
+    const rawHistory = memoryVariables.history || [];
 
     // Create messages array starting with system message
     const messages: any[] = [];
@@ -212,7 +217,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     let fullSystemMessage = await this.getSystemPrompt();
 
     // Add chat history context to system message if exists
-    if (chatHistory.length > 0) {
+    if (rawHistory.length > 0) {
       fullSystemMessage +=
         "\n\nThe following is the relevant conversation history. Use this context to maintain consistency in your responses:";
     }
@@ -228,10 +233,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       });
     }
 
-    // Add chat history
-    for (const entry of chatHistory) {
-      messages.push({ role: entry.role, content: entry.content });
-    }
+    // Add chat history - safely handle different message formats
+    addChatHistoryToMessages(rawHistory, messages);
 
     // Get the current chat model
     const chatModelCurrent = this.chainManager.chatModelManager.getChatModel();
@@ -382,7 +385,11 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       // Format chat history from memory
       const memory = this.chainManager.memoryManager.getMemory();
       const memoryVariables = await memory.loadMemoryVariables({});
-      const chatHistory = extractChatHistory(memoryVariables);
+      const rawHistory = memoryVariables.history || [];
+
+      // Process history consistently - same data used for both LLM and question condensing
+      const processedHistory = processRawChatHistory(rawHistory);
+      const chatHistory = processedMessagesToTextOnly(processedHistory);
 
       // Get standalone question if we have chat history
       let questionForEnhancement = cleanedUserMessage;

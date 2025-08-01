@@ -1,134 +1,49 @@
+import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { logError, logInfo, logWarn } from "@/logger";
-import { getSystemPrompt } from "@/settings/model";
-import { ChatMessage } from "@/types/message";
-import { createGetFileTreeTool } from "@/tools/FileTreeTools";
-import { indexTool, localSearchTool, webSearchTool } from "@/tools/SearchTools";
+import { checkIsPlusUser } from "@/plusUtils";
+import { getSettings, getSystemPrompt } from "@/settings/model";
 import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
-import {
-  getCurrentTimeTool,
-  getTimeInfoByEpochTool,
-  getTimeRangeMsTool,
-  pomodoroTool,
-} from "@/tools/TimeTools";
-import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools"; // Used in processYouTubeUrls
-import {
-  extractAllYoutubeUrls,
-  extractChatHistory,
-  getMessageRole,
-  withSuppressedTokenWarnings,
-} from "@/utils";
+import { ToolRegistry } from "@/tools/ToolRegistry";
+import { initializeBuiltinTools } from "@/tools/builtinTools";
+import { ChatMessage } from "@/types/message";
+import { getMessageRole, withSuppressedTokenWarnings } from "@/utils";
+import { processToolResults } from "@/utils/toolResultUtils";
 import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
+import { addChatHistoryToMessages } from "./utils/chatHistoryUtils";
 import { messageRequiresTools, ModelAdapter, ModelAdapterFactory } from "./utils/modelAdapter";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
+import { createToolCallMarker, updateToolCallMarker } from "./utils/toolCallParser";
 import {
   deduplicateSources,
   executeSequentialToolCall,
+  getToolConfirmtionMessage,
   getToolDisplayName,
   getToolEmoji,
   logToolCall,
   logToolResult,
   ToolExecutionResult,
 } from "./utils/toolExecution";
-import { parseXMLToolCalls, stripToolCallXML, escapeXml } from "./utils/xmlParsing";
-import { writeToFileTool, replaceInFileTool } from "@/tools/ComposerTools";
-import { getToolConfirmtionMessage } from "./utils/toolExecution";
-import { MessageContent } from "@/imageProcessing/imageProcessor";
+
+import { escapeXml, parseXMLToolCalls, stripToolCallXML } from "./utils/xmlParsing";
 
 export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private llmFormattedMessages: string[] = []; // Track LLM-formatted messages for memory
 
-  /**
-   * Process YouTube URLs in the original user prompt and fetch transcriptions
-   * Only processes URLs from the user's direct input, not from attached context
-   * @param originalUserPrompt The original user message before context processing
-   * @param updateCurrentAiMessage Callback to update the current AI message display
-   * @returns Array of conversation messages to add to the context
-   */
-  private async processYouTubeUrls(
-    originalUserPrompt: string,
-    updateCurrentAiMessage: (message: string) => void
-  ): Promise<Array<{ role: string; content: string }>> {
-    const youtubeUrls = extractAllYoutubeUrls(originalUserPrompt);
-    if (youtubeUrls.length === 0) {
-      return [];
-    }
-
-    updateCurrentAiMessage("🎥 Fetching YouTube transcription...");
-    const transcriptions: string[] = [];
-
-    for (const url of youtubeUrls) {
-      try {
-        const result = await simpleYoutubeTranscriptionTool.call({ url });
-        const parsedResult = JSON.parse(result);
-
-        if (parsedResult.success) {
-          transcriptions.push(
-            `<youtube_transcription>\n` +
-              `<url>${escapeXml(url)}</url>\n` +
-              `<transcript>\n${escapeXml(parsedResult.transcript)}\n</transcript>\n` +
-              `</youtube_transcription>`
-          );
-        } else {
-          transcriptions.push(
-            `<youtube_transcription>\n` +
-              `<url>${escapeXml(url)}</url>\n` +
-              `<error>${escapeXml(parsedResult.message)}</error>\n` +
-              `</youtube_transcription>`
-          );
-        }
-      } catch (error) {
-        logInfo(`Error transcribing YouTube video ${url}:`, error);
-        transcriptions.push(
-          `<youtube_transcription>\n` +
-            `<url>${escapeXml(url)}</url>\n` +
-            `<error>Failed to fetch transcription</error>\n` +
-            `</youtube_transcription>`
-        );
-      }
-    }
-
-    if (transcriptions.length === 0) {
-      return [];
-    }
-
-    // Return the conversation messages to add
-    const transcriptionContext = transcriptions.join("\n\n");
-    return [
-      {
-        role: "assistant",
-        content: `I've fetched the YouTube transcription(s):\n\n${transcriptionContext}`,
-      },
-      {
-        role: "user",
-        content:
-          "Please analyze or respond to my original request using the YouTube transcription(s) provided above.",
-      },
-    ];
-  }
-
   private getAvailableTools(): SimpleTool<any, any>[] {
-    // Get tools from the existing IntentAnalyzer
-    const tools: SimpleTool<any, any>[] = [
-      localSearchTool,
-      webSearchTool,
-      pomodoroTool,
-      // YouTube transcription is handled automatically in processYouTubeUrls
-      // simpleYoutubeTranscriptionTool,
-      getCurrentTimeTool,
-      getTimeInfoByEpochTool,
-      getTimeRangeMsTool,
-      indexTool,
-      writeToFileTool,
-      replaceInFileTool,
-    ];
+    const settings = getSettings();
+    const registry = ToolRegistry.getInstance();
 
-    // Add file tree tool if available
-    if (this.chainManager.app?.vault) {
-      const fileTreeTool = createGetFileTreeTool(this.chainManager.app.vault.getRoot());
-      tools.push(fileTreeTool);
+    // Initialize tools if not already done
+    if (registry.getAllTools().length === 0) {
+      initializeBuiltinTools(this.chainManager.app?.vault);
     }
 
-    return tools;
+    // Get enabled tool IDs from settings
+    const enabledToolIds = new Set(settings.autonomousAgentEnabledToolIds || []);
+
+
+    // Get all enabled tools from registry
+    return registry.getEnabledTools(enabledToolIds, !!this.chainManager.app?.vault);
   }
 
   private generateToolDescriptions(): string {
@@ -178,12 +93,14 @@ ${params}
   private generateSystemPrompt(): string {
     const basePrompt = getSystemPrompt();
     const toolDescriptions = this.generateToolDescriptions();
+    const availableTools = this.getAvailableTools();
+    const toolNames = availableTools.map((tool) => tool.name);
 
     // Use model adapter for clean model-specific handling
     const chatModel = this.chainManager.chatModelManager.getChatModel();
     const adapter = ModelAdapterFactory.createAdapter(chatModel);
 
-    return adapter.enhanceSystemPrompt(basePrompt, toolDescriptions);
+    return adapter.enhanceSystemPrompt(basePrompt, toolDescriptions, toolNames);
   }
 
   async run(
@@ -203,12 +120,18 @@ ${params}
     const iterationHistory: string[] = []; // Track all iterations for display
     const collectedSources: { title: string; path: string; score: number }[] = []; // Collect sources from localSearch
     this.llmFormattedMessages = []; // Reset LLM messages for this run
+    const isPlusUser = await checkIsPlusUser();
+    if (!isPlusUser) {
+      await this.handleError(new Error("Invalid license key"), addMessage, updateCurrentAiMessage);
+      return "";
+    }
 
     try {
       // Get chat history from memory
       const memory = this.chainManager.memoryManager.getMemory();
       const memoryVariables = await memory.loadMemoryVariables({});
-      const chatHistory = extractChatHistory(memoryVariables);
+      // Use raw history to preserve multimodal content
+      const rawHistory = memoryVariables.history || [];
 
       // Build initial conversation messages
       const customSystemPrompt = this.generateSystemPrompt();
@@ -222,10 +145,8 @@ ${params}
         });
       }
 
-      // Add chat history
-      for (const entry of chatHistory) {
-        conversationMessages.push({ role: entry.role, content: entry.content });
-      }
+      // Add chat history - safely handle different message formats
+      addChatHistoryToMessages(rawHistory, conversationMessages);
 
       // Check if the model supports multimodal (vision) capability
       const isMultimodal = this.isMultimodalModel(chatModel);
@@ -244,16 +165,11 @@ ${params}
         content,
       });
 
-      // Process YouTube URLs if present (only from original user prompt, not context)
+      // Store original user prompt for tools that need it
       const originalUserPrompt = userMessage.originalMessage || userMessage.message;
-      const youtubeMessages = await this.processYouTubeUrls(
-        originalUserPrompt,
-        updateCurrentAiMessage
-      );
-      conversationMessages.push(...youtubeMessages);
 
       // Autonomous agent loop
-      const maxIterations = 4; // Prevent infinite loops while allowing sufficient reasoning
+      const maxIterations = getSettings().autonomousAgentMaxIterations; // Get from settings
       let iteration = 0;
 
       while (iteration < maxIterations) {
@@ -264,6 +180,9 @@ ${params}
         iteration++;
         logInfo(`=== Autonomous Agent Iteration ${iteration} ===`);
 
+        // Store tool call messages for this iteration (declared here so it's accessible in the streaming callback)
+        const currentIterationToolCallMessages: string[] = [];
+
         // Get AI response
         const response = await this.streamResponse(
           conversationMessages,
@@ -271,7 +190,23 @@ ${params}
           (message) => {
             // Show tool calls as indicators during streaming for clarity, preserve think blocks
             const cleanedMessage = stripToolCallXML(message);
-            const currentDisplay = [...iterationHistory, cleanedMessage].join("\n\n");
+            // Build display with ALL content including tool calls from history
+            const displayParts = [];
+
+            // Add all iteration history (which includes tool call markers)
+            displayParts.push(...iterationHistory);
+
+            // Add current iteration's tool calls if any
+            if (currentIterationToolCallMessages.length > 0) {
+              displayParts.push(currentIterationToolCallMessages.join("\n"));
+            }
+
+            // Add the current streaming message
+            if (cleanedMessage.trim()) {
+              displayParts.push(cleanedMessage);
+            }
+
+            const currentDisplay = displayParts.join("\n\n");
             updateCurrentAiMessage(currentDisplay);
           },
           adapter
@@ -281,11 +216,6 @@ ${params}
 
         // Parse tool calls from the response
         const toolCalls = parseXMLToolCalls(response);
-
-        // Debug logging for tool call parsing
-        logInfo(`=== Iteration ${iteration} Response Analysis ===`);
-        logInfo(`Response length: ${response.length} characters`);
-        logInfo(`Parsed tool calls: ${toolCalls.length}`);
 
         // Use model adapter to detect and handle premature responses
         const prematureResponseResult = adapter.detectPrematureResponse?.(response);
@@ -300,20 +230,16 @@ ${params}
         }
 
         if (toolCalls.length === 0) {
-          logInfo("No XML tool calls found in response:");
-          logInfo(response.substring(0, 500) + (response.length > 500 ? "..." : ""));
-        } else {
-          logInfo(
-            "Found tool calls:",
-            toolCalls.map((tc) => tc.name)
-          );
-        }
-
-        if (toolCalls.length === 0) {
           // No tool calls, this is the final response
           // Strip any tool call XML from final response but preserve think blocks
           const cleanedResponse = stripToolCallXML(response);
-          fullAIResponse = [...iterationHistory, cleanedResponse].join("\n\n");
+
+          // Build full response from history (which includes tool call markers) and final response
+          const allParts = [...iterationHistory];
+          if (cleanedResponse.trim()) {
+            allParts.push(cleanedResponse);
+          }
+          fullAIResponse = allParts.join("\n\n");
 
           // Add final response to LLM messages
           this.llmFormattedMessages.push(response);
@@ -336,9 +262,10 @@ ${params}
 
         // Execute tool calls and show progress
         const toolResults: ToolExecutionResult[] = [];
-        const toolCallMessages: string[] = [];
+        const toolCallIdMap = new Map<number, string>(); // Map index to tool call ID
 
-        for (const toolCall of toolCalls) {
+        for (let i = 0; i < toolCalls.length; i++) {
+          const toolCall = toolCalls[i];
           if (abortController.signal.aborted) break;
 
           // Log tool call details for debugging
@@ -349,26 +276,67 @@ ${params}
           const tool = availableTools.find((t) => t.name === toolCall.name);
           const isBackgroundTool = tool?.isBackground || false;
 
+          let toolCallId: string | undefined;
+
           // Only show tool calling message for non-background tools
           if (!isBackgroundTool) {
-            // Create tool calling message with better spacing and display name
+            // Create tool calling message with structured marker
             const toolEmoji = getToolEmoji(toolCall.name);
             const toolDisplayName = getToolDisplayName(toolCall.name);
-            let toolMessage = `${toolEmoji} *Calling ${toolDisplayName}...*`;
             const confirmationMessage = getToolConfirmtionMessage(toolCall.name);
-            if (confirmationMessage) {
-              toolMessage += `\n⏳ *${confirmationMessage}...*`;
-            }
-            const toolCallingMessage = `<br/>\n\n${toolMessage}\n\n<br/>`;
-            toolCallMessages.push(toolCallingMessage);
+
+            // Generate unique ID for this tool call
+            toolCallId = `${toolCall.name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            toolCallIdMap.set(i, toolCallId);
+
+            // Create structured tool call marker
+            const toolCallMarker = createToolCallMarker(
+              toolCallId,
+              toolCall.name,
+              toolDisplayName,
+              toolEmoji,
+              confirmationMessage || "",
+              true, // isExecuting
+              "", // content (empty for now)
+              "" // result (empty until execution completes)
+            );
+
+            currentIterationToolCallMessages.push(toolCallMarker);
 
             // Show all history plus all tool call messages
-            const currentDisplay = [...iterationHistory, ...toolCallMessages].join("\n\n");
+            const currentDisplay = [...iterationHistory, ...currentIterationToolCallMessages].join(
+              "\n\n"
+            );
             updateCurrentAiMessage(currentDisplay);
           }
 
-          const result = await executeSequentialToolCall(toolCall, availableTools);
+          const result = await executeSequentialToolCall(
+            toolCall,
+            availableTools,
+            originalUserPrompt
+          );
           toolResults.push(result);
+
+          // Update the tool call marker with the result if we have an ID
+          if (toolCallId && !isBackgroundTool) {
+            // Update the specific tool call message
+            const messageIndex = currentIterationToolCallMessages.findIndex((msg) =>
+              msg.includes(toolCallId)
+            );
+            if (messageIndex !== -1) {
+              currentIterationToolCallMessages[messageIndex] = updateToolCallMarker(
+                currentIterationToolCallMessages[messageIndex],
+                toolCallId,
+                result.result
+              );
+            }
+
+            // Update the display with the result
+            const currentDisplay = [...iterationHistory, ...currentIterationToolCallMessages].join(
+              "\n\n"
+            );
+            updateCurrentAiMessage(currentDisplay);
+          }
 
           // Log tool result
           logToolResult(toolCall.name, result);
@@ -392,8 +360,9 @@ ${params}
         }
 
         // Add all tool call messages to history so they persist
-        if (toolCallMessages.length > 0) {
-          iterationHistory.push(toolCallMessages.join("\n"));
+        if (currentIterationToolCallMessages.length > 0) {
+          const toolCallsString = currentIterationToolCallMessages.join("\n");
+          iterationHistory.push(toolCallsString);
         }
 
         // Don't add tool results to display - they're internal only
@@ -402,12 +371,12 @@ ${params}
         // Add the assistant's response with tool calls
         this.llmFormattedMessages.push(response);
 
-        // Add tool results in LLM format
+        // Add tool results in LLM format (truncated for memory)
         if (toolResults.length > 0) {
-          const toolResultsForLLM = toolResults
-            .map((result) => `Tool '${result.toolName}' result: ${result.result}`)
-            .join("\n\n");
-          this.llmFormattedMessages.push(toolResultsForLLM);
+          const toolResultsForLLM = processToolResults(toolResults, true); // truncated for memory
+          if (toolResultsForLLM) {
+            this.llmFormattedMessages.push(toolResultsForLLM);
+          }
         }
 
         // Add AI response to conversation for next iteration
@@ -416,10 +385,8 @@ ${params}
           content: response,
         });
 
-        // Add tool results as user messages for next iteration
-        const toolResultsForConversation = toolResults
-          .map((result) => `Tool '${result.toolName}' result: ${result.result}`)
-          .join("\n\n");
+        // Add tool results as user messages for next iteration (full results for current turn)
+        const toolResultsForConversation = processToolResults(toolResults, false); // full results
 
         conversationMessages.push({
           role: "user",
@@ -473,6 +440,12 @@ ${params}
 
     // Create LLM-formatted output for memory
     const llmFormattedOutput = this.llmFormattedMessages.join("\n\n");
+
+    // If we somehow don't have a fullAIResponse but have iteration history, use that
+    if (!fullAIResponse && iterationHistory.length > 0) {
+      logWarn("fullAIResponse was empty, using iteration history");
+      fullAIResponse = iterationHistory.join("\n\n");
+    }
 
     return this.handleResponse(
       fullAIResponse,

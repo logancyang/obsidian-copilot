@@ -101,7 +101,7 @@ const ChatMessages = memo(
             (message, index) =>
               message.isVisible && (
                 <ChatSingleMessage
-                  key={index}
+                  key={`message-${message.timestamp?.epoch || index}`}
                   message={message}
                   app={app}
                   isStreaming={false}
@@ -114,7 +114,7 @@ const ChatMessages = memo(
           )}
           {(currentAiMessage || loading) && (
             <ChatSingleMessage
-              key={`ai_message_${currentAiMessage}`}
+              key="ai_message_streaming"
               message={{
                 sender: "AI",
                 message: currentAiMessage || getLoadingMessage(),

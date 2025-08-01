@@ -1,4 +1,5 @@
 import { logError, logInfo, logWarn } from "@/logger";
+import { checkIsPlusUser } from "@/plusUtils";
 import { ToolManager } from "@/tools/toolManager";
 import { err2String } from "@/utils";
 import { ToolCall } from "./xmlParsing";
@@ -14,7 +15,8 @@ export interface ToolExecutionResult {
  */
 export async function executeSequentialToolCall(
   toolCall: ToolCall,
-  availableTools: any[]
+  availableTools: any[],
+  originalUserMessage?: string
 ): Promise<ToolExecutionResult> {
   const DEFAULT_TOOL_TIMEOUT = 30000; // 30 seconds timeout per tool
 
@@ -40,6 +42,26 @@ export async function executeSequentialToolCall(
       };
     }
 
+    // Check if tool requires Plus subscription
+    if (tool.isPlusOnly) {
+      const isPlusUser = await checkIsPlusUser();
+      if (!isPlusUser) {
+        return {
+          toolName: toolCall.name,
+          result: `Error: ${getToolDisplayName(toolCall.name)} requires a Copilot Plus subscription`,
+          success: false,
+        };
+      }
+    }
+
+    // Prepare tool arguments
+    const toolArgs = { ...toolCall.args };
+
+    // If tool requires user message content and it's provided, inject it
+    if (tool.requiresUserMessageContent && originalUserMessage) {
+      toolArgs._userMessageContent = originalUserMessage;
+    }
+
     // Determine timeout for this tool
     let timeout = DEFAULT_TOOL_TIMEOUT;
     if (typeof tool.timeoutMs === "number") {
@@ -49,11 +71,11 @@ export async function executeSequentialToolCall(
     let result;
     if (!timeout || timeout === Infinity) {
       // No timeout for this tool
-      result = await ToolManager.callTool(tool, toolCall.args);
+      result = await ToolManager.callTool(tool, toolArgs);
     } else {
       // Use timeout
       result = await Promise.race([
-        ToolManager.callTool(tool, toolCall.args),
+        ToolManager.callTool(tool, toolArgs),
         new Promise((_, reject) =>
           setTimeout(
             () => reject(new Error(`Tool execution timed out after ${timeout}ms`)),
@@ -99,6 +121,7 @@ export function getToolDisplayName(toolName: string): string {
     getCurrentTime: "current time",
     getTimeRangeMs: "time range",
     getTimeInfoByEpoch: "time info",
+    convertTimeBetweenTimezones: "timezone converter",
     startPomodoro: "pomodoro timer",
     pomodoroTool: "pomodoro timer",
     simpleYoutubeTranscriptionTool: "YouTube transcription",
@@ -122,6 +145,7 @@ export function getToolEmoji(toolName: string): string {
     getCurrentTime: "🕒",
     getTimeRangeMs: "📅",
     getTimeInfoByEpoch: "🕰️",
+    convertTimeBetweenTimezones: "🌍",
     startPomodoro: "⏱️",
     pomodoroTool: "⏱️",
     simpleYoutubeTranscriptionTool: "📺",
@@ -139,7 +163,7 @@ export function getToolEmoji(toolName: string): string {
  */
 export function getToolConfirmtionMessage(toolName: string): string | null {
   if (toolName == "writeToFile") {
-    return "Please accept or reject the changes in the Preview UI";
+    return "Accept / reject in the Preview";
   }
   return null;
 }
