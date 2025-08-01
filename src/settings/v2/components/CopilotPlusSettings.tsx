@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { SettingItem } from "@/components/ui/setting-item";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ToolSettingsSection } from "./ToolSettingsSection";
 import { AUTOCOMPLETE_CONFIG } from "@/constants";
 import { cn } from "@/lib/utils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
@@ -111,90 +112,7 @@ export const CopilotPlusSettings: React.FC = () => {
 
           {settings.enableAutonomousAgent && (
             <>
-              <SettingItem
-                type="slider"
-                title="Max Iterations"
-                description="Maximum number of reasoning iterations the autonomous agent can perform. Higher values allow for more complex reasoning but may take longer."
-                value={settings.autonomousAgentMaxIterations}
-                onChange={(value) => {
-                  updateSetting("autonomousAgentMaxIterations", value);
-                }}
-                min={4}
-                max={8}
-                step={1}
-              />
-
-              <div className="tw-mb-2 tw-mt-4 tw-text-sm tw-font-medium">Available Tools</div>
-              <div className="tw-mb-4 tw-text-xs tw-text-muted">
-                Toggle which tools the autonomous agent can use
-              </div>
-
-              <div className="tw-flex tw-flex-col tw-gap-2">
-                <SettingItem
-                  type="switch"
-                  title="Vault Search"
-                  description="Search through your vault notes"
-                  checked={settings.autonomousAgentTools.localSearch}
-                  onCheckedChange={(checked) => {
-                    updateSetting("autonomousAgentTools", {
-                      ...settings.autonomousAgentTools,
-                      localSearch: checked,
-                    });
-                  }}
-                />
-
-                <SettingItem
-                  type="switch"
-                  title="Web Search"
-                  description="Search the internet for information"
-                  checked={settings.autonomousAgentTools.webSearch}
-                  onCheckedChange={(checked) => {
-                    updateSetting("autonomousAgentTools", {
-                      ...settings.autonomousAgentTools,
-                      webSearch: checked,
-                    });
-                  }}
-                />
-
-                <SettingItem
-                  type="switch"
-                  title="Pomodoro Timer"
-                  description="Manage time with Pomodoro technique"
-                  checked={settings.autonomousAgentTools.pomodoro}
-                  onCheckedChange={(checked) => {
-                    updateSetting("autonomousAgentTools", {
-                      ...settings.autonomousAgentTools,
-                      pomodoro: checked,
-                    });
-                  }}
-                />
-
-                <SettingItem
-                  type="switch"
-                  title="YouTube Transcription"
-                  description="Get transcripts from YouTube videos"
-                  checked={settings.autonomousAgentTools.youtubeTranscription}
-                  onCheckedChange={(checked) => {
-                    updateSetting("autonomousAgentTools", {
-                      ...settings.autonomousAgentTools,
-                      youtubeTranscription: checked,
-                    });
-                  }}
-                />
-
-                <SettingItem
-                  type="switch"
-                  title="Write to File"
-                  description="Create or modify files in your vault. Also known as the Composer tool."
-                  checked={settings.autonomousAgentTools.writeToFile}
-                  onCheckedChange={(checked) => {
-                    updateSetting("autonomousAgentTools", {
-                      ...settings.autonomousAgentTools,
-                      writeToFile: checked,
-                    });
-                  }}
-                />
-              </div>
+              <ToolSettingsSection />
             </>
           )}
 

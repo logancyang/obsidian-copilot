@@ -2,18 +2,9 @@ import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { logError, logInfo, logWarn } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
 import { getSettings, getSystemPrompt } from "@/settings/model";
-import { writeToFileTool } from "@/tools/ComposerTools";
-import { createGetFileTreeTool } from "@/tools/FileTreeTools";
-import { localSearchTool, webSearchTool } from "@/tools/SearchTools";
 import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
-import {
-  getCurrentTimeTool,
-  getTimeInfoByEpochTool,
-  getTimeRangeMsTool,
-  pomodoroTool,
-  convertTimeBetweenTimezonesTool,
-} from "@/tools/TimeTools";
-import { youtubeTranscriptionTool } from "@/tools/YoutubeTools";
+import { ToolRegistry } from "@/tools/ToolRegistry";
+import { initializeBuiltinTools } from "@/tools/builtinTools";
 import { ChatMessage } from "@/types/message";
 import { getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { processToolResults } from "@/utils/toolResultUtils";
@@ -39,37 +30,18 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
   private getAvailableTools(): SimpleTool<any, any>[] {
     const settings = getSettings();
-    const toolConfig = settings.autonomousAgentTools;
+    const registry = ToolRegistry.getInstance();
 
-    // Tools that are always available (not controlled by settings)
-    const alwaysAvailableTools: SimpleTool<any, any>[] = [
-      getCurrentTimeTool,
-      getTimeInfoByEpochTool,
-      getTimeRangeMsTool,
-      convertTimeBetweenTimezonesTool,
-    ];
-
-    // Add file tree tool if vault is available
-    if (this.chainManager.app?.vault) {
-      alwaysAvailableTools.push(createGetFileTreeTool(this.chainManager.app.vault.getRoot()));
+    // Initialize tools if not already done
+    if (registry.getAllTools().length === 0) {
+      initializeBuiltinTools(this.chainManager.app?.vault);
     }
 
-    // Map of setting-controlled tools
-    const settingControlledTools: Record<string, SimpleTool<any, any>> = {
-      localSearch: localSearchTool,
-      webSearch: webSearchTool,
-      pomodoro: pomodoroTool,
-      youtubeTranscription: youtubeTranscriptionTool,
-      writeToFile: writeToFileTool,
-    };
+    // Get enabled tool IDs from settings
+    const enabledToolIds = new Set(settings.autonomousAgentEnabledToolIds || []);
 
-    // Filter enabled tools from settings
-    const enabledTools = Object.entries(settingControlledTools)
-      .filter(([key]) => toolConfig[key as keyof typeof toolConfig])
-      .map(([, tool]) => tool);
-
-    // Combine always available tools with enabled tools
-    return [...alwaysAvailableTools, ...enabledTools];
+    // Get all enabled tools from registry
+    return registry.getEnabledTools(enabledToolIds, !!this.chainManager.app?.vault);
   }
 
   private generateToolDescriptions(): string {

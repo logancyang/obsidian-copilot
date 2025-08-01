@@ -113,13 +113,7 @@ export interface CopilotSettings {
   /** Whether we have suggested built-in default commands to the user once. */
   suggestedDefaultCommands: boolean;
   autonomousAgentMaxIterations: number;
-  autonomousAgentTools: {
-    localSearch: boolean;
-    webSearch: boolean;
-    pomodoro: boolean;
-    youtubeTranscription: boolean;
-    writeToFile: boolean;
-  };
+  autonomousAgentEnabledToolIds: string[];
 }
 
 export const settingsStore = createStore();
@@ -274,24 +268,10 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.autonomousAgentMaxIterations = autonomousAgentMaxIterations;
   }
 
-  // Ensure autonomousAgentTools has all required properties
-  if (
-    !sanitizedSettings.autonomousAgentTools ||
-    typeof sanitizedSettings.autonomousAgentTools !== "object"
-  ) {
-    sanitizedSettings.autonomousAgentTools = DEFAULT_SETTINGS.autonomousAgentTools;
-  } else {
-    // Ensure all tool properties exist with default values
-    const defaultTools = DEFAULT_SETTINGS.autonomousAgentTools;
-    sanitizedSettings.autonomousAgentTools = {
-      localSearch: sanitizedSettings.autonomousAgentTools.localSearch ?? defaultTools.localSearch,
-      webSearch: sanitizedSettings.autonomousAgentTools.webSearch ?? defaultTools.webSearch,
-      pomodoro: sanitizedSettings.autonomousAgentTools.pomodoro ?? defaultTools.pomodoro,
-      youtubeTranscription:
-        sanitizedSettings.autonomousAgentTools.youtubeTranscription ??
-        defaultTools.youtubeTranscription,
-      writeToFile: sanitizedSettings.autonomousAgentTools.writeToFile ?? defaultTools.writeToFile,
-    };
+  // Ensure autonomousAgentEnabledToolIds is an array
+  if (!Array.isArray(sanitizedSettings.autonomousAgentEnabledToolIds)) {
+    sanitizedSettings.autonomousAgentEnabledToolIds =
+      DEFAULT_SETTINGS.autonomousAgentEnabledToolIds;
   }
 
   return sanitizedSettings;
