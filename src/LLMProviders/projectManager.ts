@@ -569,7 +569,9 @@ ${contextParts.join("\n\n")}
     // Note: We're only processing markdown files here, other file types
     // are handled by FileParserManager and stored in the file cache
     const files = this.app.vault.getFiles().filter((file) => {
-      return file.extension === "md" && shouldIndexFile(file, inclusionPatterns, exclusionPatterns);
+      return (
+        file.extension === "md" && shouldIndexFile(file, inclusionPatterns, exclusionPatterns, true)
+      );
     });
 
     logInfo(`Found ${files.length} markdown files to process for project context`);
