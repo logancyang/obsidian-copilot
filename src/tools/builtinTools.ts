@@ -8,7 +8,7 @@ import {
   convertTimeBetweenTimezonesTool,
 } from "./TimeTools";
 import { youtubeTranscriptionTool } from "./YoutubeTools";
-import { writeToFileTool } from "./ComposerTools";
+import { writeToFileTool, replaceInFileTool } from "./ComposerTools";
 import { createGetFileTreeTool } from "./FileTreeTools";
 import { Vault } from "obsidian";
 
@@ -99,6 +99,17 @@ export const BUILTIN_TOOLS: ToolDefinition[] = [
       category: "file",
       requiresVault: true,
       customPromptInstructions: `When you need to call writeToFile, NEVER display the file content directly. Always only pass the file content to writeToFile.`,
+    },
+  },
+  {
+    tool: replaceInFileTool,
+    metadata: {
+      id: "replaceInFile",
+      displayName: "Replace in File",
+      description: "Make targeted changes to existing files using SEARCH/REPLACE blocks",
+      category: "file",
+      requiresVault: true,
+      customPromptInstructions: `When using replaceInFile, provide exact SEARCH/REPLACE blocks with precise content matching. Use this for surgical edits to existing files.`,
     },
   },
 
