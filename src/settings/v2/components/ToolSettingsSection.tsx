@@ -2,16 +2,10 @@ import React from "react";
 import { SettingItem } from "@/components/ui/setting-item";
 import { ToolRegistry } from "@/tools/ToolRegistry";
 import { updateSetting, useSettingsValue } from "@/settings/model";
-import { initializeBuiltinTools } from "@/tools/builtinTools";
 
 export const ToolSettingsSection: React.FC = () => {
   const settings = useSettingsValue();
   const registry = ToolRegistry.getInstance();
-
-  // Initialize tools if not already done
-  if (registry.getAllTools().length === 0) {
-    initializeBuiltinTools();
-  }
 
   const enabledToolIds = new Set(settings.autonomousAgentEnabledToolIds || []);
 
@@ -66,7 +60,7 @@ export const ToolSettingsSection: React.FC = () => {
         type="slider"
         title="Max Iterations"
         description="Maximum number of reasoning iterations the autonomous agent can perform. Higher values allow for more complex reasoning but may take longer."
-        value={settings.autonomousAgentMaxIterations}
+        value={settings.autonomousAgentMaxIterations ?? 4}
         onChange={(value) => {
           updateSetting("autonomousAgentMaxIterations", value);
         }}

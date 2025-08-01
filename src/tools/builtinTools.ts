@@ -135,18 +135,25 @@ export function registerFileTreeTool(vault: Vault): void {
 
 /**
  * Initialize all built-in tools in the registry
+ * @param vault - Optional Obsidian vault. When provided, enables registration of vault-dependent tools like file tree
  */
 export function initializeBuiltinTools(vault?: Vault): void {
   const registry = ToolRegistry.getInstance();
 
-  // Clear any existing tools
-  registry.clear();
+  // Only reinitialize if tools have changed or vault status has changed
+  const hasFileTree = registry.getToolMetadata("getFileTree") !== undefined;
+  const shouldHaveFileTree = vault !== undefined;
 
-  // Register all built-in tools
-  registry.registerAll(BUILTIN_TOOLS);
+  if (registry.getAllTools().length === 0 || hasFileTree !== shouldHaveFileTree) {
+    // Clear any existing tools
+    registry.clear();
 
-  // Register vault-dependent tools if vault is available
-  if (vault) {
-    registerFileTreeTool(vault);
+    // Register all built-in tools
+    registry.registerAll(BUILTIN_TOOLS);
+
+    // Register vault-dependent tools if vault is available
+    if (vault) {
+      registerFileTreeTool(vault);
+    }
   }
 }
