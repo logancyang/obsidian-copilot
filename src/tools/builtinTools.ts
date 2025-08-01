@@ -134,7 +134,10 @@ export function registerFileTreeTool(vault: Vault): void {
 }
 
 /**
- * Initialize all built-in tools in the registry
+ * Initialize all built-in tools in the registry.
+ * This function registers tool definitions, not user preferences.
+ * User-enabled tools are filtered dynamically when retrieved.
+ *
  * @param vault - Optional Obsidian vault. When provided, enables registration of vault-dependent tools like file tree
  */
 export function initializeBuiltinTools(vault?: Vault): void {
