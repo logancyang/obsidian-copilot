@@ -120,7 +120,7 @@ Critical rules:
 1. SEARCH content must match the associated file section to find EXACTLY:
    * Match character-for-character including whitespace, indentation, line endings
    * Include all comments, docstrings, etc.
-2. SEARCH/REPLACE blocks will ONLY replace the first match occurrence.
+2. SEARCH/REPLACE blocks will replace ALL matching occurrences.
    * Including multiple unique SEARCH/REPLACE blocks if you need to make multiple changes.
    * Include *just* enough lines in each SEARCH section to uniquely match each set of lines that need to change.
    * When using multiple SEARCH/REPLACE blocks, list them in the order they appear in the file.
@@ -153,7 +153,7 @@ const replaceInFileTool = createTool({
       const searchReplaceBlocks = parseSearchReplaceBlocks(diff);
 
       if (searchReplaceBlocks.length === 0) {
-        return `No valid SEARCH/REPLACE blocks found in diff. Please use the correct format with ------- SEARCH, =======, and +++++++ REPLACE markers.`;
+        return `No valid SEARCH/REPLACE blocks found in diff. Please use the correct format with ------- SEARCH, =======, and +++++++ REPLACE markers. \n diff: ${diff}`;
       }
 
       let changesApplied = 0;
@@ -170,13 +170,12 @@ const replaceInFileTool = createTool({
           continue;
         }
 
-        // Replace only the first occurrence. This behavior is intentional and documented in the tool's schema description.
-        const searchIndex = modifiedContent.indexOf(searchText);
-        if (searchIndex !== -1) {
-          modifiedContent =
-            modifiedContent.substring(0, searchIndex) +
-            replaceText +
-            modifiedContent.substring(searchIndex + searchText.length);
+        // Replace all occurrences of the search text
+        const beforeReplace = modifiedContent;
+        modifiedContent = modifiedContent.replaceAll(searchText, replaceText);
+
+        // Check if any replacements were made
+        if (modifiedContent !== beforeReplace) {
           changesApplied++;
         }
       }
@@ -188,7 +187,7 @@ const replaceInFileTool = createTool({
       // Show preview of changes
       const result = await show_preview(path, modifiedContent);
 
-      return `Applied ${changesApplied} SEARCH/REPLACE block(s). Result: ${result}. Do not call this tool again to modify this file in response to the current user request.`;
+      return `Applied ${changesApplied} SEARCH/REPLACE block(s) (replacing all occurrences). Result: ${result}. Do not call this tool again to modify this file in response to the current user request.`;
     } catch (error) {
       return `Error performing SEARCH/REPLACE on ${path}: ${error}. Please check the file path and diff format and try again.`;
     }
@@ -196,31 +195,74 @@ const replaceInFileTool = createTool({
   timeoutMs: 0, // no timeout
 });
 
-// Helper function to parse SEARCH/REPLACE blocks from diff string
+/**
+ * Helper function to parse SEARCH/REPLACE blocks from diff string.
+ *
+ * Supports flexible formatting with various line endings and optional newlines.
+ *
+ * @param diff - The diff string containing SEARCH/REPLACE blocks
+ * @returns Array of parsed search/replace text pairs
+ *
+ * @example
+ * // Standard format with newlines:
+ * const diff1 = `------- SEARCH
+ * old text here
+ * =======
+ * new text here
+ * +++++++ REPLACE`;
+ *
+ * @example
+ * // Flexible format without newlines:
+ * const diff2 = `-------SEARCHold text=======new text+++++++REPLACE`;
+ *
+ * @example
+ * // Windows line endings:
+ * const diff3 = `------- SEARCH\r\nold text\r\n=======\r\nnew text\r\n+++++++ REPLACE`;
+ *
+ * @example
+ * // Multiple blocks:
+ * const diff4 = `------- SEARCH
+ * first old text
+ * =======
+ * first new text
+ * +++++++ REPLACE
+ *
+ * ------- SEARCH
+ * second old text
+ * =======
+ * second new text
+ * +++++++ REPLACE`;
+ *
+ * Regex patterns match:
+ * - SEARCH_MARKER: /-{3,}\s*SEARCH\s*(?:\r?\n)?/ → "---SEARCH" to "----------- SEARCH\n"
+ * - SEPARATOR: /(?:\r?\n)?={3,}\s*(?:\r?\n)?/ → "===" to "\n========\n"
+ * - REPLACE_MARKER: /(?:\r?\n)?\+{3,}\s*REPLACE/ → "+++REPLACE" to "\n+++++++ REPLACE"
+ */
 function parseSearchReplaceBlocks(
   diff: string
 ): Array<{ searchText: string; replaceText: string }> {
   const blocks: Array<{ searchText: string; replaceText: string }> = [];
-  // More flexible regex that accepts:
-  // - 3+ dashes followed by optional space and "SEARCH"
-  // - 3+ equals signs as separator
-  // - 3+ plus signs followed by optional space and "REPLACE"
-  const SEARCH_MARKER = /-{3,}\s*SEARCH\s*\n/;
-  const SEPARATOR = /\n={3,}\s*\n/;
-  const REPLACE_MARKER = /\n\+{3,}\s*REPLACE/;
+
+  const SEARCH_MARKER = /-{3,}\s*SEARCH\s*(?:\r?\n)?/;
+  const SEPARATOR = /(?:\r?\n)?={3,}\s*(?:\r?\n)?/;
+  const REPLACE_MARKER = /(?:\r?\n)?\+{3,}\s*REPLACE/;
   const blockRegex = new RegExp(
-    `${SEARCH_MARKER.source}([\s\S]*?)${SEPARATOR.source}([\s\S]*?)${REPLACE_MARKER.source}`,
+    SEARCH_MARKER.source +
+      "([\\s\\S]*?)" +
+      SEPARATOR.source +
+      "([\\s\\S]*?)" +
+      REPLACE_MARKER.source,
     "g"
   );
 
   let match;
   while ((match = blockRegex.exec(diff)) !== null) {
-    const searchText = match[1];
-    const replaceText = match[2];
+    const searchText = match[1].trim();
+    const replaceText = match[2].trim();
     blocks.push({ searchText, replaceText });
   }
 
   return blocks;
 }
 
-export { writeToFileTool, replaceInFileTool };
+export { writeToFileTool, replaceInFileTool, parseSearchReplaceBlocks };
