@@ -24,7 +24,26 @@ export const BUILTIN_TOOLS: ToolDefinition[] = [
       displayName: "Vault Search",
       description: "Search through your vault notes",
       category: "search",
-      customPromptInstructions: `For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings).`,
+      customPromptInstructions: `For localSearch (searching notes in the vault):
+- You MUST always provide both "query" (string) and "salientTerms" (array of strings)
+- salientTerms MUST be extracted from the user's original query - never invent new terms
+- They are keywords used for BM25 full-text search to find notes containing those exact words
+- Extract meaningful content words from the query (nouns, verbs, names, etc.)
+- Exclude common words like "what", "I", "do", "the", "a", etc.
+- Exclude time expressions like "last month", "yesterday", "last week"
+- Preserve the original language - do NOT translate terms to English
+
+Example usage:
+<use_tool>
+<name>localSearch</name>
+<query>piano learning practice</query>
+<salientTerms>["piano", "learning", "practice"]</salientTerms>
+</use_tool>
+
+For time-based queries:
+1. First call getTimeRangeMs to convert the time expression
+2. Then use localSearch with the timeRange parameter
+3. Only use words from the original query for salientTerms`,
     },
   },
   {
@@ -34,7 +53,16 @@ export const BUILTIN_TOOLS: ToolDefinition[] = [
       displayName: "Web Search",
       description: "Search the internet for information",
       category: "search",
-      customPromptInstructions: `The webSearch tool should ONLY be used when the user explicitly requests web/internet search.`,
+      customPromptInstructions: `For webSearch:
+- Only use when the user explicitly requests web/internet search
+- Always provide an empty chatHistory array
+
+Example usage:
+<use_tool>
+<name>webSearch</name>
+<query>piano learning techniques</query>
+<chatHistory>[]</chatHistory>
+</use_tool>`,
     },
   },
 
@@ -98,7 +126,17 @@ export const BUILTIN_TOOLS: ToolDefinition[] = [
       description: "Create or modify files in your vault",
       category: "file",
       requiresVault: true,
-      customPromptInstructions: `When you need to call writeToFile, NEVER display the file content directly. Always only pass the file content to writeToFile.`,
+      customPromptInstructions: `For writeToFile:
+- NEVER display the file content directly in your response
+- Always pass the complete file content to the tool
+- Include the full path to the file
+
+Example usage:
+<use_tool>
+<name>writeToFile</name>
+<path>path/to/note.md</path>
+<content>FULL CONTENT OF THE NOTE</content>
+</use_tool>`,
     },
   },
   {
@@ -121,6 +159,14 @@ export const BUILTIN_TOOLS: ToolDefinition[] = [
       displayName: "YouTube Transcription",
       description: "Get transcripts from YouTube videos",
       category: "media",
+      customPromptInstructions: `For youtubeTranscription:
+- Use when user provides YouTube URLs
+- No parameters needed - the tool will process URLs from the conversation
+
+Example usage:
+<use_tool>
+<name>youtubeTranscription</name>
+</use_tool>`,
     },
   },
 ];
