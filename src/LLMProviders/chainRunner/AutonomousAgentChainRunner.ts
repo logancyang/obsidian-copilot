@@ -23,7 +23,7 @@ import {
   logToolResult,
   ToolExecutionResult,
 } from "./utils/toolExecution";
-import { escapeXml, parseXMLToolCalls, stripToolCallXML } from "./utils/xmlParsing";
+import { parseXMLToolCalls, stripToolCallXML } from "./utils/xmlParsing";
 
 export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private llmFormattedMessages: string[] = []; // Track LLM-formatted messages for memory
@@ -54,19 +54,16 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         const parameters = extractParametersFromZod(tool.schema);
         if (Object.keys(parameters).length > 0) {
           params = Object.entries(parameters)
-            .map(
-              ([key, description]) =>
-                `<${escapeXml(key)}>${escapeXml(description)}</${escapeXml(key)}>`
-            )
+            .map(([key, description]) => `<${key}>${description}</${key}>`)
             .join("\n");
         }
 
-        return `<${escapeXml(tool.name)}>
-<description>${escapeXml(tool.description)}</description>
+        return `<${tool.name}>
+<description>${tool.description}</description>
 <parameters>
 ${params}
 </parameters>
-</${escapeXml(tool.name)}>`;
+</${tool.name}>`;
       })
       .join("\n\n");
   }

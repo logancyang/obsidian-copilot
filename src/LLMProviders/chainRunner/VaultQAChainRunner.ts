@@ -1,5 +1,4 @@
 import { ABORT_REASON, EMPTY_INDEX_ERROR_MESSAGE, RETRIEVED_DOCUMENT_TAG } from "@/constants";
-import { escapeXml } from "./utils/xmlParsing";
 import { logInfo } from "@/logger";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { getSettings, getSystemPrompt } from "@/settings/model";
@@ -71,7 +70,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
       const context = retrievedDocs
         .map(
           (doc: any) =>
-            `<${RETRIEVED_DOCUMENT_TAG}>\n${escapeXml(doc.pageContent)}\n</${RETRIEVED_DOCUMENT_TAG}>`
+            `<${RETRIEVED_DOCUMENT_TAG}>\n${doc.pageContent}\n</${RETRIEVED_DOCUMENT_TAG}>`
         )
         .join("\n\n");
 
