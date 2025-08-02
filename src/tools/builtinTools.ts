@@ -40,10 +40,42 @@ Example usage:
 <salientTerms>["piano", "learning", "practice"]</salientTerms>
 </use_tool>
 
-For time-based queries:
-1. First call getTimeRangeMs to convert the time expression
-2. Then use localSearch with the timeRange parameter
-3. Only use words from the original query for salientTerms`,
+For localSearch with time range (e.g., "what did I do last week"):
+Step 1 - Get time range:
+<use_tool>
+<name>getTimeRangeMs</name>
+<timeExpression>last week</timeExpression>
+</use_tool>
+
+Step 2 - Search with time range (after receiving time range result):
+<use_tool>
+<name>localSearch</name>
+<query>what did I do</query>
+<salientTerms>[]</salientTerms>
+<timeRange>{"startTime": {...}, "endTime": {...}}</timeRange>
+</use_tool>
+
+For localSearch with meaningful terms (e.g., "python debugging notes from yesterday"):
+Step 1 - Get time range:
+<use_tool>
+<name>getTimeRangeMs</name>
+<timeExpression>yesterday</timeExpression>
+</use_tool>
+
+Step 2 - Search with time range:
+<use_tool>
+<name>localSearch</name>
+<query>python debugging notes</query>
+<salientTerms>["python", "debugging", "notes"]</salientTerms>
+<timeRange>{"startTime": {...}, "endTime": {...}}</timeRange>
+</use_tool>
+
+For localSearch with non-English query (PRESERVE ORIGINAL LANGUAGE):
+<use_tool>
+<name>localSearch</name>
+<query>钢琴学习</query>
+<salientTerms>["钢琴", "学习"]</salientTerms>
+</use_tool>`,
     },
   },
   {
@@ -75,6 +107,24 @@ Example usage:
       description: "Get the current time in any timezone",
       category: "time",
       isAlwaysEnabled: true,
+      customPromptInstructions: `For time queries (IMPORTANT: Always use UTC offsets, not timezone names):
+
+Example 1 - "what time is it" (local time):
+<use_tool>
+<name>getCurrentTime</name>
+</use_tool>
+
+Example 2 - "what time is it in Tokyo" (UTC+9):
+<use_tool>
+<name>getCurrentTime</name>
+<timezoneOffset>+9</timezoneOffset>
+</use_tool>
+
+Example 3 - "what time is it in New York" (UTC-5 or UTC-4 depending on DST):
+<use_tool>
+<name>getCurrentTime</name>
+<timezoneOffset>-5</timezoneOffset>
+</use_tool>`,
     },
   },
   {
@@ -95,6 +145,15 @@ Example usage:
       description: "Convert time expressions to date ranges",
       category: "time",
       isAlwaysEnabled: true,
+      customPromptInstructions: `For time-based queries:
+- Use this tool to convert time expressions like "last week", "yesterday", "last month" to proper time ranges
+- This is typically the first step before using localSearch with a time range
+
+Example:
+<use_tool>
+<name>getTimeRangeMs</name>
+<timeExpression>last week</timeExpression>
+</use_tool>`,
     },
   },
   {
@@ -105,6 +164,15 @@ Example usage:
       description: "Convert time between different timezones",
       category: "time",
       isAlwaysEnabled: true,
+      customPromptInstructions: `For timezone conversions:
+
+Example - "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9):
+<use_tool>
+<name>convertTimeBetweenTimezones</name>
+<time>6pm</time>
+<fromOffset>-8</fromOffset>
+<toOffset>+9</toOffset>
+</use_tool>`,
     },
   },
   {
@@ -130,6 +198,9 @@ Example usage:
 - NEVER display the file content directly in your response
 - Always pass the complete file content to the tool
 - Include the full path to the file
+- You MUST explicitly call writeToFile for any intent of updating or creating files
+- Do not call writeToFile tool again if the result is not accepted
+- Do not call writeToFile tool if no change needs to be made
 
 Example usage:
 <use_tool>
@@ -186,6 +257,14 @@ export function registerFileTreeTool(vault: Vault): void {
       category: "file",
       isAlwaysEnabled: true,
       requiresVault: true,
+      customPromptInstructions: `For getFileTree:
+- Use to browse the vault's file structure
+- No parameters needed
+
+Example usage:
+<use_tool>
+<name>getFileTree</name>
+</use_tool>`,
     },
   });
 }

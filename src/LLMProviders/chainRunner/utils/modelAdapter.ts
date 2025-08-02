@@ -120,6 +120,22 @@ ${toolDescriptions}
 
 # Tool Usage Guidelines
 
+## Time-based Queries
+When users ask about temporal periods (e.g., "what did I do last month", "show me notes from last week"), you MUST:
+1. First call getTimeRangeMs to convert the time expression to a proper time range
+2. Then use localSearch with the timeRange parameter from step 1
+3. For salientTerms, ONLY use words that exist in the user's original query (excluding time expressions)
+
+Example for "what did I do last month":
+1. Call getTimeRangeMs with timeExpression: "last month"
+2. Use localSearch with query matching the user's question
+3. salientTerms: [] - empty because "what", "I", "do" are not meaningful search terms
+
+Example for "meetings about project X last week":
+1. Call getTimeRangeMs with timeExpression: "last week"
+2. Use localSearch with query "meetings about project X"
+3. salientTerms: ["meetings", "project", "X"] - these words exist in the original query
+
 ${toolSpecificInstructions ? toolSpecificInstructions + "\n\n" : ""}## General Guidelines
 - NEVER mention tool names like "localSearch", "webSearch", etc. in your responses. Use natural language like "searching your vault", "searching the web", etc.
 
