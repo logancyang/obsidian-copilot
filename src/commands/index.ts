@@ -20,6 +20,7 @@ import { CustomCommandManager } from "@/commands/customCommandManager";
 import { QUICK_COMMAND_CODE_BLOCK } from "@/commands/constants";
 import { removeQuickCommandBlocks } from "@/commands/customCommandUtils";
 import { isLivePreviewModeOn } from "@/utils";
+import { ApplyCustomCommandModal } from "@/components/modals/ApplyCustomCommandModal";
 
 /**
  * Add a command to the plugin.
@@ -388,6 +389,12 @@ export function registerCommands(
         await CustomCommandManager.getInstance().createCommand(updatedCommand);
       }
     );
+    modal.open();
+  });
+
+  // Add command to apply a custom command
+  addCommand(plugin, COMMAND_IDS.APPLY_CUSTOM_COMMAND, () => {
+    const modal = new ApplyCustomCommandModal(plugin.app);
     modal.open();
   });
 }

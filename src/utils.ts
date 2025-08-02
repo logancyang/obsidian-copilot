@@ -299,9 +299,8 @@ export async function getAllNotesContent(vault: Vault): Promise<string> {
     const fileContent = await vault.cachedRead(file);
     // Import is not available at the top level due to circular dependency
     const { VAULT_NOTE_TAG } = await import("@/constants");
-    const { escapeXml } = await import("@/LLMProviders/chainRunner/utils/xmlParsing");
     vaultNotes.push(
-      `<${VAULT_NOTE_TAG}>\n<path>${escapeXml(file.path)}</path>\n<content>\n${escapeXml(fileContent)}\n</content>\n</${VAULT_NOTE_TAG}>`
+      `<${VAULT_NOTE_TAG}>\n<path>${file.path}</path>\n<content>\n${fileContent}\n</content>\n</${VAULT_NOTE_TAG}>`
     );
   }
 
