@@ -129,6 +129,7 @@ export function getToolDisplayName(toolName: string): string {
     indexVault: "vault indexing",
     indexTool: "index",
     writeToFile: "file editor",
+    replaceInFile: "file editor (find & replace)",
   };
 
   return displayNameMap[toolName] || toolName;
@@ -153,6 +154,7 @@ export function getToolEmoji(toolName: string): string {
     indexVault: "📚",
     indexTool: "📚",
     writeToFile: "✏️",
+    replaceInFile: "🔄",
   };
 
   return emojiMap[toolName] || "🔧";
@@ -162,7 +164,7 @@ export function getToolEmoji(toolName: string): string {
  * Get user confirmation message for tool call
  */
 export function getToolConfirmtionMessage(toolName: string): string | null {
-  if (toolName == "writeToFile") {
+  if (toolName == "writeToFile" || toolName == "replaceInFile") {
     return "Accept / reject in the Preview";
   }
   return null;

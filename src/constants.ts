@@ -722,6 +722,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     "pomodoro",
     "youtubeTranscription",
     "writeToFile",
+    "replaceInFile",
   ],
 };
 

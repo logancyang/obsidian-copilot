@@ -1,3 +1,4 @@
+import { logWarn } from "@/logger";
 import { Notice, TFile } from "obsidian";
 import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
 import { diffTrimmedLines } from "diff";
@@ -100,4 +101,219 @@ const writeToFileTool = createTool({
   timeoutMs: 0, // no timeout
 });
 
-export { writeToFileTool };
+const replaceInFileSchema = z.object({
+  path: z
+    .string()
+    .describe(
+      `(Required) The path of the file to modify (relative to the root of the vault and include the file extension).`
+    ),
+  diff: z.string()
+    .describe(`(Required) One or more SEARCH/REPLACE blocks following this exact format:
+\`\`\`
+------- SEARCH
+[exact content to find]
+=======
+[new content to replace with]
++++++++ REPLACE
+\`\`\`
+Critical rules:
+1. SEARCH content must match the associated file section to find EXACTLY:
+   * Match character-for-character including whitespace, indentation, line endings
+   * Include all comments, docstrings, etc.
+2. SEARCH/REPLACE blocks will replace ALL matching occurrences.
+   * Including multiple unique SEARCH/REPLACE blocks if you need to make multiple changes.
+   * Include *just* enough lines in each SEARCH section to uniquely match each set of lines that need to change.
+   * When using multiple SEARCH/REPLACE blocks, list them in the order they appear in the file.
+3. Keep SEARCH/REPLACE blocks concise:
+   * Break large SEARCH/REPLACE blocks into a series of smaller blocks that each change a small portion of the file.
+   * Include just the changing lines, and a few surrounding lines if needed for uniqueness.
+   * Do not include long runs of unchanging lines in SEARCH/REPLACE blocks.
+   * Each line must be complete. Never truncate lines mid-way through as this can cause matching failures.
+4. Special operations:
+   * To move code: Use two SEARCH/REPLACE blocks (one to delete from original + one to insert at new location)
+   * To delete code: Use empty REPLACE section`),
+});
+
+/**
+ * Normalizes line endings to LF (\n) for consistent string matching.
+ * This helps avoid issues with mixed line endings (CRLF vs LF).
+ */
+function normalizeLineEndings(text: string): string {
+  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+/**
+ * Performs line ending aware text replacement.
+ * Normalizes line endings for matching but preserves the original line ending style.
+ */
+function replaceWithLineEndingAwareness(
+  content: string,
+  searchText: string,
+  replaceText: string
+): string {
+  // Detect the predominant line ending style in the original content
+  const crlfCount = (content.match(/\r\n/g) || []).length;
+  const lfCount = (content.match(/(?<!\r)\n/g) || []).length;
+  const usesCrlf = crlfCount > lfCount;
+
+  // Normalize for matching
+  const normalizedContent = normalizeLineEndings(content);
+  const normalizedSearchText = normalizeLineEndings(searchText);
+  const normalizedReplaceText = normalizeLineEndings(replaceText);
+
+  // Perform replacement on normalized content
+  const resultNormalized = normalizedContent.replaceAll(
+    normalizedSearchText,
+    normalizedReplaceText
+  );
+
+  // Convert back to original line ending style if CRLF was predominant
+  if (usesCrlf) {
+    return resultNormalized.replace(/\n/g, "\r\n");
+  }
+
+  return resultNormalized;
+}
+
+const replaceInFileTool = createTool({
+  name: "replaceInFile",
+  description: `Request to replace sections of content in an existing file using SEARCH/REPLACE blocks that define exact changes to specific parts of the file. This tool should be used when you need to make targeted changes to specific parts of a file.`,
+  schema: replaceInFileSchema,
+  handler: async ({ path, diff }: { path: string; diff: string }) => {
+    const file = app.vault.getAbstractFileByPath(path);
+
+    if (!file || !(file instanceof TFile)) {
+      return `File not found at path: ${path}. Please check the file path and try again.`;
+    }
+
+    try {
+      const originalContent = await app.vault.read(file);
+      let modifiedContent = originalContent;
+
+      // Parse SEARCH/REPLACE blocks from diff
+      const searchReplaceBlocks = parseSearchReplaceBlocks(diff);
+
+      if (searchReplaceBlocks.length === 0) {
+        return `No valid SEARCH/REPLACE blocks found in diff. Please use the correct format with ------- SEARCH, =======, and +++++++ REPLACE markers. \n diff: ${diff}`;
+      }
+
+      let changesApplied = 0;
+
+      // Apply each SEARCH/REPLACE block in order
+      for (const block of searchReplaceBlocks) {
+        const { searchText, replaceText } = block;
+
+        // Check if the search text exists in the current content (with line ending normalization)
+        const normalizedContent = normalizeLineEndings(modifiedContent);
+        const normalizedSearchText = normalizeLineEndings(searchText);
+
+        if (!normalizedContent.includes(normalizedSearchText)) {
+          logWarn(
+            `Search text not found in file ${path}. Block ${changesApplied + 1}: "${searchText}".`
+          );
+          continue;
+        }
+
+        // Replace all occurrences using line ending aware replacement
+        const beforeReplace = modifiedContent;
+        modifiedContent = replaceWithLineEndingAwareness(modifiedContent, searchText, replaceText);
+
+        // Check if any replacements were made
+        if (modifiedContent !== beforeReplace) {
+          changesApplied++;
+        }
+      }
+
+      if (originalContent === modifiedContent) {
+        return `No changes made to ${path}. The search text was not found or replacement resulted in identical content. Call writeToFile instead`;
+      }
+
+      // Show preview of changes
+      const result = await show_preview(path, modifiedContent);
+
+      return `Applied ${changesApplied} SEARCH/REPLACE block(s) (replacing all occurrences). Result: ${result}. Do not call this tool again to modify this file in response to the current user request.`;
+    } catch (error) {
+      return `Error performing SEARCH/REPLACE on ${path}: ${error}. Please check the file path and diff format and try again.`;
+    }
+  },
+  timeoutMs: 0, // no timeout
+});
+
+/**
+ * Helper function to parse SEARCH/REPLACE blocks from diff string.
+ *
+ * Supports flexible formatting with various line endings and optional newlines.
+ *
+ * @param diff - The diff string containing SEARCH/REPLACE blocks
+ * @returns Array of parsed search/replace text pairs
+ *
+ * @example
+ * // Standard format with newlines:
+ * const diff1 = `------- SEARCH
+ * old text here
+ * =======
+ * new text here
+ * +++++++ REPLACE`;
+ *
+ * @example
+ * // Flexible format without newlines:
+ * const diff2 = `-------SEARCHold text=======new text+++++++REPLACE`;
+ *
+ * @example
+ * // Windows line endings:
+ * const diff3 = `------- SEARCH\r\nold text\r\n=======\r\nnew text\r\n+++++++ REPLACE`;
+ *
+ * @example
+ * // Multiple blocks:
+ * const diff4 = `------- SEARCH
+ * first old text
+ * =======
+ * first new text
+ * +++++++ REPLACE
+ *
+ * ------- SEARCH
+ * second old text
+ * =======
+ * second new text
+ * +++++++ REPLACE`;
+ *
+ * Regex patterns match:
+ * - SEARCH_MARKER: /-{3,}\s*SEARCH\s*(?:\r?\n)?/ → "---SEARCH" to "----------- SEARCH\n"
+ * - SEPARATOR: /(?:\r?\n)?={3,}\s*(?:\r?\n)?/ → "===" to "\n========\n"
+ * - REPLACE_MARKER: /(?:\r?\n)?\+{3,}\s*REPLACE/ → "+++REPLACE" to "\n+++++++ REPLACE"
+ */
+function parseSearchReplaceBlocks(
+  diff: string
+): Array<{ searchText: string; replaceText: string }> {
+  const blocks: Array<{ searchText: string; replaceText: string }> = [];
+
+  const SEARCH_MARKER = /-{3,}\s*SEARCH\s*(?:\r?\n)?/;
+  const SEPARATOR = /(?:\r?\n)?={3,}\s*(?:\r?\n)?/;
+  const REPLACE_MARKER = /(?:\r?\n)?\+{3,}\s*REPLACE/;
+
+  const blockRegex = new RegExp(
+    SEARCH_MARKER.source +
+      "([\\s\\S]*?)" +
+      SEPARATOR.source +
+      "([\\s\\S]*?)" +
+      REPLACE_MARKER.source,
+    "g"
+  );
+
+  let match;
+  while ((match = blockRegex.exec(diff)) !== null) {
+    const searchText = match[1].trim();
+    const replaceText = match[2].trim();
+    blocks.push({ searchText, replaceText });
+  }
+
+  return blocks;
+}
+
+export {
+  writeToFileTool,
+  replaceInFileTool,
+  parseSearchReplaceBlocks,
+  normalizeLineEndings,
+  replaceWithLineEndingAwareness,
+};

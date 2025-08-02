@@ -23,6 +23,7 @@ import {
   logToolResult,
   ToolExecutionResult,
 } from "./utils/toolExecution";
+
 import { parseXMLToolCalls, stripToolCallXML } from "./utils/xmlParsing";
 
 export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
@@ -39,6 +40,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
     // Get enabled tool IDs from settings
     const enabledToolIds = new Set(settings.autonomousAgentEnabledToolIds || []);
+
 
     // Get all enabled tools from registry
     return registry.getEnabledTools(enabledToolIds, !!this.chainManager.app?.vault);

@@ -248,15 +248,14 @@ ${
     : ""
 }
 ## General Guidelines
-- ${tools.includes("localSearch") ? 'For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings).' : ""}${
-      tools.includes("writeToFile")
-        ? `
+${tools.includes("localSearch") ? '- For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings).' : ""}
+${tools.includes("writeToFile") ? `
 - When you need to call writeToFile, NEVER display the file content directly. Always only pass the file content to writeToFile.
-- You MUST explicitly call writeToFile for any intent of updating or creating files.
-- Do not call writeToFile tool again if the result is not accepted.
-- Do not call writeToFile tool if no change needs to be made.`
+- Use writeToFile for major structural changes to files or when adding new content sections or the exact text to replace is uncertain.`
         : ""
     }
+ ${tools.includes("replaceInFile") ? "- Use replaceInFile when you want to make small edits to large files (changing specific text patterns) or just removing specific text while preserving the rest of the file content." : ""}
+    
 - NEVER mention tool names like "localSearch", "webSearch", etc. in your responses. Use natural language like "searching your vault", "searching the web", etc.
 ${
   tools.includes("youtubeTranscription")
