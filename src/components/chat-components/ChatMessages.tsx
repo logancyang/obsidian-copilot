@@ -104,6 +104,7 @@ const ChatMessages = memo(
                 <div
                   key={getMessageKey(message, index)}
                   data-message-key={getMessageKey(message, index)}
+                  className="tw-w-full"
                   style={{
                     minHeight: shouldApplyMinHeight ? `${containerMinHeight}px` : "auto",
                   }}
@@ -123,6 +124,7 @@ const ChatMessages = memo(
           })}
           {(currentAiMessage || loading) && (
             <div
+              className="tw-w-full"
               style={{
                 minHeight: `${containerMinHeight}px`,
               }}
