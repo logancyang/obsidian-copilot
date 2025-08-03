@@ -49,25 +49,61 @@ if (hasComposerTools) {
 }
 ```
 
+### Why Two Layers: Schema Descriptions vs Custom Instructions
+
+The separation between schema descriptions and custom prompt instructions serves important purposes:
+
+1. **Separation of Concerns**
+
+   - **Schema**: Defines the technical contract (parameters, types, basic usage)
+   - **Custom Instructions**: Provides behavioral guidance (when/how to use, patterns, edge cases)
+
+2. **MCP Tool Compatibility**
+
+   - MCP tools come with their own schema that shouldn't be modified
+   - Custom instructions can be added without touching the external tool's schema
+   - Enables behavioral customization for tools from external sources
+
+3. **Flexibility**
+
+   - Schema descriptions are part of the tool implementation (harder to change)
+   - Custom instructions can be modified without changing tool code
+   - Different vaults or users might need different behavioral guidance
+
+4. **Example**
+
+   ```typescript
+   // Schema (immutable, from tool implementation)
+   salientTerms: z.array(z.string()).describe("Keywords to find in notes");
+
+   // Custom Instructions (flexible, behavioral guidance)
+   customPromptInstructions: `
+   - Extract terms from user's original query only
+   - Exclude common words like "what", "I", "do"
+   - Preserve original language - don't translate
+   `;
+   ```
+
 ### Best Practices
 
-1. **Make Schema Descriptions Comprehensive**
+1. **Schema Descriptions: Focus on Technical Contract**
 
-   - Include all format requirements
-   - Provide clear examples
-   - Explain when to use vs. other tools
-   - Be explicit about parameter formats
+   - Define parameter types and formats clearly
+   - Provide examples of valid parameter values
+   - Describe what each parameter does
+   - Keep it technical and factual
 
-2. **Keep Custom Instructions Concise**
+2. **Custom Instructions: Add Behavioral Guidance**
 
-   - Focus on key reminders
-   - Avoid duplicating schema content
-   - Highlight common mistakes to avoid
+   - Explain when to use this tool vs others
+   - Highlight common usage patterns
+   - Warn about edge cases or common mistakes
+   - Keep it concise and action-oriented
 
-3. **Use Model Adapters Sparingly**
-   - Only when a model consistently fails
-   - Keep examples general, not overly specific
-   - Test if improving schema descriptions helps first
+3. **Model Adapters: Last Resort**
+   - Only when a specific model consistently fails
+   - Test if improving schema or custom instructions helps first
+   - Keep adaptations minimal and model-specific
 
 ## Current Implementation
 
