@@ -1,4 +1,4 @@
-import { parseXMLToolCalls, escapeXml, escapeXmlAttribute } from "./xmlParsing";
+import { parseXMLToolCalls, escapeXml, escapeXmlAttribute, stripToolCallXML } from "./xmlParsing";
 
 describe("parseXMLToolCalls", () => {
   it("should parse hybrid XML tool calls with JSON arrays", () => {
@@ -284,6 +284,253 @@ describe("XML Escaping Utilities", () => {
       expect(escapeXmlAttribute('my"variable')).toBe("my&quot;variable");
       expect(escapeXmlAttribute("my'variable")).toBe("my&apos;variable");
       expect(escapeXmlAttribute("my<variable>")).toBe("my&lt;variable&gt;");
+    });
+  });
+});
+
+describe("stripToolCallXML", () => {
+  describe("complete tool calls", () => {
+    it("should remove complete tool call blocks", () => {
+      const text = `Before tool call.
+
+<use_tool>
+<name>localSearch</name>
+<query>test query</query>
+</use_tool>
+
+After tool call.`;
+
+      const result = stripToolCallXML(text);
+      expect(result).toBe("Before tool call.\n\nAfter tool call.");
+    });
+
+    it("should remove multiple complete tool call blocks", () => {
+      const text = `First text.
+
+<use_tool>
+<name>localSearch</name>
+<query>first search</query>
+</use_tool>
+
+Middle text.
+
+<use_tool>
+<name>webSearch</name>
+<query>second search</query>
+</use_tool>
+
+Final text.`;
+
+      const result = stripToolCallXML(text);
+      expect(result).toBe("First text.\n\nMiddle text.\n\nFinal text.");
+    });
+
+    it("should preserve tool indicators when option is enabled", () => {
+      const text = `Before tool call.
+
+<use_tool>
+<name>localSearch</name>
+<query>test query</query>
+</use_tool>
+
+After tool call.`;
+
+      const result = stripToolCallXML(text, { preserveToolIndicators: true });
+      expect(result).toBe("Before tool call.\n\n[🔧 Tool call: vault search]\n\nAfter tool call.");
+    });
+  });
+
+  describe("partial tool calls", () => {
+    it("should remove partial tool call at end of text", () => {
+      const text = `Some text before.
+
+<use_tool>
+<name>localSearch</name>
+<query>incomplete`;
+
+      const result = stripToolCallXML(text);
+      expect(result).toBe("Some text before.");
+    });
+
+    it("should remove partial tool call with only opening tag", () => {
+      const text = `Some text before.
+
+<use_tool>`;
+
+      const result = stripToolCallXML(text);
+      expect(result).toBe("Some text before.");
+    });
+
+    it("should remove partial tool call with incomplete parameters", () => {
+      const text = `Some text before.
+
+<use_tool>
+<name>webSearch</name>
+<query>incomplete query
+<someParam>value`;
+
+      const result = stripToolCallXML(text);
+      expect(result).toBe("Some text before.");
+    });
+
+    it("should handle mixed complete and partial tool calls", () => {
+      const text = `Start text.
+
+<use_tool>
+<name>localSearch</name>
+<query>complete search</query>
+</use_tool>
+
+Middle text.
+
+<use_tool>
+<name>webSearch</name>
+<query>incomplete`;
+
+      const result = stripToolCallXML(text);
+      expect(result).toBe("Start text.\n\nMiddle text.");
+    });
+
+    it("should handle partial tool calls with preserveToolIndicators", () => {
+      const text = `Complete tool call:
+
+<use_tool>
+<name>localSearch</name>
+<query>complete search</query>
+</use_tool>
+
+Then partial:
+
+<use_tool>
+<name>webSearch</name>
+<query>incomplete`;
+
+      const result = stripToolCallXML(text, { preserveToolIndicators: true });
+      expect(result).toBe("Complete tool call:\n\n[🔧 Tool call: vault search]\n\nThen partial:");
+    });
+
+    it("should remove partial tool call in middle when followed by text", () => {
+      const text = `Before text.
+
+<use_tool>
+<name>localSearch</name>
+<query>incomplete query without closing
+
+This text should remain.`;
+
+      const result = stripToolCallXML(text);
+      expect(result).toBe("Before text.");
+    });
+  });
+
+  describe("edge cases", () => {
+    it("should handle text with no tool calls", () => {
+      const text = "Just regular text with no tool calls.";
+      const result = stripToolCallXML(text);
+      expect(result).toBe("Just regular text with no tool calls.");
+    });
+
+    it("should handle empty string", () => {
+      const result = stripToolCallXML("");
+      expect(result).toBe("");
+    });
+
+    it("should handle text with just whitespace", () => {
+      const result = stripToolCallXML("   \n  \n   ");
+      expect(result).toBe("");
+    });
+
+    it("should handle multiple partial tool calls", () => {
+      const text = `Text before.
+
+<use_tool>
+<name>tool1</name>
+
+More text.
+
+<use_tool>
+<name>tool2</name>
+<param>value`;
+
+      const result = stripToolCallXML(text);
+      expect(result).toBe("Text before.");
+    });
+
+    it("should preserve non-tool XML tags", () => {
+      const text = `Some text with <strong>bold</strong> and <em>italic</em> tags.
+
+<use_tool>
+<name>localSearch</name>
+<query>search</query>
+</use_tool>
+
+More <div>HTML-like</div> content.`;
+
+      const result = stripToolCallXML(text);
+      expect(result).toBe(
+        "Some text with <strong>bold</strong> and <em>italic</em> tags.\n\nMore <div>HTML-like</div> content."
+      );
+    });
+
+    it("should handle tool calls with complex nested content", () => {
+      const text = `Before tool.
+
+<use_tool>
+<name>complexTool</name>
+<nested>
+  <item>value1</item>
+  <item>value2</item>
+</nested>
+<jsonParam>["item1", "item2"]</jsonParam>
+</use_tool>
+
+After tool.`;
+
+      const result = stripToolCallXML(text);
+      expect(result).toBe("Before tool.\n\nAfter tool.");
+    });
+  });
+
+  describe("code block removal", () => {
+    it("should remove empty code blocks", () => {
+      const text = `Some text.
+
+\`\`\`
+\`\`\`
+
+More text.
+
+\`\`\`javascript
+\`\`\``;
+
+      const result = stripToolCallXML(text);
+      expect(result).toBe("Some text.\n\nMore text.");
+    });
+
+    it("should remove tool_code blocks", () => {
+      const text = `Some text.
+
+\`\`\`tool_code
+some tool code here
+\`\`\`
+
+More text.`;
+
+      const result = stripToolCallXML(text);
+      expect(result).toBe("Some text.\n\nMore text.");
+    });
+
+    it("should clean up excessive whitespace", () => {
+      const text = `Text with
+
+
+multiple
+
+
+newlines.`;
+
+      const result = stripToolCallXML(text);
+      expect(result).toBe("Text with\n\nmultiple\n\nnewlines.");
     });
   });
 });

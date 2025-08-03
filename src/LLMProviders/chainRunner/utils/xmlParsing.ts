@@ -210,6 +210,7 @@ export function stripToolCallXML(
     const toolNames = extractToolNamesFromXML(text);
     let toolIndex = 0;
 
+    // Remove complete tool calls and replace with indicators
     cleaned = cleaned.replace(/<use_tool>[\s\S]*?<\/use_tool>/g, () => {
       if (toolIndex < toolNames.length) {
         const toolName = toolNames[toolIndex];
@@ -219,9 +220,15 @@ export function stripToolCallXML(
       }
       return "";
     });
+
+    // Remove any remaining partial tool calls (everything after <use_tool> opening tag)
+    cleaned = cleaned.replace(/<use_tool>[\s\S]*$/g, "");
   } else {
-    // Remove all <use_tool>...</use_tool> blocks completely
+    // Remove all complete <use_tool>...</use_tool> blocks
     cleaned = cleaned.replace(/<use_tool>[\s\S]*?<\/use_tool>/g, "");
+
+    // Remove any partial tool calls (everything after <use_tool> opening tag)
+    cleaned = cleaned.replace(/<use_tool>[\s\S]*$/g, "");
   }
 
   // Keep thinking blocks in autonomous agent mode as they provide valuable context
