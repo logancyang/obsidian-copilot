@@ -1,8 +1,73 @@
-# Extending the Tool System
+# Tool System Documentation
 
 ## Overview
 
 The Copilot tool system uses a centralized registry pattern that makes it easy to add new tools, including future MCP (Model Context Protocol) tools. All tools are managed through a singleton `ToolRegistry` that provides a unified interface for tool discovery, configuration, and execution.
+
+## Tool Prompt Architecture
+
+### How Tool Instructions Flow to the LLM
+
+The system uses a three-layer approach for providing tool instructions to LLMs:
+
+1. **Tool Schema Descriptions** (in tool implementations like `ComposerTools.ts`)
+
+   - Defined in the Zod schema's `.describe()` method
+   - Appears in the system prompt under "Available tools:"
+   - Primary source of detailed parameter documentation
+   - Should be comprehensive and self-contained
+
+2. **Custom Prompt Instructions** (in `builtinTools.ts`)
+
+   - Defined in `ToolMetadata.customPromptInstructions`
+   - Collected by the model adapter and included in system prompt
+   - Used for high-level guidance and tool-specific quirks
+   - Should complement, not duplicate, schema descriptions
+
+3. **Model-Specific Adaptations** (in `modelAdapter.ts`)
+   - Applied by model adapters (GPT, Claude, Gemini)
+   - Includes model-specific examples and reminders
+   - Can add aggressive prompting for models that need it
+   - Last resort when general instructions aren't sufficient
+
+### Example Flow
+
+For the `replaceInFile` tool:
+
+```typescript
+// 1. Schema Description (ComposerTools.ts)
+diff: z.string().describe(`(Required) One or more SEARCH/REPLACE blocks...
+  [Detailed format instructions, rules, examples]`);
+
+// 2. Custom Instructions (builtinTools.ts)
+customPromptInstructions: `When using replaceInFile, provide exact SEARCH/REPLACE blocks...
+  [High-level reminders]`;
+
+// 3. Model Adapter (modelAdapter.ts - GPT specific)
+if (hasComposerTools) {
+  // Add GPT-specific examples and aggressive prompting
+}
+```
+
+### Best Practices
+
+1. **Make Schema Descriptions Comprehensive**
+
+   - Include all format requirements
+   - Provide clear examples
+   - Explain when to use vs. other tools
+   - Be explicit about parameter formats
+
+2. **Keep Custom Instructions Concise**
+
+   - Focus on key reminders
+   - Avoid duplicating schema content
+   - Highlight common mistakes to avoid
+
+3. **Use Model Adapters Sparingly**
+   - Only when a model consistently fails
+   - Keep examples general, not overly specific
+   - Test if improving schema descriptions helps first
 
 ## Current Implementation
 
@@ -303,3 +368,12 @@ console.log(
 ```
 
 This architecture provides a clean, extensible foundation for the tool system while maintaining simplicity and backward compatibility.
+
+## Summary
+
+The tool system's layered approach allows for:
+
+- Clear, comprehensive tool documentation at the schema level
+- Model-agnostic instructions that work for most LLMs
+- Targeted model-specific adaptations when necessary
+- Easy extension for new tools without modifying core infrastructure

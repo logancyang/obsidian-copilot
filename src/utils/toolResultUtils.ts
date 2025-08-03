@@ -8,6 +8,7 @@ export const DEFAULT_TOOL_RESULT_MAX_LENGTH = 10000; // Default max length for t
  * Get the configured max length for tool results
  */
 function getToolResultMaxLength(): number {
+  // For now, just return the default since toolResultMaxLength doesn't exist in settings
   return DEFAULT_TOOL_RESULT_MAX_LENGTH;
 }
 
