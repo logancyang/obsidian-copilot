@@ -129,7 +129,7 @@ export function getToolDisplayName(toolName: string): string {
     indexVault: "vault indexing",
     indexTool: "index",
     writeToFile: "file editor",
-    replaceInFile: "file editor (find & replace)",
+    replaceInFile: "file editor",
   };
 
   return displayNameMap[toolName] || toolName;

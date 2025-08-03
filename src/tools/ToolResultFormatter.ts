@@ -38,6 +38,8 @@ export class ToolResultFormatter {
           return this.formatYoutubeTranscription(parsedResult);
         case "writeToFile":
           return this.formatWriteToFile(parsedResult);
+        case "replaceInFile":
+          return this.formatReplaceInFile(parsedResult);
         default:
           // For all other tools, return the raw result
           return result;
@@ -363,6 +365,32 @@ export class ToolResultFormatter {
         return "✅ File change: accepted";
       } else if (result.toLowerCase().includes("rejected")) {
         return "❌ File change: rejected";
+      }
+
+      // Fallback for other messages
+      return result;
+    }
+    return result;
+  }
+
+  private static formatReplaceInFile(result: any): string {
+    if (typeof result === "string") {
+      // Extract the number of replacements from the result
+      const blockMatch = result.match(/Applied (\d+) SEARCH\/REPLACE block\(s\)/);
+      if (blockMatch) {
+        const blockCount = blockMatch[1];
+        const replacementText = blockCount === "1" ? "replacement" : "replacements";
+
+        if (result.toLowerCase().includes("accepted")) {
+          return `✅ ${blockCount} ${replacementText} accepted`;
+        }
+      }
+
+      // Check if it contains "accepted" or "rejected"
+      if (result.toLowerCase().includes("accepted")) {
+        return "✅ File replacements: accepted";
+      } else if (result.toLowerCase().includes("rejected")) {
+        return "❌ File replacements: rejected";
       }
 
       // Fallback for other messages
