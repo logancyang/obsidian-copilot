@@ -324,20 +324,6 @@ Final text.`;
       const result = stripToolCallXML(text);
       expect(result).toBe("First text.\n\nMiddle text.\n\nFinal text.");
     });
-
-    it("should preserve tool indicators when option is enabled", () => {
-      const text = `Before tool call.
-
-<use_tool>
-<name>localSearch</name>
-<query>test query</query>
-</use_tool>
-
-After tool call.`;
-
-      const result = stripToolCallXML(text, { preserveToolIndicators: true });
-      expect(result).toBe("Before tool call.\n\n[🔧 Tool call: vault search]\n\nAfter tool call.");
-    });
   });
 
   describe("partial tool calls", () => {
@@ -391,26 +377,6 @@ Middle text.
       expect(result).toBe("Start text.\n\nMiddle text.\n\nCalling web search...");
     });
 
-    it("should handle partial tool calls with preserveToolIndicators", () => {
-      const text = `Complete tool call:
-
-<use_tool>
-<name>localSearch</name>
-<query>complete search</query>
-</use_tool>
-
-Then partial:
-
-<use_tool>
-<name>webSearch</name>
-<query>incomplete`;
-
-      const result = stripToolCallXML(text, { preserveToolIndicators: true });
-      expect(result).toBe(
-        "Complete tool call:\n\n[🔧 Tool call: vault search]\n\nThen partial:\n\n[🔧 Calling web search...]"
-      );
-    });
-
     it("should show calling message for partial tool call in middle when followed by text", () => {
       const text = `Before text.
 
@@ -432,16 +398,6 @@ This text should remain.`;
 
       const result = stripToolCallXML(text);
       expect(result).toBe("Some text before.\n\nCalling tool...");
-    });
-
-    it("should show calling message with preserveToolIndicators when name not available", () => {
-      const text = `Some text before.
-
-<use_tool>
-<query>search without name`;
-
-      const result = stripToolCallXML(text, { preserveToolIndicators: true });
-      expect(result).toBe("Some text before.\n\n[🔧 Calling tool...]");
     });
   });
 
