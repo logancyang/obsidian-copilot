@@ -395,8 +395,15 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             if (element) {
               const root = rootsRef.current.get(id);
               if (root) {
-                root.unmount();
-                rootsRef.current.delete(id);
+                // Defer unmounting to avoid React rendering conflicts
+                setTimeout(() => {
+                  try {
+                    root.unmount();
+                  } catch (error) {
+                    console.debug("Error unmounting tool call root:", error);
+                  }
+                  rootsRef.current.delete(id);
+                }, 0);
               }
               element.remove();
             }
@@ -425,14 +432,17 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         // Extract timestamp from message ID if it's in epoch format
         const timestamp = parseInt(msgId);
         if (!isNaN(timestamp) && timestamp < oneHourAgo) {
-          roots.forEach((root) => {
-            try {
-              root.unmount();
-            } catch {
-              // Ignore errors
-            }
-          });
-          globalMap.delete(msgId);
+          // Defer cleanup to avoid React rendering conflicts
+          setTimeout(() => {
+            roots.forEach((root) => {
+              try {
+                root.unmount();
+              } catch {
+                // Ignore errors
+              }
+            });
+            globalMap.delete(msgId);
+          }, 0);
         }
       });
     };
