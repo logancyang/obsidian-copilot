@@ -341,7 +341,7 @@ After tool call.`;
   });
 
   describe("partial tool calls", () => {
-    it("should remove partial tool call at end of text", () => {
+    it("should show calling message for partial tool call at end of text", () => {
       const text = `Some text before.
 
 <use_tool>
@@ -349,19 +349,19 @@ After tool call.`;
 <query>incomplete`;
 
       const result = stripToolCallXML(text);
-      expect(result).toBe("Some text before.");
+      expect(result).toBe("Some text before.\n\nCalling vault search...");
     });
 
-    it("should remove partial tool call with only opening tag", () => {
+    it("should show generic calling message for partial tool call with only opening tag", () => {
       const text = `Some text before.
 
 <use_tool>`;
 
       const result = stripToolCallXML(text);
-      expect(result).toBe("Some text before.");
+      expect(result).toBe("Some text before.\n\nCalling tool...");
     });
 
-    it("should remove partial tool call with incomplete parameters", () => {
+    it("should show calling message for partial tool call with incomplete parameters", () => {
       const text = `Some text before.
 
 <use_tool>
@@ -370,7 +370,7 @@ After tool call.`;
 <someParam>value`;
 
       const result = stripToolCallXML(text);
-      expect(result).toBe("Some text before.");
+      expect(result).toBe("Some text before.\n\nCalling web search...");
     });
 
     it("should handle mixed complete and partial tool calls", () => {
@@ -388,7 +388,7 @@ Middle text.
 <query>incomplete`;
 
       const result = stripToolCallXML(text);
-      expect(result).toBe("Start text.\n\nMiddle text.");
+      expect(result).toBe("Start text.\n\nMiddle text.\n\nCalling web search...");
     });
 
     it("should handle partial tool calls with preserveToolIndicators", () => {
@@ -406,10 +406,12 @@ Then partial:
 <query>incomplete`;
 
       const result = stripToolCallXML(text, { preserveToolIndicators: true });
-      expect(result).toBe("Complete tool call:\n\n[🔧 Tool call: vault search]\n\nThen partial:");
+      expect(result).toBe(
+        "Complete tool call:\n\n[🔧 Tool call: vault search]\n\nThen partial:\n\n[🔧 Calling web search...]"
+      );
     });
 
-    it("should remove partial tool call in middle when followed by text", () => {
+    it("should show calling message for partial tool call in middle when followed by text", () => {
       const text = `Before text.
 
 <use_tool>
@@ -419,7 +421,27 @@ Then partial:
 This text should remain.`;
 
       const result = stripToolCallXML(text);
-      expect(result).toBe("Before text.");
+      expect(result).toBe("Before text.\n\nCalling vault search...");
+    });
+
+    it("should show generic calling message when tool name is not yet available", () => {
+      const text = `Some text before.
+
+<use_tool>
+<name>`;
+
+      const result = stripToolCallXML(text);
+      expect(result).toBe("Some text before.\n\nCalling tool...");
+    });
+
+    it("should show calling message with preserveToolIndicators when name not available", () => {
+      const text = `Some text before.
+
+<use_tool>
+<query>search without name`;
+
+      const result = stripToolCallXML(text, { preserveToolIndicators: true });
+      expect(result).toBe("Some text before.\n\n[🔧 Calling tool...]");
     });
   });
 
@@ -444,16 +466,16 @@ This text should remain.`;
       const text = `Text before.
 
 <use_tool>
-<name>tool1</name>
+<name>localSearch</name>
 
 More text.
 
 <use_tool>
-<name>tool2</name>
+<name>webSearch</name>
 <param>value`;
 
       const result = stripToolCallXML(text);
-      expect(result).toBe("Text before.");
+      expect(result).toBe("Text before.\n\nCalling vault search...");
     });
 
     it("should preserve non-tool XML tags", () => {

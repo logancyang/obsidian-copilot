@@ -177,6 +177,18 @@ function extractToolNamesFromXML(text: string): string[] {
 }
 
 /**
+ * Extracts tool name from a partial tool call block
+ */
+function extractToolNameFromPartialBlock(partialContent: string): string | null {
+  const nameMatch = partialContent.match(/<name>([\s\S]*?)<\/name>/);
+  if (nameMatch) {
+    const name = nameMatch[1].trim();
+    return name || null;
+  }
+  return null;
+}
+
+/**
  * Maps tool names to display names for better user experience
  */
 function getToolDisplayName(toolName: string): string {
@@ -220,16 +232,21 @@ export function stripToolCallXML(
       }
       return "";
     });
-
-    // Remove any remaining partial tool calls (everything after <use_tool> opening tag)
-    cleaned = cleaned.replace(/<use_tool>[\s\S]*$/g, "");
   } else {
     // Remove all complete <use_tool>...</use_tool> blocks
     cleaned = cleaned.replace(/<use_tool>[\s\S]*?<\/use_tool>/g, "");
-
-    // Remove any partial tool calls (everything after <use_tool> opening tag)
-    cleaned = cleaned.replace(/<use_tool>[\s\S]*$/g, "");
   }
+
+  // Replace partial tool calls with calling message
+  cleaned = cleaned.replace(/<use_tool>([\s\S]*)$/g, (match, partialContent) => {
+    const toolName = extractToolNameFromPartialBlock(partialContent);
+    if (toolName) {
+      const displayName = getToolDisplayName(toolName);
+      return `Calling ${displayName}...`;
+    } else {
+      return `Calling tool...`;
+    }
+  });
 
   // Keep thinking blocks in autonomous agent mode as they provide valuable context
   // They are only removed in other contexts where they add noise
