@@ -108,30 +108,32 @@ const replaceInFileSchema = z.object({
       `(Required) The path of the file to modify (relative to the root of the vault and include the file extension).`
     ),
   diff: z.string()
-    .describe(`(Required) One or more SEARCH/REPLACE blocks following this exact format:
+    .describe(`(Required) One or more SEARCH/REPLACE blocks. Each block MUST follow this exact format with these exact markers:
+
 \`\`\`
 ------- SEARCH
-[exact content to find]
+[exact content to find, including all whitespace and indentation]
 =======
 [new content to replace with]
 +++++++ REPLACE
 \`\`\`
-Critical rules:
-1. SEARCH content must match the associated file section to find EXACTLY:
-   * Match character-for-character including whitespace, indentation, line endings
-   * Include all comments, docstrings, etc.
-2. SEARCH/REPLACE blocks will replace ALL matching occurrences.
-   * Including multiple unique SEARCH/REPLACE blocks if you need to make multiple changes.
-   * Include *just* enough lines in each SEARCH section to uniquely match each set of lines that need to change.
-   * When using multiple SEARCH/REPLACE blocks, list them in the order they appear in the file.
-3. Keep SEARCH/REPLACE blocks concise:
-   * Break large SEARCH/REPLACE blocks into a series of smaller blocks that each change a small portion of the file.
-   * Include just the changing lines, and a few surrounding lines if needed for uniqueness.
-   * Do not include long runs of unchanging lines in SEARCH/REPLACE blocks.
-   * Each line must be complete. Never truncate lines mid-way through as this can cause matching failures.
-4. Special operations:
-   * To move code: Use two SEARCH/REPLACE blocks (one to delete from original + one to insert at new location)
-   * To delete code: Use empty REPLACE section`),
+
+WHEN TO USE THIS TOOL vs writeToFile:
+- Use replaceInFile for: small edits, fixing typos, updating specific sections, targeted changes
+- Use writeToFile for: creating new files, major rewrites, when you can't identify specific text to replace
+
+CRITICAL RULES:
+1. SEARCH content must match EXACTLY - every character, space, and line break
+2. Always wrap blocks in triple backticks (\`\`\`)
+3. Use the exact markers: "------- SEARCH", "=======", "+++++++ REPLACE"
+4. For multiple changes, include multiple SEARCH/REPLACE blocks in order
+5. Keep blocks concise - include only the lines being changed plus minimal context
+
+COMMON MISTAKES TO AVOID:
+- Wrong: Using different markers like "---- SEARCH" or "SEARCH -------"
+- Wrong: Forgetting the triple backticks
+- Wrong: Including too many unchanged lines
+- Wrong: Not matching whitespace/indentation exactly`),
 });
 
 /**

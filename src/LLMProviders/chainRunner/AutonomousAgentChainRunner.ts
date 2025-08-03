@@ -92,11 +92,17 @@ ${params}
     const availableTools = this.getAvailableTools();
     const toolNames = availableTools.map((tool) => tool.name);
 
+    // Get tool metadata for custom instructions
+    const registry = ToolRegistry.getInstance();
+    const toolMetadata = availableTools
+      .map((tool) => registry.getToolMetadata(tool.name))
+      .filter((meta): meta is NonNullable<typeof meta> => meta !== undefined);
+
     // Use model adapter for clean model-specific handling
     const chatModel = this.chainManager.chatModelManager.getChatModel();
     const adapter = ModelAdapterFactory.createAdapter(chatModel);
 
-    return adapter.enhanceSystemPrompt(basePrompt, toolDescriptions, toolNames);
+    return adapter.enhanceSystemPrompt(basePrompt, toolDescriptions, toolNames, toolMetadata);
   }
 
   async run(

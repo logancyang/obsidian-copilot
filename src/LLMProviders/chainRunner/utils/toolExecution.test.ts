@@ -103,7 +103,8 @@ describe("toolExecution", () => {
 
       expect(result).toEqual({
         toolName: "unknownTool",
-        result: "Error: Tool 'unknownTool' not found. Available tools: ",
+        result:
+          "Error: Tool 'unknownTool' not found. Available tools: . Make sure you have the tool enabled in the Agent settings.",
         success: false,
       });
     });

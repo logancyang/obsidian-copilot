@@ -77,7 +77,7 @@ describe("Composer Instructions - Integration Tests", () => {
     });
   });
 
-  // Helper function to run a test with a given prompt and check for composer blocks
+  // Helper function to run a test with a given prompt and check for writeToFile blocks
   const testComposerResponse = async (
     testName: string,
     userPrompt: string,
@@ -91,40 +91,41 @@ describe("Composer Instructions - Integration Tests", () => {
           userPrompt + "\n\n<output_format>\n" + COMPOSER_OUTPUT_INSTRUCTIONS + "\n</output_format>"
         );
         const content = result.response.text();
+
         if (expectedBlocks == 0) {
-          expect(content).not.toContain('"type": "composer"');
+          expect(content).not.toContain("<writeToFile>");
           return;
         } else {
-          let composerBlocks = [];
-          // When only one block is expected, find the first { and last } and parse the JSON
-          if (expectedBlocks == 1) {
-            const start = content.indexOf("{");
-            const end = content.lastIndexOf("}");
-            composerBlocks.push(content.substring(start, end + 1));
-          } else {
-            const blocks = content.match(
-              /{\s*"type":\s*"composer",\s*"path":\s*"[^"]+\.(md|canvas)"[\s\S]*?}/g
-            );
-            expect(blocks).toBeTruthy();
-            composerBlocks = blocks!;
-            expect(composerBlocks.length).toBe(expectedBlocks);
-          }
+          // Extract writeToFile blocks
+          const writeToFileRegex =
+            /<writeToFile>\s*<path>(.*?)<\/path>\s*<content>([\s\S]*?)<\/content>\s*<\/writeToFile>/g;
+          const matches = [...content.matchAll(writeToFileRegex)];
 
-          // Validate each block is valid JSON
-          composerBlocks!.forEach((block, index) => {
-            try {
-              const json = JSON.parse(block);
-              expect(json).toHaveProperty("type", "composer");
-              expect(json).toHaveProperty("path");
-              expect(json.path).toMatch(/\.(md|canvas)$/);
-              if (json.path.endsWith(".canvas")) {
-                expect(json).toHaveProperty("canvas_json");
-                expect(json.canvas_json).toHaveProperty("nodes");
-              } else {
-                expect(json).toHaveProperty("content");
+          expect(matches.length).toBe(expectedBlocks);
+
+          // Validate each block
+          matches.forEach((match, index) => {
+            const path = match[1].trim();
+            const contentStr = match[2].trim();
+
+            // Check path ends with .md or .canvas
+            expect(path).toMatch(/\.(md|canvas)$/);
+
+            // For canvas files, validate JSON structure
+            if (path.endsWith(".canvas")) {
+              try {
+                const canvasJson = JSON.parse(contentStr);
+                expect(canvasJson).toHaveProperty("nodes");
+                expect(Array.isArray(canvasJson.nodes)).toBe(true);
+                if (canvasJson.edges) {
+                  expect(Array.isArray(canvasJson.edges)).toBe(true);
+                }
+              } catch (e) {
+                throw new Error(`Invalid canvas JSON in block: ${e.message}`);
               }
-            } catch (e) {
-              throw new Error(`Invalid JSON in block ${block}: ${e.message}`);
+            } else {
+              // For markdown files, just check it has content
+              expect(contentStr.length).toBeGreaterThan(0);
             }
           });
         }

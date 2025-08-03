@@ -1,5 +1,6 @@
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { logInfo } from "@/logger";
+import { ToolMetadata } from "@/tools/ToolRegistry";
 
 /**
  * Model-specific adaptations for autonomous agent
@@ -11,13 +12,15 @@ export interface ModelAdapter {
    * Enhance system prompt with model-specific instructions
    * @param basePrompt - The base system prompt to enhance
    * @param toolDescriptions - Available tool descriptions to include
-   * @param availableToolNames - List of enabled tool names
+   * @param availableToolNames - List of enabled tool names (for backward compatibility)
+   * @param toolMetadata - Tool metadata including custom instructions
    * @returns The enhanced system prompt
    */
   enhanceSystemPrompt(
     basePrompt: string,
     toolDescriptions: string,
-    availableToolNames?: string[]
+    availableToolNames?: string[],
+    toolMetadata?: ToolMetadata[]
   ): string;
 
   /**
@@ -73,12 +76,29 @@ export interface ModelAdapter {
 class BaseModelAdapter implements ModelAdapter {
   constructor(protected modelName: string) {}
 
+  private buildToolSpecificInstructions(toolMetadata: ToolMetadata[]): string {
+    const instructions: string[] = [];
+
+    // Collect all custom instructions from tool metadata
+    for (const meta of toolMetadata) {
+      if (meta.customPromptInstructions) {
+        instructions.push(meta.customPromptInstructions);
+      }
+    }
+
+    return instructions.length > 0 ? instructions.join("\n\n") : "";
+  }
+
   enhanceSystemPrompt(
     basePrompt: string,
     toolDescriptions: string,
-    availableToolNames?: string[]
+    availableToolNames?: string[],
+    toolMetadata?: ToolMetadata[]
   ): string {
-    const tools = availableToolNames || [];
+    const metadata = toolMetadata || [];
+
+    // Build tool-specific instructions from metadata
+    const toolSpecificInstructions = this.buildToolSpecificInstructions(metadata);
 
     return `${basePrompt}
 
@@ -95,101 +115,10 @@ When you need to use a tool, format it EXACTLY like this:
 
 IMPORTANT: Use the EXACT parameter names as shown in the tool descriptions below. Do NOT use generic names like "param1" or "param".
 
-## Important Tool Usage Examples:
-${
-  tools.includes("localSearch")
-    ? `
-For localSearch (searching notes in the vault):
-<use_tool>
-<name>localSearch</name>
-<query>piano learning practice</query>
-<salientTerms>["piano", "learning", "practice"]</salientTerms>
-</use_tool>
-
-For localSearch with time range (e.g., "what did I do last week"):
-Step 1 - Get time range:
-<use_tool>
-<name>getTimeRangeMs</name>
-<timeExpression>last week</timeExpression>
-</use_tool>
-
-Step 2 - Search with time range (after receiving time range result):
-<use_tool>
-<name>localSearch</name>
-<query>what did I do</query>
-<salientTerms>[]</salientTerms>
-<timeRange>{"startTime": {...}, "endTime": {...}}</timeRange>
-</use_tool>
-
-For localSearch with meaningful terms (e.g., "python debugging notes from yesterday"):
-Step 1 - Get time range:
-<use_tool>
-<name>getTimeRangeMs</name>
-<timeExpression>yesterday</timeExpression>
-</use_tool>
-
-Step 2 - Search with time range:
-<use_tool>
-<name>localSearch</name>
-<query>python debugging notes</query>
-<salientTerms>["python", "debugging", "notes"]</salientTerms>
-<timeRange>{"startTime": {...}, "endTime": {...}}</timeRange>
-</use_tool>
-
-For localSearch with non-English query (PRESERVE ORIGINAL LANGUAGE):
-<use_tool>
-<name>localSearch</name>
-<query>钢琴学习</query>
-<salientTerms>["钢琴", "学习"]</salientTerms>
-</use_tool>
-`
-    : ""
-}${
-      tools.includes("webSearch")
-        ? `
-For webSearch (with empty chat history):
-<use_tool>
-<name>webSearch</name>
-<query>piano learning techniques</query>
-<chatHistory>[]</chatHistory>
-</use_tool>
-`
-        : ""
-    }
-For getFileTree:
-<use_tool>
-<name>getFileTree</name>
-</use_tool>
-
-For time tools:
-- Check the tool descriptions for detailed examples and timezone offset formats
-- Remember: Always use numeric UTC offsets, never timezone names
-${
-  tools.includes("writeToFile")
-    ? `
-For writeToFile:
-<use_tool>
-<name>writeToFile</name>
-<path>path/to/note.md </path>
-<content>FULL CONTENT OF THE NOTE</content>
-</use_tool>
-`
-    : ""
-}${
-      tools.includes("youtubeTranscription")
-        ? `
-For youtubeTranscription (when user provides YouTube URLs):
-<use_tool>
-<name>youtubeTranscription</name>
-</use_tool>
-`
-        : ""
-    }
-
 Available tools:
 ${toolDescriptions}
 
-# CRITICAL Guidelines for calling tools
+# Tool Usage Guidelines
 
 ## Time-based Queries
 When users ask about temporal periods (e.g., "what did I do last month", "show me notes from last week"), you MUST:
@@ -206,67 +135,9 @@ Example for "meetings about project X last week":
 1. Call getTimeRangeMs with timeExpression: "last week"
 2. Use localSearch with query "meetings about project X"
 3. salientTerms: ["meetings", "project", "X"] - these words exist in the original query
-${
-  tools.includes("localSearch")
-    ? `
-## Understanding salientTerms for localSearch
-- salientTerms MUST be extracted from the user's original query - never invent new terms
-- They are keywords used for BM25 full-text search to find notes containing those exact words
-- Extract meaningful content words from the query (nouns, verbs, names, etc.)
-- Exclude common words like "what", "I", "do", "the", "a", etc.
-- Exclude time expressions like "last month", "yesterday", "last week"
-- Preserve the original language - do NOT translate terms to English
-`
-    : ""
-}
-## General Guidelines
-${tools.includes("localSearch") ? '- For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings).' : ""}
-${
-  tools.includes("writeToFile")
-    ? `
-- When you need to call writeToFile, NEVER display the file content directly. Always only pass the file content to writeToFile.
-- Use writeToFile for major structural changes to files or when adding new content sections or the exact text to replace is uncertain.`
-    : ""
-}
- ${tools.includes("replaceInFile") ? "- Use replaceInFile when you want to make small edits to large files (changing specific text patterns) or just removing specific text while preserving the rest of the file content." : ""}
-    
+
+${toolSpecificInstructions ? toolSpecificInstructions + "\n\n" : ""}## General Guidelines
 - NEVER mention tool names like "localSearch", "webSearch", etc. in your responses. Use natural language like "searching your vault", "searching the web", etc.
-${
-  tools.includes("youtubeTranscription")
-    ? `
-## YouTube Transcription Usage
-- The youtubeTranscription tool should be used when the user provides YouTube URLs (youtube.com or youtu.be)
-- This tool automatically extracts URLs from the user's message - you don't need to pass any parameters
-- Use this tool to fetch transcripts for analysis, summarization, or answering questions about video content
-`
-    : ""
-}${
-      tools.includes("webSearch")
-        ? `
-## Web Search Usage Policy
-IMPORTANT: The webSearch tool should ONLY be used when the user explicitly requests web/internet search using phrases like:
-- "search the web for..."
-- "search online for..."
-- "look up on the internet..."
-- "find online information about..."
-- "check the web for..."
-- "search Google for..." (or any search engine)
-
-Do NOT automatically use webSearch just because information might be available online. Only use it when explicitly requested by the user.
-
-## Web Search Usage Policy
-IMPORTANT: The webSearch tool should ONLY be used when the user explicitly requests web/internet search using phrases like:
-- "search the web for..."
-- "search online for..."
-- "look up on the internet..."
-- "find online information about..."
-- "check the web for..."
-- "search Google for..." (or any search engine)
-
-Do NOT automatically use webSearch just because information might be available online. Only use it when explicitly requested by the user.
-`
-        : ""
-    }
 
 You can use multiple tools in sequence. After each tool execution, you'll receive the results and can decide whether to use more tools or provide your final response.
 
@@ -294,46 +165,107 @@ class GPTModelAdapter extends BaseModelAdapter {
   enhanceSystemPrompt(
     basePrompt: string,
     toolDescriptions: string,
-    availableToolNames?: string[]
+    availableToolNames?: string[],
+    toolMetadata?: ToolMetadata[]
   ): string {
     const baseSystemPrompt = super.enhanceSystemPrompt(
       basePrompt,
       toolDescriptions,
-      availableToolNames
+      availableToolNames,
+      toolMetadata
     );
 
+    const tools = availableToolNames || [];
+    const hasComposerTools = tools.includes("writeToFile") || tools.includes("replaceInFile");
+
     // Insert GPT-specific instructions after the base prompt
-    const gptSpecificSection = `
+    let gptSpecificSection = `
 
-CRITICAL FOR GPT MODELS: You MUST ALWAYS include XML tool calls in your response. Do not just describe what you plan to do - you MUST include the actual XML tool call blocks.
+CRITICAL FOR GPT MODELS: You MUST ALWAYS include XML tool calls in your response. Do not just describe what you plan to do - you MUST include the actual XML tool call blocks.`;
 
-EXAMPLE OF CORRECT RESPONSE:
-"I'll search your vault for piano learning notes.
+    if (hasComposerTools) {
+      gptSpecificSection += `
+
+🚨 FILE EDITING WITH COMPOSER TOOLS - GPT SPECIFIC EXAMPLES 🚨
+
+When user asks you to edit or modify a file, you MUST:
+1. Determine if it's a small edit (use replaceInFile) or major rewrite (use writeToFile)
+2. Include the tool call immediately in your response
+
+EXAMPLE 1 - User says "fix the typo 'teh' to 'the' in my note":
+✅ CORRECT RESPONSE:
+"I'll fix the typo in your note.
 
 <use_tool>
-<name>localSearch</name>
-<query>piano learning</query>
-<salientTerms>["piano", "learning"]</salientTerms>
+<name>replaceInFile</name>
+<path>path/to/note.md</path>
+<diff>\`\`\`
+------- SEARCH
+teh
+=======
+the
++++++++ REPLACE
+\`\`\`</diff>
 </use_tool>"
 
-EXAMPLE OF INCORRECT RESPONSE (DO NOT DO THIS):
-"I'll search your vault for piano learning notes."
-(Missing the XML tool call)
+EXAMPLE 2 - User says "add item 4 to the list":
+✅ CORRECT RESPONSE:
+"I'll add item 4 to your list.
 
-FINAL REMINDER FOR GPT MODELS: If the user asks you to search, find, or look up anything, you MUST include the appropriate <use_tool> XML block in your very next response. Do not wait for another turn.`;
+<use_tool>
+<name>replaceInFile</name>
+<path>path/to/file.md</path>
+<diff>\`\`\`
+------- SEARCH
+- Item 1
+- Item 2
+- Item 3
+=======
+- Item 1
+- Item 2
+- Item 3
+- Item 4
++++++++ REPLACE
+\`\`\`</diff>
+</use_tool>"
+
+❌ WRONG (DO NOT DO THIS):
+"I'll help you add item 4 to the list. Let me update that for you."
+[No tool call = FAILURE]
+
+CRITICAL: The diff parameter MUST contain the SEARCH/REPLACE blocks wrapped in triple backticks EXACTLY as shown above.`;
+    }
+
+    gptSpecificSection += `
+
+FINAL REMINDER FOR GPT MODELS: If the user asks you to search, find, edit, or modify anything, you MUST include the appropriate <use_tool> XML block in your very next response. Do not wait for another turn.`;
 
     return baseSystemPrompt + gptSpecificSection;
   }
 
   enhanceUserMessage(message: string, requiresTools: boolean): string {
     if (requiresTools) {
+      const lowerMessage = message.toLowerCase();
       const requiresSearch =
-        message.toLowerCase().includes("find") ||
-        message.toLowerCase().includes("search") ||
-        message.toLowerCase().includes("my notes");
+        lowerMessage.includes("find") ||
+        lowerMessage.includes("search") ||
+        lowerMessage.includes("my notes");
+
+      const requiresFileEdit =
+        lowerMessage.includes("edit") ||
+        lowerMessage.includes("modify") ||
+        lowerMessage.includes("update") ||
+        lowerMessage.includes("change") ||
+        lowerMessage.includes("fix") ||
+        lowerMessage.includes("add") ||
+        lowerMessage.includes("typo");
 
       if (requiresSearch) {
         return `${message}\n\nREMINDER: Use the <use_tool> XML format to call the localSearch tool.`;
+      }
+
+      if (requiresFileEdit) {
+        return `${message}\n\n🚨 GPT REMINDER: Use replaceInFile for small edits (with SEARCH/REPLACE blocks in diff parameter). The diff parameter MUST contain triple backticks around the SEARCH/REPLACE blocks. Check the examples in your system prompt.`;
       }
     }
     return message;
@@ -376,12 +308,14 @@ class ClaudeModelAdapter extends BaseModelAdapter {
   enhanceSystemPrompt(
     basePrompt: string,
     toolDescriptions: string,
-    availableToolNames?: string[]
+    availableToolNames?: string[],
+    toolMetadata?: ToolMetadata[]
   ): string {
     const baseSystemPrompt = super.enhanceSystemPrompt(
       basePrompt,
       toolDescriptions,
-      availableToolNames
+      availableToolNames,
+      toolMetadata
     );
 
     // Add specific instructions for thinking models
@@ -625,12 +559,14 @@ class GeminiModelAdapter extends BaseModelAdapter {
   enhanceSystemPrompt(
     basePrompt: string,
     toolDescriptions: string,
-    availableToolNames?: string[]
+    availableToolNames?: string[],
+    toolMetadata?: ToolMetadata[]
   ): string {
     const baseSystemPrompt = super.enhanceSystemPrompt(
       basePrompt,
       toolDescriptions,
-      availableToolNames
+      availableToolNames,
+      toolMetadata
     );
 
     // Gemini needs very explicit instructions about tool usage

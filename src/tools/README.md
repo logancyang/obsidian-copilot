@@ -12,62 +12,64 @@ The system uses a three-layer approach for providing tool instructions to LLMs:
 
 1. **Tool Schema Descriptions** (in tool implementations like `ComposerTools.ts`)
 
-   - Defined in the Zod schema's `.describe()` method
-   - Appears in the system prompt under "Available tools:"
-   - Primary source of detailed parameter documentation
-   - Should be comprehensive and self-contained
+   - Defines parameter formats, rules, and validation
+   - NO XML examples - focuses on data contract only
 
 2. **Custom Prompt Instructions** (in `builtinTools.ts`)
 
-   - Defined in `ToolMetadata.customPromptInstructions`
-   - Collected by the model adapter and included in system prompt
-   - Used for high-level guidance and tool-specific quirks
-   - Should complement, not duplicate, schema descriptions
+   - Contains XML `<use_tool>` invocation examples
+   - Shows when and how to call the tool
 
 3. **Model-Specific Adaptations** (in `modelAdapter.ts`)
-   - Applied by model adapters (GPT, Claude, Gemini)
-   - Includes model-specific examples and reminders
-   - Can add aggressive prompting for models that need it
-   - Last resort when general instructions aren't sufficient
+   - Last resort for model-specific quirks
 
-### Example Flow
+### Why Two Layers: Schema vs Custom Instructions
 
-For the `replaceInFile` tool:
+**Key Difference**: Schema descriptions document parameters, while custom instructions provide XML invocation examples.
 
-```typescript
-// 1. Schema Description (ComposerTools.ts)
-diff: z.string().describe(`(Required) One or more SEARCH/REPLACE blocks...
-  [Detailed format instructions, rules, examples]`);
+1. **Clear Separation**
 
-// 2. Custom Instructions (builtinTools.ts)
-customPromptInstructions: `When using replaceInFile, provide exact SEARCH/REPLACE blocks...
-  [High-level reminders]`;
+   - **Schema**: Parameter documentation (types, formats, rules) - NO XML examples
+   - **Custom Instructions**: XML `<use_tool>` examples showing how to invoke
 
-// 3. Model Adapter (modelAdapter.ts - GPT specific)
-if (hasComposerTools) {
-  // Add GPT-specific examples and aggressive prompting
-}
-```
+2. **MCP Compatibility**
+
+   - External tools provide immutable schemas
+   - We add custom instructions without modifying their code
+
+3. **Example**
+
+   ```typescript
+   // Schema (parameter documentation only)
+   salientTerms: z.array(z.string()).describe("Keywords to find in notes");
+
+   // Custom Instructions (XML invocation examples)
+   customPromptInstructions: `
+   Example usage:
+   <use_tool>
+   <name>localSearch</name>
+   <query>piano learning</query>
+   <salientTerms>["piano", "learning"]</salientTerms>
+   </use_tool>`;
+   ```
 
 ### Best Practices
 
-1. **Make Schema Descriptions Comprehensive**
+1. **Schema Descriptions: Parameter Documentation Only**
 
-   - Include all format requirements
-   - Provide clear examples
-   - Explain when to use vs. other tools
-   - Be explicit about parameter formats
+   - Document parameter types, formats, and validation rules
+   - NO XML examples - those belong in custom instructions
+   - Focus on the data contract
 
-2. **Keep Custom Instructions Concise**
+2. **Custom Instructions: XML Examples & Usage Patterns**
 
-   - Focus on key reminders
-   - Avoid duplicating schema content
-   - Highlight common mistakes to avoid
+   - Provide XML `<use_tool>` invocation examples
+   - Show common usage patterns and edge cases
+   - Include behavioral guidance (when to use vs other tools)
 
-3. **Use Model Adapters Sparingly**
-   - Only when a model consistently fails
-   - Keep examples general, not overly specific
-   - Test if improving schema descriptions helps first
+3. **Model Adapters: Model-Specific Fixes**
+   - Only for persistent model-specific failures
+   - Keep minimal and targeted
 
 ## Current Implementation
 

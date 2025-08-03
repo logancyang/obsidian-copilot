@@ -37,7 +37,7 @@ export async function executeSequentialToolCall(
       const availableToolNames = availableTools.map((t) => t.name).join(", ");
       return {
         toolName: toolCall.name,
-        result: `Error: Tool '${toolCall.name}' not found. Available tools: ${availableToolNames}`,
+        result: `Error: Tool '${toolCall.name}' not found. Available tools: ${availableToolNames}. Make sure you have the tool enabled in the Agent settings.`,
         success: false,
       };
     }
@@ -129,7 +129,7 @@ export function getToolDisplayName(toolName: string): string {
     indexVault: "vault indexing",
     indexTool: "index",
     writeToFile: "file editor",
-    replaceInFile: "file editor (find & replace)",
+    replaceInFile: "file editor",
   };
 
   return displayNameMap[toolName] || toolName;
