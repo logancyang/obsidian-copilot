@@ -41,19 +41,22 @@ describe("XML Escaping in processPrompt", () => {
     } as TFile;
   });
 
-  it("should escape XML special characters in selected text", async () => {
+  it("should NOT escape XML special characters in selected text", async () => {
     const customPrompt = "Process this: {}";
     const selectedText = "<tag>content & \"quotes\" 'apostrophes'</tag>";
 
     const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote);
 
-    expect(result.processedPrompt).toContain(
-      "&lt;tag&gt;content &amp; &quot;quotes&quot; &apos;apostrophes&apos;&lt;/tag&gt;"
-    );
-    expect(result.processedPrompt).not.toContain(selectedText);
+    // Should contain the original unescaped text
+    expect(result.processedPrompt).toContain(selectedText);
+    // Should NOT contain escaped characters
+    expect(result.processedPrompt).not.toContain("&lt;");
+    expect(result.processedPrompt).not.toContain("&amp;");
+    expect(result.processedPrompt).not.toContain("&quot;");
+    expect(result.processedPrompt).not.toContain("&apos;");
   });
 
-  it("should escape XML in variable names", async () => {
+  it("should NOT escape XML in variable names", async () => {
     const customPrompt = 'Use {my"variable<>}';
 
     const mockNote = {
@@ -67,19 +70,17 @@ describe("XML Escaping in processPrompt", () => {
 
     const result = await processPrompt(customPrompt, "", mockVault, mockActiveNote);
 
-    // Check variable name is escaped in attribute
-    expect(result.processedPrompt).toContain('name="my&quot;variable&lt;&gt;"');
+    // Check variable name is NOT escaped in attribute
+    expect(result.processedPrompt).toContain('name="my"variable<>"');
 
-    // Check note title is escaped
-    expect(result.processedPrompt).toContain("Note with &lt;special&gt; &amp; &quot;chars&quot;");
+    // Check note title is NOT escaped
+    expect(result.processedPrompt).toContain('Note with <special> & "chars"');
 
-    // Check content is escaped
-    expect(result.processedPrompt).toContain(
-      "Content with &lt;xml&gt; &amp; special &quot;chars&quot;"
-    );
+    // Check content is NOT escaped
+    expect(result.processedPrompt).toContain('Content with <xml> & special "chars"');
   });
 
-  it("should escape XML in active note content", async () => {
+  it("should NOT escape XML in active note content", async () => {
     const customPrompt = "Process {activeNote}";
 
     mockActiveNote.basename = "Note <with> \"XML\" & 'special' chars";
@@ -91,18 +92,14 @@ describe("XML Escaping in processPrompt", () => {
 
     const result = await processPrompt(customPrompt, "", mockVault, mockActiveNote);
 
-    // Check basename is escaped
-    expect(result.processedPrompt).toContain(
-      "Note &lt;with&gt; &quot;XML&quot; &amp; &apos;special&apos; chars"
-    );
+    // Check basename is NOT escaped
+    expect(result.processedPrompt).toContain("Note <with> \"XML\" & 'special' chars");
 
-    // Check content is escaped
-    expect(result.processedPrompt).toContain(
-      "Content: &lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt; &amp; more"
-    );
+    // Check content is NOT escaped
+    expect(result.processedPrompt).toContain('Content: <script>alert("xss")</script> & more');
   });
 
-  it("should escape XML in note paths and metadata", async () => {
+  it("should NOT escape XML in note paths and metadata", async () => {
     const customPrompt = "[[Special Note]]";
 
     const mockNote = {
@@ -116,19 +113,17 @@ describe("XML Escaping in processPrompt", () => {
 
     const result = await processPrompt(customPrompt, "", mockVault, mockActiveNote);
 
-    // Check title is escaped
-    expect(result.processedPrompt).toContain("<title>Special &amp; &quot;Note&quot;</title>");
+    // Check title is NOT escaped
+    expect(result.processedPrompt).toContain('<title>Special & "Note"</title>');
 
-    // Check path is escaped
-    expect(result.processedPrompt).toContain(
-      "<path>folder&lt;with&gt;/special&amp;chars/&quot;note&quot;.md</path>"
-    );
+    // Check path is NOT escaped
+    expect(result.processedPrompt).toContain('folder<with>/special&chars/"note".md');
 
-    // Check content is escaped
-    expect(result.processedPrompt).toContain("Content with &amp; and &lt; and &gt;");
+    // Check content is NOT escaped
+    expect(result.processedPrompt).toContain("Content with & and < and >");
   });
 
-  it("should handle tag variables with XML special characters", async () => {
+  it("should NOT escape XML in tag variables", async () => {
     const customPrompt = "Notes for {#tag&special}";
 
     const mockNote = {
@@ -143,11 +138,11 @@ describe("XML Escaping in processPrompt", () => {
 
     const result = await processPrompt(customPrompt, "", mockVault, mockActiveNote);
 
-    // Check tag variable name is escaped
-    expect(result.processedPrompt).toContain('name="#tag&amp;special"');
+    // Check tag variable name is NOT escaped
+    expect(result.processedPrompt).toContain('name="#tag&special"');
 
-    // Check content is properly escaped
-    expect(result.processedPrompt).toContain("Tagged &amp; &quot;Note&quot;");
-    expect(result.processedPrompt).toContain("Content: &lt;tag&gt; &amp; &lt;/tag&gt;");
+    // Check content is NOT escaped
+    expect(result.processedPrompt).toContain('Tagged & "Note"');
+    expect(result.processedPrompt).toContain("Content: <tag> & </tag>");
   });
 });
