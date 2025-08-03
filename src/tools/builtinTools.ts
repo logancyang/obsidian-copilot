@@ -220,7 +220,25 @@ Example usage:
       requiresVault: true,
       customPromptInstructions: `For replaceInFile:
 - Remember: Small edits → replaceInFile, Major rewrites → writeToFile
-- SEARCH text must match EXACTLY including all whitespace`,
+- SEARCH text must match EXACTLY including all whitespace
+
+Example usage:
+<use_tool>
+<name>replaceInFile</name>
+<path>notes/meeting.md</path>
+<diff>\`\`\`
+------- SEARCH
+## Attendees
+- John Smith
+- Jane Doe
+=======
+## Attendees
+- John Smith
+- Jane Doe
+- Bob Johnson
++++++++ REPLACE
+\`\`\`</diff>
+</use_tool>`,
     },
   },
 
