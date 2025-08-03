@@ -1,4 +1,5 @@
 import { logError, logWarn } from "@/logger";
+import { getToolDisplayName } from "./toolExecution";
 
 /**
  * Escapes special XML characters in a string to prevent XML injection
@@ -155,74 +156,38 @@ function parseParameterContent(content: string, parameterName?: string): any {
 }
 
 /**
- * Extracts tool names from tool call blocks for display purposes
+ * Extracts tool name from a partial tool call block
  */
-function extractToolNamesFromXML(text: string): string[] {
-  const toolNames: string[] = [];
-  const regex = /<use_tool>([\s\S]*?)<\/use_tool>/g;
-
-  let match;
-  while ((match = regex.exec(text)) !== null) {
-    const content = match[1];
-    const nameMatch = content.match(/<name>([\s\S]*?)<\/name>/);
-    if (nameMatch) {
-      const name = nameMatch[1].trim();
-      if (name) {
-        toolNames.push(name);
-      }
-    }
+function extractToolNameFromPartialBlock(partialContent: string): string | null {
+  const nameMatch = partialContent.match(/<name>([\s\S]*?)<\/name>/);
+  if (nameMatch) {
+    const name = nameMatch[1].trim();
+    return name || null;
   }
-
-  return toolNames;
-}
-
-/**
- * Maps tool names to display names for better user experience
- */
-function getToolDisplayName(toolName: string): string {
-  const displayNames: Record<string, string> = {
-    localSearch: "vault search",
-    webSearch: "web search",
-    getFileTree: "file explorer",
-    getCurrentTime: "time check",
-    pomodoroTimer: "pomodoro timer",
-    simpleYoutubeTranscription: "YouTube transcript",
-    indexVault: "vault indexing",
-  };
-  return displayNames[toolName] || toolName;
+  return null;
 }
 
 /**
  * Strips XML tool call blocks, thinking blocks, and various code blocks from text.
  * @param text - The text to clean
- * @param options - Options for stripping behavior
  * @returns The cleaned text
  */
-export function stripToolCallXML(
-  text: string,
-  options: { preserveToolIndicators?: boolean } = {}
-): string {
+export function stripToolCallXML(text: string): string {
   let cleaned = text;
 
-  // Handle tool calls based on options
-  if (options.preserveToolIndicators) {
-    // Replace tool calls with visible indicators
-    const toolNames = extractToolNamesFromXML(text);
-    let toolIndex = 0;
+  // Remove all complete <use_tool>...</use_tool> blocks
+  cleaned = cleaned.replace(/<use_tool>[\s\S]*?<\/use_tool>/g, "");
 
-    cleaned = cleaned.replace(/<use_tool>[\s\S]*?<\/use_tool>/g, () => {
-      if (toolIndex < toolNames.length) {
-        const toolName = toolNames[toolIndex];
-        const displayName = getToolDisplayName(toolName);
-        toolIndex++;
-        return `\n[🔧 Tool call: ${displayName}]\n`;
-      }
-      return "";
-    });
-  } else {
-    // Remove all <use_tool>...</use_tool> blocks completely
-    cleaned = cleaned.replace(/<use_tool>[\s\S]*?<\/use_tool>/g, "");
-  }
+  // Replace partial tool calls with calling message
+  cleaned = cleaned.replace(/<use_tool>([\s\S]*)$/g, (match, partialContent) => {
+    const toolName = extractToolNameFromPartialBlock(partialContent);
+    if (toolName) {
+      const displayName = getToolDisplayName(toolName);
+      return `Calling ${displayName}...`;
+    } else {
+      return `Calling tool...`;
+    }
+  });
 
   // Keep thinking blocks in autonomous agent mode as they provide valuable context
   // They are only removed in other contexts where they add noise
