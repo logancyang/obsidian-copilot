@@ -175,38 +175,97 @@ class GPTModelAdapter extends BaseModelAdapter {
       toolMetadata
     );
 
+    const tools = availableToolNames || [];
+    const hasComposerTools = tools.includes("writeToFile") || tools.includes("replaceInFile");
+
     // Insert GPT-specific instructions after the base prompt
-    const gptSpecificSection = `
+    let gptSpecificSection = `
 
-CRITICAL FOR GPT MODELS: You MUST ALWAYS include XML tool calls in your response. Do not just describe what you plan to do - you MUST include the actual XML tool call blocks.
+CRITICAL FOR GPT MODELS: You MUST ALWAYS include XML tool calls in your response. Do not just describe what you plan to do - you MUST include the actual XML tool call blocks.`;
 
-EXAMPLE OF CORRECT RESPONSE:
-"I'll search your vault for piano learning notes.
+    if (hasComposerTools) {
+      gptSpecificSection += `
+
+🚨 FILE EDITING WITH COMPOSER TOOLS - GPT SPECIFIC EXAMPLES 🚨
+
+When user asks you to edit or modify a file, you MUST:
+1. Determine if it's a small edit (use replaceInFile) or major rewrite (use writeToFile)
+2. Include the tool call immediately in your response
+
+EXAMPLE 1 - User says "fix the typo 'teh' to 'the' in my note":
+✅ CORRECT RESPONSE:
+"I'll fix the typo in your note.
 
 <use_tool>
-<name>localSearch</name>
-<query>piano learning</query>
-<salientTerms>["piano", "learning"]</salientTerms>
+<name>replaceInFile</name>
+<path>path/to/note.md</path>
+<diff>\`\`\`
+------- SEARCH
+teh
+=======
+the
++++++++ REPLACE
+\`\`\`</diff>
 </use_tool>"
 
-EXAMPLE OF INCORRECT RESPONSE (DO NOT DO THIS):
-"I'll search your vault for piano learning notes."
-(Missing the XML tool call)
+EXAMPLE 2 - User says "add item 4 to the list":
+✅ CORRECT RESPONSE:
+"I'll add item 4 to your list.
 
-FINAL REMINDER FOR GPT MODELS: If the user asks you to search, find, or look up anything, you MUST include the appropriate <use_tool> XML block in your very next response. Do not wait for another turn.`;
+<use_tool>
+<name>replaceInFile</name>
+<path>path/to/file.md</path>
+<diff>\`\`\`
+------- SEARCH
+- Item 1
+- Item 2
+- Item 3
+=======
+- Item 1
+- Item 2
+- Item 3
+- Item 4
++++++++ REPLACE
+\`\`\`</diff>
+</use_tool>"
+
+❌ WRONG (DO NOT DO THIS):
+"I'll help you add item 4 to the list. Let me update that for you."
+[No tool call = FAILURE]
+
+CRITICAL: The diff parameter MUST contain the SEARCH/REPLACE blocks wrapped in triple backticks EXACTLY as shown above.`;
+    }
+
+    gptSpecificSection += `
+
+FINAL REMINDER FOR GPT MODELS: If the user asks you to search, find, edit, or modify anything, you MUST include the appropriate <use_tool> XML block in your very next response. Do not wait for another turn.`;
 
     return baseSystemPrompt + gptSpecificSection;
   }
 
   enhanceUserMessage(message: string, requiresTools: boolean): string {
     if (requiresTools) {
+      const lowerMessage = message.toLowerCase();
       const requiresSearch =
-        message.toLowerCase().includes("find") ||
-        message.toLowerCase().includes("search") ||
-        message.toLowerCase().includes("my notes");
+        lowerMessage.includes("find") ||
+        lowerMessage.includes("search") ||
+        lowerMessage.includes("my notes");
+
+      const requiresFileEdit =
+        lowerMessage.includes("edit") ||
+        lowerMessage.includes("modify") ||
+        lowerMessage.includes("update") ||
+        lowerMessage.includes("change") ||
+        lowerMessage.includes("fix") ||
+        lowerMessage.includes("add") ||
+        lowerMessage.includes("typo");
 
       if (requiresSearch) {
         return `${message}\n\nREMINDER: Use the <use_tool> XML format to call the localSearch tool.`;
+      }
+
+      if (requiresFileEdit) {
+        return `${message}\n\n🚨 GPT REMINDER: Use replaceInFile for small edits (with SEARCH/REPLACE blocks in diff parameter). The diff parameter MUST contain triple backticks around the SEARCH/REPLACE blocks. Check the examples in your system prompt.`;
       }
     }
     return message;

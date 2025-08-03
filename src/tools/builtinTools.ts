@@ -218,7 +218,9 @@ Example usage:
       description: "Make targeted changes to existing files using SEARCH/REPLACE blocks",
       category: "file",
       requiresVault: true,
-      customPromptInstructions: `When using replaceInFile, provide exact SEARCH/REPLACE blocks with precise content matching. Use this for surgical edits to existing files.`,
+      customPromptInstructions: `For replaceInFile:
+- Remember: Small edits → replaceInFile, Major rewrites → writeToFile
+- SEARCH text must match EXACTLY including all whitespace`,
     },
   },
 

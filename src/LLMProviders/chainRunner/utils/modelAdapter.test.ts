@@ -83,6 +83,7 @@ describe("ModelAdapter", () => {
 
       // Check GPT-specific sections
       expect(enhancedPrompt).toContain("CRITICAL FOR GPT MODELS");
+      expect(enhancedPrompt).toContain("FINAL REMINDER FOR GPT MODELS");
     });
 
     it("should handle Claude-specific enhancements", () => {
@@ -119,6 +120,36 @@ describe("ModelAdapter", () => {
       // Should not include any tool-specific instructions
       expect(enhancedPrompt).not.toContain("LocalSearch specific instructions");
       expect(enhancedPrompt).not.toContain("WebSearch specific instructions");
+    });
+
+    it("should include composer-specific examples for GPT when file tools are enabled", () => {
+      const mockModel = { modelName: "gpt-4" } as any;
+      const adapter = ModelAdapterFactory.createAdapter(mockModel);
+
+      const enhancedPrompt = adapter.enhanceSystemPrompt(
+        basePrompt,
+        toolDescriptions,
+        ["replaceInFile", "writeToFile"],
+        []
+      );
+
+      // Check for composer-specific GPT instructions
+      expect(enhancedPrompt).toContain("FILE EDITING WITH COMPOSER TOOLS");
+      expect(enhancedPrompt).toContain("fix the typo");
+      expect(enhancedPrompt).toContain("add item 4 to the list");
+      expect(enhancedPrompt).toContain("diff parameter MUST contain");
+    });
+
+    it("should enhance file editing messages for GPT", () => {
+      const mockModel = { modelName: "gpt-4" } as any;
+      const adapter = ModelAdapterFactory.createAdapter(mockModel);
+
+      const editMessage = "fix the typo in my note";
+      const enhanced = adapter.enhanceUserMessage(editMessage, true);
+
+      expect(enhanced).toContain("GPT REMINDER");
+      expect(enhanced).toContain("replaceInFile");
+      expect(enhanced).toContain("SEARCH/REPLACE blocks");
     });
   });
 });
