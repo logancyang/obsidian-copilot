@@ -1,6 +1,8 @@
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { SuggestedPrompts } from "@/components/chat-components/SuggestedPrompts";
+import { USER_SENDER } from "@/constants";
+import { useChatScrolling } from "@/hooks/useChatScrolling";
 import { useSettingsValue } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { App } from "obsidian";
@@ -37,18 +39,11 @@ const ChatMessages = memo(
     const [loadingDots, setLoadingDots] = useState("");
 
     const settings = useSettingsValue();
-    const scrollToBottom = () => {
-      const chatMessagesContainer = document.querySelector("[data-testid='chat-messages']");
-      if (chatMessagesContainer) {
-        chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
-      }
-    };
 
-    useEffect(() => {
-      if (!loading) {
-        scrollToBottom();
-      }
-    }, [loading]);
+    // Chat scrolling behavior
+    const { containerMinHeight, scrollContainerCallbackRef, getMessageKey } = useChatScrolling({
+      chatHistory,
+    });
 
     useEffect(() => {
       let intervalId: NodeJS.Timeout;
@@ -94,38 +89,60 @@ const ChatMessages = memo(
           />
         )}
         <div
+          ref={scrollContainerCallbackRef}
           data-testid="chat-messages"
-          className="tw-mt-auto tw-box-border tw-flex tw-w-full tw-flex-1 tw-select-text tw-flex-col tw-items-start tw-justify-start tw-overflow-y-auto tw-scroll-smooth tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)]"
+          className="tw-relative tw-flex tw-w-full tw-flex-1 tw-select-text tw-flex-col tw-items-start tw-justify-start tw-overflow-y-auto tw-scroll-smooth tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)]"
         >
-          {chatHistory.map(
-            (message, index) =>
+          {chatHistory.map((message, index) => {
+            const visibleMessages = chatHistory.filter((m) => m.isVisible);
+            const isLastMessage = index === visibleMessages.length - 1;
+            // Only apply min-height to AI messages that are last
+            const shouldApplyMinHeight = isLastMessage && message.sender !== USER_SENDER;
+
+            return (
               message.isVisible && (
-                <ChatSingleMessage
-                  key={`message-${message.timestamp?.epoch || index}`}
-                  message={message}
-                  app={app}
-                  isStreaming={false}
-                  onRegenerate={() => onRegenerate(index)}
-                  onEdit={(newMessage) => onEdit(index, newMessage)}
-                  onDelete={() => onDelete(index)}
-                  chatHistory={chatHistory}
-                />
+                <div
+                  key={getMessageKey(message, index)}
+                  data-message-key={getMessageKey(message, index)}
+                  className="tw-w-full"
+                  style={{
+                    minHeight: shouldApplyMinHeight ? `${containerMinHeight}px` : "auto",
+                  }}
+                >
+                  <ChatSingleMessage
+                    message={message}
+                    app={app}
+                    isStreaming={false}
+                    onRegenerate={() => onRegenerate(index)}
+                    onEdit={(newMessage) => onEdit(index, newMessage)}
+                    onDelete={() => onDelete(index)}
+                    chatHistory={chatHistory}
+                  />
+                </div>
               )
-          )}
+            );
+          })}
           {(currentAiMessage || loading) && (
-            <ChatSingleMessage
-              key="ai_message_streaming"
-              message={{
-                sender: "AI",
-                message: currentAiMessage || getLoadingMessage(),
-                isVisible: true,
-                timestamp: null,
+            <div
+              className="tw-w-full"
+              style={{
+                minHeight: `${containerMinHeight}px`,
               }}
-              app={app}
-              isStreaming={true}
-              onDelete={() => {}}
-              chatHistory={chatHistory}
-            />
+            >
+              <ChatSingleMessage
+                key="ai_message_streaming"
+                message={{
+                  sender: "AI",
+                  message: currentAiMessage || getLoadingMessage(),
+                  isVisible: true,
+                  timestamp: null,
+                }}
+                app={app}
+                isStreaming={true}
+                onDelete={() => {}}
+                chatHistory={chatHistory}
+              />
+            </div>
           )}
         </div>
       </div>
