@@ -78,13 +78,34 @@ async function getCurrentTime(timezoneOffset?: string): Promise<TimeInfo> {
 
 const getCurrentTimeTool = createTool({
   name: "getCurrentTime",
-  description: "Get the current time in local timezone or at a specified UTC offset",
+  description:
+    "Get the current time in local timezone or at a specified UTC offset. Returns epoch time, ISO string, and formatted strings.",
   schema: z.object({
     timezoneOffset: z
       .string()
       .optional()
       .describe(
-        "Optional UTC offset (e.g., '+8', '-5', '+5:30', 'UTC+8', 'GMT-5'). Must be a numeric offset, not a timezone name."
+        `Optional UTC offset. IMPORTANT: Must be a numeric offset, NOT a timezone name.
+
+EXAMPLES OF CORRECT USAGE:
+- "what time is it" → No parameter (uses local time)
+- "what time is it in Tokyo" → timezoneOffset: "+9"
+- "what time is it in Beijing" → timezoneOffset: "+8"
+- "what time is it in New York" → timezoneOffset: "-5" (or "-4" during DST)
+- "what time is it in Mumbai" → timezoneOffset: "+5:30"
+
+SUPPORTED FORMATS:
+- Simple: "+8", "-5", "+5:30"
+- With prefix: "UTC+8", "GMT-5", "UTC+5:30"
+
+COMMON TIMEZONE OFFSETS:
+- Tokyo: UTC+9
+- Beijing/Singapore: UTC+8
+- Mumbai: UTC+5:30
+- Dubai: UTC+4
+- London: UTC+0 (UTC+1 during BST)
+- New York: UTC-5 (UTC-4 during DST)
+- Los Angeles: UTC-8 (UTC-7 during DST)`
       ),
   }),
   handler: async ({ timezoneOffset }) => getCurrentTime(timezoneOffset),
@@ -453,11 +474,24 @@ function convertToTimeInfo(dateTime: DateTime): TimeInfo {
 
 const getTimeRangeMsTool = createTool({
   name: "getTimeRangeMs",
-  description: "Get a time range in milliseconds based on a natural language time expression",
+  description: "Convert natural language time expressions to date ranges for use with localSearch",
   schema: z.object({
-    timeExpression: z
-      .string()
-      .describe("A natural language time expression (e.g., 'last week', 'from July 1 to July 15')"),
+    timeExpression: z.string()
+      .describe(`Natural language time expression to convert to a date range.
+
+COMMON EXPRESSIONS:
+- Relative past: "yesterday", "last week", "last month", "last year"
+- Relative ranges: "this week", "this month", "this year"
+- Specific dates: "July 1", "July 1 2023", "2023-07-01"
+- Date ranges: "from July 1 to July 15", "between May and June"
+- Time periods: "last 7 days", "past 30 days", "previous 3 months"
+
+IMPORTANT: This tool is typically used as the first step before localSearch when searching notes by time.
+
+EXAMPLE WORKFLOW:
+1. User: "what did I do last week"
+2. First call getTimeRangeMs with timeExpression: "last week"
+3. Then use the returned time range with localSearch`),
   }),
   handler: async ({ timeExpression }) => getTimeRangeMs(timeExpression),
   isBackground: true,
@@ -592,15 +626,21 @@ async function convertTimeBetweenTimezones(
 
 const convertTimeBetweenTimezonesTool = createTool({
   name: "convertTimeBetweenTimezones",
-  description: "Convert a specific time from one UTC offset to another",
+  description: "Convert a specific time from one timezone to another using UTC offsets",
   schema: z.object({
-    time: z.string().describe("Time to convert (e.g., '6pm', '18:00', '3:30 PM')"),
-    fromOffset: z
-      .string()
-      .describe("Source UTC offset (e.g., '+8', '-5', '+5:30', 'UTC+8'). Must be numeric offset."),
-    toOffset: z
-      .string()
-      .describe("Target UTC offset (e.g., '+9', '-5', '+5:30', 'UTC+9'). Must be numeric offset."),
+    time: z.string().describe(`Time to convert. Supports various formats:
+- 12-hour: "6pm", "3:30 PM", "11:45 am"
+- 24-hour: "18:00", "15:30", "23:45"
+- Relative: "noon", "midnight"`),
+    fromOffset: z.string().describe(`Source UTC offset. Must be numeric, not timezone name.
+Examples: "-8" for PT, "+0" for London, "+8" for Beijing`),
+    toOffset: z.string().describe(`Target UTC offset. Must be numeric, not timezone name.
+Examples: "+9" for Tokyo, "-5" for NY, "+5:30" for Mumbai
+
+EXAMPLE USAGE:
+- "what time is 6pm PT in Tokyo" → time: "6pm", fromOffset: "-8", toOffset: "+9"
+- "convert 3:30 PM EST to London time" → time: "3:30 PM", fromOffset: "-5", toOffset: "+0"
+- "what is 9am Beijing time in New York" → time: "9am", fromOffset: "+8", toOffset: "-5"`),
   }),
   handler: async ({ time, fromOffset, toOffset }) =>
     convertTimeBetweenTimezones(time, fromOffset, toOffset),

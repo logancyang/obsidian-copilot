@@ -161,37 +161,9 @@ For getFileTree:
 <name>getFileTree</name>
 </use_tool>
 
-For time queries (IMPORTANT: Always use UTC offsets, not timezone names):
-Example 1 - "what time is it" (local time):
-<use_tool>
-<name>getCurrentTime</name>
-</use_tool>
-
-Example 2 - "what time is it in Tokyo" (UTC+9):
-<use_tool>
-<name>getCurrentTime</name>
-<timezoneOffset>+9</timezoneOffset>
-</use_tool>
-
-Example 3 - "what time is it in Beijing" (UTC+8):
-<use_tool>
-<name>getCurrentTime</name>
-<timezoneOffset>+8</timezoneOffset>
-</use_tool>
-
-Example 4 - "what time is it in New York" (UTC-5 or UTC-4 depending on DST):
-<use_tool>
-<name>getCurrentTime</name>
-<timezoneOffset>-5</timezoneOffset>
-</use_tool>
-
-Example 5 - "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9):
-<use_tool>
-<name>convertTimeBetweenTimezones</name>
-<time>6pm</time>
-<fromOffset>-8</fromOffset>
-<toOffset>+9</toOffset>
-</use_tool>
+For time tools:
+- Check the tool descriptions for detailed examples and timezone offset formats
+- Remember: Always use numeric UTC offsets, never timezone names
 ${
   tools.includes("writeToFile")
     ? `
@@ -249,11 +221,13 @@ ${
 }
 ## General Guidelines
 ${tools.includes("localSearch") ? '- For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings).' : ""}
-${tools.includes("writeToFile") ? `
+${
+  tools.includes("writeToFile")
+    ? `
 - When you need to call writeToFile, NEVER display the file content directly. Always only pass the file content to writeToFile.
 - Use writeToFile for major structural changes to files or when adding new content sections or the exact text to replace is uncertain.`
-        : ""
-    }
+    : ""
+}
  ${tools.includes("replaceInFile") ? "- Use replaceInFile when you want to make small edits to large files (changing specific text patterns) or just removing specific text while preserving the rest of the file content." : ""}
     
 - NEVER mention tool names like "localSearch", "webSearch", etc. in your responses. Use natural language like "searching your vault", "searching the web", etc.
