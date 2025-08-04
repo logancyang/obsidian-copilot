@@ -15,7 +15,12 @@ import { ChatMessage, MessageContext } from "@/types/message";
 export class ChatUIState {
   private listeners: Set<() => void> = new Set();
 
-  constructor(private chatManager: ChatManager) {}
+  constructor(private chatManager: ChatManager) {
+    // Set up callback for immediate UI updates when messages are created
+    this.chatManager.setOnMessageCreatedCallback(() => {
+      this.notifyListeners();
+    });
+  }
 
   // ================================
   // UI STATE MANAGEMENT
@@ -55,13 +60,15 @@ export class ChatUIState {
     displayText: string,
     context: MessageContext,
     chainType: ChainType,
-    includeActiveNote: boolean = false
+    includeActiveNote: boolean = false,
+    content?: any[]
   ): Promise<string> {
     const messageId = await this.chatManager.sendMessage(
       displayText,
       context,
       chainType,
-      includeActiveNote
+      includeActiveNote,
+      content
     );
     this.notifyListeners();
     return messageId;
@@ -101,6 +108,10 @@ export class ChatUIState {
       onUpdateCurrentMessage,
       (message) => {
         onAddMessage(message);
+        this.notifyListeners();
+      },
+      () => {
+        // Notify immediately after truncation
         this.notifyListeners();
       }
     );
@@ -203,7 +214,12 @@ export class ChatUIState {
    */
   addMessage(message: ChatMessage): void {
     if (message.isVisible) {
-      this.addDisplayMessage(message.message, message.sender, message.id);
+      // If the message has sources or other metadata, use addFullMessage to preserve them
+      if (message.sources || message.content) {
+        this.addFullMessage(message);
+      } else {
+        this.addDisplayMessage(message.message, message.sender, message.id);
+      }
     } else {
       this.addFullMessage(message);
     }

@@ -13,7 +13,8 @@ import {
   LLMChainRunner,
   ProjectChainRunner,
   VaultQAChainRunner,
-} from "@/LLMProviders/chainRunner";
+  AutonomousAgentChainRunner,
+} from "@/LLMProviders/chainRunner/index";
 import { logError, logInfo } from "@/logger";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import VectorStoreManager from "@/search/vectorStoreManager";
@@ -268,12 +269,18 @@ export default class ChainManager {
 
   private getChainRunner(): ChainRunner {
     const chainType = getChainType();
+    const settings = getSettings();
+
     switch (chainType) {
       case ChainType.LLM_CHAIN:
         return new LLMChainRunner(this);
       case ChainType.VAULT_QA_CHAIN:
         return new VaultQAChainRunner(this);
       case ChainType.COPILOT_PLUS_CHAIN:
+        // Use AutonomousAgentChainRunner if the setting is enabled
+        if (settings.enableAutonomousAgent) {
+          return new AutonomousAgentChainRunner(this);
+        }
         return new CopilotPlusChainRunner(this);
       case ChainType.PROJECT_CHAIN:
         return new ProjectChainRunner(this);

@@ -326,6 +326,81 @@ Return project-specific repository
 
 ## Message Lifecycle
 
+### Example: User Message with Context Note
+
+When a user types "Summarize this note" and attaches "meeting-notes.md":
+
+1. **Input**: User text + attached file → Chat component
+2. **Storage**: MessageRepository stores displayText: "Summarize this note"
+3. **Processing**: ContextManager reads the note and creates processedText with proper XML structure
+4. **Memory Sync**: Chain memory receives the processed version for LLM
+5. **UI Update**: Shows message with context badge, displays only "Summarize this note"
+6. **LLM Processing**: AI receives full context and generates response
+
+### Context XML Format
+
+All context is wrapped in semantic XML tags for clear structure:
+
+#### Note Context
+
+```xml
+<note_context>
+<title>meeting-notes</title>
+<path>docs/meeting-notes.md</path>
+<ctime>2024-01-15T10:00:00.000Z</ctime>
+<mtime>2024-01-15T14:30:00.000Z</mtime>
+<content>
+[actual note content here]
+</content>
+</note_context>
+```
+
+#### URL Context
+
+```xml
+<url_content>
+<url>https://example.com/article</url>
+<content>
+[fetched content from URL]
+</content>
+</url_content>
+```
+
+#### Selected Text Context
+
+```xml
+<selected_text>
+<title>Source Note Title</title>
+<path>path/to/source.md</path>
+<start_line>45</start_line>
+<end_line>52</end_line>
+<content>
+[selected text content]
+</content>
+</selected_text>
+```
+
+#### Error Cases
+
+```xml
+<note_context_error>
+<title>filename</title>
+<path>path/to/file.ext</path>
+<error>[Error: Could not process file]</error>
+</note_context_error>
+```
+
+This separation ensures:
+
+- Clean UI (shows what user typed)
+- Rich context for AI (includes note content)
+- Reprocessable context on message edits
+
+For detailed examples, see:
+
+- `src/core/MessageLifecycle.test.ts` - Complete lifecycle demonstration with context notes
+- `src/core/MessageLifecycle.xmltags.test.ts` - XML tag formatting tests and examples
+
 ### 1. Sending a New Message
 
 ```
@@ -619,4 +694,6 @@ console.log({
 
 - `src/core/MessageRepository.test.ts` - Repository tests
 - `src/core/ChatManager.test.ts` - Manager tests
+- `src/core/MessageLifecycle.test.ts` - Complete lifecycle examples with context notes
+- `src/core/MessageLifecycle.xmltags.test.ts` - XML tag formatting tests and examples
 - `src/components/chat-components/MessageContext.test.tsx` - Context display tests

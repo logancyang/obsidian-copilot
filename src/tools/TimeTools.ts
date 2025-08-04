@@ -1,8 +1,8 @@
-import { tool } from "@langchain/core/tools";
 import * as chrono from "chrono-node";
 import { DateTime } from "luxon";
 import { Notice } from "obsidian";
 import { z } from "zod";
+import { createTool } from "./SimpleTool";
 
 export interface TimeInfo {
   epoch: number;
@@ -13,32 +13,103 @@ export interface TimeInfo {
   timezone: string;
 }
 
-async function getCurrentTime(): Promise<TimeInfo> {
-  const now = new Date();
-  const timezoneOffset = now.getTimezoneOffset();
-  const timezoneAbbr =
-    new Intl.DateTimeFormat("en", { timeZoneName: "short" })
-      .formatToParts(now)
-      .find((part) => part.type === "timeZoneName")?.value || "Unknown";
+/**
+ * Parse timezone offset string to a valid UTC offset
+ * Supports formats like: "+8", "-5", "+08:00", "-05:30", "UTC+8", "GMT-5"
+ * Returns a normalized UTC offset string like "UTC+8" or "UTC-5:30"
+ */
+function parseTimezoneOffset(offset: string): string {
+  // Extract the numeric offset from various formats
+  const offsetMatch = offset.match(/^(?:UTC|GMT)?([-+]?\d{1,2})(?::(\d{2}))?$/i);
+  if (!offsetMatch) {
+    throw new Error(
+      `Invalid timezone offset format: ${offset}. Use formats like '+8', '-5', '+5:30', 'UTC+8', 'GMT-5'`
+    );
+  }
+
+  const hours = parseInt(offsetMatch[1]);
+  const minutes = parseInt(offsetMatch[2] || "0");
+
+  // Validate the offset range
+  if (Math.abs(hours) > 14 || minutes >= 60) {
+    throw new Error(
+      `Invalid timezone offset: ${offset}. Hours must be between -14 and +14, minutes must be less than 60`
+    );
+  }
+
+  // Create a normalized UTC offset string
+  const sign = hours >= 0 ? "+" : "";
+  const minutesStr = minutes > 0 ? `:${minutes.toString().padStart(2, "0")}` : "";
+
+  return `UTC${sign}${hours}${minutesStr}`;
+}
+
+async function getCurrentTime(timezoneOffset?: string): Promise<TimeInfo> {
+  let dt: DateTime = DateTime.now();
+
+  // If timezone offset is provided, convert to that timezone
+  if (timezoneOffset) {
+    try {
+      const parsedOffset = parseTimezoneOffset(timezoneOffset);
+      const newDt = dt.setZone(parsedOffset);
+      if (!newDt.isValid) {
+        throw new Error(`Failed to apply timezone offset: ${timezoneOffset}`);
+      }
+      dt = newDt;
+    } catch (error) {
+      throw new Error(`${error.message}`);
+    }
+  }
+
+  const jsDate = dt.toJSDate();
+  // Use Luxon's offset which is in minutes and already has the correct sign
+  const offsetMinutes = dt.offset;
+  const timezoneAbbr = dt.offsetNameShort || "Unknown";
 
   return {
-    epoch: Math.floor(now.getTime()),
-    isoString: now.toISOString(),
-    userLocaleString: now.toLocaleString(),
-    localDateString: now.toLocaleDateString("en-CA", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }),
-    timezoneOffset: -timezoneOffset, // Invert the offset to match common conventions
+    epoch: Math.floor(jsDate.getTime()),
+    isoString: jsDate.toISOString(),
+    userLocaleString: dt.toLocaleString(DateTime.DATETIME_FULL),
+    localDateString: dt.toISODate() || "",
+    timezoneOffset: offsetMinutes,
     timezone: timezoneAbbr,
   };
 }
 
-const getCurrentTimeTool = tool(async () => getCurrentTime(), {
+const getCurrentTimeTool = createTool({
   name: "getCurrentTime",
-  description: "Get the current time in various formats, including timezone information",
-  schema: z.object({}), // No input required
+  description:
+    "Get the current time in local timezone or at a specified UTC offset. Returns epoch time, ISO string, and formatted strings.",
+  schema: z.object({
+    timezoneOffset: z
+      .string()
+      .optional()
+      .describe(
+        `Optional UTC offset. IMPORTANT: Must be a numeric offset, NOT a timezone name.
+
+EXAMPLES OF CORRECT USAGE:
+- "what time is it" → No parameter (uses local time)
+- "what time is it in Tokyo" → timezoneOffset: "+9"
+- "what time is it in Beijing" → timezoneOffset: "+8"
+- "what time is it in New York" → timezoneOffset: "-5" (or "-4" during DST)
+- "what time is it in Mumbai" → timezoneOffset: "+5:30"
+
+SUPPORTED FORMATS:
+- Simple: "+8", "-5", "+5:30"
+- With prefix: "UTC+8", "GMT-5", "UTC+5:30"
+
+COMMON TIMEZONE OFFSETS:
+- Tokyo: UTC+9
+- Beijing/Singapore: UTC+8
+- Mumbai: UTC+5:30
+- Dubai: UTC+4
+- London: UTC+0 (UTC+1 during BST)
+- New York: UTC-5 (UTC-4 during DST)
+- Los Angeles: UTC-8 (UTC-7 during DST)`
+      ),
+  }),
+  handler: async ({ timezoneOffset }) => getCurrentTime(timezoneOffset),
+  isBackground: true,
 });
 
 const monthNames = {
@@ -387,40 +458,44 @@ function getTimeRangeMs(timeExpression: string) {
 
 function convertToTimeInfo(dateTime: DateTime): TimeInfo {
   const jsDate = dateTime.toJSDate();
-  const timezoneOffset = jsDate.getTimezoneOffset();
-  const timezoneAbbr =
-    new Intl.DateTimeFormat("en", { timeZoneName: "short" })
-      .formatToParts(jsDate)
-      .find((part) => part.type === "timeZoneName")?.value || "Unknown";
+  // Use Luxon's offset which is in minutes and already has the correct sign
+  const offsetMinutes = dateTime.offset;
+  const timezoneAbbr = dateTime.offsetNameShort || "Unknown";
 
   return {
     epoch: Math.floor(jsDate.getTime()),
     isoString: jsDate.toISOString(),
-    userLocaleString: jsDate.toLocaleString(),
-    localDateString: jsDate.toLocaleDateString("en-CA", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }),
-    timezoneOffset: -timezoneOffset,
+    userLocaleString: dateTime.toLocaleString(DateTime.DATETIME_FULL),
+    localDateString: dateTime.toISODate() || "",
+    timezoneOffset: offsetMinutes,
     timezone: timezoneAbbr,
   };
 }
 
-const getTimeRangeMsTool = tool(
-  async ({ timeExpression }: { timeExpression: string }) => getTimeRangeMs(timeExpression),
-  {
-    name: "getTimeRangeMs",
-    description: "Get a time range in milliseconds based on a natural language time expression",
-    schema: z.object({
-      timeExpression: z
-        .string()
-        .describe(
-          "A natural language time expression (e.g., 'last week', 'from July 1 to July 15')"
-        ),
-    }),
-  }
-);
+const getTimeRangeMsTool = createTool({
+  name: "getTimeRangeMs",
+  description: "Convert natural language time expressions to date ranges for use with localSearch",
+  schema: z.object({
+    timeExpression: z.string()
+      .describe(`Natural language time expression to convert to a date range.
+
+COMMON EXPRESSIONS:
+- Relative past: "yesterday", "last week", "last month", "last year"
+- Relative ranges: "this week", "this month", "this year"
+- Specific dates: "July 1", "July 1 2023", "2023-07-01"
+- Date ranges: "from July 1 to July 15", "between May and June"
+- Time periods: "last 7 days", "past 30 days", "previous 3 months"
+
+IMPORTANT: This tool is typically used as the first step before localSearch when searching notes by time.
+
+EXAMPLE WORKFLOW:
+1. User: "what did I do last week"
+2. First call getTimeRangeMs with timeExpression: "last week"
+3. Then use the returned time range with localSearch`),
+  }),
+  handler: async ({ timeExpression }) => getTimeRangeMs(timeExpression),
+  isBackground: true,
+});
 
 function getTimeInfoByEpoch(epoch: number): TimeInfo {
   // Check if the epoch is in seconds (10 digits) or milliseconds (13 digits)
@@ -429,17 +504,15 @@ function getTimeInfoByEpoch(epoch: number): TimeInfo {
   return convertToTimeInfo(dateTime);
 }
 
-const getTimeInfoByEpochTool = tool(
-  async ({ epoch }: { epoch: number }) => getTimeInfoByEpoch(epoch),
-  {
-    name: "getTimeInfoByEpoch",
-    description:
-      "Convert a Unix timestamp (in seconds or milliseconds) to detailed time information",
-    schema: z.object({
-      epoch: z.number().describe("Unix timestamp in seconds or milliseconds"),
-    }),
-  }
-);
+const getTimeInfoByEpochTool = createTool({
+  name: "getTimeInfoByEpoch",
+  description: "Convert a Unix timestamp (in seconds or milliseconds) to detailed time information",
+  schema: z.object({
+    epoch: z.number().describe("Unix timestamp in seconds or milliseconds"),
+  }),
+  handler: async ({ epoch }) => getTimeInfoByEpoch(epoch),
+  isBackground: true,
+});
 
 function parseTimeInterval(interval: string): number {
   const match = interval.match(/^(\d+)\s*(s|sec|seconds?|m|min|minutes?|h|hr|hours?)$/i);
@@ -482,21 +555,102 @@ async function startPomodoro(interval = "25min"): Promise<void> {
   });
 }
 
-const pomodoroTool = tool(
-  async ({ interval = "25min" }: { interval?: string }) => {
+const pomodoroTool = createTool({
+  name: "startPomodoro",
+  description: "Start a Pomodoro timer with a customizable interval",
+  schema: z.object({
+    interval: z
+      .string()
+      .default("25min")
+      .describe("Time interval (e.g., '25min', '5s', '1h'). Default is 25min."),
+  }),
+  handler: async ({ interval }) => {
     startPomodoro(interval);
     return `Pomodoro timer started. It will end in ${interval}.`;
   },
-  {
-    name: "startPomodoro",
-    description: "Start a Pomodoro timer with a customizable interval",
-    schema: z.object({
-      interval: z
-        .string()
-        .optional()
-        .describe("Time interval (e.g., '25min', '5s', '1h'). Default is 25min."),
-    }),
-  }
-);
+});
 
-export { getCurrentTimeTool, getTimeInfoByEpochTool, getTimeRangeMsTool, pomodoroTool };
+/**
+ * Convert a time from one UTC offset to another
+ * @param time - Time expression like "6pm", "18:00", "3:30 PM"
+ * @param fromOffset - Source UTC offset (e.g., "+8", "-5", "UTC+8")
+ * @param toOffset - Target UTC offset (e.g., "+9", "-5", "UTC+9")
+ * @returns Time information in the target timezone
+ */
+async function convertTimeBetweenTimezones(
+  time: string,
+  fromOffset: string,
+  toOffset: string
+): Promise<TimeInfo & { originalTime: string; convertedTime: string }> {
+  // Parse timezone offsets
+  const sourceTz = parseTimezoneOffset(fromOffset);
+  const targetTz = parseTimezoneOffset(toOffset);
+
+  try {
+    // Parse the time string using chrono
+    const baseDate = DateTime.now().setZone(sourceTz);
+    const parsedDate = chrono.parseDate(time, baseDate.toJSDate());
+
+    if (!parsedDate) {
+      throw new Error(`Could not parse time: ${time}`);
+    }
+
+    // Create DateTime interpreting the parsed date as already being in source timezone
+    const sourceDt = DateTime.fromJSDate(parsedDate, { zone: sourceTz });
+
+    // Convert to target timezone
+    const targetDt = sourceDt.setZone(targetTz);
+
+    if (!targetDt.isValid) {
+      throw new Error(`Invalid timezone conversion`);
+    }
+
+    const jsDate = targetDt.toJSDate();
+    // Use Luxon's offset which is in minutes and already has the correct sign
+    const offsetMinutes = targetDt.offset;
+
+    return {
+      epoch: Math.floor(jsDate.getTime()),
+      isoString: jsDate.toISOString(),
+      userLocaleString: targetDt.toLocaleString(DateTime.DATETIME_FULL),
+      localDateString: targetDt.toISODate() || "",
+      timezoneOffset: offsetMinutes,
+      timezone: targetDt.offsetNameShort || targetTz,
+      originalTime: sourceDt.toLocaleString(DateTime.TIME_SIMPLE) + " " + sourceDt.offsetNameShort,
+      convertedTime: targetDt.toLocaleString(DateTime.TIME_SIMPLE) + " " + targetDt.offsetNameShort,
+    };
+  } catch (error) {
+    throw new Error(`Failed to convert time: ${error.message}`);
+  }
+}
+
+const convertTimeBetweenTimezonesTool = createTool({
+  name: "convertTimeBetweenTimezones",
+  description: "Convert a specific time from one timezone to another using UTC offsets",
+  schema: z.object({
+    time: z.string().describe(`Time to convert. Supports various formats:
+- 12-hour: "6pm", "3:30 PM", "11:45 am"
+- 24-hour: "18:00", "15:30", "23:45"
+- Relative: "noon", "midnight"`),
+    fromOffset: z.string().describe(`Source UTC offset. Must be numeric, not timezone name.
+Examples: "-8" for PT, "+0" for London, "+8" for Beijing`),
+    toOffset: z.string().describe(`Target UTC offset. Must be numeric, not timezone name.
+Examples: "+9" for Tokyo, "-5" for NY, "+5:30" for Mumbai
+
+EXAMPLE USAGE:
+- "what time is 6pm PT in Tokyo" → time: "6pm", fromOffset: "-8", toOffset: "+9"
+- "convert 3:30 PM EST to London time" → time: "3:30 PM", fromOffset: "-5", toOffset: "+0"
+- "what is 9am Beijing time in New York" → time: "9am", fromOffset: "+8", toOffset: "-5"`),
+  }),
+  handler: async ({ time, fromOffset, toOffset }) =>
+    convertTimeBetweenTimezones(time, fromOffset, toOffset),
+  isBackground: true,
+});
+
+export {
+  getCurrentTimeTool,
+  getTimeInfoByEpochTool,
+  getTimeRangeMsTool,
+  pomodoroTool,
+  convertTimeBetweenTimezonesTool,
+};

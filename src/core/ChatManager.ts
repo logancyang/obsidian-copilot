@@ -24,6 +24,7 @@ export class ChatManager {
   private defaultProjectKey = "defaultProjectKey";
   private lastKnownProjectId: string | null = null;
   private persistenceManager: ChatPersistenceManager;
+  private onMessageCreatedCallback?: (messageId: string) => void;
 
   constructor(
     private messageRepo: MessageRepository,
@@ -35,7 +36,7 @@ export class ChatManager {
     // Initialize default project repository
     this.projectMessageRepos.set(this.defaultProjectKey, messageRepo);
     // Initialize persistence manager with default repository
-    this.persistenceManager = new ChatPersistenceManager(plugin.app, messageRepo);
+    this.persistenceManager = new ChatPersistenceManager(plugin.app, messageRepo, chainManager);
   }
 
   /**
@@ -64,9 +65,20 @@ export class ChatManager {
     const currentRepo = this.projectMessageRepos.get(projectKey)!;
 
     // Update persistence manager to use current repository
-    this.persistenceManager = new ChatPersistenceManager(this.plugin.app, currentRepo);
+    this.persistenceManager = new ChatPersistenceManager(
+      this.plugin.app,
+      currentRepo,
+      this.chainManager
+    );
 
     return currentRepo;
+  }
+
+  /**
+   * Set callback for when a message is created (before context processing)
+   */
+  setOnMessageCreatedCallback(callback: (messageId: string) => void): void {
+    this.onMessageCreatedCallback = callback;
   }
 
   /**
@@ -76,7 +88,8 @@ export class ChatManager {
     displayText: string,
     context: MessageContext,
     chainType: ChainType,
-    includeActiveNote: boolean = false
+    includeActiveNote: boolean = false,
+    content?: any[]
   ): Promise<string> {
     try {
       logInfo(`[ChatManager] Sending message: "${displayText}"`);
@@ -99,8 +112,14 @@ export class ChatManager {
         displayText,
         displayText, // Will be updated with processed content
         USER_SENDER,
-        updatedContext
+        updatedContext,
+        content
       );
+
+      // Notify that message was created (for immediate UI update)
+      if (this.onMessageCreatedCallback) {
+        this.onMessageCreatedCallback(messageId);
+      }
 
       // Get the message for context processing
       const message = currentRepo.getMessage(messageId);
@@ -177,7 +196,8 @@ export class ChatManager {
   async regenerateMessage(
     messageId: string,
     onUpdateCurrentMessage: (message: string) => void,
-    onAddMessage: (message: ChatMessage) => void
+    onAddMessage: (message: ChatMessage) => void,
+    onTruncate?: () => void
   ): Promise<boolean> {
     try {
       logInfo(`[ChatManager] Regenerating message ${messageId}`);
@@ -207,6 +227,11 @@ export class ChatManager {
 
       // Truncate messages after the user message
       currentRepo.truncateAfter(messageIndex - 1);
+
+      // Notify that truncation happened
+      if (onTruncate) {
+        onTruncate();
+      }
 
       // Update chain memory
       await this.updateChainMemory();

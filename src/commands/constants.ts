@@ -2,6 +2,7 @@ import { CustomCommand } from "@/commands/type";
 
 export const LEGACY_SELECTED_TEXT_PLACEHOLDER = "{copilot-selection}";
 export const COMMAND_NAME_MAX_LENGTH = 50;
+export const QUICK_COMMAND_CODE_BLOCK = "copilotquickcommand";
 export const EMPTY_COMMAND: CustomCommand = {
   title: "",
   content: "",

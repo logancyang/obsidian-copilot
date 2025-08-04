@@ -7,7 +7,6 @@ import { type ChainType } from "@/chainFactory";
 import {
   BUILTIN_CHAT_MODELS,
   BUILTIN_EMBEDDING_MODELS,
-  COMPOSER_OUTPUT_INSTRUCTIONS,
   DEFAULT_OPEN_AREA,
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
@@ -109,9 +108,12 @@ export interface CopilotSettings {
   enableWordCompletion: boolean;
   projectList: Array<ProjectConfig>;
   passMarkdownImages: boolean;
+  enableAutonomousAgent: boolean;
   enableCustomPromptTemplating: boolean;
   /** Whether we have suggested built-in default commands to the user once. */
   suggestedDefaultCommands: boolean;
+  autonomousAgentMaxIterations: number;
+  autonomousAgentEnabledToolIds: string[];
 }
 
 export const settingsStore = createStore();
@@ -254,13 +256,25 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.enableWordCompletion = DEFAULT_SETTINGS.enableWordCompletion;
   }
 
+  // Ensure autonomousAgentMaxIterations has a valid value
+  const autonomousAgentMaxIterations = Number(settingsToSanitize.autonomousAgentMaxIterations);
+  if (
+    isNaN(autonomousAgentMaxIterations) ||
+    autonomousAgentMaxIterations < 4 ||
+    autonomousAgentMaxIterations > 8
+  ) {
+    sanitizedSettings.autonomousAgentMaxIterations = DEFAULT_SETTINGS.autonomousAgentMaxIterations;
+  } else {
+    sanitizedSettings.autonomousAgentMaxIterations = autonomousAgentMaxIterations;
+  }
+
+  // Ensure autonomousAgentEnabledToolIds is an array
+  if (!Array.isArray(sanitizedSettings.autonomousAgentEnabledToolIds)) {
+    sanitizedSettings.autonomousAgentEnabledToolIds =
+      DEFAULT_SETTINGS.autonomousAgentEnabledToolIds;
+  }
+
   return sanitizedSettings;
-}
-
-export function getComposerOutputPrompt(): string {
-  const isPlusUser = getSettings().isPlusUser;
-
-  return isPlusUser ? COMPOSER_OUTPUT_INSTRUCTIONS : "";
 }
 
 export function getSystemPrompt(): string {

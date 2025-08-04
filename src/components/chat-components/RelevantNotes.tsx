@@ -138,6 +138,7 @@ function RelevantNote({
               }
             }}
             className="tw-block tw-w-full tw-truncate tw-text-sm tw-font-bold tw-text-normal"
+            title={note.document.title}
           >
             {note.document.title}
           </a>

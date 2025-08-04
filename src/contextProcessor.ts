@@ -2,7 +2,7 @@ import { getSelectedTextContexts } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { TFile, Vault } from "obsidian";
-import { NOTE_CONTEXT_PROMPT_TAG } from "./constants";
+import { NOTE_CONTEXT_PROMPT_TAG, EMBEDDED_PDF_TAG, SELECTED_TEXT_TAG } from "./constants";
 
 export class ContextProcessor {
   private static instance: ContextProcessor;
@@ -31,12 +31,15 @@ export class ContextProcessor {
       if (pdfFile instanceof TFile) {
         try {
           const pdfContent = await fileParserManager.parseFile(pdfFile, vault);
-          content = content.replace(match[0], `\n\nEmbedded PDF (${pdfName}):\n${pdfContent}\n\n`);
+          content = content.replace(
+            match[0],
+            `\n\n<${EMBEDDED_PDF_TAG}>\n<name>${pdfName}</name>\n<content>\n${pdfContent}\n</content>\n</${EMBEDDED_PDF_TAG}>\n\n`
+          );
         } catch (error) {
           console.error(`Error processing embedded PDF ${pdfName}:`, error);
           content = content.replace(
             match[0],
-            `\n\nEmbedded PDF (${pdfName}): [Error: Could not process PDF]\n\n`
+            `\n\n<${EMBEDDED_PDF_TAG}>\n<name>${pdfName}</name>\n<error>Could not process PDF</error>\n</${EMBEDDED_PDF_TAG}>\n\n`
           );
         }
       }
@@ -106,10 +109,15 @@ export class ContextProcessor {
           content = await this.processEmbeddedPDFs(content, vault, fileParserManager);
         }
 
-        additionalContext += `\n\n <${prompt_tag}> \n Title: [[${note.basename}]]\nPath: ${note.path}\n\n${content}\n</${prompt_tag}>`;
+        // Get file metadata
+        const stats = await vault.adapter.stat(note.path);
+        const ctime = stats ? new Date(stats.ctime).toISOString() : "Unknown";
+        const mtime = stats ? new Date(stats.mtime).toISOString() : "Unknown";
+
+        additionalContext += `\n\n<${prompt_tag}>\n<title>${note.basename}</title>\n<path>${note.path}</path>\n<ctime>${ctime}</ctime>\n<mtime>${mtime}</mtime>\n<content>\n${content}\n</content>\n</${prompt_tag}>`;
       } catch (error) {
         console.error(`Error processing file ${note.path}:`, error);
-        additionalContext += `\n\n <${prompt_tag}_error> \n Title: [[${note.basename}]]\nPath: ${note.path}\n\n[Error: Could not process file]\n</${prompt_tag}_error>`;
+        additionalContext += `\n\n<${prompt_tag}_error>\n<title>${note.basename}</title>\n<path>${note.path}</path>\n<error>[Error: Could not process file]</error>\n</${prompt_tag}_error>`;
       }
     };
 
@@ -180,12 +188,7 @@ export class ContextProcessor {
     let additionalContext = "";
 
     for (const selectedText of selectedTextContexts) {
-      const lineRange =
-        selectedText.startLine === selectedText.endLine
-          ? `L${selectedText.startLine}`
-          : `L${selectedText.startLine}-${selectedText.endLine}`;
-
-      additionalContext += `\n\n <selected_text> \n Title: [[${selectedText.noteTitle}]]\nPath: ${selectedText.notePath}\nLines: ${lineRange}\n\n${selectedText.content}\n</selected_text>`;
+      additionalContext += `\n\n<${SELECTED_TEXT_TAG}>\n<title>${selectedText.noteTitle}</title>\n<path>${selectedText.notePath}</path>\n<start_line>${selectedText.startLine.toString()}</start_line>\n<end_line>${selectedText.endLine.toString()}</end_line>\n<content>\n${selectedText.content}\n</content>\n</${SELECTED_TEXT_TAG}>`;
     }
 
     return additionalContext;

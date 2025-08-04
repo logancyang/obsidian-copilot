@@ -6,9 +6,10 @@ import {
   COPILOT_COMMAND_SLASH_ENABLED,
   EMPTY_COMMAND,
   LEGACY_SELECTED_TEXT_PLACEHOLDER,
+  QUICK_COMMAND_CODE_BLOCK,
 } from "@/commands/constants";
 import { CustomCommand } from "@/commands/type";
-import { normalizePath, Notice, TAbstractFile, TFile, Vault } from "obsidian";
+import { normalizePath, Notice, TAbstractFile, TFile, Vault, Editor } from "obsidian";
 import { getSettings } from "@/settings/model";
 import {
   updateCachedCommands,
@@ -25,7 +26,12 @@ import {
   getNotesFromTags,
   processVariableNameForNotePath,
 } from "@/utils";
-import { NOTE_CONTEXT_PROMPT_TAG } from "@/constants";
+import {
+  NOTE_CONTEXT_PROMPT_TAG,
+  SELECTED_TEXT_TAG,
+  VARIABLE_TAG,
+  VARIABLE_NOTE_TAG,
+} from "@/constants";
 
 export function validateCommandName(
   name: string,
@@ -195,8 +201,8 @@ export async function processCommandPrompt(
 
   const processedPrompt = result.processedPrompt;
 
-  if (processedPrompt.includes("{selectedText}") || skipAppendingSelectedText) {
-    // Containing {selectedText} means the prompt was using the custom prompt
+  if (processedPrompt.includes(`{${SELECTED_TEXT_TAG}}`) || skipAppendingSelectedText) {
+    // Containing {selected_text} means the prompt was using the custom prompt
     // processor way of handling the selected text. No need to go through the
     // legacy placeholder.
     return processedPrompt;
@@ -211,7 +217,16 @@ export async function processCommandPrompt(
   // `{copilot-selection}` is found, append the selected text to the prompt.
   const index = processedPrompt.indexOf(LEGACY_SELECTED_TEXT_PLACEHOLDER);
   if (index === -1 && selectedText.trim()) {
-    return processedPrompt + "\n\n<selectedText>" + selectedText + "</selectedText>";
+    return (
+      processedPrompt +
+      "\n\n<" +
+      SELECTED_TEXT_TAG +
+      ">" +
+      selectedText +
+      "</" +
+      SELECTED_TEXT_TAG +
+      ">"
+    );
   }
   return (
     processedPrompt.slice(0, index) +
@@ -257,7 +272,7 @@ async function extractVariablesFromPrompt(
       if (activeNote) {
         const content = await getFileContent(activeNote, vault);
         if (content) {
-          variableResult.content = `## ${getFileName(activeNote)}\n\n${content}`;
+          variableResult.content = `<${VARIABLE_NOTE_TAG}>\n## ${getFileName(activeNote)}\n\n${content}\n</${VARIABLE_NOTE_TAG}>`;
           variableResult.files.push(activeNote);
         }
       } else {
@@ -274,7 +289,9 @@ async function extractVariablesFromPrompt(
       for (const file of noteFiles) {
         const content = await getFileContent(file, vault);
         if (content) {
-          notesContent.push(`## ${getFileName(file)}\n\n${content}`);
+          notesContent.push(
+            `<${VARIABLE_NOTE_TAG}>\n## ${getFileName(file)}\n\n${content}\n</${VARIABLE_NOTE_TAG}>`
+          );
           variableResult.files.push(file);
         }
       }
@@ -286,7 +303,9 @@ async function extractVariablesFromPrompt(
       for (const file of noteFiles) {
         const content = await getFileContent(file, vault);
         if (content) {
-          notesContent.push(`## ${getFileName(file)}\n\n${content}`);
+          notesContent.push(
+            `<${VARIABLE_NOTE_TAG}>\n## ${getFileName(file)}\n\n${content}\n</${VARIABLE_NOTE_TAG}>`
+          );
           variableResult.files.push(file);
         }
       }
@@ -353,16 +372,16 @@ export async function processPrompt(
   let activeNoteContent: string | null = null;
 
   if (processedPrompt.includes("{}")) {
-    processedPrompt = processedPrompt.replace(/\{\}/g, "{selectedText}");
+    processedPrompt = processedPrompt.replace(/\{\}/g, `{${SELECTED_TEXT_TAG}}`);
     if (selectedText) {
-      additionalInfo += `selectedText:\n\n${selectedText}`;
+      additionalInfo += `<${SELECTED_TEXT_TAG}>\n${selectedText}\n</${SELECTED_TEXT_TAG}>`;
       // Note: selectedText doesn't directly correspond to a file inclusion here
     } else if (activeNote) {
       activeNoteContent = await getFileContent(activeNote, vault);
-      additionalInfo += `selectedText (entire active note):\n\n${activeNoteContent}`;
+      additionalInfo += `<${SELECTED_TEXT_TAG} type="active_note">\n${activeNoteContent || ""}\n</${SELECTED_TEXT_TAG}>`;
       includedFiles.add(activeNote); // Ensure active note is tracked if used for {}
     } else {
-      additionalInfo += `selectedText:\n\n(No selected text or active note available)`;
+      additionalInfo += `<${SELECTED_TEXT_TAG}>\n(No selected text or active note available)\n</${SELECTED_TEXT_TAG}>`;
     }
   }
 
@@ -374,9 +393,9 @@ export async function processPrompt(
       continue;
     }
     if (additionalInfo) {
-      additionalInfo += `\n\n${varName}:\n\n${content}`;
+      additionalInfo += `\n\n<${VARIABLE_TAG} name="${varName}">\n${content}\n</${VARIABLE_TAG}>`;
     } else {
-      additionalInfo += `${varName}:\n\n${content}`;
+      additionalInfo += `<${VARIABLE_TAG} name="${varName}">\n${content}\n</${VARIABLE_TAG}>`;
     }
   }
 
@@ -388,7 +407,12 @@ export async function processPrompt(
     if (!includedFiles.has(noteFile)) {
       const noteContent = await getFileContent(noteFile, vault);
       if (noteContent) {
-        const noteContext = `<${NOTE_CONTEXT_PROMPT_TAG}> \n Title: [[${noteFile.basename}]]\nPath: ${noteFile.path}\n\n${noteContent}\n</${NOTE_CONTEXT_PROMPT_TAG}>`;
+        // Get file metadata
+        const stats = await vault.adapter.stat(noteFile.path);
+        const ctime = stats ? new Date(stats.ctime).toISOString() : "Unknown";
+        const mtime = stats ? new Date(stats.mtime).toISOString() : "Unknown";
+
+        const noteContext = `<${NOTE_CONTEXT_PROMPT_TAG}>\n<title>${noteFile.basename}</title>\n<path>${noteFile.path}</path>\n<ctime>${ctime}</ctime>\n<mtime>${mtime}</mtime>\n<content>\n${noteContent}\n</content>\n</${NOTE_CONTEXT_PROMPT_TAG}>`;
         if (additionalInfo) {
           additionalInfo += `\n\n`;
         }
@@ -467,4 +491,69 @@ export async function ensureCommandFrontmatter(file: TFile, command: CustomComma
   } finally {
     removePendingFileWrite(file.path);
   }
+}
+
+/**
+ * Removes all quick command code blocks from the editor while preserving cursor position and selection
+ * @param editor - The Obsidian editor instance
+ * @returns true if any blocks were removed, false otherwise
+ */
+export function removeQuickCommandBlocks(editor: Editor): boolean {
+  // Store original selection positions
+  const originalFrom = editor.getCursor("from");
+  const originalTo = editor.getCursor("to");
+
+  const content = editor.getValue();
+  const lines = content.split("\n");
+  let hasExisting = false;
+  const newLines = [];
+  let removedLinesBeforeFrom = 0;
+  let removedLinesBeforeTo = 0;
+  let i = 0;
+
+  while (i < lines.length) {
+    if (lines[i].trim() === `\`\`\`${QUICK_COMMAND_CODE_BLOCK}`) {
+      hasExisting = true;
+      const blockStartLine = i;
+
+      // Skip the opening line
+      i++;
+      // Skip until we find the closing ```
+      while (i < lines.length && lines[i].trim() !== "```") {
+        i++;
+      }
+      // Skip the closing line
+      i++;
+
+      const removedLineCount = i - blockStartLine;
+
+      // Calculate how many lines were removed before the selection positions
+      if (blockStartLine <= originalFrom.line) {
+        removedLinesBeforeFrom += removedLineCount;
+      }
+      if (blockStartLine <= originalTo.line) {
+        removedLinesBeforeTo += removedLineCount;
+      }
+    } else {
+      newLines.push(lines[i]);
+      i++;
+    }
+  }
+
+  // Update editor content and restore selection if we removed existing blocks
+  if (hasExisting) {
+    editor.setValue(newLines.join("\n"));
+
+    // Calculate new selection positions accounting for removed lines
+    const newFromLine = Math.max(0, originalFrom.line - removedLinesBeforeFrom);
+    const newToLine = Math.max(0, originalTo.line - removedLinesBeforeTo);
+
+    // Restore the selection
+    editor.setSelection(
+      { line: newFromLine, ch: originalFrom.ch },
+      { line: newToLine, ch: originalTo.ch }
+    );
+  }
+
+  return hasExisting;
 }

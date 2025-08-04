@@ -9,13 +9,13 @@ import {
   useSelectedTextContexts,
 } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
-import { processPrompt } from "@/commands/customCommandUtils";
+
 import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
 import { NewVersionBanner } from "@/components/chat-components/NewVersionBanner";
 import { ProjectList } from "@/components/chat-components/ProjectList";
-import { ABORT_REASON, COMMAND_IDS, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
+import { ABORT_REASON, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
 import { useChatManager } from "@/hooks/useChatManager";
 import { getAIResponse } from "@/langchainStream";
@@ -23,12 +23,7 @@ import ChainManager from "@/LLMProviders/chainManager";
 import CopilotPlugin from "@/main";
 import { Mention } from "@/mentions/Mention";
 import { useIsPlusUser } from "@/plusUtils";
-import {
-  getComposerOutputPrompt,
-  getSettings,
-  updateSetting,
-  useSettingsValue,
-} from "@/settings/model";
+import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { err2String } from "@/utils";
@@ -141,11 +136,6 @@ const Chat: React.FC<ChatProps> = ({
 
       // Handle composer prompt
       let displayText = inputMessage;
-      const composerPrompt = await getComposerOutputPrompt();
-      if (inputMessage.includes("@composer") && composerPrompt !== "") {
-        displayText =
-          inputMessage + "\n\n<output_format>\n" + composerPrompt + "\n</output_format>";
-      }
 
       // Add tool calls if present
       if (toolCalls) {
@@ -170,7 +160,8 @@ const Chat: React.FC<ChatProps> = ({
         displayText,
         context,
         currentChain,
-        includeActiveNote
+        includeActiveNote,
+        content.length > 0 ? content : undefined
       );
 
       // Add to user message history
@@ -253,6 +244,8 @@ const Chat: React.FC<ChatProps> = ({
         return;
       }
 
+      // Clear current AI message and set loading state
+      setCurrentAiMessage("");
       setLoading(true);
       try {
         const success = await chatUIState.regenerateMessage(
@@ -353,76 +346,6 @@ const Chat: React.FC<ChatProps> = ({
       settings.autosaveChat,
       handleSaveAsNote,
     ]
-  );
-
-  const createEffect = (
-    eventType: string,
-    promptFn: (selectedText: string, eventSubtype?: string) => string | Promise<string>
-  ) => {
-    return () => {
-      const debug = getSettings().debug;
-      const handleSelection = async (event: CustomEvent) => {
-        const messageWithPrompt = await promptFn(
-          event.detail.selectedText,
-          event.detail.eventSubtype
-        );
-
-        // Send the prompt message through ChatManager (simplified approach)
-        try {
-          const messageId = await chatUIState.sendMessage(
-            messageWithPrompt,
-            { notes: [], urls: [], selectedTextContexts: [] },
-            currentChain,
-            includeActiveNote
-          );
-
-          // Get the LLM message for AI processing
-          const llmMessage = chatUIState.getLLMMessage(messageId);
-          if (llmMessage) {
-            setLoading(true);
-            await getAIResponse(
-              llmMessage,
-              chainManager,
-              addMessage,
-              setCurrentAiMessage,
-              setAbortController,
-              {
-                debug,
-                ignoreSystemMessage: true,
-              }
-            );
-            setLoading(false);
-          }
-        } catch (error) {
-          console.error("Error processing adhoc prompt:", error);
-          setLoading(false);
-        }
-      };
-
-      eventTarget?.addEventListener(eventType, handleSelection);
-
-      // Cleanup function to remove the event listener when the component unmounts
-      return () => {
-        eventTarget?.removeEventListener(eventType, handleSelection);
-      };
-    };
-  };
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(
-    createEffect(COMMAND_IDS.APPLY_ADHOC_PROMPT, async (selectedText, customPrompt) => {
-      if (!customPrompt) {
-        return selectedText;
-      }
-      const result = await processPrompt(
-        customPrompt,
-        selectedText,
-        app.vault,
-        app.workspace.getActiveFile()
-      );
-      return result.processedPrompt; // Extract just the processed prompt string
-    }),
-    []
   );
 
   // Expose handleSaveAsNote to parent

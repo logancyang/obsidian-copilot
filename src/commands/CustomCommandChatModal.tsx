@@ -21,7 +21,7 @@ import { CustomCommand } from "@/commands/type";
 import { useSettingsValue } from "@/settings/model";
 
 // Custom hook for managing chat chain
-function useChatChain(selectedModel: CustomModel) {
+function useChatChain(selectedModel: CustomModel, systemPrompt?: string) {
   const [chatMemory] = useState<BaseChatMemory>(
     new BufferMemory({ returnMessages: true, memoryKey: "history" })
   );
@@ -32,10 +32,10 @@ function useChatChain(selectedModel: CustomModel) {
     async function initChatChain() {
       const chatModel = await ChatModelManager.getInstance().createModelInstance(selectedModel);
 
+      const defaultSystemPrompt =
+        "You are a helpful assistant. You'll help the user with their content editing needs.";
       const chatPrompt = ChatPromptTemplate.fromMessages([
-        SystemMessagePromptTemplate.fromTemplate(
-          "You are a helpful assistant. You'll help the user with their content editing needs."
-        ),
+        SystemMessagePromptTemplate.fromTemplate(systemPrompt || defaultSystemPrompt),
         new MessagesPlaceholder("history"),
         HumanMessagePromptTemplate.fromTemplate("{input}"),
       ]);
@@ -57,7 +57,7 @@ function useChatChain(selectedModel: CustomModel) {
     }
 
     initChatChain();
-  }, [selectedModel, chatMemory]);
+  }, [selectedModel, chatMemory, systemPrompt]);
 
   return { chatChain, chatMemory };
 }
@@ -67,6 +67,7 @@ interface CustomCommandChatModalContentProps {
   command: CustomCommand;
   onInsert: (message: string) => void;
   onReplace: (message: string) => void;
+  systemPrompt?: string;
 }
 
 function CustomCommandChatModalContent({
@@ -74,6 +75,7 @@ function CustomCommandChatModalContent({
   command,
   onInsert,
   onReplace,
+  systemPrompt,
 }: CustomCommandChatModalContentProps) {
   const [aiCurrentMessage, setAiCurrentMessage] = useState<string | null>(null);
   const [processedMessage, setProcessedMessage] = useState<string | null>(null);
@@ -88,7 +90,7 @@ function CustomCommandChatModalContent({
     [command.modelKey, modelKey, settings.activeModels]
   );
 
-  const { chatChain, chatMemory } = useChatChain(selectedModel);
+  const { chatChain, chatMemory } = useChatChain(selectedModel, systemPrompt);
 
   const commandTitle = command.title;
 
@@ -298,12 +300,16 @@ function CustomCommandChatModalContent({
         <div className="tw-flex tw-gap-2">
           {generating ? (
             // When generating, show Stop button
-            <Button variant="secondary" onClick={handleStopGeneration}>
+            <Button size="sm" variant="secondary" onClick={handleStopGeneration}>
               Stop
             </Button>
           ) : showFollowupSubmit ? (
             // When follow-up instruction has content, show Submit button with Enter shortcut
-            <Button onClick={handleFollowupSubmit} className="tw-flex tw-items-center tw-gap-1">
+            <Button
+              size="sm"
+              onClick={handleFollowupSubmit}
+              className="tw-flex tw-items-center tw-gap-1"
+            >
               <span>Submit</span>
               <CornerDownLeft className="tw-size-3" />
             </Button>
@@ -311,11 +317,12 @@ function CustomCommandChatModalContent({
             // Otherwise, show Insert and Replace buttons with shortcut indicators
             <>
               <Button
+                size="sm"
                 onClick={() => onInsert(processedMessage ?? "")}
                 className="tw-flex tw-items-center tw-gap-1"
               >
                 <span>Insert</span>
-                <div className="tw-flex tw-items-center tw-text-xs tw-text-normal">
+                <div className="tw-flex tw-items-center tw-text-xs">
                   {Platform.isMacOS ? (
                     <>
                       <Command className="tw-size-3" />
@@ -332,11 +339,12 @@ function CustomCommandChatModalContent({
                 </div>
               </Button>
               <Button
+                size="sm"
                 onClick={() => onReplace(processedMessage ?? "")}
                 className="tw-flex tw-items-center tw-gap-1"
               >
                 <span>Replace</span>
-                <div className="tw-flex tw-items-center tw-text-xs tw-text-normal">
+                <div className="tw-flex tw-items-center tw-text-xs">
                   {Platform.isMacOS ? (
                     <>
                       <Command className="tw-size-3" />
@@ -366,6 +374,7 @@ export class CustomCommandChatModal extends Modal {
     private configs: {
       selectedText: string;
       command: CustomCommand;
+      systemPrompt?: string;
     }
   ) {
     super(app);
@@ -374,7 +383,7 @@ export class CustomCommandChatModal extends Modal {
   onOpen() {
     const { contentEl } = this;
     this.root = createRoot(contentEl);
-    const { selectedText, command } = this.configs;
+    const { selectedText, command, systemPrompt } = this.configs;
 
     const handleInsert = (message: string) => {
       insertIntoEditor(message);
@@ -392,6 +401,7 @@ export class CustomCommandChatModal extends Modal {
         command={command}
         onInsert={handleInsert}
         onReplace={handleReplace}
+        systemPrompt={systemPrompt}
       />
     );
   }

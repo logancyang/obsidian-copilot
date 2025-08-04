@@ -99,7 +99,7 @@ export class ProjectContextCache {
           isProject: true,
         });
 
-        if (shouldIndexFile(file, inclusions, exclusions)) {
+        if (shouldIndexFile(file, inclusions, exclusions, true)) {
           // Only invalidate markdown context, keep other contexts
           await this.invalidateMarkdownContext(project);
           logInfo(
@@ -525,7 +525,7 @@ export class ProjectContextCache {
         const file = this.vault.getAbstractFileByPath(filePath);
 
         // If file no longer exists or doesn't match patterns, remove its reference
-        if (!(file instanceof TFile) || !shouldIndexFile(file, inclusions, exclusions)) {
+        if (!(file instanceof TFile) || !shouldIndexFile(file, inclusions, exclusions, true)) {
           // Note: We don't remove from fileCache to preserve content for future use
           removedCount++;
         } else {
@@ -571,7 +571,7 @@ export class ProjectContextCache {
       let addedCount = 0;
 
       for (const file of allFiles) {
-        if (shouldIndexFile(file, inclusions, exclusions)) {
+        if (shouldIndexFile(file, inclusions, exclusions, true)) {
           if (contextCacheToUpdate.fileContexts[file.path]) {
             continue;
           }

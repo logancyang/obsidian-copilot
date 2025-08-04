@@ -6,6 +6,7 @@ import { formatDateTime } from "@/utils";
 import { USER_SENDER, AI_SENDER } from "@/constants";
 import { getSettings } from "@/settings/model";
 import { getCurrentProject } from "@/aiParams";
+import ChainManager from "@/LLMProviders/chainManager";
 
 /**
  * ChatPersistenceManager - Handles saving and loading chat messages
@@ -19,7 +20,8 @@ import { getCurrentProject } from "@/aiParams";
 export class ChatPersistenceManager {
   constructor(
     private app: App,
-    private messageRepo: MessageRepository
+    private messageRepo: MessageRepository,
+    private chainManager?: ChainManager
   ) {}
 
   /**
@@ -43,15 +45,26 @@ export class ChatPersistenceManager {
         await this.app.vault.createFolder(settings.defaultSaveFolder);
       }
 
-      const fileName = this.generateFileName(messages, firstMessageEpoch);
-      const noteContent = this.generateNoteContent(chatContent, firstMessageEpoch, modelKey);
+      // Check if a file with this epoch already exists
+      const existingFile = await this.findFileByEpoch(firstMessageEpoch);
+      let topic: string | undefined;
 
-      // Check if the file already exists
-      const existingFile = this.app.vault.getAbstractFileByPath(fileName);
-      if (existingFile instanceof TFile) {
+      if (existingFile) {
+        // If file exists, preserve the existing topic
+        const frontmatter = this.app.metadataCache.getFileCache(existingFile)?.frontmatter;
+        topic = frontmatter?.topic;
+      } else {
+        // If new file, generate AI topic
+        topic = await this.generateAITopic(messages);
+      }
+
+      const fileName = this.generateFileName(messages, firstMessageEpoch, topic);
+      const noteContent = this.generateNoteContent(chatContent, firstMessageEpoch, modelKey, topic);
+
+      if (existingFile) {
         // If the file exists, update its content
         await this.app.vault.modify(existingFile, noteContent);
-        logInfo(`[ChatPersistenceManager] Updated existing chat file: ${fileName}`);
+        logInfo(`[ChatPersistenceManager] Updated existing chat file: ${existingFile.path}`);
       } else {
         // If the file doesn't exist, create a new one
         await this.app.vault.create(fileName, noteContent);
@@ -186,32 +199,106 @@ export class ChatPersistenceManager {
   }
 
   /**
+   * Find a file by its epoch in the frontmatter
+   */
+  private async findFileByEpoch(epoch: number): Promise<TFile | null> {
+    const files = await this.getChatHistoryFiles();
+
+    for (const file of files) {
+      const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+      if (frontmatter?.epoch === epoch) {
+        return file;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Generate AI topic for the conversation
+   */
+  private async generateAITopic(messages: ChatMessage[]): Promise<string | undefined> {
+    if (!this.chainManager) {
+      return undefined;
+    }
+
+    try {
+      const chatModel = this.chainManager.chatModelManager.getChatModel();
+      if (!chatModel) {
+        return undefined;
+      }
+
+      // Constants for topic generation
+      const TOPIC_GENERATION_MESSAGE_LIMIT = 6;
+      const TOPIC_GENERATION_CHAR_LIMIT = 200;
+
+      // Get conversation content for topic generation - using reduce for efficiency
+      const conversationSummary = messages.reduce((acc, m, i) => {
+        if (i >= TOPIC_GENERATION_MESSAGE_LIMIT) return acc;
+        return (
+          acc +
+          (acc ? "\n" : "") +
+          `${m.sender}: ${m.message.slice(0, TOPIC_GENERATION_CHAR_LIMIT)}`
+        );
+      }, "");
+
+      const prompt = `Generate a concise title (max 5 words) for this conversation based on its content. Return only the title without any explanation or quotes.
+
+Conversation:
+${conversationSummary}`;
+
+      const response = await chatModel.invoke(prompt);
+      const topic = response.content
+        .toString()
+        .trim()
+        .replace(/^["']|["']$/g, "") // Remove quotes if present
+        .replace(/[\\/:*?"<>|]/g, "") // Remove invalid filename characters
+        .slice(0, 50); // Limit length
+
+      return topic || undefined;
+    } catch (error) {
+      logError("[ChatPersistenceManager] Error generating AI topic:", error);
+      return undefined;
+    }
+  }
+
+  /**
    * Generate a file name for the chat
    */
-  private generateFileName(messages: ChatMessage[], firstMessageEpoch: number): string {
+  private generateFileName(
+    messages: ChatMessage[],
+    firstMessageEpoch: number,
+    topic?: string
+  ): string {
     const settings = getSettings();
     const formattedDateTime = formatDateTime(new Date(firstMessageEpoch));
     const timestampFileName = formattedDateTime.fileName;
 
-    // Get the first user message
-    const firstUserMessage = messages.find((message) => message.sender === USER_SENDER);
+    // Use provided topic or fall back to first 10 words
+    let topicForFilename: string;
+    if (topic) {
+      topicForFilename = topic;
+    } else {
+      // Get the first user message
+      const firstUserMessage = messages.find((message) => message.sender === USER_SENDER);
 
-    // Get the first 10 words from the first user message and sanitize them
-    const firstTenWords = firstUserMessage
-      ? firstUserMessage.message
-          .split(/\s+/)
-          .slice(0, 10)
-          .join(" ")
-          .replace(/[\\/:*?"<>|]/g, "") // Remove invalid filename characters
-          .trim()
-      : "Untitled Chat";
+      // Get the first 10 words from the first user message and sanitize them
+      topicForFilename = firstUserMessage
+        ? firstUserMessage.message
+            .split(/\s+/)
+            .slice(0, 10)
+            .join(" ")
+            .replace(/[\\/:*?"<>|]/g, "") // Remove invalid filename characters
+            .trim()
+        : "Untitled Chat";
+    }
 
     // Parse the custom format and replace variables
     let customFileName = settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}";
 
     // Create the file name (limit to 100 characters to avoid excessively long names)
     customFileName = customFileName
-      .replace("{$topic}", firstTenWords.slice(0, 100).replace(/\s+/g, "_"))
+      .replace("{$topic}", topicForFilename.slice(0, 100).replace(/\s+/g, "_"))
       .replace("{$date}", timestampFileName.split("_")[0])
       .replace("{$time}", timestampFileName.split("_")[1]);
 
@@ -231,7 +318,8 @@ export class ChatPersistenceManager {
   private generateNoteContent(
     chatContent: string,
     firstMessageEpoch: number,
-    modelKey: string
+    modelKey: string,
+    topic?: string
   ): string {
     const settings = getSettings();
     const currentProject = getCurrentProject();
@@ -239,6 +327,7 @@ export class ChatPersistenceManager {
     return `---
 epoch: ${firstMessageEpoch}
 modelKey: ${modelKey}
+${topic ? `topic: "${topic}"` : ""}
 ${currentProject ? `projectId: ${currentProject.id}` : ""}
 ${currentProject ? `projectName: ${currentProject.name}` : ""}
 tags:

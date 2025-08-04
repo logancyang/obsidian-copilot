@@ -3,6 +3,7 @@ import { isProjectMode } from "@/aiParams";
 import { createGetFileTreeTool } from "@/tools/FileTreeTools";
 import { indexTool, localSearchTool, webSearchTool } from "@/tools/SearchTools";
 import {
+  convertTimeBetweenTimezonesTool,
   getCurrentTimeTool,
   getTimeInfoByEpochTool,
   getTimeRangeMsTool,
@@ -30,6 +31,7 @@ export class IntentAnalyzer {
     if (this.tools.length === 0) {
       this.tools = [
         getCurrentTimeTool,
+        convertTimeBetweenTimezonesTool,
         getTimeInfoByEpochTool,
         getTimeRangeMsTool,
         localSearchTool,
@@ -104,7 +106,7 @@ export class IntentAnalyzer {
     const { timeRange, salientTerms } = context;
 
     // Handle @vault command
-    if (message.includes("@vault") && (salientTerms.length > 0 || timeRange)) {
+    if (message.includes("@vault")) {
       // Remove all @commands from the query
       const cleanQuery = this.removeAtCommands(originalMessage);
 

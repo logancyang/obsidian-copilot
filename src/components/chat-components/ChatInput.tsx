@@ -7,42 +7,36 @@ import {
   useProjectLoading,
 } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
+import { CustomCommandManager } from "@/commands/customCommandManager";
+import { sortSlashCommands } from "@/commands/customCommandUtils";
+import { getCachedCustomCommands } from "@/commands/state";
 import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
 import { AddImageModal } from "@/components/modals/AddImageModal";
 import { ListPromptModal } from "@/components/modals/ListPromptModal";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { ModelDisplay } from "@/components/ui/model-display";
+import { ModelSelector } from "@/components/ui/ModelSelector";
 import { ContextProcessor } from "@/contextProcessor";
-import { CustomCommandManager } from "@/commands/customCommandManager";
+import { cn } from "@/lib/utils";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
-import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
+
+import { updateSetting, useSettingsValue } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
 import { getToolDescription } from "@/tools/toolManager";
+import { extractNoteFiles, isAllowedFileForContext, isNoteTitleUnique } from "@/utils";
 import {
-  checkModelApiKey,
-  err2String,
-  extractNoteFiles,
-  isAllowedFileForContext,
-  isNoteTitleUnique,
-} from "@/utils";
-import {
-  ArrowBigUp,
-  ChevronDown,
-  Command,
   CornerDownLeft,
+  Database,
+  Globe,
   Image,
   Loader2,
   StopCircle,
   X,
+  Pen,
+  Sparkles,
+  Brain,
 } from "lucide-react";
-import { App, Notice, Platform, TFile } from "obsidian";
+import { App, Platform, TFile } from "obsidian";
 import React, {
   forwardRef,
   useCallback,
@@ -54,8 +48,6 @@ import React, {
 } from "react";
 import { useDropzone } from "react-dropzone";
 import ContextControl from "./ContextControl";
-import { getCachedCustomCommands } from "@/commands/state";
-import { sortSlashCommands } from "@/commands/customCommandUtils";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -104,22 +96,28 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     },
     ref
   ) => {
-    const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
     const [contextUrls, setContextUrls] = useState<string[]>([]);
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [currentModelKey, setCurrentModelKey] = useModelKey();
-    const [modelError, setModelError] = useState<string | null>(null);
     const [currentChain] = useChainType();
     const [isProjectLoading] = useProjectLoading();
+    const settings = useSettingsValue();
     const [currentActiveNote, setCurrentActiveNote] = useState<TFile | null>(() => {
       const activeFile = app.workspace.getActiveFile();
       return isAllowedFileForContext(activeFile) ? activeFile : null;
     });
     const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
-    const settings = useSettingsValue();
     const isCopilotPlus =
       currentChain === ChainType.COPILOT_PLUS_CHAIN || currentChain === ChainType.PROJECT_CHAIN;
+
+    // Toggle states for vault, web search, composer, and autonomous agent
+    const [vaultToggle, setVaultToggle] = useState(false);
+    const [webToggle, setWebToggle] = useState(false);
+    const [composerToggle, setComposerToggle] = useState(false);
+    const [autonomousAgentToggle, setAutonomousAgentToggle] = useState(
+      settings.enableAutonomousAgent
+    );
     const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
     const loadingMessages = [
       "Loading the project context...",
@@ -132,6 +130,17 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         textAreaRef.current?.focus();
       },
     }));
+
+    // Sync autonomous agent toggle with settings and chain type
+    useEffect(() => {
+      if (currentChain === ChainType.PROJECT_CHAIN) {
+        // Force off in Projects mode
+        setAutonomousAgentToggle(false);
+      } else {
+        // In other modes, use the actual settings value
+        setAutonomousAgentToggle(settings.enableAutonomousAgent);
+      }
+    }, [settings.enableAutonomousAgent, currentChain]);
 
     useEffect(() => {
       if (currentChain === ChainType.PROJECT_CHAIN) {
@@ -170,14 +179,24 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       return currentModelKey;
     };
 
-    const onSendMessage = (includeVault: boolean) => {
+    const onSendMessage = () => {
       if (!isCopilotPlus) {
         handleSendMessage();
         return;
       }
 
+      // Build tool calls based on toggle states
+      const toolCalls: string[] = [];
+      // Only add tool calls when autonomous agent is off
+      // When autonomous agent is on, it handles all tools internally
+      if (!autonomousAgentToggle) {
+        if (vaultToggle) toolCalls.push("@vault");
+        if (webToggle) toolCalls.push("@websearch");
+        if (composerToggle) toolCalls.push("@composer");
+      }
+
       handleSendMessage({
-        toolCalls: includeVault ? ["@vault"] : [],
+        toolCalls,
         contextNotes,
         urls: contextUrls,
       });
@@ -336,14 +355,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.nativeEvent.isComposing) return;
 
-      // Check for Cmd+Shift+Enter (Mac) or Ctrl+Shift+Enter (Windows)
-      if (e.key === "Enter" && e.shiftKey && (Platform.isMacOS ? e.metaKey : e.ctrlKey)) {
-        e.preventDefault();
-        e.stopPropagation();
-        onSendMessage(true);
-        return;
-      }
-
       if (e.key === "Enter") {
         /**
          * send msg:
@@ -359,7 +370,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         }
 
         e.preventDefault();
-        onSendMessage(false);
+        onSendMessage();
       }
     };
 
@@ -563,71 +574,19 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
               <span>Generating...</span>
             </div>
           ) : (
-            <DropdownMenu open={isModelDropdownOpen} onOpenChange={setIsModelDropdownOpen}>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost2" size="fit" disabled={disableModelSwitch}>
-                  {modelError ? (
-                    <span className="tw-text-error">Model Load Failed</span>
-                  ) : settings.activeModels.find(
-                      (model) =>
-                        model.enabled && getModelKeyFromModel(model) === getDisplayModelKey()
-                    ) ? (
-                    <ModelDisplay
-                      model={
-                        settings.activeModels.find(
-                          (model) =>
-                            model.enabled && getModelKeyFromModel(model) === getDisplayModelKey()
-                        )!
-                      }
-                      iconSize={8}
-                    />
-                  ) : (
-                    "Select Model"
-                  )}
-                  {!disableModelSwitch && <ChevronDown className="tw-mt-0.5 tw-size-5" />}
-                </Button>
-              </DropdownMenuTrigger>
-
-              <DropdownMenuContent align="start">
-                {!disableModelSwitch &&
-                  settings.activeModels
-                    .filter((model) => model.enabled)
-                    .map((model) => {
-                      const { hasApiKey, errorNotice } = checkModelApiKey(model, settings);
-                      return (
-                        <DropdownMenuItem
-                          key={getModelKeyFromModel(model)}
-                          onSelect={async (event) => {
-                            if (!hasApiKey && errorNotice) {
-                              event.preventDefault();
-                              new Notice(errorNotice);
-                              return;
-                            }
-
-                            try {
-                              setModelError(null);
-                              setCurrentModelKey(getModelKeyFromModel(model));
-                            } catch (error) {
-                              const msg = `Model switch failed: ` + err2String(error);
-                              setModelError(msg);
-                              new Notice(msg);
-                              // Restore to the last valid model
-                              const lastValidModel = settings.activeModels.find(
-                                (m) => m.enabled && getModelKeyFromModel(m) === currentModelKey
-                              );
-                              if (lastValidModel) {
-                                setCurrentModelKey(getModelKeyFromModel(lastValidModel));
-                              }
-                            }
-                          }}
-                          className={!hasApiKey ? "tw-cursor-not-allowed tw-opacity-50" : ""}
-                        >
-                          <ModelDisplay model={model} iconSize={12} />
-                        </DropdownMenuItem>
-                      );
-                    })}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <ModelSelector
+              variant="ghost2"
+              size="fit"
+              disabled={disableModelSwitch}
+              value={getDisplayModelKey()}
+              onChange={(modelKey) => {
+                // In project mode, we don't update the global model key
+                // as the project model takes precedence
+                if (currentChain !== ChainType.PROJECT_CHAIN) {
+                  setCurrentModelKey(modelKey);
+                }
+              }}
+            />
           )}
 
           <div className="tw-flex tw-items-center tw-gap-1">
@@ -643,13 +602,80 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
               </Button>
             ) : (
               <>
-                {isCopilotPlus && (
+                {/* Autonomous Agent button - only show in Copilot Plus mode and NOT in Projects mode */}
+                {isCopilotPlus && currentChain !== ChainType.PROJECT_CHAIN && (
                   <Button
                     variant="ghost2"
                     size="fit"
                     onClick={() => {
+                      const newValue = !autonomousAgentToggle;
+                      setAutonomousAgentToggle(newValue);
+                      updateSetting("enableAutonomousAgent", newValue);
+                    }}
+                    className={cn(
+                      "tw-mr-2 tw-text-muted hover:tw-text-accent",
+                      autonomousAgentToggle && "tw-text-accent tw-bg-accent/10"
+                    )}
+                    title="Toggle autonomous agent mode"
+                  >
+                    <Brain className="tw-size-4" />
+                  </Button>
+                )}
+
+                {/* Toggle buttons for vault, web search, and composer - show when Autonomous Agent is off */}
+                {!autonomousAgentToggle && isCopilotPlus && (
+                  <>
+                    <Button
+                      variant="ghost2"
+                      size="fit"
+                      onClick={() => setVaultToggle(!vaultToggle)}
+                      className={cn(
+                        "tw-mr-2 tw-text-muted hover:tw-text-accent",
+                        vaultToggle && "tw-text-accent tw-bg-accent/10"
+                      )}
+                      title="Toggle vault search"
+                    >
+                      <Database className="tw-size-4" />
+                    </Button>
+                    <Button
+                      variant="ghost2"
+                      size="fit"
+                      onClick={() => setWebToggle(!webToggle)}
+                      className={cn(
+                        "tw-mr-2 tw-text-muted hover:tw-text-accent",
+                        webToggle && "tw-text-accent tw-bg-accent/10"
+                      )}
+                      title="Toggle web search"
+                    >
+                      <Globe className="tw-size-4" />
+                    </Button>
+                    <Button
+                      variant="ghost2"
+                      size="fit"
+                      onClick={() => setComposerToggle(!composerToggle)}
+                      className={cn(
+                        "tw-mr-2 tw-text-muted hover:tw-text-accent",
+                        composerToggle && "tw-text-accent tw-bg-accent/10"
+                      )}
+                      title="Toggle composer (note editing)"
+                    >
+                      <span className="tw-flex tw-items-center tw-gap-0.5">
+                        <Sparkles className="tw-size-2" />
+                        <Pen className="tw-size-3" />
+                      </span>
+                    </Button>
+                  </>
+                )}
+
+                {isCopilotPlus && (
+                  <Button
+                    variant="ghost2"
+                    size="fit"
+                    className="tw-text-muted hover:tw-text-accent"
+                    onClick={() => {
                       new AddImageModal(app, onAddImage).open();
                     }}
+                    title="Add image(s)"
                   >
                     <Image className="tw-size-4" />
                   </Button>
@@ -658,37 +684,11 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                   variant="ghost2"
                   size="fit"
                   className="tw-text-muted"
-                  onClick={() => onSendMessage(false)}
+                  onClick={() => onSendMessage()}
                 >
                   <CornerDownLeft className="!tw-size-3" />
                   <span>chat</span>
                 </Button>
-
-                {currentChain === "copilot_plus" && (
-                  <Button
-                    variant="ghost2"
-                    size="fit"
-                    className="tw-hidden tw-text-muted @xs/chat-input:tw-inline-flex"
-                    onClick={() => onSendMessage(true)}
-                  >
-                    <div className="tw-flex tw-items-center tw-gap-1">
-                      {Platform.isMacOS ? (
-                        <div className="tw-flex tw-items-center">
-                          <Command className="!tw-size-3" />
-                          <ArrowBigUp className="!tw-size-3" />
-                          <CornerDownLeft className="!tw-size-3" />
-                        </div>
-                      ) : (
-                        <div className="tw-flex tw-items-center">
-                          <span>Ctrl</span>
-                          <ArrowBigUp className="tw-size-4" />
-                          <CornerDownLeft className="!tw-size-3" />
-                        </div>
-                      )}
-                      <span>vault</span>
-                    </div>
-                  </Button>
-                )}
               </>
             )}
           </div>

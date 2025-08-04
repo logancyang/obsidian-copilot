@@ -3,7 +3,7 @@ import { getTimeRangeMsTool } from "./TimeTools";
 
 // Helper function to extract the tool function
 const getTimeRangeMs = async (timeExpression: string) => {
-  return await getTimeRangeMsTool.func({ timeExpression });
+  return await getTimeRangeMsTool.call({ timeExpression });
 };
 
 // Helper to verify date ranges
@@ -351,11 +351,27 @@ describe("Time Expression Tests", () => {
   });
 
   describe("Invalid Expressions", () => {
+    let consoleWarnSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      // Mock console.warn to suppress expected warnings
+      consoleWarnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      // Restore console.warn after each test
+      consoleWarnSpy.mockRestore();
+    });
+
     test.each(["invalid time", "", "random text", "week of invalid"])(
       "invalid expression: %s",
       async (expression) => {
         const result = await getTimeRangeMs(expression);
         expect(result).toBeUndefined();
+        // Verify that console.warn was called with the expected message
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+          `Unable to parse time expression: ${expression}`
+        );
       }
     );
   });
