@@ -280,7 +280,7 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
       },
     },
     {
-      description: "should generate proper tool calls for replaceInFile",
+      description: "should generate proper tool calls for replacing text in a file",
       prompt: `Extend the description for London.
 
       <active_note>
@@ -312,7 +312,7 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
       finalOutputValidator: (output) => {},
     },
     {
-      description: "should generate proper tool calls for writeToFile",
+      description: "should generate proper tool calls for creating a new note",
       prompt: `Create a new note about London based on info from the active note.
 
       <active_note>
@@ -337,7 +337,53 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
           mockedReturnValue: "File updated successfully",
         },
       ],
-      finalOutputValidator: (output) => {},
+    },
+    {
+      description: "should generate proper tool calls for youtube transcription",
+      prompt: `Summarize https://www.youtube.com/watch?v=ZvqnkRd1iyw&list=RDZvqnkRd1iyw&start_radio=1
+      `,
+      expectedCalls: [
+        {
+          toolName: "youtubeTranscription",
+          mockedReturnValue: "This is the transcript of the video",
+        },
+      ],
+    },
+    {
+      description: "should generate proper tool calls for local search with relative time",
+      prompt: `Recap my last week
+      `,
+      expectedCalls: [
+        {
+          toolName: "getTimeRangeMs",
+          argumentValidator: (args) => {
+            expect(args).toEqual(
+              expect.objectContaining({
+                timeExpression: "last week",
+              })
+            );
+          },
+          mockedReturnValue: {
+            // A fixed time range 2025-07-28 to 2025-08-04
+            startTime: new Date("2025-07-28").getTime(),
+            endTime: new Date("2025-08-04").getTime(),
+          },
+        },
+        {
+          toolName: "localSearch",
+          argumentValidator: (args) => {
+            expect(args).toEqual(
+              expect.objectContaining({
+                timeRange: {
+                  startTime: new Date("2025-07-28").getTime(),
+                  endTime: new Date("2025-08-04").getTime(),
+                },
+              })
+            );
+          },
+          mockedReturnValue: "I went for shopping!",
+        },
+      ],
     },
     {
       description: "should generate proper tool calls for time query",
@@ -497,15 +543,23 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
         `📄 Final response (${finalResponse.length} chars): ${finalResponse.substring(0, 500)}...`
       );
 
-      const expectedToolNames = testCase.expectedCalls.map((call) => call.toolName).sort();
-      const actualToolNames = actualToolCalls.map((call) => call.name).sort();
+      // Validate tool call order and presence
+      const expectedToolNames = testCase.expectedCalls.map((call) => call.toolName);
+      const actualToolNames = actualToolCalls.map((call) => call.name);
+
+      // Check if the number of calls match
+      if (actualToolCalls.length !== testCase.expectedCalls.length) {
+        const errorMsg = `Expected ${testCase.expectedCalls.length} tool calls but got ${actualToolCalls.length}. Expected: [${expectedToolNames.join(", ")}], Actual: [${actualToolNames.join(", ")}]`;
+        console.error(`❌ ${errorMsg}`);
+        throw new Error(errorMsg);
+      }
 
       // Check if any actual tool calls were not expected
       const unexpectedToolCalls = actualToolNames.filter(
         (toolName) => !expectedToolNames.includes(toolName)
       );
       if (unexpectedToolCalls.length > 0) {
-        const errorMsg = `Unexpected tool calls found: ${unexpectedToolCalls.join(", ")}. Expected only: ${expectedToolNames.join(", ")}`;
+        const errorMsg = `Unexpected tool calls found: ${unexpectedToolCalls.join(", ")}. Expected only: [${expectedToolNames.join(", ")}]`;
         console.error(`❌ ${errorMsg}`);
         throw new Error(errorMsg);
       }
@@ -515,22 +569,30 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
         (toolName) => !actualToolNames.includes(toolName)
       );
       if (missingToolCalls.length > 0) {
-        const errorMsg = `Missing expected tool calls: ${missingToolCalls.join(", ")}. Actual calls: ${actualToolNames.join(", ")}`;
+        const errorMsg = `Missing expected tool calls: ${missingToolCalls.join(", ")}. Actual calls: [${actualToolNames.join(", ")}]`;
         console.error(`❌ ${errorMsg}`);
         throw new Error(errorMsg);
       }
 
-      // Check if the number of calls match (for tools that might be called multiple times)
-      for (const expectedCall of testCase.expectedCalls) {
-        const expectedCount = 1; // For now, assume each tool is expected once
-        const actualCount = actualToolCalls.filter(
-          (call) => call.name === expectedCall.toolName
-        ).length;
+      // Validate the order of tool calls
+      for (let i = 0; i < testCase.expectedCalls.length; i++) {
+        const expectedToolName = testCase.expectedCalls[i].toolName;
+        const actualToolName = actualToolCalls[i].name;
 
-        if (actualCount !== expectedCount) {
-          const errorMsg = `Tool '${expectedCall.toolName}' was called ${actualCount} times but expected ${expectedCount} times`;
+        if (expectedToolName !== actualToolName) {
+          const errorMsg = `Tool call order mismatch at position ${i + 1}. Expected: ${expectedToolName}, Got: ${actualToolName}. Expected order: [${expectedToolNames.join(", ")}], Actual order: [${actualToolNames.join(", ")}]`;
           console.error(`❌ ${errorMsg}`);
           throw new Error(errorMsg);
+        }
+      }
+
+      // Validate arguments for each tool call in order
+      for (let i = 0; i < testCase.expectedCalls.length; i++) {
+        const expectedCall = testCase.expectedCalls[i];
+        const actualCall = actualToolCalls[i];
+
+        if (expectedCall.argumentValidator) {
+          expectedCall.argumentValidator(actualCall.args);
         }
       }
 
