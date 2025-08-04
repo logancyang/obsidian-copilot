@@ -7,7 +7,7 @@ import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
 import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
 import { ChatMessage } from "@/types/message";
-import { insertIntoEditor } from "@/utils";
+import { cleanMessageForCopy, insertIntoEditor } from "@/utils";
 import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -105,7 +105,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       return;
     }
 
-    navigator.clipboard.writeText(message.message).then(() => {
+    const cleanedContent = cleanMessageForCopy(message.message);
+    navigator.clipboard.writeText(cleanedContent).then(() => {
       setIsCopied(true);
 
       setTimeout(() => {
@@ -543,7 +544,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
     const editor = leaf.view.editor;
     const hasSelection = editor.getSelection().length > 0;
-    insertIntoEditor(message.message, hasSelection);
+    const cleanedContent = cleanMessageForCopy(message.message);
+    insertIntoEditor(cleanedContent, hasSelection);
   };
 
   const renderMessageContent = () => {
