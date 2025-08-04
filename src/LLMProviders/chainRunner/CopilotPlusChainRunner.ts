@@ -72,11 +72,16 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
   }
 
   private async extractEmbeddedImages(content: string, sourcePath?: string): Promise<string[]> {
-    const imageRegex = /!\[\[(.*?\.(png|jpg|jpeg|gif|webp|bmp|svg))\]\]/g;
-    const matches = [...content.matchAll(imageRegex)];
+    // Match both wiki-style ![[image.ext]] and standard markdown ![alt](image.ext)
+    const wikiImageRegex = /!\[\[(.*?\.(png|jpg|jpeg|gif|webp|bmp|svg))\]\]/g;
+    // Updated regex to handle URLs with or without file extensions
+    const markdownImageRegex = /!\[.*?\]\(([^)]+)\)/g;
+
     const resolvedImages: string[] = [];
 
-    for (const match of matches) {
+    // Process wiki-style images
+    const wikiMatches = [...content.matchAll(wikiImageRegex)];
+    for (const match of wikiMatches) {
       const imageName = match[1];
 
       // If we have a source path and access to the app, resolve the wikilink
@@ -94,6 +99,45 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       } else {
         // Fallback to raw filename if no source path available
         resolvedImages.push(imageName);
+      }
+    }
+
+    // Process standard markdown images
+    const mdMatches = [...content.matchAll(markdownImageRegex)];
+    for (const match of mdMatches) {
+      const imagePath = match[1].trim();
+
+      // Skip empty paths
+      if (!imagePath) continue;
+
+      // Handle external URLs (http://, https://, etc.)
+      if (imagePath.match(/^https?:\/\//)) {
+        // Include external URLs - they will be processed by processImageUrls
+        // The ImageProcessor will validate if it's actually an image
+        resolvedImages.push(imagePath);
+        continue;
+      }
+
+      // For local paths, resolve them using Obsidian's metadata cache
+      // Let ImageBatchProcessor handle validation of whether it's actually an image
+      // Clean up the path (remove any leading ./ or /)
+      const cleanPath = imagePath.replace(/^\.\//, "").replace(/^\//, "");
+
+      // If we have a source path and access to the app, resolve the path
+      if (sourcePath) {
+        const resolvedFile = app.metadataCache.getFirstLinkpathDest(cleanPath, sourcePath);
+
+        if (resolvedFile) {
+          // Use the resolved path
+          resolvedImages.push(resolvedFile.path);
+        } else {
+          // If file not found, still include the raw path
+          // Let ImageBatchProcessor handle validation
+          resolvedImages.push(cleanPath);
+        }
+      } else {
+        // Fallback to raw path if no source path available
+        resolvedImages.push(cleanPath);
       }
     }
 
