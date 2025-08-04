@@ -21,7 +21,7 @@ export function PlusSettings() {
   return (
     <section className="tw-flex tw-flex-col tw-gap-4 tw-rounded-lg tw-bg-secondary tw-p-4">
       <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-text-xl tw-font-bold">
-        <span>Copilot Plus (beta)</span>
+        <span>Copilot Plus</span>
         {isPlusUser && (
           <Badge variant="outline" className="tw-text-success">
             Active
@@ -35,8 +35,8 @@ export function PlusSettings() {
           image support, web search integration, exclusive chat and embedding models, and much more.
         </div>
         <div>
-          Currently in beta, Copilot Plus is evolving fast, with new features and improvements
-          rolling out regularly. Join now to secure the lowest price and get early access!
+          Copilot Plus is evolving fast, with new features and improvements rolling out regularly.
+          Join now to secure the lowest price and get early access!
         </div>
       </div>
       <div className="tw-flex tw-items-center tw-gap-2">
