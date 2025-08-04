@@ -131,10 +131,16 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       },
     }));
 
-    // Sync autonomous agent toggle with settings
+    // Sync autonomous agent toggle with settings and chain type
     useEffect(() => {
-      setAutonomousAgentToggle(settings.enableAutonomousAgent);
-    }, [settings.enableAutonomousAgent]);
+      if (currentChain === ChainType.PROJECT_CHAIN) {
+        // Force off in Projects mode
+        setAutonomousAgentToggle(false);
+      } else {
+        // In other modes, use the actual settings value
+        setAutonomousAgentToggle(settings.enableAutonomousAgent);
+      }
+    }, [settings.enableAutonomousAgent, currentChain]);
 
     useEffect(() => {
       if (currentChain === ChainType.PROJECT_CHAIN) {
@@ -596,8 +602,8 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
               </Button>
             ) : (
               <>
-                {/* Autonomous Agent button - only show in Copilot Plus mode */}
-                {isCopilotPlus && (
+                {/* Autonomous Agent button - only show in Copilot Plus mode and NOT in Projects mode */}
+                {isCopilotPlus && currentChain !== ChainType.PROJECT_CHAIN && (
                   <Button
                     variant="ghost2"
                     size="fit"
@@ -616,7 +622,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                   </Button>
                 )}
 
-                {/* Toggle buttons for vault, web search, and composer - only show when Autonomous Agent is off */}
+                {/* Toggle buttons for vault, web search, and composer - show when Autonomous Agent is off */}
                 {!autonomousAgentToggle && isCopilotPlus && (
                   <>
                     <Button
