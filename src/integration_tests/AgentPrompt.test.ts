@@ -85,127 +85,6 @@ jest.mock("@/chainFactory", () => ({
   })),
 }));
 
-jest.mock("@/constants", () => {
-  const actual = jest.requireActual("@/constants") as any;
-  const ChainType = {
-    LLM_CHAIN: "llm_chain",
-    VAULT_QA_CHAIN: "vault_qa",
-    COPILOT_PLUS_CHAIN: "copilot_plus",
-    PROJECT_CHAIN: "project",
-  };
-
-  return {
-    ...actual,
-    ChainType,
-    USER_SENDER: "user",
-    AI_SENDER: "ai",
-    CHAT_VIEWTYPE: "copilot-view",
-    BUILTIN_CHAT_MODELS: [
-      {
-        name: "gemini-2.5-flash",
-        displayName: "Gemini 2.5 Flash",
-        provider: "google",
-        enabled: true,
-        baseModel: "gemini-2.5-flash",
-        isBuiltin: true,
-      },
-    ],
-    ChatModelProviders: {
-      OPENAI: "openai",
-      GOOGLE: "google",
-    },
-    ChatModels: {
-      GPT_41: "gpt-4",
-    },
-    EmbeddingModels: {
-      OPENAI_EMBEDDING_SMALL: "text-embedding-3-small",
-    },
-    EmbeddingModelProviders: {
-      OPENAI: "openai",
-      COPILOT_PLUS: "copilot_plus",
-      COPILOT_PLUS_JINA: "copilot_plus_jina",
-    },
-    DEFAULT_MODEL_SETTING: {
-      TEMPERATURE: 0.1,
-      MAX_TOKENS: 1000,
-    },
-    DEFAULT_SETTINGS: {
-      defaultChainType: ChainType.LLM_CHAIN,
-      defaultModelKey: "gpt-4|openai",
-      embeddingModelKey: "text-embedding-3-small|openai",
-      temperature: 0.1,
-      maxTokens: 1000,
-      autonomousAgentMaxIterations: 3,
-      autonomousAgentEnabledToolIds: [
-        "localSearch",
-        "webSearch",
-        "pomodoro",
-        "youtubeTranscription",
-        "writeToFile",
-        "replaceInFile",
-      ],
-      googleApiKey: process.env.GEMINI_API_KEY || "",
-    },
-    VAULT_VECTOR_STORE_STRATEGY: "NEVER",
-    COMPOSER_OUTPUT_INSTRUCTIONS: "",
-  };
-});
-
-// Mock settings model - essential for the test
-jest.mock("@/settings/model", () => {
-  const actual = jest.requireActual("@/settings/model") as any;
-  return {
-    ...actual,
-    getSettings: jest.fn().mockReturnValue({
-      defaultModelKey: "gemini-2.5-flash|google",
-      googleApiKey: process.env.GEMINI_API_KEY || "",
-      autonomousAgentMaxIterations: 3,
-      autonomousAgentEnabledToolIds: [
-        "localSearch",
-        "webSearch",
-        "pomodoro",
-        "youtubeTranscription",
-        "writeToFile",
-        "replaceInFile",
-      ],
-      defaultChainType: "copilot_plus",
-      userSystemPrompt: "",
-      activeModels: [
-        {
-          name: "gemini-2.5-flash",
-          displayName: "Gemini 2.5 Flash",
-          provider: "google",
-          enabled: true,
-          baseModel: "gemini-2.5-flash",
-          isBuiltin: true,
-          apiKey: process.env.GEMINI_API_KEY || "",
-        },
-      ],
-      activeEmbeddingModels: [
-        {
-          name: "text-embedding-3-small",
-          displayName: "OpenAI Small",
-          provider: "openai",
-          enabled: true,
-          isBuiltin: true,
-          isEmbeddingModel: true,
-          apiKey: process.env.OPENAI_API_KEY || "",
-        },
-      ],
-    }),
-    settingsStore: {
-      get: jest.fn(),
-      set: jest.fn(),
-    },
-    settingsAtom: {},
-    getModelKeyFromModel: jest
-      .fn()
-      .mockImplementation((model: any) => `${model.name}|${model.provider}`),
-    getDefaultApiKey: jest.fn().mockReturnValue(process.env.GEMINI_API_KEY || ""),
-    subscribeToSettingsChange: jest.fn(),
-  };
-});
-
 // Mock Obsidian - essential for tool initialization
 jest.mock("obsidian", () => ({
   App: jest.fn(),
@@ -353,9 +232,6 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
       const settings = getSettings();
       const enabledToolIds = new Set(settings.autonomousAgentEnabledToolIds || []) as Set<string>;
       availableTools = registry.getEnabledTools(enabledToolIds, !!mockApp.vault);
-
-      console.log(`✅ Successfully initialized with ${availableTools.length} available tools`);
-      console.log(`🔧 Available tools: ${availableTools.map((t) => t.name).join(", ")}`);
     } catch (error) {
       console.error("❌ Error during Agent Prompt test setup:", error);
       throw error;
@@ -565,11 +441,6 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
         );
         const toolCalls = parseXMLToolCalls(fullResponse);
 
-        console.log(
-          `🔧 Parsed ${toolCalls.length} tool calls:`,
-          toolCalls.map((tc) => tc.name)
-        );
-
         if (toolCalls.length === 0) {
           // No tool calls, this is the final response
           const cleanedResponse = stripToolCallXML(fullResponse);
@@ -622,19 +493,10 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
           `\n\nI've reached the maximum number of iterations (${maxIterations}) for this task.`;
       }
 
-      console.log(`✅ Agent loop completed after ${iteration} iterations`);
       console.log(
         `📄 Final response (${finalResponse.length} chars): ${finalResponse.substring(0, 500)}...`
       );
 
-      // Validate that actual tool calls exactly match expected tool calls
-      console.log(`🔍 Validating tool call matching...`);
-      console.log(
-        `📊 Expected tool calls: ${testCase.expectedCalls.map((call) => call.toolName).join(", ")}`
-      );
-      console.log(`📊 Actual tool calls: ${actualToolCalls.map((call) => call.name).join(", ")}`);
-
-      // Validate tool call matching
       const expectedToolNames = testCase.expectedCalls.map((call) => call.toolName).sort();
       const actualToolNames = actualToolCalls.map((call) => call.name).sort();
 
@@ -672,10 +534,6 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
         }
       }
 
-      console.log(
-        `✅ Tool call validation passed - all expected calls made and no unexpected calls`
-      );
-
       // Basic assertions
       expect(finalResponse).toBeDefined();
       expect(finalResponse.length).toBeGreaterThan(0);
@@ -683,7 +541,6 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
       // Verify final output if validator provided
       if (testCase.finalOutputValidator) {
         testCase.finalOutputValidator(finalResponse);
-        console.log(`✅ Final output validation passed`);
       }
 
       console.log(`✅ Agent Prompt test completed successfully: ${testCase.description}`);
