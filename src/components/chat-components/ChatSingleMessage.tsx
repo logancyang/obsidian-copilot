@@ -167,7 +167,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       };
 
       const processThinkSection = (content: string): string => {
-        return processCollapsibleSection(content, "think", "Thought for a second", "Thinking...");
+        return processCollapsibleSection(content, "think", "Thought for a while", "Thinking...");
       };
 
       const processWriteToFileSection = (content: string): string => {
