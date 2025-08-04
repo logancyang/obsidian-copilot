@@ -1,4 +1,5 @@
 import { ToolManager } from "@/tools/toolManager";
+import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
 
 /**
  * ActionBlockStreamer processes streaming chunks to detect and handle writeToFile blocks.
@@ -32,9 +33,25 @@ export class ActionBlockStreamer {
   }
 
   async *processChunk(chunk: any): AsyncGenerator<any, void, unknown> {
-    // Add to buffer - fix buffer corruption by checking for null/undefined content
-    if (chunk.content != null) {
-      this.buffer += chunk.content;
+    // Handle different chunk formats
+    let chunkContent = "";
+
+    // Handle Claude thinking model array-based content
+    if (Array.isArray(chunk.content)) {
+      for (const item of chunk.content) {
+        if (item.type === "text" && item.text != null) {
+          chunkContent += item.text;
+        }
+      }
+    }
+    // Handle standard string content
+    else if (chunk.content != null) {
+      chunkContent = chunk.content;
+    }
+
+    // Add to buffer
+    if (chunkContent) {
+      this.buffer += chunkContent;
     }
 
     // Yield the original chunk as-is
@@ -59,8 +76,9 @@ export class ActionBlockStreamer {
           content: fileContent,
         });
 
-        // Yield tool result
-        yield { ...chunk, content: `\nFile change result: ${result}\n` };
+        // Format tool result using ToolResultFormatter for consistency with agent mode
+        const formattedResult = ToolResultFormatter.format("writeToFile", result);
+        yield { ...chunk, content: `\n${formattedResult}\n` };
       } catch (err: any) {
         yield { ...chunk, content: `\nError: ${err?.message || err}\n` };
       }

@@ -1,10 +1,13 @@
 import { ActionBlockStreamer } from "./ActionBlockStreamer";
 import { ToolManager } from "@/tools/toolManager";
+import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
 
-// Mock the ToolManager
+// Mock the ToolManager and ToolResultFormatter
 jest.mock("@/tools/toolManager");
+jest.mock("@/tools/ToolResultFormatter");
 
 const MockedToolManager = ToolManager as jest.Mocked<typeof ToolManager>;
+const MockedToolResultFormatter = ToolResultFormatter as jest.Mocked<typeof ToolResultFormatter>;
 
 describe("ActionBlockStreamer", () => {
   let writeToFileTool: any;
@@ -13,6 +16,10 @@ describe("ActionBlockStreamer", () => {
   beforeEach(() => {
     writeToFileTool = { name: "writeToFile" };
     MockedToolManager.callTool.mockClear();
+
+    // Mock ToolResultFormatter to return the raw result without "File change result: " prefix
+    MockedToolResultFormatter.format = jest.fn((_toolName, result) => result);
+
     streamer = new ActionBlockStreamer(MockedToolManager, writeToFileTool);
   });
 
@@ -52,7 +59,7 @@ describe("ActionBlockStreamer", () => {
     // Should yield original chunk plus tool result
     expect(output).toEqual([
       "Some text before <writeToFile><path>file.txt</path><content>content</content></writeToFile> and some text after.",
-      "\nFile change result: File written successfully.\n",
+      "\nFile written successfully.\n",
     ]);
 
     expect(MockedToolManager.callTool).toHaveBeenCalledWith(writeToFileTool, {
@@ -73,7 +80,7 @@ describe("ActionBlockStreamer", () => {
 
     expect(output).toEqual([
       "```xml\n<writeToFile><path>file.xml</path><content>xml content</content></writeToFile>\n```",
-      "\nFile change result: XML file written.\n",
+      "\nXML file written.\n",
     ]);
 
     expect(MockedToolManager.callTool).toHaveBeenCalledWith(writeToFileTool, {
@@ -96,7 +103,7 @@ describe("ActionBlockStreamer", () => {
       "Here is a file <writeToFile><path>split.txt</path>",
       "<content>split content</content>",
       "</writeToFile> That was it.",
-      "\nFile change result: Split file written.\n",
+      "\nSplit file written.\n",
     ]);
 
     expect(MockedToolManager.callTool).toHaveBeenCalledWith(writeToFileTool, {
@@ -120,8 +127,8 @@ describe("ActionBlockStreamer", () => {
     // Should yield original chunk plus both tool results
     expect(output).toEqual([
       "<writeToFile><path>f1.txt</path><content>c1</content></writeToFile>Some text<writeToFile><path>f2.txt</path><content>c2</content></writeToFile>",
-      "\nFile change result: File 1 written.\n",
-      "\nFile change result: File 2 written.\n",
+      "\nFile 1 written.\n",
+      "\nFile 2 written.\n",
     ]);
 
     expect(MockedToolManager.callTool).toHaveBeenCalledTimes(2);
@@ -213,7 +220,7 @@ describe("ActionBlockStreamer", () => {
     // Should yield chunk as-is plus tool result
     expect(output).toEqual([
       "<writeToFile><path>missing-content.txt</path></writeToFile>",
-      "\nFile change result: Malformed handled.\n",
+      "\nMalformed handled.\n",
     ]);
 
     // Tool should be called with undefined content

@@ -26,7 +26,10 @@ export class ThinkBlockStreamer {
             this.fullResponse += "\n<think>";
             this.hasOpenThinkBlock = true;
           }
-          this.fullResponse += item.thinking;
+          // Guard against undefined thinking content
+          if (item.thinking !== undefined) {
+            this.fullResponse += item.thinking;
+          }
           this.updateCurrentAiMessage(this.fullResponse);
           return true; // Indicate we handled a thinking chunk
       }
@@ -49,7 +52,10 @@ export class ThinkBlockStreamer {
         this.fullResponse += "\n<think>";
         this.hasOpenThinkBlock = true;
       }
-      this.fullResponse += chunk.additional_kwargs.reasoning_content;
+      // Guard against undefined reasoning content
+      if (chunk.additional_kwargs.reasoning_content !== undefined) {
+        this.fullResponse += chunk.additional_kwargs.reasoning_content;
+      }
       return true; // Indicate we handled a thinking chunk
     }
     return false; // No thinking chunk handled

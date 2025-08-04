@@ -670,6 +670,41 @@ export function getProviderKeyManagementURL(provider: string): string {
   return ProviderInfo[provider as Provider]?.keyManagementURL || "";
 }
 
+/**
+ * Cleans a message by removing Think blocks, Action blocks (writeToFile), and tool call markers
+ * for copying to clipboard. This is more comprehensive than removeThinkTags which is used for RAG.
+ */
+export function cleanMessageForCopy(message: string): string {
+  let cleanedMessage = message;
+
+  // First use the existing removeThinkTags function
+  cleanedMessage = removeThinkTags(cleanedMessage);
+
+  // Remove writeToFile blocks wrapped in XML codeblocks
+  cleanedMessage = cleanedMessage.replace(
+    /```xml\s*[\s\S]*?<writeToFile>[\s\S]*?<\/writeToFile>[\s\S]*?```/g,
+    ""
+  );
+
+  // Remove standalone writeToFile blocks
+  cleanedMessage = cleanedMessage.replace(/<writeToFile>[\s\S]*?<\/writeToFile>/g, "");
+
+  // Remove tool call markers
+  // Format: <!--TOOL_CALL_START:id:toolName:displayName:emoji:confirmationMessage:isExecuting-->content<!--TOOL_CALL_END:id:result-->
+  cleanedMessage = cleanedMessage.replace(
+    /<!--TOOL_CALL_START:[^:]+:[^:]+:[^:]+:[^:]+:[^:]*:[^:]+-->[\s\S]*?<!--TOOL_CALL_END:[^:]+:[\s\S]*?-->/g,
+    ""
+  );
+
+  // Clean up any resulting multiple consecutive newlines (more than 2)
+  cleanedMessage = cleanedMessage.replace(/\n{3,}/g, "\n\n");
+
+  // Trim leading and trailing whitespace
+  cleanedMessage = cleanedMessage.trim();
+
+  return cleanedMessage;
+}
+
 export async function insertIntoEditor(message: string, replace: boolean = false) {
   let leaf = app.workspace.getMostRecentLeaf();
   if (!leaf) {
@@ -691,8 +726,8 @@ export async function insertIntoEditor(message: string, replace: boolean = false
   const cursorFrom = editor.getCursor("from");
   const cursorTo = editor.getCursor("to");
 
-  // Remove think tags before inserting
-  const cleanedMessage = removeThinkTags(message);
+  // Clean the message before inserting (removes think tags, writeToFile blocks, tool calls)
+  const cleanedMessage = cleanMessageForCopy(message);
 
   if (replace) {
     editor.replaceRange(cleanedMessage, cursorFrom, cursorTo);
