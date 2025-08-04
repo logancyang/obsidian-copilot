@@ -75,6 +75,7 @@ ${params}
   ): string {
     const basePrompt = getSystemPrompt();
     const toolDescriptions = AutonomousAgentChainRunner.generateToolDescriptions(availableTools);
+
     const toolNames = availableTools.map((tool) => tool.name);
 
     // Get tool metadata for custom instructions
@@ -114,7 +115,6 @@ ${params}
     const collectedSources: { title: string; path: string; score: number }[] = []; // Collect sources from localSearch
     this.llmFormattedMessages = []; // Reset LLM messages for this run
     const isPlusUser = await checkIsPlusUser();
-    console.log("isPlusUser", isPlusUser);
     if (!isPlusUser) {
       await this.handleError(new Error("Invalid license key"), addMessage, updateCurrentAiMessage);
       return "";
@@ -127,10 +127,9 @@ ${params}
       // Use raw history to preserve multimodal content
       const rawHistory = memoryVariables.history || [];
 
-      console.log("BEFORE customSystemPrompt");
       // Build initial conversation messages
       const customSystemPrompt = this.generateSystemPrompt();
-      console.log("customSystemPrompt", customSystemPrompt);
+
       const chatModel = this.chainManager.chatModelManager.getChatModel();
       const adapter = ModelAdapterFactory.createAdapter(chatModel);
 

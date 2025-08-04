@@ -35,10 +35,7 @@ export const ToolSettingsSection: React.FC = () => {
       if (configurableInCategory.length === 0) return null;
 
       return (
-        <div key={category} className="tw-mb-4">
-          <div className="tw-mb-2 tw-text-xs tw-font-medium tw-uppercase tw-text-muted">
-            {category}
-          </div>
+        <React.Fragment key={category}>
           {configurableInCategory.map(({ metadata }) => (
             <SettingItem
               key={metadata.id}
@@ -49,7 +46,7 @@ export const ToolSettingsSection: React.FC = () => {
               onCheckedChange={(checked) => handleToolToggle(metadata.id, checked)}
             />
           ))}
-        </div>
+        </React.Fragment>
       );
     });
   };
@@ -69,12 +66,14 @@ export const ToolSettingsSection: React.FC = () => {
         step={1}
       />
 
-      <div className="tw-mb-2 tw-mt-4 tw-text-sm tw-font-medium">Available Tools</div>
-      <div className="tw-mb-4 tw-text-xs tw-text-muted">
-        Toggle which tools the autonomous agent can use
-      </div>
+      <div className="tw-mt-4 tw-rounded-lg tw-bg-secondary tw-p-4">
+        <div className="tw-mb-2 tw-text-sm tw-font-medium">Agent Accessible Tools</div>
+        <div className="tw-mb-4 tw-text-xs tw-text-muted">
+          Toggle which tools the autonomous agent can use
+        </div>
 
-      <div className="tw-flex tw-flex-col tw-gap-2">{renderToolsByCategory()}</div>
+        <div className="tw-flex tw-flex-col tw-gap-2">{renderToolsByCategory()}</div>
+      </div>
     </>
   );
 };

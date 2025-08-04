@@ -183,7 +183,7 @@ export function ChatControls({
               {selectedChain === ChainType.COPILOT_PLUS_CHAIN && (
                 <div className="tw-flex tw-items-center tw-gap-1">
                   <Sparkles className="tw-size-4" />
-                  copilot plus (beta)
+                  copilot plus
                 </div>
               )}
               {selectedChain === ChainType.PROJECT_CHAIN && "projects (alpha)"}
@@ -213,7 +213,7 @@ export function ChatControls({
               >
                 <div className="tw-flex tw-items-center tw-gap-1">
                   <Sparkles className="tw-size-4" />
-                  copilot plus (beta)
+                  copilot plus
                 </div>
               </DropdownMenuItem>
             ) : (
@@ -223,7 +223,7 @@ export function ChatControls({
                   onCloseProject?.();
                 }}
               >
-                copilot plus (beta)
+                copilot plus
                 <SquareArrowOutUpRight className="tw-size-3" />
               </DropdownMenuItem>
             )}
@@ -245,7 +245,7 @@ export function ChatControls({
                   onCloseProject?.();
                 }}
               >
-                copilot plus (beta)
+                copilot plus
                 <SquareArrowOutUpRight className="tw-size-3" />
               </DropdownMenuItem>
             )}
