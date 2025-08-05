@@ -24,7 +24,11 @@ import {
   ToolExecutionResult,
 } from "./utils/toolExecution";
 
-import { parseXMLToolCalls, stripToolCallXML } from "./utils/xmlParsing";
+import {
+  extractToolNameFromPartialBlock,
+  parseXMLToolCalls,
+  stripToolCallXML,
+} from "./utils/xmlParsing";
 
 export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private llmFormattedMessages: string[] = []; // Track LLM-formatted messages for memory
@@ -206,6 +210,22 @@ ${params}
             // Add the current streaming message
             if (cleanedMessage.trim()) {
               displayParts.push(cleanedMessage);
+            }
+
+            // Add tool call marker for the tool call that is being generated
+            const toolName = extractToolNameFromPartialBlock(message);
+            if (toolName) {
+              const toolCallMarker = createToolCallMarker(
+                "temporary-tool-call-id",
+                toolName,
+                getToolDisplayName(toolName),
+                getToolEmoji(toolName),
+                "", // confirmationMessage
+                true, // isExecuting
+                "", // content (empty for now)
+                "" // result (empty until execution completes)
+              );
+              displayParts.push(toolCallMarker);
             }
 
             const currentDisplay = displayParts.join("\n\n");

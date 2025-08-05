@@ -1,4 +1,27 @@
-import { parseXMLToolCalls, escapeXml, escapeXmlAttribute, stripToolCallXML } from "./xmlParsing";
+import {
+  extractToolNameFromPartialBlock,
+  parseXMLToolCalls,
+  escapeXml,
+  escapeXmlAttribute,
+  stripToolCallXML,
+} from "./xmlParsing";
+
+describe("parseXMLToolName", () => {
+  it("should extract tool name from partial XML tool call", () => {
+    const xml = "<use_tool><name>toolName</name>";
+    expect(extractToolNameFromPartialBlock(xml)).toBe("toolName");
+  });
+
+  it("should handle empty name content", () => {
+    const xml = "<use_tool><name></name>";
+    expect(extractToolNameFromPartialBlock(xml)).toBe(null);
+  });
+
+  it("should handle whitespace in name", () => {
+    const xml = "<use_tool><name>  toolWithSpaces  </name>";
+    expect(extractToolNameFromPartialBlock(xml)).toBe("toolWithSpaces");
+  });
+});
 
 describe("parseXMLToolCalls", () => {
   it("should parse hybrid XML tool calls with JSON arrays", () => {
