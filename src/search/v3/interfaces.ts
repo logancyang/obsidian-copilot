@@ -1,29 +1,33 @@
-export interface Hit {
-  noteId: string;
-  score: number;
-  engine: "lexical" | "graph" | "semantic" | "fallback";
-  rank: number;
+/**
+ * Core document structure for search indexing
+ */
+export interface NoteDoc {
+  id: string; // vault-relative path
+  title: string; // filename or front-matter title
+  headings: string[]; // H1..H6 plain text
+  tags: string[]; // inline + frontmatter via getAllTags(cache)
+  props: Record<string, unknown>; // frontmatter key/values
+  linksOut: string[]; // outgoing link targets (paths or basenames)
+  linksIn: string[]; // backlinks (paths or basenames)
+  body: string; // full markdown text (used only for L1)
+  mtime: number; // modification time for recency
 }
 
-export interface SearchResult {
-  noteId: string;
-  score: number;
-  engines: string[];
+/**
+ * Simplified structure for ranking results
+ */
+export interface NoteIdRank {
+  id: string; // note path
+  score: number; // relevance score
+  engine?: string; // source engine (l1, semantic, grepPrior)
 }
 
 export interface SearchOptions {
   maxResults?: number;
   rrfK?: number;
-  enableLexical?: boolean;
-  enableGraph?: boolean;
   enableSemantic?: boolean;
-}
-
-export interface RetrieverEngine {
-  readonly name: string;
-  initialize(vault: any): Promise<void>;
-  search(queries: string[], limit?: number): Hit[];
-  updateFile?(file: any, content: string): void;
-  removeFile?(path: string): void;
-  cleanup?(): void;
+  semanticWeight?: number;
+  l1ByteCap?: number;
+  candidateLimit?: number;
+  graphHops?: number;
 }
