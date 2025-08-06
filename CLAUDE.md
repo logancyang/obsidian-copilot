@@ -172,8 +172,17 @@ For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE
 - File naming: PascalCase for components, camelCase for utilities
 - Async/await over promises
 - Early returns for error conditions
-- JSDoc for complex functions
+- **Always add JSDoc comments** for all functions and methods
 - Organize imports: React → external → internal
+- **Avoid language-specific lists** (like stopwords or action verbs) - use language-agnostic approaches instead
+
+### Logging
+
+- **NEVER use console.log** - Use the logging utilities instead:
+  - `logInfo()` for informational messages
+  - `logWarn()` for warnings
+  - `logError()` for errors
+- Import from logger: `import { logInfo, logWarn, logError } from "@/logger"`
 
 ## Testing Guidelines
 

@@ -22,7 +22,7 @@ export interface SearchOptions {
 export interface RetrieverEngine {
   readonly name: string;
   initialize(vault: any): Promise<void>;
-  search(queries: string[], limit?: number): Promise<Hit[]> | Hit[];
+  search(queries: string[], limit?: number): Hit[];
   updateFile?(file: any, content: string): void;
   removeFile?(path: string): void;
   cleanup?(): void;
