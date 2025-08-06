@@ -53,13 +53,15 @@ export class TieredRetriever {
       // 1. Expand query into variants and terms
       const expanded = await this.queryExpander.expand(query);
       const queries = expanded.queries;
+      const salientTerms = expanded.salientTerms;
 
-      logInfo(
-        `Query expansion: ${queries.length} variants - [${queries.map((q) => `"${q}"`).join(", ")}]`
-      );
+      logInfo(`Query expansion: ${queries.length} variants + ${salientTerms.length} terms`);
+      logInfo(`  Variants: [${queries.map((q) => `"${q}"`).join(", ")}]`);
+      logInfo(`  Terms: [${salientTerms.map((t) => `"${t}"`).join(", ")}]`);
 
-      // 2. GREP for initial candidates
-      const grepHits = await this.grepScanner.batchCachedReadGrep(queries, 200);
+      // 2. GREP for initial candidates (use both queries and terms)
+      const allSearchStrings = [...queries, ...salientTerms];
+      const grepHits = await this.grepScanner.batchCachedReadGrep(allSearchStrings, 200);
 
       logInfo(`Grep scan: Found ${grepHits.length} initial matches`);
 
@@ -83,10 +85,14 @@ export class TieredRetriever {
 
       logInfo(`Full-text index: Built with ${indexed} documents`);
 
-      // 6. Search full-text index with all query variants
-      const fullTextResults = this.fullTextEngine.search(queries, maxResults * 2);
+      // 6. Search full-text index with both query variants AND salient terms
+      // This hybrid approach maximizes both precision (from phrases) and recall (from terms)
+      const allFullTextQueries = [...queries, ...salientTerms];
+      const fullTextResults = this.fullTextEngine.search(allFullTextQueries, maxResults * 2);
 
-      logInfo(`Full-text search: Found ${fullTextResults.length} results`);
+      logInfo(
+        `Full-text search: Found ${fullTextResults.length} results (using ${allFullTextQueries.length} search inputs)`
+      );
 
       // 7. Optional semantic re-ranking
       const semanticResults: NoteIdRank[] = [];

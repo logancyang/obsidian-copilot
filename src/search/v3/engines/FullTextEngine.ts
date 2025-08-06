@@ -32,6 +32,7 @@ export class FullTextEngine {
           { field: "title", tokenize: this.tokenizeMixed.bind(this), weight: 3 },
           { field: "headings", tokenize: this.tokenizeMixed.bind(this), weight: 2 },
           { field: "tags", tokenize: this.tokenizeMixed.bind(this), weight: 2 },
+          { field: "links", tokenize: this.tokenizeMixed.bind(this), weight: 2 }, // Links have same weight as tags
           { field: "body", tokenize: this.tokenizeMixed.bind(this), weight: 1 },
         ],
         store: false, // Don't store docs to save memory
@@ -99,11 +100,17 @@ export class FullTextEngine {
           const bodySize = MemoryManager.getByteSize(doc.body);
 
           if (this.memoryManager.canAddContent(bodySize)) {
+            // Extract basenames from links for searchability
+            const linkBasenames = [...doc.linksOut, ...doc.linksIn]
+              .map((path) => path.replace(/.*\//, "").replace(/\.md$/, ""))
+              .join(" ");
+
             this.index.add({
               id: doc.id,
               title: doc.title,
               headings: doc.headings.join(" "),
               tags: doc.tags.join(" "),
+              links: linkBasenames, // Index link basenames for search
               body: doc.body,
             });
 
@@ -136,13 +143,13 @@ export class FullTextEngine {
       const headings = cache?.headings?.map((h) => h.heading) ?? [];
       const props = cache?.frontmatter ?? {};
 
-      // Get links
+      // Get links (using full paths for accuracy)
       const outgoing = this.app.metadataCache.resolvedLinks[file.path] ?? {};
       const backlinks = this.app.metadataCache.getBacklinksForFile(file)?.data ?? {};
 
-      // Normalize links to basenames
-      const linksOut = Object.keys(outgoing).map((p) => p.replace(/.*\//, "").replace(/\.md$/, ""));
-      const linksIn = Object.keys(backlinks).map((p) => p.replace(/.*\//, "").replace(/\.md$/, ""));
+      // Store full paths for link information
+      const linksOut = Object.keys(outgoing);
+      const linksIn = Object.keys(backlinks);
 
       // Get title from frontmatter or filename
       const frontmatter = props as Record<string, any>;

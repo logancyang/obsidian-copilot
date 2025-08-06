@@ -4,13 +4,13 @@
 export interface NoteDoc {
   id: string; // vault-relative path
   title: string; // filename or front-matter title
-  headings: string[]; // H1..H6 plain text
-  tags: string[]; // inline + frontmatter via getAllTags(cache)
-  props: Record<string, unknown>; // frontmatter key/values
-  linksOut: string[]; // outgoing link targets (paths or basenames)
-  linksIn: string[]; // backlinks (paths or basenames)
-  body: string; // full markdown text (used only for L1)
-  mtime: number; // modification time for recency
+  headings: string[]; // H1..H6 plain text (indexed)
+  tags: string[]; // inline + frontmatter via getAllTags(cache) (indexed)
+  props: Record<string, unknown>; // frontmatter key/values (extracted but not indexed)
+  linksOut: string[]; // outgoing link full paths (extracted and indexed as basenames)
+  linksIn: string[]; // backlink full paths (extracted and indexed as basenames)
+  body: string; // full markdown text (indexed)
+  mtime: number; // modification time for recency (extracted but not used)
 }
 
 /**
