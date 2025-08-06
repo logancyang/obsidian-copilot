@@ -45,8 +45,8 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     return registry.getEnabledTools(enabledToolIds, !!this.chainManager.app?.vault);
   }
 
-  private generateToolDescriptions(): string {
-    const tools = this.getAvailableTools();
+  private static generateToolDescriptions(availableTools: SimpleTool<any, any>[]): string {
+    const tools = availableTools;
     return tools
       .map((tool) => {
         let params = "";
@@ -69,27 +69,13 @@ ${params}
       .join("\n\n");
   }
 
-  private buildIterationDisplay(
-    iterationHistory: string[],
-    currentIteration: number,
-    currentMessage: string
+  public static generateSystemPrompt(
+    availableTools: SimpleTool<any, any>[],
+    adapter: ModelAdapter
   ): string {
-    // Simply join all history without headers or separators
-    const allParts = [...iterationHistory];
-
-    // Add current message if present
-    if (currentMessage) {
-      allParts.push(currentMessage);
-    }
-
-    // Join with simple spacing
-    return allParts.join("\n\n");
-  }
-
-  private generateSystemPrompt(): string {
     const basePrompt = getSystemPrompt();
-    const toolDescriptions = this.generateToolDescriptions();
-    const availableTools = this.getAvailableTools();
+    const toolDescriptions = AutonomousAgentChainRunner.generateToolDescriptions(availableTools);
+
     const toolNames = availableTools.map((tool) => tool.name);
 
     // Get tool metadata for custom instructions
@@ -98,11 +84,17 @@ ${params}
       .map((tool) => registry.getToolMetadata(tool.name))
       .filter((meta): meta is NonNullable<typeof meta> => meta !== undefined);
 
+    return adapter.enhanceSystemPrompt(basePrompt, toolDescriptions, toolNames, toolMetadata);
+  }
+
+  private generateSystemPrompt(): string {
+    const availableTools = this.getAvailableTools();
+
     // Use model adapter for clean model-specific handling
     const chatModel = this.chainManager.chatModelManager.getChatModel();
     const adapter = ModelAdapterFactory.createAdapter(chatModel);
 
-    return adapter.enhanceSystemPrompt(basePrompt, toolDescriptions, toolNames, toolMetadata);
+    return AutonomousAgentChainRunner.generateSystemPrompt(availableTools, adapter);
   }
 
   async run(
@@ -137,6 +129,7 @@ ${params}
 
       // Build initial conversation messages
       const customSystemPrompt = this.generateSystemPrompt();
+
       const chatModel = this.chainManager.chatModelManager.getChatModel();
       const adapter = ModelAdapterFactory.createAdapter(chatModel);
 
