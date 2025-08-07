@@ -1,31 +1,34 @@
-import { FullTextEngine } from "./FullTextEngine";
+// Mock Obsidian modules first (before imports)
+jest.mock("obsidian", () => {
+  // Define MockTFile inside the mock factory
+  class MockTFile {
+    path: string;
+    basename: string;
+    stat: { mtime: number };
 
-// Mock TFile class
-class MockTFile {
-  path: string;
-  basename: string;
-  stat: { mtime: number };
-
-  constructor(path: string) {
-    this.path = path;
-    this.basename = path.replace(".md", "");
-    this.stat = { mtime: Date.now() };
-  }
-}
-
-// Mock Obsidian modules
-jest.mock("obsidian", () => ({
-  TFile: MockTFile,
-  Platform: {
-    isMobile: false,
-  },
-  getAllTags: jest.fn((cache) => {
-    if (cache?.frontmatter?.tags) {
-      return cache.frontmatter.tags;
+    constructor(path: string) {
+      this.path = path;
+      this.basename = path.replace(".md", "");
+      this.stat = { mtime: Date.now() };
     }
-    return [];
-  }),
-}));
+  }
+
+  return {
+    TFile: MockTFile,
+    Platform: {
+      isMobile: false,
+    },
+    getAllTags: jest.fn((cache) => {
+      if (cache?.frontmatter?.tags) {
+        return cache.frontmatter.tags;
+      }
+      return [];
+    }),
+  };
+});
+
+import { FullTextEngine } from "./FullTextEngine";
+import { TFile } from "obsidian";
 
 describe("FullTextEngine", () => {
   let engine: FullTextEngine;
@@ -53,9 +56,9 @@ describe("FullTextEngine", () => {
       vault: {
         getAbstractFileByPath: jest.fn((path) => {
           if (!path || path === "missing.md") return null;
-          const file = new MockTFile(path);
+          const file = new (TFile as any)(path);
           // Make it pass instanceof TFile check
-          Object.setPrototypeOf(file, MockTFile.prototype);
+          Object.setPrototypeOf(file, TFile.prototype);
           return file;
         }),
         cachedRead: jest.fn((file) => {
@@ -158,8 +161,8 @@ describe("FullTextEngine", () => {
     it("should handle missing files gracefully", async () => {
       mockApp.vault.getAbstractFileByPath = jest.fn((path) => {
         if (path === "missing.md") return null;
-        const file = new MockTFile(path);
-        Object.setPrototypeOf(file, MockTFile.prototype);
+        const file = new (TFile as any)(path);
+        Object.setPrototypeOf(file, TFile.prototype);
         return file;
       });
 

@@ -160,33 +160,6 @@ export class TieredRetriever {
   }
 
   /**
-   * Progressive expansion - increase graph hops if recall is low
-   * @param currentResults - Current result set
-   * @param query - Original query
-   * @param currentHops - Current hop count
-   * @returns Expanded results if needed
-   */
-  async progressiveExpansion(
-    currentResults: NoteIdRank[],
-    query: string,
-    currentHops: number
-  ): Promise<NoteIdRank[]> {
-    // If we have very few results, try expanding with more hops
-    if (currentResults.length < 5 && currentHops < 3) {
-      logInfo(
-        `TieredRetriever: Low recall (${currentResults.length}), expanding to ${currentHops + 1} hops`
-      );
-
-      return this.retrieve(query, {
-        graphHops: currentHops + 1,
-        maxResults: 30,
-      });
-    }
-
-    return currentResults;
-  }
-
-  /**
    * Get statistics about the last retrieval
    */
   getStats(): {

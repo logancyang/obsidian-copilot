@@ -24,10 +24,10 @@ _(Multilingual, Partial In-Memory; optional semantic add-on)_
            "NextJS OAuth setup", "oauth", "nextjs"]
    Finds: ["auth/oauth-guide.md", "nextjs/auth.md", "tutorials/oauth.md"]
 
-3. Graph Expansion (links/backlinks)
-   From:     3 grep hits
-   Expands:  +5 linked notes (JWT.md, auth-flow.md, etc.)
-   Total:    8 candidate notes
+3. Graph Expansion (link analysis)
+   Strategies: Link traversal + Active context + Co-citation
+   From:       3 grep hits → 8 total candidates
+   Adds:       JWT.md (linked), auth-flow.md (backlink), config.md (co-cited)
 
 4. Full-Text Index (L1 - ephemeral FlexSearch)
    Builds index from 8 notes with fields:
@@ -187,7 +187,6 @@ interface NoteDoc {
   linksOut: string[]; // outgoing link full paths (extracted and indexed as basenames)
   linksIn: string[]; // backlink full paths (extracted and indexed as basenames)
   body: string; // full markdown text (indexed)
-  mtime: number; // modification time for recency (extracted but not used)
 }
 
 interface NoteIdRank {
@@ -289,37 +288,44 @@ class GrepScanner {
 }
 ```
 
-### 4.3 Graph Expander (Increase Recall)
+### 4.3 Graph Expander (Increase Recall via Link Analysis)
 
-Expand from grep hits to find related notes:
+Discovers related notes that don't contain search terms but are conceptually connected through the knowledge graph.
 
-```ts
-class GraphExpander {
-  async expandFromNotes(notePaths: string[], hops: number): Promise<string[]> {
-    const expanded = new Set<string>(notePaths);
+**Three Expansion Strategies:**
 
-    for (let hop = 0; hop < hops; hop++) {
-      const frontier = [...expanded];
+1. **BFS Link Traversal** - Breadth-first search following outgoing links and backlinks
+2. **Active Context** - Includes neighbors of the currently open note
+3. **Co-citation** - Finds notes linking to same targets (topic similarity)
 
-      for (const path of frontier) {
-        // Get outgoing links
-        const outgoing = app.metadataCache.resolvedLinks[path] || {};
-        Object.keys(outgoing).forEach((link) => expanded.add(link));
+**How It Works:**
 
-        // Get backlinks
-        const backlinks = app.metadataCache.getBacklinksForFile(
-          app.vault.getAbstractFileByPath(path)
-        );
-        if (backlinks) {
-          Object.keys(backlinks.data).forEach((link) => expanded.add(link));
-        }
-      }
-    }
+```typescript
+// Example: Search for "authentication" finds 3 notes initially
+grepHits = ["auth/oauth.md", "auth/jwt.md", "tutorials/auth.md"];
 
-    return Array.from(expanded);
-  }
-}
+// 1. Link Traversal (1 hop)
+// - oauth.md links to: ["concepts/tokens.md", "auth/flow.md"]
+// - jwt.md has backlinks from: ["api/security.md", "examples/login.md"]
+// → Adds 4 more notes via direct connections
+
+// 2. Active Context (user has "nextjs/setup.md" open)
+// - setup.md links to: ["auth/nextjs-auth.md", "config/env.md"]
+// → Adds 2 more contextually relevant notes
+
+// 3. Co-citation (oauth.md and jwt.md both link to "crypto/signing.md")
+// - Other notes also linking to signing.md: ["auth/saml.md"]
+// → Adds 1 topically similar note
+
+// Final expansion: 3 → 10 notes
 ```
+
+**Key Benefits:**
+
+- Finds conceptually related notes without exact term matches
+- Uses graph structure to infer relationships
+- Adapts to user's current context (active note)
+- Discovers notes about similar topics via shared references
 
 ### 4.4 Full-Text Engine (L1 - Ephemeral Body Index)
 

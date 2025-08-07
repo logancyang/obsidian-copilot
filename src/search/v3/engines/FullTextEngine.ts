@@ -100,9 +100,13 @@ export class FullTextEngine {
           const bodySize = MemoryManager.getByteSize(doc.body);
 
           if (this.memoryManager.canAddContent(bodySize)) {
-            // Extract basenames from links for searchability
+            // Extract basenames from links for searchability (optimized)
             const linkBasenames = [...doc.linksOut, ...doc.linksIn]
-              .map((path) => path.replace(/.*\//, "").replace(/\.md$/, ""))
+              .map((path) => {
+                const lastSlash = path.lastIndexOf("/");
+                const basename = lastSlash >= 0 ? path.slice(lastSlash + 1) : path;
+                return basename.endsWith(".md") ? basename.slice(0, -3) : basename;
+              })
               .join(" ");
 
             this.index.add({
@@ -164,7 +168,6 @@ export class FullTextEngine {
         linksOut,
         linksIn,
         body: content,
-        mtime: file.stat.mtime,
       };
     } catch (error) {
       logInfo(`FullText: Skipped ${file.path}: ${error}`);
@@ -181,39 +184,32 @@ export class FullTextEngine {
   search(queries: string[], limit: number = 30): NoteIdRank[] {
     const scoreMap = new Map<string, number>();
 
-    queries.forEach((query) => {
+    // Process each query
+    for (const query of queries) {
       try {
         const results = this.index.search(query, { limit, enrich: true });
-        this.processSearchResults(results, scoreMap);
+
+        // Process results directly (inlined for simplicity)
+        if (Array.isArray(results)) {
+          for (const fieldResult of results) {
+            if (!fieldResult?.result) continue;
+
+            for (let idx = 0; idx < fieldResult.result.length; idx++) {
+              const item = fieldResult.result[idx];
+              const id = typeof item === "string" ? item : item?.id;
+              if (id) {
+                const score = 1 / (idx + 1);
+                scoreMap.set(id, Math.max(scoreMap.get(id) || 0, score));
+              }
+            }
+          }
+        }
       } catch (error) {
         logInfo(`FullText: Search failed for "${query}": ${error}`);
       }
-    });
+    }
 
-    return this.convertToNoteIdRank(scoreMap, limit);
-  }
-
-  /**
-   * Process search results and update score map
-   */
-  private processSearchResults(results: any[], scoreMap: Map<string, number>): void {
-    if (!Array.isArray(results)) return;
-
-    results.forEach((fieldResult) => {
-      fieldResult?.result?.forEach((item: any, idx: number) => {
-        const id = typeof item === "string" ? item : item?.id;
-        if (id) {
-          const score = 1 / (idx + 1);
-          scoreMap.set(id, Math.max(scoreMap.get(id) || 0, score));
-        }
-      });
-    });
-  }
-
-  /**
-   * Convert score map to sorted NoteIdRank array
-   */
-  private convertToNoteIdRank(scoreMap: Map<string, number>, limit: number): NoteIdRank[] {
+    // Convert to sorted array
     return Array.from(scoreMap.entries())
       .map(([id, score]) => ({ id, score, engine: "fulltext" }))
       .sort((a, b) => b.score - a.score)

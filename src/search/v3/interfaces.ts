@@ -10,7 +10,6 @@ export interface NoteDoc {
   linksOut: string[]; // outgoing link full paths (extracted and indexed as basenames)
   linksIn: string[]; // backlink full paths (extracted and indexed as basenames)
   body: string; // full markdown text (indexed)
-  mtime: number; // modification time for recency (extracted but not used)
 }
 
 /**

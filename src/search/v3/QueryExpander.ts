@@ -19,13 +19,9 @@ export interface ExpandedQuery {
  */
 export class QueryExpander {
   private cache = new Map<string, ExpandedQuery>();
+  private readonly config;
 
-  private static readonly CONFIG = {
-    MAX_VARIANTS: 2,
-    TIMEOUT_MS: 500,
-    MAX_CACHE_SIZE: 100,
-    MIN_TERM_LENGTH: 2,
-    PROMPT_TEMPLATE: `Generate alternative search queries and extract keywords for the following query:
+  private static readonly PROMPT_TEMPLATE = `Generate alternative search queries and extract keywords for the following query:
 "{query}"
 
 Instructions:
@@ -53,22 +49,15 @@ Format your response using XML tags:
 <term>keyword1</term>
 <term>keyword2</term>
 <term>keyword3</term>
-</terms>`,
-  } as const;
+</terms>`;
 
-  constructor(private readonly options: QueryExpanderOptions = {}) {}
-
-  // Getters for configuration with defaults
-  private get maxVariants(): number {
-    return this.options.maxVariants ?? QueryExpander.CONFIG.MAX_VARIANTS;
-  }
-
-  private get timeout(): number {
-    return this.options.timeout ?? QueryExpander.CONFIG.TIMEOUT_MS;
-  }
-
-  private get cacheSize(): number {
-    return this.options.cacheSize ?? QueryExpander.CONFIG.MAX_CACHE_SIZE;
+  constructor(private readonly options: QueryExpanderOptions = {}) {
+    this.config = {
+      maxVariants: options.maxVariants ?? 2,
+      timeout: options.timeout ?? 500,
+      cacheSize: options.cacheSize ?? 100,
+      minTermLength: 2,
+    };
   }
 
   /**
@@ -83,9 +72,12 @@ Format your response using XML tags:
       return { queries: [], salientTerms: [] };
     }
 
-    // Check cache first
+    // Check cache first (and update LRU position)
     const cached = this.cache.get(query);
     if (cached) {
+      // Move to end (most recently used) for proper LRU
+      this.cache.delete(query);
+      this.cache.set(query, cached);
       logInfo(`QueryExpander: Using cached expansion for "${query}"`);
       return cached;
     }
@@ -116,7 +108,7 @@ Format your response using XML tags:
       setTimeout(() => {
         logInfo(`QueryExpander: Timeout reached for "${query}"`);
         resolve(this.fallbackExpansion(query));
-      }, this.timeout);
+      }, this.config.timeout);
     });
 
     // Create expansion promise
@@ -144,9 +136,9 @@ Format your response using XML tags:
         return this.fallbackExpansion(query);
       }
 
-      const prompt = QueryExpander.CONFIG.PROMPT_TEMPLATE.replace(
+      const prompt = QueryExpander.PROMPT_TEMPLATE.replace(
         "{count}",
-        this.maxVariants.toString()
+        this.config.maxVariants.toString()
       ).replace("{query}", query);
 
       const response = await model.invoke(prompt);
@@ -197,7 +189,7 @@ Format your response using XML tags:
     let queryMatch;
     while ((queryMatch = queryRegex.exec(content)) !== null) {
       const query = queryMatch[1]?.trim();
-      if (query && query !== originalQuery && queries.length <= this.maxVariants) {
+      if (query && query !== originalQuery && queries.length <= this.config.maxVariants) {
         queries.push(query);
       }
     }
@@ -226,7 +218,7 @@ Format your response using XML tags:
     });
 
     return {
-      queries: queries.slice(0, this.maxVariants + 1), // +1 for original
+      queries: queries.slice(0, this.config.maxVariants + 1), // +1 for original
       salientTerms: Array.from(terms),
     };
   }
@@ -259,7 +251,7 @@ Format your response using XML tags:
       }
 
       // Parse content based on current section
-      if (section === "queries" && queries.length <= this.maxVariants) {
+      if (section === "queries" && queries.length <= this.config.maxVariants) {
         const cleanQuery = line.replace(/^[-•*\d.)\s]+/, "").trim();
         if (cleanQuery && cleanQuery !== originalQuery) {
           queries.push(cleanQuery);
@@ -277,7 +269,7 @@ Format your response using XML tags:
 
     // If no sections found, treat lines as queries
     if (queries.length === 1 && terms.size === 0) {
-      for (const line of lines.slice(0, this.maxVariants)) {
+      for (const line of lines.slice(0, this.config.maxVariants)) {
         if (line && !line.toUpperCase().includes("QUERY")) {
           queries.push(line);
         }
@@ -289,7 +281,7 @@ Format your response using XML tags:
     extractedTerms.forEach((term) => terms.add(term));
 
     return {
-      queries: queries.slice(0, this.maxVariants + 1),
+      queries: queries.slice(0, this.config.maxVariants + 1),
       salientTerms: Array.from(terms),
     };
   }
@@ -352,7 +344,7 @@ Format your response using XML tags:
    */
   private isValidTerm(term: string): boolean {
     return (
-      term.length >= QueryExpander.CONFIG.MIN_TERM_LENGTH && /^[\w-]+$/.test(term) // Allow word characters and hyphens
+      term.length >= this.config.minTermLength && /^[\w-]+$/.test(term) // Allow word characters and hyphens
     );
   }
 
@@ -363,7 +355,7 @@ Format your response using XML tags:
    */
   private cacheResult(query: string, expanded: ExpandedQuery): void {
     // Map maintains insertion order for simple LRU
-    if (this.cache.size >= this.cacheSize) {
+    if (this.cache.size >= this.config.cacheSize) {
       const firstKey = this.cache.keys().next().value;
       if (firstKey) {
         this.cache.delete(firstKey);
