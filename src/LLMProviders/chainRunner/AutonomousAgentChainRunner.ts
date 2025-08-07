@@ -213,7 +213,6 @@ ${params}
               );
               if (messageIndex === -1) {
                 currentIterationToolCallMessages.push(toolCallMarker);
-                console.log("created toolCallMarker during streaming", toolCallId);
               }
             }
 
