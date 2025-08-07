@@ -30,9 +30,10 @@ export class FullTextEngine {
         id: "id",
         index: [
           { field: "title", tokenize: this.tokenizeMixed.bind(this), weight: 3 },
+          { field: "path", tokenize: this.tokenizeMixed.bind(this), weight: 2.5 }, // Path components are highly relevant
           { field: "headings", tokenize: this.tokenizeMixed.bind(this), weight: 2 },
           { field: "tags", tokenize: this.tokenizeMixed.bind(this), weight: 2 },
-          { field: "links", tokenize: this.tokenizeMixed.bind(this), weight: 2 }, // Links have same weight as tags
+          { field: "links", tokenize: this.tokenizeMixed.bind(this), weight: 2 },
           { field: "body", tokenize: this.tokenizeMixed.bind(this), weight: 1 },
         ],
         store: false, // Don't store docs to save memory
@@ -109,9 +110,14 @@ export class FullTextEngine {
               })
               .join(" ");
 
+            // Extract path components for searchability
+            // "Piano Lessons/Lesson 2.md" → "Piano Lessons Lesson 2"
+            const pathComponents = doc.id.replace(/\.md$/, "").split("/").join(" ");
+
             this.index.add({
               id: doc.id,
               title: doc.title,
+              path: pathComponents, // Index folder and file names
               headings: doc.headings.join(" "),
               tags: doc.tags.join(" "),
               links: linkBasenames, // Index link basenames for search
@@ -182,26 +188,48 @@ export class FullTextEngine {
    * @returns Array of NoteIdRank results
    */
   search(queries: string[], limit: number = 30): NoteIdRank[] {
-    const scoreMap = new Map<string, number>();
+    const scoreMap = new Map<string, { score: number; fieldMatches: Set<string> }>();
+
+    // Only log if we have many queries or debug mode
+    if (queries.length > 5) {
+      logInfo(`FullText: Searching with ${queries.length} queries`);
+    }
 
     // Process each query
     for (const query of queries) {
       try {
-        const results = this.index.search(query, { limit, enrich: true });
+        const results = this.index.search(query, { limit: limit * 2, enrich: true });
 
-        // Process results directly (inlined for simplicity)
+        // Process results with improved scoring
         if (Array.isArray(results)) {
+          let queryMatchCount = 0;
           for (const fieldResult of results) {
-            if (!fieldResult?.result) continue;
+            if (!fieldResult?.result || !fieldResult?.field) continue;
+
+            const fieldName = fieldResult.field;
+            const fieldWeight = this.getFieldWeight(fieldName);
 
             for (let idx = 0; idx < fieldResult.result.length; idx++) {
               const item = fieldResult.result[idx];
               const id = typeof item === "string" ? item : item?.id;
               if (id) {
-                const score = 1 / (idx + 1);
-                scoreMap.set(id, Math.max(scoreMap.get(id) || 0, score));
+                queryMatchCount++;
+                // Calculate position-based score with field weighting
+                const positionScore = 1 / (idx + 1);
+                const fieldScore = positionScore * fieldWeight;
+
+                const existing = scoreMap.get(id) || { score: 0, fieldMatches: new Set() };
+                // Accumulate scores from different queries (don't use Math.max)
+                // This way, documents matching multiple query terms get higher scores
+                existing.score += fieldScore;
+                existing.fieldMatches.add(fieldName);
+                scoreMap.set(id, existing);
               }
             }
+          }
+          // Only log significant match counts
+          if (queryMatchCount > 10) {
+            logInfo(`  Query "${query}": ${queryMatchCount} matches found`);
           }
         }
       } catch (error) {
@@ -209,11 +237,81 @@ export class FullTextEngine {
       }
     }
 
-    // Convert to sorted array
-    return Array.from(scoreMap.entries())
-      .map(([id, score]) => ({ id, score, engine: "fulltext" }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
+    // Apply bonus for multi-field matches
+    const finalResults: NoteIdRank[] = [];
+    for (const [id, data] of scoreMap.entries()) {
+      // Boost score if matched in multiple fields
+      const multiFieldBonus = 1 + (data.fieldMatches.size - 1) * 0.2;
+      const finalScore = data.score * multiFieldBonus;
+      finalResults.push({ id, score: finalScore, engine: "fulltext" });
+    }
+
+    // Apply folder-based boosting before sorting
+    this.applyFolderBoost(finalResults);
+
+    // Sort again after boosting and return top results
+    finalResults.sort((a, b) => b.score - a.score);
+    return finalResults.slice(0, limit);
+  }
+
+  /**
+   * Apply folder-based boosting to improve ranking of related notes.
+   * Notes in the same folder get a boost when multiple notes from that folder are found.
+   */
+  private applyFolderBoost(results: NoteIdRank[]): void {
+    // Count notes per folder
+    const folderCounts = new Map<string, number>();
+
+    for (const result of results) {
+      const lastSlash = result.id.lastIndexOf("/");
+      if (lastSlash > 0) {
+        const folder = result.id.substring(0, lastSlash);
+        folderCounts.set(folder, (folderCounts.get(folder) || 0) + 1);
+      }
+    }
+
+    // Log folder boost summary
+    const foldersWithMultiple = Array.from(folderCounts.entries()).filter(([, count]) => count > 1);
+    if (foldersWithMultiple.length > 0) {
+      logInfo(`FullText: Boosting ${foldersWithMultiple.length} folders with multiple matches`);
+      // Log top folders
+      foldersWithMultiple.slice(0, 3).forEach(([folder, count]) => {
+        const boostFactor = 1 + Math.log2(count + 1);
+        logInfo(`  ${folder}: ${count} docs (${boostFactor.toFixed(2)}x boost)`);
+      });
+    }
+
+    // Apply boost to notes in folders with multiple matches
+    for (const result of results) {
+      const lastSlash = result.id.lastIndexOf("/");
+      if (lastSlash > 0) {
+        const folder = result.id.substring(0, lastSlash);
+        const count = folderCounts.get(folder) || 1;
+
+        // Boost score based on folder prevalence (more notes in folder = higher boost)
+        if (count > 1) {
+          // Use a more moderate boost to avoid overflow
+          // Logarithmic boost: grows slower than exponential
+          const boostFactor = 1 + Math.log2(count + 1); // More moderate: ~2x for 3 docs, ~2.3x for 7 docs
+          result.score = result.score * boostFactor;
+        }
+      }
+    }
+  }
+
+  /**
+   * Get field weight for scoring
+   */
+  private getFieldWeight(fieldName: string): number {
+    const weights: Record<string, number> = {
+      title: 3,
+      path: 2.5,
+      headings: 2,
+      tags: 2,
+      links: 2,
+      body: 1,
+    };
+    return weights[fieldName] || 1;
   }
 
   /**

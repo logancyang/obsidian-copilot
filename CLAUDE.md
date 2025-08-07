@@ -10,7 +10,7 @@ Copilot for Obsidian is an AI-powered assistant plugin that integrates various L
 
 ### Build & Development
 
-- `npm run dev` - Start development server with hot reload (runs Tailwind CSS + esbuild in watch mode)
+- **NEVER RUN `npm run dev`** - The user will handle all builds manually
 - `npm run build` - Production build (TypeScript check + minified output)
 
 ### Code Quality
@@ -152,6 +152,13 @@ For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE
    - Integrated with ChatManager for seamless persistence
 
 ## Code Style Guidelines
+
+### MAJOR PRINCIPLES
+
+- **ALWAYS WRITE GENERALIZABLE SOLUTIONS**: Never add edge-case handling or hardcoded logic for specific scenarios (like "piano notes" or "daily notes"). Solutions must work for all cases.
+- **Avoid hardcoding**: No hardcoded folder names, file patterns, or special-case logic
+- **Configuration over convention**: If behavior needs to vary, make it configurable, not hardcoded
+- **Universal patterns**: Solutions should work equally well for any folder structure, naming convention, or content type
 
 ### TypeScript
 

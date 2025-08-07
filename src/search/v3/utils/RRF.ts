@@ -19,7 +19,7 @@ export interface RRFConfig {
 /**
  * Perform weighted Reciprocal Rank Fusion to combine multiple rankings
  * @param config - RRF configuration with rankings and weights
- * @returns Fused ranking of note IDs
+ * @returns Fused ranking of note IDs with normalized scores
  */
 export function weightedRRF(config: RRFConfig): NoteIdRank[] {
   const { lexical = [], semantic = [], grepPrior = [], weights = {}, k = 60 } = config;
@@ -43,9 +43,23 @@ export function weightedRRF(config: RRFConfig): NoteIdRank[] {
 
   logInfo(`RRF: Fused ${scores.size} unique results`);
 
-  return Array.from(scores.entries())
-    .sort(([, a], [, b]) => b - a)
-    .map(([id, score]) => ({ id, score, engine: "rrf" }));
+  // Sort by score
+  const sortedResults = Array.from(scores.entries()).sort(([, a], [, b]) => b - a);
+
+  // Normalize scores to 0-1 range
+  if (sortedResults.length > 0) {
+    const maxScore = sortedResults[0][1];
+    const minScore = sortedResults[sortedResults.length - 1][1];
+    const range = maxScore - minScore || 1; // Avoid division by zero
+
+    return sortedResults.map(([id, score]) => ({
+      id,
+      score: (score - minScore) / range, // Normalize to 0-1
+      engine: "rrf",
+    }));
+  }
+
+  return [];
 }
 
 /**

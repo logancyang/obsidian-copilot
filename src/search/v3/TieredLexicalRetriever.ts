@@ -2,7 +2,7 @@ import { Document } from "@langchain/core/documents";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { App, TFile } from "obsidian";
-import { TieredRetriever } from "./TieredRetriever";
+import { SearchCore } from "./SearchCore";
 import { logInfo, logWarn } from "@/logger";
 import { extractNoteFiles } from "@/utils";
 import { getSettings } from "@/settings/model";
@@ -20,7 +20,7 @@ import ChatModelManager from "@/LLMProviders/chatModelManager";
  */
 export class TieredLexicalRetriever extends BaseRetriever {
   public lc_namespace = ["tiered_lexical_retriever"];
-  private tieredRetriever: TieredRetriever;
+  private searchCore: SearchCore;
 
   constructor(
     private app: App,
@@ -45,7 +45,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
         return null;
       }
     };
-    this.tieredRetriever = new TieredRetriever(app, getChatModel);
+    this.searchCore = new SearchCore(app, getChatModel);
   }
 
   /**
@@ -75,7 +75,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
       }
 
       // Perform the tiered search
-      const searchResults = await this.tieredRetriever.retrieve(query, {
+      const searchResults = await this.searchCore.retrieve(query, {
         maxResults: this.options.maxK,
         salientTerms: enhancedSalientTerms,
         // We're not using semantic for now, so disable it
@@ -209,6 +209,44 @@ export class TieredLexicalRetriever extends BaseRetriever {
       const scoreB = b.metadata.score || 0;
       return scoreB - scoreA;
     });
+  }
+
+  /**
+   * Apply folder-based boosting to improve ranking of related notes.
+   * Notes in the same folder get a slight boost when multiple notes from that folder are found.
+   * @deprecated Moved to FullTextEngine for proper integration with RRF
+   */
+  private applyFolderBoost(documents: Document[]): void {
+    // Count notes per folder
+    const folderCounts = new Map<string, number>();
+
+    for (const doc of documents) {
+      const path = doc.metadata.path as string;
+      const lastSlash = path.lastIndexOf("/");
+      if (lastSlash > 0) {
+        const folder = path.substring(0, lastSlash);
+        folderCounts.set(folder, (folderCounts.get(folder) || 0) + 1);
+      }
+    }
+
+    // Apply boost to notes in folders with multiple matches
+    for (const doc of documents) {
+      const path = doc.metadata.path as string;
+      const lastSlash = path.lastIndexOf("/");
+      if (lastSlash > 0) {
+        const folder = path.substring(0, lastSlash);
+        const count = folderCounts.get(folder) || 1;
+
+        // Boost score based on folder prevalence (more notes in folder = higher boost)
+        if (count > 1) {
+          const currentScore = doc.metadata.score || 0;
+          // Apply 10-30% boost based on folder prevalence
+          const boostFactor = 1 + Math.min(0.3, 0.1 * Math.log2(count));
+          doc.metadata.score = currentScore * boostFactor;
+          doc.metadata.folderBoost = boostFactor;
+        }
+      }
+    }
   }
 
   /**

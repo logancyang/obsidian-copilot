@@ -1,5 +1,7 @@
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { FuzzyMatcher } from "./utils/FuzzyMatcher";
 import { logInfo, logWarn, logError } from "@/logger";
+import { withSuppressedTokenWarnings } from "@/utils";
 
 export interface QueryExpanderOptions {
   maxVariants?: number;
@@ -21,24 +23,36 @@ export class QueryExpander {
   private cache = new Map<string, ExpandedQuery>();
   private readonly config;
 
-  private static readonly PROMPT_TEMPLATE = `Generate alternative search queries and extract keywords for the following query:
+  private static readonly PROMPT_TEMPLATE = `Generate alternative search queries and semantically related terms for the following query:
 "{query}"
 
 Instructions:
-- Generate {count} alternative search queries that capture the same intent
-- Extract keywords ONLY from the ORIGINAL query above
-- Keywords should be NOUNS or noun-like terms (things, concepts, topics, entities)
-- Focus on the actual subject matter, not the action or intent
-- EXCLUDE common action/intent verbs in ANY language such as:
-  * English: find, search, get, locate, show, retrieve, etc.
-  * Other languages: their equivalents (chercher, buscar, suchen, 查找, etc.)
-- Include only content-bearing words that identify WHAT is being searched for
-- Keep keywords in the SAME LANGUAGE as the original query
-- Single words only, not phrases
+1. Generate {count} alternative search queries that capture the same intent
+2. Extract semantically related terms that someone might use when searching for this topic
+3. Include:
+   - Keywords from the original query
+   - Synonyms and related concepts
+   - Domain-specific terminology
+   - Associated terms someone might use
+4. Keep the SAME LANGUAGE as the original query
+5. Focus on NOUNS and meaningful concepts
+6. EXCLUDE common action verbs in ANY language (find, search, get, 查找, chercher, buscar, etc.)
 
-Example: "find my piano notes" → Keywords: piano, notes (NOT: find, my)
-Example: "search typescript interfaces" → Keywords: typescript, interfaces (NOT: search)
-Example: "查找我的笔记" → Keywords: 笔记 (keep in Chinese)
+Example: "find my piano notes" 
+- Queries: "piano lesson notes", "piano practice sheets"  
+- Terms: piano, notes, music, sheet, practice, lesson, piece, scales, exercises
+
+Example: "typescript interfaces"
+- Queries: "typescript type definitions", "typescript contracts"
+- Terms: typescript, interfaces, types, definitions, contracts, typing, declarations
+
+Example: "查找我的笔记" (Chinese)
+- Queries: "我的学习笔记", "个人笔记文档"
+- Terms: 笔记, 文档, 记录, 资料, 学习, 备忘录 (keep in Chinese)
+
+Example: "rechercher documents projet" (French)
+- Queries: "documents de projet", "fichiers projet"
+- Terms: documents, projet, fichiers, dossiers, archives (keep in French)
 
 Format your response using XML tags:
 <queries>
@@ -49,6 +63,8 @@ Format your response using XML tags:
 <term>keyword1</term>
 <term>keyword2</term>
 <term>keyword3</term>
+<term>related_term1</term>
+<term>related_term2</term>
 </terms>`;
 
   constructor(private readonly options: QueryExpanderOptions = {}) {
@@ -141,7 +157,10 @@ Format your response using XML tags:
         this.config.maxVariants.toString()
       ).replace("{query}", query);
 
-      const response = await model.invoke(prompt);
+      // Invoke model with token warnings suppressed
+      const response = await withSuppressedTokenWarnings(async () => {
+        return await model.invoke(prompt);
+      });
       const content = this.extractContent(response);
 
       if (!content) {
@@ -288,15 +307,42 @@ Format your response using XML tags:
 
   /**
    * Provides a fallback expansion when LLM is unavailable or fails.
-   * Extracts terms directly from the original query.
+   * Extracts terms directly from the original query and generates fuzzy variants.
    * @param query - The original query
-   * @returns Fallback expansion with original query and extracted terms
+   * @returns Fallback expansion with original query, fuzzy variants, and extracted terms
    */
   private fallbackExpansion(query: string): ExpandedQuery {
-    // Simple fallback: extract terms from the original query
+    // Extract terms from the original query
     const terms = this.extractTermsFromQueries([query]);
+
+    // Generate fuzzy variants for important terms
+    const queries = new Set<string>([query]);
+
+    // Generate variants for each salient term
+    for (const term of terms) {
+      if (term.length >= 3) {
+        // Only generate variants for meaningful terms
+        const variants = FuzzyMatcher.generateVariants(term);
+        // Add query with each variant substituted
+        for (const variant of variants.slice(0, 3)) {
+          // Limit variants per term
+          if (variant !== term) {
+            const fuzzyQuery = query
+              .toLowerCase()
+              .replace(new RegExp(`\\b${term}\\b`, "gi"), variant);
+            if (fuzzyQuery !== query.toLowerCase()) {
+              queries.add(fuzzyQuery);
+            }
+          }
+        }
+      }
+    }
+
+    // Limit total number of queries
+    const queryArray = Array.from(queries).slice(0, this.config.maxVariants + 1);
+
     return {
-      queries: [query],
+      queries: queryArray,
       salientTerms: terms,
     };
   }

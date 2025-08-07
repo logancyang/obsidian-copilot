@@ -220,6 +220,114 @@ describe("FullTextEngine", () => {
     });
   });
 
+  describe("search scoring", () => {
+    beforeEach(async () => {
+      // Create more specific test data for scoring tests
+      const scoringMockCache: Record<string, any> = {
+        "Piano Lessons/Lesson 1.md": {
+          headings: [{ heading: "Piano Basics" }],
+          frontmatter: { title: "Piano Lesson 1" },
+        },
+        "Piano Lessons/Lesson 2.md": {
+          headings: [{ heading: "Piano Scales" }],
+          frontmatter: { title: "Piano Lesson 2" },
+        },
+        "daily/2024-01-01.md": {
+          headings: [],
+          frontmatter: { title: "Daily Note" },
+        },
+        "projects/music.md": {
+          headings: [{ heading: "Music Theory" }],
+          frontmatter: { title: "Music Project", tags: ["piano", "music"] },
+        },
+      };
+
+      mockApp.metadataCache.getFileCache = jest.fn((file: any) => scoringMockCache[file.path]);
+      mockApp.vault.cachedRead = jest.fn((file) => {
+        const contents: Record<string, string> = {
+          "Piano Lessons/Lesson 1.md": "Learning piano fundamentals and basic notes",
+          "Piano Lessons/Lesson 2.md": "Advanced piano techniques and chord progressions",
+          "daily/2024-01-01.md": "Today I practiced piano for 30 minutes",
+          "projects/music.md": "Piano music theory and composition notes",
+        };
+        return Promise.resolve(contents[file.path] || "");
+      });
+
+      await engine.buildFromCandidates([
+        "Piano Lessons/Lesson 1.md",
+        "Piano Lessons/Lesson 2.md",
+        "daily/2024-01-01.md",
+        "projects/music.md",
+      ]);
+    });
+
+    it("should apply field weighting correctly", () => {
+      const results = engine.search(["piano"], 10);
+
+      // Title matches should score higher than body matches
+      const titleMatch = results.find((r) => r.id.includes("Lesson"));
+      const bodyMatch = results.find((r) => r.id.includes("daily"));
+
+      if (titleMatch && bodyMatch) {
+        expect(titleMatch.score).toBeGreaterThan(bodyMatch.score);
+      }
+    });
+
+    it("should boost multi-field matches", () => {
+      const results = engine.search(["piano"], 10);
+
+      // The music.md file has "piano" in tags and body, should get multi-field bonus
+      const multiFieldMatch = results.find((r) => r.id === "projects/music.md");
+      expect(multiFieldMatch).toBeDefined();
+
+      // Should be ranked relatively high due to multi-field bonus
+      const index = results.findIndex((r) => r.id === "projects/music.md");
+      expect(index).toBeLessThan(3); // Should be in top 3
+    });
+
+    it("should score path matches with proper weight", () => {
+      const results = engine.search(["piano lessons"], 10);
+
+      // Files in "Piano Lessons" folder should match on path field
+      const lessonFiles = results.filter((r) => r.id.includes("Piano Lessons"));
+      expect(lessonFiles.length).toBe(2);
+
+      // Both lesson files should be ranked high
+      const lesson1Index = results.findIndex((r) => r.id.includes("Lesson 1"));
+      const lesson2Index = results.findIndex((r) => r.id.includes("Lesson 2"));
+
+      expect(lesson1Index).toBeLessThan(3);
+      expect(lesson2Index).toBeLessThan(3);
+    });
+
+    it("should handle position-based scoring", () => {
+      const results = engine.search(["piano"], 10);
+
+      // All results should have decreasing scores
+      for (let i = 1; i < results.length; i++) {
+        expect(results[i].score).toBeLessThanOrEqual(results[i - 1].score);
+      }
+    });
+  });
+
+  describe("getFieldWeight", () => {
+    it("should return correct weights for known fields", () => {
+      const getFieldWeight = (engine as any).getFieldWeight.bind(engine);
+
+      expect(getFieldWeight("title")).toBe(3);
+      expect(getFieldWeight("path")).toBe(2.5);
+      expect(getFieldWeight("headings")).toBe(2);
+      expect(getFieldWeight("tags")).toBe(2);
+      expect(getFieldWeight("links")).toBe(2);
+      expect(getFieldWeight("body")).toBe(1);
+    });
+
+    it("should return default weight for unknown fields", () => {
+      const getFieldWeight = (engine as any).getFieldWeight.bind(engine);
+      expect(getFieldWeight("unknown")).toBe(1);
+    });
+  });
+
   describe("clear", () => {
     it("should reset index and memory", async () => {
       await engine.buildFromCandidates(["note1.md", "note2.md"]);

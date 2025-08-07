@@ -9,9 +9,9 @@ import { GrepScanner } from "./scanners/GrepScanner";
 import { weightedRRF } from "./utils/RRF";
 
 /**
- * Main orchestrator for tiered note-level lexical retrieval
+ * Core search engine that orchestrates the multi-stage retrieval pipeline
  */
-export class TieredRetriever {
+export class SearchCore {
   private grepScanner: GrepScanner;
   private graphExpander: GraphExpander;
   private fullTextEngine: FullTextEngine;
@@ -26,8 +26,8 @@ export class TieredRetriever {
     this.fullTextEngine = new FullTextEngine(app);
     this.queryExpander = new QueryExpander({
       getChatModel: this.getChatModel,
-      maxVariants: 2,
-      timeout: 500,
+      maxVariants: 3,
+      timeout: 4000, // 4 seconds timeout for LLM query rewrite
     });
   }
 
@@ -48,7 +48,7 @@ export class TieredRetriever {
     } = options;
 
     try {
-      logInfo(`\n=== TieredRetriever: Starting search for "${query}" ===`);
+      logInfo(`\n=== SearchCore: Starting search for "${query}" ===`);
 
       // 1. Expand query into variants and terms
       const expanded = await this.queryExpander.expand(query);
@@ -97,11 +97,19 @@ export class TieredRetriever {
         `Full-text search: Found ${fullTextResults.length} results (using ${allFullTextQueries.length} search inputs)`
       );
 
+      // Only log in debug mode
+      // if (fullTextResults.length > 0) {
+      //   logInfo("Full-text top 10 results before RRF:");
+      //   fullTextResults.slice(0, 10).forEach((r, i) => {
+      //     logInfo(`  ${i+1}. ${r.id} (score: ${r.score.toFixed(4)})`);
+      //   });
+      // }
+
       // 7. Optional semantic re-ranking
       const semanticResults: NoteIdRank[] = [];
       if (enableSemantic && this.getChatModel) {
         // TODO: Implement semantic search when SemanticReranker is ready
-        logInfo("TieredRetriever: Semantic search not yet implemented");
+        logInfo("SearchCore: Semantic search not yet implemented");
       }
 
       // 8. Convert grep hits to NoteIdRank for fusion
@@ -135,7 +143,6 @@ export class TieredRetriever {
         const resultsForLogging = finalResults.map((result, idx) => {
           const file = this.app.vault.getAbstractFileByPath(result.id);
           return {
-            rank: idx + 1,
             title: file?.name || result.id,
             path: result.id,
             score: result.score.toFixed(4),
@@ -150,7 +157,7 @@ export class TieredRetriever {
 
       return finalResults;
     } catch (error) {
-      logError("TieredRetriever: Retrieval failed", error);
+      logError("SearchCore: Retrieval failed", error);
 
       // Fallback to simple grep results
       const fallbackResults = await this.fallbackSearch(query, maxResults);
@@ -173,7 +180,7 @@ export class TieredRetriever {
         engine: "grep",
       }));
     } catch (error) {
-      logError("TieredRetriever: Fallback search failed", error);
+      logError("SearchCore: Fallback search failed", error);
       return [];
     }
   }
@@ -195,6 +202,6 @@ export class TieredRetriever {
   clear(): void {
     this.fullTextEngine.clear();
     this.queryExpander.clearCache();
-    logInfo("TieredRetriever: Cleared all caches");
+    logInfo("SearchCore: Cleared all caches");
   }
 }
