@@ -59,6 +59,12 @@ export class TieredLexicalRetriever extends BaseRetriever {
     config?: BaseCallbackConfig
   ): Promise<Document[]> {
     try {
+      // If time range is specified, ONLY return time-relevant documents
+      if (this.options.timeRange) {
+        return this.getTimeRangeDocuments(query);
+      }
+
+      // Normal search flow when no time range
       // Extract note TFiles wrapped in [[]] from the query
       const noteFiles = extractNoteFiles(query, this.app.vault);
       const noteTitles = noteFiles.map((file) => file.basename);
@@ -82,27 +88,24 @@ export class TieredLexicalRetriever extends BaseRetriever {
         enableSemantic: false,
       });
 
-      // Get mentioned notes that should always be included
-      const mentionedNotes = await this.getMentionedNotes(noteFiles);
+      // Get title-matched notes that should always be included
+      const titleMatches = await this.getTitleMatches(noteFiles);
 
       // Convert search results to Document format
       const searchDocuments = await this.convertToDocuments(searchResults);
 
       // Combine and deduplicate results
-      const combinedDocuments = this.combineResults(searchDocuments, mentionedNotes);
-
-      // Apply time range filter if specified
-      const filteredDocuments = this.applyTimeRangeFilter(combinedDocuments);
+      const combinedDocuments = this.combineResults(searchDocuments, titleMatches);
 
       if (getSettings().debug) {
         logInfo("TieredLexicalRetriever: Search complete", {
-          totalResults: filteredDocuments.length,
-          mentionedNotes: mentionedNotes.length,
+          totalResults: combinedDocuments.length,
+          titleMatches: titleMatches.length,
           searchResults: searchResults.length,
         });
       }
 
-      return filteredDocuments;
+      return combinedDocuments;
     } catch (error) {
       logWarn("TieredLexicalRetriever: Error during search", error);
       // Fallback to empty results on error
@@ -111,10 +114,167 @@ export class TieredLexicalRetriever extends BaseRetriever {
   }
 
   /**
-   * Get documents for explicitly mentioned note files (using [[]] syntax).
+   * Get documents for time-based queries.
+   * ONLY returns daily notes and documents within the time range.
+   */
+  private async getTimeRangeDocuments(_query: string): Promise<Document[]> {
+    if (!this.options.timeRange) {
+      return [];
+    }
+
+    const { startTime, endTime } = this.options.timeRange;
+
+    // Generate daily note titles for the date range
+    const dailyNoteTitles = this.generateDailyNoteDateRange(startTime, endTime);
+
+    if (getSettings().debug) {
+      logInfo("TieredLexicalRetriever: Generated daily note titles", {
+        startTime: new Date(startTime).toISOString(),
+        endTime: new Date(endTime).toISOString(),
+        titlesCount: dailyNoteTitles.length,
+        firstTitle: dailyNoteTitles[0],
+        lastTitle: dailyNoteTitles[dailyNoteTitles.length - 1],
+      });
+    }
+
+    // Extract daily note files by exact title match
+    const dailyNoteQuery = dailyNoteTitles.join(", ");
+    const dailyNoteFiles = extractNoteFiles(dailyNoteQuery, this.app.vault);
+
+    // Get documents for daily notes
+    const dailyNoteDocuments = await this.getTitleMatches(dailyNoteFiles);
+
+    // Mark all daily notes for inclusion in context
+    const dailyNotesWithContext = dailyNoteDocuments.map((doc) => {
+      doc.metadata.includeInContext = true;
+      return doc;
+    });
+
+    // For time-based queries, we DON'T run regular search
+    // Instead, find all documents modified within the time range
+    const allFiles = this.app.vault.getMarkdownFiles();
+    const timeFilteredDocuments: Document[] = [];
+
+    // Limit the number of time-filtered documents to avoid overwhelming results
+    const maxTimeFilteredDocs = Math.min(this.options.maxK, 100);
+
+    for (const file of allFiles) {
+      // Only include files modified within the time range
+      if (file.stat.mtime >= startTime && file.stat.mtime <= endTime) {
+        // Skip if already included as daily note
+        if (dailyNoteFiles.some((f) => f.path === file.path)) {
+          continue;
+        }
+
+        // Stop if we have enough documents
+        if (timeFilteredDocuments.length >= maxTimeFilteredDocs) {
+          break;
+        }
+
+        try {
+          const content = await this.app.vault.cachedRead(file);
+          const cache = this.app.metadataCache.getFileCache(file);
+
+          // Calculate score based on recency (more recent = higher score)
+          const daysSinceModified = (Date.now() - file.stat.mtime) / (1000 * 60 * 60 * 24);
+          const recencyScore = Math.max(0.3, Math.min(1.0, 1.0 - daysSinceModified / 30));
+
+          timeFilteredDocuments.push(
+            new Document({
+              pageContent: content,
+              metadata: {
+                path: file.path,
+                title: file.basename,
+                mtime: file.stat.mtime,
+                ctime: file.stat.ctime,
+                tags: cache?.tags?.map((t) => t.tag) || [],
+                includeInContext: true,
+                score: recencyScore,
+                source: "time-filtered",
+              },
+            })
+          );
+        } catch (error) {
+          logWarn(`TieredLexicalRetriever: Failed to read file ${file.path}`, error);
+        }
+      }
+    }
+
+    // Combine and deduplicate
+    const documentMap = new Map<string, Document>();
+
+    // Add daily notes first (they have priority)
+    for (const doc of dailyNotesWithContext) {
+      documentMap.set(doc.metadata.path, doc);
+    }
+
+    // Add time-filtered documents
+    for (const doc of timeFilteredDocuments) {
+      if (!documentMap.has(doc.metadata.path)) {
+        documentMap.set(doc.metadata.path, {
+          ...doc,
+          metadata: {
+            ...doc.metadata,
+            includeInContext: true,
+          },
+        });
+      }
+    }
+
+    // Sort by score (daily notes get score 1.0, time-filtered by recency)
+    const results = Array.from(documentMap.values()).sort((a, b) => {
+      const scoreA = a.metadata.score || 0;
+      const scoreB = b.metadata.score || 0;
+      return scoreB - scoreA;
+    });
+
+    if (getSettings().debug) {
+      logInfo("TieredLexicalRetriever: Time range search complete", {
+        timeRange: this.options.timeRange,
+        dailyNotesFound: dailyNoteFiles.length,
+        timeFilteredDocs: timeFilteredDocuments.length,
+        totalResults: results.length,
+      });
+    }
+
+    return results;
+  }
+
+  /**
+   * Generate daily note titles for a date range.
+   * Returns titles in [[YYYY-MM-DD]] format.
+   */
+  private generateDailyNoteDateRange(startTime: number, endTime: number): string[] {
+    const dailyNotes: string[] = [];
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+
+    // Limit to 365 days for performance
+    const maxDays = 365;
+    const daysDiff = Math.ceil((endTime - startTime) / (1000 * 60 * 60 * 24));
+
+    if (daysDiff > maxDays) {
+      logWarn(
+        `TieredLexicalRetriever: Date range exceeds ${maxDays} days, limiting to recent ${maxDays} days`
+      );
+      start.setTime(end.getTime() - maxDays * 24 * 60 * 60 * 1000);
+    }
+
+    const current = new Date(start);
+    while (current <= end) {
+      // Use en-CA locale for YYYY-MM-DD format
+      dailyNotes.push(`[[${current.toLocaleDateString("en-CA")}]]`);
+      current.setDate(current.getDate() + 1);
+    }
+
+    return dailyNotes;
+  }
+
+  /**
+   * Get documents for notes matching by title (explicit [[]] mentions or time-based queries).
    * These are always included in results regardless of search score.
    */
-  private async getMentionedNotes(noteFiles: TFile[]): Promise<Document[]> {
+  private async getTitleMatches(noteFiles: TFile[]): Promise<Document[]> {
     const chunks: Document[] = [];
 
     for (const file of noteFiles) {
@@ -132,14 +292,14 @@ export class TieredLexicalRetriever extends BaseRetriever {
               mtime: file.stat.mtime,
               ctime: file.stat.ctime,
               tags: cache?.tags?.map((t) => t.tag) || [],
-              includeInContext: true, // Always include mentioned notes
-              score: 1.0, // Max score for explicit mentions
-              source: "mentioned",
+              includeInContext: true, // Always include title matches
+              score: 1.0, // Max score for title matches
+              source: "title-match",
             },
           })
         );
       } catch (error) {
-        logWarn(`TieredLexicalRetriever: Failed to read mentioned file ${file.path}`, error);
+        logWarn(`TieredLexicalRetriever: Failed to read title-matched file ${file.path}`, error);
       }
     }
 
@@ -188,11 +348,11 @@ export class TieredLexicalRetriever extends BaseRetriever {
   /**
    * Combine search results with mentioned notes, deduplicating by path.
    */
-  private combineResults(searchDocuments: Document[], mentionedNotes: Document[]): Document[] {
+  private combineResults(searchDocuments: Document[], titleMatches: Document[]): Document[] {
     const documentMap = new Map<string, Document>();
 
-    // Add mentioned notes first (they have priority)
-    for (const doc of mentionedNotes) {
+    // Add title matches first (they have priority)
+    for (const doc of titleMatches) {
       documentMap.set(doc.metadata.path, doc);
     }
 
@@ -208,62 +368,6 @@ export class TieredLexicalRetriever extends BaseRetriever {
       const scoreA = a.metadata.score || 0;
       const scoreB = b.metadata.score || 0;
       return scoreB - scoreA;
-    });
-  }
-
-  /**
-   * Apply folder-based boosting to improve ranking of related notes.
-   * Notes in the same folder get a slight boost when multiple notes from that folder are found.
-   * @deprecated Moved to FullTextEngine for proper integration with RRF
-   */
-  private applyFolderBoost(documents: Document[]): void {
-    // Count notes per folder
-    const folderCounts = new Map<string, number>();
-
-    for (const doc of documents) {
-      const path = doc.metadata.path as string;
-      const lastSlash = path.lastIndexOf("/");
-      if (lastSlash > 0) {
-        const folder = path.substring(0, lastSlash);
-        folderCounts.set(folder, (folderCounts.get(folder) || 0) + 1);
-      }
-    }
-
-    // Apply boost to notes in folders with multiple matches
-    for (const doc of documents) {
-      const path = doc.metadata.path as string;
-      const lastSlash = path.lastIndexOf("/");
-      if (lastSlash > 0) {
-        const folder = path.substring(0, lastSlash);
-        const count = folderCounts.get(folder) || 1;
-
-        // Boost score based on folder prevalence (more notes in folder = higher boost)
-        if (count > 1) {
-          const currentScore = doc.metadata.score || 0;
-          // Apply 10-30% boost based on folder prevalence
-          const boostFactor = 1 + Math.min(0.3, 0.1 * Math.log2(count));
-          doc.metadata.score = currentScore * boostFactor;
-          doc.metadata.folderBoost = boostFactor;
-        }
-      }
-    }
-  }
-
-  /**
-   * Apply time range filter if specified in options.
-   */
-  private applyTimeRangeFilter(documents: Document[]): Document[] {
-    if (!this.options.timeRange) {
-      return documents;
-    }
-
-    const { startTime, endTime } = this.options.timeRange;
-
-    return documents.filter((doc) => {
-      const mtime = doc.metadata.mtime;
-      if (typeof mtime !== "number") return false;
-
-      return mtime >= startTime && mtime <= endTime;
     });
   }
 }

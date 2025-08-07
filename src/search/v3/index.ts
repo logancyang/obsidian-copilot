@@ -1,5 +1,5 @@
 // Main exports for v3 search implementation
-export { TieredRetriever } from "./TieredRetriever";
+export { SearchCore } from "./SearchCore";
 export { QueryExpander, type ExpandedQuery } from "./QueryExpander";
 
 // Core interfaces

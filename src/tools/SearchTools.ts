@@ -54,15 +54,23 @@ const localSearchTool = createTool({
     // Perform the search
     const documents = await retriever.getRelevantDocuments(query);
 
+    logInfo(`localSearch found ${documents.length} documents for query: "${query}"`);
+    if (timeRange) {
+      logInfo(
+        `Time range search from ${new Date(timeRange.startTime.epoch).toISOString()} to ${new Date(timeRange.endTime.epoch).toISOString()}`
+      );
+    }
+
     // Format the results - only include snippet, not full content
     const formattedResults = documents.map((doc) => ({
-      title: doc.metadata.title,
+      title: doc.metadata.title || "Untitled",
       // Only include a snippet for display (first 200 chars)
       content: doc.pageContent.substring(0, 200),
-      path: doc.metadata.path,
-      score: doc.metadata.score,
-      rerank_score: doc.metadata.rerank_score,
-      includeInContext: doc.metadata.includeInContext,
+      path: doc.metadata.path || "",
+      score: doc.metadata.score ?? 0,
+      rerank_score: doc.metadata.rerank_score ?? null,
+      includeInContext: doc.metadata.includeInContext ?? true,
+      source: doc.metadata.source, // Pass through source for proper labeling
     }));
 
     return JSON.stringify(formattedResults);

@@ -4,7 +4,7 @@ import { Document } from "@langchain/core/documents";
 // Mock modules
 jest.mock("obsidian");
 jest.mock("@/logger");
-jest.mock("./TieredRetriever");
+jest.mock("./SearchCore");
 jest.mock("@/LLMProviders/chatModelManager");
 
 describe("TieredLexicalRetriever", () => {
