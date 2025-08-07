@@ -119,16 +119,27 @@ Format your response using XML tags:
    * @returns Expanded query or fallback if timeout is reached
    */
   private async expandWithTimeout(query: string): Promise<ExpandedQuery> {
-    // Create timeout promise
+    let timeoutId: NodeJS.Timeout | undefined;
+
+    // Create timeout promise with cancellable timer
     const timeoutPromise = new Promise<ExpandedQuery>((resolve) => {
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         logInfo(`QueryExpander: Timeout reached for "${query}"`);
         resolve(this.fallbackExpansion(query));
       }, this.config.timeout);
     });
 
-    // Create expansion promise
-    const expansionPromise = this.expandWithLLM(query);
+    // Create expansion promise that clears timeout on completion
+    const expansionPromise = this.expandWithLLM(query).then(
+      (result) => {
+        if (timeoutId) clearTimeout(timeoutId);
+        return result;
+      },
+      (error) => {
+        if (timeoutId) clearTimeout(timeoutId);
+        throw error;
+      }
+    );
 
     // Race between timeout and expansion
     return Promise.race([expansionPromise, timeoutPromise]);
