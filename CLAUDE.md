@@ -192,48 +192,56 @@ For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE
 - Test files adjacent to implementation (`.test.ts`)
 - Use `@testing-library/react` for component testing
 
-### Manual Test Checklists
+## Development Session Planning
 
-**Important**: After each significant change, generate a manual test checklist document that includes:
+### Using TODO.md for Session Management
 
-1. **Overview**: Brief description of what changed
-2. **Test Scenarios**: Specific test cases with steps and expected results
-3. **Verification Checklist**: List of items to verify functionality
-4. **Files Modified**: List of changed files for reference
+**IMPORTANT**: When working on a development session, maintain a comprehensive `TODO.md` file that serves as the central plan and tracker:
 
-Example format:
+1. **Session Goal**: Define the high-level objective at the start
+2. **Task Tracking**:
+   - List all completed tasks with [x] checkboxes
+   - Track pending tasks with [ ] checkboxes
+   - Group related tasks into logical sections
+3. **Architecture Decisions**: Document key design choices and rationale
+4. **Progress Updates**: Keep the TODO.md updated as tasks complete
+5. **Testing Checklist**: Include verification steps for the session
+
+The TODO.md should be:
+
+- The single source of truth for session progress
+- Updated frequently as work progresses
+- Clear enough that another developer can understand what was done
+- Comprehensive enough to serve as a migration guide
+
+### Structure Example:
 
 ```markdown
-# [Feature] Test Instructions
+# Development Session TODO
 
-## Overview
+## Session Goal
 
-Brief description of the feature/fix
+[Clear statement of what this session aims to achieve]
 
-## Test Scenarios
+## Completed Tasks ✅
 
-### 1. Test Case Name
+- [x] Task description with key details
+- [x] Another completed task
 
-1. Step one
-2. Step two
-3. **Expected Result:**
-   - Expected behavior
-   - UI state changes
-   - Data persistence
+## Pending Tasks 📋
 
-### 2. Another Test Case
+- [ ] Next task to work on
+- [ ] Future enhancement
 
-[...]
+## Architecture Summary
 
-## Verification Checklist
+[Key design decisions and rationale]
 
-- [ ] Core functionality works
-- [ ] Edge cases handled
-- [ ] No regressions
-- [ ] Performance acceptable
+## Testing Checklist
+
+- [ ] Functionality verification
+- [ ] Performance checks
 ```
-
-This helps ensure thorough testing and provides documentation for QA.
 
 ## Important Notes
 
@@ -242,7 +250,12 @@ This helps ensure thorough testing and provides documentation for QA.
 - Settings are versioned - migrations may be needed
 - Local model support available via Ollama/LM Studio
 - Rate limiting is implemented for all API calls
-- For technical debt and known issues, see [`TODO.md`](./TODO.md)
+- For technical debt and known issues, see [`TECHDEBT.md`](./TECHDEBT.md)
+- For current development session planning, see [`TODO.md`](./TODO.md)
+
+### Obsidian Plugin Environment
+
+- **Global `app` variable**: In Obsidian plugins, `app` is a globally available variable that provides access to the Obsidian API. It's automatically available in all files without needing to import or declare it.
 
 ### Architecture Migration Notes
 

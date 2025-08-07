@@ -2,7 +2,7 @@ import { NoteIdRank } from "../interfaces";
 import { logInfo } from "@/logger";
 
 /**
- * Configuration for RRF fusion
+ * Configuration for RRF (Reciprocal Rank Fusion)
  */
 export interface RRFConfig {
   lexical?: NoteIdRank[]; // L1 results

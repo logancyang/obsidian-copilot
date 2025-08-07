@@ -16,7 +16,7 @@ import {
   AutonomousAgentChainRunner,
 } from "@/LLMProviders/chainRunner/index";
 import { logError, logInfo } from "@/logger";
-import { HybridRetriever } from "@/search/hybridRetriever";
+import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings, getSystemPrompt, subscribeToSettingsChange } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
@@ -209,7 +209,7 @@ export default class ChainManager {
         // TODO: VaultQAChainRunner now handles this directly without chains
         await this.initializeQAChain(options);
 
-        const retriever = new HybridRetriever({
+        const retriever = new TieredLexicalRetriever(app, {
           minSimilarityScore: 0.01,
           maxK: getSettings().maxSourceChunks,
           salientTerms: [],

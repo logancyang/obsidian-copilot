@@ -12,5 +12,5 @@ export { FullTextEngine } from "./engines/FullTextEngine";
 export { SemanticReranker } from "./rerankers/SemanticReranker";
 
 // Utilities
-export { weightedRRF, simpleRRF, type RRFConfig } from "./utils/RRFFusion";
+export { weightedRRF, simpleRRF, type RRFConfig } from "./utils/RRF";
 export { MemoryManager } from "./utils/MemoryManager";

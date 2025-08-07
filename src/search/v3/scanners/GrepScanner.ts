@@ -1,6 +1,7 @@
 import { App, Platform, TFile } from "obsidian";
 import { logInfo } from "@/logger";
 import { getPlatformValue } from "../utils/platformUtils";
+import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 
 /**
  * Fast substring search using Obsidian's cachedRead for initial seeding
@@ -23,7 +24,12 @@ export class GrepScanner {
    * @returns Array of file paths that contain any of the query strings
    */
   async batchCachedReadGrep(queries: string[], limit: number): Promise<string[]> {
-    const files = this.app.vault.getMarkdownFiles();
+    // Get inclusion/exclusion patterns from settings
+    const { inclusions, exclusions } = getMatchingPatterns();
+
+    // Filter files based on inclusion/exclusion patterns
+    const allFiles = this.app.vault.getMarkdownFiles();
+    const files = allFiles.filter((file) => shouldIndexFile(file, inclusions, exclusions));
     const matches = new Set<string>();
     const batchSize = getPlatformValue(
       GrepScanner.CONFIG.BATCH_SIZE.MOBILE,

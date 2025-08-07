@@ -2,6 +2,18 @@
 
 _(Multilingual, Partial In-Memory; optional semantic add-on)_
 
+## TODO: Integration Tasks
+
+- [ ] Hook into existing local search tool (replace Orama)
+- [ ] Connect to Obsidian metadataCache events
+- [ ] Add file watcher for incremental updates
+- [ ] Mobile optimizations (yielding, smaller batches)
+- [ ] Create settings UI (memory cap, candidate size, semantic toggle)
+- [ ] Integration tests for full retrieval pipeline
+- [ ] Performance benchmarks (latency, memory usage)
+- [ ] Migration path from existing engines
+- [ ] VectorStoreManager integration (future - semantic)
+
 ---
 
 ## Quick Example: End-to-End Flow
@@ -45,7 +57,7 @@ _(Multilingual, Partial In-Memory; optional semantic add-on)_
    | auth/oauth-guide.md | "OAuth Guide" (pos 2) | #oauth | Yes | 2.1 |
    | tutorials/oauth.md | - | #oauth | Yes | 1.2 |
 
-6. RRF Fusion (combine rankings)
+6. RRF (combine rankings)
    Merges: full-text (1.0x) + grep prior (0.3x) + semantic (2.0x if enabled)
 
 7. Final Results
@@ -79,7 +91,7 @@ graph TD
     E --> F[Full-Text Search]
     F --> G{Semantic Enabled?}
     G -->|Yes| H[Semantic Re-ranking]
-    G -->|No| I[RRF Fusion]
+    G -->|No| I[RRF]
     H --> I
     I --> J[Final Results]
 ```
@@ -147,7 +159,7 @@ async function retrieve(query: string): Promise<NoteIdRank[]> {
     semanticResults = await reRankBySimilarity(combined, queryEmbeddings);
   }
 
-  // 8. WEIGHTED RRF FUSION - Combine all signals
+  // 8. WEIGHTED RRF - Combine all signals
   const fusedResults = weightedRRF({
     lexical: fullTextResults,     // weight: 1.0
     semantic: semanticResults,     // weight: 2.0 (if enabled)
@@ -202,23 +214,7 @@ interface NoteIdRank {
 
 ### 4.1 Query Expander (Query Enhancement)
 
-Uses LLM to generate alternative query phrasings and extract salient terms:
-
-```typescript
-class QueryExpander {
-  async expand(query: string): Promise<ExpandedQuery> {
-    // 1. Try LLM expansion with 500ms timeout
-    // 2. Generate 2 alternative phrasings
-    // 3. Extract noun-like terms (excludes action verbs)
-    // 4. Falls back to original query if LLM unavailable
-
-    return {
-      queries: ["original", "variant1", "variant2"],
-      salientTerms: ["noun1", "noun2"], // Content-bearing words only
-    };
-  }
-}
-```
+Uses LLM to generate alternative query phrasings and extract salient terms.
 
 **Examples**:
 
@@ -251,81 +247,19 @@ class QueryExpander {
 
 ### 4.2 Grep Scanner (L0 - Initial Seeding)
 
-Fast substring search using Obsidian's `cachedRead`:
+Fast substring search using Obsidian's `cachedRead`. Searches both full queries and individual terms with batch processing optimized for platform (10 files on mobile, 50 on desktop).
 
-```ts
-class GrepScanner {
-  async batchCachedReadGrep(queries: string[], limit: number): Promise<string[]> {
-    const files = app.vault.getMarkdownFiles();
-    const matches: Set<string> = new Set();
-    const batchSize = Platform.isMobile ? 10 : 50;
+### 4.3 Graph Expander
 
-    for (let i = 0; i < files.length && matches.size < limit; i += batchSize) {
-      const batch = files.slice(i, i + batchSize);
+Discovers related notes through link analysis, expanding initial grep hits from ~50 to 150+ candidates.
 
-      await Promise.all(
-        batch.map(async (file) => {
-          const content = await app.vault.cachedRead(file);
-          const lower = content.toLowerCase();
+**Three Strategies:**
 
-          for (const query of queries) {
-            if (lower.includes(query.toLowerCase())) {
-              matches.add(file.path);
-              break;
-            }
-          }
-        })
-      );
-
-      // Yield on mobile
-      if (Platform.isMobile && i % 100 === 0) {
-        await new Promise((r) => setTimeout(r, 0));
-      }
-    }
-
-    return Array.from(matches).slice(0, limit);
-  }
-}
-```
-
-### 4.3 Graph Expander (Increase Recall via Link Analysis)
-
-Discovers related notes that don't contain search terms but are conceptually connected through the knowledge graph.
-
-**Three Expansion Strategies:**
-
-1. **BFS Link Traversal** - Breadth-first search following outgoing links and backlinks
-2. **Active Context** - Includes neighbors of the currently open note
+1. **BFS Link Traversal** - Follows outgoing/backlinks from grep hits
+2. **Active Context** - Includes neighbors of currently open note
 3. **Co-citation** - Finds notes linking to same targets (topic similarity)
 
-**How It Works:**
-
-```typescript
-// Example: Search for "authentication" finds 3 notes initially
-grepHits = ["auth/oauth.md", "auth/jwt.md", "tutorials/auth.md"];
-
-// 1. Link Traversal (1 hop)
-// - oauth.md links to: ["concepts/tokens.md", "auth/flow.md"]
-// - jwt.md has backlinks from: ["api/security.md", "examples/login.md"]
-// → Adds 4 more notes via direct connections
-
-// 2. Active Context (user has "nextjs/setup.md" open)
-// - setup.md links to: ["auth/nextjs-auth.md", "config/env.md"]
-// → Adds 2 more contextually relevant notes
-
-// 3. Co-citation (oauth.md and jwt.md both link to "crypto/signing.md")
-// - Other notes also linking to signing.md: ["auth/saml.md"]
-// → Adds 1 topically similar note
-
-// Final expansion: 3 → 10 notes
-```
-
-**Key Benefits:**
-
-- Finds conceptually related notes without exact term matches
-- Uses graph structure to infer relationships
-- Adapts to user's current context (active note)
-- Discovers notes about similar topics via shared references
+Enables discovery of conceptually related notes without exact term matches by leveraging the knowledge graph structure.
 
 ### 4.4 Full-Text Engine (L1 - Ephemeral Body Index)
 
@@ -341,210 +275,26 @@ FlexSearch uses a **Contextual Index** algorithm (NOT BM25/TF-IDF). Key characte
    - ASCII words: `"hello world"` → `["hello", "world"]`
    - CJK bigrams: `"中文编程"` → `["中文", "文编", "编程"]`
 
-**Example Search Flow (Hybrid Approach)**:
+**Hybrid Search Approach:**
 
-```typescript
-// Original Query: "How do I implement authentication in my Next.js app?"
-//
-// We search with BOTH:
-// 1. Full phrases: ["How do I implement authentication in my Next.js app?",
-//                   "Next.js authentication implementation", "NextJS auth setup"]
-// 2. Individual terms: ["authentication", "nextjs", "app"]
-//
-// Each gets tokenized and searched across all fields:
+- Searches both full query phrases (for precision) and individual terms (for recall)
+- Combines scores using max scoring across all searches
+- Results in better recall without sacrificing precision
 
-// Search 1: Full phrase "Next.js authentication implementation"
-// - Title match: "Next.js Authentication Guide" → score 3.0
-// - Body matches: multiple positions → score 0.5
+**Implementation Details:**
 
-// Search 2: Term "authentication" (better recall)
-// - Title matches: 5 documents → various scores
-// - Tag matches: 12 documents → various scores
-// - Body matches: 25 documents → various scores
-
-// Search 3: Term "nextjs" (better recall)
-// - Similar broad matching across fields
-
-// Combined scoring (max score per document across all searches):
-// - Note A: Best from phrase search (3.0) OR term search (2.5) = 3.0
-// - Note B: Best from term searches only = 2.1
-// - Note C: Matches only individual terms = 1.2
-
-// Final ranking: Note A (3.0) > Note B (2.1) > Note C (1.2)
-// Result: Better recall (from terms) + Better precision (from phrases)
-```
-
-```ts
-class FullTextEngine {
-  private index: FlexSearch.Document;
-  private bytesUsed = 0;
-  private readonly maxBytes: number;
-
-  constructor() {
-    this.maxBytes = Platform.isMobile ? 8 * 1024 * 1024 : 20 * 1024 * 1024;
-    this.index = new FlexSearch.Document({
-      encode: false,
-      tokenize: this.tokenizeMixed,
-      cache: false,
-      document: {
-        id: "id",
-        index: [
-          { field: "title", tokenize: this.tokenizeMixed, weight: 3 },
-          { field: "headings", tokenize: this.tokenizeMixed, weight: 2 },
-          { field: "tags", tokenize: this.tokenizeMixed, weight: 2 },
-          { field: "links", tokenize: this.tokenizeMixed, weight: 2 },
-          { field: "body", tokenize: this.tokenizeMixed, weight: 1 },
-        ],
-        store: false,
-      },
-    });
-  }
-
-  async buildFromCandidates(paths: string[]): Promise<void> {
-    this.clear();
-
-    for (const path of paths) {
-      if (this.bytesUsed >= this.maxBytes) break;
-
-      const file = app.vault.getAbstractFileByPath(path);
-      if (file instanceof TFile) {
-        const content = await app.vault.cachedRead(file);
-        const bytes = new Blob([content]).size;
-
-        if (this.bytesUsed + bytes <= this.maxBytes) {
-          const cache = app.metadataCache.getFileCache(file);
-          const allTags = cache ? (getAllTags(cache) ?? []) : [];
-          const headings = cache?.headings?.map((h) => h.heading) ?? [];
-
-          // Get links as full paths but index as basenames
-          const outgoing = app.metadataCache.resolvedLinks[file.path] ?? {};
-          const backlinks = app.metadataCache.getBacklinksForFile(file)?.data ?? {};
-          const linksOut = Object.keys(outgoing);
-          const linksIn = Object.keys(backlinks);
-
-          // Extract basenames for searchability
-          const linkBasenames = [...linksOut, ...linksIn]
-            .map((path) => path.replace(/.*\//, "").replace(/\.md$/, ""))
-            .join(" ");
-
-          this.index.add({
-            id: path,
-            title: file.basename,
-            headings: headings.join(" "),
-            tags: allTags.join(" "),
-            links: linkBasenames,
-            body: content,
-          });
-          this.bytesUsed += bytes;
-        }
-      }
-    }
-  }
-
-  search(query: string, limit: number): NoteIdRank[] {
-    const results = this.index.search(query, { limit, enrich: true });
-    return results.flatMap((r) =>
-      r.result.map((id: string, idx: number) => ({
-        id,
-        score: 1 / (idx + 1),
-        engine: "l1",
-      }))
-    );
-  }
-
-  clear(): void {
-    this.index = this.createIndex();
-    this.bytesUsed = 0;
-  }
-
-  private tokenizeMixed(str: string): string[] {
-    // ASCII words + CJK bigrams
-    const tokens: string[] = [];
-
-    // ASCII words
-    const asciiWords = str.toLowerCase().match(/[a-z0-9_]+/g) || [];
-    tokens.push(...asciiWords);
-
-    // CJK bigrams
-    const cjkPattern = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]+/g;
-    const cjkMatches = str.match(cjkPattern) || [];
-
-    for (const match of cjkMatches) {
-      if (match.length === 1) {
-        tokens.push(match);
-      }
-      for (let i = 0; i < match.length - 1; i++) {
-        tokens.push(match.slice(i, i + 2));
-      }
-    }
-
-    return tokens;
-  }
-}
-```
+- Builds ephemeral FlexSearch index per-query
+- Memory-bounded with platform-aware limits (8MB mobile, 20MB desktop)
+- Custom tokenizer handles ASCII words and CJK bigrams
+- Links indexed as searchable basenames while preserving full paths
 
 ### 4.5 Semantic Re-ranker (L2 - Optional)
 
-When semantic is enabled, re-rank combined results:
+When semantic is enabled, re-ranks combined results using embedding similarity. Uses max similarity across query variants for robust scoring.
 
-```ts
-class SemanticReranker {
-  async reRankBySimilarity(
-    candidates: NoteIdRank[],
-    queryEmbeddings: number[][]
-  ): Promise<NoteIdRank[]> {
-    const scores: Map<string, number> = new Map();
+### 4.6 Weighted RRF
 
-    for (const candidate of candidates) {
-      const file = app.vault.getAbstractFileByPath(candidate.id);
-      if (file instanceof TFile) {
-        const content = await app.vault.cachedRead(file);
-        const noteEmbedding = await this.embedText(content.slice(0, 2000));
-
-        // Max similarity across query variants
-        let maxSim = 0;
-        for (const qEmbed of queryEmbeddings) {
-          const sim = this.cosineSimilarity(qEmbed, noteEmbedding);
-          maxSim = Math.max(maxSim, sim);
-        }
-
-        scores.set(candidate.id, maxSim);
-      }
-    }
-
-    return Array.from(scores.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(([id, score]) => ({ id, score, engine: "semantic" }));
-  }
-}
-```
-
-### 4.6 Weighted RRF Fusion
-
-Combine multiple rankings with different weights:
-
-```ts
-function weightedRRF(
-  lists: Record<string, NoteIdRank[]>,
-  weights: Record<string, number> = {},
-  k = 60
-): NoteIdRank[] {
-  const scores = new Map<string, number>();
-
-  for (const [name, ranking] of Object.entries(lists)) {
-    const weight = weights[name] || 1.0;
-
-    ranking.forEach((item, idx) => {
-      const current = scores.get(item.id) || 0;
-      scores.set(item.id, current + weight * (1 / (k + idx + 1)));
-    });
-  }
-
-  return Array.from(scores.entries())
-    .sort((a, b) => b[1] - a[1])
-    .map(([id, score]) => ({ id, score }));
-}
-```
+Combines multiple rankings with configurable weights using Reciprocal Rank Fusion (RRF). Documents appearing in multiple result sets receive higher scores. Default weights: lexical (1.0x), semantic (2.0x), grep prior (0.3x).
 
 ---
 
@@ -567,12 +317,14 @@ Full-text search: Found 35 results (using 6 search inputs)
 RRF: Processed 35 items from lexical with weight 1
 RRF: Processed 52 items from grepPrior with weight 0.3
 RRF: Fused 68 unique results
-Final results: 30 documents (after RRF fusion)
+Final results: 30 documents (after RRF)
 ```
 
 This logging helps debug search performance and understand the retrieval flow.
 
-## 6) Memory & Performance
+## 6) Performance & Configuration
+
+### Performance Characteristics
 
 - **No persistent index**: Everything built per-query
 - **Grep scan**: < 50ms for 1k files (cached)
@@ -581,100 +333,33 @@ This logging helps debug search performance and understand the retrieval flow.
 - **Total latency**: < 200ms P95
 - **Memory peak**: < 20MB mobile, < 50MB desktop
 
----
+### Settings
 
-## 7) Settings
-
-- **Memory cap**: 8MB (mobile) / 20MB (desktop)
-- **Candidate limit**: 300 (mobile) / 500 (desktop) notes max
-- **Graph hops**: 1 (expandable to 2-3 on low recall)
-- **Semantic**: Off by default, toggle to enable
-- **Semantic weight**: 2.0x in RRF fusion
-- **RRF k-value**: 60 (standard reciprocal rank fusion constant)
-
----
-
-# 4-Day Implementation Plan
-
-## Day 1: Core Infrastructure & Grep Scanner ✅
-
-- [x] Create `NoteDoc` and `NoteIdRank` interfaces
-- [x] Implement multilingual tokenizer (ASCII + CJK bigrams)
-- [x] Create memory budget manager with platform detection
-- [x] Implement `GrepScanner` with batch cachedRead
-- [x] Add CJK-aware substring matching
-- [x] Optimize batching for mobile (10 files) vs desktop (50 files)
-- [x] Add unit tests for tokenizer and grep
-
-## Day 2: Graph Expansion & L1 Engine ✅
-
-- [x] Implement GraphExpander for multi-hop traversal
-- [x] **Implement graph expansion from grep results** (1-hop from each hit)
-- [x] Add co-citation neighbor discovery
-- [x] Create `FullTextEngine` with ephemeral FlexSearch
-- [x] Implement byte-capped indexing (8MB mobile / 20MB desktop)
-- [x] Add `clear()` for post-query cleanup
-- [x] Test L1 memory usage via unit tests
-
-## Day 3: Ranking, Fusion & Semantic Integration ✅
-
-- [x] Implement weighted RRF fusion with configurable weights
-- [x] Create `TieredRetriever` main orchestrator
-- [x] **Create SemanticReranker structure** (ready for integration)
-- [x] Add similarity scoring against query variant embeddings
-- [x] Configure heavier weight (2.0x) for semantic ranking in RRF
-- [x] Add progressive expansion (increase hops on low recall)
-
-## Day 4: Integration, Optimization & Testing
-
-- [ ] Hook into Obsidian metadataCache events
-- [ ] Add file watcher for incremental updates
-- [ ] Mobile optimizations (yielding, smaller batches)
-- [ ] Create basic settings UI (memory cap, candidate size, semantic toggle)
-- [ ] Unit tests for RRF, graph expansion
-- [ ] Integration test for full retrieval pipeline
-- [ ] Performance benchmarks (latency, memory usage)
-- [ ] Migration path from existing engines
-- [ ] Document API changes and usage
+| Setting         | Mobile | Desktop | Description                     |
+| --------------- | ------ | ------- | ------------------------------- |
+| Memory cap      | 8MB    | 20MB    | Maximum index memory            |
+| Candidate limit | 300    | 500     | Max notes to index              |
+| Graph hops      | 1      | 1-3     | Link traversal depth            |
+| Semantic        | Off    | Off     | Enable embedding search         |
+| Semantic weight | 2.0x   | 2.0x    | RRF weight                      |
+| RRF k-value     | 60     | 60      | Reciprocal rank fusion constant |
 
 ---
 
-## Current Implementation Status
+## Implementation Status
 
-### ✅ Completed
+**Completed**: All core components implemented with 66 unit tests passing
 
-- ✅ Basic LexicalEngine with FlexSearch (legacy, will be replaced)
-- ✅ QueryExpander with LLM integration
-- ✅ GrepScanner with batch cachedRead
-- ✅ GraphExpander for multi-hop traversal
-- ✅ FullTextEngine with ephemeral FlexSearch
-- ✅ MemoryManager with platform detection
-- ✅ Multilingual tokenizer (ASCII + CJK bigrams)
-- ✅ SemanticReranker (placeholder for integration)
-- ✅ Weighted RRF fusion
-- ✅ TieredRetriever main orchestrator
-- ✅ Unit tests for core components
+- Query expansion with LLM integration
+- Grep scanner with platform-optimized batching
+- Graph expander with BFS traversal
+- Full-text engine with ephemeral FlexSearch
+- Multilingual tokenizer (ASCII + CJK)
+- Weighted RRF
+- TieredRetriever orchestrator
 
-### 🎯 Next Steps
+**Key Insights**:
 
-1. Integration with existing VectorStoreManager for semantic search
-2. Hook into Obsidian metadataCache events
-3. Performance benchmarks and optimization
-4. Settings UI for search configuration
-
-### Key Insights
-
-1. **No L0 index needed** - Grep provides fast initial seeding
-2. **Graph expansion from grep hits** - Dramatically improves recall
-3. **Semantic re-ranking** - Combine L1+semantic, re-rank all through embeddings
-4. **Ephemeral L1 only** - Built per-query, no persistence needed
-
----
-
-## Success Metrics
-
-- [ ] Memory < 20MB mobile, < 50MB desktop
-- [ ] P95 latency < 200ms for typical queries
-- [ ] Recall@10 > 0.8 for test queries
-- [ ] Zero breaking changes for API consumers
-- [ ] CJK search working acceptably
+- No persistent index needed - grep provides fast initial seeding
+- Graph expansion dramatically improves recall (3x candidates)
+- Ephemeral indexing eliminates maintenance overhead

@@ -1,6 +1,6 @@
-import { ABORT_REASON, EMPTY_INDEX_ERROR_MESSAGE, RETRIEVED_DOCUMENT_TAG } from "@/constants";
+import { ABORT_REASON, RETRIEVED_DOCUMENT_TAG } from "@/constants";
 import { logInfo } from "@/logger";
-import { HybridRetriever } from "@/search/hybridRetriever";
+import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
 import { getSettings, getSystemPrompt } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import {
@@ -27,17 +27,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
     const streamer = new ThinkBlockStreamer(updateCurrentAiMessage);
 
     try {
-      // Add check for empty index
-      const indexEmpty = await this.chainManager.vectorStoreManager.isIndexEmpty();
-      if (indexEmpty) {
-        return this.handleResponse(
-          EMPTY_INDEX_ERROR_MESSAGE,
-          userMessage,
-          abortController,
-          addMessage,
-          updateCurrentAiMessage
-        );
-      }
+      // Tiered lexical retriever doesn't need index check - it builds indexes on demand
 
       // Get chat history from memory
       const memory = this.chainManager.memoryManager.getMemory();
@@ -53,8 +43,8 @@ export class VaultQAChainRunner extends BaseChainRunner {
         standaloneQuestion = userMessage.message;
       }
 
-      // Create retriever (similar to how it's done in chainManager)
-      const retriever = new HybridRetriever({
+      // Create retriever using tiered lexical approach
+      const retriever = new TieredLexicalRetriever(app, {
         minSimilarityScore: 0.01,
         maxK: getSettings().maxSourceChunks,
         salientTerms: [],

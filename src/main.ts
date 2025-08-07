@@ -13,7 +13,7 @@ import { registerContextMenu } from "@/commands/contextMenu";
 import { encryptAllKeys } from "@/encryptionService";
 import { logInfo } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
-import { HybridRetriever } from "@/search/hybridRetriever";
+import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
 import {
@@ -414,14 +414,14 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async customSearchDB(query: string, salientTerms: string[], textWeight: number): Promise<any[]> {
-    const hybridRetriever = new HybridRetriever({
+    const retriever = new TieredLexicalRetriever(app, {
       minSimilarityScore: 0.3,
       maxK: 20,
       salientTerms: salientTerms,
       textWeight: textWeight,
     });
 
-    const results = await hybridRetriever.getOramaChunks(query, salientTerms);
+    const results = await retriever.getRelevantDocuments(query);
     return results.map((doc) => ({
       content: doc.pageContent,
       metadata: doc.metadata,

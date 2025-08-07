@@ -6,7 +6,7 @@ import { GraphExpander } from "./expanders/GraphExpander";
 import { NoteIdRank, SearchOptions } from "./interfaces";
 import { QueryExpander } from "./QueryExpander";
 import { GrepScanner } from "./scanners/GrepScanner";
-import { weightedRRF } from "./utils/RRFFusion";
+import { weightedRRF } from "./utils/RRF";
 
 /**
  * Main orchestrator for tiered note-level lexical retrieval
@@ -53,7 +53,10 @@ export class TieredRetriever {
       // 1. Expand query into variants and terms
       const expanded = await this.queryExpander.expand(query);
       const queries = expanded.queries;
-      const salientTerms = expanded.salientTerms;
+      // Combine expanded salient terms with any provided salient terms
+      const salientTerms = options.salientTerms
+        ? [...new Set([...expanded.salientTerms, ...options.salientTerms])]
+        : expanded.salientTerms;
 
       logInfo(`Query expansion: ${queries.length} variants + ${salientTerms.length} terms`);
       logInfo(`  Variants: [${queries.map((q) => `"${q}"`).join(", ")}]`);
@@ -108,7 +111,7 @@ export class TieredRetriever {
         engine: "grep",
       }));
 
-      // 9. Weighted RRF fusion
+      // 9. Weighted RRF
       const fusedResults = weightedRRF({
         lexical: fullTextResults,
         semantic: semanticResults,
@@ -127,7 +130,23 @@ export class TieredRetriever {
       // 11. Return top K results
       const finalResults = fusedResults.slice(0, maxResults);
 
-      logInfo(`Final results: ${finalResults.length} documents (after RRF fusion)\n`);
+      // Log results in an inspectable format
+      if (finalResults.length > 0) {
+        const resultsForLogging = finalResults.map((result, idx) => {
+          const file = this.app.vault.getAbstractFileByPath(result.id);
+          return {
+            rank: idx + 1,
+            title: file?.name || result.id,
+            path: result.id,
+            score: result.score.toFixed(4),
+            engine: result.engine,
+          };
+        });
+        logInfo(`Final results: ${finalResults.length} documents (after RRF)`);
+        console.table(resultsForLogging);
+      } else {
+        logInfo("No results found");
+      }
 
       return finalResults;
     } catch (error) {

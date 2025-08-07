@@ -43,7 +43,6 @@ export class GraphExpander {
 
     for (let hop = 0; hop < hops; hop++) {
       const nextLevel = new Set<string>();
-      const startSize = visited.size;
 
       // Only expand nodes from the current level (true BFS)
       for (const path of currentLevel) {
@@ -71,11 +70,8 @@ export class GraphExpander {
         }
       }
 
-      if (visited.size > startSize) {
-        logInfo(
-          `  Graph hop ${hop + 1}: ${startSize} → ${visited.size} notes (+${visited.size - startSize})`
-        );
-      }
+      // Only log for first hop or if debugging
+      // Log details are captured in expandCandidates summary
 
       // Move to next level for next iteration
       currentLevel = nextLevel;
