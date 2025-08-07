@@ -6,7 +6,7 @@ export interface NoteDoc {
   title: string; // filename or front-matter title
   headings: string[]; // H1..H6 plain text (indexed)
   tags: string[]; // inline + frontmatter via getAllTags(cache) (indexed)
-  props: Record<string, unknown>; // frontmatter key/values (extracted but not indexed)
+  props: Record<string, unknown>; // frontmatter key/values (values indexed, keys ignored)
   linksOut: string[]; // outgoing link full paths (extracted and indexed as basenames)
   linksIn: string[]; // backlink full paths (extracted and indexed as basenames)
   body: string; // full markdown text (indexed)

@@ -33,6 +33,7 @@ export class FullTextEngine {
           { field: "path", tokenize: this.tokenizeMixed.bind(this), weight: 2.5 }, // Path components are highly relevant
           { field: "headings", tokenize: this.tokenizeMixed.bind(this), weight: 2 },
           { field: "tags", tokenize: this.tokenizeMixed.bind(this), weight: 2 },
+          { field: "props", tokenize: this.tokenizeMixed.bind(this), weight: 2 }, // Frontmatter property values
           { field: "links", tokenize: this.tokenizeMixed.bind(this), weight: 2 },
           { field: "body", tokenize: this.tokenizeMixed.bind(this), weight: 1 },
         ],
@@ -114,12 +115,16 @@ export class FullTextEngine {
             // "Piano Lessons/Lesson 2.md" → "Piano Lessons Lesson 2"
             const pathComponents = doc.id.replace(/\.md$/, "").split("/").join(" ");
 
+            // Extract frontmatter property values for searchability
+            const propValues = this.extractPropertyValues(doc.props);
+
             this.index.add({
               id: doc.id,
               title: doc.title,
               path: pathComponents, // Index folder and file names
               headings: doc.headings.join(" "),
               tags: doc.tags.join(" "),
+              props: propValues.join(" "), // Index frontmatter property values
               links: linkBasenames, // Index link basenames for search
               body: doc.body,
             });
@@ -182,7 +187,66 @@ export class FullTextEngine {
   }
 
   /**
+   * Extract frontmatter property values for search indexing.
+   * Only indexes primitive values (strings, numbers, booleans) and arrays of primitives.
+   * Skips objects and null/undefined values.
+   *
+   * @param props - Frontmatter properties object
+   * @returns Array of string values for indexing
+   */
+  private extractPropertyValues(props: Record<string, unknown> | undefined): string[] {
+    const propValues: string[] = [];
+    if (props && typeof props === "object") {
+      for (const value of Object.values(props)) {
+        this.extractPrimitiveValues(value, propValues);
+      }
+    }
+    return propValues;
+  }
+
+  /**
+   * Recursively extract primitive values (strings/numbers/booleans) from a value.
+   * Handles arrays of primitives but skips nested arrays and objects.
+   *
+   * @param value - The value to extract from
+   * @param output - Array to collect extracted string values
+   * @param depth - Current recursion depth (max 1 for arrays)
+   */
+  private extractPrimitiveValues(value: unknown, output: string[], depth: number = 0): void {
+    if (value == null) return; // Skip null/undefined
+
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed) output.push(trimmed); // Skip empty strings
+    } else if (typeof value === "number" || typeof value === "boolean") {
+      output.push(String(value));
+    } else if (value instanceof Date) {
+      // Handle Date objects (convert to ISO string)
+      output.push(value.toISOString());
+    } else if (Array.isArray(value) && depth === 0) {
+      // Only process first-level arrays, skip nested arrays
+      value.forEach((item) => {
+        if (typeof item === "string" || typeof item === "number" || typeof item === "boolean") {
+          if (typeof item === "string") {
+            const trimmed = item.trim();
+            if (trimmed) output.push(trimmed);
+          } else {
+            output.push(String(item));
+          }
+        }
+      });
+    }
+    // Skip objects and nested arrays
+  }
+
+  /**
    * Search the ephemeral index with multiple query variants
+   *
+   * Scoring happens in three stages:
+   * 1. Score Accumulation: Documents matching multiple queries get additive scores
+   * 2. Multi-field Bonus: Documents matching in multiple fields (title, tags, etc.) get boosted
+   * 3. Folder Boost: Documents in folders with multiple matches get boosted
+   *
    * @param queries - Array of query strings
    * @param limit - Maximum results per query
    * @returns Array of NoteIdRank results
@@ -238,9 +302,14 @@ export class FullTextEngine {
     }
 
     // Apply bonus for multi-field matches
+    // Example: Query "OAuth NextJS"
+    // - Doc A matches "OAuth" in title only → multiFieldBonus = 1.0 (no bonus)
+    // - Doc B matches "OAuth" in title AND "NextJS" in tags → multiFieldBonus = 1.2 (20% boost)
+    // - Doc C matches in title, tags, AND body → multiFieldBonus = 1.4 (40% boost)
     const finalResults: NoteIdRank[] = [];
     for (const [id, data] of scoreMap.entries()) {
       // Boost score if matched in multiple fields
+      // Each additional field beyond the first adds 20% to the score
       const multiFieldBonus = 1 + (data.fieldMatches.size - 1) * 0.2;
       const finalScore = data.score * multiFieldBonus;
       finalResults.push({ id, score: finalScore, engine: "fulltext" });
@@ -256,7 +325,33 @@ export class FullTextEngine {
 
   /**
    * Apply folder-based boosting to improve ranking of related notes.
-   * Notes in the same folder get a boost when multiple notes from that folder are found.
+   *
+   * IMPORTANT: Only boosts documents that are ALREADY in the search results.
+   * Does NOT add new documents from the same folder.
+   *
+   * How it works:
+   * 1. Counts how many results are in each folder
+   * 2. Boosts ALL results in folders with 2+ matches
+   * 3. Boost formula: score * (1 + log2(count + 1))
+   *
+   * Example scenarios:
+   *
+   * Case A: dirA/dirB/docA.md and dirA/dirB/docB.md (same folder)
+   * - Both docs are in "dirA/dirB" folder
+   * - Folder count = 2
+   * - Both get boost: score * 1.58 (~58% boost)
+   *
+   * Case B: dirA/dirB/docA.md and dirA/docC.md (different folders)
+   * - docA is in "dirA/dirB" folder (count = 1, no boost)
+   * - docC is in "dirA" folder (count = 1, no boost)
+   * - Neither gets boosted because each folder only has 1 match
+   *
+   * Real example with query "OAuth NextJS":
+   * - Results: nextjs/auth.md, nextjs/config.md, nextjs/jwt.md, tutorials/oauth.md
+   * - "nextjs" folder has 3 docs → each gets 2x boost
+   * - "tutorials" folder has 1 doc → no boost
+   *
+   * @param results - Array of search results to apply boosting to (modified in place)
    */
   private applyFolderBoost(results: NoteIdRank[]): void {
     // Count notes per folder
@@ -308,6 +403,7 @@ export class FullTextEngine {
       path: 2.5,
       headings: 2,
       tags: 2,
+      props: 2,
       links: 2,
       body: 1,
     };

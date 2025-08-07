@@ -23,7 +23,7 @@ _(Multilingual, Partial In-Memory; optional semantic add-on)_
 ### Step-by-Step Processing:
 
 ```
-1. Query Expansion (LLM, 500ms timeout)
+1. Query Expansion (LLM, 4s timeout)
    Input:  "How do I set up OAuth in Next.js?"
    Output: ["How do I set up OAuth in Next.js?",
             "Next.js OAuth configuration",
@@ -51,19 +51,23 @@ _(Multilingual, Partial In-Memory; optional semantic add-on)_
            "NextJS OAuth setup", "oauth", "nextjs"]
    Results by field match + position:
 
-   | Note | Title Match | Tag Match | Body Match | Score |
-   |------|------------|-----------|------------|-------|
-   | nextjs/auth.md | "NextJS OAuth Setup" (pos 1) | #oauth #nextjs | Yes | 5.0 |
-   | auth/oauth-guide.md | "OAuth Guide" (pos 2) | #oauth | Yes | 2.1 |
-   | tutorials/oauth.md | - | #oauth | Yes | 1.2 |
+   | Note | Title Match | Path Match | Tag Match | Body Match | Base Score | Folder Boost | Final Score |
+   |------|------------|------------|-----------|------------|------------|--------------|-------------|
+   | nextjs/auth.md | "NextJS OAuth Setup" (pos 1) | nextjs auth | #oauth #nextjs | Yes | 5.0 | 2x (3 docs in nextjs/) | 10.0 |
+   | nextjs/config.md | - | nextjs config | #nextjs | Yes | 1.8 | 2x (3 docs in nextjs/) | 3.6 |
+   | nextjs/jwt.md | - | nextjs jwt | #nextjs #auth | Yes | 1.5 | 2x (3 docs in nextjs/) | 3.0 |
+   | auth/oauth-guide.md | "OAuth Guide" (pos 2) | auth oauth | #oauth | Yes | 2.1 | 1x (single) | 2.1 |
+   | tutorials/oauth.md | - | tutorials oauth | #oauth | Yes | 1.2 | 1x (single) | 1.2 |
 
 6. RRF (combine rankings)
    Merges: full-text (1.0x) + grep prior (0.3x) + semantic (2.0x if enabled)
 
-7. Final Results
-   1. nextjs/auth.md (score: 5.0)
-   2. auth/oauth-guide.md (score: 2.1)
-   3. tutorials/oauth.md (score: 1.2)
+7. Final Results (after folder boosting and RRF)
+   1. nextjs/auth.md (score: 10.0) - Boosted by folder clustering
+   2. nextjs/config.md (score: 3.6) - Boosted by folder clustering
+   3. nextjs/jwt.md (score: 3.0) - Boosted by folder clustering
+   4. auth/oauth-guide.md (score: 2.1)
+   5. tutorials/oauth.md (score: 1.2)
 ```
 
 ---
@@ -84,16 +88,70 @@ _(Multilingual, Partial In-Memory; optional semantic add-on)_
 
 ```mermaid
 graph TD
-    A[User Query] --> B[Query Expansion]
-    B --> C[Grep Scan]
-    C --> D[Graph Expansion]
-    D --> E[Build Full-Text Index]
-    E --> F[Full-Text Search]
-    F --> G{Semantic Enabled?}
-    G -->|Yes| H[Semantic Re-ranking]
-    G -->|No| I[RRF]
+    A[User Query] --> B[Query Expansion<br/>LLM rewrites + term extraction]
+    B --> C[Grep Scan<br/>Substring search on queries + terms]
+    C --> D[Graph Expansion<br/>BFS traversal + co-citation]
+    D --> E[Build Full-Text Index<br/>FlexSearch with path indexing]
+    E --> F[Full-Text Search<br/>Hybrid: phrases + terms]
+    F --> FB[Folder Boosting<br/>Cluster detection + logarithmic boost]
+    FB --> G{Semantic Enabled?}
+    G -->|Yes| H[Semantic Re-ranking<br/>Embedding similarity]
+    G -->|No| I[Weighted RRF<br/>Multi-signal fusion]
     H --> I
-    I --> J[Final Results]
+    I --> J[Final Results<br/>Top-K selection]
+
+    style B fill:#e1f5fe
+    style FB fill:#fff3e0
+    style I fill:#f3e5f5
+```
+
+### Detailed Technical Pipeline
+
+```mermaid
+graph LR
+    subgraph QP["Query Processing"]
+        Q[Query] --> QE[Query Expander]
+        QE --> V[3 Variants]
+        QE --> T[Salient Terms - Nouns only]
+    end
+
+    subgraph ID["Initial Discovery"]
+        V --> GS[Grep Scanner - cachedRead]
+        T --> GS
+        GS --> GH[50-200 hits]
+    end
+
+    subgraph GA["Graph Analysis"]
+        GH --> GE[Graph Expander]
+        GE --> BFS[BFS Links: 1-3 hops]
+        GE --> AC[Active Context: Current note neighbors]
+        GE --> CC[Co-citation: Shared links]
+        BFS --> EC[~500 candidates]
+        AC --> EC
+        CC --> EC
+    end
+
+    subgraph FTP["Full-Text Processing"]
+        EC --> FTI[FlexSearch Index]
+        FTI --> IDX[Field Indexing: Title 3x, Path 2.5x, Tags/Links 2x, Body 1x]
+        IDX --> FTS[Search Engine]
+        V --> FTS
+        T --> FTS
+        FTS --> SA[Score Accumulation: Multi-match bonus]
+        SA --> MF[Multi-field Bonus: +20% per field]
+    end
+
+    subgraph RO["Ranking Optimization"]
+        MF --> FB[Folder Boost: Logarithmic scaling]
+        FB --> RRF[Weighted RRF: Lexical 1.0x, Grep 0.3x, Semantic 2.0x]
+    end
+
+    RRF --> R[Top-K Results]
+
+    style QE fill:#e1f5fe
+    style FB fill:#fff3e0
+    style RRF fill:#f3e5f5
+    style FTI fill:#e8f5e9
 ```
 
 ### Detailed Step-by-Step Flow
@@ -101,7 +159,7 @@ graph TD
 ```typescript
 async function retrieve(query: string): Promise<NoteIdRank[]> {
   // 1. QUERY EXPANSION - Generate variants for better recall
-  // Uses LLM (with 500ms timeout) to generate alternative phrasings
+  // Uses LLM (with 4s timeout) to generate alternative phrasings
   const expanded = await queryExpander.expand(query);
   const variants = expanded.queries; // ["original", "variant1", "variant2"]
 
@@ -133,9 +191,11 @@ async function retrieve(query: string): Promise<NoteIdRank[]> {
 
   // 5. BUILD FULL-TEXT INDEX - Ephemeral FlexSearch from candidates
   await fullTextEngine.buildFromCandidates(candidates);
-  // Indexes: title, headings, tags, links (as basenames), body with multilingual tokenizer
-  // Example indexed doc: {title: "NextJS Auth Guide", headings: ["JWT Setup", "OAuth"],
-  //                       tags: ["nextjs", "auth"], links: "jwt-basics oauth-flow", body: "..."}
+  // Indexes: title, path, headings, tags, links (as basenames), body with multilingual tokenizer
+  // Path components are indexed separately for folder/file name search
+  // Example indexed doc: {title: "NextJS Auth Guide", path: "nextjs auth-guide",
+  //                       headings: ["JWT Setup", "OAuth"], tags: ["nextjs", "auth"],
+  //                       links: "jwt-basics oauth-flow", body: "..."}
 
   // 6. FULL-TEXT SEARCH - Hybrid search with phrases AND terms
   // Combines: Full query variants (precision) + Individual terms (recall)
@@ -179,11 +239,14 @@ async function retrieve(query: string): Promise<NoteIdRank[]> {
 
 1. **Progressive Refinement**: Start fast (grep) → expand (graph) → refine (full-text)
 2. **Hybrid Search Strategy**: Uses BOTH full query phrases (precision) AND individual terms (recall)
-3. **Memory-Bounded**: Each step respects platform memory limits
-4. **Multilingual**: Handles ASCII and CJK throughout the pipeline
-5. **Fault-Tolerant**: Falls back to grep-only if pipeline fails
-6. **Configurable**: Semantic search, graph hops, memory limits all adjustable
-7. **Link-Aware Search**: Links are indexed as searchable basenames while preserving full paths for graph traversal
+3. **Score Accumulation**: Documents matching multiple queries/terms get higher scores (not max)
+4. **Folder Clustering**: Automatic boosting of notes in folders with multiple matches
+5. **Path-Aware Indexing**: Folder and file names are searchable with 2.5x weight
+6. **Memory-Bounded**: Each step respects platform memory limits
+7. **Multilingual**: Handles ASCII and CJK throughout the pipeline
+8. **Fault-Tolerant**: Falls back to grep-only if pipeline fails
+9. **Configurable**: Semantic search, graph hops, memory limits all adjustable
+10. **Link-Aware Search**: Links are indexed as searchable basenames while preserving full paths for graph traversal
 
 ---
 
@@ -195,7 +258,7 @@ interface NoteDoc {
   title: string; // filename or front-matter title
   headings: string[]; // H1..H6 plain text (indexed)
   tags: string[]; // inline + frontmatter via getAllTags(cache) (indexed)
-  props: Record<string, unknown>; // frontmatter key/values (extracted but not indexed)
+  props: Record<string, unknown>; // frontmatter key/values (values indexed with 2x weight)
   linksOut: string[]; // outgoing link full paths (extracted and indexed as basenames)
   linksIn: string[]; // backlink full paths (extracted and indexed as basenames)
   body: string; // full markdown text (indexed)
@@ -241,7 +304,7 @@ Uses LLM to generate alternative query phrasings and extract salient terms.
 
 - **Language-agnostic**: Works with any language (English, Chinese, Japanese, etc.)
 - **Smart filtering**: Excludes action verbs (find, search, get, 查找, buscar, etc.)
-- **Timeout protection**: 500ms timeout prevents slow LLM responses
+- **Timeout protection**: 4s timeout prevents slow LLM responses
 - **Caching**: Results cached to avoid redundant LLM calls
 - **Fallback**: Uses original query if LLM unavailable
 
@@ -270,7 +333,7 @@ FlexSearch index built per-query:
 FlexSearch uses a **Contextual Index** algorithm (NOT BM25/TF-IDF). Key characteristics:
 
 1. **Position-based scoring**: Results are ranked by position (1st result = score 1.0, 2nd = 0.5, 3rd = 0.33, etc.)
-2. **Field weights**: Title (3x) > Headings/Tags/Links (2x) > Body (1x)
+2. **Field weights**: Title (3x) > Path (2.5x) > Headings/Tags/Props/Links (2x) > Body (1x)
 3. **Input format**: Can be either sentences or terms. Our tokenizer splits into:
    - ASCII words: `"hello world"` → `["hello", "world"]`
    - CJK bigrams: `"中文编程"` → `["中文", "文编", "编程"]`
@@ -278,8 +341,47 @@ FlexSearch uses a **Contextual Index** algorithm (NOT BM25/TF-IDF). Key characte
 **Hybrid Search Approach:**
 
 - Searches both full query phrases (for precision) and individual terms (for recall)
-- Combines scores using max scoring across all searches
+- Accumulates scores from multiple queries (documents matching multiple terms rank higher)
+- Multi-field bonus: 20% boost for each additional field matched
 - Results in better recall without sacrificing precision
+
+**Folder Boosting Algorithm:**
+
+The system applies intelligent folder-based boosting to improve clustering of related notes:
+
+1. **Folder Prevalence Detection**: Counts how many results are in each folder
+2. **Logarithmic Boost**: Notes in folders with multiple matches get boosted
+   - Formula: `boostFactor = 1 + log2(count + 1)`
+   - Example: 3 docs in folder → ~2x boost, 7 docs → ~2.3x boost
+3. **Applied After Scoring**: Boost applied after initial scoring but before final ranking
+4. **Promotes Topic Clusters**: Helps surface groups of related notes from the same project/topic
+
+**Path Indexing:**
+
+- Path components are indexed separately with 2.5x weight
+- Example: `"Piano Lessons/Lesson 2.md"` indexes as `"Piano Lessons Lesson 2"`
+- Enables folder name and file name searching
+
+**Frontmatter Property Indexing:**
+
+- Property VALUES are indexed (keys are ignored) with 2x weight
+- Supports strings, numbers, booleans, dates, and arrays of primitives
+- Skips null/undefined values and empty strings
+- Example frontmatter:
+  ```yaml
+  ---
+  author: John Doe
+  date: 2024-01-01
+  published: true
+  tags: [tutorial, advanced]
+  status: draft
+  priority: 1
+  ---
+  ```
+  Indexes as: `"John Doe 2024-01-01T00:00:00.000Z true tutorial advanced draft 1"`
+- Enables searching for content by author, status, boolean flags, or any custom metadata
+- Date objects are indexed as ISO strings (searchable by year, month, day)
+- Note: Property keys are NOT searchable (can't search "author:" or "status:")
 
 **Implementation Details:**
 
@@ -303,21 +405,28 @@ Combines multiple rankings with configurable weights using Reciprocal Rank Fusio
 When a search is executed, you'll see detailed logging showing each pipeline step:
 
 ```
-=== TieredRetriever: Starting search for "How do I implement authentication in my Next.js app?" ===
+=== SearchCore: Starting search for "How do I implement authentication in my Next.js app?" ===
 Query expansion: 3 variants + 3 terms
   Variants: ["How do I implement authentication in my Next.js app?", "Next.js authentication implementation", "NextJS auth setup guide"]
   Terms: ["authentication", "nextjs", "app"]
-Grep scan: Found 52 initial matches (searching 6 inputs)
-  Grep: 52 files match from phrases + terms
-Graph expansion: grep: 52→156, active: 12, co-cited: 8 → 176 total
-  Graph hop 1: 52 → 156 notes (+104)
+Grep scan: Found 52 initial matches
+Graph expansion: 52 grep → 176 expanded → 176 final candidates
 Full-text index: Built with 176 documents
-  FullText: Indexed 176/176 docs (18% memory, 1543210 bytes)
+FullText: Indexed 176/200 docs (18% memory, 1543210 bytes)
+FullText: Boosting 3 folders with multiple matches
+  nextjs: 5 docs (2.32x boost)
+  auth: 3 docs (2.00x boost)
+  tutorials: 2 docs (1.58x boost)
 Full-text search: Found 35 results (using 6 search inputs)
-RRF: Processed 35 items from lexical with weight 1
-RRF: Processed 52 items from grepPrior with weight 0.3
-RRF: Fused 68 unique results
 Final results: 30 documents (after RRF)
+
+┌─────────┬──────────────────────┬──────────────────────────┬────────┬──────────┐
+│ (index) │ title                │ path                     │ score  │ engine   │
+├─────────┼──────────────────────┼──────────────────────────┼────────┼──────────┤
+│    0    │ 'nextjs-auth.md'     │ 'nextjs/auth.md'        │ '10.00'│ 'rrf'    │
+│    1    │ 'config.md'          │ 'nextjs/config.md'      │ '3.60' │ 'rrf'    │
+│    2    │ 'jwt.md'             │ 'nextjs/jwt.md'         │ '3.00' │ 'rrf'    │
+└─────────┴──────────────────────┴──────────────────────────┴────────┴──────────┘
 ```
 
 This logging helps debug search performance and understand the retrieval flow.

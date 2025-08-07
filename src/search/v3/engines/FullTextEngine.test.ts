@@ -318,6 +318,7 @@ describe("FullTextEngine", () => {
       expect(getFieldWeight("path")).toBe(2.5);
       expect(getFieldWeight("headings")).toBe(2);
       expect(getFieldWeight("tags")).toBe(2);
+      expect(getFieldWeight("props")).toBe(2);
       expect(getFieldWeight("links")).toBe(2);
       expect(getFieldWeight("body")).toBe(1);
     });
@@ -358,6 +359,168 @@ describe("FullTextEngine", () => {
       expect(stats2.memoryUsed).toBeGreaterThan(0);
       expect(stats2.memoryPercent).toBeGreaterThanOrEqual(0);
       expect(stats2.memoryPercent).toBeLessThanOrEqual(100);
+    });
+  });
+
+  describe("frontmatter property indexing", () => {
+    beforeEach(() => {
+      // Add test notes with various frontmatter properties
+      const propsCache: Record<string, any> = {
+        "author-test.md": {
+          headings: [],
+          frontmatter: {
+            author: "John Doe",
+            date: "2024-01-01",
+            status: "draft",
+          },
+        },
+        "project-test.md": {
+          headings: [],
+          frontmatter: {
+            project: "Machine Learning",
+            priority: 1,
+            tags: ["ai", "research"],
+            nested: { ignore: "this" }, // Should be ignored
+          },
+        },
+        "array-test.md": {
+          headings: [],
+          frontmatter: {
+            keywords: ["typescript", "react", "testing"],
+            authors: ["Alice", "Bob"],
+            numbers: [100, 200, 300],
+          },
+        },
+        "edge-cases.md": {
+          headings: [],
+          frontmatter: {
+            published: true,
+            draft: false,
+            date: new Date("2024-01-15"),
+            nullValue: null,
+            emptyString: "  ",
+            nestedArray: [["should", "skip"], "but this works"],
+          },
+        },
+      };
+
+      // Update mock cache
+      mockApp.metadataCache.getFileCache = jest.fn((file: TFile) => {
+        return propsCache[file.path] || { headings: [], frontmatter: {} };
+      });
+
+      // Update vault content
+      mockApp.vault.cachedRead = jest.fn((file: TFile) => {
+        const contents: Record<string, string> = {
+          "author-test.md": "This is a draft document",
+          "project-test.md": "Machine learning research content",
+          "array-test.md": "Testing arrays in frontmatter",
+          "edge-cases.md": "Testing edge cases",
+        };
+        return Promise.resolve(contents[file.path] || "");
+      });
+    });
+
+    it("should index string property values", async () => {
+      await engine.buildFromCandidates(["author-test.md"]);
+
+      // Should find by author name
+      const results = engine.search(["John Doe"], 10);
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0].id).toBe("author-test.md");
+    });
+
+    it("should index number property values", async () => {
+      await engine.buildFromCandidates(["project-test.md"]);
+
+      // Should find by priority number (converted to string)
+      const results = engine.search(["1"], 10);
+      expect(results.some((r) => r.id === "project-test.md")).toBe(true);
+    });
+
+    it("should index array property values", async () => {
+      await engine.buildFromCandidates(["array-test.md"]);
+
+      // Should find by array elements
+      const results1 = engine.search(["typescript"], 10);
+      expect(results1.some((r) => r.id === "array-test.md")).toBe(true);
+
+      const results2 = engine.search(["Alice"], 10);
+      expect(results2.some((r) => r.id === "array-test.md")).toBe(true);
+
+      // Should find by number in array (converted to string)
+      const results3 = engine.search(["300"], 10);
+      expect(results3.some((r) => r.id === "array-test.md")).toBe(true);
+    });
+
+    it("should NOT index nested objects", async () => {
+      await engine.buildFromCandidates(["project-test.md"]);
+
+      // Should NOT find by nested object value
+      const results = engine.search(["ignore"], 10);
+      expect(results.some((r) => r.id === "project-test.md")).toBe(false);
+    });
+
+    it("should NOT index property keys", async () => {
+      await engine.buildFromCandidates(["author-test.md"]);
+
+      // Should NOT find by property key alone
+      // Use a unique property key that doesn't appear in values or body
+      const results = engine.search(["status"], 10);
+
+      // "status" key should not be indexed, but "draft" value should be
+      // So searching for "status" should not find the document
+      // (unless "status" appears in the body, which it doesn't in our test)
+      expect(results.some((r) => r.id === "author-test.md")).toBe(false);
+
+      // But searching for the value "draft" should find it
+      const valueResults = engine.search(["draft"], 10);
+      expect(valueResults.some((r) => r.id === "author-test.md")).toBe(true);
+    });
+
+    it("should index boolean values", async () => {
+      await engine.buildFromCandidates(["edge-cases.md"]);
+
+      // Should find by boolean values converted to strings
+      const trueResults = engine.search(["true"], 10);
+      expect(trueResults.some((r) => r.id === "edge-cases.md")).toBe(true);
+
+      const falseResults = engine.search(["false"], 10);
+      expect(falseResults.some((r) => r.id === "edge-cases.md")).toBe(true);
+    });
+
+    it("should index Date objects as ISO strings", async () => {
+      // Note: Our mock frontmatter has a Date object
+      // In real Obsidian, dates in frontmatter are usually strings
+      // But we support Date objects if they're present
+      await engine.buildFromCandidates(["edge-cases.md"]);
+
+      // The Date object should be converted to ISO string
+      // Should find by searching for the ISO format
+      const results = engine.search(["2024-01-15T00:00:00"], 10);
+      expect(results.some((r) => r.id === "edge-cases.md")).toBe(true);
+    });
+
+    it("should skip null values and empty strings", async () => {
+      await engine.buildFromCandidates(["edge-cases.md"]);
+
+      // Should NOT find by "null" string
+      const nullResults = engine.search(["null"], 10);
+      expect(nullResults.some((r) => r.id === "edge-cases.md")).toBe(false);
+
+      // Empty strings should also be skipped (no way to test directly)
+    });
+
+    it("should handle nested arrays properly", async () => {
+      await engine.buildFromCandidates(["edge-cases.md"]);
+
+      // Should find the string in the nested array
+      const results = engine.search(["but this works"], 10);
+      expect(results.some((r) => r.id === "edge-cases.md")).toBe(true);
+
+      // Should NOT find the nested array elements
+      const nestedResults = engine.search(["should"], 10);
+      expect(nestedResults.some((r) => r.id === "edge-cases.md")).toBe(false);
     });
   });
 });
