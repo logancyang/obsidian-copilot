@@ -54,10 +54,11 @@ const localSearchTool = createTool({
     // Perform the search
     const documents = await retriever.getRelevantDocuments(query);
 
-    // Format the results
+    // Format the results - only include snippet, not full content
     const formattedResults = documents.map((doc) => ({
       title: doc.metadata.title,
-      content: doc.pageContent,
+      // Only include a snippet for display (first 200 chars)
+      content: doc.pageContent.substring(0, 200),
       path: doc.metadata.path,
       score: doc.metadata.score,
       rerank_score: doc.metadata.rerank_score,
