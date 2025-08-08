@@ -221,7 +221,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     core: true,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -230,7 +229,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     core: true,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -238,7 +236,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.OPENAI,
     enabled: true,
     isBuiltIn: true,
-    projectEnabled: true,
+    core: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -264,16 +262,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.OPENAI,
     enabled: true,
     isBuiltIn: true,
-    core: true,
     capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.O4_mini,
-    provider: ChatModelProviders.OPENAI,
-    enabled: true,
-    isBuiltIn: true,
-    core: true,
-    capabilities: [ModelCapability.REASONING],
   },
   {
     name: ChatModels.CLAUDE_4_SONNET,
@@ -288,20 +277,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
-  },
-  {
-    name: ChatModels.CLAUDE_3_5_SONNET,
-    provider: ChatModelProviders.ANTHROPIC,
-    enabled: true,
-    isBuiltIn: true,
-    core: true,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.CLAUDE_3_5_HAIKU,
-    provider: ChatModelProviders.ANTHROPIC,
-    enabled: true,
-    isBuiltIn: true,
   },
   {
     name: ChatModels.GROK3,
@@ -330,18 +305,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     isBuiltIn: true,
     projectEnabled: true,
     capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.COMMAND_R,
-    provider: ChatModelProviders.COHEREAI,
-    enabled: true,
-    isBuiltIn: true,
-  },
-  {
-    name: ChatModels.COMMAND_R_PLUS,
-    provider: ChatModelProviders.COHEREAI,
-    enabled: true,
-    isBuiltIn: true,
   },
   {
     name: ChatModels.AZURE_OPENAI,
