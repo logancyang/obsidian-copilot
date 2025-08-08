@@ -10,7 +10,12 @@ import { getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { processToolResults } from "@/utils/toolResultUtils";
 import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
 import { addChatHistoryToMessages } from "./utils/chatHistoryUtils";
-import { messageRequiresTools, ModelAdapter, ModelAdapterFactory } from "./utils/modelAdapter";
+import {
+  messageRequiresTools,
+  ModelAdapter,
+  ModelAdapterFactory,
+  STREAMING_TRUNCATE_THRESHOLD,
+} from "./utils/modelAdapter";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { createToolCallMarker, updateToolCallMarker } from "./utils/toolCallParser";
 import {
@@ -24,7 +29,11 @@ import {
   ToolExecutionResult,
 } from "./utils/toolExecution";
 
-import { parseXMLToolCalls, stripToolCallXML } from "./utils/xmlParsing";
+import {
+  extractToolNameFromPartialBlock,
+  parseXMLToolCalls,
+  stripToolCallXML,
+} from "./utils/xmlParsing";
 
 export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private llmFormattedMessages: string[] = []; // Track LLM-formatted messages for memory
@@ -95,6 +104,10 @@ ${params}
     const adapter = ModelAdapterFactory.createAdapter(chatModel);
 
     return AutonomousAgentChainRunner.generateSystemPrompt(availableTools, adapter);
+  }
+
+  private getTemporaryToolCallId(toolName: string, index: number): string {
+    return `temporary-tool-call-id-${toolName}-${index}`;
   }
 
   async run(
@@ -182,23 +195,65 @@ ${params}
         const response = await this.streamResponse(
           conversationMessages,
           abortController,
-          (message) => {
+          (fullMessage) => {
             // Show tool calls as indicators during streaming for clarity, preserve think blocks
-            const cleanedMessage = stripToolCallXML(message);
+            const cleanedMessage = stripToolCallXML(fullMessage);
             // Build display with ALL content including tool calls from history
             const displayParts = [];
 
             // Add all iteration history (which includes tool call markers)
             displayParts.push(...iterationHistory);
 
-            // Add current iteration's tool calls if any
-            if (currentIterationToolCallMessages.length > 0) {
-              displayParts.push(currentIterationToolCallMessages.join("\n"));
-            }
-
             // Add the current streaming message
             if (cleanedMessage.trim()) {
               displayParts.push(cleanedMessage);
+            }
+
+            // Collect tool names from the current streaming message, including partial tool call block
+            const toolCalls = parseXMLToolCalls(fullMessage);
+            let toolNames: string[] = [];
+            if (toolCalls.length > 0) {
+              toolNames = toolCalls.map((toolCall) => toolCall.name);
+            }
+            const toolName = extractToolNameFromPartialBlock(fullMessage);
+            if (toolName) {
+              // Only add the partial tool call block if the block is larger than STREAMING_TRUNCATE_THRESHOLD
+              const lastToolNameIndex = fullMessage.lastIndexOf(toolName);
+              if (fullMessage.length - lastToolNameIndex > STREAMING_TRUNCATE_THRESHOLD) {
+                toolNames.push(toolName);
+              }
+            }
+
+            // Create tool call markers if they don't exist
+            // Generate temporary tool call id based on index of the tool name in the toolNames array
+            for (let i = 0; i < toolNames.length; i++) {
+              const toolName = toolNames[i];
+              const toolCallId = this.getTemporaryToolCallId(toolName, i);
+              // Check if the tool call marker already exists
+              const messageIndex = currentIterationToolCallMessages.findIndex((msg) =>
+                msg.includes(toolCallId)
+              );
+              if (messageIndex !== -1) {
+                continue;
+              }
+
+              const toolCallMarker = createToolCallMarker(
+                toolCallId,
+                toolName,
+                getToolDisplayName(toolName),
+                getToolEmoji(toolName),
+                "", // confirmationMessage (empty until generation completes)
+                true, // isExecuting
+                "", // content (empty for now)
+                "" // result (empty until execution completes)
+              );
+
+              currentIterationToolCallMessages.push(toolCallMarker);
+            }
+
+            // Add current iteration's tool calls if any
+            if (currentIterationToolCallMessages.length > 0) {
+              displayParts.push(currentIterationToolCallMessages.join("\n"));
             }
 
             const currentDisplay = displayParts.join("\n\n");
@@ -259,6 +314,9 @@ ${params}
         const toolResults: ToolExecutionResult[] = [];
         const toolCallIdMap = new Map<number, string>(); // Map index to tool call ID
 
+        // Truncate currentIterationToolCallMessages based on the toolCalls array size
+        currentIterationToolCallMessages.splice(toolCalls.length);
+
         for (let i = 0; i < toolCalls.length; i++) {
           const toolCall = toolCalls[i];
           if (abortController.signal.aborted) break;
@@ -296,7 +354,19 @@ ${params}
               "" // result (empty until execution completes)
             );
 
-            currentIterationToolCallMessages.push(toolCallMarker);
+            // Check if the tool call marker already created during streaming
+            const messageIndex = currentIterationToolCallMessages.findIndex((msg) =>
+              msg.includes(this.getTemporaryToolCallId(toolCall.name, i))
+            );
+            if (messageIndex !== -1) {
+              currentIterationToolCallMessages[messageIndex] = toolCallMarker;
+            } else {
+              currentIterationToolCallMessages.push(toolCallMarker);
+              logWarn(
+                "Created tool call marker for tool call that was not created during streaming",
+                toolCall.name
+              );
+            }
 
             // Show all history plus all tool call messages
             const currentDisplay = [...iterationHistory, ...currentIterationToolCallMessages].join(

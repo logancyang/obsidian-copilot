@@ -1,5 +1,4 @@
 import { logError, logWarn } from "@/logger";
-import { getToolDisplayName } from "./toolExecution";
 
 /**
  * Escapes special XML characters in a string to prevent XML injection
@@ -158,8 +157,15 @@ function parseParameterContent(content: string, parameterName?: string): any {
 /**
  * Extracts tool name from a partial tool call block
  */
-function extractToolNameFromPartialBlock(partialContent: string): string | null {
-  const nameMatch = partialContent.match(/<name>([\s\S]*?)<\/name>/);
+export function extractToolNameFromPartialBlock(content: string): string | null {
+  // First remove all complete <use_tool>...</use_tool> blocks
+  content = content.replace(/<use_tool>[\s\S]*?<\/use_tool>/g, "");
+
+  // Then extract content after remaining <use_tool> tag
+  const useToolMatch = content.match(/<use_tool>([\s\S]*)/);
+  const contentAfterUseToolTag = useToolMatch ? useToolMatch[1] : content;
+
+  const nameMatch = contentAfterUseToolTag.match(/<name>([\s\S]*?)<\/name>/);
   if (nameMatch) {
     const name = nameMatch[1].trim();
     return name || null;
@@ -175,19 +181,11 @@ function extractToolNameFromPartialBlock(partialContent: string): string | null 
 export function stripToolCallXML(text: string): string {
   let cleaned = text;
 
-  // Remove all complete <use_tool>...</use_tool> blocks
+  // First remove all complete <use_tool>...</use_tool> blocks
   cleaned = cleaned.replace(/<use_tool>[\s\S]*?<\/use_tool>/g, "");
 
-  // Replace partial tool calls with calling message
-  cleaned = cleaned.replace(/<use_tool>([\s\S]*)$/g, (match, partialContent) => {
-    const toolName = extractToolNameFromPartialBlock(partialContent);
-    if (toolName) {
-      const displayName = getToolDisplayName(toolName);
-      return `Calling ${displayName}...`;
-    } else {
-      return `Calling tool...`;
-    }
-  });
+  // Then remove remaining partial tool calls
+  cleaned = cleaned.replace(/<use_tool>([\s\S]*)$/g, "");
 
   // Keep thinking blocks in autonomous agent mode as they provide valuable context
   // They are only removed in other contexts where they add noise
