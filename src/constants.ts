@@ -122,6 +122,9 @@ export const DEFAULT_MODEL_SETTING = {
 
 export enum ChatModels {
   COPILOT_PLUS_FLASH = "copilot-plus-flash",
+  GPT_5 = "gpt-5",
+  GPT_5_mini = "gpt-5-mini",
+  GPT_5_nano = "gpt-5-nano",
   GPT_41 = "gpt-4.1",
   GPT_41_mini = "gpt-4.1-mini",
   GPT_41_nano = "gpt-4.1-nano",
@@ -217,6 +220,30 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     capabilities: [ModelCapability.VISION],
   },
   {
+    name: ChatModels.GPT_5,
+    provider: ChatModelProviders.OPENAI,
+    enabled: true,
+    isBuiltIn: true,
+    core: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
+    name: ChatModels.GPT_5_mini,
+    provider: ChatModelProviders.OPENAI,
+    enabled: true,
+    isBuiltIn: true,
+    core: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
+    name: ChatModels.GPT_5_nano,
+    provider: ChatModelProviders.OPENAI,
+    enabled: true,
+    isBuiltIn: true,
+    core: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
     name: ChatModels.GPT_41,
     provider: ChatModelProviders.OPENAI,
     enabled: true,
@@ -239,16 +266,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.OPENAI,
     enabled: true,
     isBuiltIn: true,
-    core: true,
     capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.O4_mini,
-    provider: ChatModelProviders.OPENAI,
-    enabled: true,
-    isBuiltIn: true,
-    core: true,
-    capabilities: [ModelCapability.REASONING],
   },
   {
     name: ChatModels.CLAUDE_4_SONNET,
@@ -263,20 +281,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
-  },
-  {
-    name: ChatModels.CLAUDE_3_5_SONNET,
-    provider: ChatModelProviders.ANTHROPIC,
-    enabled: true,
-    isBuiltIn: true,
-    core: true,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.CLAUDE_3_5_HAIKU,
-    provider: ChatModelProviders.ANTHROPIC,
-    enabled: true,
-    isBuiltIn: true,
   },
   {
     name: ChatModels.GROK3,
@@ -313,18 +317,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     isBuiltIn: true,
     projectEnabled: true,
     capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.COMMAND_R,
-    provider: ChatModelProviders.COHEREAI,
-    enabled: true,
-    isBuiltIn: true,
-  },
-  {
-    name: ChatModels.COMMAND_R_PLUS,
-    provider: ChatModelProviders.COHEREAI,
-    enabled: true,
-    isBuiltIn: true,
   },
   {
     name: ChatModels.AZURE_OPENAI,
@@ -733,6 +725,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     "writeToFile",
     "replaceInFile",
   ],
+  reasoningEffort: "low",
+  verbosity: "medium",
 };
 
 export const EVENT_NAMES = {

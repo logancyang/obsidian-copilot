@@ -784,6 +784,8 @@ export async function checkLatestVersion(): Promise<{
   }
 }
 
+// Note: LangChain 0.6.6+ handles O-series and GPT-5 models automatically
+// These functions are kept for backward compatibility and specific checks
 export function isOSeriesModel(model: BaseChatModel | string): boolean {
   if (typeof model === "string") {
     return model.startsWith("o1") || model.startsWith("o3") || model.startsWith("o4");
@@ -792,6 +794,42 @@ export function isOSeriesModel(model: BaseChatModel | string): boolean {
   // For BaseChatModel instances
   const modelName = (model as any).modelName || (model as any).model || "";
   return modelName.startsWith("o1") || modelName.startsWith("o3") || modelName.startsWith("o4");
+}
+
+export function isGPT5Model(model: BaseChatModel | string): boolean {
+  if (typeof model === "string") {
+    return model.startsWith("gpt-5");
+  }
+
+  // For BaseChatModel instances
+  const modelName = (model as any).modelName || (model as any).model || "";
+  return modelName.startsWith("gpt-5");
+}
+
+/**
+ * Utility for determining model characteristics
+ * Note: Most of this is handled by LangChain 0.6.6+ internally
+ */
+export interface ModelInfo {
+  isOSeries: boolean;
+  isGPT5: boolean;
+  isThinkingEnabled: boolean;
+}
+
+export function getModelInfo(model: BaseChatModel | string): ModelInfo {
+  const modelName =
+    typeof model === "string" ? model : (model as any).modelName || (model as any).model || "";
+
+  const isOSeries = isOSeriesModel(modelName);
+  const isGPT5 = isGPT5Model(modelName);
+  const isThinkingEnabled =
+    modelName.startsWith("claude-3-7-sonnet") || modelName.startsWith("claude-sonnet-4");
+
+  return {
+    isOSeries,
+    isGPT5,
+    isThinkingEnabled,
+  };
 }
 
 export function getMessageRole(
