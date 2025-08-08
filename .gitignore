@@ -27,3 +27,6 @@ data.json
 
 # Claude configuration
 .claude/settings.local.json
+
+# Development session tracking
+TODO.md
