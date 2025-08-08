@@ -122,6 +122,9 @@ export const DEFAULT_MODEL_SETTING = {
 
 export enum ChatModels {
   COPILOT_PLUS_FLASH = "copilot-plus-flash",
+  GPT_5 = "gpt-5",
+  GPT_5_mini = "gpt-5-mini",
+  GPT_5_nano = "gpt-5-nano",
   GPT_41 = "gpt-4.1",
   GPT_41_mini = "gpt-4.1-mini",
   GPT_41_nano = "gpt-4.1-nano",
@@ -213,6 +216,32 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     core: true,
+    projectEnabled: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
+    name: ChatModels.GPT_5,
+    provider: ChatModelProviders.OPENAI,
+    enabled: true,
+    isBuiltIn: true,
+    core: true,
+    projectEnabled: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
+    name: ChatModels.GPT_5_mini,
+    provider: ChatModelProviders.OPENAI,
+    enabled: true,
+    isBuiltIn: true,
+    core: true,
+    projectEnabled: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
+    name: ChatModels.GPT_5_nano,
+    provider: ChatModelProviders.OPENAI,
+    enabled: true,
+    isBuiltIn: true,
     projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
@@ -733,6 +762,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     "writeToFile",
     "replaceInFile",
   ],
+  reasoningEffort: "low",
+  verbosity: "medium",
 };
 
 export const EVENT_NAMES = {

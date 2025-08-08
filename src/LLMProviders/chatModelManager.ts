@@ -8,7 +8,7 @@ import {
 import { getDecryptedKey } from "@/encryptionService";
 import { logError, logInfo } from "@/logger";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
-import { err2String, isOSeriesModel, safeFetch, withSuppressedTokenWarnings } from "@/utils";
+import { err2String, getModelInfo, safeFetch, withSuppressedTokenWarnings } from "@/utils";
 import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatCohere } from "@langchain/cohere";
@@ -93,9 +93,8 @@ export default class ChatModelManager {
     const settings = getSettings();
 
     const modelName = customModel.name;
-    const isOSeries = isOSeriesModel(modelName);
-    const isThinkingEnabled =
-      modelName.startsWith("claude-3-7-sonnet") || modelName.startsWith("claude-sonnet-4");
+    const modelInfo = getModelInfo(modelName);
+    const { isThinkingEnabled } = modelInfo;
 
     // Base config without temperature when thinking is enabled
     const baseConfig: Omit<ModelConfig, "maxTokens" | "maxCompletionTokens" | "temperature"> = {
@@ -116,16 +115,17 @@ export default class ChatModelManager {
     } = {
       [ChatModelProviders.OPENAI]: {
         modelName: modelName,
-        openAIApiKey: await getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
+        apiKey: await getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
           organization: await getDecryptedKey(customModel.openAIOrgId || settings.openAIOrgId),
         },
-        ...this.handleOpenAIExtraArgs(
-          isOSeries,
+        ...this.getOpenAISpecialConfig(
+          modelName,
           customModel.maxTokens ?? settings.maxTokens,
-          customModel.temperature ?? settings.temperature
+          customModel.temperature ?? settings.temperature,
+          customModel
         ),
       },
       [ChatModelProviders.ANTHROPIC]: {
@@ -146,7 +146,7 @@ export default class ChatModelManager {
       [ChatModelProviders.AZURE_OPENAI]: {
         modelName:
           customModel.azureOpenAIApiDeploymentName || settings.azureOpenAIApiDeploymentName,
-        openAIApiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
+        apiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
         configuration: {
           baseURL:
             customModel.baseUrl ||
@@ -160,10 +160,11 @@ export default class ChatModelManager {
           },
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
-        ...this.handleOpenAIExtraArgs(
-          isOSeries,
+        ...this.getOpenAISpecialConfig(
+          modelName,
           customModel.maxTokens ?? settings.maxTokens,
-          customModel.temperature ?? settings.temperature
+          customModel.temperature ?? settings.temperature,
+          customModel
         ),
       },
       [ChatModelProviders.COHEREAI]: {
@@ -200,7 +201,7 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.OPENROUTERAI]: {
         modelName: modelName,
-        openAIApiKey: await getDecryptedKey(customModel.apiKey || settings.openRouterAiApiKey),
+        apiKey: await getDecryptedKey(customModel.apiKey || settings.openRouterAiApiKey),
         configuration: {
           baseURL: customModel.baseUrl || "https://openrouter.ai/api/v1",
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -225,7 +226,7 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.LM_STUDIO]: {
         modelName: modelName,
-        openAIApiKey: customModel.apiKey || "default-key",
+        apiKey: customModel.apiKey || "default-key",
         configuration: {
           baseURL: customModel.baseUrl || "http://localhost:1234/v1",
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -233,21 +234,22 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.OPENAI_FORMAT]: {
         modelName: modelName,
-        openAIApiKey: await getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
+        apiKey: await getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
           defaultHeaders: { "dangerously-allow-browser": "true" },
         },
-        ...this.handleOpenAIExtraArgs(
-          isOSeries,
+        ...this.getOpenAISpecialConfig(
+          modelName,
           customModel.maxTokens ?? settings.maxTokens,
-          customModel.temperature ?? settings.temperature
+          customModel.temperature ?? settings.temperature,
+          customModel
         ),
       },
       [ChatModelProviders.COPILOT_PLUS]: {
         modelName: modelName,
-        openAIApiKey: await getDecryptedKey(settings.plusLicenseKey),
+        apiKey: await getDecryptedKey(settings.plusLicenseKey),
         configuration: {
           baseURL: BREVILABS_API_BASE_URL,
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -277,15 +279,14 @@ export default class ChatModelManager {
       customModel
     );
 
+    // LangChain 0.6.6 handles token configuration for special models internally
     const tokenConfig = isThinkingEnabled
       ? {
           maxTokens: customModel.maxTokens ?? settings.maxTokens,
         }
-      : this.handleOpenAIExtraArgs(
-          isOSeries,
-          customModel.maxTokens ?? settings.maxTokens,
-          customModel.temperature ?? settings.temperature
-        );
+      : {
+          maxTokens: customModel.maxTokens ?? settings.maxTokens,
+        };
 
     const finalConfig = {
       ...baseConfig,
@@ -302,20 +303,43 @@ export default class ChatModelManager {
     return finalConfig as ModelConfig;
   }
 
-  private handleOpenAIExtraArgs(
-    isOSeriesModel: boolean,
+  /**
+   * Adds special configuration for OpenAI models that support reasoning
+   * LangChain 0.6.6+ handles most of the token/temperature logic internally
+   */
+  private getOpenAISpecialConfig(
+    modelName: string,
     maxTokens: number,
-    temperature: number | undefined
+    temperature: number | undefined,
+    customModel?: CustomModel
   ) {
-    const config = isOSeriesModel
-      ? {
-          maxCompletionTokens: maxTokens,
-          temperature: temperature === undefined ? undefined : 1,
+    const settings = getSettings();
+    const modelInfo = getModelInfo(modelName);
+    const config: any = {
+      maxTokens,
+      temperature,
+    };
+
+    // Add reasoning parameters for O-series and GPT-5 models
+    // LangChain 0.6.6 will handle the endpoint routing and parameter conversion
+    if (modelInfo.isOSeries || modelInfo.isGPT5) {
+      config.reasoning = {
+        effort: customModel?.reasoningEffort || settings.reasoningEffort || "low",
+      };
+
+      // Add verbosity for GPT-5 models (when API supports it)
+      if (modelInfo.isGPT5) {
+        const verbosityValue = customModel?.verbosity || settings.verbosity || "medium";
+        config.verbosity = verbosityValue;
+
+        // Also add to modelKwargs for compatibility
+        if (!config.modelKwargs) {
+          config.modelKwargs = {};
         }
-      : {
-          maxTokens: maxTokens,
-          temperature: temperature,
-        };
+        config.modelKwargs.verbosity = verbosityValue;
+      }
+    }
+
     return config;
   }
 
@@ -504,8 +528,8 @@ export default class ChatModelManager {
       const modelConfig = await this.getModelConfig(modelToTest);
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { streaming, maxTokens, maxCompletionTokens, ...pingConfig } = modelConfig;
-      const isOSeries = isOSeriesModel(modelToTest.name);
-      const tokenConfig = this.handleOpenAIExtraArgs(isOSeries, 30, modelConfig.temperature);
+      // For ping, just use minimal config
+      const tokenConfig = { maxTokens: 30 };
       const testModel = new (this.getProviderConstructor(modelToTest))({
         ...pingConfig,
         ...tokenConfig,
