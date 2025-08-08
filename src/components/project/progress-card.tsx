@@ -107,9 +107,6 @@ export default function ProgressCard({ plugin, setHiddenCard }: ProgressCardProp
             >
               <Loader2 className="tw-size-4 tw-animate-spin tw-text-accent" />
               <span className="tw-text-sm tw-font-medium">Processing</span>
-              <Badge variant="secondary" className="tw-text-xs  tw-bg-muted/10">
-                {processingFiles.length} files
-              </Badge>
               {isProcessingExpanded ? (
                 <ChevronDown className="tw-ml-auto tw-size-4" />
               ) : (
