@@ -73,7 +73,6 @@ ${params}
       .join("\n\n");
   }
 
-
   public static generateSystemPrompt(
     availableTools: SimpleTool<any, any>[],
     adapter: ModelAdapter
@@ -102,8 +101,8 @@ ${params}
     return AutonomousAgentChainRunner.generateSystemPrompt(availableTools, adapter);
   }
 
-  private getTemporaryToolCallId(toolName: string): string {
-    return `temporary-tool-call-id-${toolName}`;
+  private getTemporaryToolCallId(toolName: string, index: number): string {
+    return `temporary-tool-call-id-${toolName}-${index}`;
   }
 
   async run(
@@ -192,6 +191,7 @@ ${params}
           conversationMessages,
           abortController,
           (fullMessage) => {
+            console.log("fullMessage", fullMessage);
             // Show tool calls as indicators during streaming for clarity, preserve think blocks
             const cleanedMessage = stripToolCallXML(fullMessage);
             // Build display with ALL content including tool calls from history
@@ -205,10 +205,30 @@ ${params}
               displayParts.push(cleanedMessage);
             }
 
-            // Add tool call marker for the tool call that is being generated
+            // Collect tool names from the current streaming message, including partial tool call block
+            const toolCalls = parseXMLToolCalls(fullMessage);
+            let toolNames: string[] = [];
+            if (toolCalls.length > 0) {
+              toolNames = toolCalls.map((toolCall) => toolCall.name);
+            }
             const toolName = extractToolNameFromPartialBlock(fullMessage);
             if (toolName) {
-              const toolCallId = this.getTemporaryToolCallId(toolName);
+              toolNames.push(toolName);
+            }
+
+            // Create tool call markers if they don't exist
+            // Generate temporary tool call id based on index of the tool name in the toolNames array
+            for (let i = 0; i < toolNames.length; i++) {
+              const toolName = toolNames[i];
+              const toolCallId = this.getTemporaryToolCallId(toolName, i);
+              // Check if the tool call marker already exists
+              const messageIndex = currentIterationToolCallMessages.findIndex((msg) =>
+                msg.includes(toolCallId)
+              );
+              if (messageIndex !== -1) {
+                continue;
+              }
+
               const toolCallMarker = createToolCallMarker(
                 toolCallId,
                 toolName,
@@ -219,12 +239,9 @@ ${params}
                 "", // content (empty for now)
                 "" // result (empty until execution completes)
               );
-              const messageIndex = currentIterationToolCallMessages.findIndex((msg) =>
-                msg.includes(toolCallId)
-              );
-              if (messageIndex === -1) {
-                currentIterationToolCallMessages.push(toolCallMarker);
-              }
+
+              currentIterationToolCallMessages.push(toolCallMarker);
+              console.log("created toolCallMarker during streaming", toolCallId);
             }
 
             // Add current iteration's tool calls if any
@@ -237,6 +254,8 @@ ${params}
           },
           adapter
         );
+
+        console.log("response", response);
 
         if (!response) break;
 
@@ -290,6 +309,9 @@ ${params}
         const toolResults: ToolExecutionResult[] = [];
         const toolCallIdMap = new Map<number, string>(); // Map index to tool call ID
 
+        // Truncate currentIterationToolCallMessages based on the toolCalls array size
+        currentIterationToolCallMessages.splice(toolCalls.length);
+
         for (let i = 0; i < toolCalls.length; i++) {
           const toolCall = toolCalls[i];
           if (abortController.signal.aborted) break;
@@ -327,14 +349,18 @@ ${params}
               "" // result (empty until execution completes)
             );
 
-            //NOTE: This logic will break if the multiple tool calls with the same name are generated in the same iteration
+            // Check if the tool call marker already created during streaming
             const messageIndex = currentIterationToolCallMessages.findIndex((msg) =>
-              msg.includes(this.getTemporaryToolCallId(toolCall.name))
+              msg.includes(this.getTemporaryToolCallId(toolCall.name, i))
             );
             if (messageIndex !== -1) {
               currentIterationToolCallMessages[messageIndex] = toolCallMarker;
             } else {
               currentIterationToolCallMessages.push(toolCallMarker);
+              logWarn(
+                "Created tool call marker for tool call that was not created during streaming",
+                toolCall.name
+              );
             }
 
             // Show all history plus all tool call messages
