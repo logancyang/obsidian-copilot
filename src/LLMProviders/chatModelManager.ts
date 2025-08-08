@@ -8,7 +8,13 @@ import {
 import { getDecryptedKey } from "@/encryptionService";
 import { logError, logInfo } from "@/logger";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
-import { err2String, getModelInfo, safeFetch, withSuppressedTokenWarnings } from "@/utils";
+import {
+  err2String,
+  getModelInfo,
+  ModelInfo,
+  safeFetch,
+  withSuppressedTokenWarnings,
+} from "@/utils";
 import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatCohere } from "@langchain/cohere";
@@ -89,6 +95,31 @@ export default class ChatModelManager {
     return ChatModelManager.instance;
   }
 
+  private static readonly REASONING_MODEL_TEMPERATURE = 1;
+
+  /**
+   * Determines the appropriate temperature for a model
+   * @returns temperature value or undefined if temperature should not be set
+   */
+  private getTemperatureForModel(
+    modelInfo: ModelInfo,
+    customModel: CustomModel,
+    settings: any
+  ): number | undefined {
+    // Thinking-enabled models don't accept temperature
+    if (modelInfo.isThinkingEnabled) {
+      return undefined;
+    }
+
+    // O-series and GPT-5 models require temperature = 1
+    if (modelInfo.isOSeries || modelInfo.isGPT5) {
+      return ChatModelManager.REASONING_MODEL_TEMPERATURE;
+    }
+
+    // All other models use configured temperature
+    return customModel.temperature ?? settings.temperature;
+  }
+
   private async getModelConfig(customModel: CustomModel): Promise<ModelConfig> {
     const settings = getSettings();
 
@@ -96,19 +127,16 @@ export default class ChatModelManager {
     const modelInfo = getModelInfo(modelName);
     const { isThinkingEnabled } = modelInfo;
 
-    // Base config without temperature when thinking is enabled
-    const baseConfig: Omit<ModelConfig, "maxTokens" | "maxCompletionTokens" | "temperature"> = {
+    // Base config - temperature will be handled by provider-specific methods
+    const baseConfig: Omit<ModelConfig, "maxTokens" | "maxCompletionTokens"> = {
       modelName: modelName,
       streaming: customModel.stream ?? true,
       maxRetries: 3,
       maxConcurrency: 3,
       enableCors: customModel.enableCors,
+      // Add temperature for normal models (will be overridden by special configs if needed)
+      ...(!isThinkingEnabled && { temperature: customModel.temperature ?? settings.temperature }),
     };
-
-    // Add temperature only if thinking is not enabled
-    if (!isThinkingEnabled) {
-      (baseConfig as any).temperature = customModel.temperature ?? settings.temperature;
-    }
 
     const providerConfig: {
       [K in keyof ChatProviderConstructMap]: ConstructorParameters<ChatProviderConstructMap[K]>[0];
@@ -295,11 +323,6 @@ export default class ChatModelManager {
       ...tokenConfig,
     };
 
-    // Final safety check to ensure no temperature when thinking is enabled
-    if (isThinkingEnabled) {
-      delete finalConfig.temperature;
-    }
-
     return finalConfig as ModelConfig;
   }
 
@@ -310,14 +333,20 @@ export default class ChatModelManager {
   private getOpenAISpecialConfig(
     modelName: string,
     maxTokens: number,
-    temperature: number | undefined,
+    _temperature: number | undefined,
     customModel?: CustomModel
   ) {
     const settings = getSettings();
     const modelInfo = getModelInfo(modelName);
+    const resolvedTemperature = this.getTemperatureForModel(
+      modelInfo,
+      customModel || ({} as CustomModel),
+      settings
+    );
+
     const config: any = {
       maxTokens,
-      temperature,
+      temperature: resolvedTemperature,
     };
 
     // Add reasoning parameters for O-series and GPT-5 models
@@ -331,12 +360,7 @@ export default class ChatModelManager {
       if (modelInfo.isGPT5) {
         const verbosityValue = customModel?.verbosity || settings.verbosity || "medium";
         config.verbosity = verbosityValue;
-
-        // Also add to modelKwargs for compatibility
-        if (!config.modelKwargs) {
-          config.modelKwargs = {};
-        }
-        config.modelKwargs.verbosity = verbosityValue;
+        config.modelKwargs = { verbosity: verbosityValue };
       }
     }
 
