@@ -4,7 +4,12 @@ import ProjectManager from "@/LLMProviders/projectManager";
 import { logInfo } from "@/logger";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings } from "@/settings/model";
-import { extractNoteFiles, removeThinkTags, withSuppressedTokenWarnings } from "@/utils";
+import {
+  extractNoteFiles,
+  removeThinkTags,
+  removeErrorTags,
+  withSuppressedTokenWarnings,
+} from "@/utils";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
 import { BaseChatModelCallOptions } from "@langchain/core/language_models/chat_models";
@@ -146,7 +151,8 @@ export class HybridRetriever extends BaseRetriever {
 
       // Process the result
       if (rewrittenQueryObject && "content" in rewrittenQueryObject) {
-        return removeThinkTags(rewrittenQueryObject.content as string);
+        const cleanedContent = removeThinkTags(rewrittenQueryObject.content as string);
+        return removeErrorTags(cleanedContent);
       }
 
       console.warn("Unexpected rewrittenQuery format. Falling back to original query.");

@@ -246,8 +246,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     textContent: string,
     userMessage: ChatMessage,
     abortController: AbortController,
-    updateCurrentAiMessage: (message: string) => void
-  ): Promise<string> {
+    thinkStreamer: ThinkBlockStreamer
+  ): Promise<void> {
     // Get chat history
     const memory = this.chainManager.memoryManager.getMemory();
     const memoryVariables = await memory.loadMemoryVariables({});
@@ -299,7 +299,6 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     logInfo("Enhanced user message: ", enhancedUserMessage);
     logInfo("==== Final Request to AI ====\n", messages);
     const actionStreamer = new ActionBlockStreamer(ToolManager, writeToFileTool);
-    const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage);
 
     // Wrap the stream call with warning suppression
     const chatStream = await withSuppressedTokenWarnings(() =>
@@ -319,7 +318,6 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         thinkStreamer.processChunk(processedChunk);
       }
     }
-    return thinkStreamer.close();
   }
 
   async run(
@@ -335,15 +333,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     }
   ): Promise<string> {
     const { updateLoadingMessage } = options;
-    let fullAIResponse = "";
+    const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage);
     let sources: { title: string; path: string; score: number }[] = [];
-    let currentPartialResponse = "";
-
-    // Wrapper to track partial response
-    const trackAndUpdateAiMessage = (message: string) => {
-      currentPartialResponse = message;
-      updateCurrentAiMessage(message);
-    };
 
     try {
       // Check if this is a YouTube-only message
@@ -466,11 +457,11 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       );
 
       logInfo("==== Invoking LLM with all tool results ====");
-      fullAIResponse = await this.streamMultimodalResponse(
+      await this.streamMultimodalResponse(
         enhancedUserMessage,
         userMessage,
         abortController,
-        trackAndUpdateAiMessage
+        thinkStreamer
       );
     } catch (error: any) {
       // Reset loading message to default
@@ -481,7 +472,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         logInfo("CopilotPlus stream aborted by user", { reason: abortController.signal.reason });
         // Don't show error message for user-initiated aborts
       } else {
-        await this.handleError(error, addMessage, updateCurrentAiMessage);
+        await this.handleError(error, thinkStreamer.processErrorChunk.bind(thinkStreamer));
       }
     }
 
@@ -491,13 +482,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       return "";
     }
 
-    // If aborted but not a new chat, use the partial response
-    if (abortController.signal.aborted && currentPartialResponse) {
-      fullAIResponse = currentPartialResponse;
-    }
-
     return this.handleResponse(
-      fullAIResponse,
+      thinkStreamer.close(),
       userMessage,
       abortController,
       addMessage,

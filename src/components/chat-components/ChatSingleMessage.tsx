@@ -11,13 +11,26 @@ import { cleanMessageForCopy, insertIntoEditor } from "@/utils";
 import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import ReactDOM, { Root } from "react-dom/client";
+import { createRoot, Root } from "react-dom/client";
 
 declare global {
   interface Window {
     __copilotToolCallRoots?: Map<string, Map<string, Root>>;
   }
 }
+
+interface ErrorBlockProps {
+  errorContent: string;
+}
+
+export const ErrorBlock: React.FC<ErrorBlockProps> = ({ errorContent }) => {
+  return (
+    <div className="tw-my-2 tw-mb-6 tw-max-h-[180px] tw-overflow-y-scroll tw-rounded-xl tw-bg-modifier-error-rgb/5 tw-p-3">
+      <div className="tw-mb-2 tw-text-sm tw-font-semibold tw-text-error">⚠️ Error occurred</div>
+      <div className="tw-text-xs tw-text-error">{errorContent.trim()}</div>
+    </div>
+  );
+};
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
   if (!context || (!context.notes?.length && !context.urls?.length)) {
@@ -229,6 +242,17 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           .join("");
       };
 
+      // Process error chunks - remove them from content during preprocessing
+      const processErrorChunks = (text: string): string => {
+        // If we find errorChunk tags, it means streaming has stopped due to error
+        // Remove errorChunk content from the processed message since we'll handle it separately
+        if (text.includes("<errorChunk>")) {
+          // Remove all errorChunk content from the text that will be rendered
+          text = text.replace(/<errorChunk>[\s\S]*?<\/errorChunk>/g, "");
+        }
+        return text;
+      };
+
       // Process LaTeX
       const latexProcessed = content
         .replace(/\\\[\s*/g, "$$")
@@ -236,9 +260,12 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         .replace(/\\\(\s*/g, "$")
         .replace(/\s*\\\)/g, "$");
 
+      // Process error chunks first - remove them from content
+      const errorProcessed = processErrorChunks(latexProcessed);
+
       // Process only Obsidian internal images (starting with ![[)
       const noteImageProcessed = replaceLinks(
-        latexProcessed,
+        errorProcessed,
         /!\[\[(.*?)]]/g,
         (file) => `![](${app.vault.getResourcePath(file)})`
       );
@@ -289,7 +316,37 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     );
   };
 
+  const errorPostProcessor = useCallback(
+    (originMessage: string, isUnmounting: boolean, roots: Root[]) => {
+      const errorChunkRegex = /<errorChunk>([\s\S]*?)<\/errorChunk>/g;
+
+      const errorMatches = [...originMessage.matchAll(errorChunkRegex)];
+
+      if (errorMatches.length > 0) {
+        errorMatches.forEach((match) => {
+          if (isUnmounting) return;
+
+          const errorContent = match[1];
+
+          // Create a container for the ErrorBlock component
+          const container = document.createElement("div");
+          contentRef.current?.appendChild(container);
+
+          // Create a root and render the ErrorBlock component
+          const root = createRoot(container);
+          roots.push(root);
+
+          if (!isUnmounting) {
+            root.render(<ErrorBlock errorContent={errorContent} />);
+          }
+        });
+      }
+    },
+    []
+  );
+
   useEffect(() => {
+    const roots: Root[] = [];
     let isUnmounting = false;
 
     if (contentRef.current && message.sender !== USER_SENDER) {
@@ -298,7 +355,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         componentRef.current = new Component();
       }
 
-      const processedMessage = preprocess(message.message);
+      const originMessage = message.message;
+      const processedMessage = preprocess(originMessage);
       const parsedMessage = parseToolCallMarkers(processedMessage);
 
       if (!isUnmounting) {
@@ -365,7 +423,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                 contentRef.current!.appendChild(toolDiv);
               }
 
-              const root = ReactDOM.createRoot(toolDiv);
+              const root = createRoot(toolDiv);
               rootsRef.current.set(toolCallId, root);
 
               root.render(
@@ -410,14 +468,24 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             }
           }
         });
+
+        // Process error blocks from original message
+        errorPostProcessor(originMessage, isUnmounting, roots);
       }
     }
 
     // Cleanup function
     return () => {
       isUnmounting = true;
+      roots.forEach((root) => {
+        try {
+          root.unmount();
+        } catch (error) {
+          console.debug("Error unmounting error block root:", error);
+        }
+      });
     };
-  }, [message, app, componentRef, isStreaming, preprocess]);
+  }, [message, app, componentRef, isStreaming, preprocess, errorPostProcessor]);
 
   // Cleanup effect that only runs on component unmount
   useEffect(() => {
