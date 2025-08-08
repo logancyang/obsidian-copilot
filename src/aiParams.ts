@@ -38,6 +38,27 @@ const chainTypeAtom = atom(
 const currentProjectAtom = atom<ProjectConfig | null>(null);
 const projectLoadingAtom = atom<boolean>(false);
 
+export interface FailedItem {
+  path: string;
+  type: "md" | "web" | "youtube" | "nonMd";
+  error?: string;
+  timestamp?: number;
+}
+
+interface ProjectContextLoadState {
+  success: Array<string>;
+  failed: Array<FailedItem>;
+  processingFiles: Array<string>;
+  total: Array<string>;
+}
+
+export const projectContextLoadAtom = atom<ProjectContextLoadState>({
+  success: [],
+  failed: [],
+  processingFiles: [],
+  total: [],
+});
+
 const selectedTextContextsAtom = atom<SelectedTextContext[]>([]);
 
 export interface ProjectConfig {
@@ -51,7 +72,7 @@ export interface ProjectConfig {
     maxTokens?: number;
   };
   contextSource: {
-    inclusions: string;
+    inclusions?: string;
     exclusions?: string;
     webUrls?: string;
     youtubeUrls?: string;
@@ -236,6 +257,53 @@ export function clearSelectedTextContexts() {
 
 export function useSelectedTextContexts() {
   return useAtom(selectedTextContextsAtom, {
+    store: settingsStore,
+  });
+}
+
+/**
+ * Gets the project context load state from the atom.
+ */
+export function getProjectContextLoadState(): Readonly<ProjectContextLoadState> {
+  return settingsStore.get(projectContextLoadAtom);
+}
+
+/**
+ * Sets the project context load state in the atom.
+ */
+export function setProjectContextLoadState(state: ProjectContextLoadState) {
+  settingsStore.set(projectContextLoadAtom, state);
+}
+
+/**
+ * Updates a specific field in the project context load state.
+ */
+export function updateProjectContextLoadState<K extends keyof ProjectContextLoadState>(
+  key: K,
+  valueFn: (prev: ProjectContextLoadState[K]) => ProjectContextLoadState[K]
+) {
+  settingsStore.set(projectContextLoadAtom, (prev) => ({
+    ...prev,
+    [key]: valueFn(prev[key]),
+  }));
+}
+
+/**
+ * Subscribes to changes in the project context load state.
+ */
+export function subscribeToProjectContextLoadChange(
+  callback: (state: ProjectContextLoadState) => void
+): () => void {
+  return settingsStore.sub(projectContextLoadAtom, () => {
+    callback(settingsStore.get(projectContextLoadAtom));
+  });
+}
+
+/**
+ * Hook to get the project context load state from the atom.
+ */
+export function useProjectContextLoad() {
+  return useAtom(projectContextLoadAtom, {
     store: settingsStore,
   });
 }

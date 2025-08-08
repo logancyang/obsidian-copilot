@@ -28,6 +28,7 @@ module.exports = {
       "on-accent-inverted": "var(--text-on-accent-inverted)",
       success: "var(--text-success)",
       warning: "var(--text-warning)",
+      loading: "var(--color-blue)",
       error: "var(--text-error)",
       accent: "var(--text-accent)",
       "accent-hover": "var(--text-accent-hover)",
