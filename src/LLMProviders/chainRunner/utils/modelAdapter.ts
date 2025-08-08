@@ -2,6 +2,8 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { logInfo } from "@/logger";
 import { ToolMetadata } from "@/tools/ToolRegistry";
 
+export const STREAMING_TRUNCATE_THRESHOLD = 50;
+
 /**
  * Model-specific adaptations for autonomous agent
  * Handles quirks and requirements of different LLM providers
@@ -547,7 +549,6 @@ REMEMBER: One brief sentence before tools is perfect. Nothing after tool calls.`
       .trim();
 
     // Simple threshold: if there's substantial non-thinking content, truncate
-    const STREAMING_TRUNCATE_THRESHOLD = 50;
     return contentAfterWithoutThinking.length > STREAMING_TRUNCATE_THRESHOLD;
   }
 }

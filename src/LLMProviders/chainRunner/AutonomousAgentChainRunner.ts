@@ -10,7 +10,12 @@ import { getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { processToolResults } from "@/utils/toolResultUtils";
 import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
 import { addChatHistoryToMessages } from "./utils/chatHistoryUtils";
-import { messageRequiresTools, ModelAdapter, ModelAdapterFactory } from "./utils/modelAdapter";
+import {
+  messageRequiresTools,
+  ModelAdapter,
+  ModelAdapterFactory,
+  STREAMING_TRUNCATE_THRESHOLD,
+} from "./utils/modelAdapter";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { createToolCallMarker, updateToolCallMarker } from "./utils/toolCallParser";
 import {
@@ -191,7 +196,6 @@ ${params}
           conversationMessages,
           abortController,
           (fullMessage) => {
-            console.log("fullMessage", fullMessage);
             // Show tool calls as indicators during streaming for clarity, preserve think blocks
             const cleanedMessage = stripToolCallXML(fullMessage);
             // Build display with ALL content including tool calls from history
@@ -213,7 +217,11 @@ ${params}
             }
             const toolName = extractToolNameFromPartialBlock(fullMessage);
             if (toolName) {
-              toolNames.push(toolName);
+              // Only add the partial tool call block if the block is larger than STREAMING_TRUNCATE_THRESHOLD
+              const lastToolNameIndex = fullMessage.lastIndexOf(toolName);
+              if (fullMessage.length - lastToolNameIndex > STREAMING_TRUNCATE_THRESHOLD) {
+                toolNames.push(toolName);
+              }
             }
 
             // Create tool call markers if they don't exist
@@ -241,7 +249,6 @@ ${params}
               );
 
               currentIterationToolCallMessages.push(toolCallMarker);
-              console.log("created toolCallMarker during streaming", toolCallId);
             }
 
             // Add current iteration's tool calls if any
@@ -254,8 +261,6 @@ ${params}
           },
           adapter
         );
-
-        console.log("response", response);
 
         if (!response) break;
 
