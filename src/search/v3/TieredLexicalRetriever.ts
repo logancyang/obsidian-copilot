@@ -6,7 +6,21 @@ import { SearchCore } from "./SearchCore";
 import { logInfo, logWarn } from "@/logger";
 import { extractNoteFiles } from "@/utils";
 import { getSettings } from "@/settings/model";
-import ChatModelManager from "@/LLMProviders/chatModelManager";
+// Defer requiring ChatModelManager until runtime to avoid test-time import issues
+let getChatModelManagerSingleton: (() => any) | null = null;
+async function safeGetChatModel() {
+  try {
+    if (!getChatModelManagerSingleton) {
+      // dynamic import to prevent module load side effects during tests
+      const mod = await import("@/LLMProviders/chatModelManager");
+      getChatModelManagerSingleton = () => mod.default.getInstance();
+    }
+    const chatModelManager = getChatModelManagerSingleton();
+    return chatModelManager.getChatModel();
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Tiered Lexical Retriever that implements multi-stage note retrieval:
@@ -35,17 +49,8 @@ export class TieredLexicalRetriever extends BaseRetriever {
     }
   ) {
     super();
-    // Create a getter for the chat model
-    const getChatModel = async () => {
-      try {
-        const chatModelManager = ChatModelManager.getInstance();
-        return chatModelManager.getChatModel();
-      } catch {
-        // Return null if no chat model available (query expansion will use fallback)
-        return null;
-      }
-    };
-    this.searchCore = new SearchCore(app, getChatModel);
+    // Provide safe getter for chat model (returns null in tests if unavailable)
+    this.searchCore = new SearchCore(app, safeGetChatModel);
   }
 
   /**

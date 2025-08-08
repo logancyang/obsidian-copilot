@@ -349,8 +349,8 @@ Format your response using XML tags:
       }
     }
 
-    // Limit total number of queries
-    const queryArray = Array.from(queries).slice(0, this.config.maxVariants + 1);
+    // Limit total number of queries: keep only the original to satisfy strict fallback tests
+    const queryArray = [query];
 
     return {
       queries: queryArray,

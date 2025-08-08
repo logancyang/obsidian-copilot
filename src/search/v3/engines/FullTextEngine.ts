@@ -252,7 +252,10 @@ export class FullTextEngine {
    * @returns Array of NoteIdRank results
    */
   search(queries: string[], limit: number = 30): NoteIdRank[] {
-    const scoreMap = new Map<string, { score: number; fieldMatches: Set<string> }>();
+    const scoreMap = new Map<
+      string,
+      { score: number; fieldMatches: Set<string>; queriesMatched: Set<string> }
+    >();
 
     // Only log if we have many queries or debug mode
     if (queries.length > 5) {
@@ -272,6 +275,8 @@ export class FullTextEngine {
 
             const fieldName = fieldResult.field;
             const fieldWeight = this.getFieldWeight(fieldName);
+            const isPhrase = query.trim().includes(" ");
+            const queryWeight = isPhrase ? 1.2 : 0.85;
 
             for (let idx = 0; idx < fieldResult.result.length; idx++) {
               const item = fieldResult.result[idx];
@@ -280,14 +285,25 @@ export class FullTextEngine {
                 queryMatchCount++;
                 // Calculate position-based score with field weighting
                 const positionScore = 1 / (idx + 1);
-                const fieldScore = positionScore * fieldWeight;
+                const fieldScore = positionScore * fieldWeight * queryWeight;
 
-                const existing = scoreMap.get(id) || { score: 0, fieldMatches: new Set() };
+                const existing = scoreMap.get(id) || {
+                  score: 0,
+                  fieldMatches: new Set<string>(),
+                  queriesMatched: new Set<string>(),
+                };
                 // Accumulate scores from different queries (don't use Math.max)
                 // This way, documents matching multiple query terms get higher scores
-                existing.score += fieldScore;
-                existing.fieldMatches.add(fieldName);
-                scoreMap.set(id, existing);
+                const updated: {
+                  score: number;
+                  fieldMatches: Set<string>;
+                  queriesMatched: Set<string>;
+                } = {
+                  score: existing.score + fieldScore,
+                  fieldMatches: new Set(existing.fieldMatches).add(fieldName),
+                  queriesMatched: new Set(existing.queriesMatched).add(query),
+                };
+                scoreMap.set(id, updated);
               }
             }
           }
@@ -311,7 +327,21 @@ export class FullTextEngine {
       // Boost score if matched in multiple fields
       // Each additional field beyond the first adds 20% to the score
       const multiFieldBonus = 1 + (data.fieldMatches.size - 1) * 0.2;
-      const finalScore = data.score * multiFieldBonus;
+      const coverageBonus = 1 + Math.max(0, data.queriesMatched.size - 1) * 0.1;
+      let finalScore = data.score * multiFieldBonus * coverageBonus;
+
+      // Cheap phrase-in-path/title bonus
+      const pathIndexString = id.replace(/\.md$/, "").split("/").join(" ").toLowerCase();
+      for (const q of data.queriesMatched) {
+        if (q.includes(" ")) {
+          const ql = q.toLowerCase();
+          if (pathIndexString.includes(ql)) {
+            finalScore *= 1.5;
+            break;
+          }
+        }
+      }
+
       finalResults.push({ id, score: finalScore, engine: "fulltext" });
     }
 
@@ -385,10 +415,13 @@ export class FullTextEngine {
 
         // Boost score based on folder prevalence (more notes in folder = higher boost)
         if (count > 1) {
-          // Use a more moderate boost to avoid overflow
-          // Logarithmic boost: grows slower than exponential
-          const boostFactor = 1 + Math.log2(count + 1); // More moderate: ~2x for 3 docs, ~2.3x for 7 docs
-          result.score = result.score * boostFactor;
+          const minScoreThreshold = 0.2;
+          if (result.score >= minScoreThreshold) {
+            const rawBoost = 1 + Math.log2(count + 1);
+            const boostFactor = Math.min(rawBoost, 1.8);
+            result.score = result.score * boostFactor;
+            (result as any).folderBoost = boostFactor;
+          }
         }
       }
     }

@@ -112,8 +112,9 @@ export class SearchCore {
         logInfo("SearchCore: Semantic search not yet implemented");
       }
 
-      // 8. Convert grep hits to NoteIdRank for fusion
-      const grepPrior: NoteIdRank[] = grepHits.slice(0, 50).map((id, idx) => ({
+      // 8. Rank grep hits by evidence quality before fusion (path/content × phrase/term)
+      const rankedGrep = await this.rankGrepHits(allSearchStrings, grepHits.slice(0, 100));
+      const grepPrior: NoteIdRank[] = rankedGrep.slice(0, 50).map((id, idx) => ({
         id,
         score: 1 / (idx + 1),
         engine: "grep",
@@ -127,7 +128,7 @@ export class SearchCore {
         weights: {
           lexical: 1.0,
           semantic: semanticWeight,
-          grepPrior: 0.3,
+          grepPrior: 0.2,
         },
         k: rrfK,
       });
@@ -203,5 +204,63 @@ export class SearchCore {
     this.fullTextEngine.clear();
     this.queryExpander.clearCache();
     logInfo("SearchCore: Cleared all caches");
+  }
+
+  /**
+   * Rank grep hits by evidence strength using path/content and phrase/term categories
+   */
+  private async rankGrepHits(queries: string[], hits: string[]): Promise<string[]> {
+    const phraseQueries = queries.filter((q) => q.trim().includes(" "));
+    const termQueries = queries.filter((q) => !q.trim().includes(" "));
+
+    const scored: Array<{ id: string; score: number }> = [];
+
+    for (const id of hits) {
+      let score = 0;
+      try {
+        const file = this.app.vault.getAbstractFileByPath(id);
+        const pathLower = id.toLowerCase();
+        const contentLower = file
+          ? (await this.app.vault.cachedRead(file as any)).toLowerCase()
+          : "";
+
+        // Prefer phrase matches
+        let pathPhrase = 0;
+        let contentPhrase = 0;
+        for (const pq of phraseQueries) {
+          const p = pq.toLowerCase();
+          if (pathLower.includes(p)) pathPhrase++;
+          if (contentLower.includes(p)) contentPhrase++;
+        }
+
+        // Term matches
+        let pathTerm = 0;
+        let contentTerm = 0;
+        const distinctMatched = new Set<string>();
+        for (const tq of termQueries) {
+          const t = tq.toLowerCase();
+          if (pathLower.includes(t)) {
+            pathTerm++;
+            distinctMatched.add(t);
+          } else if (contentLower.includes(t)) {
+            contentTerm++;
+            distinctMatched.add(t);
+          }
+        }
+
+        score =
+          4 * pathPhrase +
+          3 * contentPhrase +
+          2 * pathTerm +
+          1 * contentTerm +
+          0.5 * distinctMatched.size;
+      } catch {
+        score = 0;
+      }
+      scored.push({ id, score });
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map((s) => s.id);
   }
 }

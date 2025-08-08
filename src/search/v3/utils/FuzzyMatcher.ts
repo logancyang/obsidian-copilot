@@ -42,10 +42,12 @@ export class FuzzyMatcher {
    * Calculate similarity score (0-1) based on Levenshtein distance
    */
   static similarity(str1: string, str2: string): number {
-    const maxLen = Math.max(str1.length, str2.length);
+    const a = str1.toLowerCase();
+    const b = str2.toLowerCase();
+    const maxLen = Math.max(a.length, b.length);
     if (maxLen === 0) return 1;
 
-    const distance = this.levenshteinDistance(str1.toLowerCase(), str2.toLowerCase());
+    const distance = this.levenshteinDistance(a, b);
     return 1 - distance / maxLen;
   }
 
@@ -144,6 +146,22 @@ export class FuzzyMatcher {
    * Check if two terms are fuzzy matches
    */
   static isFuzzyMatch(term1: string, term2: string, threshold: number = 0.8): boolean {
-    return this.similarity(term1, term2) >= threshold;
+    const raw = this.similarity(term1, term2);
+    if (raw >= threshold) return true;
+
+    // Secondary check with light plural/singular normalization improves recall for common forms
+    const normalizePlural = (s: string): string => {
+      const lower = s.toLowerCase();
+      if (lower.endsWith("ies") && lower.length > 3) return lower.slice(0, -3) + "y";
+      if (lower.endsWith("es") && lower.length > 2) return lower.slice(0, -2);
+      if (lower.endsWith("s") && !lower.endsWith("ss") && lower.length > 1)
+        return lower.slice(0, -1);
+      return lower;
+    };
+    const normA = normalizePlural(term1);
+    const normB = normalizePlural(term2);
+    if (normA === normB) return true; // treat exact normalized forms as match
+    const normSim = this.similarity(normA, normB);
+    return normSim >= threshold;
   }
 }
