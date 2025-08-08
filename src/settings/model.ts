@@ -112,6 +112,10 @@ export interface CopilotSettings {
   enableCustomPromptTemplating: boolean;
   /** Whether we have suggested built-in default commands to the user once. */
   suggestedDefaultCommands: boolean;
+  /** Default reasoning effort for models that support it (GPT-5, O-series, etc.) */
+  reasoningEffort: "minimal" | "low" | "medium" | "high";
+  /** Default verbosity level for models that support it */
+  verbosity: "low" | "medium" | "high";
 }
 
 export const settingsStore = createStore();

@@ -124,6 +124,10 @@ export interface CustomModel {
   azureOpenAIApiDeploymentName?: string;
   azureOpenAIApiVersion?: string;
   azureOpenAIApiEmbeddingDeploymentName?: string;
+
+  // OpenAI GPT-5 and O-series specific fields
+  reasoningEffort?: "minimal" | "low" | "medium" | "high";
+  verbosity?: "low" | "medium" | "high";
 }
 
 export function setModelKey(modelKey: string) {

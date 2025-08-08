@@ -90,7 +90,7 @@
     "@langchain/google-genai": "^0.1.6",
     "@langchain/groq": "^0.1.2",
     "@langchain/mistralai": "^0.2.0",
-    "@langchain/openai": "^0.5.6",
+    "@langchain/openai": "^0.6.6",
     "@langchain/xai": "^0.0.2",
     "@orama/orama": "^3.0.0-rc-2",
     "@radix-ui/react-checkbox": "^1.1.3",
