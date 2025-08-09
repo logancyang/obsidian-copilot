@@ -19,6 +19,64 @@ export interface ParsedMessage {
 }
 
 /**
+ * Safely encode tool result so it can be embedded inside an HTML comment
+ * We use URI encoding with a prefix to avoid introducing `-->` in the payload
+ */
+function encodeResultForMarker(result: string): string {
+  try {
+    return `ENC:${encodeURIComponent(result)}`;
+  } catch {
+    // Fallback to original if encoding fails
+    return result;
+  }
+}
+
+/**
+ * Decode tool result previously encoded for marker embedding
+ */
+export function decodeResultFromMarker(result: string | undefined): string | undefined {
+  if (typeof result !== "string") return result;
+  if (!result.startsWith("ENC:")) return result;
+  try {
+    return decodeURIComponent(result.slice(4));
+  } catch {
+    return result;
+  }
+}
+
+/**
+ * For logging only: decode any encoded tool results embedded in markers
+ */
+export function decodeToolCallMarkerResults(message: string): string {
+  if (!message || typeof message !== "string") return message;
+  return message.replace(
+    /<!--TOOL_CALL_END:([^:]+):(ENC:[\s\S]*?)-->/g,
+    (_match, id: string, encoded: string) => {
+      const decoded = decodeResultFromMarker(encoded) || encoded;
+      return `<!--TOOL_CALL_END:${id}:${decoded}-->`;
+    }
+  );
+}
+
+/**
+ * Ensure any TOOL_CALL_END results are encoded. Useful for sanitizing messages
+ * that might contain unencoded results due to legacy or partial updates.
+ */
+export function ensureEncodedToolCallMarkerResults(message: string): string {
+  if (!message || typeof message !== "string") return message;
+  return message.replace(
+    /<!--TOOL_CALL_END:([^:]+):([\s\S]*?)-->/g,
+    (_match, id: string, content: string) => {
+      if (content.startsWith("ENC:")) {
+        return _match;
+      }
+      const safe = encodeResultForMarker(content);
+      return `<!--TOOL_CALL_END:${id}:${safe}-->`;
+    }
+  );
+}
+
+/**
  * Parse tool call markers from a message
  * Format: <!--TOOL_CALL_START:id:toolName:displayName:emoji:confirmationMessage:isExecuting-->content<!--TOOL_CALL_END:id:result-->
  */
@@ -63,7 +121,7 @@ export function parseToolCallMarkers(message: string): ParsedMessage {
         emoji,
         confirmationMessage: confirmationMessage || undefined,
         isExecuting: isExecuting === "true",
-        result: result || undefined,
+        result: decodeResultFromMarker(result) || undefined,
         startIndex: match.index,
         endIndex: match.index + fullMatch.length,
       },
@@ -104,7 +162,8 @@ export function createToolCallMarker(
   content: string = "",
   result: string = ""
 ): string {
-  return `<!--TOOL_CALL_START:${id}:${toolName}:${displayName}:${emoji}:${confirmationMessage}:${isExecuting}-->${content}<!--TOOL_CALL_END:${id}:${result}-->`;
+  const safeResult = result ? encodeResultForMarker(result) : result;
+  return `<!--TOOL_CALL_START:${id}:${toolName}:${displayName}:${emoji}:${confirmationMessage}:${isExecuting}-->${content}<!--TOOL_CALL_END:${id}:${safeResult}-->`;
 }
 
 /**
@@ -117,6 +176,6 @@ export function updateToolCallMarker(message: string, id: string, result: string
     `(<!--TOOL_CALL_START:${escapedId}:[^:]+:[^:]+:[^:]+:[^:]*:)true(-->[\\s\\S]*?<!--TOOL_CALL_END:${escapedId}:)[\\s\\S]*?-->`,
     "g"
   );
-
-  return message.replace(regex, `$1false$2${result}-->`);
+  const safeResult = encodeResultForMarker(result);
+  return message.replace(regex, `$1false$2${safeResult}-->`);
 }

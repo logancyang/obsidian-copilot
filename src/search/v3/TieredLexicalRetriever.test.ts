@@ -1,7 +1,7 @@
-import { TieredLexicalRetriever } from "./TieredLexicalRetriever";
 import { Document } from "@langchain/core/documents";
 import { TFile } from "obsidian";
 import * as SearchCoreModule from "./SearchCore";
+import { TieredLexicalRetriever } from "./TieredLexicalRetriever";
 
 // Mock modules
 jest.mock("obsidian");
@@ -36,12 +36,12 @@ describe("TieredLexicalRetriever", () => {
     };
 
     // Ensure SearchCore is mocked before constructing retriever
-    jest.spyOn(SearchCoreModule, "SearchCore").mockImplementation(() => ({
+    jest.spyOn(SearchCoreModule, "SearchCore").mockImplementation((() => ({
       retrieve: jest.fn().mockResolvedValue([
         { id: "note1.md", score: 0.8, engine: "fulltext" },
         { id: "note2.md", score: 0.6, engine: "grep" },
       ]),
-    }));
+    })) as any);
 
     // Create retriever instance
     retriever = new TieredLexicalRetriever(mockApp, {
@@ -140,12 +140,12 @@ describe("TieredLexicalRetriever", () => {
 
     it("should integrate all components correctly", async () => {
       // Ensure SearchCore mock returns two results for this test
-      jest.spyOn(SearchCoreModule, "SearchCore").mockImplementation(() => ({
+      jest.spyOn(SearchCoreModule, "SearchCore").mockImplementation((() => ({
         retrieve: jest.fn().mockResolvedValue([
           { id: "note1.md", score: 0.8, engine: "fulltext" },
           { id: "note2.md", score: 0.6, engine: "grep" },
         ]),
-      }));
+      })) as any);
 
       const query = "test query";
       const results = await retriever.getRelevantDocuments(query);
@@ -159,7 +159,7 @@ describe("TieredLexicalRetriever", () => {
     it("should handle empty search results", async () => {
       jest
         .spyOn(SearchCoreModule, "SearchCore")
-        .mockImplementation(() => ({ retrieve: jest.fn().mockResolvedValue([]) }));
+        .mockImplementation((() => ({ retrieve: jest.fn().mockResolvedValue([]) })) as any);
       // Recreate retriever to use the new mock implementation
       retriever = new TieredLexicalRetriever(mockApp, {
         minSimilarityScore: 0.1,
@@ -193,9 +193,9 @@ describe("TieredLexicalRetriever", () => {
         return null;
       });
 
-      jest.spyOn(SearchCoreModule, "SearchCore").mockImplementation(() => ({
+      jest.spyOn(SearchCoreModule, "SearchCore").mockImplementation((() => ({
         retrieve: jest.fn().mockResolvedValue([{ id: "other.md", score: 0.4, engine: "fulltext" }]),
-      }));
+      })) as any);
 
       // Recreate retriever to use the new mock implementation
       retriever = new TieredLexicalRetriever(mockApp, {

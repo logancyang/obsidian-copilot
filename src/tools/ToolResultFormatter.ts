@@ -20,14 +20,24 @@ export class ToolResultFormatter {
   }
   static format(toolName: string, result: string): string {
     try {
-      // Try to parse the result as JSON first
+      // Decode tool marker encoding if present (ENC:...)
+      let normalized = result;
+      if (typeof normalized === "string" && normalized.startsWith("ENC:")) {
+        try {
+          normalized = decodeURIComponent(normalized.slice(4));
+        } catch {
+          // fall back to original
+        }
+      }
+
+      // Try to parse the (potentially decoded) result as JSON first
       let parsedResult: any;
       try {
-        parsedResult = JSON.parse(result);
+        parsedResult = JSON.parse(normalized);
       } catch (e) {
         // If not JSON, use the raw string
         logWarn(`ToolResultFormatter: Failed to parse JSON for ${toolName}:`, e);
-        parsedResult = result;
+        parsedResult = normalized;
       }
 
       // Route to specific formatter based on tool name

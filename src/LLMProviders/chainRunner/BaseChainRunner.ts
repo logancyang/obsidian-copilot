@@ -82,7 +82,14 @@ export abstract class BaseChainRunner implements ChainRunner {
         (m: any) => m.content
       )
     );
-    logInfo("==== Final AI Response ====\n", fullAIResponse);
+    // Decode tool marker results for logging readability only (storage remains encoded)
+    try {
+      const { decodeToolCallMarkerResults } = await import("./utils/toolCallParser");
+      const readable = decodeToolCallMarkerResults(fullAIResponse);
+      logInfo("==== Final AI Response ====\n", readable);
+    } catch {
+      logInfo("==== Final AI Response ====\n", fullAIResponse);
+    }
     return fullAIResponse;
   }
 

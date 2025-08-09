@@ -2,9 +2,9 @@ import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { logError, logInfo, logWarn } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
 import { getSettings, getSystemPrompt } from "@/settings/model";
+import { initializeBuiltinTools } from "@/tools/builtinTools";
 import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
 import { ToolRegistry } from "@/tools/ToolRegistry";
-import { initializeBuiltinTools } from "@/tools/builtinTools";
 import { ChatMessage } from "@/types/message";
 import { getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { processToolResults } from "@/utils/toolResultUtils";
@@ -445,9 +445,12 @@ ${params}
         }
 
         // Add AI response to conversation for next iteration
+        // Ensure any tool markers have encoded results before storing in conversation
+        const { ensureEncodedToolCallMarkerResults } = await import("./utils/toolCallParser");
+        const safeAssistantContent = ensureEncodedToolCallMarkerResults(response);
         conversationMessages.push({
           role: "assistant",
-          content: response,
+          content: safeAssistantContent,
         });
 
         // Add tool results as user messages for next iteration (full results for current turn)
@@ -516,6 +519,13 @@ ${params}
       logWarn("fullAIResponse was empty, using iteration history");
       fullAIResponse = iterationHistory.join("\n\n");
     }
+
+    // Decode encoded tool marker results for clearer logging only
+    const { decodeToolCallMarkerResults } = await import("./utils/toolCallParser");
+    const readableFullAIResponse = decodeToolCallMarkerResults(fullAIResponse);
+    // Keep llmFormattedOutput encoded for memory storage; no decoded variant needed
+    // Log a readable copy, but pass encoded strings to handler/storage to preserve UI parsing
+    logInfo("==== Final AI Response (decoded) ====\n", readableFullAIResponse);
 
     return this.handleResponse(
       fullAIResponse,
