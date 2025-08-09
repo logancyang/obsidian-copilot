@@ -1,5 +1,5 @@
-import { GraphExpander } from "./GraphExpander";
 import { App, TFile } from "obsidian";
+import { GraphExpander } from "./GraphExpander";
 
 describe("GraphExpander", () => {
   let expander: GraphExpander;
@@ -296,16 +296,21 @@ describe("GraphExpander", () => {
       expect(resultSet.has("H.md")).toBe(true);
     });
 
-    it("should skip co-citations for large result sets", async () => {
-      // Create 25 grep hits to exceed the co-citation threshold
-      const grepHits = Array.from({ length: 25 }, (_, i) => `note${i}.md`);
+    it("should skip co-citations for very large result sets (>=50)", async () => {
+      const grepHits = Array.from({ length: 60 }, (_, i) => `note${i}.md`);
 
       const getCoCitationsSpy = jest.spyOn(expander, "getCoCitations");
 
       await expander.expandCandidates(grepHits, null, 1);
 
-      // Should not call getCoCitations when grepHits.length >= 20
       expect(getCoCitationsSpy).not.toHaveBeenCalled();
+    });
+
+    it("should allow +1 hop when grep hits are small (<5)", async () => {
+      const grepHits = ["A.md", "B.md", "C.md", "D.md"]; // 4 hits
+      const expandSpy = jest.spyOn(expander, "expandFromNotes");
+      await expander.expandCandidates(grepHits, null, 1);
+      expect(expandSpy).toHaveBeenCalledWith(grepHits, 2);
     });
   });
 

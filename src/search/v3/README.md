@@ -38,6 +38,7 @@ _(Multilingual, Partial In-Memory; optional semantic add-on)_
 
 3. Graph Expansion (link analysis)
    Strategies: Link traversal + Active context + Co-citation
+   Guardrails: If grep hits < 5 → +1 hop (cap 3); if ≥ 50 → force 1 hop and disable co-citation
    From:       3 grep hits → 8 total candidates
    Adds:       JWT.md (linked), auth-flow.md (backlink), config.md (co-cited)
 
@@ -47,27 +48,28 @@ _(Multilingual, Partial In-Memory; optional semantic add-on)_
 
 5. Full-Text Search (Hybrid: Phrases + Terms)
    Searches BOTH: 3 query variants (precision) + 2 terms (recall)
+   Also includes LLM <term> tags as low-weight inputs (reduced influence)
    Input: ["How do I set up OAuth in Next.js?", "Next.js OAuth configuration",
            "NextJS OAuth setup", "oauth", "nextjs"]
    Results by field match + position:
 
-   | Note | Title Match | Path Match | Tag Match | Body Match | Base Score | Folder Boost | Final Score |
-   |------|------------|------------|-----------|------------|------------|--------------|-------------|
-   | nextjs/auth.md | "NextJS OAuth Setup" (pos 1) | nextjs auth | #oauth #nextjs | Yes | 5.0 | 2x (3 docs in nextjs/) | 10.0 |
-   | nextjs/config.md | - | nextjs config | #nextjs | Yes | 1.8 | 2x (3 docs in nextjs/) | 3.6 |
-   | nextjs/jwt.md | - | nextjs jwt | #nextjs #auth | Yes | 1.5 | 2x (3 docs in nextjs/) | 3.0 |
-   | auth/oauth-guide.md | "OAuth Guide" (pos 2) | auth oauth | #oauth | Yes | 2.1 | 1x (single) | 2.1 |
-   | tutorials/oauth.md | - | tutorials oauth | #oauth | Yes | 1.2 | 1x (single) | 1.2 |
+   | Note | Title Match | Path Match | Tag Match | Body Match | Base Score | Folder Boost | Final Score (0–1) |
+   |------|------------|------------|-----------|------------|------------|--------------|-------------------|
+   | nextjs/auth.md | "NextJS OAuth Setup" (pos 1) | nextjs auth | #oauth #nextjs | Yes | 5.0 | 2x (3 docs in nextjs/) | 0.93 |
+   | nextjs/config.md | - | nextjs config | #nextjs | Yes | 1.8 | 2x (3 docs in nextjs/) | 0.36 |
+   | nextjs/jwt.md | - | nextjs jwt | #nextjs #auth | Yes | 1.5 | 2x (3 docs in nextjs/) | 0.30 |
+   | auth/oauth-guide.md | "OAuth Guide" (pos 2) | auth oauth | #oauth | Yes | 2.1 | 1x (single) | 0.21 |
+   | tutorials/oauth.md | - | tutorials oauth | #oauth | Yes | 1.2 | 1x (single) | 0.12 |
 
 6. RRF (combine rankings)
-   Merges: full-text (1.0x) + grep prior (0.3x) + semantic (2.0x if enabled)
+   Merges: full-text (1.0x) + grep prior (0.2x) + semantic (2.0x if enabled)
 
 7. Final Results (after folder boosting and RRF)
-   1. nextjs/auth.md (score: 10.0) - Boosted by folder clustering
-   2. nextjs/config.md (score: 3.6) - Boosted by folder clustering
-   3. nextjs/jwt.md (score: 3.0) - Boosted by folder clustering
-   4. auth/oauth-guide.md (score: 2.1)
-   5. tutorials/oauth.md (score: 1.2)
+   1. nextjs/auth.md (score: 0.93) - Boosted by folder clustering; normalized to 0–1
+   2. nextjs/config.md (score: 0.36) - Boosted by folder clustering; normalized to 0–1
+   3. nextjs/jwt.md (score: 0.30) - Boosted by folder clustering; normalized to 0–1
+   4. auth/oauth-guide.md (score: 0.21)
+   5. tutorials/oauth.md (score: 0.12)
 ```
 
 ---
@@ -105,7 +107,7 @@ graph TD
     style I fill:#f3e5f5
 ```
 
-### Detailed Technical Pipeline
+### Detailed Technical Pipeline (Minimal End-to-End Example)
 
 ```mermaid
 graph LR
@@ -123,9 +125,9 @@ graph LR
 
     subgraph GA["Graph Analysis"]
         GH --> GE[Graph Expander]
-        GE --> BFS[BFS Links: 1-3 hops]
+        GE --> BFS[BFS Links: 1-3 hops (adaptive)]
         GE --> AC[Active Context: Current note neighbors]
-        GE --> CC[Co-citation: Shared links]
+        GE --> CC[Co-citation: Shared links (disabled when hits ≥ 50)]
         BFS --> EC[~500 candidates]
         AC --> EC
         CC --> EC
@@ -137,6 +139,7 @@ graph LR
         IDX --> FTS[Search Engine]
         V --> FTS
         T --> FTS
+        T -.low weight.-> FTS
         FTS --> SA[Score Accumulation: Multi-match bonus]
         SA --> MF[Multi-field Bonus: +20% per field]
     end
@@ -200,7 +203,7 @@ async function retrieve(query: string): Promise<NoteIdRank[]> {
   // 6. FULL-TEXT SEARCH - Hybrid search with phrases AND terms
   // Combines: Full query variants (precision) + Individual terms (recall)
   const allFullTextQueries = [...variants, ...expanded.salientTerms];
-  const fullTextResults = fullTextEngine.search(allFullTextQueries, limit * 2);
+  const fullTextResults = fullTextEngine.search(allFullTextQueries, limit * 2, expanded.salientTerms);
   // Searches: ["How do I implement...", "Next.js auth...", "authentication", "nextjs", "app"]
   // Returns: [{id: "tutorials/nextjs-auth.md", score: 0.95, engine: "fulltext"},
   //          {id: "auth/jwt-implementation.md", score: 0.8, engine: "fulltext"}, ...]
@@ -222,9 +225,10 @@ async function retrieve(query: string): Promise<NoteIdRank[]> {
   // 8. WEIGHTED RRF - Combine all signals
   const fusedResults = weightedRRF({
     lexical: fullTextResults,     // weight: 1.0
-    semantic: semanticResults,     // weight: 2.0 (if enabled)
-    grepPrior: grepHits.slice(50), // weight: 0.3 (weak prior for direct matches)
-  }, k: 60);
+    semantic: semanticResults,    // weight: 2.0 (if enabled)
+    grepPrior: grepPrior,         // weight: 0.2 (weak prior)
+    weights: { lexical: 1.0, semantic: 2.0, grepPrior: 0.2 },
+  }, 60);
   // Combines rankings: docs appearing in multiple result sets score higher
 
   // 9. CLEANUP & RETURN
@@ -323,6 +327,12 @@ Discovers related notes through link analysis, expanding initial grep hits from 
 3. **Co-citation** - Finds notes linking to same targets (topic similarity)
 
 Enables discovery of conceptually related notes without exact term matches by leveraging the knowledge graph structure.
+
+**Guardrails:**
+
+- H = configured graph traversal depth (Graph hops setting)
+- Small set (1–4 grep hits): effectiveHops = min(H + 1, 3)
+- Large set (≥50 grep hits): effectiveHops = 1 and co-citation is disabled
 
 ### 4.4 Full-Text Engine (L1 - Ephemeral Body Index)
 

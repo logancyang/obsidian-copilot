@@ -1,5 +1,5 @@
-import { App, TFile } from "obsidian";
 import { logInfo } from "@/logger";
+import { App, TFile } from "obsidian";
 
 /**
  * GraphExpander increases search recall by finding related notes through link analysis.
@@ -152,6 +152,13 @@ export class GraphExpander {
     activeFile: TFile | null,
     hops: number = 1
   ): Promise<string[]> {
+    // Minimal guardrails:
+    // - If grep hits are small (<5), allow +1 hop (cap at 3)
+    // - If grep hits are large (>=50), force 1 hop and disable co-citations
+    const smallSet = grepHits.length > 0 && grepHits.length < 5;
+    const veryLargeSet = grepHits.length >= 50;
+    const effectiveHops = smallSet ? Math.min(hops + 1, 3) : veryLargeSet ? 1 : hops;
+
     const allCandidates = new Set<string>(grepHits);
     let expandedFromGrep: string[] = [];
     let activeNeighbors: string[] = [];
@@ -159,19 +166,19 @@ export class GraphExpander {
 
     // Expand from grep hits
     if (grepHits.length > 0) {
-      expandedFromGrep = await this.expandFromNotes(grepHits, hops);
+      expandedFromGrep = await this.expandFromNotes(grepHits, effectiveHops);
       expandedFromGrep.forEach((path) => allCandidates.add(path));
     }
 
     // Add active note neighbors
     if (activeFile) {
-      activeNeighbors = await this.expandFromNotes([activeFile.path], hops);
+      activeNeighbors = await this.expandFromNotes([activeFile.path], effectiveHops);
       activeNeighbors.forEach((path) => allCandidates.add(path));
     }
 
     // Add co-citations for better recall (only for small result sets to avoid explosion)
     // Co-citation finds notes about similar topics based on shared outgoing links
-    if (grepHits.length > 0 && grepHits.length < 20) {
+    if (!veryLargeSet && grepHits.length > 0 && grepHits.length < 50) {
       coCitations = await this.getCoCitations(grepHits);
       coCitations.forEach((path) => allCandidates.add(path));
     }
