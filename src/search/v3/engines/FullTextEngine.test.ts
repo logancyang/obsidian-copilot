@@ -27,8 +27,8 @@ jest.mock("obsidian", () => {
   };
 });
 
-import { FullTextEngine } from "./FullTextEngine";
 import { TFile } from "obsidian";
+import { FullTextEngine } from "./FullTextEngine";
 
 describe("FullTextEngine", () => {
   let engine: FullTextEngine;
@@ -487,6 +487,21 @@ describe("FullTextEngine", () => {
 
       const falseResults = engine.search(["false"], 10);
       expect(falseResults.some((r) => r.id === "edge-cases.md")).toBe(true);
+    });
+
+    it("should downweight boolean/numeric tokens in props field", async () => {
+      await engine.buildFromCandidates(["edge-cases.md", "project-test.md"]);
+
+      const boolResults = engine.search(["true"], 10);
+      const numResults = engine.search(["1"], 10);
+
+      expect(boolResults.length).toBeGreaterThan(0);
+      expect(numResults.length).toBeGreaterThan(0);
+
+      const boolTop = boolResults[0];
+      const numTop = numResults[0];
+      expect(boolTop.score).toBeLessThanOrEqual(0.5);
+      expect(numTop.score).toBeLessThanOrEqual(0.5);
     });
 
     it("should index Date objects as ISO strings", async () => {

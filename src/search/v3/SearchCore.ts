@@ -91,7 +91,12 @@ export class SearchCore {
       // 6. Search full-text index with both query variants AND salient terms
       // This hybrid approach maximizes both precision (from phrases) and recall (from terms)
       const allFullTextQueries = [...queries, ...salientTerms];
-      const fullTextResults = this.fullTextEngine.search(allFullTextQueries, maxResults * 2);
+      // Pass salient terms as low-weight terms
+      const fullTextResults = this.fullTextEngine.search(
+        allFullTextQueries,
+        maxResults * 2,
+        salientTerms
+      );
 
       logInfo(
         `Full-text search: Found ${fullTextResults.length} results (using ${allFullTextQueries.length} search inputs)`

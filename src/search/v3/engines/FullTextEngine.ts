@@ -1,8 +1,8 @@
+import { logInfo } from "@/logger";
 import FlexSearch from "flexsearch";
 import { App, TFile, getAllTags } from "obsidian";
 import { NoteDoc, NoteIdRank } from "../interfaces";
 import { MemoryManager } from "../utils/MemoryManager";
-import { logInfo } from "@/logger";
 
 /**
  * Full-text search engine using ephemeral FlexSearch index built per-query
@@ -251,7 +251,7 @@ export class FullTextEngine {
    * @param limit - Maximum results per query
    * @returns Array of NoteIdRank results
    */
-  search(queries: string[], limit: number = 30): NoteIdRank[] {
+  search(queries: string[], limit: number = 30, lowWeightTerms: string[] = []): NoteIdRank[] {
     const scoreMap = new Map<
       string,
       { score: number; fieldMatches: Set<string>; queriesMatched: Set<string> }
@@ -261,6 +261,9 @@ export class FullTextEngine {
     if (queries.length > 5) {
       logInfo(`FullText: Searching with ${queries.length} queries`);
     }
+
+    // Build a lookup for low-weight terms
+    const lowWeightLookup = new Set(lowWeightTerms.map((t) => t.toLowerCase()));
 
     // Process each query
     for (const query of queries) {
@@ -276,7 +279,18 @@ export class FullTextEngine {
             const fieldName = fieldResult.field;
             const fieldWeight = this.getFieldWeight(fieldName);
             const isPhrase = query.trim().includes(" ");
-            const queryWeight = isPhrase ? 1.2 : 0.85;
+            const baseQueryWeight = isPhrase ? 1.2 : 0.85;
+            // Downweight LLM-provided salient terms relative to original queries
+            const isLowWeightTerm = lowWeightLookup.has(query.toLowerCase());
+            const lowWeightFactor = isLowWeightTerm ? 0.6 : 1.0;
+
+            // Noise reduction for property values: heavy downweight for boolean/numeric tokens
+            const isBooleanLiteral = /^(true|false|yes|no|on|off)$/i.test(query.trim());
+            const isNumericLiteral = /^\d+(?:[.,]\d+)?$/.test(query.trim());
+            const propNoiseFactor =
+              fieldName === "props" && (isBooleanLiteral || isNumericLiteral) ? 0.1 : 1.0;
+
+            const queryWeight = baseQueryWeight * lowWeightFactor * propNoiseFactor;
 
             for (let idx = 0; idx < fieldResult.result.length; idx++) {
               const item = fieldResult.result[idx];
