@@ -1,5 +1,4 @@
 import { findRelevantNotes } from "@/search/findRelevantNotes";
-import VectorStoreManager from "@/search/vectorStoreManager";
 import { Editor, TFile } from "obsidian";
 
 /**
@@ -154,8 +153,7 @@ export class RelevantNotesCache {
     }
 
     // Otherwise, fetch and cache new relevant notes
-    const db = await VectorStoreManager.getInstance().getDb();
-    const relevantNotes = await findRelevantNotes({ db, filePath: file.path });
+    const relevantNotes = await findRelevantNotes({ filePath: file.path });
 
     // Get top N relevant notes
     const topNotes = relevantNotes.slice(0, RelevantNotesCache.MAX_RELEVANT_NOTES);

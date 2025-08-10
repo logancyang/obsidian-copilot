@@ -10,7 +10,6 @@ import {
   getSimilarityCategory,
   RelevantNoteEntry,
 } from "@/search/findRelevantNotes";
-import VectorStoreManager from "@/search/vectorStoreManager";
 import {
   ArrowRight,
   ChevronDown,
@@ -24,7 +23,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { Notice, TFile } from "obsidian";
-import React, { memo, useEffect, useState, useCallback } from "react";
+import React, { memo, useCallback, useEffect, useState } from "react";
 
 function useRelevantNotes(refresher: number) {
   const [relevantNotes, setRelevantNotes] = useState<RelevantNoteEntry[]>([]);
@@ -33,8 +32,20 @@ function useRelevantNotes(refresher: number) {
   useEffect(() => {
     async function fetchNotes() {
       if (!activeFile?.path) return;
-      const db = await VectorStoreManager.getInstance().getDb();
-      const notes = await findRelevantNotes({ db, filePath: activeFile.path });
+      // Only show when embedding index is available
+      try {
+        const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
+        const manager = MemoryIndexManager.getInstance(app);
+        await manager.loadIfExists();
+        if (!manager.isAvailable()) {
+          setRelevantNotes([]);
+          return;
+        }
+      } catch {
+        setRelevantNotes([]);
+        return;
+      }
+      const notes = await findRelevantNotes({ filePath: activeFile.path });
       setRelevantNotes(notes);
     }
     fetchNotes();
@@ -48,8 +59,21 @@ function useHasIndex(notePath: string, refresher: number) {
   useEffect(() => {
     if (!notePath) return;
     async function fetchHasIndex() {
-      const hasIndex = await VectorStoreManager.getInstance().hasIndex(notePath);
-      setHasIndex(hasIndex);
+      // For v3 memory index, hide when index is unavailable
+      try {
+        const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
+        const manager = MemoryIndexManager.getInstance(app);
+        await manager.loadIfExists();
+        if (!manager.isAvailable()) {
+          setHasIndex(false);
+          return;
+        }
+        // @ts-ignore
+        const records = (manager as any)["records"] as Array<{ path: string } | undefined>;
+        setHasIndex(Array.isArray(records) ? records.some((r) => r?.path === notePath) : false);
+      } catch {
+        setHasIndex(false);
+      }
     }
     fetchHasIndex();
   }, [notePath, refresher]);
@@ -256,11 +280,17 @@ export const RelevantNotes = memo(
     };
     const refreshIndex = async () => {
       if (activeFile) {
-        await VectorStoreManager.getInstance().reindexFile(activeFile);
-        new Notice(`Reindexed ${activeFile.name}`);
+        const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
+        // Run incremental index and ensure it reloads
+        await MemoryIndexManager.getInstance(app).indexVaultIncremental();
+        await MemoryIndexManager.getInstance(app).ensureLoaded();
+        new Notice(`Refreshed index`);
         setRefresher(refresher + 1);
       }
     };
+    // Do not render the section if we have no embedding index available/for this note
+    if (!hasIndex) return null;
+
     return (
       <div
         className={cn(

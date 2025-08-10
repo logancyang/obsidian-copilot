@@ -526,9 +526,9 @@ export class MemoryIndexManager {
     }
   }
 
-  // Partitioned write: roll files at ~50MB to avoid JSON stringify RangeError on large strings
+  // Partitioned write: roll files at ~150MB to avoid JSON stringify RangeError on large strings
   private async writePartitions(lines: string[]): Promise<void> {
-    const MAX_BYTES = 50 * 1024 * 1024; // 50MB target per partition
+    const MAX_BYTES = 150 * 1024 * 1024; // 150MB target per partition
     // First, remove legacy single file if exists to avoid confusion
     const legacy = await this.getLegacyIndexPath();
     if (await this.app.vault.adapter.exists(legacy)) {
