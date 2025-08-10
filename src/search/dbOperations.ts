@@ -1,3 +1,5 @@
+// DEPRECATED: Orama DB operations are superseded by v3 MemoryIndexManager JSONL index. Keep only for
+// backward compatibility where needed; new features should not depend on this module.
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { CustomError } from "@/error";
 import { logError, logInfo } from "@/logger";

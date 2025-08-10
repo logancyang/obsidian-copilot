@@ -1,3 +1,4 @@
+// DEPRECATED: Orama search modal is obsolete in v3. Kept only for historical reference in debug builds.
 import CopilotPlugin from "@/main";
 import { extractNoteFiles } from "@/utils";
 import { App, Modal, Notice, TFile } from "obsidian";

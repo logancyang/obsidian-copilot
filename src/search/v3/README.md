@@ -2,17 +2,18 @@
 
 _(Multilingual, Partial In-Memory; optional semantic add-on)_
 
-## TODO: Integration Tasks
+## Current Implementation Snapshot
 
-- [ ] Hook into existing local search tool (replace Orama)
-- [ ] Connect to Obsidian metadataCache events
-- [ ] Add file watcher for incremental updates
-- [ ] Mobile optimizations (yielding, smaller batches)
-- [ ] Create settings UI (memory cap, candidate size, semantic toggle)
-- [ ] Integration tests for full retrieval pipeline
-- [ ] Performance benchmarks (latency, memory usage)
-- [ ] Migration path from existing engines
-- [ ] VectorStoreManager integration (future - semantic)
+- Tiered Lexical Retrieval (Grep → Graph → Full-text → Weighted RRF) fully implemented
+- Semantic (optional) integrated via JSONL-backed in-memory index (`MemoryIndexManager`)
+- Scores normalized to [0,1] with tiny rank-based epsilon to avoid ties at the top
+- Time-based queries show actual `mtime` and use a dedicated cap; daily notes handled explicitly
+- UX parity for indexing: live progress notice, pause/resume/stop, inclusions/exclusions display
+- Auto-Index Strategy: NEVER, ON STARTUP, ON MODE SWITCH respected only when semantic toggle is on
+- Commands wired: Refresh Vault Index → incremental; Force Reindex Vault → full rebuild
+- Clear Index deletes legacy and partitioned JSONL files
+- Index partitioning: `copilot-index-v3-000.jsonl`, `001`, ... with ~150MB per file guard
+- Sync location: `.obsidian/` when “Enable Obsidian Sync” is on; `.copilot/` at vault root otherwise
 
 ---
 
@@ -246,11 +247,12 @@ async function retrieve(query: string): Promise<NoteIdRank[]> {
 3. **Score Accumulation**: Documents matching multiple queries/terms get higher scores (not max)
 4. **Folder Clustering**: Automatic boosting of notes in folders with multiple matches
 5. **Path-Aware Indexing**: Folder and file names are searchable with 2.5x weight
-6. **Memory-Bounded**: Each step respects platform memory limits
-7. **Multilingual**: Handles ASCII and CJK throughout the pipeline
-8. **Fault-Tolerant**: Falls back to grep-only if pipeline fails
-9. **Configurable**: Semantic search, graph hops, memory limits all adjustable
-10. **Link-Aware Search**: Links are indexed as searchable basenames while preserving full paths for graph traversal
+6. **Low-weight Terms**: LLM-extracted salient terms are included as low-weight inputs
+7. **Memory-Bounded**: Each step respects platform memory limits
+8. **Multilingual**: Handles ASCII and CJK throughout the pipeline
+9. **Fault-Tolerant**: Falls back to grep-only if pipeline fails
+10. **Configurable**: Semantic search, graph hops, memory limits all adjustable
+11. **Link-Aware Search**: Links are indexed as searchable basenames while preserving full paths for graph traversal
 
 ---
 
@@ -400,9 +402,14 @@ The system applies intelligent folder-based boosting to improve clustering of re
 - Custom tokenizer handles ASCII words and CJK bigrams
 - Links indexed as searchable basenames while preserving full paths
 
-### 4.5 Semantic Re-ranker (L2 - Optional)
+### 4.5 Semantic Layer (Optional)
 
-When semantic is enabled, re-ranks combined results using embedding similarity. Uses max similarity across query variants for robust scoring.
+- Storage: JSONL snapshots (`copilot-index-v3-000.jsonl`, …) persisted under `.obsidian/` or `.copilot/`
+- Loading: `MemoryIndexManager.loadIfExists()` at startup; non-disruptive if missing
+- Building: `indexVault()` full rebuild; `indexVaultIncremental()` reindexes only changed files
+- Vector store: LangChain `MemoryVectorStore` in-memory; addVectors + similaritySearchVectorWithScore
+- Retrieval: Aggregates per-note by averaging top-3 chunk similarities; per-query min–max scaling
+- Fusion: Weighted RRF (semantic default weight 1.5–2.0) + tiny rank epsilon for score differentiation
 
 ### 4.6 Weighted RRF
 
@@ -454,28 +461,31 @@ This logging helps debug search performance and understand the retrieval flow.
 
 ### Settings
 
-| Setting         | Mobile | Desktop | Description                     |
-| --------------- | ------ | ------- | ------------------------------- |
-| Memory cap      | 8MB    | 20MB    | Maximum index memory            |
-| Candidate limit | 300    | 500     | Max notes to index              |
-| Graph hops      | 1      | 1-3     | Link traversal depth            |
-| Semantic        | Off    | Off     | Enable embedding search         |
-| Semantic weight | 2.0x   | 2.0x    | RRF weight                      |
-| RRF k-value     | 60     | 60      | Reciprocal rank fusion constant |
+- Enable Semantic Search (v3): master toggle for memory index and auto-index strategy
+- Auto-Index Strategy: NEVER, ON STARTUP, ON MODE SWITCH (only when semantic toggle is on)
+- Requests per Minute: embedding rate control during indexing
+- Embedding Batch Size: indexing throughput control
+- Exclusions/Inclusions: respected by `MemoryIndexManager` during builds
+- Disable index loading on mobile: skips load/build on mobile to save resources
 
 ---
 
 ## Implementation Status
 
-**Completed**: All core components implemented with 66 unit tests passing
+Completed highlights:
 
 - Query expansion with LLM integration
 - Grep scanner with platform-optimized batching
 - Graph expander with BFS traversal
 - Full-text engine with ephemeral FlexSearch
 - Multilingual tokenizer (ASCII + CJK)
-- Weighted RRF
-- TieredRetriever orchestrator
+- Weighted RRF with epsilon tie-breaker; grep prior ranked and reduced weight (0.2)
+- TieredRetriever orchestrator; Relevant Notes uses vector store when available
+
+Migration notes:
+
+- Orama-based modules are deprecated and annotated in-code
+- VectorStoreManager, dbOperations, chunkedStorage remain only for legacy/debug; commands/modal hooks removed
 
 **Key Insights**:
 

@@ -1,3 +1,4 @@
+// DEPRECATED: Orama debug modal. Not used by v3 semantic index; slated for removal.
 import CopilotPlugin from "@/main";
 import { search } from "@orama/orama";
 import { App, Modal, Notice, TFile } from "obsidian";

@@ -1,3 +1,4 @@
+// DEPRECATED: Legacy partitioned Orama store. v3 uses JSONL snapshots + MemoryIndexManager.
 import { CustomError } from "@/error";
 import { getSettings } from "@/settings/model";
 import { create, load, Orama, RawData, save } from "@orama/orama";
