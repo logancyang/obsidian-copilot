@@ -64,18 +64,22 @@ const localSearchTool = createTool({
     }
 
     // Format the results - only include snippet, not full content
-    const formattedResults = documents.map((doc) => ({
-      title: doc.metadata.title || "Untitled",
-      // Only include a snippet for display (first 200 chars)
-      content: doc.pageContent.substring(0, 200),
-      path: doc.metadata.path || "",
-      score: doc.metadata.score ?? 0,
-      rerank_score: doc.metadata.rerank_score ?? null,
-      includeInContext: doc.metadata.includeInContext ?? true,
-      source: doc.metadata.source, // Pass through source for proper labeling
-      // Show actual modified time for time-based queries
-      mtime: doc.metadata.mtime ?? null,
-    }));
+    const formattedResults = documents.map((doc) => {
+      const scored = doc.metadata.rerank_score ?? doc.metadata.score ?? 0;
+      return {
+        title: doc.metadata.title || "Untitled",
+        // Only include a snippet for display (first 200 chars)
+        content: doc.pageContent.substring(0, 200),
+        path: doc.metadata.path || "",
+        // Ensure both fields reflect the same final fused score when present
+        score: scored,
+        rerank_score: scored,
+        includeInContext: doc.metadata.includeInContext ?? true,
+        source: doc.metadata.source, // Pass through source for proper labeling
+        // Show actual modified time for time-based queries
+        mtime: doc.metadata.mtime ?? null,
+      };
+    });
 
     return JSON.stringify(formattedResults);
   },

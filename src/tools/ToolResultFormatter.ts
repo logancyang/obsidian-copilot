@@ -101,7 +101,7 @@ export class ToolResultFormatter {
   private static formatSearchItem(item: any, index: number): string {
     const filename = item.path?.split("/").pop()?.replace(/\.md$/, "") || item.title || "Untitled";
     const score = item.rerank_score || item.score || 0;
-    const scoreDisplay = typeof score === "number" ? score.toFixed(3) : score;
+    const scoreDisplay = typeof score === "number" ? score.toFixed(4) : score;
 
     // For time-filtered results, show as "Recency" instead of "Relevance"
     const scoreLabel = item.source === "time-filtered" ? "Recency" : "Relevance";
@@ -119,6 +119,9 @@ export class ToolResultFormatter {
           lines.push(`   🕒 Modified: ${String(item.mtime)}${item.includeInContext ? " ✓" : ""}`);
         }
       }
+    } else if (item.source === "title-match") {
+      // For title matches, avoid misleading numeric scores; mark as a title match
+      lines.push(`   🔖 Title match${item.includeInContext ? " ✓" : ""}`);
     } else {
       // Default: show relevance-like score line
       lines.push(`   📊 ${scoreLabel}: ${scoreDisplay}${item.includeInContext ? " ✓" : ""}`);

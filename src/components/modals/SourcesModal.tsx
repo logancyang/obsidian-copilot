@@ -58,8 +58,9 @@ export class SourcesModal extends Modal {
         // Use the path if available, otherwise fall back to title
         this.app.workspace.openLinkText(source.path || source.title, "");
       });
-      if (source.score && source.score <= 1) {
-        item.appendChild(document.createTextNode(` - Relevance score: ${source.score.toFixed(3)}`));
+      // Display with 4 decimals to match SearchCore logs and avoid apparent ties
+      if (typeof source.score === "number") {
+        item.appendChild(document.createTextNode(` - Relevance score: ${source.score.toFixed(4)}`));
       }
     });
   }

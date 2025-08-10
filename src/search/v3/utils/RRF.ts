@@ -57,13 +57,17 @@ export function weightedRRF(config: RRFConfig): NoteIdRank[] {
   // This maps typical RRF scores to a 0-1 range with good distribution
   if (sortedResults.length > 0) {
     const scaleFactor = k / 2;
-    const compressed = sortedResults.map(([id, score]) => ({
+    const base = sortedResults.map(([id, score]) => ({
       id,
       score: Math.min(score * scaleFactor, 1),
       engine: "rrf" as const,
     }));
-    // Apply a light global compression to pull back near-1.0 scores
-    return compressed.map((r) => ({ ...r, score: Math.min(r.score * 0.9, 0.95) }));
+    // Dead-simple differentiation for saturated tops: subtract tiny rank-based epsilon
+    const epsilon = 0.0005; // 5e-4 drop per rank to avoid walls of identical scores
+    return base.map((r, idx) => ({
+      ...r,
+      score: Math.max(0, Math.min(1, r.score - epsilon * idx)),
+    }));
   }
 
   return [];

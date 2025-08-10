@@ -194,6 +194,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
                 tags: cache?.tags?.map((t) => t.tag) || [],
                 includeInContext: true,
                 score: recencyScore,
+                rerank_score: recencyScore,
                 source: "time-filtered",
               },
             })
@@ -298,6 +299,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
               tags: cache?.tags?.map((t) => t.tag) || [],
               includeInContext: true, // Always include title matches
               score: 1.0, // Max score for title matches
+              rerank_score: 1.0,
               source: "title-match",
             },
           })
@@ -336,6 +338,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
               ctime: file.stat.ctime,
               tags: cache?.tags?.map((t) => t.tag) || [],
               score: result.score,
+              rerank_score: result.score,
               engine: result.engine || "v3",
               includeInContext: result.score > (this.options.minSimilarityScore || 0.1),
             },
@@ -355,15 +358,30 @@ export class TieredLexicalRetriever extends BaseRetriever {
   private combineResults(searchDocuments: Document[], titleMatches: Document[]): Document[] {
     const documentMap = new Map<string, Document>();
 
-    // Add title matches first (they have priority)
+    // Add title matches first (they have priority for inclusion)
     for (const doc of titleMatches) {
       documentMap.set(doc.metadata.path, doc);
     }
 
-    // Add search results (won't override explicit chunks)
+    // Add search results; if title-match already exists, attach fused score as rerank_score (keep original score for tests/UI semantics)
     for (const doc of searchDocuments) {
-      if (!documentMap.has(doc.metadata.path)) {
-        documentMap.set(doc.metadata.path, doc);
+      const key = doc.metadata.path;
+      if (!documentMap.has(key)) {
+        documentMap.set(key, doc);
+      } else {
+        const existing = documentMap.get(key)!;
+        const fused = (doc.metadata as any).rerank_score ?? doc.metadata.score ?? 0;
+        const merged: Document = {
+          ...existing,
+          metadata: {
+            ...existing.metadata,
+            // Preserve original score from title match; add fused score as rerank_score for consistency across displays
+            rerank_score: fused,
+            engine: (doc.metadata as any).engine || existing.metadata.engine,
+            includeInContext: true,
+          },
+        } as Document;
+        documentMap.set(key, merged);
       }
     }
 
