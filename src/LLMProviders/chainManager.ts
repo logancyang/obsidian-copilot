@@ -8,12 +8,12 @@ import {
 import ChainFactory, { ChainType, Document } from "@/chainFactory";
 import { BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
 import {
+  AutonomousAgentChainRunner,
   ChainRunner,
   CopilotPlusChainRunner,
   LLMChainRunner,
   ProjectChainRunner,
   VaultQAChainRunner,
-  AutonomousAgentChainRunner,
 } from "@/LLMProviders/chainRunner/index";
 import { logError, logInfo } from "@/logger";
 import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
@@ -292,7 +292,10 @@ export default class ChainManager {
   private async initializeQAChain(options: SetChainOptions) {
     // Handle index refresh if needed
     if (options.refreshIndex) {
-      await this.vectorStoreManager.indexVaultToVectorStore();
+      // New semantic index auto-refresh path
+      const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
+      await MemoryIndexManager.getInstance(this.app).indexVaultIncremental();
+      await MemoryIndexManager.getInstance(this.app).ensureLoaded();
     }
   }
 

@@ -1,5 +1,5 @@
-import { NoteIdRank } from "../interfaces";
 import { logInfo } from "@/logger";
+import { NoteIdRank } from "../interfaces";
 
 /**
  * Configuration for RRF (Reciprocal Rank Fusion)
@@ -29,7 +29,8 @@ export interface RRFConfig {
  */
 export function weightedRRF(config: RRFConfig): NoteIdRank[] {
   const { lexical = [], semantic = [], grepPrior = [], weights = {}, k = 60 } = config;
-  const finalWeights = { lexical: 1.0, semantic: 2.0, grepPrior: 0.3, ...weights };
+  // Reduce semantic weight and compress final scores slightly to avoid many 1.0s
+  const finalWeights = { lexical: 1.0, semantic: 1.5, grepPrior: 0.3, ...weights };
 
   const scores = new Map<string, number>();
 
@@ -56,12 +57,13 @@ export function weightedRRF(config: RRFConfig): NoteIdRank[] {
   // This maps typical RRF scores to a 0-1 range with good distribution
   if (sortedResults.length > 0) {
     const scaleFactor = k / 2;
-
-    return sortedResults.map(([id, score]) => ({
+    const compressed = sortedResults.map(([id, score]) => ({
       id,
-      score: Math.min(score * scaleFactor, 1), // Cap at 1
+      score: Math.min(score * scaleFactor, 1),
       engine: "rrf" as const,
     }));
+    // Apply a light global compression to pull back near-1.0 scores
+    return compressed.map((r) => ({ ...r, score: Math.min(r.score * 0.9, 0.95) }));
   }
 
   return [];

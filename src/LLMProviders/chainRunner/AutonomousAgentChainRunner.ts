@@ -532,11 +532,9 @@ ${params}
     }
 
     // Decode encoded tool marker results for clearer logging only
-    const { decodeToolCallMarkerResults } = await import("./utils/toolCallParser");
-    const readableFullAIResponse = decodeToolCallMarkerResults(fullAIResponse);
+    await import("./utils/toolCallParser");
     // Keep llmFormattedOutput encoded for memory storage; no decoded variant needed
-    // Log a readable copy, but pass encoded strings to handler/storage to preserve UI parsing
-    logInfo("==== Final AI Response (decoded) ====\n", readableFullAIResponse);
+    // Readable log removed to reduce verbosity
 
     return this.handleResponse(
       fullAIResponse,

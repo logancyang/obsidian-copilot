@@ -9,7 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { PLUS_UTM_MEDIUMS } from "@/constants";
 import { logError } from "@/logger";
 import { navigateToPlusPage, useIsPlusUser } from "@/plusUtils";
-import VectorStoreManager from "@/search/vectorStoreManager";
+import { MemoryIndexManager } from "@/search/v3/MemoryIndexManager";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { Docs4LLMParser } from "@/tools/FileParserManager";
 import { isRateLimitError } from "@/utils/rateLimitUtils";
@@ -32,8 +32,10 @@ import React from "react";
 
 export async function refreshVaultIndex() {
   try {
-    await VectorStoreManager.getInstance().indexVaultToVectorStore();
-    new Notice("Vault index refreshed.");
+    // v3 semantic index: show progress and perform incremental update
+    const count = await MemoryIndexManager.getInstance(app).indexVaultIncremental();
+    await MemoryIndexManager.getInstance(app).ensureLoaded();
+    new Notice(`Semantic memory index updated: ${count} new/modified chunks`);
   } catch (error) {
     console.error("Error refreshing vault index:", error);
     new Notice("Failed to refresh vault index. Check console for details.");
@@ -42,8 +44,9 @@ export async function refreshVaultIndex() {
 
 export async function forceReindexVault() {
   try {
-    await VectorStoreManager.getInstance().indexVaultToVectorStore(true);
-    new Notice("Vault force reindexed.");
+    const count = await MemoryIndexManager.getInstance(app).indexVault();
+    await MemoryIndexManager.getInstance(app).ensureLoaded();
+    new Notice(`Semantic memory index rebuilt: ${count} chunks`);
   } catch (error) {
     console.error("Error force reindexing vault:", error);
     new Notice("Failed to force reindex vault. Check console for details.");

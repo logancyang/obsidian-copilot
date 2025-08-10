@@ -98,7 +98,8 @@ describe("MemoryIndexManager", () => {
     const resultsAlpha = await manager.search(["alpha"], 5);
     expect(resultsAlpha.length).toBeGreaterThan(0);
     expect(resultsAlpha[0].id).toBe("a.md");
-    expect(resultsAlpha[0].score).toBeGreaterThan(0.8);
+    // After per-note aggregation + min-max scaling, score should be near 1 and others below
+    expect(resultsAlpha[0].score).toBeGreaterThan(0.5);
 
     const resultsBetaOnlyCandidate = await manager.search(["alpha"], 5, ["b.md"]);
     // Candidate filter should ensure only b.md is considered

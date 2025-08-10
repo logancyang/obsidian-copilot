@@ -26,6 +26,15 @@ export const QASettings: React.FC = () => {
     <div className="tw-space-y-4">
       <section>
         <div className="tw-space-y-4">
+          {/* Enable Semantic Search (v3) */}
+          <SettingItem
+            type="switch"
+            title="Enable Semantic Search (v3)"
+            description="Blend semantic similarity into results when available. If the index doesn't exist, search falls back to default (terms matching with Obsidian link expansion). Use 'Refresh Vault Index' or 'Force Reindex Vault' to build it."
+            checked={settings.enableSemanticSearchV3}
+            onCheckedChange={(checked) => updateSetting("enableSemanticSearchV3", checked)}
+          />
+
           {/* Auto-Index Strategy */}
           <SettingItem
             type="select"

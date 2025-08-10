@@ -14,7 +14,6 @@ import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
 import { RemoveFromIndexModal } from "@/components/modals/RemoveFromIndexModal";
 import CopilotPlugin from "@/main";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
-import { MemoryIndexManager } from "@/search/v3/MemoryIndexManager";
 import { CopilotSettings, getSettings, updateSetting } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
 import { isLivePreviewModeOn } from "@/utils";
@@ -144,7 +143,36 @@ export function registerCommands(
   });
 
   addCommand(plugin, COMMAND_IDS.CLEAR_LOCAL_COPILOT_INDEX, async () => {
-    await plugin.vectorStoreManager.clearIndex();
+    try {
+      const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
+      const manager = MemoryIndexManager.getInstance(plugin.app);
+      const cfgDir = plugin.app.vault.configDir;
+      // List all files in config dir; remove any starting with copilot-index
+      // @ts-ignore
+      const { files } = await plugin.app.vault.adapter.list(cfgDir);
+      for (const f of files || []) {
+        const name = typeof f === "string" ? f : f;
+        if (
+          name.includes("/copilot-index") &&
+          (name.endsWith(".json") || name.endsWith(".jsonl"))
+        ) {
+          try {
+            // @ts-ignore
+            await plugin.app.vault.adapter.remove(name);
+          } catch (e) {
+            console.warn("Failed to remove index file:", name, e);
+          }
+        }
+      }
+      // Reset in-memory
+      manager["loaded"] = false as any;
+      (manager as any)["records"] = [];
+      (manager as any)["vectorStore"] = null;
+      new Notice("Cleared semantic memory index files.");
+    } catch (err) {
+      console.error("Error clearing semantic memory index:", err);
+      new Notice("Failed to clear semantic memory index.");
+    }
   });
 
   addCommand(plugin, COMMAND_IDS.GARBAGE_COLLECT_COPILOT_INDEX, async () => {
@@ -157,36 +185,29 @@ export function registerCommands(
     }
   });
 
-  // Build/Refresh semantic memory index (JSONL)
-  plugin.addCommand({
-    id: "copilot-build-memory-index-v3",
-    name: "Copilot: Build Semantic Memory Index (v3)",
-    callback: async () => {
-      const count = await MemoryIndexManager.getInstance(plugin.app).indexVault();
-      console.log(`Copilot: Memory index build complete, ${count} chunks indexed.`);
-      new Notice(`Semantic memory index built: ${count} chunks`);
-    },
-  });
+  // Removed legacy build-only command; use refresh and force reindex commands instead
 
   addCommand(plugin, COMMAND_IDS.INDEX_VAULT_TO_COPILOT_INDEX, async () => {
     try {
-      const indexedFileCount = await plugin.vectorStoreManager.indexVaultToVectorStore();
-
-      new Notice(`${indexedFileCount} vault files indexed to Copilot index.`);
+      const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
+      const count = await MemoryIndexManager.getInstance(plugin.app).indexVaultIncremental();
+      await MemoryIndexManager.getInstance(plugin.app).ensureLoaded();
+      new Notice(`Semantic memory index updated: ${count} new/modified chunks`);
     } catch (err) {
-      console.error("Error indexing vault to Copilot index:", err);
-      new Notice("An error occurred while indexing vault to Copilot index.");
+      console.error("Error building semantic memory index:", err);
+      new Notice("An error occurred while building the semantic memory index.");
     }
   });
 
   addCommand(plugin, COMMAND_IDS.FORCE_REINDEX_VAULT_TO_COPILOT_INDEX, async () => {
     try {
-      const indexedFileCount = await plugin.vectorStoreManager.indexVaultToVectorStore(true);
-
-      new Notice(`${indexedFileCount} vault files re-indexed to Copilot index.`);
+      const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
+      const count = await MemoryIndexManager.getInstance(plugin.app).indexVault();
+      await MemoryIndexManager.getInstance(plugin.app).ensureLoaded();
+      new Notice(`Semantic memory index rebuilt: ${count} chunks`);
     } catch (err) {
-      console.error("Error re-indexing vault to Copilot index:", err);
-      new Notice("An error occurred while re-indexing vault to Copilot index.");
+      console.error("Error rebuilding semantic memory index:", err);
+      new Notice("An error occurred while rebuilding the semantic memory index.");
     }
   });
 

@@ -13,7 +13,13 @@ import { registerContextMenu } from "@/commands/contextMenu";
 import { CustomCommandRegister } from "@/commands/customCommandRegister";
 import { migrateCommands, suggestDefaultCommands } from "@/commands/migrator";
 import { createQuickCommandContainer } from "@/components/QuickCommand";
-import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
+import {
+  ABORT_REASON,
+  CHAT_VIEWTYPE,
+  DEFAULT_OPEN_AREA,
+  EVENT_NAMES,
+  VAULT_VECTOR_STORE_STRATEGY,
+} from "@/constants";
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
 import { encryptAllKeys } from "@/encryptionService";
@@ -118,12 +124,24 @@ export default class CopilotPlugin extends Plugin {
 
     IntentAnalyzer.initTools(this.app.vault);
 
-    // Load semantic memory index (if present) at startup; non-disruptive
+    // Auto-index per strategy when semantic toggle is enabled
     try {
-      const loaded = await MemoryIndexManager.getInstance(this.app).loadIfExists();
-      if (!loaded) {
-        logWarn("MemoryIndex: embedding index not found; falling back to full-text only");
-        new Notice("embedding index doesn't exist, fall back to full-text search");
+      const settings = getSettings();
+      const semanticOn = settings.enableSemanticSearchV3;
+      if (semanticOn) {
+        const strategy = settings.indexVaultToVectorStore;
+        if (strategy === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP) {
+          await MemoryIndexManager.getInstance(this.app).indexVaultIncremental();
+          await MemoryIndexManager.getInstance(this.app).ensureLoaded();
+        } else {
+          const loaded = await MemoryIndexManager.getInstance(this.app).loadIfExists();
+          if (!loaded) {
+            logWarn("MemoryIndex: embedding index not found; falling back to full-text only");
+            new Notice("embedding index doesn't exist, fall back to full-text search");
+          }
+        }
+      } else {
+        await MemoryIndexManager.getInstance(this.app).loadIfExists();
       }
     } catch {
       // Swallow errors to avoid disrupting startup

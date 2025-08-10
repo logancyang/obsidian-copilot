@@ -60,11 +60,14 @@ export default class ProjectManager {
       if (isProjectMode()) {
         return;
       }
+      const settings = getSettings();
+      const shouldAutoIndex =
+        settings.enableSemanticSearchV3 &&
+        settings.indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH &&
+        (getChainType() === ChainType.VAULT_QA_CHAIN ||
+          getChainType() === ChainType.COPILOT_PLUS_CHAIN);
       await this.getCurrentChainManager().createChainWithNewModel({
-        refreshIndex:
-          getSettings().indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH &&
-          (getChainType() === ChainType.VAULT_QA_CHAIN ||
-            getChainType() === ChainType.COPILOT_PLUS_CHAIN),
+        refreshIndex: shouldAutoIndex,
       });
     });
 
