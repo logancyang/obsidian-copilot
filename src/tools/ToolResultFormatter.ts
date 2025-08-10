@@ -106,10 +106,23 @@ export class ToolResultFormatter {
     // For time-filtered results, show as "Recency" instead of "Relevance"
     const scoreLabel = item.source === "time-filtered" ? "Recency" : "Relevance";
 
-    const lines = [
-      `${index + 1}. ${filename}`,
-      `   📊 ${scoreLabel}: ${scoreDisplay}${item.includeInContext ? " ✓" : ""}`,
-    ];
+    const lines = [`${index + 1}. ${filename}`];
+
+    // For time-filtered queries, show actual modified time instead of a recency score
+    if (item.source === "time-filtered") {
+      if (item.mtime) {
+        try {
+          const d = new Date(item.mtime);
+          const iso = isNaN(d.getTime()) ? String(item.mtime) : d.toISOString();
+          lines.push(`   🕒 Modified: ${iso}${item.includeInContext ? " ✓" : ""}`);
+        } catch {
+          lines.push(`   🕒 Modified: ${String(item.mtime)}${item.includeInContext ? " ✓" : ""}`);
+        }
+      }
+    } else {
+      // Default: show relevance-like score line
+      lines.push(`   📊 ${scoreLabel}: ${scoreDisplay}${item.includeInContext ? " ✓" : ""}`);
+    }
 
     const snippet = this.extractContentSnippet(item.content);
     if (snippet) {

@@ -28,17 +28,19 @@ const localSearchTool = createTool({
     const settings = getSettings();
 
     const returnAll = timeRange !== undefined;
-    const maxSourceChunks =
+    const baseMax =
       settings.maxSourceChunks < PLUS_MODE_DEFAULT_SOURCE_CHUNKS
         ? PLUS_MODE_DEFAULT_SOURCE_CHUNKS
         : settings.maxSourceChunks;
+    // For time-based queries, ensure a healthy cap to avoid starving recall when users set a very low max
+    const effectiveMaxK = returnAll ? Math.max(baseMax, 200) : baseMax;
 
     logInfo(`returnAll: ${returnAll}`);
 
     // Use tiered lexical retriever for multi-stage search
     const retriever = new TieredLexicalRetriever(app, {
       minSimilarityScore: returnAll ? 0.0 : 0.1,
-      maxK: returnAll ? 1000 : maxSourceChunks,
+      maxK: effectiveMaxK,
       salientTerms,
       timeRange: timeRange
         ? {
@@ -71,6 +73,8 @@ const localSearchTool = createTool({
       rerank_score: doc.metadata.rerank_score ?? null,
       includeInContext: doc.metadata.includeInContext ?? true,
       source: doc.metadata.source, // Pass through source for proper labeling
+      // Show actual modified time for time-based queries
+      mtime: doc.metadata.mtime ?? null,
     }));
 
     return JSON.stringify(formattedResults);
