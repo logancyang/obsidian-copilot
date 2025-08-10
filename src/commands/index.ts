@@ -9,15 +9,13 @@ import { CustomCommandManager } from "@/commands/customCommandManager";
 import { removeQuickCommandBlocks } from "@/commands/customCommandUtils";
 import { getCachedCustomCommands } from "@/commands/state";
 import { ApplyCustomCommandModal } from "@/components/modals/ApplyCustomCommandModal";
-import { DebugSearchModal } from "@/components/modals/DebugSearchModal";
-import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
-import { RemoveFromIndexModal } from "@/components/modals/RemoveFromIndexModal";
+// Orama-based debug modals removed in v3
 import CopilotPlugin from "@/main";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { CopilotSettings, getSettings, updateSetting } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
 import { isLivePreviewModeOn } from "@/utils";
-import { Editor, MarkdownView, Notice, TFile } from "obsidian";
+import { Editor, MarkdownView, Notice } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";
 
@@ -175,16 +173,6 @@ export function registerCommands(
     }
   });
 
-  addCommand(plugin, COMMAND_IDS.GARBAGE_COLLECT_COPILOT_INDEX, async () => {
-    try {
-      const removedDocs = await plugin.vectorStoreManager.garbageCollectVectorStore();
-      new Notice(`${removedDocs} documents removed from Copilot index.`);
-    } catch (err) {
-      console.error("Error garbage collecting the Copilot index:", err);
-      new Notice("An error occurred while garbage collecting the Copilot index.");
-    }
-  });
-
   // Removed legacy build-only command; use refresh and force reindex commands instead
 
   addCommand(plugin, COMMAND_IDS.INDEX_VAULT_TO_COPILOT_INDEX, async () => {
@@ -215,6 +203,7 @@ export function registerCommands(
     plugin.loadCopilotChatHistory();
   });
 
+  /*
   addCommand(plugin, COMMAND_IDS.LIST_INDEXED_FILES, async () => {
     try {
       const indexedFiles = await plugin.vectorStoreManager.getIndexedFiles();
@@ -299,33 +288,9 @@ export function registerCommands(
       new Notice("Failed to list indexed files.");
     }
   });
+  */
 
   // Debug commands (only when debug mode is enabled)
-  if (next.debug) {
-    addCommand(plugin, COMMAND_IDS.INSPECT_COPILOT_INDEX_BY_NOTE_PATHS, () => {
-      new OramaSearchModal(plugin.app, plugin).open();
-    });
-
-    addCommand(plugin, COMMAND_IDS.SEARCH_ORAMA_DB, () => {
-      new DebugSearchModal(plugin.app, plugin).open();
-    });
-
-    addCommand(plugin, COMMAND_IDS.REMOVE_FILES_FROM_COPILOT_INDEX, async () => {
-      new RemoveFromIndexModal(plugin.app, async (filePaths: string[]) => {
-        const dbOps = await plugin.vectorStoreManager.getDbOps();
-        try {
-          for (const path of filePaths) {
-            await dbOps.removeDocs(path);
-          }
-          await dbOps.saveDB();
-          new Notice(`Successfully removed ${filePaths.length} files from the index.`);
-        } catch (err) {
-          console.error("Error removing files from index:", err);
-          new Notice("An error occurred while removing files from the index.");
-        }
-      }).open();
-    });
-  }
 
   // Add clear Copilot cache command
   addCommand(plugin, COMMAND_IDS.CLEAR_COPILOT_CACHE, async () => {

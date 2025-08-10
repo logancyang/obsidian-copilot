@@ -1,6 +1,6 @@
+import { logError, logInfo } from "@/logger";
 import { App, TFile } from "obsidian";
 import { NoteIdRank } from "../interfaces";
-import { logInfo, logError } from "@/logger";
 
 /**
  * Semantic re-ranker for enhanced search results using embeddings
@@ -74,8 +74,8 @@ export class SemanticReranker {
    * @returns Semantically similar notes
    */
   async semanticSearch(query: string, limit: number = 200): Promise<NoteIdRank[]> {
-    // This would integrate with the existing VectorStoreManager
-    // For now, return empty array as placeholder
+    // Placeholder: a direct semantic search entry point can integrate MemoryIndexManager if needed
+
     logInfo("SemanticReranker: Direct semantic search not yet implemented");
     return [];
   }

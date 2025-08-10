@@ -57,7 +57,20 @@ export class MemoryIndexManager {
   }
 
   private async getIndexBase(): Promise<string> {
-    const baseDir = this.app.vault.configDir;
+    const baseDir = getSettings().enableIndexSync
+      ? this.app.vault.configDir // sync via .obsidian
+      : ".copilot"; // store at vault root under .copilot
+    // When not syncing, ensure folder exists at vault root
+    try {
+      // @ts-ignore
+      const exists = await this.app.vault.adapter.exists(baseDir);
+      if (!exists) {
+        // @ts-ignore
+        await this.app.vault.adapter.mkdir(baseDir);
+      }
+    } catch {
+      // ignore
+    }
     return `${baseDir}/copilot-index-v3`;
   }
 

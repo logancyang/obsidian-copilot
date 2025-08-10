@@ -27,7 +27,6 @@ import { logInfo, logWarn } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
 import { MemoryIndexManager } from "@/search/v3/MemoryIndexManager";
 import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
-import VectorStoreManager from "@/search/vectorStoreManager";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
 import {
   getModelKeyFromModel,
@@ -56,7 +55,6 @@ export default class CopilotPlugin extends Plugin {
   projectManager: ProjectManager;
   brevilabsClient: BrevilabsClient;
   userMessageHistory: string[] = [];
-  vectorStoreManager: VectorStoreManager;
   fileParserManager: FileParserManager;
   customCommandRegister: CustomCommandRegister;
   settingsUnsubscriber?: () => void;
@@ -80,15 +78,13 @@ export default class CopilotPlugin extends Plugin {
     // Initialize built-in tools with vault access
     initializeBuiltinTools(this.app.vault);
 
-    this.vectorStoreManager = VectorStoreManager.getInstance();
-
     // Initialize BrevilabsClient
     this.brevilabsClient = BrevilabsClient.getInstance();
     this.brevilabsClient.setPluginVersion(this.manifest.version);
     checkIsPlusUser();
 
     // Initialize ProjectManager
-    this.projectManager = ProjectManager.getInstance(this.app, this.vectorStoreManager, this);
+    this.projectManager = ProjectManager.getInstance(this.app, this);
 
     // Initialize FileParserManager early with other core services
     this.fileParserManager = new FileParserManager(this.brevilabsClient, this.app.vault);
@@ -130,18 +126,24 @@ export default class CopilotPlugin extends Plugin {
       const semanticOn = settings.enableSemanticSearchV3;
       if (semanticOn) {
         const strategy = settings.indexVaultToVectorStore;
-        if (strategy === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP) {
+        const isMobileDisabled = settings.disableIndexOnMobile && (this.app as any).isMobile;
+        if (!isMobileDisabled && strategy === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP) {
           await MemoryIndexManager.getInstance(this.app).indexVaultIncremental();
           await MemoryIndexManager.getInstance(this.app).ensureLoaded();
         } else {
-          const loaded = await MemoryIndexManager.getInstance(this.app).loadIfExists();
+          const loaded = isMobileDisabled
+            ? false
+            : await MemoryIndexManager.getInstance(this.app).loadIfExists();
           if (!loaded) {
             logWarn("MemoryIndex: embedding index not found; falling back to full-text only");
             new Notice("embedding index doesn't exist, fall back to full-text search");
           }
         }
       } else {
-        await MemoryIndexManager.getInstance(this.app).loadIfExists();
+        // If semantic is off, we still try to load index for features that depend on it
+        if (!(settings.disableIndexOnMobile && (this.app as any).isMobile)) {
+          await MemoryIndexManager.getInstance(this.app).loadIfExists();
+        }
       }
     } catch {
       // Swallow errors to avoid disrupting startup
@@ -180,10 +182,6 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async onunload() {
-    if (this.vectorStoreManager) {
-      this.vectorStoreManager.onunload();
-    }
-
     if (this.projectManager) {
       this.projectManager.onunload();
     }

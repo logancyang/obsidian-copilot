@@ -17,7 +17,6 @@ import {
 } from "@/LLMProviders/chainRunner/index";
 import { logError, logInfo } from "@/logger";
 import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
-import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings, getSystemPrompt, subscribeToSettingsChange } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { findCustomModel, isOSeriesModel, isSupportedChain } from "@/utils";
@@ -44,15 +43,13 @@ export default class ChainManager {
   }
 
   public app: App;
-  public vectorStoreManager: VectorStoreManager;
   public chatModelManager: ChatModelManager;
   public memoryManager: MemoryManager;
   public promptManager: PromptManager;
 
-  constructor(app: App, vectorStoreManager: VectorStoreManager) {
+  constructor(app: App) {
     // Instantiate singletons
     this.app = app;
-    this.vectorStoreManager = vectorStoreManager;
     this.memoryManager = MemoryManager.getInstance();
     this.chatModelManager = ChatModelManager.getInstance();
     this.promptManager = PromptManager.getInstance();

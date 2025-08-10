@@ -1,10 +1,9 @@
 import { PatternMatchingModal } from "@/components/modals/PatternMatchingModal";
-import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
+// import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
 import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
-import VectorStoreManager from "@/search/vectorStoreManager";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { HelpCircle } from "lucide-react";
 import React from "react";
@@ -12,15 +11,9 @@ import React from "react";
 export const QASettings: React.FC = () => {
   const settings = useSettingsValue();
 
-  const handlePartitionsChange = (value: string) => {
-    const numValue = parseInt(value);
-    if (numValue !== settings.numPartitions) {
-      new RebuildIndexConfirmModal(app, async () => {
-        updateSetting("numPartitions", numValue);
-        await VectorStoreManager.getInstance().indexVaultToVectorStore(true);
-      }).open();
-    }
-  };
+  // Partitions are automatically managed in v3 (150MB per JSONL partition).
+  // Remove UI control; keep handler stub to avoid accidental usage.
+  // const handlePartitionsChange = (_value: string) => {};
 
   return (
     <div className="tw-space-y-4">
@@ -138,35 +131,7 @@ export const QASettings: React.FC = () => {
             onChange={(value) => updateSetting("embeddingBatchSize", value)}
           />
 
-          {/* Number of Partitions */}
-          <SettingItem
-            type="select"
-            title="Number of Partitions"
-            description="Number of partitions for Copilot index. Default is 1. Increase if you have issues indexing large vaults. Warning: Changes require clearing and rebuilding the index!"
-            value={settings.numPartitions.toString()}
-            onChange={handlePartitionsChange}
-            options={[
-              "1",
-              "2",
-              "3",
-              "4",
-              "5",
-              "6",
-              "7",
-              "8",
-              "12",
-              "16",
-              "20",
-              "24",
-              "28",
-              "32",
-              "36",
-              "40",
-            ].map((it) => ({
-              label: it,
-              value: it,
-            }))}
-          />
+          {/* Number of Partitions removed (auto-managed in v3) */}
 
           {/* Exclusions */}
           <SettingItem
@@ -227,7 +192,7 @@ export const QASettings: React.FC = () => {
           <SettingItem
             type="switch"
             title="Enable Obsidian Sync for Copilot index"
-            description="If enabled, the index will be stored in the .obsidian folder and synced with Obsidian Sync by default. If disabled, it will be stored in .copilot-index folder at vault root."
+            description="If enabled, store the semantic index in .obsidian so it syncs with Obsidian Sync. If disabled, store it under .copilot/ at the vault root."
             checked={settings.enableIndexSync}
             onCheckedChange={(checked) => updateSetting("enableIndexSync", checked)}
           />

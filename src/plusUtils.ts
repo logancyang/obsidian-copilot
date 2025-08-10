@@ -84,9 +84,10 @@ export function applyPlusSettings(): void {
   // Ensure indexing happens only once when embedding model changes
   if (previousEmbeddingModelKey !== embeddingModelKey) {
     logInfo("applyPlusSettings: Embedding model changed, triggering indexing");
-    import("@/search/vectorStoreManager")
-      .then((module) => {
-        module.default.getInstance().indexVaultToVectorStore();
+    import("@/search/v3/MemoryIndexManager")
+      .then(async (module) => {
+        await module.MemoryIndexManager.getInstance(app).indexVault();
+        await module.MemoryIndexManager.getInstance(app).ensureLoaded();
       })
       .catch((error) => {
         logError("Failed to trigger indexing after Plus settings applied:", error);
