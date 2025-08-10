@@ -215,6 +215,14 @@ ${params}
             if (toolCalls.length > 0) {
               toolNames = toolCalls.map((toolCall) => toolCall.name);
             }
+
+            // Determine background tools to avoid showing banners during streaming
+            const availableTools = this.getAvailableTools();
+            const backgroundToolNames = new Set(
+              availableTools.filter((t) => t.isBackground).map((t) => t.name)
+            );
+
+            // Include partial tool name if long enough, then filter out background tools
             const toolName = extractToolNameFromPartialBlock(fullMessage);
             if (toolName) {
               // Only add the partial tool call block if the block is larger than STREAMING_TRUNCATE_THRESHOLD
@@ -223,6 +231,9 @@ ${params}
                 toolNames.push(toolName);
               }
             }
+
+            // Filter out background tools (should be invisible)
+            toolNames = toolNames.filter((name) => !backgroundToolNames.has(name));
 
             // Create tool call markers if they don't exist
             // Generate temporary tool call id based on index of the tool name in the toolNames array
