@@ -38,6 +38,13 @@ export class MemoryIndexManager {
     return MemoryIndexManager.instance;
   }
 
+  /**
+   * Testing utility to clear the singleton and state between tests.
+   */
+  static __resetForTests(): void {
+    MemoryIndexManager.instance = undefined as unknown as MemoryIndexManager;
+  }
+
   private async getIndexPath(): Promise<string> {
     const baseDir = this.app.vault.configDir;
     return `${baseDir}/copilot-index-v3.jsonl`;
@@ -143,8 +150,8 @@ export class MemoryIndexManager {
       for (const [doc, score] of results) {
         const path = (doc.metadata as any)?.path as string;
         if (candidateSet && !candidateSet.has(path)) continue;
-        // Normalize: lower distance better → convert to [0,1]
-        const normalized = score <= 1 ? 1 - score : 1 / (1 + score);
+        // MemoryVectorStore returns cosine similarity in [0,1] where higher is better
+        const normalized = Math.max(0, Math.min(1, typeof score === "number" ? score : 0));
         const prev = noteToScore.get(path) ?? 0;
         if (normalized > prev) noteToScore.set(path, normalized);
       }
