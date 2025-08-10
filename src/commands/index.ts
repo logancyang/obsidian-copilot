@@ -3,24 +3,24 @@ import { FileCache } from "@/cache/fileCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { ChainType } from "@/chainFactory";
 
+import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
+import { EMPTY_COMMAND, QUICK_COMMAND_CODE_BLOCK } from "@/commands/constants";
+import { CustomCommandManager } from "@/commands/customCommandManager";
+import { removeQuickCommandBlocks } from "@/commands/customCommandUtils";
+import { getCachedCustomCommands } from "@/commands/state";
+import { ApplyCustomCommandModal } from "@/components/modals/ApplyCustomCommandModal";
 import { DebugSearchModal } from "@/components/modals/DebugSearchModal";
 import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
 import { RemoveFromIndexModal } from "@/components/modals/RemoveFromIndexModal";
 import CopilotPlugin from "@/main";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
+import { MemoryIndexManager } from "@/search/v3/MemoryIndexManager";
 import { CopilotSettings, getSettings, updateSetting } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
-import { Editor, Notice, TFile, MarkdownView } from "obsidian";
+import { isLivePreviewModeOn } from "@/utils";
+import { Editor, MarkdownView, Notice, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";
-import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
-import { EMPTY_COMMAND } from "@/commands/constants";
-import { getCachedCustomCommands } from "@/commands/state";
-import { CustomCommandManager } from "@/commands/customCommandManager";
-import { QUICK_COMMAND_CODE_BLOCK } from "@/commands/constants";
-import { removeQuickCommandBlocks } from "@/commands/customCommandUtils";
-import { isLivePreviewModeOn } from "@/utils";
-import { ApplyCustomCommandModal } from "@/components/modals/ApplyCustomCommandModal";
 
 /**
  * Add a command to the plugin.
@@ -155,6 +155,17 @@ export function registerCommands(
       console.error("Error garbage collecting the Copilot index:", err);
       new Notice("An error occurred while garbage collecting the Copilot index.");
     }
+  });
+
+  // Build/Refresh semantic memory index (JSONL)
+  plugin.addCommand({
+    id: "copilot-build-memory-index-v3",
+    name: "Copilot: Build Semantic Memory Index (v3)",
+    callback: async () => {
+      const count = await MemoryIndexManager.getInstance(plugin.app).indexVault();
+      console.log(`Copilot: Memory index build complete, ${count} chunks indexed.`);
+      new Notice(`Semantic memory index built: ${count} chunks`);
+    },
   });
 
   addCommand(plugin, COMMAND_IDS.INDEX_VAULT_TO_COPILOT_INDEX, async () => {

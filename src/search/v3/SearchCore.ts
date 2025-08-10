@@ -4,6 +4,7 @@ import { App } from "obsidian";
 import { FullTextEngine } from "./engines/FullTextEngine";
 import { GraphExpander } from "./expanders/GraphExpander";
 import { NoteIdRank, SearchOptions } from "./interfaces";
+import { MemoryIndexManager } from "./MemoryIndexManager";
 import { QueryExpander } from "./QueryExpander";
 import { GrepScanner } from "./scanners/GrepScanner";
 import { weightedRRF } from "./utils/RRF";
@@ -110,11 +111,17 @@ export class SearchCore {
       //   });
       // }
 
-      // 7. Optional semantic re-ranking
-      const semanticResults: NoteIdRank[] = [];
-      if (enableSemantic && this.getChatModel) {
-        // TODO: Implement semantic search when SemanticReranker is ready
-        logInfo("SearchCore: Semantic search not yet implemented");
+      // 7. Optional semantic retrieval (vector-only, in-memory JSONL-backed index)
+      let semanticResults: NoteIdRank[] = [];
+      if (enableSemantic) {
+        try {
+          const index = MemoryIndexManager.getInstance(this.app);
+          const topK = Math.min(candidateLimit, 200);
+          const hits = await index.search(allFullTextQueries, topK, candidates);
+          semanticResults = hits.map((h) => ({ id: h.id, score: h.score, engine: "semantic" }));
+        } catch (error) {
+          logInfo("SearchCore: Semantic retrieval failed", error as any);
+        }
       }
 
       // 8. Rank grep hits by evidence quality before fusion (path/content × phrase/term)

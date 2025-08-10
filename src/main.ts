@@ -8,11 +8,18 @@ import CopilotView from "@/components/CopilotView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 
-import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
+import { QUICK_COMMAND_CODE_BLOCK } from "@/commands/constants";
 import { registerContextMenu } from "@/commands/contextMenu";
+import { CustomCommandRegister } from "@/commands/customCommandRegister";
+import { migrateCommands, suggestDefaultCommands } from "@/commands/migrator";
+import { createQuickCommandContainer } from "@/components/QuickCommand";
+import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
+import { ChatManager } from "@/core/ChatManager";
+import { MessageRepository } from "@/core/MessageRepository";
 import { encryptAllKeys } from "@/encryptionService";
-import { logInfo } from "@/logger";
+import { logInfo, logWarn } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
+import { MemoryIndexManager } from "@/search/v3/MemoryIndexManager";
 import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
@@ -23,6 +30,7 @@ import {
   setSettings,
   subscribeToSettingsChange,
 } from "@/settings/model";
+import { ChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
 import {
@@ -36,13 +44,6 @@ import {
   WorkspaceLeaf,
 } from "obsidian";
 import { IntentAnalyzer } from "./LLMProviders/intentAnalyzer";
-import { CustomCommandRegister } from "@/commands/customCommandRegister";
-import { migrateCommands, suggestDefaultCommands } from "@/commands/migrator";
-import { ChatManager } from "@/core/ChatManager";
-import { MessageRepository } from "@/core/MessageRepository";
-import { ChatUIState } from "@/state/ChatUIState";
-import { createQuickCommandContainer } from "@/components/QuickCommand";
-import { QUICK_COMMAND_CODE_BLOCK } from "@/commands/constants";
 
 export default class CopilotPlugin extends Plugin {
   // Plugin components
@@ -116,6 +117,17 @@ export default class CopilotPlugin extends Plugin {
     });
 
     IntentAnalyzer.initTools(this.app.vault);
+
+    // Load semantic memory index (if present) at startup; non-disruptive
+    try {
+      const loaded = await MemoryIndexManager.getInstance(this.app).loadIfExists();
+      if (!loaded) {
+        logWarn("MemoryIndex: embedding index not found; falling back to full-text only");
+        new Notice("embedding index doesn't exist, fall back to full-text search");
+      }
+    } catch {
+      // Swallow errors to avoid disrupting startup
+    }
 
     this.registerEvent(
       this.app.workspace.on("editor-menu", (menu: Menu) => {

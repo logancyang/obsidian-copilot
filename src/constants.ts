@@ -715,6 +715,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   passMarkdownImages: true,
   enableAutonomousAgent: false,
   enableCustomPromptTemplating: true,
+  enableSemanticSearchV3: false,
   suggestedDefaultCommands: false,
   autonomousAgentMaxIterations: 4,
   autonomousAgentEnabledToolIds: [

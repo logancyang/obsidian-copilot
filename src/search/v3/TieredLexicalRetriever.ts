@@ -1,11 +1,11 @@
+import { logInfo, logWarn } from "@/logger";
+import { getSettings } from "@/settings/model";
+import { extractNoteFiles } from "@/utils";
+import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
 import { BaseRetriever } from "@langchain/core/retrievers";
-import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { App, TFile } from "obsidian";
 import { SearchCore } from "./SearchCore";
-import { logInfo, logWarn } from "@/logger";
-import { extractNoteFiles } from "@/utils";
-import { getSettings } from "@/settings/model";
 // Defer requiring ChatModelManager until runtime to avoid test-time import issues
 let getChatModelManagerSingleton: (() => any) | null = null;
 async function safeGetChatModel() {
@@ -89,8 +89,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
       const searchResults = await this.searchCore.retrieve(query, {
         maxResults: this.options.maxK,
         salientTerms: enhancedSalientTerms,
-        // We're not using semantic for now, so disable it
-        enableSemantic: false,
+        enableSemantic: !!getSettings().enableSemanticSearchV3,
       });
 
       // Get title-matched notes that should always be included

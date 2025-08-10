@@ -110,6 +110,8 @@ export interface CopilotSettings {
   passMarkdownImages: boolean;
   enableAutonomousAgent: boolean;
   enableCustomPromptTemplating: boolean;
+  /** Enable semantic stage in v3 search (requires Memory Index JSONL) */
+  enableSemanticSearchV3: boolean;
   /** Whether we have suggested built-in default commands to the user once. */
   suggestedDefaultCommands: boolean;
   autonomousAgentMaxIterations: number;
