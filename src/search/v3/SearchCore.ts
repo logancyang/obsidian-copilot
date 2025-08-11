@@ -9,6 +9,9 @@ import { QueryExpander } from "./QueryExpander";
 import { GrepScanner } from "./scanners/GrepScanner";
 import { weightedRRF } from "./utils/RRF";
 
+// LLM timeout for query expansion and HyDE generation
+const LLM_GENERATION_TIMEOUT_MS = 4000;
+
 /**
  * Core search engine that orchestrates the multi-stage retrieval pipeline
  */
@@ -28,7 +31,7 @@ export class SearchCore {
     this.queryExpander = new QueryExpander({
       getChatModel: this.getChatModel,
       maxVariants: 3,
-      timeout: 4000, // 4 seconds timeout for LLM query rewrite
+      timeout: LLM_GENERATION_TIMEOUT_MS,
     });
   }
 
@@ -116,7 +119,18 @@ export class SearchCore {
         try {
           const index = MemoryIndexManager.getInstance(this.app);
           const topK = Math.min(candidateLimit, 200);
-          const hits = await index.search(allFullTextQueries, topK, candidates);
+
+          // Generate HyDE document for semantic diversity
+          const hydeDoc = await this.generateHyDE(query);
+
+          // Build search queries: original variants + HyDE if available
+          const semanticQueries = [...allFullTextQueries];
+          if (hydeDoc) {
+            // Add HyDE document as the first query for higher weight
+            semanticQueries.unshift(hydeDoc);
+          }
+
+          const hits = await index.search(semanticQueries, topK, candidates);
           semanticResults = hits.map((h) => ({ id: h.id, score: h.score, engine: "semantic" }));
         } catch (error) {
           logInfo("SearchCore: Semantic retrieval failed", error as any);
@@ -152,20 +166,18 @@ export class SearchCore {
 
       // Log results in an inspectable format
       if (finalResults.length > 0) {
-        const resultsForLogging = finalResults.map((result, idx) => {
+        const resultsForLogging = finalResults.map((result) => {
           const file = this.app.vault.getAbstractFileByPath(result.id);
           return {
             title: file?.name || result.id,
             path: result.id,
-            score: result.score.toFixed(4),
+            score: parseFloat(result.score.toFixed(4)),
             engine: result.engine,
           };
         });
         logInfo(`Final results: ${finalResults.length} documents (after RRF)`);
-        // Log top 5 results for debugging
-        resultsForLogging.slice(0, 5).forEach((r, i) => {
-          logInfo(`  ${i + 1}. ${r.path} (score: ${r.score})`);
-        });
+        // Log as an array object for better inspection in console
+        logInfo("Search results:", resultsForLogging);
       } else {
         logInfo("No results found");
       }
@@ -218,6 +230,51 @@ export class SearchCore {
     this.fullTextEngine.clear();
     this.queryExpander.clearCache();
     logInfo("SearchCore: Cleared all caches");
+  }
+
+  /**
+   * Generate a hypothetical document using HyDE (Hypothetical Document Embeddings)
+   * Creates a synthetic answer to help find semantically similar documents
+   */
+  private async generateHyDE(query: string): Promise<string | null> {
+    try {
+      // Get chat model if available
+      if (!this.getChatModel) {
+        return null;
+      }
+
+      const chatModel = await this.getChatModel();
+      if (!chatModel) {
+        return null;
+      }
+
+      // Simple prompt for pure hypothetical generation
+      const prompt = `Write a brief, informative passage (2-3 sentences) that directly answers this question. Use specific details and terminology that would appear in a comprehensive answer.
+
+Question: ${query}
+
+Answer:`;
+
+      // Generate with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), LLM_GENERATION_TIMEOUT_MS);
+
+      const response = await chatModel.invoke(prompt, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      const hydeDoc = response.content?.toString() || null;
+      if (hydeDoc) {
+        logInfo(`HyDE generated: ${hydeDoc.slice(0, 100)}...`);
+      }
+      return hydeDoc;
+    } catch (error: any) {
+      if (error?.name === "AbortError") {
+        logInfo(`HyDE generation timed out (${LLM_GENERATION_TIMEOUT_MS / 1000}s limit)`);
+      } else {
+        logInfo(`HyDE generation skipped: ${error?.message || "Unknown error"}`);
+      }
+      return null;
+    }
   }
 
   /**
