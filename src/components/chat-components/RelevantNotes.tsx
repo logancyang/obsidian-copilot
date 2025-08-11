@@ -68,9 +68,8 @@ function useHasIndex(notePath: string, refresher: number) {
           setHasIndex(false);
           return;
         }
-        // @ts-ignore
-        const records = (manager as any)["records"] as Array<{ path: string } | undefined>;
-        setHasIndex(Array.isArray(records) ? records.some((r) => r?.path === notePath) : false);
+        // Use public method to check if file is indexed
+        setHasIndex(manager.hasFile(notePath));
       } catch {
         setHasIndex(false);
       }

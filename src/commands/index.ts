@@ -163,10 +163,8 @@ export function registerCommands(
           }
         }
       }
-      // Reset in-memory
-      manager["loaded"] = false as any;
-      (manager as any)["records"] = [];
-      (manager as any)["vectorStore"] = null;
+      // Reset in-memory using public method
+      manager.clearIndex();
       new Notice("Cleared semantic memory index files.");
     } catch (err) {
       logError("Error clearing semantic memory index:", err);
@@ -209,18 +207,11 @@ export function registerCommands(
       const manager = MemoryIndexManager.getInstance(plugin.app);
       await manager.ensureLoaded();
 
-      // Get indexed files from the manager
+      // Get indexed files from the manager using public method
       const indexedFiles = new Set<string>();
       if (manager.isAvailable()) {
-        // Access the records to get indexed file paths
-        const records = (manager as any)["records"] as Array<{ path: string }>;
-        if (Array.isArray(records)) {
-          records.forEach((record) => {
-            if (record?.path) {
-              indexedFiles.add(record.path);
-            }
-          });
-        }
+        const paths = manager.getIndexedPaths();
+        paths.forEach((path) => indexedFiles.add(path));
       }
 
       // Get all markdown files from vault

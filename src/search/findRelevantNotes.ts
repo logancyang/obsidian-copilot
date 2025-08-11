@@ -16,12 +16,8 @@ async function getNoteEmbeddingsFromMemoryIndex(notePath: string): Promise<numbe
   try {
     const manager = MemoryIndexManager.getInstance(app);
     await manager.ensureLoaded();
-    // @ts-ignore access underlying records to collect embeddings per note
-    const records = (manager as any)["records"] as
-      | Array<{ path: string; embedding: number[] }>
-      | undefined;
-    if (!records || records.length === 0) return [];
-    return records.filter((r) => r.path === notePath).map((r) => r.embedding);
+    // Use public method to get embeddings for the file
+    return manager.getFileEmbeddings(notePath);
   } catch {
     return [];
   }
@@ -99,10 +95,7 @@ async function calculateSimilarityScore({
   await manager.ensureLoaded();
   // Try vector path first
   try {
-    // @ts-ignore internal access within codebase
-    const store = (manager as any)["vectorStore"] as {
-      similaritySearchVectorWithScore: (vec: number[], k: number) => Promise<[any, number][]>;
-    } | null;
+    const store = manager.getVectorStore();
     if (store) {
       const k = Math.max(MAX_K, 50);
       const results = await store.similaritySearchVectorWithScore(averageEmbedding, k);

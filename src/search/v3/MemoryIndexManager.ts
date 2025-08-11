@@ -763,4 +763,54 @@ export class MemoryIndexManager {
       }
     }
   }
+
+  /**
+   * Get all indexed file paths
+   * @returns Array of file paths that are currently indexed
+   */
+  public getIndexedPaths(): string[] {
+    const paths = new Set<string>();
+    for (const record of this.records) {
+      if (record?.path) {
+        paths.add(record.path);
+      }
+    }
+    return Array.from(paths);
+  }
+
+  /**
+   * Check if a specific file is indexed
+   * @param path The file path to check
+   * @returns true if the file is indexed
+   */
+  public hasFile(path: string): boolean {
+    return this.records.some((r) => r?.path === path);
+  }
+
+  /**
+   * Get embeddings for a specific file
+   * @param path The file path
+   * @returns Array of embeddings for the file's chunks
+   */
+  public getFileEmbeddings(path: string): number[][] {
+    return this.records.filter((r) => r?.path === path).map((r) => r.embedding);
+  }
+
+  /**
+   * Clear the index (for resetting)
+   * Used when clearing the index from commands
+   */
+  public clearIndex(): void {
+    this.loaded = false;
+    this.records = [];
+    this.vectorStore = null;
+  }
+
+  /**
+   * Get the underlying vector store for similarity search
+   * @returns The vector store or null if not loaded
+   */
+  public getVectorStore(): MemoryVectorStore | null {
+    return this.vectorStore;
+  }
 }
