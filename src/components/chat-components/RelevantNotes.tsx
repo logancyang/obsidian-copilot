@@ -281,15 +281,28 @@ export const RelevantNotes = memo(
     const refreshIndex = async () => {
       if (activeFile) {
         const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
-        // Run incremental index and ensure it reloads
-        await MemoryIndexManager.getInstance(app).indexVaultIncremental();
-        await MemoryIndexManager.getInstance(app).ensureLoaded();
-        new Notice(`Refreshed index`);
+        const manager = MemoryIndexManager.getInstance(app);
+
+        // First ensure the index is loaded
+        await manager.ensureLoaded();
+
+        // Check if index exists
+        if (!manager.isAvailable()) {
+          // No index exists, need to build it first
+          new Notice("No index found. Building index for the first time...");
+          await manager.indexVaultIncremental();
+        } else {
+          // Index exists, just reindex the current file
+          await manager.reindexSingleFileIfModified(activeFile, 0);
+        }
+
+        // Reload to ensure UI updates
+        await manager.ensureLoaded();
+        new Notice(`Refreshed index for ${activeFile.basename}`);
         setRefresher(refresher + 1);
       }
     };
-    // Do not render the section if we have no embedding index available/for this note
-    if (!hasIndex) return null;
+    // Show the UI even without an index so users can build/refresh it
 
     return (
       <div
@@ -344,7 +357,11 @@ export const RelevantNotes = memo(
           </div>
           {relevantNotes.length === 0 && (
             <div className="tw-flex tw-max-h-12 tw-flex-wrap tw-gap-x-2 tw-gap-y-1 tw-overflow-y-hidden tw-px-1">
-              <span className="tw-text-xs tw-text-muted">No relevant notes found</span>
+              <span className="tw-text-xs tw-text-muted">
+                {!hasIndex
+                  ? "No index available. Click refresh to build index."
+                  : "No relevant notes found"}
+              </span>
             </div>
           )}
           {!isOpen && relevantNotes.length > 0 && (

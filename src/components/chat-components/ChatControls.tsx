@@ -33,9 +33,8 @@ import React from "react";
 export async function refreshVaultIndex() {
   try {
     // v3 semantic index: show progress and perform incremental update
-    const count = await MemoryIndexManager.getInstance(app).indexVaultIncremental();
+    await MemoryIndexManager.getInstance(app).indexVaultIncremental();
     await MemoryIndexManager.getInstance(app).ensureLoaded();
-    new Notice(`Semantic memory index updated: ${count} new/modified chunks`);
   } catch (error) {
     console.error("Error refreshing vault index:", error);
     new Notice("Failed to refresh vault index. Check console for details.");
@@ -44,9 +43,8 @@ export async function refreshVaultIndex() {
 
 export async function forceReindexVault() {
   try {
-    const count = await MemoryIndexManager.getInstance(app).indexVault();
+    await MemoryIndexManager.getInstance(app).indexVault();
     await MemoryIndexManager.getInstance(app).ensureLoaded();
-    new Notice(`Semantic memory index rebuilt: ${count} chunks`);
   } catch (error) {
     console.error("Error force reindexing vault:", error);
     new Notice("Failed to force reindex vault. Check console for details.");

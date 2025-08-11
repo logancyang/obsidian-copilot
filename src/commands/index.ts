@@ -2,6 +2,7 @@ import { addSelectedTextContext, getChainType } from "@/aiParams";
 import { FileCache } from "@/cache/fileCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { ChainType } from "@/chainFactory";
+import { logError, logWarn } from "@/logger";
 
 import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
 import { EMPTY_COMMAND, QUICK_COMMAND_CODE_BLOCK } from "@/commands/constants";
@@ -15,7 +16,7 @@ import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { CopilotSettings, getSettings, updateSetting } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
 import { isLivePreviewModeOn } from "@/utils";
-import { Editor, MarkdownView, Notice } from "obsidian";
+import { Editor, MarkdownView, Notice, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";
 
@@ -82,7 +83,7 @@ export function registerCommands(
         .chatModelManager.countTokens(allContent);
       new Notice(`Total tokens in your vault: ${totalTokens}`);
     } catch (error) {
-      console.error("Error counting tokens: ", error);
+      logError("Error counting tokens: ", error);
       new Notice("An error occurred while counting tokens.");
     }
   });
@@ -158,7 +159,7 @@ export function registerCommands(
             // @ts-ignore
             await plugin.app.vault.adapter.remove(name);
           } catch (e) {
-            console.warn("Failed to remove index file:", name, e);
+            logWarn("Failed to remove index file:", name, e);
           }
         }
       }
@@ -168,7 +169,7 @@ export function registerCommands(
       (manager as any)["vectorStore"] = null;
       new Notice("Cleared semantic memory index files.");
     } catch (err) {
-      console.error("Error clearing semantic memory index:", err);
+      logError("Error clearing semantic memory index:", err);
       new Notice("Failed to clear semantic memory index.");
     }
   });
@@ -178,11 +179,10 @@ export function registerCommands(
   addCommand(plugin, COMMAND_IDS.INDEX_VAULT_TO_COPILOT_INDEX, async () => {
     try {
       const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
-      const count = await MemoryIndexManager.getInstance(plugin.app).indexVaultIncremental();
+      await MemoryIndexManager.getInstance(plugin.app).indexVaultIncremental();
       await MemoryIndexManager.getInstance(plugin.app).ensureLoaded();
-      new Notice(`Semantic memory index updated: ${count} new/modified chunks`);
     } catch (err) {
-      console.error("Error building semantic memory index:", err);
+      logError("Error building semantic memory index:", err);
       new Notice("An error occurred while building the semantic memory index.");
     }
   });
@@ -190,11 +190,10 @@ export function registerCommands(
   addCommand(plugin, COMMAND_IDS.FORCE_REINDEX_VAULT_TO_COPILOT_INDEX, async () => {
     try {
       const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
-      const count = await MemoryIndexManager.getInstance(plugin.app).indexVault();
+      await MemoryIndexManager.getInstance(plugin.app).indexVault();
       await MemoryIndexManager.getInstance(plugin.app).ensureLoaded();
-      new Notice(`Semantic memory index rebuilt: ${count} chunks`);
     } catch (err) {
-      console.error("Error rebuilding semantic memory index:", err);
+      logError("Error rebuilding semantic memory index:", err);
       new Notice("An error occurred while rebuilding the semantic memory index.");
     }
   });
@@ -203,53 +202,65 @@ export function registerCommands(
     plugin.loadCopilotChatHistory();
   });
 
-  /*
   addCommand(plugin, COMMAND_IDS.LIST_INDEXED_FILES, async () => {
     try {
-      const indexedFiles = await plugin.vectorStoreManager.getIndexedFiles();
-      const indexedFilePaths = new Set(indexedFiles);
-      const allMarkdownFiles = plugin.app.vault.getMarkdownFiles();
-      const emptyFiles = new Set<string>();
-      const unindexedFiles = new Set<string>();
-      const filesWithoutEmbeddings = new Set<string>();
+      // Get the MemoryIndexManager for v3
+      const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
+      const manager = MemoryIndexManager.getInstance(plugin.app);
+      await manager.ensureLoaded();
 
-      // Get dbOps for checking embeddings
-      const dbOps = await plugin.vectorStoreManager.getDbOps();
-
-      // Categorize files
-      for (const file of allMarkdownFiles) {
-        const content = await plugin.app.vault.cachedRead(file);
-        if (!content || content.trim().length === 0) {
-          emptyFiles.add(file.path);
-        } else if (!indexedFilePaths.has(file.path)) {
-          unindexedFiles.add(file.path);
-        } else {
-          // Check if file has embeddings
-          const hasEmbeddings = await dbOps.hasEmbeddings(file.path);
-          if (!hasEmbeddings) {
-            filesWithoutEmbeddings.add(file.path);
-          }
+      // Get indexed files from the manager
+      const indexedFiles = new Set<string>();
+      if (manager.isAvailable()) {
+        // Access the records to get indexed file paths
+        const records = (manager as any)["records"] as Array<{ path: string }>;
+        if (Array.isArray(records)) {
+          records.forEach((record) => {
+            if (record?.path) {
+              indexedFiles.add(record.path);
+            }
+          });
         }
       }
 
-      if (indexedFiles.length === 0 && emptyFiles.size === 0 && unindexedFiles.size === 0) {
-        new Notice("No files found to list.");
-        return;
+      // Get all markdown files from vault
+      const { getMatchingPatterns, shouldIndexFile } = await import("@/search/searchUtils");
+      const { inclusions, exclusions } = getMatchingPatterns();
+      const allMarkdownFiles = plugin.app.vault.getMarkdownFiles();
+      const emptyFiles = new Set<string>();
+      const unindexedFiles = new Set<string>();
+      const excludedFiles = new Set<string>();
+
+      // Categorize files
+      for (const file of allMarkdownFiles) {
+        // Check if file should be indexed based on settings
+        if (!shouldIndexFile(file, inclusions, exclusions)) {
+          excludedFiles.add(file.path);
+          continue;
+        }
+
+        const content = await plugin.app.vault.cachedRead(file);
+        if (!content || content.trim().length === 0) {
+          emptyFiles.add(file.path);
+        } else if (!indexedFiles.has(file.path)) {
+          unindexedFiles.add(file.path);
+        }
       }
 
       // Create content for the file
       const content = [
         "# Copilot Files Status",
-        `- Indexed files: ${indexedFiles.length}`,
-        `	- Files missing embeddings: ${filesWithoutEmbeddings.size}`,
+        `- Indexed files: ${indexedFiles.size}`,
         `- Unindexed files: ${unindexedFiles.size}`,
         `- Empty files: ${emptyFiles.size}`,
+        `- Excluded files: ${excludedFiles.size}`,
         "",
         "## Indexed Files",
-        ...indexedFiles.map((file) => {
-          const noEmbedding = filesWithoutEmbeddings.has(file);
-          return `- [[${file}]]${noEmbedding ? " *(embedding missing)*" : ""}`;
-        }),
+        ...(indexedFiles.size > 0
+          ? Array.from(indexedFiles)
+              .sort()
+              .map((file) => `- [[${file}]]`)
+          : ["No indexed files found."]),
         "",
         "## Unindexed Files",
         ...(unindexedFiles.size > 0
@@ -264,6 +275,13 @@ export function registerCommands(
               .sort()
               .map((file) => `- [[${file}]]`)
           : ["No empty files found."]),
+        "",
+        "## Excluded Files (based on settings)",
+        ...(excludedFiles.size > 0
+          ? Array.from(excludedFiles)
+              .sort()
+              .map((file) => `- [[${file}]]`)
+          : ["No excluded files."]),
       ].join("\n");
 
       // Create or update the file in the vault
@@ -271,24 +289,23 @@ export function registerCommands(
       const filePath = `${fileName}`;
 
       const existingFile = plugin.app.vault.getAbstractFileByPath(filePath);
-      if (existingFile instanceof TFile) {
-        await plugin.app.vault.modify(existingFile, content);
+      if (existingFile) {
+        await plugin.app.vault.modify(existingFile as TFile, content);
       } else {
         await plugin.app.vault.create(filePath, content);
       }
 
       // Open the file
       const file = plugin.app.vault.getAbstractFileByPath(filePath);
-      if (file instanceof TFile) {
-        await plugin.app.workspace.getLeaf().openFile(file);
-        new Notice(`Listed ${indexedFiles.length} indexed files`);
+      if (file) {
+        await plugin.app.workspace.getLeaf().openFile(file as TFile);
+        new Notice(`Listed ${indexedFiles.size} indexed files`);
       }
     } catch (error) {
-      console.error("Error listing indexed files:", error);
+      logError("Error listing indexed files:", error);
       new Notice("Failed to list indexed files.");
     }
   });
-  */
 
   // Debug commands (only when debug mode is enabled)
 
@@ -310,7 +327,7 @@ export function registerCommands(
 
       new Notice("All Copilot caches cleared successfully");
     } catch (error) {
-      console.error("Error clearing Copilot caches:", error);
+      logError("Error clearing Copilot caches:", error);
       new Notice("Failed to clear Copilot caches");
     }
   });

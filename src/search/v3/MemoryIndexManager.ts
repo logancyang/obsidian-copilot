@@ -1,6 +1,7 @@
 import { CHUNK_SIZE } from "@/constants";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
 import { logError, logInfo, logWarn } from "@/logger";
+import { RateLimiter } from "@/rateLimiter";
 import {
   extractAppIgnoreSettings,
   getDecodedPatterns,
@@ -39,13 +40,20 @@ export class MemoryIndexManager {
   private isIndexingCancelled: boolean = false;
   private indexedCount: number = 0;
   private totalFilesToIndex: number = 0;
+  private rateLimiter: RateLimiter;
 
-  private constructor(private app: App) {}
+  private constructor(private app: App) {
+    const settings = getSettings();
+    this.rateLimiter = new RateLimiter(settings.embeddingRequestsPerMin);
+  }
 
   static getInstance(app: App): MemoryIndexManager {
     if (!MemoryIndexManager.instance) {
       MemoryIndexManager.instance = new MemoryIndexManager(app);
     }
+    // Update rate limiter if settings changed
+    const settings = getSettings();
+    MemoryIndexManager.instance.rateLimiter.setRequestsPerMin(settings.embeddingRequestsPerMin);
     return MemoryIndexManager.instance;
   }
 
@@ -200,6 +208,8 @@ export class MemoryIndexManager {
     const variantVectors: number[][] = [];
     for (const q of queryVariants) {
       try {
+        // Apply rate limiting before each query embedding
+        await this.rateLimiter.wait();
         variantVectors.push(await embeddings.embedQuery(q));
       } catch (error) {
         logWarn("MemoryIndex: query embedding failed", error);
@@ -263,25 +273,36 @@ export class MemoryIndexManager {
         .filter((f) => shouldIndexFile(f, inclusions, exclusions));
 
       if (files.length === 0) return 0;
-      {
-        this.totalFilesToIndex = files.length;
-        this.indexedCount = 0;
-        this.isIndexingPaused = false;
-        this.isIndexingCancelled = false;
-        this.createIndexingNotice(files.length);
-      }
+
+      this.totalFilesToIndex = files.length;
+      this.indexedCount = 0;
+      this.isIndexingPaused = false;
+      this.isIndexingCancelled = false;
+      this.createIndexingNotice(files.length);
+
       const embeddings = await EmbeddingManager.getInstance().getEmbeddingsAPI();
       const splitter = RecursiveCharacterTextSplitter.fromLanguage("markdown", {
         chunkSize: CHUNK_SIZE,
       });
-      const lines: string[] = [];
 
-      let processedFiles = 0;
+      // Step 1: Prepare ALL chunks first (like old implementation)
+      interface ChunkInfo {
+        text: string;
+        path: string;
+        title: string;
+        mtime: number;
+        ctime: number;
+        chunkIndex: number;
+      }
+
+      const allChunks: ChunkInfo[] = [];
+      const processedFiles = new Set<string>();
+
       for (const file of files) {
         if (this.isIndexingCancelled) break;
-        await this.handlePause();
         const content = await this.app.vault.cachedRead(file);
         if (!content?.trim()) continue;
+
         const title = file.basename;
         const header = `\n\nNOTE TITLE: [[${title}]]\n\nNOTE BLOCK CONTENT:\n\n`;
         const chunks = await splitter.createDocuments([content], [], {
@@ -289,35 +310,65 @@ export class MemoryIndexManager {
           appendChunkOverlapHeader: true,
         });
 
-        const texts = chunks.map((c) => c.pageContent);
-        // Embed in small batches to respect provider rate limits
-        const batchSize = Math.max(1, getSettings().embeddingBatchSize || 16);
-        for (let i = 0; i < texts.length; i += batchSize) {
-          const batch = texts.slice(i, i + batchSize);
-          const vecs = await embeddings.embedDocuments(batch);
-          vecs.forEach((embedding, j) => {
-            const id = `${file.path}#${i + j}`;
-            const rec: JsonlChunkRecord = {
-              id,
-              path: file.path,
-              title,
-              mtime: file.stat.mtime,
-              ctime: file.stat.ctime,
-              embedding,
-            };
-            lines.push(JSON.stringify(rec));
+        chunks.forEach((chunk, index) => {
+          allChunks.push({
+            text: chunk.pageContent,
+            path: file.path,
+            title,
+            mtime: file.stat.mtime,
+            ctime: file.stat.ctime,
+            chunkIndex: index,
           });
-        }
-        processedFiles++;
-        this.indexedCount = processedFiles;
+        });
+
+        processedFiles.add(file.path);
+      }
+
+      if (allChunks.length === 0) {
+        this.finalizeIndexingNotice(0);
+        return 0;
+      }
+
+      // Step 2: Process chunks in batches with rate limiting
+      const lines: string[] = [];
+      const batchSize = Math.max(1, getSettings().embeddingBatchSize || 16);
+      let processedChunks = 0;
+
+      for (let i = 0; i < allChunks.length; i += batchSize) {
+        if (this.isIndexingCancelled) break;
+        await this.handlePause();
+
+        const batch = allChunks.slice(i, i + batchSize);
+        const texts = batch.map((chunk) => chunk.text);
+
+        // Apply rate limiting ONCE per batch (not per file)
+        await this.rateLimiter.wait();
+        const vecs = await embeddings.embedDocuments(texts);
+
+        vecs.forEach((embedding, j) => {
+          const chunk = batch[j];
+          const rec: JsonlChunkRecord = {
+            id: `${chunk.path}#${chunk.chunkIndex}`,
+            path: chunk.path,
+            title: chunk.title,
+            mtime: chunk.mtime,
+            ctime: chunk.ctime,
+            embedding,
+          };
+          lines.push(JSON.stringify(rec));
+        });
+
+        processedChunks += batch.length;
+        // Update progress based on chunks processed but show file count
+        this.indexedCount = Math.floor((processedChunks / allChunks.length) * processedFiles.size);
         this.updateIndexingNoticeMessage();
       }
 
       await this.writePartitions(lines);
       this.loaded = false; // force reload on next ensureLoaded()
-      logInfo(`MemoryIndex: Indexed ${lines.length} chunks`);
-      this.finalizeIndexingNotice();
-      return lines.length;
+      logInfo(`MemoryIndex: Indexed ${lines.length} chunks from ${processedFiles.size} files`);
+      this.finalizeIndexingNotice(processedFiles.size);
+      return processedFiles.size; // Return file count, not chunk count
     } catch (error) {
       logError("MemoryIndex: indexVault failed", error);
       this.hideIndexingNotice();
@@ -388,8 +439,17 @@ export class MemoryIndexManager {
         this.createIndexingNotice(toUpdate.length);
       }
 
-      // Helper to build chunk records for one file
-      const buildRecordsForFile = async (file: any): Promise<JsonlChunkRecord[]> => {
+      // Helper to prepare chunks for a file (without embedding)
+      interface ChunkInfo {
+        text: string;
+        path: string;
+        title: string;
+        mtime: number;
+        ctime: number;
+        chunkIndex: number;
+      }
+
+      const prepareChunksForFile = async (file: any): Promise<ChunkInfo[]> => {
         const content = await this.app.vault.cachedRead(file);
         if (!content?.trim()) return [];
         const title = file.basename;
@@ -398,24 +458,14 @@ export class MemoryIndexManager {
           chunkHeader: header,
           appendChunkOverlapHeader: true,
         });
-        const texts = chunks.map((c) => c.pageContent);
-        const batchSize = Math.max(1, getSettings().embeddingBatchSize || 16);
-        const out: JsonlChunkRecord[] = [];
-        for (let i = 0; i < texts.length; i += batchSize) {
-          const batch = texts.slice(i, i + batchSize);
-          const vecs = await embeddings.embedDocuments(batch);
-          vecs.forEach((embedding, j) => {
-            out.push({
-              id: `${file.path}#${i + j}`,
-              path: file.path,
-              title,
-              mtime: file.stat.mtime,
-              ctime: file.stat.ctime,
-              embedding,
-            });
-          });
-        }
-        return out;
+        return chunks.map((chunk, index) => ({
+          text: chunk.pageContent,
+          path: file.path,
+          title,
+          mtime: file.stat.mtime,
+          ctime: file.stat.ctime,
+          chunkIndex: index,
+        }));
       };
 
       // Build set of paths to remove for efficient lookup
@@ -429,16 +479,52 @@ export class MemoryIndexManager {
         }
       }
 
-      // Build new records for updated paths
-      const newRecords: JsonlChunkRecord[] = [];
-      let processed = 0;
+      // Step 1: Prepare all chunks for files that need updating
+      const allNewChunks: ChunkInfo[] = [];
+      const processedFiles = new Set<string>();
+
       for (const { file } of toUpdate) {
         if (this.isIndexingCancelled) break;
+        const chunks = await prepareChunksForFile(file);
+        if (chunks.length > 0) {
+          allNewChunks.push(...chunks);
+          processedFiles.add(file.path);
+        }
+      }
+
+      // Step 2: Process all new chunks in batches with rate limiting
+      const newRecords: JsonlChunkRecord[] = [];
+      const batchSize = Math.max(1, getSettings().embeddingBatchSize || 16);
+      let processedChunks = 0;
+
+      for (let i = 0; i < allNewChunks.length; i += batchSize) {
+        if (this.isIndexingCancelled) break;
         await this.handlePause();
-        const recs = await buildRecordsForFile(file);
-        newRecords.push(...recs);
-        processed++;
-        this.indexedCount = processed;
+
+        const batch = allNewChunks.slice(i, i + batchSize);
+        const texts = batch.map((chunk) => chunk.text);
+
+        // Apply rate limiting ONCE per batch
+        await this.rateLimiter.wait();
+        const vecs = await embeddings.embedDocuments(texts);
+
+        vecs.forEach((embedding, j) => {
+          const chunk = batch[j];
+          newRecords.push({
+            id: `${chunk.path}#${chunk.chunkIndex}`,
+            path: chunk.path,
+            title: chunk.title,
+            mtime: chunk.mtime,
+            ctime: chunk.ctime,
+            embedding,
+          });
+        });
+
+        processedChunks += batch.length;
+        // Update progress based on chunks processed but show file count
+        this.indexedCount = Math.floor(
+          (processedChunks / allNewChunks.length) * processedFiles.size
+        );
         this.updateIndexingNoticeMessage();
       }
 
@@ -451,10 +537,10 @@ export class MemoryIndexManager {
       this.loaded = false;
       this.records = combined;
       logInfo(
-        `MemoryIndex: Incremental index complete; removed ${toRemove.size} paths, updated ${toUpdate.length} files, total chunks: ${combined.length}`
+        `MemoryIndex: Incremental index complete; removed ${toRemove.size} files, updated ${processedFiles.size} files, total chunks: ${combined.length}`
       );
-      this.finalizeIndexingNotice();
-      return newRecords.length;
+      this.finalizeIndexingNotice(processedFiles.size);
+      return processedFiles.size; // Return file count, not chunk count
     } catch (error) {
       logError("MemoryIndex: incremental index failed", error);
       this.hideIndexingNotice();
@@ -502,6 +588,8 @@ export class MemoryIndexManager {
       const newRecords: JsonlChunkRecord[] = [];
       for (let i = 0; i < texts.length; i += batchSize) {
         const batch = texts.slice(i, i + batchSize);
+        // Apply rate limiting before each batch
+        await this.rateLimiter.wait();
         const vecs = await embeddings.embedDocuments(batch);
         vecs.forEach((embedding, j) => {
           newRecords.push({
@@ -592,14 +680,21 @@ export class MemoryIndexManager {
     this.indexNoticeMessage.textContent = messages.join("\n");
   }
 
-  private finalizeIndexingNotice() {
+  private finalizeIndexingNotice(fileCount?: number) {
     if (this.currentIndexingNotice) {
-      // Auto hide after brief delay
-      const notice = this.currentIndexingNotice;
-      setTimeout(() => notice.hide(), 1500);
+      this.currentIndexingNotice.hide();
     }
     this.currentIndexingNotice = null;
     this.indexNoticeMessage = null;
+
+    // Show completion notice
+    if (this.isIndexingCancelled) {
+      new Notice("Indexing cancelled");
+    } else if (fileCount !== undefined) {
+      new Notice(`Indexing completed successfully! Indexed ${fileCount} files.`);
+    } else {
+      new Notice("Indexing completed successfully!");
+    }
   }
 
   private hideIndexingNotice() {
