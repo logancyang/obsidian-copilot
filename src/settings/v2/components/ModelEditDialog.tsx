@@ -11,7 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SettingSlider } from "@/components/ui/setting-slider";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DEFAULT_MODEL_SETTING,
@@ -28,6 +27,7 @@ import { HelpCircle } from "lucide-react";
 import { App, Modal } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
+import { ParameterControl } from "@/components/ui/parameter-controls";
 
 interface ModelEditModalContentProps {
   model: CustomModel;
@@ -86,6 +86,19 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
       });
     },
     [originalModel, debouncedOnUpdate]
+  );
+
+  const handleLocalReset = useCallback(
+    (field: keyof CustomModel) => {
+      setLocalModel((prevModel) => {
+        const updatedModel = { ...prevModel };
+        delete updatedModel[field];
+        // Call the debounced update function, passing the stable originalModel and the new updatedModel
+        debouncedOnUpdate(originalModel, updatedModel);
+        return updatedModel; // Return the updated model for immediate state update
+      });
+    },
+    [debouncedOnUpdate, originalModel]
   );
 
   if (!localModel) return null;
@@ -245,138 +258,80 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
               </div>
             </FormField>
 
-            <FormField
-              label={
-                <div className="tw-flex tw-items-center tw-gap-2">
-                  Token limit
-                  <TooltipProvider delayDuration={0}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <HelpCircle className="tw-size-4 tw-text-muted" />
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">
-                        <div className="tw-w-[300px]">
-                          <p>
-                            The maximum number of <em>output tokens</em> to generate. Default is{" "}
-                            {DEFAULT_MODEL_SETTING.MAX_TOKENS}.
-                          </p>
-                          <em>
-                            This number plus the length of your prompt (input tokens) must be
-                            smaller than the context window of the model.
-                          </em>
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-              }
-            >
-              <SettingSlider
-                value={
-                  localModel.maxTokens ?? settings.maxTokens ?? DEFAULT_MODEL_SETTING.MAX_TOKENS
-                }
+            <FormField>
+              <ParameterControl
+                optional={false}
+                label="Token limit"
+                value={localModel.maxTokens ?? settings.maxTokens}
                 onChange={(value) => handleLocalUpdate("maxTokens", value)}
-                min={0}
                 max={65000}
+                min={0}
                 step={100}
+                defaultValue={DEFAULT_MODEL_SETTING.MAX_TOKENS}
+                helpText={
+                  <>
+                    <p>
+                      The maximum number of <em>output tokens</em> to generate. Default is{" "}
+                      {DEFAULT_MODEL_SETTING.MAX_TOKENS}.
+                    </p>
+                    <em>
+                      This number plus the length of your prompt (input tokens) must be smaller than
+                      the context window of the model.
+                    </em>
+                  </>
+                }
               />
             </FormField>
 
-            <FormField
-              label={
-                <div className="tw-flex tw-items-center tw-gap-2">
-                  Temperature
-                  <TooltipProvider delayDuration={0}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <HelpCircle className="tw-size-4 tw-text-muted" />
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">
-                        <div className="tw-max-w-[300px]">
-                          Default is {DEFAULT_MODEL_SETTING.TEMPERATURE}. Higher values will result
-                          in more creativeness, but also more mistakes. Set to 0 for no randomness.
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-              }
-            >
-              <SettingSlider
-                value={
-                  localModel.temperature ??
-                  settings.temperature ??
-                  DEFAULT_MODEL_SETTING.TEMPERATURE
-                }
+            <FormField>
+              <ParameterControl
+                optional={false}
+                label="Temperature"
+                value={localModel.temperature ?? settings.temperature}
                 onChange={(value) => handleLocalUpdate("temperature", value)}
                 max={2}
                 min={0}
                 step={0.05}
+                defaultValue={DEFAULT_MODEL_SETTING.TEMPERATURE}
+                helpText={`Default is ${DEFAULT_MODEL_SETTING.TEMPERATURE}. Higher values will result in more creativeness, but also more mistakes. Set to 0 for no randomness.`}
               />
             </FormField>
 
-            <FormField
-              label={
-                <div className="tw-flex tw-items-center tw-gap-2">
-                  Top-P
-                  <TooltipProvider delayDuration={0}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <HelpCircle className="tw-size-4 tw-text-muted" />
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">
-                        <div className="tw-w-[300px]">
-                          Default value is 0.9, the smaller the value, the less variety in the
-                          answers, the easier to understand, the larger the value, the larger the
-                          range of the Al&#39;s vocabulary, the more diverse
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-              }
-            >
-              <SettingSlider
-                value={localModel.topP ?? 0.9}
+            <FormField>
+              <ParameterControl
+                label="Top-P"
+                value={localModel.topP}
                 onChange={(value) => handleLocalUpdate("topP", value)}
+                disableFn={() => handleLocalReset("topP")}
                 max={1}
                 min={0}
                 step={0.05}
+                defaultValue={0.9}
+                helpText="Default value is 0.9, the smaller the value, the less variety in the answers, the easier to understand, the larger the value, the larger the range of the AI's vocabulary, the more diverse"
               />
             </FormField>
 
-            <FormField
-              label={
-                <div className="tw-flex tw-items-center tw-gap-2">
-                  Frequency Penalty
-                  <TooltipProvider delayDuration={0}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <HelpCircle className="tw-size-4 tw-text-muted" />
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">
-                        <div className="tw-w-[300px]">
-                          <p>
-                            The frequency penalty parameter tells the model not to repeat a word
-                            that has already been used multiple times in the conversation.
-                          </p>
-                          <em>
-                            The higher the value, the more the model is penalized for repeating
-                            words.
-                          </em>
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-              }
-            >
-              <SettingSlider
-                value={localModel.frequencyPenalty ?? 0}
+            <FormField>
+              <ParameterControl
+                label="Frequency Penalty"
+                value={localModel.frequencyPenalty}
                 onChange={(value) => handleLocalUpdate("frequencyPenalty", value)}
+                disableFn={() => handleLocalReset("frequencyPenalty")}
                 max={2}
                 min={0}
                 step={0.05}
+                defaultValue={0}
+                helpText={
+                  <>
+                    <p>
+                      The frequency penalty parameter tells the model not to repeat a word that has
+                      already been used multiple times in the conversation.
+                    </p>
+                    <em>
+                      The higher the value, the more the model is penalized for repeating words.
+                    </em>
+                  </>
+                }
               />
             </FormField>
 

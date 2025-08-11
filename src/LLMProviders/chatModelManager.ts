@@ -7,7 +7,12 @@ import {
 } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { logError, logInfo } from "@/logger";
-import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
+import {
+  CopilotSettings,
+  getModelKeyFromModel,
+  getSettings,
+  subscribeToSettingsChange,
+} from "@/settings/model";
 import {
   err2String,
   getModelInfo,
@@ -104,7 +109,7 @@ export default class ChatModelManager {
   private getTemperatureForModel(
     modelInfo: ModelInfo,
     customModel: CustomModel,
-    settings: any
+    settings: CopilotSettings
   ): number | undefined {
     // Thinking-enabled models don't accept temperature
     if (modelInfo.isThinkingEnabled) {
