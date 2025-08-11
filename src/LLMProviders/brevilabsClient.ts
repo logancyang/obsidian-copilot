@@ -139,7 +139,7 @@ export class BrevilabsClient {
         url.searchParams.append(key, value as string);
       });
     }
-
+    console.log("body", body);
     const response = await fetch(url.toString(), {
       method,
       headers: {
@@ -212,19 +212,39 @@ export class BrevilabsClient {
 
   /**
    * Validate the license key and update the isPlusUser setting.
+   * @param context Optional context object containing additional information about the validation request
    * @returns true if the license key is valid, false if the license key is invalid, and undefined if
    * unknown error.
    */
-  async validateLicenseKey(): Promise<{ isValid: boolean | undefined; plan?: string }> {
+  async validateLicenseKey(
+    context?: Record<string, any>
+  ): Promise<{ isValid: boolean | undefined; plan?: string }> {
+    console.log("context", context);
+
+    // Build the request body with proper structure
+    const requestBody: Record<string, any> = {
+      license_key: await getDecryptedKey(getSettings().plusLicenseKey),
+    };
+
+    // Safely spread context if provided, ensuring no conflicts with required fields
+    if (context && typeof context === "object") {
+      // Filter out any undefined or null values from context
+      const filteredContext = Object.fromEntries(
+        Object.entries(context).filter(([_, value]) => value !== undefined && value !== null)
+      );
+
+      // Spread the filtered context into the request body
+      Object.assign(requestBody, filteredContext);
+    }
+
     const { data, error } = await this.makeRequest<LicenseResponse>(
       "/license",
-      {
-        license_key: await getDecryptedKey(getSettings().plusLicenseKey),
-      },
+      requestBody,
       "POST",
       true,
       true
     );
+
     if (error) {
       if (error.message === "Invalid license key") {
         turnOffPlus();

@@ -34,6 +34,7 @@ import {
   processRawChatHistory,
   processedMessagesToTextOnly,
 } from "./utils/chatHistoryUtils";
+import { checkIsPlusUser } from "@/plusUtils";
 
 export class CopilotPlusChainRunner extends BaseChainRunner {
   private isYoutubeOnlyMessage(message: string): boolean {
@@ -338,6 +339,13 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     let fullAIResponse = "";
     let sources: { title: string; path: string; score: number }[] = [];
     let currentPartialResponse = "";
+    const isPlusUser = await checkIsPlusUser({
+      isCopilotPlus: true,
+    });
+    if (!isPlusUser) {
+      await this.handleError(new Error("Invalid license key"), addMessage, updateCurrentAiMessage);
+      return "";
+    }
 
     // Wrapper to track partial response
     const trackAndUpdateAiMessage = (message: string) => {
