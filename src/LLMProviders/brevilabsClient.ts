@@ -139,7 +139,6 @@ export class BrevilabsClient {
         url.searchParams.append(key, value as string);
       });
     }
-    console.log("body", body);
     const response = await fetch(url.toString(), {
       method,
       headers: {
@@ -212,15 +211,13 @@ export class BrevilabsClient {
 
   /**
    * Validate the license key and update the isPlusUser setting.
-   * @param context Optional context object containing additional information about the validation request
+   * @param context Optional context object containing the features that the user is using to validate the license key.
    * @returns true if the license key is valid, false if the license key is invalid, and undefined if
    * unknown error.
    */
   async validateLicenseKey(
     context?: Record<string, any>
   ): Promise<{ isValid: boolean | undefined; plan?: string }> {
-    console.log("context", context);
-
     // Build the request body with proper structure
     const requestBody: Record<string, any> = {
       license_key: await getDecryptedKey(getSettings().plusLicenseKey),
