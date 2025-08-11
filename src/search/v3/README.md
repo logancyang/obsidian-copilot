@@ -404,7 +404,7 @@ The system applies intelligent folder-based boosting to improve clustering of re
 **Implementation Details:**
 
 - Builds ephemeral FlexSearch index per-query
-- Memory-bounded with platform-aware limits (8MB mobile, 20MB desktop)
+- Memory-bounded with platform-aware limits (20MB mobile, 100MB desktop)
 - Custom tokenizer handles ASCII words and CJK bigrams
 - Links indexed as searchable basenames while preserving full paths
 
@@ -463,7 +463,7 @@ This logging helps debug search performance and understand the retrieval flow.
 - **Graph expansion**: < 30ms for 200 nodes
 - **Full-text build**: < 100ms for 500 candidates
 - **Total latency**: < 200ms P95
-- **Memory peak**: < 20MB mobile, < 50MB desktop
+- **Memory peak**: < 20MB mobile, < 100MB desktop
 
 ### Settings
 

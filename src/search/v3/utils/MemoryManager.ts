@@ -7,8 +7,8 @@ import { getPlatformValue } from "./platformUtils";
 export class MemoryManager {
   private static readonly CONFIG = {
     MAX_BYTES: {
-      MOBILE: 8 * 1024 * 1024, // 8MB
-      DESKTOP: 20 * 1024 * 1024, // 20MB
+      MOBILE: 20 * 1024 * 1024, // 20MB
+      DESKTOP: 100 * 1024 * 1024, // 100MB
     },
     CANDIDATE_LIMIT: {
       MOBILE: 300,
