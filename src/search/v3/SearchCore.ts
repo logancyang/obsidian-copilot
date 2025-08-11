@@ -39,14 +39,13 @@ export class SearchCore {
    * @returns Ranked list of note IDs
    */
   async retrieve(query: string, options: SearchOptions = {}): Promise<NoteIdRank[]> {
-    const {
-      maxResults = 30,
-      enableSemantic = false,
-      semanticWeight = 2.0,
-      candidateLimit = 500,
-      graphHops = 1,
-      rrfK = 60,
-    } = options;
+    // Validate and sanitize options
+    const maxResults = Math.min(Math.max(1, options.maxResults || 30), 100);
+    const enableSemantic = options.enableSemantic || false;
+    const semanticWeight = Math.min(Math.max(0, options.semanticWeight || 1.5), 10);
+    const candidateLimit = Math.min(Math.max(10, options.candidateLimit || 500), 1000);
+    const graphHops = Math.min(Math.max(1, options.graphHops || 1), 3);
+    const rrfK = Math.min(Math.max(1, options.rrfK || 60), 100);
 
     try {
       logInfo(`\n=== SearchCore: Starting search for "${query}" ===`);
@@ -163,7 +162,10 @@ export class SearchCore {
           };
         });
         logInfo(`Final results: ${finalResults.length} documents (after RRF)`);
-        console.table(resultsForLogging);
+        // Log top 5 results for debugging
+        resultsForLogging.slice(0, 5).forEach((r, i) => {
+          logInfo(`  ${i + 1}. ${r.path} (score: ${r.score})`);
+        });
       } else {
         logInfo("No results found");
       }

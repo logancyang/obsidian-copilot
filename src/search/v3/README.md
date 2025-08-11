@@ -338,7 +338,13 @@ Enables discovery of conceptually related notes without exact term matches by le
 
 ### 4.4 Full-Text Engine (L1 - Ephemeral Body Index)
 
-FlexSearch index built per-query:
+FlexSearch index built per-query with security and performance optimizations:
+
+**Security Features:**
+
+- Path validation via `VaultPathValidator` to prevent path traversal attacks
+- Content size limit of 10MB per file to prevent memory exhaustion
+- Circular reference handling with depth-based limiting (maxDepth=2)
 
 #### FlexSearch Ranking Algorithm
 
@@ -472,23 +478,70 @@ This logging helps debug search performance and understand the retrieval flow.
 
 ## Implementation Status
 
-Completed highlights:
+### ✅ Completed Features:
 
-- Query expansion with LLM integration
-- Grep scanner with platform-optimized batching
-- Graph expander with BFS traversal
-- Full-text engine with ephemeral FlexSearch
-- Multilingual tokenizer (ASCII + CJK)
-- Weighted RRF with epsilon tie-breaker; grep prior ranked and reduced weight (0.2)
-- TieredRetriever orchestrator; Relevant Notes uses vector store when available
+**Core Pipeline:**
 
-Migration notes:
+- Query expansion with LLM integration and 4s timeout via AbortController
+- Grep scanner with platform-optimized batching (10 mobile, 50 desktop)
+- Graph expander with true BFS traversal and visited tracking
+- Full-text engine with ephemeral FlexSearch and multilingual tokenizer (ASCII + CJK)
+- Weighted RRF with simple linear scaling; grep prior ranked and reduced weight (0.2)
+- TieredLexicalRetriever orchestrator integrated into search tools
 
-- Orama-based modules are deprecated and annotated in-code
-- VectorStoreManager, dbOperations, chunkedStorage remain only for legacy/debug; commands/modal hooks removed
+**Security & Performance:**
+
+- Path traversal protection via VaultPathValidator
+- Content size limits (10MB per file) to prevent memory exhaustion
+- Circular reference handling with depth-based limiting
+- Score normalization using Math.tanh for natural 0-1 range
+- Array operations optimized with in-place mutations
+- Single-file reindexing for opportunistic updates
+
+**Semantic Search (Optional):**
+
+- JSONL-backed MemoryIndexManager with partitioned storage
+- LangChain MemoryVectorStore for in-memory vector operations
+- Incremental indexing for new/modified files only
+- Auto-index strategies: NEVER, ON STARTUP, ON MODE SWITCH
+- Settings toggle to enable/disable semantic search
+
+**UX Improvements:**
+
+- Live indexing progress with pause/resume/stop controls
+- Inclusions/exclusions displayed during indexing
+- Commands: "Refresh Vault Index" (incremental), "Force Reindex Vault" (full)
+- Clear Index command removes all index files
+- Unified scoring with rerank_score attached to all documents
+
+### ✅ Final Status:
+
+**Completed in Final Session:**
+
+- Graph hops setting (1-3 range) added to QA settings
+- Critical bug fixes: removed console.table, added null checks
+- Settings validation for all SearchOptions parameters
+- Documentation updated to reflect final implementation
+
+**Deferred (Not Critical):**
+The following features were considered but deemed unnecessary based on current performance:
+
+- Incremental indexing hooks (active note switching handles updates)
+- Result caching (performance is already good)
+- Additional settings UI (graph hops is sufficient)
+- Metrics panel (existing logging is adequate)
+
+### Migration Notes:
+
+- Orama-based modules deprecated: OramaSearchModal marked as obsolete
+- VectorStoreManager replaced by MemoryIndexManager for v3
+- All v3 tests passing (126 tests), clean TypeScript build
+- Backwards compatible with existing search tools
 
 **Key Insights**:
 
-- No persistent index needed - grep provides fast initial seeding
+- No persistent full-text index needed - grep provides fast initial seeding
 - Graph expansion dramatically improves recall (3x candidates)
 - Ephemeral indexing eliminates maintenance overhead
+- Security hardening prevents common attack vectors
+- Platform-aware memory management ensures stability

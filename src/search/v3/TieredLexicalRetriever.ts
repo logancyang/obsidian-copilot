@@ -90,6 +90,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
         maxResults: this.options.maxK,
         salientTerms: enhancedSalientTerms,
         enableSemantic: !!getSettings().enableSemanticSearchV3,
+        graphHops: getSettings().graphHops || 1,
       });
 
       // Get title-matched notes that should always be included
@@ -323,9 +324,11 @@ export class TieredLexicalRetriever extends BaseRetriever {
     for (const result of searchResults) {
       try {
         const file = this.app.vault.getAbstractFileByPath(result.id);
-        if (!(file instanceof TFile)) continue;
+        if (!file || !(file instanceof TFile)) continue;
 
         const content = await this.app.vault.cachedRead(file);
+        if (!content) continue;
+
         const cache = this.app.metadataCache.getFileCache(file);
 
         documents.push(

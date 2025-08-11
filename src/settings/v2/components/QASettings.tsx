@@ -23,7 +23,7 @@ export const QASettings: React.FC = () => {
           <SettingItem
             type="switch"
             title="Enable Semantic Search (v3)"
-            description="Blend semantic similarity into results when available. If the index doesn't exist, search falls back to default (terms matching with Obsidian link expansion). Use 'Refresh Vault Index' or 'Force Reindex Vault' to build it."
+            description="Optional semantic search component to boost the default search performance. Use 'Refresh Vault Index' or 'Force Reindex Vault' to build the embedding index."
             checked={settings.enableSemanticSearchV3}
             onCheckedChange={(checked) => updateSetting("enableSemanticSearchV3", checked)}
           />
@@ -105,6 +105,18 @@ export const QASettings: React.FC = () => {
             step={1}
             value={settings.maxSourceChunks}
             onChange={(value) => updateSetting("maxSourceChunks", value)}
+          />
+
+          {/* Graph Hops */}
+          <SettingItem
+            type="slider"
+            title="Graph Expansion Hops"
+            description="How many hops to traverse in the Obsidian graph when expanding search results. Higher values find more related notes but may add less relevant results. Default is 1."
+            min={1}
+            max={3}
+            step={1}
+            value={settings.graphHops || 1}
+            onChange={(value) => updateSetting("graphHops", value)}
           />
 
           {/* Requests per Minute */}
