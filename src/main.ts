@@ -50,6 +50,11 @@ import {
 } from "obsidian";
 import { IntentAnalyzer } from "./LLMProviders/intentAnalyzer";
 
+interface FileTrackingState {
+  lastActiveFile: TFile | null;
+  lastActiveMtime: number | null;
+}
+
 export default class CopilotPlugin extends Plugin {
   // Plugin components
   projectManager: ProjectManager;
@@ -60,6 +65,7 @@ export default class CopilotPlugin extends Plugin {
   settingsUnsubscriber?: () => void;
   private autocompleteService: AutocompleteService;
   chatUIState: ChatUIState;
+  private fileTracker: FileTrackingState = { lastActiveFile: null, lastActiveMtime: null };
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -160,6 +166,34 @@ export default class CopilotPlugin extends Plugin {
         if (leaf && leaf.view instanceof MarkdownView) {
           const file = leaf.view.file;
           if (file) {
+            // On switching to a new file, opportunistically re-index the previous active file
+            // if semantic search v3 is enabled and file was modified while active
+            try {
+              const settings = getSettings();
+              if (settings.enableSemanticSearchV3) {
+                const { lastActiveFile, lastActiveMtime } = this.fileTracker;
+                if (
+                  lastActiveFile &&
+                  typeof lastActiveMtime === "number" &&
+                  lastActiveFile.extension === "md"
+                ) {
+                  if (lastActiveFile.stat?.mtime && lastActiveFile.stat.mtime > lastActiveMtime) {
+                    // Reindex only the last active file that changed
+                    void MemoryIndexManager.getInstance(this.app).reindexSingleFileIfModified(
+                      lastActiveFile,
+                      lastActiveMtime
+                    );
+                  }
+                }
+                // update trackers
+                this.fileTracker = {
+                  lastActiveFile: file,
+                  lastActiveMtime: file.stat?.mtime ?? null,
+                };
+              }
+            } catch {
+              // non-fatal: ignore indexing errors during active file switch
+            }
             const activeCopilotView = this.app.workspace
               .getLeavesOfType(CHAT_VIEWTYPE)
               .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;

@@ -1,7 +1,7 @@
 // DEPRECATED: Orama search modal is obsolete in v3. Kept only for historical reference in debug builds.
 import CopilotPlugin from "@/main";
 import { extractNoteFiles } from "@/utils";
-import { App, Modal, Notice, TFile } from "obsidian";
+import { App, Modal, Notice } from "obsidian";
 
 export class OramaSearchModal extends Modal {
   private plugin: CopilotPlugin;
@@ -45,36 +45,16 @@ export class OramaSearchModal extends Modal {
       }
 
       try {
-        const dbOps = await this.plugin.vectorStoreManager.getDbOps();
-        const results = await dbOps.getDocsJsonByPaths(notePaths);
+        // Orama deprecated - this modal no longer functional
+        new Notice("Orama search is deprecated. Use the new search system.");
+        return;
 
-        // Create or overwrite file with results
-        const fileName = `CopilotDB-Search-Results.md`;
-        const content = [
-          "## Searched Paths",
-          ...notePaths.map((path) => `- [[${path}]]`),
-          "",
-          "## Index Data",
-          "```json",
-          JSON.stringify(results, null, 2),
-          "```",
-        ].join("\n");
-
-        // Check if file exists and modify it, otherwise create new
-        const existingFile = this.app.vault.getAbstractFileByPath(fileName);
-        if (existingFile) {
-          await this.app.vault.modify(existingFile as TFile, content);
-        } else {
-          await this.app.vault.create(fileName, content);
-        }
-
-        // Open the file
-        const file = this.app.vault.getAbstractFileByPath(fileName);
-        if (file) {
-          await this.app.workspace.getLeaf().openFile(file as TFile);
-        }
-
-        this.close();
+        // Original code preserved for reference:
+        // const dbOps = await this.plugin.vectorStoreManager.getDbOps();
+        // const results = await dbOps.getDocsJsonByPaths(notePaths);
+        // const fileName = `CopilotDB-Search-Results.md`;
+        // const content = [...].join("\n");
+        // ... file creation and opening logic ...
       } catch (error) {
         console.error("Error searching DB:", error);
         new Notice("Error searching database. Check console for details.");

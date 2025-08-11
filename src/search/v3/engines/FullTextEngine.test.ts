@@ -181,6 +181,22 @@ describe("FullTextEngine", () => {
       stats = engine.getStats();
       expect(stats.documentsIndexed).toBe(2); // Should have cleared note1
     });
+
+    it("should skip unsafe vault paths", async () => {
+      // Mock vault to return files for any safe path
+      mockApp.vault.getAbstractFileByPath = jest.fn((path) => {
+        if (path === "note1.md") {
+          const file = new (TFile as any)(path);
+          Object.setPrototypeOf(file, TFile.prototype);
+          return file;
+        }
+        return null;
+      });
+
+      const candidates = ["../evil.md", "/abs.md", "note1.md"];
+      const indexed = await engine.buildFromCandidates(candidates);
+      expect(indexed).toBe(1);
+    });
   });
 
   describe("search", () => {
@@ -536,6 +552,27 @@ describe("FullTextEngine", () => {
       // Should NOT find the nested array elements
       const nestedResults = engine.search(["should"], 10);
       expect(nestedResults.some((r) => r.id === "edge-cases.md")).toBe(false);
+    });
+
+    it("should handle circular frontmatter safely", async () => {
+      const a: any = { name: "A" };
+      const b: any = { name: "B" };
+      a.ref = b;
+      b.ref = a; // circular
+
+      const propsCache: Record<string, any> = {
+        "circular.md": {
+          headings: [],
+          frontmatter: a,
+        },
+      };
+
+      mockApp.metadataCache.getFileCache = jest.fn((file: TFile) => {
+        return propsCache[file.path] || { headings: [], frontmatter: {} };
+      });
+      mockApp.vault.cachedRead = jest.fn((file: TFile) => Promise.resolve("body"));
+
+      await expect(engine.buildFromCandidates(["circular.md"])).resolves.toBe(1);
     });
   });
 });

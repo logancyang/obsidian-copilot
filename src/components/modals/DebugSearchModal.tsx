@@ -53,7 +53,8 @@ export class DebugSearchModal extends Modal {
           searchParams.vector.value = Object.values(searchParams.vector.value);
         }
 
-        const db = await this.plugin.vectorStoreManager.getDb();
+        // @ts-ignore - vectorStoreManager deprecated with Orama removal
+        const db = null; // await this.plugin.vectorStoreManager.getDb();
         if (!db) {
           new Notice("Database not found");
           return;

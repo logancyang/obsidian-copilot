@@ -409,7 +409,7 @@ The system applies intelligent folder-based boosting to improve clustering of re
 - Building: `indexVault()` full rebuild; `indexVaultIncremental()` reindexes only changed files
 - Vector store: LangChain `MemoryVectorStore` in-memory; addVectors + similaritySearchVectorWithScore
 - Retrieval: Aggregates per-note by averaging top-3 chunk similarities; per-query min–max scaling
-- Fusion: Weighted RRF (semantic default weight 1.5–2.0) + tiny rank epsilon for score differentiation
+- Fusion: Weighted RRF (semantic default weight 1.5) + tiny rank epsilon for score differentiation
 
 ### 4.6 Weighted RRF
 

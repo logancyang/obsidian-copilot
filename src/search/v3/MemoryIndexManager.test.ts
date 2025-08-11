@@ -39,6 +39,8 @@ function makeApp(opts: {
         write: async (_path: string, data: string) => {
           opts.captureWrites?.buffer.push(data);
         },
+        remove: async (_path: string) => {},
+        mkdir: async (_path: string) => {},
       },
       getMarkdownFiles: () => [] as any,
       cachedRead: async () => "",
@@ -123,5 +125,36 @@ describe("MemoryIndexManager", () => {
     const count = await manager.indexVault();
     expect(count).toBeGreaterThan(0);
     expect(writes.join("\n")).toContain("x.md");
+  });
+
+  test("reindexSingleFileIfModified updates only that file", async () => {
+    const writes: string[] = [];
+    // Existing index has a.md with one chunk
+    const existing = JSON.stringify({
+      id: "a.md#0",
+      path: "a.md",
+      title: "Alpha",
+      mtime: 1,
+      ctime: 1,
+      embedding: [1, 0],
+    });
+    const app = makeApp({ exists: true, content: existing, captureWrites: { buffer: writes } });
+    const manager = MemoryIndexManager.getInstance(app);
+    await manager.loadIfExists();
+
+    // Mock reading content and embeddings
+    (app.vault.cachedRead as any) = async () => "# Title\n\nBody";
+    const file: any = {
+      path: "a.md",
+      basename: "a",
+      extension: "md",
+      stat: { mtime: 2, ctime: 1 },
+    };
+
+    await manager.reindexSingleFileIfModified(file, 1);
+    // Should have written partitions and not thrown
+    expect(writes.length).toBeGreaterThan(0);
+    const joined = writes.join("\n");
+    expect(joined).toContain("a.md");
   });
 });

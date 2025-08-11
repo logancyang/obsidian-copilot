@@ -418,9 +418,16 @@ export class MemoryIndexManager {
         return out;
       };
 
-      // Start with existing records, filter out removed/updated paths
+      // Build set of paths to remove for efficient lookup
       const removedOrUpdated = new Set<string>([...toRemove, ...toUpdate.map((u) => u.file.path)]);
-      const keptRecords = this.records.filter((r) => !removedOrUpdated.has(r.path));
+
+      // Filter existing records more efficiently
+      const keptRecords: JsonlChunkRecord[] = [];
+      for (const record of this.records) {
+        if (!removedOrUpdated.has(record.path)) {
+          keptRecords.push(record);
+        }
+      }
 
       // Build new records for updated paths
       const newRecords: JsonlChunkRecord[] = [];
@@ -452,6 +459,75 @@ export class MemoryIndexManager {
       logError("MemoryIndex: incremental index failed", error);
       this.hideIndexingNotice();
       return 0;
+    }
+  }
+
+  /**
+   * Reindex a single modified file if its mtime increased compared to existing index records.
+   * Falls back to full incremental build if index is not yet loaded or file isn't tracked.
+   */
+  async reindexSingleFileIfModified(file: any, previousMtime: number | null): Promise<void> {
+    const existed = await this.loadIfExists();
+    if (!existed) {
+      // No index yet; do nothing here to avoid full build implicitly
+      return;
+    }
+
+    try {
+      if (!file || file.extension !== "md") return;
+      const indexedMtime = Math.max(
+        0,
+        ...this.records.filter((r) => r.path === file.path).map((r) => r.mtime)
+      );
+      const prev = previousMtime ?? indexedMtime;
+      if (!file.stat?.mtime || file.stat.mtime <= prev) {
+        return; // not modified since last seen
+      }
+
+      const embeddings = await EmbeddingManager.getInstance().getEmbeddingsAPI();
+      const splitter = RecursiveCharacterTextSplitter.fromLanguage("markdown", {
+        chunkSize: CHUNK_SIZE,
+      });
+
+      const content = await this.app.vault.cachedRead(file);
+      if (!content?.trim()) return;
+      const title = file.basename;
+      const header = `\n\nNOTE TITLE: [[${title}]]\n\nNOTE BLOCK CONTENT:\n\n`;
+      const chunks = await splitter.createDocuments([content], [], {
+        chunkHeader: header,
+        appendChunkOverlapHeader: true,
+      });
+      const texts = chunks.map((c) => c.pageContent);
+      const batchSize = Math.max(1, getSettings().embeddingBatchSize || 16);
+      const newRecords: JsonlChunkRecord[] = [];
+      for (let i = 0; i < texts.length; i += batchSize) {
+        const batch = texts.slice(i, i + batchSize);
+        const vecs = await embeddings.embedDocuments(batch);
+        vecs.forEach((embedding, j) => {
+          newRecords.push({
+            id: `${file.path}#${i + j}`,
+            path: file.path,
+            title,
+            mtime: file.stat.mtime,
+            ctime: file.stat.ctime,
+            embedding,
+          });
+        });
+      }
+
+      // Remove old records in-place for better performance
+      for (let i = this.records.length - 1; i >= 0; i--) {
+        if (this.records[i].path === file.path) {
+          this.records.splice(i, 1);
+        }
+      }
+      // Append new records
+      this.records.push(...newRecords);
+      await this.writePartitions(this.records.map((r) => JSON.stringify(r)));
+      this.loaded = false; // force rebuild of vector store on next ensureLoaded
+      logInfo(`MemoryIndex: Reindexed modified file ${file.path} with ${newRecords.length} chunks`);
+    } catch (error) {
+      logWarn("MemoryIndex: reindexSingleFileIfModified failed", error);
     }
   }
 

@@ -1,7 +1,7 @@
-import { App, Platform, TFile } from "obsidian";
 import { logInfo } from "@/logger";
-import { getPlatformValue } from "../utils/platformUtils";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
+import { App, TFile } from "obsidian";
+import { getPlatformValue } from "../utils/platformUtils";
 
 /**
  * Fast substring search using Obsidian's cachedRead for initial seeding
@@ -80,7 +80,8 @@ export class GrepScanner {
       );
 
       // Yield on mobile to prevent blocking
-      if (Platform.isMobile && i % GrepScanner.CONFIG.YIELD_INTERVAL === 0) {
+      const isMobile = getPlatformValue(true, false);
+      if (isMobile && i % GrepScanner.CONFIG.YIELD_INTERVAL === 0) {
         await new Promise((r) => setTimeout(r, 0));
       }
     }

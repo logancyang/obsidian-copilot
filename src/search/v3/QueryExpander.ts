@@ -1,7 +1,7 @@
+import { logError, logInfo, logWarn } from "@/logger";
+import { withSuppressedTokenWarnings } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { FuzzyMatcher } from "./utils/FuzzyMatcher";
-import { logInfo, logWarn, logError } from "@/logger";
-import { withSuppressedTokenWarnings } from "@/utils";
 
 export interface QueryExpanderOptions {
   maxVariants?: number;
@@ -38,8 +38,8 @@ Instructions:
 5. Focus on NOUNS and meaningful concepts
 6. EXCLUDE common action verbs in ANY language (find, search, get, 查找, chercher, buscar, etc.)
 
-Example: "find my piano notes" 
-- Queries: "piano lesson notes", "piano practice sheets"  
+Example: "find my piano notes"
+- Queries: "piano lesson notes", "piano practice sheets"
 - Terms: piano, notes, music, sheet, practice, lesson, piece, scales, exercises
 
 Example: "typescript interfaces"
@@ -119,30 +119,24 @@ Format your response using XML tags:
    * @returns Expanded query or fallback if timeout is reached
    */
   private async expandWithTimeout(query: string): Promise<ExpandedQuery> {
-    let timeoutId: NodeJS.Timeout | undefined;
+    const controller = new AbortController();
 
-    // Create timeout promise with cancellable timer
-    const timeoutPromise = new Promise<ExpandedQuery>((resolve) => {
-      timeoutId = setTimeout(() => {
-        logInfo(`QueryExpander: Timeout reached for "${query}"`);
-        resolve(this.fallbackExpansion(query));
-      }, this.config.timeout);
-    });
+    const timeoutId = setTimeout(() => {
+      logInfo(`QueryExpander: Timeout reached for "${query}"`);
+      controller.abort();
+    }, this.config.timeout);
 
-    // Create expansion promise that clears timeout on completion
-    const expansionPromise = this.expandWithLLM(query).then(
-      (result) => {
-        if (timeoutId) clearTimeout(timeoutId);
-        return result;
-      },
-      (error) => {
-        if (timeoutId) clearTimeout(timeoutId);
-        throw error;
+    try {
+      const result = await this.expandWithLLM(query, controller.signal);
+      clearTimeout(timeoutId);
+      return result;
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error?.name === "AbortError" || controller.signal.aborted) {
+        return this.fallbackExpansion(query);
       }
-    );
-
-    // Race between timeout and expansion
-    return Promise.race([expansionPromise, timeoutPromise]);
+      throw error;
+    }
   }
 
   /**
@@ -150,7 +144,12 @@ Format your response using XML tags:
    * @param query - The query to expand
    * @returns Expanded queries and extracted salient terms
    */
-  private async expandWithLLM(query: string): Promise<ExpandedQuery> {
+  private async expandWithLLM(query: string, signal?: AbortSignal): Promise<ExpandedQuery> {
+    // Check if already aborted
+    if (signal?.aborted) {
+      return this.fallbackExpansion(query);
+    }
+
     try {
       if (!this.options.getChatModel) {
         logInfo("QueryExpander: No chat model getter provided");
@@ -170,8 +169,27 @@ Format your response using XML tags:
 
       // Invoke model with token warnings suppressed
       const response = await withSuppressedTokenWarnings(async () => {
+        // Pass AbortSignal when supported by the model implementation
+        const anyModel = model as any;
+        if (typeof anyModel.invoke === "function") {
+          try {
+            return await anyModel.invoke(prompt, { signal });
+          } catch (err) {
+            if ((err as any)?.name === "AbortError") {
+              logInfo("QueryExpander: LLM request aborted by timeout");
+              return null;
+            }
+            throw err;
+          }
+        }
         return await model.invoke(prompt);
       });
+
+      // Check if aborted after the call
+      if (signal?.aborted || !response) {
+        return this.fallbackExpansion(query);
+      }
+
       const content = this.extractContent(response);
 
       if (!content) {

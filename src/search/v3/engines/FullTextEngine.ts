@@ -3,6 +3,7 @@ import FlexSearch from "flexsearch";
 import { App, TFile, getAllTags } from "obsidian";
 import { NoteDoc, NoteIdRank } from "../interfaces";
 import { MemoryManager } from "../utils/MemoryManager";
+import { VaultPathValidator } from "../utils/VaultPathValidator";
 
 /**
  * Full-text search engine using ephemeral FlexSearch index built per-query
@@ -11,6 +12,9 @@ export class FullTextEngine {
   private index: any; // FlexSearch.Document
   private memoryManager: MemoryManager;
   private indexedDocs = new Set<string>();
+
+  // Security: Maximum content size to prevent memory exhaustion (10MB)
+  private static readonly MAX_CONTENT_SIZE = 10 * 1024 * 1024;
 
   constructor(private app: App) {
     this.memoryManager = new MemoryManager();
@@ -22,20 +26,21 @@ export class FullTextEngine {
    */
   private createIndex(): any {
     const Document = (FlexSearch as any).Document;
+    const tokenizer = this.tokenizeMixed.bind(this);
     return new Document({
       encode: false,
-      tokenize: this.tokenizeMixed.bind(this),
+      tokenize: tokenizer,
       cache: false,
       document: {
         id: "id",
         index: [
-          { field: "title", tokenize: this.tokenizeMixed.bind(this), weight: 3 },
-          { field: "path", tokenize: this.tokenizeMixed.bind(this), weight: 2.5 }, // Path components are highly relevant
-          { field: "headings", tokenize: this.tokenizeMixed.bind(this), weight: 2 },
-          { field: "tags", tokenize: this.tokenizeMixed.bind(this), weight: 2 },
-          { field: "props", tokenize: this.tokenizeMixed.bind(this), weight: 2 }, // Frontmatter property values
-          { field: "links", tokenize: this.tokenizeMixed.bind(this), weight: 2 },
-          { field: "body", tokenize: this.tokenizeMixed.bind(this), weight: 1 },
+          { field: "title", tokenize: tokenizer, weight: 3 },
+          { field: "path", tokenize: tokenizer, weight: 2.5 }, // Path components are highly relevant
+          { field: "headings", tokenize: tokenizer, weight: 2 },
+          { field: "tags", tokenize: tokenizer, weight: 2 },
+          { field: "props", tokenize: tokenizer, weight: 2 }, // Frontmatter property values
+          { field: "links", tokenize: tokenizer, weight: 2 },
+          { field: "body", tokenize: tokenizer, weight: 1 },
         ],
         store: false, // Don't store docs to save memory
       },
@@ -87,6 +92,11 @@ export class FullTextEngine {
     const limitedCandidates = candidatePaths.slice(0, this.memoryManager.getCandidateLimit());
 
     for (const path of limitedCandidates) {
+      // Guard against path traversal or invalid inputs
+      if (!VaultPathValidator.isValid(path)) {
+        logInfo(`FullText: Skipping unsafe path ${path}`);
+        continue;
+      }
       if (!this.memoryManager.canAddContent(1000)) {
         // Rough estimate
         logInfo(
@@ -151,7 +161,15 @@ export class FullTextEngine {
   private async createNoteDoc(file: TFile): Promise<NoteDoc | null> {
     try {
       const cache = this.app.metadataCache.getFileCache(file);
-      const content = await this.app.vault.cachedRead(file);
+      let content = await this.app.vault.cachedRead(file);
+
+      // Security: Limit content size to prevent memory exhaustion
+      if (content.length > FullTextEngine.MAX_CONTENT_SIZE) {
+        logInfo(
+          `FullText: File ${file.path} exceeds size limit (${content.length} bytes), truncating`
+        );
+        content = content.substring(0, FullTextEngine.MAX_CONTENT_SIZE);
+      }
 
       // Extract metadata
       const allTags = cache ? (getAllTags(cache) ?? []) : [];
@@ -198,45 +216,40 @@ export class FullTextEngine {
     const propValues: string[] = [];
     if (props && typeof props === "object") {
       for (const value of Object.values(props)) {
-        this.extractPrimitiveValues(value, propValues);
+        this.extractPrimitiveValues(value, propValues, 2);
       }
     }
     return propValues;
   }
 
   /**
-   * Recursively extract primitive values (strings/numbers/booleans) from a value.
-   * Handles arrays of primitives but skips nested arrays and objects.
+   * Extract primitive values with depth limit to prevent infinite recursion.
+   * Simpler approach using depth limit instead of circular reference tracking.
    *
    * @param value - The value to extract from
    * @param output - Array to collect extracted string values
-   * @param depth - Current recursion depth (max 1 for arrays)
+   * @param maxDepth - Maximum recursion depth
    */
-  private extractPrimitiveValues(value: unknown, output: string[], depth: number = 0): void {
-    if (value == null) return; // Skip null/undefined
+  private extractPrimitiveValues(value: unknown, output: string[], maxDepth: number): void {
+    if (maxDepth <= 0 || value == null) return;
 
     if (typeof value === "string") {
       const trimmed = value.trim();
-      if (trimmed) output.push(trimmed); // Skip empty strings
+      if (trimmed) output.push(trimmed);
     } else if (typeof value === "number" || typeof value === "boolean") {
       output.push(String(value));
     } else if (value instanceof Date) {
-      // Handle Date objects (convert to ISO string)
       output.push(value.toISOString());
-    } else if (Array.isArray(value) && depth === 0) {
-      // Only process first-level arrays, skip nested arrays
-      value.forEach((item) => {
+    } else if (Array.isArray(value)) {
+      // Limit array processing to first 10 items for performance
+      value.slice(0, 10).forEach((item) => {
         if (typeof item === "string" || typeof item === "number" || typeof item === "boolean") {
-          if (typeof item === "string") {
-            const trimmed = item.trim();
-            if (trimmed) output.push(trimmed);
-          } else {
-            output.push(String(item));
-          }
+          const str = typeof item === "string" ? item.trim() : String(item);
+          if (str) output.push(str);
         }
       });
     }
-    // Skip objects and nested arrays
+    // Skip objects entirely - simpler and safer
   }
 
   /**

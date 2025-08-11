@@ -260,12 +260,15 @@ export class SearchCore {
           }
         }
 
-        score =
+        // Compute raw evidence score
+        const raw =
           4 * pathPhrase +
           3 * contentPhrase +
           2 * pathTerm +
           1 * contentTerm +
           0.5 * distinctMatched.size;
+        // Use tanh for natural 0-1 normalization with soft saturation
+        score = Math.tanh(raw / 4);
       } catch {
         score = 0;
       }
