@@ -8,16 +8,15 @@ import {
 import ChainFactory, { ChainType, Document } from "@/chainFactory";
 import { BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
 import {
+  AutonomousAgentChainRunner,
   ChainRunner,
   CopilotPlusChainRunner,
   LLMChainRunner,
   ProjectChainRunner,
   VaultQAChainRunner,
-  AutonomousAgentChainRunner,
 } from "@/LLMProviders/chainRunner/index";
 import { logError, logInfo } from "@/logger";
-import { HybridRetriever } from "@/search/hybridRetriever";
-import VectorStoreManager from "@/search/vectorStoreManager";
+import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
 import { getSettings, getSystemPrompt, subscribeToSettingsChange } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { findCustomModel, isOSeriesModel, isSupportedChain } from "@/utils";
@@ -44,15 +43,13 @@ export default class ChainManager {
   }
 
   public app: App;
-  public vectorStoreManager: VectorStoreManager;
   public chatModelManager: ChatModelManager;
   public memoryManager: MemoryManager;
   public promptManager: PromptManager;
 
-  constructor(app: App, vectorStoreManager: VectorStoreManager) {
+  constructor(app: App) {
     // Instantiate singletons
     this.app = app;
-    this.vectorStoreManager = vectorStoreManager;
     this.memoryManager = MemoryManager.getInstance();
     this.chatModelManager = ChatModelManager.getInstance();
     this.promptManager = PromptManager.getInstance();
@@ -209,7 +206,7 @@ export default class ChainManager {
         // TODO: VaultQAChainRunner now handles this directly without chains
         await this.initializeQAChain(options);
 
-        const retriever = new HybridRetriever({
+        const retriever = new TieredLexicalRetriever(app, {
           minSimilarityScore: 0.01,
           maxK: getSettings().maxSourceChunks,
           salientTerms: [],
@@ -292,7 +289,10 @@ export default class ChainManager {
   private async initializeQAChain(options: SetChainOptions) {
     // Handle index refresh if needed
     if (options.refreshIndex) {
-      await this.vectorStoreManager.indexVaultToVectorStore();
+      // New semantic index auto-refresh path
+      const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
+      await MemoryIndexManager.getInstance(this.app).indexVaultIncremental();
+      await MemoryIndexManager.getInstance(this.app).ensureLoaded();
     }
   }
 

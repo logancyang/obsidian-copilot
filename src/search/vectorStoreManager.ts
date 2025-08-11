@@ -1,3 +1,5 @@
+// DEPRECATED: v3 semantic indexing uses MemoryIndexManager (JSONL snapshots). This file remains only
+// for legacy Orama-based flows and should not be referenced by new code.
 import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { CopilotSettings, getSettings, subscribeToSettingsChange } from "@/settings/model";

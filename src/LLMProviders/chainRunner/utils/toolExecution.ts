@@ -199,9 +199,11 @@ export function logToolResult(toolName: string, result: ToolExecutionResult): vo
   logInfo(`${emoji} ${displayName.toUpperCase()} RESULT: ${status}`);
 
   // Log abbreviated result for readability
-  if (result.result.length > 500) {
+  // Reduce limit to 300 chars for cleaner logs
+  const maxLogLength = 300;
+  if (result.result.length > maxLogLength) {
     logInfo(
-      `Result: ${result.result.substring(0, 500)}... (truncated, ${result.result.length} chars total)`
+      `Result: ${result.result.substring(0, maxLogLength)}... (truncated, ${result.result.length} chars total)`
     );
   } else {
     logInfo(`Result:`, result.result);

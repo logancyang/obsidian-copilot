@@ -110,6 +110,10 @@ export interface CopilotSettings {
   passMarkdownImages: boolean;
   enableAutonomousAgent: boolean;
   enableCustomPromptTemplating: boolean;
+  /** Enable semantic stage in v3 search (requires Memory Index JSONL) */
+  enableSemanticSearchV3: boolean;
+  /** Graph expansion hops for v3 search (1-3, default 1) */
+  graphHops: number;
   /** Whether we have suggested built-in default commands to the user once. */
   suggestedDefaultCommands: boolean;
   autonomousAgentMaxIterations: number;
@@ -258,6 +262,14 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure enableWordCompletion has a default value
   if (typeof sanitizedSettings.enableWordCompletion !== "boolean") {
     sanitizedSettings.enableWordCompletion = DEFAULT_SETTINGS.enableWordCompletion;
+  }
+
+  // Ensure graphHops has a valid value (1-3)
+  const graphHops = Number(settingsToSanitize.graphHops);
+  if (isNaN(graphHops) || graphHops < 1 || graphHops > 3) {
+    sanitizedSettings.graphHops = DEFAULT_SETTINGS.graphHops;
+  } else {
+    sanitizedSettings.graphHops = Math.floor(graphHops);
   }
 
   // Ensure autonomousAgentMaxIterations has a valid value

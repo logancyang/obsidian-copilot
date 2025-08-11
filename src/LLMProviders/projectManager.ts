@@ -21,7 +21,6 @@ import { FileParserManager } from "@/tools/FileParserManager";
 import { err2String } from "@/utils";
 import { isRateLimitError } from "@/utils/rateLimitUtils";
 import { App, Notice, TFile } from "obsidian";
-import VectorStoreManager from "../search/vectorStoreManager";
 import { BrevilabsClient } from "./brevilabsClient";
 import ChainManager from "./chainManager";
 import { ProjectLoadTracker } from "./projectLoadTracker";
@@ -36,11 +35,11 @@ export default class ProjectManager {
   private fileParserManager: FileParserManager;
   private loadTracker: ProjectLoadTracker;
 
-  private constructor(app: App, vectorStoreManager: VectorStoreManager, plugin: CopilotPlugin) {
+  private constructor(app: App, plugin: CopilotPlugin) {
     this.app = app;
     this.plugin = plugin;
     this.currentProjectId = null;
-    this.chainMangerInstance = new ChainManager(app, vectorStoreManager);
+    this.chainMangerInstance = new ChainManager(app);
     this.projectContextCache = ProjectContextCache.getInstance();
     this.fileParserManager = new FileParserManager(
       BrevilabsClient.getInstance(),
@@ -60,11 +59,14 @@ export default class ProjectManager {
       if (isProjectMode()) {
         return;
       }
+      const settings = getSettings();
+      const shouldAutoIndex =
+        settings.enableSemanticSearchV3 &&
+        settings.indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH &&
+        (getChainType() === ChainType.VAULT_QA_CHAIN ||
+          getChainType() === ChainType.COPILOT_PLUS_CHAIN);
       await this.getCurrentChainManager().createChainWithNewModel({
-        refreshIndex:
-          getSettings().indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH &&
-          (getChainType() === ChainType.VAULT_QA_CHAIN ||
-            getChainType() === ChainType.COPILOT_PLUS_CHAIN),
+        refreshIndex: shouldAutoIndex,
       });
     });
 
@@ -107,13 +109,9 @@ export default class ProjectManager {
     });
   }
 
-  public static getInstance(
-    app: App,
-    vectorStoreManager: VectorStoreManager,
-    plugin: CopilotPlugin
-  ): ProjectManager {
+  public static getInstance(app: App, plugin: CopilotPlugin): ProjectManager {
     if (!ProjectManager.instance) {
-      ProjectManager.instance = new ProjectManager(app, vectorStoreManager, plugin);
+      ProjectManager.instance = new ProjectManager(app, plugin);
     }
     return ProjectManager.instance;
   }

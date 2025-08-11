@@ -2,25 +2,23 @@ import { addSelectedTextContext, getChainType } from "@/aiParams";
 import { FileCache } from "@/cache/fileCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { ChainType } from "@/chainFactory";
+import { logError, logWarn } from "@/logger";
 
-import { DebugSearchModal } from "@/components/modals/DebugSearchModal";
-import { OramaSearchModal } from "@/components/modals/OramaSearchModal";
-import { RemoveFromIndexModal } from "@/components/modals/RemoveFromIndexModal";
+import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
+import { EMPTY_COMMAND, QUICK_COMMAND_CODE_BLOCK } from "@/commands/constants";
+import { CustomCommandManager } from "@/commands/customCommandManager";
+import { removeQuickCommandBlocks } from "@/commands/customCommandUtils";
+import { getCachedCustomCommands } from "@/commands/state";
+import { ApplyCustomCommandModal } from "@/components/modals/ApplyCustomCommandModal";
+// Orama-based debug modals removed in v3
 import CopilotPlugin from "@/main";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { CopilotSettings, getSettings, updateSetting } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
-import { Editor, Notice, TFile, MarkdownView } from "obsidian";
+import { isLivePreviewModeOn } from "@/utils";
+import { Editor, MarkdownView, Notice, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";
-import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
-import { EMPTY_COMMAND } from "@/commands/constants";
-import { getCachedCustomCommands } from "@/commands/state";
-import { CustomCommandManager } from "@/commands/customCommandManager";
-import { QUICK_COMMAND_CODE_BLOCK } from "@/commands/constants";
-import { removeQuickCommandBlocks } from "@/commands/customCommandUtils";
-import { isLivePreviewModeOn } from "@/utils";
-import { ApplyCustomCommandModal } from "@/components/modals/ApplyCustomCommandModal";
 
 /**
  * Add a command to the plugin.
@@ -85,7 +83,7 @@ export function registerCommands(
         .chatModelManager.countTokens(allContent);
       new Notice(`Total tokens in your vault: ${totalTokens}`);
     } catch (error) {
-      console.error("Error counting tokens: ", error);
+      logError("Error counting tokens: ", error);
       new Notice("An error occurred while counting tokens.");
     }
   });
@@ -144,38 +142,57 @@ export function registerCommands(
   });
 
   addCommand(plugin, COMMAND_IDS.CLEAR_LOCAL_COPILOT_INDEX, async () => {
-    await plugin.vectorStoreManager.clearIndex();
-  });
-
-  addCommand(plugin, COMMAND_IDS.GARBAGE_COLLECT_COPILOT_INDEX, async () => {
     try {
-      const removedDocs = await plugin.vectorStoreManager.garbageCollectVectorStore();
-      new Notice(`${removedDocs} documents removed from Copilot index.`);
+      const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
+      const manager = MemoryIndexManager.getInstance(plugin.app);
+      const cfgDir = plugin.app.vault.configDir;
+      // List all files in config dir; remove any starting with copilot-index
+      // @ts-ignore
+      const { files } = await plugin.app.vault.adapter.list(cfgDir);
+      for (const f of files || []) {
+        const name = typeof f === "string" ? f : f;
+        if (
+          name.includes("/copilot-index") &&
+          (name.endsWith(".json") || name.endsWith(".jsonl"))
+        ) {
+          try {
+            // @ts-ignore
+            await plugin.app.vault.adapter.remove(name);
+          } catch (e) {
+            logWarn("Failed to remove index file:", name, e);
+          }
+        }
+      }
+      // Reset in-memory using public method
+      manager.clearIndex();
+      new Notice("Cleared semantic memory index files.");
     } catch (err) {
-      console.error("Error garbage collecting the Copilot index:", err);
-      new Notice("An error occurred while garbage collecting the Copilot index.");
+      logError("Error clearing semantic memory index:", err);
+      new Notice("Failed to clear semantic memory index.");
     }
   });
 
+  // Removed legacy build-only command; use refresh and force reindex commands instead
+
   addCommand(plugin, COMMAND_IDS.INDEX_VAULT_TO_COPILOT_INDEX, async () => {
     try {
-      const indexedFileCount = await plugin.vectorStoreManager.indexVaultToVectorStore();
-
-      new Notice(`${indexedFileCount} vault files indexed to Copilot index.`);
+      const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
+      await MemoryIndexManager.getInstance(plugin.app).indexVaultIncremental();
+      await MemoryIndexManager.getInstance(plugin.app).ensureLoaded();
     } catch (err) {
-      console.error("Error indexing vault to Copilot index:", err);
-      new Notice("An error occurred while indexing vault to Copilot index.");
+      logError("Error building semantic memory index:", err);
+      new Notice("An error occurred while building the semantic memory index.");
     }
   });
 
   addCommand(plugin, COMMAND_IDS.FORCE_REINDEX_VAULT_TO_COPILOT_INDEX, async () => {
     try {
-      const indexedFileCount = await plugin.vectorStoreManager.indexVaultToVectorStore(true);
-
-      new Notice(`${indexedFileCount} vault files re-indexed to Copilot index.`);
+      const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
+      await MemoryIndexManager.getInstance(plugin.app).indexVault();
+      await MemoryIndexManager.getInstance(plugin.app).ensureLoaded();
     } catch (err) {
-      console.error("Error re-indexing vault to Copilot index:", err);
-      new Notice("An error occurred while re-indexing vault to Copilot index.");
+      logError("Error rebuilding semantic memory index:", err);
+      new Notice("An error occurred while rebuilding the semantic memory index.");
     }
   });
 
@@ -185,50 +202,56 @@ export function registerCommands(
 
   addCommand(plugin, COMMAND_IDS.LIST_INDEXED_FILES, async () => {
     try {
-      const indexedFiles = await plugin.vectorStoreManager.getIndexedFiles();
-      const indexedFilePaths = new Set(indexedFiles);
+      // Get the MemoryIndexManager for v3
+      const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
+      const manager = MemoryIndexManager.getInstance(plugin.app);
+      await manager.ensureLoaded();
+
+      // Get indexed files from the manager using public method
+      const indexedFiles = new Set<string>();
+      if (manager.isAvailable()) {
+        const paths = manager.getIndexedPaths();
+        paths.forEach((path) => indexedFiles.add(path));
+      }
+
+      // Get all markdown files from vault
+      const { getMatchingPatterns, shouldIndexFile } = await import("@/search/searchUtils");
+      const { inclusions, exclusions } = getMatchingPatterns();
       const allMarkdownFiles = plugin.app.vault.getMarkdownFiles();
       const emptyFiles = new Set<string>();
       const unindexedFiles = new Set<string>();
-      const filesWithoutEmbeddings = new Set<string>();
-
-      // Get dbOps for checking embeddings
-      const dbOps = await plugin.vectorStoreManager.getDbOps();
+      const excludedFiles = new Set<string>();
 
       // Categorize files
       for (const file of allMarkdownFiles) {
+        // Check if file should be indexed based on settings
+        if (!shouldIndexFile(file, inclusions, exclusions)) {
+          excludedFiles.add(file.path);
+          continue;
+        }
+
         const content = await plugin.app.vault.cachedRead(file);
         if (!content || content.trim().length === 0) {
           emptyFiles.add(file.path);
-        } else if (!indexedFilePaths.has(file.path)) {
+        } else if (!indexedFiles.has(file.path)) {
           unindexedFiles.add(file.path);
-        } else {
-          // Check if file has embeddings
-          const hasEmbeddings = await dbOps.hasEmbeddings(file.path);
-          if (!hasEmbeddings) {
-            filesWithoutEmbeddings.add(file.path);
-          }
         }
-      }
-
-      if (indexedFiles.length === 0 && emptyFiles.size === 0 && unindexedFiles.size === 0) {
-        new Notice("No files found to list.");
-        return;
       }
 
       // Create content for the file
       const content = [
         "# Copilot Files Status",
-        `- Indexed files: ${indexedFiles.length}`,
-        `	- Files missing embeddings: ${filesWithoutEmbeddings.size}`,
+        `- Indexed files: ${indexedFiles.size}`,
         `- Unindexed files: ${unindexedFiles.size}`,
         `- Empty files: ${emptyFiles.size}`,
+        `- Excluded files: ${excludedFiles.size}`,
         "",
         "## Indexed Files",
-        ...indexedFiles.map((file) => {
-          const noEmbedding = filesWithoutEmbeddings.has(file);
-          return `- [[${file}]]${noEmbedding ? " *(embedding missing)*" : ""}`;
-        }),
+        ...(indexedFiles.size > 0
+          ? Array.from(indexedFiles)
+              .sort()
+              .map((file) => `- [[${file}]]`)
+          : ["No indexed files found."]),
         "",
         "## Unindexed Files",
         ...(unindexedFiles.size > 0
@@ -243,6 +266,13 @@ export function registerCommands(
               .sort()
               .map((file) => `- [[${file}]]`)
           : ["No empty files found."]),
+        "",
+        "## Excluded Files (based on settings)",
+        ...(excludedFiles.size > 0
+          ? Array.from(excludedFiles)
+              .sort()
+              .map((file) => `- [[${file}]]`)
+          : ["No excluded files."]),
       ].join("\n");
 
       // Create or update the file in the vault
@@ -250,50 +280,25 @@ export function registerCommands(
       const filePath = `${fileName}`;
 
       const existingFile = plugin.app.vault.getAbstractFileByPath(filePath);
-      if (existingFile instanceof TFile) {
-        await plugin.app.vault.modify(existingFile, content);
+      if (existingFile) {
+        await plugin.app.vault.modify(existingFile as TFile, content);
       } else {
         await plugin.app.vault.create(filePath, content);
       }
 
       // Open the file
       const file = plugin.app.vault.getAbstractFileByPath(filePath);
-      if (file instanceof TFile) {
-        await plugin.app.workspace.getLeaf().openFile(file);
-        new Notice(`Listed ${indexedFiles.length} indexed files`);
+      if (file) {
+        await plugin.app.workspace.getLeaf().openFile(file as TFile);
+        new Notice(`Listed ${indexedFiles.size} indexed files`);
       }
     } catch (error) {
-      console.error("Error listing indexed files:", error);
+      logError("Error listing indexed files:", error);
       new Notice("Failed to list indexed files.");
     }
   });
 
   // Debug commands (only when debug mode is enabled)
-  if (next.debug) {
-    addCommand(plugin, COMMAND_IDS.INSPECT_COPILOT_INDEX_BY_NOTE_PATHS, () => {
-      new OramaSearchModal(plugin.app, plugin).open();
-    });
-
-    addCommand(plugin, COMMAND_IDS.SEARCH_ORAMA_DB, () => {
-      new DebugSearchModal(plugin.app, plugin).open();
-    });
-
-    addCommand(plugin, COMMAND_IDS.REMOVE_FILES_FROM_COPILOT_INDEX, async () => {
-      new RemoveFromIndexModal(plugin.app, async (filePaths: string[]) => {
-        const dbOps = await plugin.vectorStoreManager.getDbOps();
-        try {
-          for (const path of filePaths) {
-            await dbOps.removeDocs(path);
-          }
-          await dbOps.saveDB();
-          new Notice(`Successfully removed ${filePaths.length} files from the index.`);
-        } catch (err) {
-          console.error("Error removing files from index:", err);
-          new Notice("An error occurred while removing files from the index.");
-        }
-      }).open();
-    });
-  }
 
   // Add clear Copilot cache command
   addCommand(plugin, COMMAND_IDS.CLEAR_COPILOT_CACHE, async () => {
@@ -313,7 +318,7 @@ export function registerCommands(
 
       new Notice("All Copilot caches cleared successfully");
     } catch (error) {
-      console.error("Error clearing Copilot caches:", error);
+      logError("Error clearing Copilot caches:", error);
       new Notice("Failed to clear Copilot caches");
     }
   });

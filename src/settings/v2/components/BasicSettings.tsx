@@ -6,8 +6,8 @@ import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { SettingItem } from "@/components/ui/setting-item";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DEFAULT_OPEN_AREA, PLUS_UTM_MEDIUMS } from "@/constants";
+import { cn } from "@/lib/utils";
 import { createPlusPageUrl } from "@/plusUtils";
-import VectorStoreManager from "@/search/vectorStoreManager";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { checkModelApiKey, formatDateTime } from "@/utils";
@@ -15,7 +15,6 @@ import { HelpCircle, Key, Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useState } from "react";
 import { ApiKeyDialog } from "./ApiKeyDialog";
-import { cn } from "@/lib/utils";
 
 const ChainType2Label: Record<ChainType, string> = {
   [ChainType.LLM_CHAIN]: "Chat",
@@ -35,7 +34,9 @@ export const BasicSettings: React.FC = () => {
     if (modelKey !== settings.embeddingModelKey) {
       new RebuildIndexConfirmModal(app, async () => {
         updateSetting("embeddingModelKey", modelKey);
-        await VectorStoreManager.getInstance().indexVaultToVectorStore(true);
+        const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
+        await MemoryIndexManager.getInstance(app).indexVault();
+        await MemoryIndexManager.getInstance(app).ensureLoaded();
       }).open();
     }
   };

@@ -2,9 +2,9 @@ import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { logError, logInfo, logWarn } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
 import { getSettings, getSystemPrompt } from "@/settings/model";
+import { initializeBuiltinTools } from "@/tools/builtinTools";
 import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
 import { ToolRegistry } from "@/tools/ToolRegistry";
-import { initializeBuiltinTools } from "@/tools/builtinTools";
 import { ChatMessage } from "@/types/message";
 import { getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { processToolResults } from "@/utils/toolResultUtils";
@@ -215,6 +215,14 @@ ${params}
             if (toolCalls.length > 0) {
               toolNames = toolCalls.map((toolCall) => toolCall.name);
             }
+
+            // Determine background tools to avoid showing banners during streaming
+            const availableTools = this.getAvailableTools();
+            const backgroundToolNames = new Set(
+              availableTools.filter((t) => t.isBackground).map((t) => t.name)
+            );
+
+            // Include partial tool name if long enough, then filter out background tools
             const toolName = extractToolNameFromPartialBlock(fullMessage);
             if (toolName) {
               // Only add the partial tool call block if the block is larger than STREAMING_TRUNCATE_THRESHOLD
@@ -223,6 +231,9 @@ ${params}
                 toolNames.push(toolName);
               }
             }
+
+            // Filter out background tools (should be invisible)
+            toolNames = toolNames.filter((name) => !backgroundToolNames.has(name));
 
             // Create tool call markers if they don't exist
             // Generate temporary tool call id based on index of the tool name in the toolNames array
@@ -445,9 +456,12 @@ ${params}
         }
 
         // Add AI response to conversation for next iteration
+        // Ensure any tool markers have encoded results before storing in conversation
+        const { ensureEncodedToolCallMarkerResults } = await import("./utils/toolCallParser");
+        const safeAssistantContent = ensureEncodedToolCallMarkerResults(response);
         conversationMessages.push({
           role: "assistant",
-          content: response,
+          content: safeAssistantContent,
         });
 
         // Add tool results as user messages for next iteration (full results for current turn)
@@ -458,7 +472,12 @@ ${params}
           content: toolResultsForConversation,
         });
 
-        logInfo("Tool results added to conversation:", toolResultsForConversation);
+        // Truncate long tool results for logging to avoid console spam
+        const truncatedForLog =
+          toolResultsForConversation.length > 500
+            ? toolResultsForConversation.substring(0, 500) + "... (truncated)"
+            : toolResultsForConversation;
+        logInfo("Tool results added to conversation:", truncatedForLog);
       }
 
       // If we hit max iterations, add a message explaining the limit was reached
@@ -511,6 +530,11 @@ ${params}
       logWarn("fullAIResponse was empty, using iteration history");
       fullAIResponse = iterationHistory.join("\n\n");
     }
+
+    // Decode encoded tool marker results for clearer logging only
+    await import("./utils/toolCallParser");
+    // Keep llmFormattedOutput encoded for memory storage; no decoded variant needed
+    // Readable log removed to reduce verbosity
 
     return this.handleResponse(
       fullAIResponse,

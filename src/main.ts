@@ -8,13 +8,25 @@ import CopilotView from "@/components/CopilotView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 
-import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
+import { QUICK_COMMAND_CODE_BLOCK } from "@/commands/constants";
 import { registerContextMenu } from "@/commands/contextMenu";
+import { CustomCommandRegister } from "@/commands/customCommandRegister";
+import { migrateCommands, suggestDefaultCommands } from "@/commands/migrator";
+import { createQuickCommandContainer } from "@/components/QuickCommand";
+import {
+  ABORT_REASON,
+  CHAT_VIEWTYPE,
+  DEFAULT_OPEN_AREA,
+  EVENT_NAMES,
+  VAULT_VECTOR_STORE_STRATEGY,
+} from "@/constants";
+import { ChatManager } from "@/core/ChatManager";
+import { MessageRepository } from "@/core/MessageRepository";
 import { encryptAllKeys } from "@/encryptionService";
-import { logInfo } from "@/logger";
+import { logInfo, logWarn } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
-import { HybridRetriever } from "@/search/hybridRetriever";
-import VectorStoreManager from "@/search/vectorStoreManager";
+import { MemoryIndexManager } from "@/search/v3/MemoryIndexManager";
+import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
 import {
   getModelKeyFromModel,
@@ -23,6 +35,7 @@ import {
   setSettings,
   subscribeToSettingsChange,
 } from "@/settings/model";
+import { ChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
 import {
@@ -36,25 +49,23 @@ import {
   WorkspaceLeaf,
 } from "obsidian";
 import { IntentAnalyzer } from "./LLMProviders/intentAnalyzer";
-import { CustomCommandRegister } from "@/commands/customCommandRegister";
-import { migrateCommands, suggestDefaultCommands } from "@/commands/migrator";
-import { ChatManager } from "@/core/ChatManager";
-import { MessageRepository } from "@/core/MessageRepository";
-import { ChatUIState } from "@/state/ChatUIState";
-import { createQuickCommandContainer } from "@/components/QuickCommand";
-import { QUICK_COMMAND_CODE_BLOCK } from "@/commands/constants";
+
+interface FileTrackingState {
+  lastActiveFile: TFile | null;
+  lastActiveMtime: number | null;
+}
 
 export default class CopilotPlugin extends Plugin {
   // Plugin components
   projectManager: ProjectManager;
   brevilabsClient: BrevilabsClient;
   userMessageHistory: string[] = [];
-  vectorStoreManager: VectorStoreManager;
   fileParserManager: FileParserManager;
   customCommandRegister: CustomCommandRegister;
   settingsUnsubscriber?: () => void;
   private autocompleteService: AutocompleteService;
   chatUIState: ChatUIState;
+  private fileTracker: FileTrackingState = { lastActiveFile: null, lastActiveMtime: null };
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -73,15 +84,13 @@ export default class CopilotPlugin extends Plugin {
     // Initialize built-in tools with vault access
     initializeBuiltinTools(this.app.vault);
 
-    this.vectorStoreManager = VectorStoreManager.getInstance();
-
     // Initialize BrevilabsClient
     this.brevilabsClient = BrevilabsClient.getInstance();
     this.brevilabsClient.setPluginVersion(this.manifest.version);
     checkIsPlusUser();
 
     // Initialize ProjectManager
-    this.projectManager = ProjectManager.getInstance(this.app, this.vectorStoreManager, this);
+    this.projectManager = ProjectManager.getInstance(this.app, this);
 
     // Initialize FileParserManager early with other core services
     this.fileParserManager = new FileParserManager(this.brevilabsClient, this.app.vault);
@@ -117,6 +126,35 @@ export default class CopilotPlugin extends Plugin {
 
     IntentAnalyzer.initTools(this.app.vault);
 
+    // Auto-index per strategy when semantic toggle is enabled
+    try {
+      const settings = getSettings();
+      const semanticOn = settings.enableSemanticSearchV3;
+      if (semanticOn) {
+        const strategy = settings.indexVaultToVectorStore;
+        const isMobileDisabled = settings.disableIndexOnMobile && (this.app as any).isMobile;
+        if (!isMobileDisabled && strategy === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP) {
+          await MemoryIndexManager.getInstance(this.app).indexVaultIncremental();
+          await MemoryIndexManager.getInstance(this.app).ensureLoaded();
+        } else {
+          const loaded = isMobileDisabled
+            ? false
+            : await MemoryIndexManager.getInstance(this.app).loadIfExists();
+          if (!loaded) {
+            logWarn("MemoryIndex: embedding index not found; falling back to full-text only");
+            new Notice("embedding index doesn't exist, fall back to full-text search");
+          }
+        }
+      } else {
+        // If semantic is off, we still try to load index for features that depend on it
+        if (!(settings.disableIndexOnMobile && (this.app as any).isMobile)) {
+          await MemoryIndexManager.getInstance(this.app).loadIfExists();
+        }
+      }
+    } catch {
+      // Swallow errors to avoid disrupting startup
+    }
+
     this.registerEvent(
       this.app.workspace.on("editor-menu", (menu: Menu) => {
         return registerContextMenu(menu);
@@ -128,6 +166,34 @@ export default class CopilotPlugin extends Plugin {
         if (leaf && leaf.view instanceof MarkdownView) {
           const file = leaf.view.file;
           if (file) {
+            // On switching to a new file, opportunistically re-index the previous active file
+            // if semantic search v3 is enabled and file was modified while active
+            try {
+              const settings = getSettings();
+              if (settings.enableSemanticSearchV3) {
+                const { lastActiveFile, lastActiveMtime } = this.fileTracker;
+                if (
+                  lastActiveFile &&
+                  typeof lastActiveMtime === "number" &&
+                  lastActiveFile.extension === "md"
+                ) {
+                  if (lastActiveFile.stat?.mtime && lastActiveFile.stat.mtime > lastActiveMtime) {
+                    // Reindex only the last active file that changed
+                    void MemoryIndexManager.getInstance(this.app).reindexSingleFileIfModified(
+                      lastActiveFile,
+                      lastActiveMtime
+                    );
+                  }
+                }
+                // update trackers
+                this.fileTracker = {
+                  lastActiveFile: file,
+                  lastActiveMtime: file.stat?.mtime ?? null,
+                };
+              }
+            } catch {
+              // non-fatal: ignore indexing errors during active file switch
+            }
             const activeCopilotView = this.app.workspace
               .getLeavesOfType(CHAT_VIEWTYPE)
               .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
@@ -150,10 +216,6 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async onunload() {
-    if (this.vectorStoreManager) {
-      this.vectorStoreManager.onunload();
-    }
-
     if (this.projectManager) {
       this.projectManager.onunload();
     }
@@ -414,14 +476,14 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async customSearchDB(query: string, salientTerms: string[], textWeight: number): Promise<any[]> {
-    const hybridRetriever = new HybridRetriever({
+    const retriever = new TieredLexicalRetriever(app, {
       minSimilarityScore: 0.3,
       maxK: 20,
       salientTerms: salientTerms,
       textWeight: textWeight,
     });
 
-    const results = await hybridRetriever.getOramaChunks(query, salientTerms);
+    const results = await retriever.getRelevantDocuments(query);
     return results.map((doc) => ({
       content: doc.pageContent,
       metadata: doc.metadata,

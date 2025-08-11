@@ -1,3 +1,5 @@
+import { logWarn } from "@/logger";
+
 /**
  * Format tool results for display in the UI
  * Each formatter should return a user-friendly representation of the tool result
@@ -18,13 +20,24 @@ export class ToolResultFormatter {
   }
   static format(toolName: string, result: string): string {
     try {
-      // Try to parse the result as JSON first
+      // Decode tool marker encoding if present (ENC:...)
+      let normalized = result;
+      if (typeof normalized === "string" && normalized.startsWith("ENC:")) {
+        try {
+          normalized = decodeURIComponent(normalized.slice(4));
+        } catch {
+          // fall back to original
+        }
+      }
+
+      // Try to parse the (potentially decoded) result as JSON first
       let parsedResult: any;
       try {
-        parsedResult = JSON.parse(result);
-      } catch {
+        parsedResult = JSON.parse(normalized);
+      } catch (e) {
         // If not JSON, use the raw string
-        parsedResult = result;
+        logWarn(`ToolResultFormatter: Failed to parse JSON for ${toolName}:`, e);
+        parsedResult = normalized;
       }
 
       // Route to specific formatter based on tool name
@@ -51,146 +64,89 @@ export class ToolResultFormatter {
   }
 
   private static formatLocalSearch(result: any): string {
-    // If already formatted or not a string, return as is
-    if (typeof result !== "string") {
-      return typeof result === "object" ? JSON.stringify(result, null, 2) : String(result);
+    const searchResults = this.parseSearchResults(result);
+
+    if (!Array.isArray(searchResults)) {
+      return typeof result === "string" ? result : JSON.stringify(result, null, 2);
     }
 
-    // Check if it looks like JSON (array or object)
-    const trimmedResult = result.trim();
-    if (!trimmedResult.startsWith("[") && !trimmedResult.startsWith("{")) {
-      return result;
+    const count = searchResults.length;
+    if (count === 0) {
+      return "📚 Found 0 relevant notes\n\nNo matching notes found.";
     }
 
-    // Try standard JSON parsing first
-    let searchResults = this.tryParseJson(result);
+    const topResults = searchResults.slice(0, 10);
+    const formattedItems = topResults
+      .map((item, index) => this.formatSearchItem(item, index))
+      .join("\n\n");
 
-    // If parsing failed, try regex extraction for malformed JSON
-    try {
-      if (searchResults.length === 0) {
-        // Match individual JSON objects (works for arrays or malformed JSON)
-        const objectRegex = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
-        const matches = result.match(objectRegex);
+    const footer = count > 10 ? `\n\n... and ${count - 10} more results` : "";
 
-        if (matches) {
-          const regexResults: any[] = [];
-          for (const match of matches) {
-            try {
-              // Parse each object individually
-              const obj = JSON.parse(match);
-              regexResults.push(obj);
-            } catch {
-              // Skip malformed objects
-            }
-          }
-          searchResults = regexResults;
+    return `📚 Found ${count} relevant notes\n\nTop results:\n\n${formattedItems}${footer}`;
+  }
+
+  private static parseSearchResults(result: any): any[] {
+    if (Array.isArray(result)) return result;
+    if (typeof result === "object" && result !== null) return [result];
+    if (typeof result === "string") {
+      const trimmed = result.trim();
+      if (!trimmed.startsWith("[") && !trimmed.startsWith("{")) {
+        return [];
+      }
+      return this.tryParseJson(result);
+    }
+    return [];
+  }
+
+  private static formatSearchItem(item: any, index: number): string {
+    const filename = item.path?.split("/").pop()?.replace(/\.md$/, "") || item.title || "Untitled";
+    const score = item.rerank_score || item.score || 0;
+    const scoreDisplay = typeof score === "number" ? score.toFixed(4) : score;
+
+    // For time-filtered results, show as "Recency" instead of "Relevance"
+    const scoreLabel = item.source === "time-filtered" ? "Recency" : "Relevance";
+
+    const lines = [`${index + 1}. ${filename}`];
+
+    // For time-filtered queries, show actual modified time instead of a recency score
+    if (item.source === "time-filtered") {
+      if (item.mtime) {
+        try {
+          const d = new Date(item.mtime);
+          const iso = isNaN(d.getTime()) ? String(item.mtime) : d.toISOString();
+          lines.push(`   🕒 Modified: ${iso}${item.includeInContext ? " ✓" : ""}`);
+        } catch {
+          lines.push(`   🕒 Modified: ${String(item.mtime)}${item.includeInContext ? " ✓" : ""}`);
         }
       }
-
-      if (searchResults.length === 0) {
-        // Fallback: try to extract key information using regex
-        const titleRegex = /"title"\s*:\s*"([^"]+)"/g;
-        const pathRegex = /"path"\s*:\s*"([^"]+)"/g;
-        const scoreRegex = /"score"\s*:\s*([\d.]+)/g;
-
-        let titleMatch;
-        const results = [];
-        while ((titleMatch = titleRegex.exec(result))) {
-          const title = titleMatch[1];
-          pathRegex.lastIndex = titleMatch.index;
-          const pathMatch = pathRegex.exec(result);
-          scoreRegex.lastIndex = titleMatch.index;
-          const scoreMatch = scoreRegex.exec(result);
-
-          results.push({
-            title: title,
-            path: pathMatch ? pathMatch[1] : "",
-            score: scoreMatch ? parseFloat(scoreMatch[1]) : 0,
-            content: "", // Content is too complex to extract reliably
-          });
-        }
-
-        if (results.length > 0) {
-          searchResults = results;
-        }
-      }
-    } catch {
-      // If extraction fails, return original
-      return result;
+    } else if (item.source === "title-match") {
+      // For title matches, avoid misleading numeric scores; mark as a title match
+      lines.push(`   🔖 Title match${item.includeInContext ? " ✓" : ""}`);
+    } else {
+      // Default: show relevance-like score line
+      lines.push(`   📊 ${scoreLabel}: ${scoreDisplay}${item.includeInContext ? " ✓" : ""}`);
     }
 
-    // Check if it's an array of search results
-    if (Array.isArray(searchResults)) {
-      const output: string[] = [`📚 Found ${searchResults.length} relevant notes`];
-
-      if (searchResults.length === 0) {
-        output.push("\nNo matching notes found.");
-        return output.join("");
-      }
-
-      output.push("");
-      output.push("Top results:");
-      output.push("");
-
-      // Show top 10 results
-      searchResults.slice(0, 10).forEach((item, index) => {
-        const filename =
-          item.path?.split("/").pop()?.replace(/\.md$/, "") || item.title || "Untitled";
-        const score = item.rerank_score || item.score || 0;
-        const scoreDisplay = typeof score === "number" ? score.toFixed(3) : score;
-
-        output.push(`${index + 1}. ${filename}`);
-        output.push(`   📊 Relevance: ${scoreDisplay}${item.includeInContext ? " ✓" : ""}`);
-
-        // Show a snippet of content if available
-        if (item.content) {
-          // Extract actual content from the formatted string
-          let cleanContent = item.content;
-
-          // Remove NOTE TITLE section
-          cleanContent = cleanContent.replace(
-            /NOTE TITLE:[\s\S]*?(?=METADATA:|NOTE BLOCK CONTENT:)/,
-            ""
-          );
-
-          // Remove METADATA section
-          cleanContent = cleanContent.replace(/METADATA:\{[\s\S]*?\}/, "");
-
-          // Extract content after NOTE BLOCK CONTENT:
-          const contentMatch = cleanContent.match(/NOTE BLOCK CONTENT:\s*([\s\S]*)/);
-          if (contentMatch) {
-            cleanContent = contentMatch[1];
-          }
-
-          // Clean up the content
-          const snippet = cleanContent
-            .substring(0, 150)
-            .replace(/\n+/g, " ")
-            .replace(/\s+/g, " ")
-            .trim();
-
-          if (snippet) {
-            output.push(`   💬 "${snippet}${cleanContent.length > 150 ? "..." : ""}"`);
-          }
-        }
-
-        // Show path if different from filename
-        if (item.path && !item.path.endsWith(`/${filename}.md`)) {
-          output.push(`   📁 ${item.path}`);
-        }
-
-        output.push("");
-      });
-
-      if (searchResults.length > 10) {
-        output.push(`... and ${searchResults.length - 10} more results`);
-      }
-
-      return output.join("\n");
+    const snippet = this.extractContentSnippet(item.content);
+    if (snippet) {
+      lines.push(`   💬 "${snippet}${item.content?.length > 150 ? "..." : ""}"`);
     }
 
-    // If not an array, return original
-    return typeof result === "string" ? result : JSON.stringify(result, null, 2);
+    if (item.path && !item.path.endsWith(`/${filename}.md`)) {
+      lines.push(`   📁 ${item.path}`);
+    }
+
+    return lines.join("\n");
+  }
+
+  private static extractContentSnippet(content: string, maxLength = 150): string {
+    if (!content) return "";
+
+    // Try to extract content after NOTE BLOCK CONTENT: pattern
+    const contentMatch = content.match(/NOTE BLOCK CONTENT:\s*([\s\S]*)/);
+    const cleanContent = contentMatch?.[1] || content;
+
+    return cleanContent.substring(0, maxLength).replace(/\s+/g, " ").trim();
   }
 
   private static formatWebSearch(result: any): string {

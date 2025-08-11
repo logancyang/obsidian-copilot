@@ -1,3 +1,4 @@
+// DEPRECATED: Orama debug modal. Not used by v3 semantic index; slated for removal.
 import CopilotPlugin from "@/main";
 import { search } from "@orama/orama";
 import { App, Modal, Notice, TFile } from "obsidian";
@@ -52,7 +53,8 @@ export class DebugSearchModal extends Modal {
           searchParams.vector.value = Object.values(searchParams.vector.value);
         }
 
-        const db = await this.plugin.vectorStoreManager.getDb();
+        // @ts-ignore - vectorStoreManager deprecated with Orama removal
+        const db = null; // await this.plugin.vectorStoreManager.getDb();
         if (!db) {
           new Notice("Database not found");
           return;

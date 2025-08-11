@@ -10,7 +10,6 @@ import {
   getSimilarityCategory,
   RelevantNoteEntry,
 } from "@/search/findRelevantNotes";
-import VectorStoreManager from "@/search/vectorStoreManager";
 import {
   ArrowRight,
   ChevronDown,
@@ -24,7 +23,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { Notice, TFile } from "obsidian";
-import React, { memo, useEffect, useState, useCallback } from "react";
+import React, { memo, useCallback, useEffect, useState } from "react";
 
 function useRelevantNotes(refresher: number) {
   const [relevantNotes, setRelevantNotes] = useState<RelevantNoteEntry[]>([]);
@@ -33,8 +32,20 @@ function useRelevantNotes(refresher: number) {
   useEffect(() => {
     async function fetchNotes() {
       if (!activeFile?.path) return;
-      const db = await VectorStoreManager.getInstance().getDb();
-      const notes = await findRelevantNotes({ db, filePath: activeFile.path });
+      // Only show when embedding index is available
+      try {
+        const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
+        const manager = MemoryIndexManager.getInstance(app);
+        await manager.loadIfExists();
+        if (!manager.isAvailable()) {
+          setRelevantNotes([]);
+          return;
+        }
+      } catch {
+        setRelevantNotes([]);
+        return;
+      }
+      const notes = await findRelevantNotes({ filePath: activeFile.path });
       setRelevantNotes(notes);
     }
     fetchNotes();
@@ -48,8 +59,20 @@ function useHasIndex(notePath: string, refresher: number) {
   useEffect(() => {
     if (!notePath) return;
     async function fetchHasIndex() {
-      const hasIndex = await VectorStoreManager.getInstance().hasIndex(notePath);
-      setHasIndex(hasIndex);
+      // For v3 memory index, hide when index is unavailable
+      try {
+        const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
+        const manager = MemoryIndexManager.getInstance(app);
+        await manager.loadIfExists();
+        if (!manager.isAvailable()) {
+          setHasIndex(false);
+          return;
+        }
+        // Use public method to check if file is indexed
+        setHasIndex(manager.hasFile(notePath));
+      } catch {
+        setHasIndex(false);
+      }
     }
     fetchHasIndex();
   }, [notePath, refresher]);
@@ -256,11 +279,30 @@ export const RelevantNotes = memo(
     };
     const refreshIndex = async () => {
       if (activeFile) {
-        await VectorStoreManager.getInstance().reindexFile(activeFile);
-        new Notice(`Reindexed ${activeFile.name}`);
+        const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
+        const manager = MemoryIndexManager.getInstance(app);
+
+        // First ensure the index is loaded
+        await manager.ensureLoaded();
+
+        // Check if index exists
+        if (!manager.isAvailable()) {
+          // No index exists, need to build it first
+          new Notice("No index found. Building index for the first time...");
+          await manager.indexVaultIncremental();
+        } else {
+          // Index exists, just reindex the current file
+          await manager.reindexSingleFileIfModified(activeFile, 0);
+        }
+
+        // Reload to ensure UI updates
+        await manager.ensureLoaded();
+        new Notice(`Refreshed index for ${activeFile.basename}`);
         setRefresher(refresher + 1);
       }
     };
+    // Show the UI even without an index so users can build/refresh it
+
     return (
       <div
         className={cn(
@@ -314,7 +356,11 @@ export const RelevantNotes = memo(
           </div>
           {relevantNotes.length === 0 && (
             <div className="tw-flex tw-max-h-12 tw-flex-wrap tw-gap-x-2 tw-gap-y-1 tw-overflow-y-hidden tw-px-1">
-              <span className="tw-text-xs tw-text-muted">No relevant notes found</span>
+              <span className="tw-text-xs tw-text-muted">
+                {!hasIndex
+                  ? "No index available. Click refresh to build index."
+                  : "No relevant notes found"}
+              </span>
             </div>
           )}
           {!isOpen && relevantNotes.length > 0 && (
