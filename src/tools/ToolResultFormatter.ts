@@ -1,5 +1,3 @@
-import { logWarn } from "@/logger";
-
 /**
  * Format tool results for display in the UI
  * Each formatter should return a user-friendly representation of the tool result
@@ -30,13 +28,12 @@ export class ToolResultFormatter {
         }
       }
 
-      // Try to parse the (potentially decoded) result as JSON first
+      // Try to parse as JSON for all tools now that they return JSON
       let parsedResult: any;
       try {
         parsedResult = JSON.parse(normalized);
-      } catch (e) {
-        // If not JSON, use the raw string
-        logWarn(`ToolResultFormatter: Failed to parse JSON for ${toolName}:`, e);
+      } catch {
+        // If not JSON, use the raw string (for backward compatibility)
         parsedResult = normalized;
       }
 
@@ -150,6 +147,36 @@ export class ToolResultFormatter {
   }
 
   private static formatWebSearch(result: any): string {
+    // Handle new JSON array format from webSearch tool
+    if (Array.isArray(result) && result.length > 0 && result[0].type === "web_search") {
+      const output: string[] = ["🌐 Web Search Results"];
+      const item = result[0];
+
+      // Add the main content
+      if (item.content) {
+        output.push("");
+        output.push(item.content);
+      }
+
+      // Add citations if present
+      if (item.citations && item.citations.length > 0) {
+        output.push("");
+        output.push("Sources:");
+        item.citations.forEach((url: string, index: number) => {
+          output.push(`[${index + 1}] ${url}`);
+        });
+      }
+
+      // Add instruction for the model
+      if (item.instruction) {
+        output.push("");
+        output.push(`Note: ${item.instruction}`);
+      }
+
+      return output.join("\n");
+    }
+
+    // Fallback for old string format (for backward compatibility)
     if (typeof result === "string") {
       // Web search results include instructions and citations
       // Extract the main content and citations
@@ -315,43 +342,46 @@ export class ToolResultFormatter {
   }
 
   private static formatWriteToFile(result: any): string {
-    if (typeof result === "string") {
-      // Check if it contains "accepted" or "rejected"
-      if (result.toLowerCase().includes("accepted")) {
-        return "✅ File change: accepted";
-      } else if (result.toLowerCase().includes("rejected")) {
-        return "❌ File change: rejected";
-      }
+    // Extract result status from object or use string directly
+    const status = typeof result === "object" ? result.result : result;
+    const statusStr = String(status).toLowerCase();
 
-      // Fallback for other messages
-      return result;
+    if (statusStr.includes("accepted")) {
+      return "✅ File change: accepted";
+    } else if (statusStr.includes("rejected")) {
+      return "❌ File change: rejected";
     }
-    return result;
+
+    // Return message if available, otherwise the raw result
+    return typeof result === "object" && result.message ? result.message : String(status);
   }
 
   private static formatReplaceInFile(result: any): string {
-    if (typeof result === "string") {
-      // Extract the number of replacements from the result
-      const blockMatch = result.match(/Applied (\d+) SEARCH\/REPLACE block\(s\)/);
-      if (blockMatch) {
-        const blockCount = blockMatch[1];
-        const replacementText = blockCount === "1" ? "replacement" : "replacements";
+    // Extract block count from object or string
+    let blockCount = 0;
+    let status = "";
 
-        if (result.toLowerCase().includes("accepted")) {
-          return `✅ ${blockCount} ${replacementText} accepted`;
-        }
-      }
-
-      // Check if it contains "accepted" or "rejected"
-      if (result.toLowerCase().includes("accepted")) {
-        return "✅ File replacements: accepted";
-      } else if (result.toLowerCase().includes("rejected")) {
-        return "❌ File replacements: rejected";
-      }
-
-      // Fallback for other messages
-      return result;
+    if (typeof result === "object") {
+      blockCount = result.blocksApplied || 0;
+      status = result.result || "";
+    } else if (typeof result === "string") {
+      const match = result.match(/Applied (\d+) SEARCH\/REPLACE block/);
+      if (match) blockCount = parseInt(match[1]);
+      status = result;
     }
-    return result;
+
+    const statusStr = String(status).toLowerCase();
+
+    if (statusStr.includes("accepted")) {
+      const replacementText = blockCount === 1 ? "replacement" : "replacements";
+      return blockCount > 0
+        ? `✅ ${blockCount} ${replacementText} accepted`
+        : "✅ File replacements: accepted";
+    } else if (statusStr.includes("rejected")) {
+      return blockCount === 0 ? "❌ No replacements made" : "❌ File replacements: rejected";
+    }
+
+    // Return message if available, otherwise the raw result
+    return typeof result === "object" && result.message ? result.message : String(status);
   }
 }
