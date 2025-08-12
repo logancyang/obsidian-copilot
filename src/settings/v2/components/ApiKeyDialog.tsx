@@ -7,7 +7,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { ChatModelProviders, ProviderSettingsKeyMap, SettingKeyProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import ProjectManager from "@/LLMProviders/projectManager";
-import { logError, logInfo } from "@/logger";
+import { logError } from "@/logger";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { parseModelsResponse, StandardModel } from "@/settings/providerModels";
 import {
@@ -19,7 +19,7 @@ import {
 } from "@/utils";
 import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { App, Modal, Notice } from "obsidian";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
 
 interface ApiKeyModalContentProps {
@@ -29,7 +29,6 @@ interface ApiKeyModalContentProps {
 interface ProviderKeyItem {
   provider: SettingKeyProviders;
   apiKey: string;
-  isVerified: boolean;
 }
 
 interface SelectedModelInfo {
@@ -41,9 +40,6 @@ interface SelectedModelInfo {
 function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
   const settings = useSettingsValue();
 
-  const [verifyingProviders, setVerifyingProviders] = useState<Set<SettingKeyProviders>>(new Set());
-  const [unverifiedKeys, setUnverifiedKeys] = useState<Set<SettingKeyProviders>>(new Set());
-
   const [expandedProvider, setExpandedProvider] = useState<SettingKeyProviders | null>(null);
   const [modelsByProvider, setModelsByProvider] = useState<
     Record<SettingKeyProviders, StandardModel[] | null>
@@ -53,28 +49,11 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
   const [selectedModel, setSelectedModel] = useState<SelectedModelInfo | null>(null);
   const [verifyingModel, setVerifyingModel] = useState(false);
 
-  // Ref to store the latest unverifiedKeys
-  const unverifiedKeysRef = useRef(unverifiedKeys);
-
-  // Effect to keep the ref updated with the latest unverifiedKeys
-  useEffect(() => {
-    unverifiedKeysRef.current = unverifiedKeys;
-  }, [unverifiedKeys]);
-
   useEffect(() => {
     // Initialization on mount
-    setUnverifiedKeys(new Set());
     setExpandedProvider(null);
     setSelectedModel(null);
-
-    // Cleanup on unmount
-    return () => {
-      unverifiedKeysRef.current.forEach((provider) => {
-        const settingKey = ProviderSettingsKeyMap[provider];
-        updateSetting(settingKey, "");
-      });
-    };
-  }, []); // Empty dependency array ensures this runs on mount and cleans up on unmount
+  }, []); // Empty dependency array ensures this runs on mount
 
   // Get API key by provider
   const getApiKeyByProvider = (provider: SettingKeyProviders): string => {
@@ -88,7 +67,6 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
     return {
       provider: providerKey,
       apiKey,
-      isVerified: !!apiKey && !unverifiedKeys.has(providerKey),
     };
   });
 
@@ -96,51 +74,10 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
     const currentKey = getApiKeyByProvider(provider);
     if (currentKey !== value) {
       updateSetting(ProviderSettingsKeyMap[provider], value);
-      setUnverifiedKeys((prev) => new Set(prev).add(provider));
       // Mark models as needing refresh for this provider
       setModelsByProvider((prev) => ({ ...prev, [provider]: undefined }));
       // Clear error for this provider as the key has changed
       setErrorProvider((prev) => (prev === provider ? null : prev));
-    }
-  };
-
-  const verifyApiKey = async (provider: SettingKeyProviders, apiKey: string) => {
-    setVerifyingProviders((prev) => new Set(prev).add(provider));
-    try {
-      logInfo(`Verifying ${provider} API key`);
-      const defaultTestModel = getProviderInfo(provider).testModel;
-
-      if (!defaultTestModel) {
-        new Notice(
-          "API key verification failed: No default test model found for the selected provider.",
-          10000
-        );
-        return;
-      }
-
-      const customModel: CustomModel = {
-        name: defaultTestModel,
-        provider: provider,
-        apiKey,
-        enabled: true,
-      };
-      await ProjectManager.instance.getCurrentChainManager().chatModelManager.ping(customModel);
-
-      new Notice("API key verified successfully!");
-      setUnverifiedKeys((prev) => {
-        const next = new Set(prev);
-        next.delete(provider);
-        return next;
-      });
-    } catch (error) {
-      console.error("API key verification failed:", error);
-      new Notice("API key verification failed: " + err2String(error), 10000);
-    } finally {
-      setVerifyingProviders((prev) => {
-        const next = new Set(prev);
-        next.delete(provider);
-        return next;
-      });
     }
   };
 
@@ -288,29 +225,7 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
                       className="tw-max-w-full"
                       value={item.apiKey}
                       onChange={(v) => handleApiKeyChange(item.provider, v)}
-                      disabled={verifyingProviders.has(item.provider)}
                     />
-                  </div>
-                  <div className="tw-w-[72px]">
-                    {!item.isVerified ? (
-                      <Button
-                        onClick={() => verifyApiKey(item.provider, item.apiKey)}
-                        disabled={!item.apiKey || verifyingProviders.size > 0}
-                        variant="secondary"
-                        size="sm"
-                        className="tw-w-full tw-whitespace-nowrap"
-                      >
-                        {verifyingProviders.has(item.provider) ? (
-                          <Loader2 className="tw-mr-2 tw-size-4 tw-animate-spin" />
-                        ) : (
-                          "Verify"
-                        )}
-                      </Button>
-                    ) : (
-                      <span className="tw-flex tw-h-9 tw-items-center tw-justify-center tw-text-sm tw-text-success">
-                        Verified
-                      </span>
-                    )}
                   </div>
                   <div className="">
                     <Button
@@ -328,7 +243,7 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
                           fetchModelsForProvider(item.provider, item.apiKey);
                         }
                       }}
-                      disabled={!item.apiKey || verifyingProviders.size > 0}
+                      disabled={!item.apiKey}
                       variant="secondary"
                       size="sm"
                       className="tw-flex tw-w-full tw-items-center tw-justify-center tw-gap-1 tw-whitespace-nowrap tw-p-0.5"
