@@ -329,6 +329,9 @@ export default class ChatModelManager {
   /**
    * Adds special configuration for OpenAI models that support reasoning
    * LangChain 0.6.6+ handles most of the token/temperature logic internally
+   *
+   * NOTE: GPT-5 models require Responses API for verbosity parameter to work.
+   * The useResponsesApi flag is set automatically in createModelInstance() for GPT-5.
    */
   private getOpenAISpecialConfig(
     modelName: string,
@@ -356,11 +359,15 @@ export default class ChatModelManager {
         effort: customModel?.reasoningEffort || settings.reasoningEffort || "low",
       };
 
-      // Add verbosity for GPT-5 models (when API supports it)
+      // Add verbosity for GPT-5 models (Responses API only)
+      // This requires useResponsesApi=true which is set in createModelInstance()
+      // In Responses API, verbosity must be passed as text.verbosity
       if (modelInfo.isGPT5) {
-        const verbosityValue = customModel?.verbosity || settings.verbosity || "medium";
-        config.verbosity = verbosityValue;
-        config.modelKwargs = { verbosity: verbosityValue };
+        const verbosityValue = customModel?.verbosity || settings.verbosity || "low";
+        // For Responses API, verbosity is nested under 'text' parameter
+        config.text = {
+          verbosity: verbosityValue,
+        };
       }
     }
 
@@ -468,6 +475,17 @@ export default class ChatModelManager {
     try {
       const modelInstance = await this.createModelInstance(model);
       ChatModelManager.chatModel = modelInstance;
+
+      // Log if Responses API is enabled for GPT-5
+      const modelInfo = getModelInfo(model.name);
+      if (
+        modelInfo.isGPT5 &&
+        (model.provider === ChatModelProviders.OPENAI ||
+          model.provider === ChatModelProviders.AZURE_OPENAI ||
+          model.provider === ChatModelProviders.OPENAI_FORMAT)
+      ) {
+        logInfo(`Chat model set with Responses API for GPT-5: ${model.name}`);
+      }
     } catch (error) {
       logError(error);
       new Notice(`Error creating model: ${modelKey}`);
@@ -488,10 +506,21 @@ export default class ChatModelManager {
     }
 
     const modelConfig = await this.getModelConfig(model);
+    const modelInfo = getModelInfo(model.name);
 
-    const newModelInstance = new selectedModel.AIConstructor({
-      ...modelConfig,
-    });
+    // For GPT-5 models, automatically use Responses API for proper verbosity support
+    const constructorConfig: any = { ...modelConfig };
+    if (
+      modelInfo.isGPT5 &&
+      (selectedModel.vendor === ChatModelProviders.OPENAI ||
+        selectedModel.vendor === ChatModelProviders.AZURE_OPENAI ||
+        selectedModel.vendor === ChatModelProviders.OPENAI_FORMAT)
+    ) {
+      constructorConfig.useResponsesApi = true;
+      logInfo(`Enabling Responses API for GPT-5 model: ${model.name} (${selectedModel.vendor})`);
+    }
+
+    const newModelInstance = new selectedModel.AIConstructor(constructorConfig);
     return newModelInstance;
   }
 
@@ -554,10 +583,24 @@ export default class ChatModelManager {
       const { streaming, maxTokens, maxCompletionTokens, ...pingConfig } = modelConfig;
       // For ping, just use minimal config
       const tokenConfig = { maxTokens: 30 };
-      const testModel = new (this.getProviderConstructor(modelToTest))({
+
+      // Check if it's a GPT-5 model and enable Responses API for proper support
+      const modelInfo = getModelInfo(model.name);
+      const constructorConfig: any = {
         ...pingConfig,
         ...tokenConfig,
-      });
+      };
+
+      if (
+        modelInfo.isGPT5 &&
+        (model.provider === ChatModelProviders.OPENAI ||
+          model.provider === ChatModelProviders.AZURE_OPENAI ||
+          model.provider === ChatModelProviders.OPENAI_FORMAT)
+      ) {
+        constructorConfig.useResponsesApi = true;
+      }
+
+      const testModel = new (this.getProviderConstructor(modelToTest))(constructorConfig);
       await testModel.invoke([{ role: "user", content: "hello" }], {
         timeout: 8000,
       });
