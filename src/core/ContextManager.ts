@@ -62,6 +62,10 @@ export class ContextManager {
       );
 
       // 2. Extract URLs and process them (for Copilot Plus chain)
+      // IMPORTANT: Only process URLs from the user's direct chat input message,
+      // NOT from the content of context notes. This ensures url4llm is only called
+      // for URLs explicitly typed by the user in the chat, similar to how YouTube
+      // transcription only processes YouTube URLs from user input.
       const urlContextAddition =
         chainType === ChainType.COPILOT_PLUS_CHAIN
           ? await this.mention.processUrls(processedMessage)

@@ -50,6 +50,10 @@ export class ContextProcessor {
   /**
    * Processes context notes, excluding any already handled by custom prompts.
    *
+   * NOTE: This method reads and includes note content as-is. URLs within note content
+   * are NOT extracted or processed with url4llm. Only URLs directly typed in the user's
+   * chat input are processed, not URLs that happen to be in the content of context notes.
+   *
    * @param excludedNotePaths A set of file paths that should be skipped.
    * @param fileParserManager
    * @param vault

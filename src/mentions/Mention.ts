@@ -53,7 +53,16 @@ export class Mention {
     }
   }
 
-  // For non-youtube URLs
+  /**
+   * Process URLs from user input text for url4llm endpoint.
+   *
+   * IMPORTANT: This method should ONLY be called with the user's direct chat input,
+   * NOT with content from context notes. This ensures url4llm is only called for
+   * URLs explicitly typed by the user, similar to YouTube transcript processing.
+   *
+   * @param text The user's chat input text
+   * @returns Processed URL context and any errors
+   */
   async processUrls(text: string): Promise<{
     urlContext: string;
     imageUrls: string[];

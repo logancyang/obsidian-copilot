@@ -692,15 +692,15 @@ export class ProjectContextCache {
     for (const filePath in cache.fileContexts) {
       const file = this.vault.getAbstractFileByPath(filePath);
 
-        // If file no longer exists or doesn't match patterns, remove its reference
-        if (!(file instanceof TFile) || !shouldIndexFile(file, inclusions, exclusions, true)) {
-          // Note: We don't remove from fileCache to preserve content for future use
-          removedCount++;
-        } else {
-          // Keep the file reference if it still matches
-          updatedFileContexts[filePath] = cache.fileContexts[filePath];
-        }
+      // If file no longer exists or doesn't match patterns, remove its reference
+      if (!(file instanceof TFile) || !shouldIndexFile(file, inclusions, exclusions, true)) {
+        // Note: We don't remove from fileCache to preserve content for future use
+        removedCount++;
+      } else {
+        // Keep the file reference if it still matches
+        updatedFileContexts[filePath] = cache.fileContexts[filePath];
       }
+    }
 
     // Only update if we actually removed something
     if (removedCount > 0) {
