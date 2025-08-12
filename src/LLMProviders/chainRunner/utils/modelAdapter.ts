@@ -311,53 +311,6 @@ FINAL REMINDER FOR GPT MODELS: If the user asks you to search, find, edit, or mo
   needsSpecialHandling(): boolean {
     return true;
   }
-
-  /**
-   * Sanitize GPT-5 responses to handle multiple iteration issues
-   * GPT-5 sometimes generates multiple complete responses when using tools
-   * @param response - The model's response text to sanitize
-   * @param iteration - The current iteration number
-   * @returns The sanitized response text
-   */
-  sanitizeResponse(response: string, iteration: number): string {
-    if (!this.isGPT5Model()) {
-      return response;
-    }
-
-    // For GPT-5, if we detect multiple similar responses concatenated, take only the last one
-    // This handles the issue where GPT-5 generates multiple responses across tool iterations
-    const lines = response.split("\n");
-    const responseSegments: string[] = [];
-    let currentSegment = "";
-
-    for (const line of lines) {
-      // Detect potential response boundaries (lines that look like response starts)
-      if (line.match(/^I(?:'ll|'m|\s+will|\s+am)/)) {
-        if (currentSegment.trim()) {
-          responseSegments.push(currentSegment.trim());
-        }
-        currentSegment = line;
-      } else {
-        currentSegment += "\n" + line;
-      }
-    }
-
-    // Add the last segment
-    if (currentSegment.trim()) {
-      responseSegments.push(currentSegment.trim());
-    }
-
-    // If we have multiple similar segments, likely from redundant iterations
-    // Keep only the last one which is typically the most complete
-    if (responseSegments.length > 2) {
-      logInfo(
-        `GPT-5 sanitizer: Found ${responseSegments.length} response segments, keeping the last one`
-      );
-      return responseSegments[responseSegments.length - 1];
-    }
-
-    return response;
-  }
 }
 
 /**
