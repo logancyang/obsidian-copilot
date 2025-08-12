@@ -37,13 +37,13 @@ export function useIsPlusUser(): boolean | undefined {
 }
 
 /** Check if the user is a Plus user. */
-export async function checkIsPlusUser(): Promise<boolean | undefined> {
+export async function checkIsPlusUser(context?: Record<string, any>): Promise<boolean | undefined> {
   if (!getSettings().plusLicenseKey) {
     turnOffPlus();
     return false;
   }
   const brevilabsClient = BrevilabsClient.getInstance();
-  const result = await brevilabsClient.validateLicenseKey();
+  const result = await brevilabsClient.validateLicenseKey(context);
   return result.isValid;
 }
 

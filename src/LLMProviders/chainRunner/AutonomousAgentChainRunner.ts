@@ -127,7 +127,9 @@ ${params}
     const iterationHistory: string[] = []; // Track all iterations for display
     const collectedSources: { title: string; path: string; score: number }[] = []; // Collect sources from localSearch
     this.llmFormattedMessages = []; // Reset LLM messages for this run
-    const isPlusUser = await checkIsPlusUser();
+    const isPlusUser = await checkIsPlusUser({
+      isAutonomousAgent: true,
+    });
     if (!isPlusUser) {
       await this.handleError(new Error("Invalid license key"), addMessage, updateCurrentAiMessage);
       return "";
