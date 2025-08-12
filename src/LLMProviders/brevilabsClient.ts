@@ -230,6 +230,14 @@ export class BrevilabsClient {
         Object.entries(context).filter(([_, value]) => value !== undefined && value !== null)
       );
 
+      // Remove any reserved fields that must not be overridden by context
+      const reservedKeys = new Set(["license_key", "user_id"]);
+      for (const key of reservedKeys) {
+        if (key in filteredContext) {
+          delete (filteredContext as Record<string, unknown>)[key];
+        }
+      }
+
       // Spread the filtered context into the request body
       Object.assign(requestBody, filteredContext);
     }
