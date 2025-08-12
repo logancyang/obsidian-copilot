@@ -88,9 +88,13 @@ export async function executeSequentialToolCall(
     // Validate result
     if (result === null || result === undefined) {
       logWarn(`Tool ${toolCall.name} returned null/undefined result`);
+      // Return empty JSON object instead of plain string for better compatibility
       return {
         toolName: toolCall.name,
-        result: "Tool executed but returned no result",
+        result: JSON.stringify({
+          message: "Tool executed but returned no result",
+          status: "empty",
+        }),
         success: true,
       };
     }

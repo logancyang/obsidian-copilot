@@ -164,6 +164,13 @@ NOTE: Use individual XML parameter tags. For arrays, use JSON format like ["item
  * GPT-specific adapter with aggressive prompting
  */
 class GPTModelAdapter extends BaseModelAdapter {
+  /**
+   * Check if this is a GPT-5 model
+   * @returns True if the model is in the GPT-5 family
+   */
+  protected isGPT5Model(): boolean {
+    return this.modelName.includes("gpt-5") || this.modelName.includes("gpt5");
+  }
   enhanceSystemPrompt(
     basePrompt: string,
     toolDescriptions: string,
@@ -181,9 +188,29 @@ class GPTModelAdapter extends BaseModelAdapter {
     const hasComposerTools = tools.includes("writeToFile") || tools.includes("replaceInFile");
 
     // Insert GPT-specific instructions after the base prompt
-    let gptSpecificSection = `
+    let gptSpecificSection = "";
+
+    // Add GPT-5 specific instructions
+    if (this.isGPT5Model()) {
+      gptSpecificSection = `
+
+GPT-5 SPECIFIC RULES:
+- Use maximum 2 tool calls initially, then provide an answer
+- Call each tool ONCE per unique query
+- For optional parameters: OMIT them entirely if not needed (don't pass empty strings/null)
+- For localSearch: OMIT timeRange if not doing time-based search
+
+Example localSearch without time:
+<use_tool>
+<name>localSearch</name>
+<query>piano notes</query>
+<salientTerms>["piano", "notes"]</salientTerms>
+</use_tool>`;
+    } else {
+      gptSpecificSection = `
 
 CRITICAL FOR GPT MODELS: You MUST ALWAYS include XML tool calls in your response. Do not just describe what you plan to do - you MUST include the actual XML tool call blocks.`;
+    }
 
     if (hasComposerTools) {
       gptSpecificSection += `
@@ -247,29 +274,37 @@ FINAL REMINDER FOR GPT MODELS: If the user asks you to search, find, edit, or mo
 
   enhanceUserMessage(message: string, requiresTools: boolean): string {
     if (requiresTools) {
-      const lowerMessage = message.toLowerCase();
-      const requiresSearch =
-        lowerMessage.includes("find") ||
-        lowerMessage.includes("search") ||
-        lowerMessage.includes("my notes");
-
-      const requiresFileEdit =
-        lowerMessage.includes("edit") ||
-        lowerMessage.includes("modify") ||
-        lowerMessage.includes("update") ||
-        lowerMessage.includes("change") ||
-        lowerMessage.includes("fix") ||
-        lowerMessage.includes("add") ||
-        lowerMessage.includes("typo");
-
-      if (requiresSearch) {
-        return `${message}\n\nREMINDER: Use the <use_tool> XML format to call the localSearch tool.`;
-      }
-
-      if (requiresFileEdit) {
-        return `${message}\n\n🚨 GPT REMINDER: Use replaceInFile for small edits (with SEARCH/REPLACE blocks in diff parameter). The diff parameter MUST contain triple backticks around the SEARCH/REPLACE blocks. Check the examples in your system prompt.`;
-      }
+      return this.getBaseEnhancement(message, requiresTools);
     }
+    return message;
+  }
+
+  private getBaseEnhancement(message: string, requiresTools: boolean): string {
+    if (!requiresTools) return message;
+
+    const lowerMessage = message.toLowerCase();
+    const requiresSearch =
+      lowerMessage.includes("find") ||
+      lowerMessage.includes("search") ||
+      lowerMessage.includes("my notes");
+
+    const requiresFileEdit =
+      lowerMessage.includes("edit") ||
+      lowerMessage.includes("modify") ||
+      lowerMessage.includes("update") ||
+      lowerMessage.includes("change") ||
+      lowerMessage.includes("fix") ||
+      lowerMessage.includes("add") ||
+      lowerMessage.includes("typo");
+
+    if (requiresSearch) {
+      return `${message}\n\nREMINDER: Use the <use_tool> XML format to call the localSearch tool.`;
+    }
+
+    if (requiresFileEdit) {
+      return `${message}\n\n🚨 GPT REMINDER: Use replaceInFile for small edits (with SEARCH/REPLACE blocks in diff parameter). The diff parameter MUST contain triple backticks around the SEARCH/REPLACE blocks. Check the examples in your system prompt.`;
+    }
+
     return message;
   }
 
@@ -640,8 +675,14 @@ export class ModelAdapterFactory {
 
     // GPT models need special handling
     if (modelName.includes("gpt")) {
-      logInfo("Using GPTModelAdapter");
-      return new GPTModelAdapter(modelName);
+      const adapter = new GPTModelAdapter(modelName);
+      // Log if it's a GPT-5 model for debugging
+      if ((adapter as any).isGPT5Model()) {
+        logInfo("Using GPTModelAdapter with GPT-5 specific enhancements");
+      } else {
+        logInfo("Using GPTModelAdapter");
+      }
+      return adapter;
     }
 
     // Claude models

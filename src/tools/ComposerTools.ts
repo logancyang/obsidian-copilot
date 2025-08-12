@@ -95,8 +95,11 @@ const writeToFileTool = createTool({
   schema: writeToFileSchema,
   handler: async ({ path, content }) => {
     const result = await show_preview(path, content);
-    // Return tool result and also instruct the model do not retry this tool call for failed result.
-    return `File change result: ${result}. Do not retry or attempt alternative approaches to modify this file in response to the current user request.`;
+    // Simple JSON wrapper for consistent parsing
+    return JSON.stringify({
+      result: result,
+      message: `File change result: ${result}. Do not retry or attempt alternative approaches to modify this file in response to the current user request.`,
+    });
   },
   timeoutMs: 0, // no timeout
 });
@@ -233,7 +236,12 @@ const replaceInFileTool = createTool({
       // Show preview of changes
       const result = await show_preview(path, modifiedContent);
 
-      return `Applied ${changesApplied} SEARCH/REPLACE block(s) (replacing all occurrences). Result: ${result}. Do not call this tool again to modify this file in response to the current user request.`;
+      // Simple JSON wrapper with essential info
+      return JSON.stringify({
+        result: result,
+        blocksApplied: changesApplied,
+        message: `Applied ${changesApplied} SEARCH/REPLACE block(s) (replacing all occurrences). Result: ${result}. Do not call this tool again to modify this file in response to the current user request.`,
+      });
     } catch (error) {
       return `Error performing SEARCH/REPLACE on ${path}: ${error}. Please check the file path and diff format and try again.`;
     }
