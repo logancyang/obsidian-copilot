@@ -37,7 +37,7 @@ export function ParameterControl({
     setIsEnabled(!isEnabled);
     if (!isEnabled) {
       // When enabling, set to current value or default
-      onChange(value || defaultValue);
+      onChange(value ?? defaultValue);
     } else {
       disableFn?.();
     }
@@ -51,13 +51,13 @@ export function ParameterControl({
 
   return (
     <div className="tw-space-y-3">
-      <div className="tw-flex tw-items-center tw-justify-between">
-        <div className="tw-flex tw-items-center tw-gap-2">
-          <span className={`tw-font-medium ${isEnabled ? "tw-text-normal" : "tw-text-muted"}`}>
-            {label}
-          </span>
-          {helpText && (
-            <TooltipProvider delayDuration={0}>
+      <TooltipProvider delayDuration={0}>
+        <div className="tw-flex tw-items-center tw-justify-between">
+          <div className="tw-flex tw-items-center tw-gap-2">
+            <span className={`tw-font-medium ${isEnabled ? "tw-text-normal" : "tw-text-muted"}`}>
+              {label}
+            </span>
+            {helpText && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <HelpCircle className="tw-size-4 tw-text-muted" />
@@ -66,12 +66,10 @@ export function ParameterControl({
                   <div className="tw-max-w-[300px]">{helpText}</div>
                 </TooltipContent>
               </Tooltip>
-            </TooltipProvider>
-          )}
-        </div>
-        <div className={`tw-flex tw-items-center ${optional ? "tw-gap-3" : "tw-gap-0"}`}>
-          {optional && (
-            <TooltipProvider delayDuration={0}>
+            )}
+          </div>
+          <div className={`tw-flex tw-items-center ${optional ? "tw-gap-3" : "tw-gap-0"}`}>
+            {optional && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -87,19 +85,19 @@ export function ParameterControl({
                   <span>{isEnabled ? "Disable parameters" : "Enable parameters"}</span>
                 </TooltipContent>
               </Tooltip>
-            </TooltipProvider>
-          )}
-          <span
-            className={`tw-min-w-8 tw-text-right tw-font-mono tw-text-sm ${isEnabled ? "tw-text-normal" : "tw-text-muted"}`}
-          >
-            {isEnabled ? value || 0 : optional ? "—" : value || 0}
-          </span>
+            )}
+            <span
+              className={`tw-min-w-8 tw-text-right tw-font-mono tw-text-sm ${isEnabled ? "tw-text-normal" : "tw-text-muted"}`}
+            >
+              {isEnabled ? (value ?? defaultValue) : "—"}
+            </span>
+          </div>
         </div>
-      </div>
+      </TooltipProvider>
 
       <div className="tw-relative">
         <Slider
-          value={[isEnabled ? value || 0 : min]}
+          value={[isEnabled ? (value ?? defaultValue) : min]}
           onValueChange={handleValueChange}
           min={min}
           max={max}
