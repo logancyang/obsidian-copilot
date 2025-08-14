@@ -9,6 +9,7 @@ import { GrepScanner } from "./scanners/GrepScanner";
 import { FolderBoostCalculator } from "./scoring/FolderBoostCalculator";
 import { GraphBoostCalculator } from "./scoring/GraphBoostCalculator";
 import { weightedRRF } from "./utils/RRF";
+import { ScoreNormalizer } from "./utils/ScoreNormalizer";
 
 // LLM timeout for query expansion and HyDE generation
 const LLM_GENERATION_TIMEOUT_MS = 4000;
@@ -22,6 +23,7 @@ export class SearchCore {
   private queryExpander: QueryExpander;
   private folderBoostCalculator: FolderBoostCalculator;
   private graphBoostCalculator: GraphBoostCalculator;
+  private scoreNormalizer: ScoreNormalizer;
 
   constructor(
     private app: App,
@@ -36,6 +38,12 @@ export class SearchCore {
     });
     this.folderBoostCalculator = new FolderBoostCalculator();
     this.graphBoostCalculator = new GraphBoostCalculator(app);
+    this.scoreNormalizer = new ScoreNormalizer({
+      method: "zscore-tanh",
+      tanhScale: 2.5,
+      clipMin: 0.02,
+      clipMax: 0.98,
+    });
   }
 
   /**
@@ -48,7 +56,7 @@ export class SearchCore {
     // Validate and sanitize options
     const maxResults = Math.min(Math.max(1, options.maxResults || 30), 100);
     const enableSemantic = options.enableSemantic || false;
-    const semanticWeight = Math.min(Math.max(0, options.semanticWeight || 1.5), 10);
+    const semanticWeight = Math.min(Math.max(0, options.semanticWeight || 0.6), 1); // Default 60% semantic
     const candidateLimit = Math.min(Math.max(10, options.candidateLimit || 500), 1000);
     const rrfK = Math.min(Math.max(1, options.rrfK || 60), 100);
 
@@ -76,7 +84,7 @@ export class SearchCore {
       // 3. Limit candidates (no graph expansion - we use graph for boost only)
       const candidates = grepHits.slice(0, candidateLimit);
 
-      logInfo(`Using ${candidates.length} candidates for full-text search`);
+      logInfo(`Using ${candidates.length} candidates for BOTH full-text and semantic search`);
 
       // 5. Build ephemeral full-text index
       const indexed = await this.fullTextEngine.buildFromCandidates(candidates);
@@ -122,19 +130,26 @@ export class SearchCore {
             semanticQueries.unshift(hydeDoc);
           }
 
+          // Pass the same candidates array to limit semantic search to the same subset
           const hits = await index.search(semanticQueries, topK, candidates);
           semanticResults = hits.map((h) => ({ id: h.id, score: h.score, engine: "semantic" }));
+
+          logInfo(
+            `Semantic search: Found ${semanticResults.length} results (restricted to ${candidates.length} candidates)`
+          );
         } catch (error) {
           logInfo("SearchCore: Semantic retrieval failed", error as any);
         }
       }
 
-      // 8. Weighted RRF (simplified - no grep prior)
+      // 8. Weighted RRF with normalized weights
+      // semanticWeight now represents the percentage (0-1) for semantic
+      // lexical gets the remainder to ensure weights sum to 1.0
       let fusedResults = weightedRRF({
         lexical: fullTextResults,
         semantic: semanticResults,
         weights: {
-          lexical: 1.0,
+          lexical: 1.0 - semanticWeight,
           semantic: semanticWeight,
         },
         k: rrfK,
@@ -151,10 +166,14 @@ export class SearchCore {
       fusedResults = this.graphBoostCalculator.applyBoosts(fusedResults);
       logInfo("Folder and graph boosts applied to search results");
 
-      // 10. Clean up full-text index to free memory
+      // 10. Apply score normalization (z-score + tanh) to prevent auto-1.0
+      fusedResults = this.scoreNormalizer.normalize(fusedResults);
+      logInfo("Score normalization applied (z-score + tanh)");
+
+      // 11. Clean up full-text index to free memory
       this.fullTextEngine.clear();
 
-      // 11. Return top K results
+      // 12. Return top K results
       const finalResults = fusedResults.slice(0, maxResults);
 
       // Log results in an inspectable format

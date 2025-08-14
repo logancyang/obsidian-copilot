@@ -7,11 +7,9 @@ import { NoteIdRank } from "../interfaces";
 export interface RRFConfig {
   lexical?: NoteIdRank[]; // L1 results
   semantic?: NoteIdRank[]; // Semantic results
-  grepPrior?: NoteIdRank[]; // Initial grep results as weak prior
   weights?: {
-    lexical?: number; // Default: 1.0
-    semantic?: number; // Default: 2.0
-    grepPrior?: number; // Default: 0.3
+    lexical?: number; // Weight for lexical results
+    semantic?: number; // Weight for semantic results
   };
   k?: number; // RRF constant (default: 60)
 }
@@ -19,25 +17,50 @@ export interface RRFConfig {
 /**
  * Perform weighted Reciprocal Rank Fusion to combine multiple rankings
  *
+ * Weights are normalized to sum to 1.0 for consistent scoring.
+ * If only lexical results provided, uses weight 1.0.
+ * If both provided, normalizes weights to sum to 1.0.
+ *
  * Scoring formula: score = Σ(weight / (k + rank + 1)) for each ranking
  * Final score = raw_score * k / 2 (capped at 1.0)
- *
- * Simple linear scaling for reasonable score distribution
  *
  * @param config - RRF configuration with rankings and weights
  * @returns Fused ranking with scores in 0-1 range
  */
 export function weightedRRF(config: RRFConfig): NoteIdRank[] {
-  const { lexical = [], semantic = [], grepPrior = [], weights = {}, k = 60 } = config;
-  // Reduce semantic weight and compress final scores slightly to avoid many 1.0s
-  const finalWeights = { lexical: 1.0, semantic: 1.5, grepPrior: 0.3, ...weights };
+  const { lexical = [], semantic = [], weights = {}, k = 60 } = config;
+
+  // Determine weights based on what's provided
+  let finalWeights: { lexical: number; semantic: number };
+
+  if (semantic.length === 0) {
+    // Only lexical results
+    finalWeights = { lexical: 1.0, semantic: 0.0 };
+  } else if (lexical.length === 0) {
+    // Only semantic results
+    finalWeights = { lexical: 0.0, semantic: 1.0 };
+  } else {
+    // Both provided - normalize weights to sum to 1.0
+    const rawLexical = weights.lexical ?? 0.4; // Default 40% lexical
+    const rawSemantic = weights.semantic ?? 0.6; // Default 60% semantic
+    const sum = rawLexical + rawSemantic;
+
+    if (sum > 0) {
+      finalWeights = {
+        lexical: rawLexical / sum,
+        semantic: rawSemantic / sum,
+      };
+    } else {
+      // Fallback if both weights are 0
+      finalWeights = { lexical: 0.5, semantic: 0.5 };
+    }
+  }
 
   const scores = new Map<string, number>();
 
   [
     { items: lexical, weight: finalWeights.lexical, name: "lexical" },
     { items: semantic, weight: finalWeights.semantic, name: "semantic" },
-    { items: grepPrior, weight: finalWeights.grepPrior, name: "grepPrior" },
   ]
     .filter(({ items }) => items.length > 0)
     .forEach(({ items, weight, name }) => {
@@ -45,7 +68,7 @@ export function weightedRRF(config: RRFConfig): NoteIdRank[] {
         const current = scores.get(item.id) || 0;
         scores.set(item.id, current + weight / (k + idx + 1));
       });
-      logInfo(`RRF: Processed ${items.length} items from ${name} with weight ${weight}`);
+      logInfo(`RRF: Processed ${items.length} items from ${name} with weight ${weight.toFixed(2)}`);
     });
 
   logInfo(`RRF: Fused ${scores.size} unique results`);

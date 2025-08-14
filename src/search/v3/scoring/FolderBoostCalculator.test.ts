@@ -72,7 +72,7 @@ describe("FolderBoostCalculator", () => {
       });
     });
 
-    it("should cap scores at 1.0", () => {
+    it("should allow scores above 1.0 (normalizer will handle it)", () => {
       const results: NoteIdRank[] = [
         { id: "folder/note1.md", score: 0.9 },
         { id: "folder/note2.md", score: 0.9 },
@@ -80,9 +80,12 @@ describe("FolderBoostCalculator", () => {
 
       const boosted = calculator.applyBoosts(results);
 
-      // Even with boost, scores should not exceed 1.0
+      // With boost = 1 + log2(3) ≈ 2.585, scores can exceed 1.0
+      // This is OK - the ScoreNormalizer will handle normalization
+      const expectedBoost = 1 + Math.log2(3);
       boosted.forEach((result) => {
-        expect(result.score).toBeLessThanOrEqual(1.0);
+        expect(result.score).toBeCloseTo(0.9 * expectedBoost, 2);
+        expect(result.score).toBeGreaterThan(1.0);
       });
     });
 

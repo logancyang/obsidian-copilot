@@ -1,7 +1,7 @@
 import { logInfo } from "@/logger";
 import FlexSearch from "flexsearch";
 import { App, TFile, getAllTags } from "obsidian";
-import { NoteDoc, NoteIdRank } from "../interfaces";
+import { NoteDoc, NoteIdRank, SearchExplanation } from "../interfaces";
 import { MemoryManager } from "../utils/MemoryManager";
 import { VaultPathValidator } from "../utils/VaultPathValidator";
 
@@ -266,7 +266,12 @@ export class FullTextEngine {
   search(queries: string[], limit: number = 30, lowWeightTerms: string[] = []): NoteIdRank[] {
     const scoreMap = new Map<
       string,
-      { score: number; fieldMatches: Set<string>; queriesMatched: Set<string> }
+      {
+        score: number;
+        fieldMatches: Set<string>;
+        queriesMatched: Set<string>;
+        lexicalMatches: { field: string; query: string; weight: number }[];
+      }
     >();
 
     // Only log if we have many queries or debug mode
@@ -317,17 +322,23 @@ export class FullTextEngine {
                   score: 0,
                   fieldMatches: new Set<string>(),
                   queriesMatched: new Set<string>(),
+                  lexicalMatches: [],
                 };
                 // Accumulate scores from different queries (don't use Math.max)
                 // This way, documents matching multiple query terms get higher scores
-                const updated: {
-                  score: number;
-                  fieldMatches: Set<string>;
-                  queriesMatched: Set<string>;
-                } = {
+
+                // Track lexical match for explanation
+                existing.lexicalMatches.push({
+                  field: fieldName,
+                  query: query,
+                  weight: fieldWeight,
+                });
+
+                const updated = {
                   score: existing.score + fieldScore,
                   fieldMatches: new Set(existing.fieldMatches).add(fieldName),
                   queriesMatched: new Set(existing.queriesMatched).add(query),
+                  lexicalMatches: existing.lexicalMatches,
                 };
                 scoreMap.set(id, updated);
               }
@@ -368,7 +379,18 @@ export class FullTextEngine {
         }
       }
 
-      finalResults.push({ id, score: finalScore, engine: "fulltext" });
+      const explanation: SearchExplanation = {
+        lexicalMatches: data.lexicalMatches,
+        baseScore: finalScore,
+        finalScore: finalScore,
+      };
+
+      finalResults.push({
+        id,
+        score: finalScore,
+        engine: "fulltext",
+        explanation,
+      });
     }
 
     // Sort and return top results

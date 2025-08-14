@@ -210,8 +210,21 @@ export class GraphBoostCalculator {
     // Apply boosts to scores
     for (const item of items) {
       const boost = boosts.get(item.id);
-      if (boost) {
-        item.score *= boost.boostMultiplier;
+      if (boost && boost.boostMultiplier > 1.0) {
+        const boostedScore = item.score * boost.boostMultiplier;
+        item.score = boostedScore;
+
+        // Add graph boost to explanation if present
+        if ("explanation" in item && item.explanation) {
+          (item as any).explanation = {
+            ...(item as any).explanation,
+            graphBoost: {
+              connections: boost.candidateConnections,
+              boostFactor: boost.boostMultiplier,
+            },
+            finalScore: boostedScore,
+          };
+        }
       }
     }
 

@@ -6,9 +6,18 @@ import { NoteIdRank } from "../interfaces";
  */
 export interface FolderBoostConfig {
   enabled: boolean;
-  minDocsForBoost?: number; // Minimum documents in folder to apply boost (default: 2)
-  maxBoostFactor?: number; // Maximum boost multiplier (default: 3.0)
+  minDocsForBoost: number;
+  maxBoostFactor: number;
 }
+
+/**
+ * Default configuration for folder boost
+ */
+export const DEFAULT_FOLDER_BOOST_CONFIG: FolderBoostConfig = {
+  enabled: true,
+  minDocsForBoost: 2,
+  maxBoostFactor: 3.0,
+};
 
 /**
  * Result of folder boost calculation for a single document
@@ -28,11 +37,7 @@ export interface FolderBoostResult {
  * topically coherent groups.
  */
 export class FolderBoostCalculator {
-  private config: FolderBoostConfig = {
-    enabled: true,
-    minDocsForBoost: 2,
-    maxBoostFactor: 3.0,
-  };
+  private config: FolderBoostConfig = DEFAULT_FOLDER_BOOST_CONFIG;
 
   /**
    * Update calculator configuration
@@ -64,10 +69,22 @@ export class FolderBoostCalculator {
       const folder = this.extractFolder(result.id);
       const stats = folderStats.get(folder);
 
-      if (stats && stats.documentCount >= (this.config.minDocsForBoost || 2)) {
+      if (stats && stats.documentCount >= this.config.minDocsForBoost) {
+        const boostedScore = result.score * stats.boostFactor; // Don't cap - let normalizer handle it
         return {
           ...result,
-          score: Math.min(1.0, result.score * stats.boostFactor),
+          score: boostedScore,
+          explanation: result.explanation
+            ? {
+                ...result.explanation,
+                folderBoost: {
+                  folder: stats.folderPath,
+                  documentCount: stats.documentCount,
+                  boostFactor: stats.boostFactor,
+                },
+                finalScore: boostedScore,
+              }
+            : undefined,
         };
       }
 
@@ -93,11 +110,11 @@ export class FolderBoostCalculator {
     // Calculate boost factors
     const folderStats = new Map<string, FolderBoostResult>();
     for (const [folder, count] of folderCounts.entries()) {
-      if (count >= (this.config.minDocsForBoost || 2)) {
+      if (count >= this.config.minDocsForBoost) {
         // Logarithmic boost: 1 + log2(count + 1)
         // Examples: 2 docs → 1.58x, 3 docs → 2x, 5 docs → 2.58x
         const rawBoost = 1 + Math.log2(count + 1);
-        const boostFactor = Math.min(rawBoost, this.config.maxBoostFactor || 3.0);
+        const boostFactor = Math.min(rawBoost, this.config.maxBoostFactor);
 
         folderStats.set(folder, {
           folderPath: folder,
@@ -117,8 +134,7 @@ export class FolderBoostCalculator {
    * @returns Folder path or empty string for root files
    */
   private extractFolder(filePath: string): string {
-    const lastSlash = filePath.lastIndexOf("/");
-    return lastSlash > 0 ? filePath.substring(0, lastSlash) : "";
+    return filePath.substring(0, filePath.lastIndexOf("/")) || "";
   }
 
   /**

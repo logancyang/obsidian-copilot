@@ -3,7 +3,7 @@ import { NoteIdRank } from "../interfaces";
 
 describe("RRF (Reciprocal Rank Fusion)", () => {
   describe("weightedRRF", () => {
-    it("should combine rankings with default weights", () => {
+    it("should combine rankings with normalized default weights", () => {
       const lexical: NoteIdRank[] = [
         { id: "doc1", score: 10, engine: "lexical" },
         { id: "doc2", score: 8, engine: "lexical" },
@@ -18,7 +18,7 @@ describe("RRF (Reciprocal Rank Fusion)", () => {
 
       const results = weightedRRF({ lexical, semantic });
 
-      // doc2 should rank first (appears high in both lists)
+      // With default weights (0.4 lexical, 0.6 semantic), doc2 should rank first
       expect(results[0].id).toBe("doc2");
       // doc1 should rank second
       expect(results[1].id).toBe("doc1");
@@ -29,7 +29,7 @@ describe("RRF (Reciprocal Rank Fusion)", () => {
       expect(results[0].score).toBeGreaterThan(0);
     });
 
-    it("should respect custom weights", () => {
+    it("should normalize custom weights to sum to 1.0", () => {
       const lexical: NoteIdRank[] = [
         { id: "doc1", score: 10, engine: "lexical" },
         { id: "doc2", score: 8, engine: "lexical" },
@@ -40,7 +40,7 @@ describe("RRF (Reciprocal Rank Fusion)", () => {
         { id: "doc3", score: 7, engine: "semantic" },
       ];
 
-      // Give semantic much higher weight
+      // Give semantic higher weight (will be normalized to 0.857, lexical to 0.143)
       const results = weightedRRF({
         lexical,
         semantic,
@@ -51,25 +51,21 @@ describe("RRF (Reciprocal Rank Fusion)", () => {
       expect(results[0].id).toBe("doc2");
     });
 
-    it("should handle grep prior as weak signal", () => {
+    it("should handle single source with weight 1.0", () => {
       const lexical: NoteIdRank[] = [
         { id: "doc1", score: 10, engine: "lexical" },
         { id: "doc2", score: 8, engine: "lexical" },
+        { id: "doc3", score: 6, engine: "lexical" },
       ];
 
-      const grepPrior: NoteIdRank[] = [
-        { id: "doc3", score: 1, engine: "grep" },
-        { id: "doc1", score: 0.8, engine: "grep" },
-      ];
+      const results = weightedRRF({ lexical });
 
-      const results = weightedRRF({ lexical, grepPrior });
-
-      // doc1 should rank first (high in lexical + some grep support)
+      // With only lexical results, should use weight 1.0
       expect(results[0].id).toBe("doc1");
-      // doc3 should be included but rank lower
-      const doc3 = results.find((r) => r.id === "doc3");
-      expect(doc3).toBeDefined();
-      expect(results.indexOf(doc3!)).toBeGreaterThan(1);
+      expect(results[1].id).toBe("doc2");
+      expect(results[2].id).toBe("doc3");
+      // All results should be included
+      expect(results.length).toBe(3);
     });
 
     it("should not always normalize top score to 1", () => {
@@ -123,6 +119,45 @@ describe("RRF (Reciprocal Rank Fusion)", () => {
       expect(results).toEqual([]);
     });
 
+    it("should use slider-friendly weights (0-1 range)", () => {
+      const lexical: NoteIdRank[] = [
+        { id: "doc1", score: 10, engine: "lexical" },
+        { id: "doc2", score: 8, engine: "lexical" },
+      ];
+
+      const semantic: NoteIdRank[] = [
+        { id: "doc3", score: 9, engine: "semantic" },
+        { id: "doc1", score: 7, engine: "semantic" },
+      ];
+
+      // Test with 30% semantic weight (70% lexical)
+      const results30 = weightedRRF({
+        lexical,
+        semantic,
+        weights: { lexical: 0.7, semantic: 0.3 },
+      });
+
+      // Test with 70% semantic weight (30% lexical)
+      const results70 = weightedRRF({
+        lexical,
+        semantic,
+        weights: { lexical: 0.3, semantic: 0.7 },
+      });
+
+      // doc1 appears in both but is first in lexical
+      // With 70% lexical weight, doc1 should rank higher
+      // With 70% semantic weight, doc3 (first in semantic) should be more competitive
+
+      const doc1Score30 = results30.find((r) => r.id === "doc1")?.score || 0;
+      const doc3Score30 = results30.find((r) => r.id === "doc3")?.score || 0;
+
+      const doc1Score70 = results70.find((r) => r.id === "doc1")?.score || 0;
+      const doc3Score70 = results70.find((r) => r.id === "doc3")?.score || 0;
+
+      // With more lexical weight (30% semantic), doc1 should have higher advantage
+      expect(doc1Score30 - doc3Score30).toBeGreaterThan(doc1Score70 - doc3Score70);
+    });
+
     it("should handle single item", () => {
       const lexical: NoteIdRank[] = [{ id: "doc1", score: 10, engine: "lexical" }];
       const results = weightedRRF({ lexical });
@@ -166,22 +201,18 @@ describe("RRF (Reciprocal Rank Fusion)", () => {
         { id: "doc2", score: 7, engine: "semantic" },
       ];
 
-      const grepPrior: NoteIdRank[] = [
-        { id: "doc1", score: 1, engine: "grep" },
-        { id: "doc3", score: 0.8, engine: "grep" },
-      ];
+      // With normalized weights (default 0.4 lexical, 0.6 semantic)
+      const results = weightedRRF({ lexical, semantic });
 
-      const results = weightedRRF({ lexical, semantic, grepPrior });
-
-      // doc1 appears first in all three sources - should get high score
+      // doc1 appears first in both sources - should get high score
       expect(results[0].id).toBe("doc1");
       expect(results[0].score).toBeLessThanOrEqual(1);
-      expect(results[0].score).toBeGreaterThan(0.7); // High score with multiple sources
+      expect(results[0].score).toBeGreaterThan(0.5); // Good score with both sources
 
-      // doc2 appears in two sources, should have moderate to high score
+      // doc2 appears in both sources, should have moderate score
       const doc2 = results.find((r) => r.id === "doc2");
       expect(doc2).toBeDefined();
-      expect(doc2!.score).toBeGreaterThan(0.4);
+      expect(doc2!.score).toBeGreaterThan(0.3);
       expect(doc2!.score).toBeLessThanOrEqual(1);
     });
   });

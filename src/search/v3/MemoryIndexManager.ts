@@ -178,21 +178,43 @@ export class MemoryIndexManager {
 
     const noteToScores = new Map<string, number[]>();
     const candidateSet = candidates && candidates.length > 0 ? new Set(candidates) : null;
+
+    // Log candidate restriction for verification
+    if (candidateSet) {
+      logInfo(`MemoryIndex: Restricting semantic search to ${candidateSet.size} candidates`);
+    } else {
+      logInfo("MemoryIndex: No candidate restriction (searching entire index)");
+    }
+
     const kPerQuery = Math.min(
       this.records.length,
       Math.max(maxK * MemoryIndexManager.SEARCH_K_MULTIPLIER, MemoryIndexManager.SEARCH_MIN_K)
     );
 
+    let totalSkipped = 0;
+    let totalIncluded = 0;
+
     for (const qv of variantVectors) {
       const results = await this.vectorStore.similaritySearchVectorWithScore(qv, kPerQuery);
       for (const [doc, score] of results) {
         const path = (doc.metadata as any)?.path as string;
-        if (candidateSet && !candidateSet.has(path)) continue;
+        if (candidateSet && !candidateSet.has(path)) {
+          totalSkipped++;
+          continue;
+        }
+        totalIncluded++;
         const normalized = Math.max(0, Math.min(1, typeof score === "number" ? score : 0));
         const arr = noteToScores.get(path) ?? [];
         arr.push(normalized);
         noteToScores.set(path, arr);
       }
+    }
+
+    // Log filtering statistics
+    if (candidateSet) {
+      logInfo(
+        `MemoryIndex: Included ${totalIncluded} results, filtered out ${totalSkipped} non-candidates`
+      );
     }
 
     // Aggregate scores per note
