@@ -7,6 +7,7 @@ import { ModelAdapter } from "./modelAdapter";
 export class ThinkBlockStreamer {
   private hasOpenThinkBlock = false;
   private fullResponse = "";
+  private errorResponse = "";
   private shouldTruncate = false;
 
   constructor(
@@ -113,12 +114,21 @@ export class ThinkBlockStreamer {
     return truncated;
   }
 
+  processErrorChunk(errorMessage: string) {
+    this.errorResponse = "\n<errorChunk>" + errorMessage + "</errorChunk>";
+  }
+
   close() {
     // Make sure to close any open think block at the end
     if (this.hasOpenThinkBlock) {
       this.fullResponse += "</think>";
-      this.updateCurrentAiMessage(this.fullResponse);
     }
+
+    if (this.errorResponse) {
+      this.fullResponse += this.errorResponse;
+    }
+
+    this.updateCurrentAiMessage(this.fullResponse);
     return this.fullResponse;
   }
 }

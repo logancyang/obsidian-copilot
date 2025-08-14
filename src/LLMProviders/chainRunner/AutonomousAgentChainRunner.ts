@@ -123,6 +123,7 @@ ${params}
     }
   ): Promise<string> {
     let fullAIResponse = "";
+
     const conversationMessages: any[] = [];
     const iterationHistory: string[] = []; // Track all iterations for display
     const collectedSources: { title: string; path: string; score: number }[] = []; // Collect sources from localSearch
@@ -131,7 +132,7 @@ ${params}
       isAutonomousAgent: true,
     });
     if (!isPlusUser) {
-      await this.handleError(new Error("Invalid license key"), addMessage, updateCurrentAiMessage);
+      // await this.handleError(new Error("Invalid license key"), addMessage, updateCurrentAiMessage);
       return "";
     }
 
@@ -515,7 +516,7 @@ ${params}
           );
         } catch (fallbackError) {
           logError("Fallback to regular Plus mode also failed:", fallbackError);
-          await this.handleError(fallbackError, addMessage, updateCurrentAiMessage);
+          // await this.handleError(fallbackError, addMessage, updateCurrentAiMessage);
           return "";
         }
       }

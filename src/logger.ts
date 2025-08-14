@@ -7,9 +7,7 @@ export function logInfo(...args: any[]) {
 }
 
 export function logError(...args: any[]) {
-  if (getSettings().debug) {
-    console.error(...args);
-  }
+  console.error(...args);
 }
 
 export function logWarn(...args: any[]) {
