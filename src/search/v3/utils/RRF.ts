@@ -69,9 +69,34 @@ export function weightedRRF(config: RRFConfig): NoteIdRank[] {
         const current = scores.get(item.id) || 0;
         scores.set(item.id, current + weight / (k + idx + 1));
 
-        // Preserve explanation from the first occurrence (highest ranked)
-        if (item.explanation && !explanations.has(item.id)) {
-          explanations.set(item.id, item.explanation);
+        // Merge explanations from both lexical and semantic results
+        if (item.explanation) {
+          const existing = explanations.get(item.id);
+          if (existing) {
+            // Merge the explanations
+            const merged = { ...existing };
+
+            // Merge lexical matches
+            if (item.explanation.lexicalMatches && !existing.lexicalMatches) {
+              merged.lexicalMatches = item.explanation.lexicalMatches;
+            }
+
+            // Merge semantic score
+            if (
+              item.explanation.semanticScore !== undefined &&
+              existing.semanticScore === undefined
+            ) {
+              merged.semanticScore = item.explanation.semanticScore;
+            }
+
+            // Update base and final scores to reflect fusion
+            merged.baseScore = existing.baseScore || item.explanation.baseScore;
+            merged.finalScore = existing.finalScore || item.explanation.finalScore;
+
+            explanations.set(item.id, merged);
+          } else {
+            explanations.set(item.id, item.explanation);
+          }
         }
       });
       logInfo(`RRF: Processed ${items.length} items from ${name} with weight ${weight.toFixed(2)}`);
