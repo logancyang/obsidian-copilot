@@ -99,7 +99,7 @@ export const QASettings: React.FC = () => {
           <SettingItem
             type="slider"
             title="Max Sources"
-            description="Copilot goes through your vault to find relevant blocks and passes the top N blocks to the LLM. Default for N is 3. Increase if you want more sources included in the answer generation step."
+            description="Copilot goes through your vault to find relevant notes and passes the top N to the LLM. Default for N is 15. Increase if you want more notes included in the answer generation step."
             min={1}
             max={128}
             step={1}
