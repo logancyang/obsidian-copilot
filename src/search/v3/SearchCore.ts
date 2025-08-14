@@ -12,7 +12,11 @@ import { weightedRRF } from "./utils/RRF";
 import { ScoreNormalizer } from "./utils/ScoreNormalizer";
 
 // LLM timeout for query expansion and HyDE generation
-const LLM_GENERATION_TIMEOUT_MS = 4000;
+const LLM_GENERATION_TIMEOUT_MS = 5000;
+
+// Search constants
+const DEFAULT_SEMANTIC_TOP_K_LIMIT = 200;
+const FULLTEXT_RESULT_MULTIPLIER = 2;
 
 /**
  * Core search engine that orchestrates the multi-stage retrieval pipeline
@@ -86,70 +90,16 @@ export class SearchCore {
 
       logInfo(`Using ${candidates.length} candidates for BOTH full-text and semantic search`);
 
-      // 5. Build ephemeral full-text index
-      const indexed = await this.fullTextEngine.buildFromCandidates(candidates);
-
-      logInfo(`Full-text index: Built with ${indexed} documents`);
-
-      // 6. Search full-text index with both query variants AND salient terms
-      // This hybrid approach maximizes both precision (from phrases) and recall (from terms)
+      // Prepare queries for both engines
       const allFullTextQueries = [...queries, ...salientTerms];
-      // Pass salient terms as low-weight terms
-      const fullTextResults = this.fullTextEngine.search(
-        allFullTextQueries,
-        maxResults * 2,
-        salientTerms
-      );
 
-      logInfo(
-        `Full-text search: Found ${fullTextResults.length} results (using ${allFullTextQueries.length} search inputs)`
-      );
-
-      // Only log in debug mode
-      // if (fullTextResults.length > 0) {
-      //   logInfo("Full-text top 10 results before RRF:");
-      //   fullTextResults.slice(0, 10).forEach((r, i) => {
-      //     logInfo(`  ${i+1}. ${r.id} (score: ${r.score.toFixed(4)})`);
-      //   });
-      // }
-
-      // 7. Optional semantic retrieval (vector-only, in-memory JSONL-backed index)
-      let semanticResults: NoteIdRank[] = [];
-      if (enableSemantic) {
-        try {
-          const index = MemoryIndexManager.getInstance(this.app);
-          const topK = Math.min(candidateLimit, 200);
-
-          // Generate HyDE document for semantic diversity
-          const hydeDoc = await this.generateHyDE(query);
-
-          // Build search queries: original variants + HyDE if available
-          const semanticQueries = [...allFullTextQueries];
-          if (hydeDoc) {
-            // Add HyDE document as the first query for higher weight
-            semanticQueries.unshift(hydeDoc);
-          }
-
-          // Pass the same candidates array to limit semantic search to the same subset
-          const hits = await index.search(semanticQueries, topK, candidates);
-          semanticResults = hits.map((h) => ({
-            id: h.id,
-            score: h.score,
-            engine: "semantic",
-            explanation: {
-              semanticScore: h.score,
-              baseScore: h.score,
-              finalScore: h.score,
-            },
-          }));
-
-          logInfo(
-            `Semantic search: Found ${semanticResults.length} results (restricted to ${candidates.length} candidates)`
-          );
-        } catch (error) {
-          logInfo("SearchCore: Semantic retrieval failed", error as any);
-        }
-      }
+      // 5, 6 & 7. Run lexical and semantic searches in parallel
+      const [fullTextResults, semanticResults] = await Promise.all([
+        this.executeLexicalSearch(candidates, allFullTextQueries, salientTerms, maxResults),
+        enableSemantic
+          ? this.executeSemanticSearch(candidates, allFullTextQueries, query, candidateLimit)
+          : Promise.resolve([]),
+      ]);
 
       // 8. Weighted RRF with normalized weights
       // semanticWeight now represents the percentage (0-1) for semantic
@@ -252,6 +202,95 @@ export class SearchCore {
     this.queryExpander.clearCache();
     logInfo("SearchCore: Cleared all caches");
   }
+
+  /**
+   * Execute lexical search with full-text index
+   * @param candidates - Candidate documents to index
+   * @param queries - Search queries
+   * @param salientTerms - Salient terms for boosting
+   * @param maxResults - Maximum number of results
+   * @returns Ranked list of documents from lexical search
+   */
+  private async executeLexicalSearch(
+    candidates: string[],
+    queries: string[],
+    salientTerms: string[],
+    maxResults: number
+  ): Promise<NoteIdRank[]> {
+    try {
+      // Build ephemeral full-text index
+      const indexed = await this.fullTextEngine.buildFromCandidates(candidates);
+      logInfo(`Full-text index: Built with ${indexed} documents`);
+
+      // Search the index
+      const results = this.fullTextEngine.search(
+        queries,
+        maxResults * FULLTEXT_RESULT_MULTIPLIER,
+        salientTerms
+      );
+      logInfo(
+        `Full-text search: Found ${results.length} results (using ${queries.length} search inputs)`
+      );
+      return results;
+    } catch (error) {
+      logError("Full-text search failed", error);
+      return [];
+    }
+  }
+
+  /**
+   * Execute semantic search using embeddings
+   * @param candidates - Candidate documents to search within
+   * @param allFullTextQueries - Base queries for semantic search
+   * @param originalQuery - Original user query for HyDE generation
+   * @param candidateLimit - Maximum number of candidates
+   * @returns Ranked list of documents from semantic search
+   */
+  private async executeSemanticSearch(
+    candidates: string[],
+    allFullTextQueries: string[],
+    originalQuery: string,
+    candidateLimit: number
+  ): Promise<NoteIdRank[]> {
+    try {
+      const index = MemoryIndexManager.getInstance(this.app);
+      const topK = Math.min(candidateLimit, DEFAULT_SEMANTIC_TOP_K_LIMIT);
+
+      // Generate HyDE document for semantic diversity
+      const hydeDoc = await this.generateHyDE(originalQuery);
+
+      // Build search queries: HyDE (if available) + original variants
+      const semanticQueries = hydeDoc ? [hydeDoc, ...allFullTextQueries] : allFullTextQueries;
+
+      // Pass the same candidates array to limit semantic search to the same subset
+      const semanticHits = await index.search(semanticQueries, topK, candidates);
+      const results = semanticHits.map(this.mapSemanticHit);
+
+      logInfo(
+        `Semantic search: Found ${results.length} results (restricted to ${candidates.length} candidates)`
+      );
+      return results;
+    } catch (error) {
+      logInfo("SearchCore: Semantic retrieval failed", error as any);
+      return [];
+    }
+  }
+
+  /**
+   * Map semantic search hit to NoteIdRank format
+   * @param hit - Semantic search hit
+   * @returns NoteIdRank with explanation
+   */
+  private mapSemanticHit = (hit: any): NoteIdRank => ({
+    id: hit.id,
+    score: hit.score,
+    engine: "semantic" as const,
+    explanation: {
+      semanticScore: hit.score,
+      baseScore: hit.score,
+      finalScore: hit.score,
+    },
+  });
 
   /**
    * Generate a hypothetical document using HyDE (Hypothetical Document Embeddings)

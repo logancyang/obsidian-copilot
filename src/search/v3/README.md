@@ -8,26 +8,27 @@ A high-performance, memory-bounded search system for Obsidian that combines mult
 graph TD
     A[User Query] --> B[Query Expansion<br/>LLM rewrites + terms]
     B --> C[Grep Scan<br/>Fast substring search]
-    C --> D[Full-Text Index<br/>Ephemeral FlexSearch]
-    D --> E[Full-Text Search<br/>Multi-field weighted]
-    E --> F{Semantic?}
-    F -->|Yes| G[Semantic Search<br/>Vector similarity]
-    F -->|No| H[RRF Fusion]
-    G --> H[RRF Fusion<br/>Combine rankings]
-    H --> I[Folder Boost<br/>Topical clustering]
-    I --> J[Graph Boost<br/>Link connections]
-    J --> K[Score Normalization<br/>Z-score + tanh]
-    K --> L[Final Results]
+    C --> D{Parallel Search}
+    D --> E[Full-Text Search<br/>Build index + Search]
+    D --> F[Semantic Search<br/>HyDE + Embeddings]
+    E --> G[RRF Fusion<br/>Combine rankings]
+    F --> G
+    G --> H[Folder Boost<br/>Topical clustering]
+    H --> I[Graph Boost<br/>Link connections]
+    I --> J[Score Normalization<br/>Z-score + tanh]
+    J --> K[Final Results]
 
     style B fill:#e1f5fe
-    style H fill:#f3e5f5
-    style K fill:#fff3e0
+    style D fill:#ffe0b2
+    style G fill:#f3e5f5
+    style J fill:#fff3e0
 ```
 
 ## Key Features
 
 - **Memory-Bounded**: No persistent full-text index, everything ephemeral
-- **Progressive Refinement**: Fast grep → precise full-text → semantic (optional)
+- **Parallel Search**: Lexical and semantic searches run concurrently for optimal performance
+- **Progressive Refinement**: Fast grep → parallel (full-text + semantic)
 - **Multilingual**: Supports English and CJK languages
 - **Explainable**: Tracks why documents ranked highly
 - **Fault-Tolerant**: Graceful fallbacks at each stage
@@ -55,33 +56,41 @@ Finds: ["auth/oauth-guide.md", "nextjs/auth.md", "tutorials/oauth.md"]
        (up to 200 candidates)
 ```
 
-### 3. Full-Text Search (L1)
+### 3. Parallel Search Execution
 
-Builds ephemeral FlexSearch index with field weights:
+**Full-Text Search (L1)** and **Semantic Search (Optional)** run in parallel:
 
-- Title (3x), Path (2.5x), Tags/Links/Props (2x), Body (1x)
+#### Full-Text Branch:
 
-### 4. Semantic Search (Optional)
+- Builds ephemeral FlexSearch index from candidates
+- Searches with field weights: Title (3x), Path (2.5x), Tags/Links/Props (2x), Body (1x)
+- Returns up to 2x maxResults for better recall
 
-If enabled, searches vector store limited to same candidates
+#### Semantic Branch (if enabled):
 
-### 5. RRF Fusion
+- Generates HyDE synthetic answer for query expansion
+- Searches vector store limited to same candidates
+- Combines HyDE document with query variants
+
+Both branches complete before fusion begins.
+
+### 4. RRF Fusion
 
 Combines rankings with normalized weights (sum to 1.0):
 
 - Default: 40% lexical + 60% semantic (when enabled)
 - Configurable via slider (0-100% semantic weight)
 
-### 6. Boosting Stage
+### 5. Boosting Stage
 
 - **Folder Boost**: Notes in folders with multiple matches (logarithmic, 1-3x)
 - **Graph Boost**: Notes linked to other results (1.0-2.0x)
 
-### 7. Score Normalization
+### 6. Score Normalization
 
 Z-score + tanh normalization prevents auto-1.0 scores
 
-### 8. Final Results
+### 7. Final Results
 
 ```
 1. nextjs/auth.md (0.95) - Title match, folder boost, graph connections
@@ -91,25 +100,43 @@ Z-score + tanh normalization prevents auto-1.0 scores
 
 ## Core Components
 
+### SearchCore
+
+- Orchestrates the entire search pipeline
+- Executes lexical and semantic searches in parallel via `Promise.all()`
+- Methods:
+  - `executeLexicalSearch()`: Builds index and searches in isolation
+  - `executeSemanticSearch()`: Runs HyDE + embedding search independently
+  - `mapSemanticHit()`: Transforms semantic results to unified format
+
 ### Query Expander
 
-- Generates alternative phrasings using LLM (4s timeout)
+- Generates alternative phrasings using LLM (5s timeout)
 - Extracts salient terms (nouns only, language-agnostic)
 - Falls back to original query if LLM unavailable
 
 ### Grep Scanner
 
 - Fast substring search using Obsidian's `cachedRead`
-- Platform-optimized batching (10 files mobile, 50 desktop)
+- Unified batching (30 files) for all platforms
 - Searches both phrases and individual terms
+- Path-first optimization for faster matching
 
 ### Full-Text Engine
 
 - Ephemeral FlexSearch index built per-query
+- Runs independently in lexical search branch
 - Custom tokenizer for ASCII words + CJK bigrams
 - Multi-field indexing with configurable weights
 - Path components indexed for folder/file search
 - Frontmatter values indexed (not keys)
+
+### RRF (Reciprocal Rank Fusion)
+
+- Combines lexical and semantic rankings with normalized weights
+- Weights always sum to 1.0 for consistent scoring
+- Merges explanations from both search engines
+- Default: 40% lexical + 60% semantic (configurable)
 
 ### Folder & Graph Boost Calculators
 
@@ -137,6 +164,8 @@ Both boosts multiply existing scores after RRF fusion, helping related content r
 ### Semantic Layer (Optional)
 
 - JSONL-backed vector store in memory
+- Runs in parallel with lexical search when enabled
+- HyDE generation for query expansion (5s timeout)
 - Incremental indexing for changed files
 - Auto-index strategies: NEVER, ON STARTUP, ON MODE SWITCH
 - Partitioned storage (~150MB per file)
@@ -164,29 +193,33 @@ interface NoteIdRank {
 
 - **Grep scan**: < 50ms for 1k files
 - **Full-text build**: < 100ms for 500 candidates
-- **Total latency**: < 200ms P95
+- **Parallel search**: Lexical and semantic run concurrently
+- **Total latency**: < 200ms P95 (reduced from sequential execution)
 - **Memory peak**: < 20MB mobile, < 100MB desktop
 
 ## Configuration
 
 ### Search Options
 
-- `maxResults`: Number of results to return (default: 30)
+- `maxResults`: Number of results to return (default: 30, max: 100)
 - `enableSemantic`: Enable vector search (default: false)
 - `semanticWeight`: Percentage for semantic results (0-1, default: 0.6 = 60%)
-- `candidateLimit`: Max candidates for full-text (default: 500)
-- `rrfK`: RRF smoothing parameter (default: 60)
+- `candidateLimit`: Max candidates for full-text (default: 500, range: 10-1000)
+- `rrfK`: RRF smoothing parameter (default: 60, range: 1-100)
+- `salientTerms`: Additional terms to enhance the search (optional)
 
 ### Settings
 
 - **Enable Semantic Search**: Master toggle for vector features
 - **Auto-Index Strategy**: NEVER | ON STARTUP | ON MODE SWITCH
 - **Graph Boost Weight**: Connection influence (0.1-1.0)
+- **Lexical Search RAM Limit**: RAM usage for lexical search
 - **Exclusions/Inclusions**: File patterns to index
 
 ## Implementation Status
 
-✅ **Core Pipeline**: Query expansion, grep, full-text, RRF fusion
+✅ **Core Pipeline**: Query expansion, grep, parallel search, RRF fusion
+✅ **Parallel Execution**: Full-text and semantic searches run concurrently
 ✅ **Boosting**: Folder and graph boost calculators
 ✅ **Normalization**: Z-score + tanh with explainability
 ✅ **Semantic**: Optional vector search with consistent candidates
@@ -197,7 +230,8 @@ interface NoteIdRank {
 
 1. **No Persistent Full-Text Index**: Grep provides fast initial seeding
 2. **Ephemeral Everything**: Eliminates maintenance overhead
-3. **Unified Boosting Stage**: All boosts applied post-RRF
-4. **Consistent Candidates**: Both lexical and semantic search same subset
-5. **Statistical Normalization**: Prevents artificial perfect scores
-6. **Explainable Rankings**: Track contributing factors for transparency
+3. **Parallel Search Architecture**: Lexical and semantic run concurrently for performance
+4. **Unified Boosting Stage**: All boosts applied post-RRF
+5. **Consistent Candidates**: Both lexical and semantic search same subset
+6. **Statistical Normalization**: Prevents artificial perfect scores
+7. **Explainable Rankings**: Track contributing factors for transparency
