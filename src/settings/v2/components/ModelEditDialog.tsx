@@ -4,13 +4,7 @@ import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DEFAULT_MODEL_SETTING,
@@ -260,6 +254,7 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
 
             <FormField>
               <ParameterControl
+                type={"slider"}
                 optional={false}
                 label="Token limit"
                 value={localModel.maxTokens ?? settings.maxTokens}
@@ -285,6 +280,7 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
 
             <FormField>
               <ParameterControl
+                type={"slider"}
                 optional={false}
                 label="Temperature"
                 value={localModel.temperature ?? settings.temperature}
@@ -299,6 +295,7 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
 
             <FormField>
               <ParameterControl
+                type={"slider"}
                 label="Top-P"
                 value={localModel.topP}
                 onChange={(value) => handleLocalUpdate("topP", value)}
@@ -313,6 +310,7 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
 
             <FormField>
               <ParameterControl
+                type={"slider"}
                 label="Frequency Penalty"
                 value={localModel.frequencyPenalty}
                 onChange={(value) => handleLocalUpdate("frequencyPenalty", value)}
@@ -342,94 +340,68 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
                 localModel.name.startsWith("o3") ||
                 localModel.name.startsWith("o4")) && (
                 <>
-                  <FormField
-                    label={
-                      <div className="tw-flex tw-items-center tw-gap-2">
-                        Reasoning Effort
-                        <TooltipProvider delayDuration={0}>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <HelpCircle className="tw-size-4 tw-text-muted" />
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom">
-                              <div className="tw-w-[300px]">
-                                <p>
-                                  Controls the amount of reasoning effort the model uses. Higher
-                                  effort provides more thorough reasoning but takes longer. Note:
-                                  thinking tokens are not available yet!
-                                </p>
-                                <ul className="tw-mt-2 tw-space-y-1 tw-text-xs">
-                                  <li>
-                                    Minimal: Fastest responses, minimal reasoning (GPT-5 only)
-                                  </li>
-                                  <li>Low: Faster responses, basic reasoning (default)</li>
-                                  <li>Medium: Balanced performance</li>
-                                  <li>High: Thorough reasoning, slower responses</li>
-                                </ul>
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                    }
-                  >
-                    <Select
-                      value={localModel.reasoningEffort || settings.reasoningEffort || "low"}
-                      onValueChange={(value) => handleLocalUpdate("reasoningEffort", value)}
-                    >
-                      <SelectTrigger className="tw-w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {localModel.name.startsWith("gpt-5") && (
-                          <SelectItem value="minimal">Minimal</SelectItem>
-                        )}
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <FormField>
+                    <ParameterControl
+                      type="select"
+                      label="Reasoning Effort"
+                      value={localModel.reasoningEffort}
+                      onChange={(value) => handleLocalUpdate("reasoningEffort", value)}
+                      disableFn={() => handleLocalReset("reasoningEffort")}
+                      defaultValue={
+                        settings.reasoningEffort ?? DEFAULT_MODEL_SETTING.REASONING_EFFORT
+                      }
+                      options={[
+                        ...(localModel.name.startsWith("gpt-5")
+                          ? [{ value: "minimal", label: "Minimal" }]
+                          : []),
+                        { value: "low", label: "Low" },
+                        { value: "medium", label: "Medium" },
+                        { value: "high", label: "High" },
+                      ]}
+                      helpText={
+                        <>
+                          <p>
+                            Controls the amount of reasoning effort the model uses. Higher effort
+                            provides more thorough reasoning but takes longer. Note: thinking tokens
+                            are not available yet!
+                          </p>
+                          <ul className="tw-mt-2 tw-space-y-1 tw-text-xs">
+                            <li>Minimal: Fastest responses, minimal reasoning (GPT-5 only)</li>
+                            <li>Low: Faster responses, basic reasoning (default)</li>
+                            <li>Medium: Balanced performance</li>
+                            <li>High: Thorough reasoning, slower responses</li>
+                          </ul>
+                        </>
+                      }
+                    />
                   </FormField>
 
                   {/* Verbosity only for GPT-5 models */}
                   {localModel.name.startsWith("gpt-5") && (
-                    <FormField
-                      label={
-                        <div className="tw-flex tw-items-center tw-gap-2">
-                          Verbosity
-                          <TooltipProvider delayDuration={0}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <HelpCircle className="tw-size-4 tw-text-muted" />
-                              </TooltipTrigger>
-                              <TooltipContent side="bottom">
-                                <div className="tw-w-[300px]">
-                                  <p>Controls the length and detail of the model responses.</p>
-                                  <ul className="tw-mt-2 tw-space-y-1 tw-text-xs">
-                                    <li>Low: Concise, brief responses</li>
-                                    <li>Medium: Balanced detail</li>
-                                    <li>High: Detailed, comprehensive responses</li>
-                                  </ul>
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                      }
-                    >
-                      <Select
-                        value={localModel.verbosity || settings.verbosity || "medium"}
-                        onValueChange={(value) => handleLocalUpdate("verbosity", value)}
-                      >
-                        <SelectTrigger className="tw-w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="low">Low</SelectItem>
-                          <SelectItem value="medium">Medium</SelectItem>
-                          <SelectItem value="high">High</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <FormField>
+                      <ParameterControl
+                        type="select"
+                        label="Verbosity"
+                        value={localModel.verbosity}
+                        onChange={(value) => handleLocalUpdate("verbosity", value)}
+                        disableFn={() => handleLocalReset("verbosity")}
+                        defaultValue={settings.verbosity ?? DEFAULT_MODEL_SETTING.VERBOSITY}
+                        options={[
+                          { value: "low", label: "Low" },
+                          { value: "medium", label: "Medium" },
+                          { value: "high", label: "High" },
+                        ]}
+                        helpText={
+                          <>
+                            <p>Controls the length and detail of the model responses.</p>
+                            <ul className="tw-mt-2 tw-space-y-1 tw-text-xs">
+                              <li>Low: Concise, brief responses</li>
+                              <li>Medium: Balanced detail</li>
+                              <li>High: Detailed, comprehensive responses</li>
+                            </ul>
+                          </>
+                        }
+                      />
                     </FormField>
                   )}
                 </>
