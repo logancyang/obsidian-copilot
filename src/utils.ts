@@ -512,7 +512,8 @@ export function extractAllYoutubeUrls(text: string): string[] {
  * https://forum.obsidian.md/t/support-streaming-the-request-and-requesturl-response-body/87381 */
 export async function safeFetch(url: string, options: RequestInit = {}): Promise<Response> {
   // Initialize headers if not provided
-  const headers = options.headers ? { ...options.headers } : {};
+  const normalizedHeaders = new Headers(options.headers);
+  const headers = Object.fromEntries(normalizedHeaders.entries());
 
   // Remove content-length if it exists
   delete (headers as Record<string, string>)["content-length"];
