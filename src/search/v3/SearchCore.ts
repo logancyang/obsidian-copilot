@@ -2,11 +2,11 @@ import { logError, logInfo } from "@/logger";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { App } from "obsidian";
 import { FullTextEngine } from "./engines/FullTextEngine";
-import { GraphExpander } from "./expanders/GraphExpander";
 import { NoteIdRank, SearchOptions } from "./interfaces";
 import { MemoryIndexManager } from "./MemoryIndexManager";
 import { QueryExpander } from "./QueryExpander";
 import { GrepScanner } from "./scanners/GrepScanner";
+import { GraphBoostCalculator } from "./scoring/GraphBoostCalculator";
 import { weightedRRF } from "./utils/RRF";
 
 // LLM timeout for query expansion and HyDE generation
@@ -17,22 +17,22 @@ const LLM_GENERATION_TIMEOUT_MS = 4000;
  */
 export class SearchCore {
   private grepScanner: GrepScanner;
-  private graphExpander: GraphExpander;
   private fullTextEngine: FullTextEngine;
   private queryExpander: QueryExpander;
+  private graphBoostCalculator: GraphBoostCalculator;
 
   constructor(
     private app: App,
     private getChatModel?: () => Promise<BaseChatModel | null>
   ) {
     this.grepScanner = new GrepScanner(app);
-    this.graphExpander = new GraphExpander(app);
     this.fullTextEngine = new FullTextEngine(app);
     this.queryExpander = new QueryExpander({
       getChatModel: this.getChatModel,
       maxVariants: 3,
       timeout: LLM_GENERATION_TIMEOUT_MS,
     });
+    this.graphBoostCalculator = new GraphBoostCalculator(app);
   }
 
   /**
@@ -47,7 +47,6 @@ export class SearchCore {
     const enableSemantic = options.enableSemantic || false;
     const semanticWeight = Math.min(Math.max(0, options.semanticWeight || 1.5), 10);
     const candidateLimit = Math.min(Math.max(10, options.candidateLimit || 500), 1000);
-    const graphHops = Math.min(Math.max(1, options.graphHops || 1), 3);
     const rrfK = Math.min(Math.max(1, options.rrfK || 60), 100);
 
     try {
@@ -71,20 +70,10 @@ export class SearchCore {
 
       logInfo(`Grep scan: Found ${grepHits.length} initial matches`);
 
-      // 3. Graph expansion from grep results
-      const activeFile = this.app.workspace.getActiveFile();
-      const expandedCandidates = await this.graphExpander.expandCandidates(
-        grepHits,
-        activeFile,
-        graphHops
-      );
+      // 3. Limit candidates (no graph expansion - we use graph for boost only)
+      const candidates = grepHits.slice(0, candidateLimit);
 
-      // 4. Limit candidates
-      const candidates = expandedCandidates.slice(0, candidateLimit);
-
-      logInfo(
-        `Graph expansion: ${grepHits.length} grep → ${expandedCandidates.length} expanded → ${candidates.length} final candidates`
-      );
+      logInfo(`Using ${candidates.length} candidates for full-text search`);
 
       // 5. Build ephemeral full-text index
       const indexed = await this.fullTextEngine.buildFromCandidates(candidates);
@@ -146,7 +135,7 @@ export class SearchCore {
       }));
 
       // 9. Weighted RRF
-      const fusedResults = weightedRRF({
+      let fusedResults = weightedRRF({
         lexical: fullTextResults,
         semantic: semanticResults,
         grepPrior: grepPrior,
@@ -158,10 +147,19 @@ export class SearchCore {
         k: rrfK,
       });
 
-      // 10. Clean up full-text index to free memory
+      // 10. Apply graph boost (after RRF, before final selection)
+      // Graph boost is always enabled with fixed weight of 0.3
+      this.graphBoostCalculator.setConfig({
+        enabled: true,
+        candidateConnectionWeight: 0.3,
+      });
+      fusedResults = this.graphBoostCalculator.applyBoosts(fusedResults);
+      logInfo("Graph boost applied to search results");
+
+      // 11. Clean up full-text index to free memory
       this.fullTextEngine.clear();
 
-      // 11. Return top K results
+      // 12. Return top K results
       const finalResults = fusedResults.slice(0, maxResults);
 
       // Log results in an inspectable format

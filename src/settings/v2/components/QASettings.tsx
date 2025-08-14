@@ -107,18 +107,6 @@ export const QASettings: React.FC = () => {
             onChange={(value) => updateSetting("maxSourceChunks", value)}
           />
 
-          {/* Graph Hops */}
-          <SettingItem
-            type="slider"
-            title="Graph Expansion Hops"
-            description="How many hops to traverse in the Obsidian graph when expanding search results. Higher values find more related notes but may add less relevant results. Default is 1."
-            min={1}
-            max={3}
-            step={1}
-            value={settings.graphHops || 1}
-            onChange={(value) => updateSetting("graphHops", value)}
-          />
-
           {/* Requests per Minute */}
           <SettingItem
             type="slider"

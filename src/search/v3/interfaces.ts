@@ -28,6 +28,5 @@ export interface SearchOptions {
   semanticWeight?: number;
   l1ByteCap?: number;
   candidateLimit?: number;
-  graphHops?: number;
   salientTerms?: string[]; // Additional terms to enhance the search
 }

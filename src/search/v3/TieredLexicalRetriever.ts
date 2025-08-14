@@ -90,7 +90,6 @@ export class TieredLexicalRetriever extends BaseRetriever {
         maxResults: this.options.maxK,
         salientTerms: enhancedSalientTerms,
         enableSemantic: !!getSettings().enableSemanticSearchV3,
-        graphHops: getSettings().graphHops || 1,
       });
 
       // Get title-matched notes that should always be included

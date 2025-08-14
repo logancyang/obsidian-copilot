@@ -35,19 +35,13 @@ _(Multilingual, Partial In-Memory; optional semantic add-on)_
    Searches BOTH: Full queries + Individual terms
    Input: ["How do I set up OAuth in Next.js?", "Next.js OAuth configuration",
            "NextJS OAuth setup", "oauth", "nextjs"]
-   Finds: ["auth/oauth-guide.md", "nextjs/auth.md", "tutorials/oauth.md"]
+   Finds: ["auth/oauth-guide.md", "nextjs/auth.md", "tutorials/oauth.md"] (up to 200)
 
-3. Graph Expansion (link analysis)
-   Strategies: Link traversal + Active context + Co-citation
-   Guardrails: If grep hits < 5 → +1 hop (cap 3); if ≥ 50 → force 1 hop and disable co-citation
-   From:       3 grep hits → 8 total candidates
-   Adds:       JWT.md (linked), auth-flow.md (backlink), config.md (co-cited)
-
-4. Full-Text Index (L1 - ephemeral FlexSearch)
-   Builds index from 8 notes with fields:
+3. Full-Text Index (L1 - ephemeral FlexSearch)
+   Builds index from grep candidates with fields:
    - title (3x weight), headings (2x), tags (2x), links (2x), body (1x)
 
-5. Full-Text Search (Hybrid: Phrases + Terms)
+4. Full-Text Search (Hybrid: Phrases + Terms)
    Searches BOTH: 3 query variants (precision) + 2 terms (recall)
    Also includes LLM <term> tags as low-weight inputs (reduced influence)
    Input: ["How do I set up OAuth in Next.js?", "Next.js OAuth configuration",
@@ -62,13 +56,18 @@ _(Multilingual, Partial In-Memory; optional semantic add-on)_
    | auth/oauth-guide.md | "OAuth Guide" (pos 2) | auth oauth | #oauth | Yes | 2.1 | 1x (single) | 0.21 |
    | tutorials/oauth.md | - | tutorials oauth | #oauth | Yes | 1.2 | 1x (single) | 0.12 |
 
-6. RRF (combine rankings)
+5. RRF (combine rankings)
    Merges: full-text (1.0x) + grep prior (0.2x) + semantic (2.0x if enabled)
 
-7. Final Results (after folder boosting and RRF)
-   1. nextjs/auth.md (score: 0.93) - Boosted by folder clustering; normalized to 0–1
-   2. nextjs/config.md (score: 0.36) - Boosted by folder clustering; normalized to 0–1
-   3. nextjs/jwt.md (score: 0.30) - Boosted by folder clustering; normalized to 0–1
+6. Graph Boost (link-based reranking)
+   Analyzes connections between result candidates
+   Notes linked to other relevant results get boost (1.0-2.0x multiplier)
+   Example: If nextjs/auth.md links to nextjs/config.md, both get boosted
+
+7. Final Results (after folder boost, RRF, and graph boost)
+   1. nextjs/auth.md (score: 0.95) - Boosted by folder clustering + graph connections
+   2. nextjs/config.md (score: 0.38) - Boosted by folder clustering + graph connections
+   3. nextjs/jwt.md (score: 0.30) - Boosted by folder clustering
    4. auth/oauth-guide.md (score: 0.21)
    5. tutorials/oauth.md (score: 0.12)
 ```
@@ -93,18 +92,19 @@ _(Multilingual, Partial In-Memory; optional semantic add-on)_
 graph TD
     A[User Query] --> B[Query Expansion<br/>LLM rewrites + term extraction]
     B --> C[Grep Scan<br/>Substring search on queries + terms]
-    C --> D[Graph Expansion<br/>BFS traversal + co-citation]
-    D --> E[Build Full-Text Index<br/>FlexSearch with path indexing]
+    C --> E[Build Full-Text Index<br/>FlexSearch with path indexing]
     E --> F[Full-Text Search<br/>Hybrid: phrases + terms]
     F --> FB[Folder Boosting<br/>Cluster detection + logarithmic boost]
     FB --> G{Semantic Enabled?}
     G -->|Yes| H[Semantic Re-ranking<br/>Embedding similarity]
     G -->|No| I[Weighted RRF<br/>Multi-signal fusion]
     H --> I
-    I --> J[Final Results<br/>Top-K selection]
+    I --> GB[Graph Boost<br/>Link-based reranking]
+    GB --> J[Final Results<br/>Top-K selection]
 
     style B fill:#e1f5fe
     style FB fill:#fff3e0
+    style GB fill:#e8f5e9
     style I fill:#f3e5f5
 ```
 
@@ -180,18 +180,8 @@ async function retrieve(query: string): Promise<NoteIdRank[]> {
   // Searches for full phrases + individual terms: "authentication", "nextjs", "app"
   // Returns: ["auth/nextjs-setup.md", "tutorials/nextjs-auth.md", ...] up to 200 files
 
-  // 3. GRAPH EXPANSION - Expand via links for better recall
-  const activeFile = app.workspace.getActiveFile();
-  const expandedCandidates = await graphExpander.expandCandidates(
-    grepHits,      // Start from grep hits
-    activeFile,    // Include active note neighbors
-    graphHops: 1   // 1-hop expansion
-  );
-  // Expands: 50 grep hits → 150+ via links and co-citations
-  // Adds: notes linking to/from auth notes, JWT docs, OAuth guides, etc.
-
-  // 4. CANDIDATE LIMITING - Respect memory bounds
-  const candidates = expandedCandidates.slice(0, 500);
+  // 3. CANDIDATE LIMITING - Respect memory bounds
+  const candidates = grepHits.slice(0, 500);
 
   // 5. BUILD FULL-TEXT INDEX - Ephemeral FlexSearch from candidates
   await fullTextEngine.buildFromCandidates(candidates);
@@ -204,7 +194,11 @@ async function retrieve(query: string): Promise<NoteIdRank[]> {
   // 6. FULL-TEXT SEARCH - Hybrid search with phrases AND terms
   // Combines: Full query variants (precision) + Individual terms (recall)
   const allFullTextQueries = [...variants, ...expanded.salientTerms];
-  const fullTextResults = fullTextEngine.search(allFullTextQueries, limit * 2, expanded.salientTerms);
+  const fullTextResults = fullTextEngine.search(
+    allFullTextQueries,
+    limit * 2,
+    expanded.salientTerms
+  );
   // Searches: ["How do I implement...", "Next.js auth...", "authentication", "nextjs", "app"]
   // Returns: [{id: "tutorials/nextjs-auth.md", score: 0.95, engine: "fulltext"},
   //          {id: "auth/jwt-implementation.md", score: 0.8, engine: "fulltext"}, ...]
@@ -224,15 +218,25 @@ async function retrieve(query: string): Promise<NoteIdRank[]> {
   }
 
   // 8. WEIGHTED RRF - Combine all signals
-  const fusedResults = weightedRRF({
-    lexical: fullTextResults,     // weight: 1.0
-    semantic: semanticResults,    // weight: 2.0 (if enabled)
-    grepPrior: grepPrior,         // weight: 0.2 (weak prior)
-    weights: { lexical: 1.0, semantic: 2.0, grepPrior: 0.2 },
-  }, 60);
+  let fusedResults = weightedRRF(
+    {
+      lexical: fullTextResults, // weight: 1.0
+      semantic: semanticResults, // weight: 2.0 (if enabled)
+      grepPrior: grepPrior, // weight: 0.2 (weak prior)
+      weights: { lexical: 1.0, semantic: 2.0, grepPrior: 0.2 },
+    },
+    60
+  );
   // Combines rankings: docs appearing in multiple result sets score higher
 
-  // 9. CLEANUP & RETURN
+  // 9. GRAPH BOOST - Apply link-based reranking
+  if (settings.enableGraphBoost) {
+    fusedResults = graphBoostCalculator.applyBoosts(fusedResults);
+    // Analyzes connections between candidates
+    // Notes linked to other relevant results get 1.0-2.0x boost
+  }
+
+  // 10. CLEANUP & RETURN
   fullTextEngine.clear(); // Free memory
   return fusedResults.slice(0, maxResults); // Default: top 30
   // Final: ["tutorials/nextjs-auth.md", "auth/jwt-implementation.md",
@@ -318,23 +322,31 @@ Uses LLM to generate alternative query phrasings and extract salient terms.
 
 Fast substring search using Obsidian's `cachedRead`. Searches both full queries and individual terms with batch processing optimized for platform (10 files on mobile, 50 on desktop).
 
-### 4.3 Graph Expander
+### 4.3 Graph Boost Calculator
 
-Discovers related notes through link analysis, expanding initial grep hits from ~50 to 150+ candidates.
+**Graph connections as a ranking signal, not a retrieval mechanism.**
 
-**Three Strategies:**
+Analyzes link connections between search result candidates to boost notes that are connected to other relevant results. Similar to PageRank but computed only within the candidate set.
 
-1. **BFS Link Traversal** - Follows outgoing/backlinks from grep hits
-2. **Active Context** - Includes neighbors of currently open note
-3. **Co-citation** - Finds notes linking to same targets (topic similarity)
+**Key Features:**
 
-Enables discovery of conceptually related notes without exact term matches by leveraging the knowledge graph structure.
+- **Bounded Complexity**: Only analyzes connections within candidates (O(N) not O(entire vault))
+- **Safe by Default**: Enabled by default, only reranks existing results
+- **Configurable Weight**: Control influence via settings (0.1-1.0, default 0.3)
+- **Logarithmic Scaling**: Diminishing returns for many connections (prevents over-influence)
 
-**Guardrails:**
+**How it Works:**
 
-- H = configured graph traversal depth (Graph hops setting)
-- Small set (1–4 grep hits): effectiveHops = min(H + 1, 3)
-- Large set (≥50 grep hits): effectiveHops = 1 and co-citation is disabled
+1. After RRF combines lexical/semantic/grep rankings
+2. For each candidate, count connections to other candidates
+3. Apply boost multiplier (1.0-2.0x) based on connection count
+4. Notes linked to many other relevant notes rank higher
+
+**Example:**
+
+- If `nextjs/auth.md` links to `nextjs/config.md` and both are in results
+- Both get a connection boost, improving their final ranking
+- Helps surface tightly connected topic clusters
 
 ### 4.4 Full-Text Engine (L1 - Ephemeral Body Index)
 
@@ -467,6 +479,8 @@ This logging helps debug search performance and understand the retrieval flow.
 
 ### Settings
 
+- Enable Graph Boost: boost search results based on link connections (default ON, safe and improves quality)
+- Graph Boost Weight: 0.1-1.0, controls how much link connections influence ranking (default 0.3)
 - Enable Semantic Search (v3): master toggle for memory index and auto-index strategy
 - Auto-Index Strategy: NEVER, ON STARTUP, ON MODE SWITCH (only when semantic toggle is on)
 - Requests per Minute: embedding rate control during indexing
