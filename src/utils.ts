@@ -954,8 +954,12 @@ export async function withSuppressedTokenWarnings<T>(fn: () => Promise<T>): Prom
 }
 
 /**
- * Check if the current Obsidian editor setting is in live preview mode
+ * Check if the current Obsidian editor setting is in source mode
  */
-export function isLivePreviewModeOn(): boolean {
-  return !!(app.vault as any).config?.livePreview;
+export function isSourceModeOn(): boolean {
+  const view = app.workspace.getActiveViewOfType(MarkdownView);
+  if (!view) return true;
+
+  const state = view.getState() as { source?: boolean };
+  return state.source === true;
 }

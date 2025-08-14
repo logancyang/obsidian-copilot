@@ -3,7 +3,6 @@ import { getCachedCustomCommands } from "@/commands/state";
 import { COMMAND_IDS } from "@/constants";
 import { Menu } from "obsidian";
 import { CustomCommand } from "./type";
-import { isLivePreviewModeOn } from "@/utils";
 
 export function registerContextMenu(menu: Menu) {
   // Create the main "Copilot" submenu
@@ -23,13 +22,11 @@ export function registerContextMenu(menu: Menu) {
       });
     });
 
-    if (isLivePreviewModeOn()) {
-      submenu.addItem((subItem: any) => {
-        subItem.setTitle("Trigger quick command").onClick(() => {
-          (app as any).commands.executeCommandById(`copilot:${COMMAND_IDS.TRIGGER_QUICK_COMMAND}`);
-        });
+    submenu.addItem((subItem: any) => {
+      subItem.setTitle("Trigger quick command").onClick(() => {
+        (app as any).commands.executeCommandById(`copilot:${COMMAND_IDS.TRIGGER_QUICK_COMMAND}`);
       });
-    }
+    });
 
     // Get custom commands
     const commands = getCachedCustomCommands();
