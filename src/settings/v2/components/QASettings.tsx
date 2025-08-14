@@ -140,11 +140,24 @@ export const QASettings: React.FC = () => {
               min={0}
               max={100}
               step={10}
-              value={Math.round(settings.semanticSearchWeight * 100)}
+              value={Math.round((settings.semanticSearchWeight ?? 0.6) * 100)}
               onChange={(value) => updateSetting("semanticSearchWeight", value / 100)}
               suffix="%"
             />
           )}
+
+          {/* Lexical Search RAM Limit */}
+          <SettingItem
+            type="slider"
+            title="Lexical Search RAM Limit"
+            description="Maximum RAM usage for full-text search index. Lower values use less memory but may limit search performance on large vaults. Default is 100 MB."
+            min={20}
+            max={1000}
+            step={20}
+            value={settings.lexicalSearchRamLimit || 100}
+            onChange={(value) => updateSetting("lexicalSearchRamLimit", value)}
+            suffix=" MB"
+          />
 
           {/* Number of Partitions removed (auto-managed in v3) */}
 

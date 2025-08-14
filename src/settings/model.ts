@@ -119,6 +119,13 @@ export interface CopilotSettings {
    * - Default: 0.6 (60% semantic, 40% lexical)
    */
   semanticSearchWeight: number;
+  /**
+   * RAM limit for lexical search index (in MB)
+   * Controls memory usage for full-text search operations
+   * - Range: 20-1000 MB
+   * - Default: 100 MB
+   */
+  lexicalSearchRamLimit: number;
   /** Whether we have suggested built-in default commands to the user once. */
   suggestedDefaultCommands: boolean;
   autonomousAgentMaxIterations: number;
@@ -243,6 +250,23 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   sanitizedSettings.embeddingBatchSize = isNaN(embeddingBatchSize)
     ? DEFAULT_SETTINGS.embeddingBatchSize
     : embeddingBatchSize;
+
+  // Sanitize semanticSearchWeight (0-1 range)
+  const semanticSearchWeight = Number(settingsToSanitize.semanticSearchWeight);
+  if (isNaN(semanticSearchWeight) || semanticSearchWeight < 0 || semanticSearchWeight > 1) {
+    sanitizedSettings.semanticSearchWeight = DEFAULT_SETTINGS.semanticSearchWeight;
+  } else {
+    sanitizedSettings.semanticSearchWeight = semanticSearchWeight;
+  }
+
+  // Sanitize lexicalSearchRamLimit (20-1000 MB range)
+  const lexicalSearchRamLimit = Number(settingsToSanitize.lexicalSearchRamLimit);
+  if (isNaN(lexicalSearchRamLimit)) {
+    sanitizedSettings.lexicalSearchRamLimit = DEFAULT_SETTINGS.lexicalSearchRamLimit;
+  } else {
+    // Clamp to valid range
+    sanitizedSettings.lexicalSearchRamLimit = Math.min(1000, Math.max(20, lexicalSearchRamLimit));
+  }
 
   // Ensure includeActiveNoteAsContext has a default value
   if (typeof sanitizedSettings.includeActiveNoteAsContext !== "boolean") {

@@ -1,18 +1,14 @@
 import { logInfo } from "@/logger";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import { App, TFile } from "obsidian";
-import { getPlatformValue } from "../utils/platformUtils";
 
 /**
  * Fast substring search using Obsidian's cachedRead for initial seeding
  */
 export class GrepScanner {
   private static readonly CONFIG = {
-    BATCH_SIZE: {
-      DESKTOP: 50,
-      MOBILE: 10,
-    },
-    YIELD_INTERVAL: 100, // Yield every N files on mobile
+    BATCH_SIZE: 30, // Process files in batches for performance
+    YIELD_INTERVAL: 100, // Yield every N files to prevent blocking
   } as const;
 
   constructor(private app: App) {}
@@ -31,10 +27,7 @@ export class GrepScanner {
     const allFiles = this.app.vault.getMarkdownFiles();
     const files = allFiles.filter((file) => shouldIndexFile(file, inclusions, exclusions));
     const matches = new Set<string>();
-    const batchSize = getPlatformValue(
-      GrepScanner.CONFIG.BATCH_SIZE.MOBILE,
-      GrepScanner.CONFIG.BATCH_SIZE.DESKTOP
-    );
+    const batchSize = GrepScanner.CONFIG.BATCH_SIZE;
 
     // Normalize queries for case-insensitive search
     const normalizedQueries = queries.map((q) => q.toLowerCase());
@@ -79,9 +72,8 @@ export class GrepScanner {
         })
       );
 
-      // Yield on mobile to prevent blocking
-      const isMobile = getPlatformValue(true, false);
-      if (isMobile && i % GrepScanner.CONFIG.YIELD_INTERVAL === 0) {
+      // Yield periodically to prevent blocking
+      if (i % GrepScanner.CONFIG.YIELD_INTERVAL === 0) {
         await new Promise((r) => setTimeout(r, 0));
       }
     }

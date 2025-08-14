@@ -1,34 +1,28 @@
 import { logInfo } from "@/logger";
-import { getPlatformValue } from "./platformUtils";
+import { getSettings } from "@/settings/model";
 
 /**
  * Manages memory budget for search operations
  */
 export class MemoryManager {
-  private static readonly CONFIG = {
-    MAX_BYTES: {
-      MOBILE: 20 * 1024 * 1024, // 20MB
-      DESKTOP: 100 * 1024 * 1024, // 100MB
-    },
-    CANDIDATE_LIMIT: {
-      MOBILE: 300,
-      DESKTOP: 500,
-    },
-  } as const;
+  private static readonly DEFAULT_CANDIDATE_LIMIT = 500;
+  private static readonly MB_TO_BYTES = 1024 * 1024;
 
   private bytesUsed: number = 0;
   private readonly maxBytes: number;
   private readonly candidateLimit: number;
 
   constructor() {
-    this.maxBytes = getPlatformValue(
-      MemoryManager.CONFIG.MAX_BYTES.MOBILE,
-      MemoryManager.CONFIG.MAX_BYTES.DESKTOP
-    );
+    const settings = getSettings();
+    // Convert MB to bytes, with bounds checking
+    const ramLimitMB = Math.min(1000, Math.max(20, settings.lexicalSearchRamLimit || 100));
+    this.maxBytes = ramLimitMB * MemoryManager.MB_TO_BYTES;
 
-    this.candidateLimit = getPlatformValue(
-      MemoryManager.CONFIG.CANDIDATE_LIMIT.MOBILE,
-      MemoryManager.CONFIG.CANDIDATE_LIMIT.DESKTOP
+    // Keep a reasonable candidate limit based on RAM available
+    // Roughly 200KB average per document means ~500 docs for 100MB
+    this.candidateLimit = Math.min(
+      MemoryManager.DEFAULT_CANDIDATE_LIMIT,
+      Math.floor(ramLimitMB * 5) // Approximately 5 docs per MB
     );
   }
 
