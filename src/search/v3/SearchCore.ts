@@ -132,7 +132,16 @@ export class SearchCore {
 
           // Pass the same candidates array to limit semantic search to the same subset
           const hits = await index.search(semanticQueries, topK, candidates);
-          semanticResults = hits.map((h) => ({ id: h.id, score: h.score, engine: "semantic" }));
+          semanticResults = hits.map((h) => ({
+            id: h.id,
+            score: h.score,
+            engine: "semantic",
+            explanation: {
+              semanticScore: h.score,
+              baseScore: h.score,
+              finalScore: h.score,
+            },
+          }));
 
           logInfo(
             `Semantic search: Found ${semanticResults.length} results (restricted to ${candidates.length} candidates)`

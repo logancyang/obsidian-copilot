@@ -318,7 +318,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
    * Convert v3 search results to LangChain Document format.
    */
   private async convertToDocuments(
-    searchResults: Array<{ id: string; score: number; engine?: string }>
+    searchResults: Array<{ id: string; score: number; engine?: string; explanation?: any }>
   ): Promise<Document[]> {
     const documents: Document[] = [];
 
@@ -345,6 +345,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
               rerank_score: result.score,
               engine: result.engine || "v3",
               includeInContext: result.score > (this.options.minSimilarityScore || 0.1),
+              explanation: result.explanation,
             },
           })
         );

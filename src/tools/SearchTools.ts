@@ -1,5 +1,5 @@
 import { getStandaloneQuestion } from "@/chainUtils";
-import { PLUS_MODE_DEFAULT_SOURCE_CHUNKS, TEXT_WEIGHT } from "@/constants";
+import { TEXT_WEIGHT } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logInfo } from "@/logger";
 import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
@@ -28,12 +28,10 @@ const localSearchTool = createTool({
     const settings = getSettings();
 
     const returnAll = timeRange !== undefined;
-    const baseMax =
-      settings.maxSourceChunks < PLUS_MODE_DEFAULT_SOURCE_CHUNKS
-        ? PLUS_MODE_DEFAULT_SOURCE_CHUNKS
-        : settings.maxSourceChunks;
-    // For time-based queries, ensure a healthy cap to avoid starving recall when users set a very low max
-    const effectiveMaxK = returnAll ? Math.max(baseMax, 200) : baseMax;
+    // For time-based queries, ensure a healthy cap to avoid starving recall
+    const effectiveMaxK = returnAll
+      ? Math.max(settings.maxSourceChunks, 200)
+      : settings.maxSourceChunks;
 
     logInfo(`returnAll: ${returnAll}`);
 
@@ -78,6 +76,8 @@ const localSearchTool = createTool({
         source: doc.metadata.source, // Pass through source for proper labeling
         // Show actual modified time for time-based queries
         mtime: doc.metadata.mtime ?? null,
+        // Include search explanation if available
+        explanation: doc.metadata.explanation ?? null,
       };
     });
 

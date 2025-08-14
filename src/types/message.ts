@@ -54,7 +54,7 @@ export interface ChatMessage {
   isVisible: boolean;
 
   /** Sources cited in the response */
-  sources?: { title: string; path: string; score: number }[];
+  sources?: { title: string; path: string; score: number; explanation?: any }[];
 
   /** Rich content (images, etc.) */
   content?: any[];
@@ -87,6 +87,6 @@ export interface StoredMessage {
   context?: MessageContext;
   isVisible: boolean;
   isErrorMessage?: boolean;
-  sources?: { title: string; path: string; score: number }[];
+  sources?: { title: string; path: string; score: number; explanation?: any }[];
   content?: any[];
 }

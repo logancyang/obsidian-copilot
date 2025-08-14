@@ -97,9 +97,7 @@ export const RETRIEVED_DOCUMENT_TAG = "retrieved_document";
 export const EMPTY_INDEX_ERROR_MESSAGE =
   "Copilot index does not exist. Please index your vault first!\n\n1. Set a working embedding model in QA settings. If it's not a local model, don't forget to set the API key. \n\n2. Click 'Refresh Index for Vault' and wait for indexing to complete. If you encounter the rate limiting error, please turn your request per second down in QA setting.";
 export const CHUNK_SIZE = 6000;
-export const CONTEXT_SCORE_THRESHOLD = 0.4;
 export const TEXT_WEIGHT = 0.4;
-export const PLUS_MODE_DEFAULT_SOURCE_CHUNKS = 15;
 export const MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT = 448000;
 export const LOADING_MESSAGES = {
   DEFAULT: "",
@@ -691,7 +689,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableIndexSync: true,
   debug: false,
   enableEncryption: false,
-  maxSourceChunks: 3,
+  maxSourceChunks: 15,
   groqApiKey: "",
   activeModels: BUILTIN_CHAT_MODELS,
   activeEmbeddingModels: BUILTIN_EMBEDDING_MODELS,

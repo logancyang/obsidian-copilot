@@ -125,7 +125,8 @@ ${params}
     let fullAIResponse = "";
     const conversationMessages: any[] = [];
     const iterationHistory: string[] = []; // Track all iterations for display
-    const collectedSources: { title: string; path: string; score: number }[] = []; // Collect sources from localSearch
+    const collectedSources: { title: string; path: string; score: number; explanation?: any }[] =
+      []; // Collect sources from localSearch
     this.llmFormattedMessages = []; // Reset LLM messages for this run
     const isPlusUser = await checkIsPlusUser({
       isAutonomousAgent: true,
@@ -428,6 +429,7 @@ ${params}
                   title: doc.title || doc.path,
                   path: doc.path || doc.title || "",
                   score: doc.rerank_score || doc.score || 0,
+                  explanation: doc.explanation || null,
                 }));
                 collectedSources.push(...sources);
               }

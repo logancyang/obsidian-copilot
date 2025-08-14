@@ -220,9 +220,12 @@ export function logToolResult(toolName: string, result: ToolExecutionResult): vo
  * If path is not available, falls back to title
  */
 export function deduplicateSources(
-  sources: { title: string; path: string; score: number }[]
-): { title: string; path: string; score: number }[] {
-  const uniqueSources = new Map<string, { title: string; path: string; score: number }>();
+  sources: { title: string; path: string; score: number; explanation?: any }[]
+): { title: string; path: string; score: number; explanation?: any }[] {
+  const uniqueSources = new Map<
+    string,
+    { title: string; path: string; score: number; explanation?: any }
+  >();
 
   for (const source of sources) {
     // Use path as the unique key, falling back to title if path is not available

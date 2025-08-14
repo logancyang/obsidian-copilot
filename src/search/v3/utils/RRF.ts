@@ -57,6 +57,7 @@ export function weightedRRF(config: RRFConfig): NoteIdRank[] {
   }
 
   const scores = new Map<string, number>();
+  const explanations = new Map<string, any>();
 
   [
     { items: lexical, weight: finalWeights.lexical, name: "lexical" },
@@ -67,6 +68,11 @@ export function weightedRRF(config: RRFConfig): NoteIdRank[] {
       items.forEach((item, idx) => {
         const current = scores.get(item.id) || 0;
         scores.set(item.id, current + weight / (k + idx + 1));
+
+        // Preserve explanation from the first occurrence (highest ranked)
+        if (item.explanation && !explanations.has(item.id)) {
+          explanations.set(item.id, item.explanation);
+        }
       });
       logInfo(`RRF: Processed ${items.length} items from ${name} with weight ${weight.toFixed(2)}`);
     });
@@ -84,6 +90,7 @@ export function weightedRRF(config: RRFConfig): NoteIdRank[] {
       id,
       score: Math.min(score * scaleFactor, 1),
       engine: "rrf" as const,
+      explanation: explanations.get(id),
     }));
     // Dead-simple differentiation for saturated tops: subtract tiny rank-based epsilon
     const epsilon = 0.0005; // 5e-4 drop per rank to avoid walls of identical scores

@@ -337,7 +337,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
   ): Promise<string> {
     const { updateLoadingMessage } = options;
     let fullAIResponse = "";
-    let sources: { title: string; path: string; score: number }[] = [];
+    let sources: { title: string; path: string; score: number; explanation?: any }[] = [];
     let currentPartialResponse = "";
     const isPlusUser = await checkIsPlusUser({
       isCopilotPlus: true,
@@ -514,7 +514,9 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     );
   }
 
-  private getSources(documents: any): { title: string; path: string; score: number }[] {
+  private getSources(
+    documents: any
+  ): { title: string; path: string; score: number; explanation?: any }[] {
     if (!documents || !Array.isArray(documents)) {
       logWarn("No valid documents provided to getSources");
       return [];
@@ -545,6 +547,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
           path: doc.path || doc.title, // Use path if available, otherwise use title
           score: docScore,
           isReranked: isReranked,
+          explanation: doc.explanation || null, // Preserve explanation data
         });
       }
     }
