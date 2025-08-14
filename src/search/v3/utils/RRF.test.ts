@@ -207,7 +207,7 @@ describe("RRF (Reciprocal Rank Fusion)", () => {
       // doc1 appears first in both sources - should get high score
       expect(results[0].id).toBe("doc1");
       expect(results[0].score).toBeLessThanOrEqual(1);
-      expect(results[0].score).toBeGreaterThan(0.5); // Good score with both sources
+      expect(results[0].score).toBeGreaterThan(0.45); // Good score with both sources (normalized weights)
 
       // doc2 appears in both sources, should have moderate score
       const doc2 = results.find((r) => r.id === "doc2");

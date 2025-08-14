@@ -87,6 +87,7 @@ interface SliderSettingItemProps extends BaseSettingItemProps {
   min: number;
   max: number;
   step: number;
+  suffix?: string;
 }
 
 // 添加 Dialog 类型的 Props
@@ -221,6 +222,7 @@ export function SettingItem(props: SettingItemProps) {
             min={props.min}
             max={props.max}
             step={props.step}
+            suffix={props.suffix}
             disabled={disabled}
             className="tw-w-full sm:tw-w-[300px]"
           />

@@ -131,6 +131,21 @@ export const QASettings: React.FC = () => {
             onChange={(value) => updateSetting("embeddingBatchSize", value)}
           />
 
+          {/* Semantic vs Lexical Weight */}
+          {settings.enableSemanticSearchV3 && (
+            <SettingItem
+              type="slider"
+              title="Semantic Search Weight"
+              description="Balance between semantic (meaning-based) and lexical (keyword-based) search. 0% = fully lexical, 100% = fully semantic. Default is 60% semantic."
+              min={0}
+              max={100}
+              step={10}
+              value={Math.round(settings.semanticSearchWeight * 100)}
+              onChange={(value) => updateSetting("semanticSearchWeight", value / 100)}
+              suffix="%"
+            />
+          )}
+
           {/* Number of Partitions removed (auto-managed in v3) */}
 
           {/* Exclusions */}

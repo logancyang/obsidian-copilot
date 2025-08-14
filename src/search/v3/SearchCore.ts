@@ -56,7 +56,7 @@ export class SearchCore {
     // Validate and sanitize options
     const maxResults = Math.min(Math.max(1, options.maxResults || 30), 100);
     const enableSemantic = options.enableSemantic || false;
-    const semanticWeight = Math.min(Math.max(0, options.semanticWeight || 0.6), 1); // Default 60% semantic
+    const semanticWeight = Math.min(Math.max(0, options.semanticWeight ?? 0.6), 1); // Default 60% semantic
     const candidateLimit = Math.min(Math.max(10, options.candidateLimit || 500), 1000);
     const rrfK = Math.min(Math.max(1, options.rrfK || 60), 100);
 
@@ -274,7 +274,15 @@ Answer:`;
       const response = await chatModel.invoke(prompt, { signal: controller.signal });
       clearTimeout(timeoutId);
 
-      const hydeDoc = response.content?.toString() || null;
+      // Extract string content from the response
+      let hydeDoc: string | null = null;
+      if (typeof response.content === "string") {
+        hydeDoc = response.content;
+      } else if (response.content && typeof response.content === "object") {
+        // Handle AIMessage or complex content structure
+        hydeDoc = String(response.content);
+      }
+
       if (hydeDoc) {
         logInfo(`HyDE generated: ${hydeDoc.slice(0, 100)}...`);
       }

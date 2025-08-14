@@ -112,6 +112,13 @@ export interface CopilotSettings {
   enableCustomPromptTemplating: boolean;
   /** Enable semantic stage in v3 search (requires Memory Index JSONL) */
   enableSemanticSearchV3: boolean;
+  /**
+   * Weight for semantic search in hybrid retrieval (0-1 range)
+   * - 0 = fully lexical (keyword-based) search
+   * - 1 = fully semantic (meaning-based) search
+   * - Default: 0.6 (60% semantic, 40% lexical)
+   */
+  semanticSearchWeight: number;
   /** Whether we have suggested built-in default commands to the user once. */
   suggestedDefaultCommands: boolean;
   autonomousAgentMaxIterations: number;

@@ -86,10 +86,12 @@ export class TieredLexicalRetriever extends BaseRetriever {
       }
 
       // Perform the tiered search
+      const settings = getSettings();
       const searchResults = await this.searchCore.retrieve(query, {
         maxResults: this.options.maxK,
         salientTerms: enhancedSalientTerms,
-        enableSemantic: !!getSettings().enableSemanticSearchV3,
+        enableSemantic: !!settings.enableSemanticSearchV3,
+        semanticWeight: settings.semanticSearchWeight || 0.6,
       });
 
       // Get title-matched notes that should always be included

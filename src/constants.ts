@@ -701,6 +701,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   showSuggestedPrompts: true,
   showRelevantNotes: true,
   numPartitions: 1,
+  semanticSearchWeight: 0.6, // Default 60% semantic, 40% lexical
   promptUsageTimestamps: {},
   promptSortStrategy: PromptSortStrategy.TIMESTAMP,
   defaultConversationNoteName: "{$topic}@{$date}_{$time}",

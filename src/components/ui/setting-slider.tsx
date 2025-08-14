@@ -10,6 +10,7 @@ interface SettingSliderProps {
   step: number;
   disabled?: boolean;
   className?: string;
+  suffix?: string;
 }
 
 export function SettingSlider({
@@ -20,6 +21,7 @@ export function SettingSlider({
   step,
   disabled,
   className,
+  suffix,
 }: SettingSliderProps) {
   // Internal state for smooth updates
   const [localValue, setLocalValue] = useState(initialValue);
@@ -41,7 +43,10 @@ export function SettingSlider({
         disabled={disabled}
         className="tw-flex-1"
       />
-      <div className="tw-min-w-[40px] tw-text-right tw-text-sm">{localValue}</div>
+      <div className="tw-min-w-[40px] tw-text-right tw-text-sm">
+        {localValue}
+        {suffix}
+      </div>
     </div>
   );
 }
