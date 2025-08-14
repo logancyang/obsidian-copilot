@@ -4,7 +4,7 @@ _(Multilingual, Partial In-Memory; optional semantic add-on)_
 
 ## Current Implementation Snapshot
 
-- Tiered Lexical Retrieval (Grep → Graph → Full-text → Weighted RRF) fully implemented
+- Tiered Lexical Retrieval (Grep → Full-text → RRF → Boosting) fully implemented
 - Semantic (optional) integrated via JSONL-backed in-memory index (`MemoryIndexManager`)
 - Scores normalized to [0,1] with tiny rank-based epsilon to avoid ties at the top
 - Time-based queries show actual `mtime` and use a dedicated cap; daily notes handled explicitly
@@ -57,14 +57,15 @@ _(Multilingual, Partial In-Memory; optional semantic add-on)_
    | tutorials/oauth.md | - | tutorials oauth | #oauth | Yes | 1.2 | 1x (single) | 0.12 |
 
 5. RRF (combine rankings)
-   Merges: full-text (1.0x) + grep prior (0.2x) + semantic (2.0x if enabled)
+   Merges: full-text (1.0x) + semantic (1.5x if enabled)
+   Documents appearing in multiple result sets score higher
 
-6. Graph Boost (link-based reranking)
-   Analyzes connections between result candidates
-   Notes linked to other relevant results get boost (1.0-2.0x multiplier)
+6. Folder & Graph Boost (unified boosting stage)
+   - Folder Boost: Notes in folders with multiple matches get logarithmic boost (1-3x)
+   - Graph Boost: Notes linked to other relevant results get boost (1.0-2.0x)
    Example: If nextjs/auth.md links to nextjs/config.md, both get boosted
 
-7. Final Results (after folder boost, RRF, and graph boost)
+7. Final Results (after RRF and unified boosting)
    1. nextjs/auth.md (score: 0.95) - Boosted by folder clustering + graph connections
    2. nextjs/config.md (score: 0.38) - Boosted by folder clustering + graph connections
    3. nextjs/jwt.md (score: 0.30) - Boosted by folder clustering
@@ -94,17 +95,15 @@ graph TD
     B --> C[Grep Scan<br/>Substring search on queries + terms]
     C --> E[Build Full-Text Index<br/>FlexSearch with path indexing]
     E --> F[Full-Text Search<br/>Hybrid: phrases + terms]
-    F --> FB[Folder Boosting<br/>Cluster detection + logarithmic boost]
-    FB --> G{Semantic Enabled?}
+    F --> G{Semantic Enabled?}
     G -->|Yes| H[Semantic Re-ranking<br/>Embedding similarity]
     G -->|No| I[Weighted RRF<br/>Multi-signal fusion]
     H --> I
-    I --> GB[Graph Boost<br/>Link-based reranking]
-    GB --> J[Final Results<br/>Top-K selection]
+    I --> B2[Unified Boosting<br/>Folder + Graph boosts]
+    B2 --> J[Final Results<br/>Top-K selection]
 
     style B fill:#e1f5fe
-    style FB fill:#fff3e0
-    style GB fill:#e8f5e9
+    style B2 fill:#fff3e0
     style I fill:#f3e5f5
 ```
 
@@ -124,18 +123,8 @@ graph LR
         GS --> GH[50-200 hits]
     end
 
-    subgraph GA["Graph Analysis"]
-        GH --> GE[Graph Expander]
-        GE --> BFS[BFS Links: 1-3 hops (adaptive)]
-        GE --> AC[Active Context: Current note neighbors]
-        GE --> CC[Co-citation: Shared links (disabled when hits ≥ 50)]
-        BFS --> EC[~500 candidates]
-        AC --> EC
-        CC --> EC
-    end
-
     subgraph FTP["Full-Text Processing"]
-        EC --> FTI[FlexSearch Index]
+        GH --> FTI[FlexSearch Index]
         FTI --> IDX[Field Indexing: Title 3x, Path 2.5x, Tags/Links 2x, Body 1x]
         IDX --> FTS[Search Engine]
         V --> FTS
@@ -146,14 +135,14 @@ graph LR
     end
 
     subgraph RO["Ranking Optimization"]
-        MF --> FB[Folder Boost: Logarithmic scaling]
-        FB --> RRF[Weighted RRF: Lexical 1.0x, Grep 0.3x, Semantic 2.0x]
+        MF --> RRF[Weighted RRF: Lexical 1.0x, Semantic 1.5x]
+        RRF --> UB[Unified Boosting: Folder + Graph]
     end
 
-    RRF --> R[Top-K Results]
+    UB --> R[Top-K Results]
 
     style QE fill:#e1f5fe
-    style FB fill:#fff3e0
+    style UB fill:#fff3e0
     style RRF fill:#f3e5f5
     style FTI fill:#e8f5e9
 ```
@@ -183,7 +172,7 @@ async function retrieve(query: string): Promise<NoteIdRank[]> {
   // 3. CANDIDATE LIMITING - Respect memory bounds
   const candidates = grepHits.slice(0, 500);
 
-  // 5. BUILD FULL-TEXT INDEX - Ephemeral FlexSearch from candidates
+  // 4. BUILD FULL-TEXT INDEX - Ephemeral FlexSearch from candidates
   await fullTextEngine.buildFromCandidates(candidates);
   // Indexes: title, path, headings, tags, links (as basenames), body with multilingual tokenizer
   // Path components are indexed separately for folder/file name search
@@ -191,7 +180,7 @@ async function retrieve(query: string): Promise<NoteIdRank[]> {
   //                       headings: ["JWT Setup", "OAuth"], tags: ["nextjs", "auth"],
   //                       links: "jwt-basics oauth-flow", body: "..."}
 
-  // 6. FULL-TEXT SEARCH - Hybrid search with phrases AND terms
+  // 5. FULL-TEXT SEARCH - Hybrid search with phrases AND terms
   // Combines: Full query variants (precision) + Individual terms (recall)
   const allFullTextQueries = [...variants, ...expanded.salientTerms];
   const fullTextResults = fullTextEngine.search(
@@ -203,7 +192,7 @@ async function retrieve(query: string): Promise<NoteIdRank[]> {
   // Returns: [{id: "tutorials/nextjs-auth.md", score: 0.95, engine: "fulltext"},
   //          {id: "auth/jwt-implementation.md", score: 0.8, engine: "fulltext"}, ...]
 
-  // 7. OPTIONAL SEMANTIC RE-RANKING
+  // 6. OPTIONAL SEMANTIC RE-RANKING
   let semanticResults = [];
   if (settings.enableSemantic) {
     // Get semantic candidates from vector store
@@ -217,26 +206,24 @@ async function retrieve(query: string): Promise<NoteIdRank[]> {
     semanticResults = await reRankBySimilarity(combined, queryEmbeddings);
   }
 
-  // 8. WEIGHTED RRF - Combine all signals
+  // 7. WEIGHTED RRF - Combine all signals
   let fusedResults = weightedRRF(
     {
       lexical: fullTextResults, // weight: 1.0
-      semantic: semanticResults, // weight: 2.0 (if enabled)
-      grepPrior: grepPrior, // weight: 0.2 (weak prior)
-      weights: { lexical: 1.0, semantic: 2.0, grepPrior: 0.2 },
+      semantic: semanticResults, // weight: 1.5 (if enabled)
+      weights: { lexical: 1.0, semantic: 1.5 },
     },
     60
   );
   // Combines rankings: docs appearing in multiple result sets score higher
 
-  // 9. GRAPH BOOST - Apply link-based reranking
-  if (settings.enableGraphBoost) {
-    fusedResults = graphBoostCalculator.applyBoosts(fusedResults);
-    // Analyzes connections between candidates
-    // Notes linked to other relevant results get 1.0-2.0x boost
-  }
+  // 8. UNIFIED BOOSTING - Apply folder and graph boosts
+  fusedResults = folderBoostCalculator.applyBoosts(fusedResults);
+  fusedResults = graphBoostCalculator.applyBoosts(fusedResults);
+  // Folder boost: Notes in same folder get logarithmic boost
+  // Graph boost: Notes linked to other results get connection boost
 
-  // 10. CLEANUP & RETURN
+  // 9. CLEANUP & RETURN
   fullTextEngine.clear(); // Free memory
   return fusedResults.slice(0, maxResults); // Default: top 30
   // Final: ["tutorials/nextjs-auth.md", "auth/jwt-implementation.md",
@@ -246,16 +233,16 @@ async function retrieve(query: string): Promise<NoteIdRank[]> {
 
 ### Key Flow Characteristics
 
-1. **Progressive Refinement**: Start fast (grep) → expand (graph) → refine (full-text)
+1. **Progressive Refinement**: Start fast (grep) → refine (full-text) → boost (folder/graph)
 2. **Hybrid Search Strategy**: Uses BOTH full query phrases (precision) AND individual terms (recall)
 3. **Score Accumulation**: Documents matching multiple queries/terms get higher scores (not max)
-4. **Folder Clustering**: Automatic boosting of notes in folders with multiple matches
+4. **Unified Boosting Stage**: Folder and graph boosts applied together after RRF fusion
 5. **Path-Aware Indexing**: Folder and file names are searchable with 2.5x weight
 6. **Low-weight Terms**: LLM-extracted salient terms are included as low-weight inputs
 7. **Memory-Bounded**: Each step respects platform memory limits
 8. **Multilingual**: Handles ASCII and CJK throughout the pipeline
 9. **Fault-Tolerant**: Falls back to grep-only if pipeline fails
-10. **Configurable**: Semantic search, graph hops, memory limits all adjustable
+10. **Configurable**: Semantic search and memory limits adjustable
 11. **Link-Aware Search**: Links are indexed as searchable basenames while preserving full paths for graph traversal
 
 ---
@@ -322,7 +309,26 @@ Uses LLM to generate alternative query phrasings and extract salient terms.
 
 Fast substring search using Obsidian's `cachedRead`. Searches both full queries and individual terms with batch processing optimized for platform (10 files on mobile, 50 on desktop).
 
-### 4.3 Graph Boost Calculator
+### 4.3 Folder Boost Calculator
+
+**Folder connections as a ranking signal for topical clustering.**
+
+Analyzes folder distribution of search results to boost notes that share folders with other relevant results. Uses logarithmic scaling to prevent over-boosting.
+
+**Key Features:**
+
+- **Logarithmic Boost**: Formula: `1 + log2(count + 1)` (2 docs → 2.58x, 3 docs → 3x)
+- **Capped at 3x**: Maximum boost factor prevents runaway scores
+- **Applied Post-RRF**: Works on already-ranked results
+- **Promotes Clusters**: Surfaces related notes from same project/folder
+
+**Example:**
+
+- Results include `nextjs/auth.md`, `nextjs/config.md`, `nextjs/jwt.md`
+- All 3 get ~3x boost for being in the same folder
+- Helps surface coherent topic groups
+
+### 4.4 Graph Boost Calculator
 
 **Graph connections as a ranking signal, not a retrieval mechanism.**
 
@@ -348,7 +354,7 @@ Analyzes link connections between search result candidates to boost notes that a
 - Both get a connection boost, improving their final ranking
 - Helps surface tightly connected topic clusters
 
-### 4.4 Full-Text Engine (L1 - Ephemeral Body Index)
+### 4.5 Full-Text Engine (L1 - Ephemeral Body Index)
 
 FlexSearch index built per-query with security and performance optimizations:
 
@@ -374,17 +380,6 @@ FlexSearch uses a **Contextual Index** algorithm (NOT BM25/TF-IDF). Key characte
 - Accumulates scores from multiple queries (documents matching multiple terms rank higher)
 - Multi-field bonus: 20% boost for each additional field matched
 - Results in better recall without sacrificing precision
-
-**Folder Boosting Algorithm:**
-
-The system applies intelligent folder-based boosting to improve clustering of related notes:
-
-1. **Folder Prevalence Detection**: Counts how many results are in each folder
-2. **Logarithmic Boost**: Notes in folders with multiple matches get boosted
-   - Formula: `boostFactor = 1 + log2(count + 1)`
-   - Example: 3 docs in folder → ~2x boost, 7 docs → ~2.3x boost
-3. **Applied After Scoring**: Boost applied after initial scoring but before final ranking
-4. **Promotes Topic Clusters**: Helps surface groups of related notes from the same project/topic
 
 **Path Indexing:**
 
@@ -420,7 +415,7 @@ The system applies intelligent folder-based boosting to improve clustering of re
 - Custom tokenizer handles ASCII words and CJK bigrams
 - Links indexed as searchable basenames while preserving full paths
 
-### 4.5 Semantic Layer (Optional)
+### 4.6 Semantic Layer (Optional)
 
 - Storage: JSONL snapshots (`copilot-index-v3-000.jsonl`, …) persisted under `.obsidian/` or `.copilot/`
 - Loading: `MemoryIndexManager.loadIfExists()` at startup; non-disruptive if missing
@@ -429,9 +424,9 @@ The system applies intelligent folder-based boosting to improve clustering of re
 - Retrieval: Aggregates per-note by averaging top-3 chunk similarities; per-query min–max scaling
 - Fusion: Weighted RRF (semantic default weight 1.5) + tiny rank epsilon for score differentiation
 
-### 4.6 Weighted RRF
+### 4.7 Weighted RRF
 
-Combines multiple rankings with configurable weights using Reciprocal Rank Fusion (RRF). Documents appearing in multiple result sets receive higher scores. Default weights: lexical (1.0x), semantic (2.0x), grep prior (0.3x).
+Combines multiple rankings with configurable weights using Reciprocal Rank Fusion (RRF). Documents appearing in multiple result sets receive higher scores. Default weights: lexical (1.0x), semantic (1.5x). The grep prior has been removed as all grep hits are already represented in the full-text results.
 
 ---
 
@@ -445,14 +440,14 @@ Query expansion: 3 variants + 3 terms
   Variants: ["How do I implement authentication in my Next.js app?", "Next.js authentication implementation", "NextJS auth setup guide"]
   Terms: ["authentication", "nextjs", "app"]
 Grep scan: Found 52 initial matches
-Graph expansion: 52 grep → 176 expanded → 176 final candidates
-Full-text index: Built with 176 documents
-FullText: Indexed 176/200 docs (18% memory, 1543210 bytes)
-FullText: Boosting 3 folders with multiple matches
-  nextjs: 5 docs (2.32x boost)
-  auth: 3 docs (2.00x boost)
-  tutorials: 2 docs (1.58x boost)
+Full-text index: Built with 52 documents
+FullText: Indexed 52/200 docs (18% memory, 543210 bytes)
 Full-text search: Found 35 results (using 6 search inputs)
+Folder boost: Boosting 3 folders with multiple matches
+  nextjs: 5 docs (3.0x boost)
+  auth: 3 docs (2.58x boost)
+  tutorials: 2 docs (2.0x boost)
+Graph boost applied to search results
 Final results: 30 documents (after RRF)
 
 ┌─────────┬──────────────────────┬──────────────────────────┬────────┬──────────┐
@@ -479,8 +474,6 @@ This logging helps debug search performance and understand the retrieval flow.
 
 ### Settings
 
-- Enable Graph Boost: boost search results based on link connections (default ON, safe and improves quality)
-- Graph Boost Weight: 0.1-1.0, controls how much link connections influence ranking (default 0.3)
 - Enable Semantic Search (v3): master toggle for memory index and auto-index strategy
 - Auto-Index Strategy: NEVER, ON STARTUP, ON MODE SWITCH (only when semantic toggle is on)
 - Requests per Minute: embedding rate control during indexing
@@ -498,9 +491,9 @@ This logging helps debug search performance and understand the retrieval flow.
 
 - Query expansion with LLM integration and 4s timeout via AbortController
 - Grep scanner with platform-optimized batching (10 mobile, 50 desktop)
-- Graph expander with true BFS traversal and visited tracking
 - Full-text engine with ephemeral FlexSearch and multilingual tokenizer (ASCII + CJK)
-- Weighted RRF with simple linear scaling; grep prior ranked and reduced weight (0.2)
+- Weighted RRF with simple linear scaling
+- Folder and Graph boost calculators for post-RRF ranking adjustments
 - TieredLexicalRetriever orchestrator integrated into search tools
 
 **Security & Performance:**
@@ -532,7 +525,7 @@ This logging helps debug search performance and understand the retrieval flow.
 
 **Completed in Final Session (2025-08-11):**
 
-- Graph hops setting (1-3 range) added to QA settings with slider UI
+- Simplified pipeline: removed graph expansion and grep prior from RRF
 - Rate limiting properly integrated with RateLimiter class
 - Batching fixed to prepare all chunks first, then process in batches (matching old implementation)
 - Indexing notices show file counts instead of chunk counts
@@ -570,7 +563,7 @@ The following features were considered but deemed unnecessary based on current p
 **Key Insights**:
 
 - No persistent full-text index needed - grep provides fast initial seeding
-- Graph expansion dramatically improves recall (3x candidates)
+- Clean separation between retrieval (grep/full-text) and ranking (RRF/boosts)
 - Ephemeral indexing eliminates maintenance overhead
 - Security hardening prevents common attack vectors
 - Platform-aware memory management ensures stability

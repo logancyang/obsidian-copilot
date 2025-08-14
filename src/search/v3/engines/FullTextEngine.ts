@@ -255,10 +255,9 @@ export class FullTextEngine {
   /**
    * Search the ephemeral index with multiple query variants
    *
-   * Scoring happens in three stages:
+   * Scoring happens in two stages:
    * 1. Score Accumulation: Documents matching multiple queries get additive scores
    * 2. Multi-field Bonus: Documents matching in multiple fields (title, tags, etc.) get boosted
-   * 3. Folder Boost: Documents in folders with multiple matches get boosted
    *
    * @param queries - Array of query strings
    * @param limit - Maximum results per query
@@ -372,86 +371,9 @@ export class FullTextEngine {
       finalResults.push({ id, score: finalScore, engine: "fulltext" });
     }
 
-    // Apply folder-based boosting before sorting
-    this.applyFolderBoost(finalResults);
-
-    // Sort again after boosting and return top results
+    // Sort and return top results
     finalResults.sort((a, b) => b.score - a.score);
     return finalResults.slice(0, limit);
-  }
-
-  /**
-   * Apply folder-based boosting to improve ranking of related notes.
-   *
-   * IMPORTANT: Only boosts documents that are ALREADY in the search results.
-   * Does NOT add new documents from the same folder.
-   *
-   * How it works:
-   * 1. Counts how many results are in each folder
-   * 2. Boosts ALL results in folders with 2+ matches
-   * 3. Boost formula: score * (1 + log2(count + 1))
-   *
-   * Example scenarios:
-   *
-   * Case A: dirA/dirB/docA.md and dirA/dirB/docB.md (same folder)
-   * - Both docs are in "dirA/dirB" folder
-   * - Folder count = 2
-   * - Both get boost: score * 1.58 (~58% boost)
-   *
-   * Case B: dirA/dirB/docA.md and dirA/docC.md (different folders)
-   * - docA is in "dirA/dirB" folder (count = 1, no boost)
-   * - docC is in "dirA" folder (count = 1, no boost)
-   * - Neither gets boosted because each folder only has 1 match
-   *
-   * Real example with query "OAuth NextJS":
-   * - Results: nextjs/auth.md, nextjs/config.md, nextjs/jwt.md, tutorials/oauth.md
-   * - "nextjs" folder has 3 docs → each gets 2x boost
-   * - "tutorials" folder has 1 doc → no boost
-   *
-   * @param results - Array of search results to apply boosting to (modified in place)
-   */
-  private applyFolderBoost(results: NoteIdRank[]): void {
-    // Count notes per folder
-    const folderCounts = new Map<string, number>();
-
-    for (const result of results) {
-      const lastSlash = result.id.lastIndexOf("/");
-      if (lastSlash > 0) {
-        const folder = result.id.substring(0, lastSlash);
-        folderCounts.set(folder, (folderCounts.get(folder) || 0) + 1);
-      }
-    }
-
-    // Log folder boost summary
-    const foldersWithMultiple = Array.from(folderCounts.entries()).filter(([, count]) => count > 1);
-    if (foldersWithMultiple.length > 0) {
-      logInfo(`FullText: Boosting ${foldersWithMultiple.length} folders with multiple matches`);
-      // Log top folders
-      foldersWithMultiple.slice(0, 3).forEach(([folder, count]) => {
-        const boostFactor = 1 + Math.log2(count + 1);
-        logInfo(`  ${folder}: ${count} docs (${boostFactor.toFixed(2)}x boost)`);
-      });
-    }
-
-    // Apply boost to notes in folders with multiple matches
-    for (const result of results) {
-      const lastSlash = result.id.lastIndexOf("/");
-      if (lastSlash > 0) {
-        const folder = result.id.substring(0, lastSlash);
-        const count = folderCounts.get(folder) || 1;
-
-        // Boost score based on folder prevalence (more notes in folder = higher boost)
-        if (count > 1) {
-          const minScoreThreshold = 0.2;
-          if (result.score >= minScoreThreshold) {
-            const rawBoost = 1 + Math.log2(count + 1);
-            const boostFactor = Math.min(rawBoost, 1.8);
-            result.score = result.score * boostFactor;
-            (result as any).folderBoost = boostFactor;
-          }
-        }
-      }
-    }
   }
 
   /**

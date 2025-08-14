@@ -6,6 +6,7 @@ import { NoteIdRank, SearchOptions } from "./interfaces";
 import { MemoryIndexManager } from "./MemoryIndexManager";
 import { QueryExpander } from "./QueryExpander";
 import { GrepScanner } from "./scanners/GrepScanner";
+import { FolderBoostCalculator } from "./scoring/FolderBoostCalculator";
 import { GraphBoostCalculator } from "./scoring/GraphBoostCalculator";
 import { weightedRRF } from "./utils/RRF";
 
@@ -19,6 +20,7 @@ export class SearchCore {
   private grepScanner: GrepScanner;
   private fullTextEngine: FullTextEngine;
   private queryExpander: QueryExpander;
+  private folderBoostCalculator: FolderBoostCalculator;
   private graphBoostCalculator: GraphBoostCalculator;
 
   constructor(
@@ -32,6 +34,7 @@ export class SearchCore {
       maxVariants: 3,
       timeout: LLM_GENERATION_TIMEOUT_MS,
     });
+    this.folderBoostCalculator = new FolderBoostCalculator();
     this.graphBoostCalculator = new GraphBoostCalculator(app);
   }
 
@@ -126,40 +129,32 @@ export class SearchCore {
         }
       }
 
-      // 8. Rank grep hits by evidence quality before fusion (path/content × phrase/term)
-      const rankedGrep = await this.rankGrepHits(allSearchStrings, grepHits.slice(0, 100));
-      const grepPrior: NoteIdRank[] = rankedGrep.slice(0, 50).map((id, idx) => ({
-        id,
-        score: 1 / (idx + 1),
-        engine: "grep",
-      }));
-
-      // 9. Weighted RRF
+      // 8. Weighted RRF (simplified - no grep prior)
       let fusedResults = weightedRRF({
         lexical: fullTextResults,
         semantic: semanticResults,
-        grepPrior: grepPrior,
         weights: {
           lexical: 1.0,
           semantic: semanticWeight,
-          grepPrior: 0.2,
         },
         k: rrfK,
       });
 
-      // 10. Apply graph boost (after RRF, before final selection)
-      // Graph boost is always enabled with fixed weight of 0.3
+      // 9. Apply folder and graph boosts (after RRF, before final selection)
+      // Both boosts are applied in sequence as ranking adjustments
+      fusedResults = this.folderBoostCalculator.applyBoosts(fusedResults);
+
       this.graphBoostCalculator.setConfig({
         enabled: true,
         candidateConnectionWeight: 0.3,
       });
       fusedResults = this.graphBoostCalculator.applyBoosts(fusedResults);
-      logInfo("Graph boost applied to search results");
+      logInfo("Folder and graph boosts applied to search results");
 
-      // 11. Clean up full-text index to free memory
+      // 10. Clean up full-text index to free memory
       this.fullTextEngine.clear();
 
-      // 12. Return top K results
+      // 11. Return top K results
       const finalResults = fusedResults.slice(0, maxResults);
 
       // Log results in an inspectable format
@@ -273,66 +268,5 @@ Answer:`;
       }
       return null;
     }
-  }
-
-  /**
-   * Rank grep hits by evidence strength using path/content and phrase/term categories
-   */
-  private async rankGrepHits(queries: string[], hits: string[]): Promise<string[]> {
-    const phraseQueries = queries.filter((q) => q.trim().includes(" "));
-    const termQueries = queries.filter((q) => !q.trim().includes(" "));
-
-    const scored: Array<{ id: string; score: number }> = [];
-
-    for (const id of hits) {
-      let score = 0;
-      try {
-        const file = this.app.vault.getAbstractFileByPath(id);
-        const pathLower = id.toLowerCase();
-        const contentLower = file
-          ? (await this.app.vault.cachedRead(file as any)).toLowerCase()
-          : "";
-
-        // Prefer phrase matches
-        let pathPhrase = 0;
-        let contentPhrase = 0;
-        for (const pq of phraseQueries) {
-          const p = pq.toLowerCase();
-          if (pathLower.includes(p)) pathPhrase++;
-          if (contentLower.includes(p)) contentPhrase++;
-        }
-
-        // Term matches
-        let pathTerm = 0;
-        let contentTerm = 0;
-        const distinctMatched = new Set<string>();
-        for (const tq of termQueries) {
-          const t = tq.toLowerCase();
-          if (pathLower.includes(t)) {
-            pathTerm++;
-            distinctMatched.add(t);
-          } else if (contentLower.includes(t)) {
-            contentTerm++;
-            distinctMatched.add(t);
-          }
-        }
-
-        // Compute raw evidence score
-        const raw =
-          4 * pathPhrase +
-          3 * contentPhrase +
-          2 * pathTerm +
-          1 * contentTerm +
-          0.5 * distinctMatched.size;
-        // Use tanh for natural 0-1 normalization with soft saturation
-        score = Math.tanh(raw / 4);
-      } catch {
-        score = 0;
-      }
-      scored.push({ id, score });
-    }
-
-    scored.sort((a, b) => b.score - a.score);
-    return scored.map((s) => s.id);
   }
 }
