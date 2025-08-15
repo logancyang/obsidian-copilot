@@ -32,6 +32,7 @@ import { Buffer } from "buffer";
 import { Notice, TFile } from "obsidian";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
 import ProgressCard from "@/components/project/progress-card";
+import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
 
 type ChatMode = "default" | "project";
 
@@ -565,6 +566,19 @@ const Chat: React.FC<ChatProps> = ({
               plugin={plugin}
               setHiddenCard={() => {
                 setProgressCardVisible(false);
+              }}
+              onEditContext={() => {
+                const currentProject = getCurrentProject();
+                if (currentProject) {
+                  // Open the context management modal for editing the project
+                  new ContextManageModal(
+                    app,
+                    (updatedProject) => {
+                      handleEditProject(currentProject, updatedProject);
+                    },
+                    currentProject
+                  ).open();
+                }
               }}
             />
           </div>
