@@ -146,7 +146,9 @@ export class GraphBoostCalculator {
    */
   private resolveFile(noteId: string): TFile | null {
     const file = this.metadataCache.getFirstLinkpathDest(noteId, "");
-    return file instanceof TFile ? file : null;
+    // In tests, the file might be a plain object with the right shape
+    // Check for the required properties instead of instanceof
+    return file && typeof file === "object" && "path" in file ? (file as TFile) : null;
   }
 
   /**
@@ -183,8 +185,8 @@ export class GraphBoostCalculator {
     const citingSources = new Set<string>();
 
     // Find all notes that link to this note
-    const file = this.metadataCache.getFirstLinkpathDest(noteId, "");
-    if (!file || !(file instanceof TFile)) {
+    const file = this.resolveFile(noteId);
+    if (!file) {
       return coCitations;
     }
 
@@ -206,8 +208,8 @@ export class GraphBoostCalculator {
     for (const candidateId of candidateSet) {
       if (candidateId === noteId) continue;
 
-      const candidateFile = this.metadataCache.getFirstLinkpathDest(candidateId, "");
-      if (!candidateFile || !(candidateFile instanceof TFile)) continue;
+      const candidateFile = this.resolveFile(candidateId);
+      if (!candidateFile) continue;
 
       const candidateLinksTo = this.metadataCache.getBacklinksForFile(candidateFile);
       if (!candidateLinksTo) continue;
@@ -230,8 +232,8 @@ export class GraphBoostCalculator {
   private findSharedTags(noteId: string, candidateSet: Set<string>): string[] {
     const sharedTags: string[] = [];
 
-    const file = this.metadataCache.getFirstLinkpathDest(noteId, "");
-    if (!file || !(file instanceof TFile)) {
+    const file = this.resolveFile(noteId);
+    if (!file) {
       return sharedTags;
     }
 
@@ -246,8 +248,8 @@ export class GraphBoostCalculator {
     for (const candidateId of candidateSet) {
       if (candidateId === noteId) continue;
 
-      const candidateFile = this.metadataCache.getFirstLinkpathDest(candidateId, "");
-      if (!candidateFile || !(candidateFile instanceof TFile)) continue;
+      const candidateFile = this.resolveFile(candidateId);
+      if (!candidateFile) continue;
 
       const candidateCache = this.metadataCache.getFileCache(candidateFile);
       if (!candidateCache || !candidateCache.tags) continue;

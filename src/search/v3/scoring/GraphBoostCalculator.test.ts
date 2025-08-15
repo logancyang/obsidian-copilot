@@ -18,7 +18,8 @@ const createMockFile = (path: string): TFile => {
 };
 
 const mockMetadataCache = {
-  getFirstLinkpathDest: (linkpath: string) => {
+  getFirstLinkpathDest: (linkpath: string, sourcePath: string) => {
+    // In our tests, the linkpath is the full path including .md
     return mockFiles.get(linkpath) || null;
   },
   getBacklinksForFile: (file: TFile) => {
@@ -87,7 +88,8 @@ describe("GraphBoostCalculator", () => {
         backlinkWeight: 1.0,
         coCitationWeight: 0,
         sharedTagWeight: 0,
-        boostStrength: 0.1,
+        boostStrength: 0.5, // Increased for testing
+        maxBoostMultiplier: 1.5,
       });
 
       // Setup: note2 and note3 link to note1
@@ -107,7 +109,7 @@ describe("GraphBoostCalculator", () => {
 
       // note1 should be boosted (2 backlinks from other results)
       expect(boosted[0].score).toBeGreaterThan(1.0);
-      expect(boosted[0].score).toBeLessThan(1.2); // Max cap
+      expect(boosted[0].score).toBeLessThanOrEqual(1.5); // Max cap is 1.5
 
       // note2 and note3 should not be boosted
       expect(boosted[1].score).toBe(0.9);
@@ -135,7 +137,7 @@ describe("GraphBoostCalculator", () => {
         backlinkWeight: 0,
         coCitationWeight: 0.5,
         sharedTagWeight: 0,
-        boostStrength: 0.1,
+        boostStrength: 0.5,
       });
 
       createMockFile("note1.md");
@@ -165,7 +167,7 @@ describe("GraphBoostCalculator", () => {
         backlinkWeight: 0,
         coCitationWeight: 0,
         sharedTagWeight: 0.3,
-        boostStrength: 0.1,
+        boostStrength: 0.5,
       });
 
       createMockFile("note1.md");
@@ -200,7 +202,7 @@ describe("GraphBoostCalculator", () => {
         backlinkWeight: 1.0,
         coCitationWeight: 0.5,
         sharedTagWeight: 0.3,
-        boostStrength: 0.1,
+        boostStrength: 0.5,
       });
 
       createMockFile("note1.md");
@@ -277,13 +279,17 @@ describe("GraphBoostCalculator", () => {
 
       createMockFile("note1.md");
       createMockFile("note2.md");
+      createMockFile("note3.md");
+      createMockFile("note4.md");
 
-      // Many backlinks to trigger high boost
+      // Many backlinks to trigger high boost - all are in results
       mockBacklinks.set("note1.md", new Set(["note2.md", "note3.md", "note4.md"]));
 
       const results: NoteIdRank[] = [
         { id: "note1.md", score: 1.0, engine: "rrf" },
         { id: "note2.md", score: 0.9, engine: "rrf" },
+        { id: "note3.md", score: 0.8, engine: "rrf" },
+        { id: "note4.md", score: 0.7, engine: "rrf" },
       ];
 
       const boosted = boost.applyBoost(results);

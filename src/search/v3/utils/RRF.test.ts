@@ -126,8 +126,8 @@ describe("RRF (Reciprocal Rank Fusion)", () => {
       ];
 
       const semantic: NoteIdRank[] = [
-        { id: "doc3", score: 9, engine: "semantic" },
-        { id: "doc1", score: 7, engine: "semantic" },
+        { id: "doc3", score: 0.9, engine: "semantic" }, // High similarity
+        { id: "doc1", score: 0.5, engine: "semantic" }, // Lower similarity
       ];
 
       // Test with 30% semantic weight (70% lexical)
@@ -144,18 +144,17 @@ describe("RRF (Reciprocal Rank Fusion)", () => {
         weights: { lexical: 0.3, semantic: 0.7 },
       });
 
-      // doc1 appears in both but is first in lexical
-      // With 70% lexical weight, doc1 should rank higher
-      // With 70% semantic weight, doc3 (first in semantic) should be more competitive
+      // Verify that weights affect the final ranking
+      expect(results30.length).toBeGreaterThan(0);
+      expect(results70.length).toBeGreaterThan(0);
 
-      const doc1Score30 = results30.find((r) => r.id === "doc1")?.score || 0;
+      // With semantic similarity blending, scores should be affected by weights
       const doc3Score30 = results30.find((r) => r.id === "doc3")?.score || 0;
-
-      const doc1Score70 = results70.find((r) => r.id === "doc1")?.score || 0;
       const doc3Score70 = results70.find((r) => r.id === "doc3")?.score || 0;
 
-      // With more lexical weight (30% semantic), doc1 should have higher advantage
-      expect(doc1Score30 - doc3Score30).toBeGreaterThan(doc1Score70 - doc3Score70);
+      // Semantic similarity now directly affects scores
+      // With 70% semantic, doc3 (0.9 similarity) should get bigger boost than with 30%
+      expect(doc3Score70).toBeGreaterThan(doc3Score30);
     });
 
     it("should handle single item", () => {

@@ -22,12 +22,22 @@ describe("QueryExpander", () => {
   describe("expand", () => {
     it("should return empty result for empty query", async () => {
       const result = await expander.expand("");
-      expect(result).toEqual({ queries: [], salientTerms: [] });
+      expect(result).toEqual({
+        queries: [],
+        salientTerms: [],
+        originalQuery: "",
+        expandedQueries: [],
+      });
     });
 
     it("should return empty result for whitespace query", async () => {
       const result = await expander.expand("   ");
-      expect(result).toEqual({ queries: [], salientTerms: [] });
+      expect(result).toEqual({
+        queries: [],
+        salientTerms: [],
+        originalQuery: "",
+        expandedQueries: [],
+      });
     });
 
     it("should expand query with LLM and extract substantive terms from original query", async () => {

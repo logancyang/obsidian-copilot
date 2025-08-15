@@ -46,8 +46,8 @@ describe("FolderBoostCalculator", () => {
 
       const boosted = calculator.applyBoosts(results);
 
-      // nextjs folder has 2 docs, boost = 1 + log2(2 + 1) = 1 + log2(3) ≈ 2.585
-      const expectedBoost = 1 + Math.log2(3);
+      // nextjs folder has 2 docs, boost = min(1 + log2(2 + 1), 1.5) = min(2.585, 1.5) = 1.5
+      const expectedBoost = Math.min(1 + Math.log2(3), 1.5);
       expect(boosted[0].score).toBeCloseTo(0.3 * expectedBoost, 2);
       expect(boosted[1].score).toBeCloseTo(0.2 * expectedBoost, 2);
       // tutorials folder has 1 doc, no boost
@@ -65,8 +65,8 @@ describe("FolderBoostCalculator", () => {
 
       const boosted = calculator.applyBoosts(results);
 
-      // 5 docs in folder: boost = 1 + log2(5 + 1) ≈ 3.585, but capped at 3.0
-      const expectedBoost = Math.min(1 + Math.log2(6), 3.0); // Capped at default maxBoostFactor
+      // 5 docs in folder: boost = 1 + log2(5 + 1) ≈ 2.585, but capped at 1.5
+      const expectedBoost = Math.min(1 + Math.log2(6), 1.5); // Capped at default maxBoostFactor
       boosted.forEach((result) => {
         expect(result.score).toBeCloseTo(0.2 * expectedBoost, 2);
       });
@@ -80,11 +80,12 @@ describe("FolderBoostCalculator", () => {
 
       const boosted = calculator.applyBoosts(results);
 
-      // With boost = 1 + log2(3) ≈ 2.585, scores can exceed 1.0
-      // This is OK - the ScoreNormalizer will handle normalization
-      const expectedBoost = 1 + Math.log2(3);
+      // With boost = min(1 + log2(3), 1.5) = 1.5, scores won't exceed 1.0
+      // 0.9 * 1.5 = 1.35
+      const expectedBoost = Math.min(1 + Math.log2(3), 1.5);
       boosted.forEach((result) => {
         expect(result.score).toBeCloseTo(0.9 * expectedBoost, 2);
+        // With new lower boost, score is 1.35 which is still > 1.0
         expect(result.score).toBeGreaterThan(1.0);
       });
     });
@@ -182,7 +183,7 @@ describe("FolderBoostCalculator", () => {
       const nextjsBoost = boosts.get("nextjs");
       expect(nextjsBoost).toBeDefined();
       expect(nextjsBoost?.documentCount).toBe(3);
-      expect(nextjsBoost?.boostFactor).toBeCloseTo(3.0, 1); // 1 + log2(3 + 1) = 3
+      expect(nextjsBoost?.boostFactor).toBeCloseTo(1.5, 1); // min(1 + log2(3 + 1), 1.5) = 1.5
     });
   });
 });
