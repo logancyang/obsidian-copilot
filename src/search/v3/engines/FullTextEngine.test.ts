@@ -331,11 +331,11 @@ describe("FullTextEngine", () => {
       const getFieldWeight = (engine as any).getFieldWeight.bind(engine);
 
       expect(getFieldWeight("title")).toBe(3);
-      expect(getFieldWeight("path")).toBe(2.5);
-      expect(getFieldWeight("headings")).toBe(2);
-      expect(getFieldWeight("tags")).toBe(2);
-      expect(getFieldWeight("props")).toBe(2);
-      expect(getFieldWeight("links")).toBe(2);
+      expect(getFieldWeight("path")).toBe(1.5);
+      expect(getFieldWeight("headings")).toBe(1.5);
+      expect(getFieldWeight("tags")).toBe(1.5);
+      expect(getFieldWeight("props")).toBe(1.5);
+      expect(getFieldWeight("links")).toBe(1.5);
       expect(getFieldWeight("body")).toBe(1);
     });
 

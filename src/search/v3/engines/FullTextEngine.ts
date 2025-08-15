@@ -486,13 +486,13 @@ export class FullTextEngine {
    */
   private getFieldWeight(fieldName: string): number {
     const weights: Record<string, number> = {
-      title: 3,
-      path: 2.5,
-      headings: 2,
-      tags: 2,
-      props: 2,
-      links: 2,
-      body: 1,
+      title: 3, // 3x weight for title matches
+      path: 1.5, // 1.5x weight for metadata fields
+      headings: 1.5, // 1.5x weight for metadata fields
+      tags: 1.5, // 1.5x weight for metadata fields
+      props: 1.5, // 1.5x weight for metadata fields
+      links: 1.5, // 1.5x weight for metadata fields
+      body: 1, // 1x weight (baseline)
     };
     return weights[fieldName] || 1;
   }
