@@ -61,13 +61,13 @@ const localSearchTool = createTool({
       );
     }
 
-    // Format the results - only include snippet, not full content
+    // Format the results - include full content for LLM context
     const formattedResults = documents.map((doc) => {
       const scored = doc.metadata.rerank_score ?? doc.metadata.score ?? 0;
       return {
         title: doc.metadata.title || "Untitled",
-        // Only include a snippet for display (first 200 chars)
-        content: doc.pageContent.substring(0, 200),
+        // Include full content for documents that will be sent to LLM
+        content: doc.pageContent,
         path: doc.metadata.path || "",
         // Ensure both fields reflect the same final fused score when present
         score: scored,
