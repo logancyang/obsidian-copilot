@@ -1,4 +1,4 @@
-import { ProjectConfig } from "@/aiParams";
+import { ProjectConfig, getCurrentProject } from "@/aiParams";
 import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
 import { TruncatedText } from "@/components/TruncatedText";
 import { Button } from "@/components/ui/button";
@@ -63,12 +63,23 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
     .join(",");
 
   const handleEditProjectContext = (originP: ProjectConfig) => {
+    // attempt to retrieve the latest project configuration.
+    let projectToEdit = originP;
+
+    if (initialProject?.id) {
+      const currentProject = getCurrentProject();
+      if (currentProject?.id === originP.id) {
+        // Use the latest global project configuration
+        projectToEdit = currentProject;
+      }
+    }
+
     const modal = new ContextManageModal(
       app,
       async (updatedProject: ProjectConfig) => {
         setFormData(updatedProject);
       },
-      originP
+      projectToEdit
     );
     modal.open();
   };
