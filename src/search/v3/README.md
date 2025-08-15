@@ -63,7 +63,7 @@ Finds: ["auth/oauth-guide.md", "nextjs/auth.md", "tutorials/oauth.md"]
 #### Full-Text Branch:
 
 - Builds ephemeral FlexSearch index from candidates
-- Searches with field weights: Title (3x), Path (2.5x), Tags/Links/Props (2x), Body (1x)
+- Searches with field weights: Title (3x), Path (1.5x), Tags/Links/Props/Headings (1.5x), Body (1x)
 - Returns up to 2x maxResults for better recall
 
 #### Semantic Branch (if enabled):
@@ -83,12 +83,15 @@ Combines rankings with normalized weights (sum to 1.0):
 
 ### 5. Boosting Stage
 
-- **Folder Boost**: Notes in folders with multiple matches (logarithmic, 1-3x)
-- **Graph Boost**: Notes linked to other results (1.0-2.0x)
+- **Folder Boost**: Notes in folders with multiple matches (logarithmic, 1-1.5x)
+- **Graph Boost**: Notes linked to other results (1.0-1.2x)
 
 ### 6. Score Normalization
 
-Z-score + tanh normalization prevents auto-1.0 scores
+Min-max normalization prevents auto-1.0 scores
+
+- `baseScore`: The raw score after RRF fusion and all boosts are applied
+- `finalScore`: The normalized score in [0.02, 0.98] range that users see
 
 ### 7. Final Results
 
@@ -142,13 +145,13 @@ Z-score + tanh normalization prevents auto-1.0 scores
 
 **Folder Boost**: Rewards notes that share folders with other search results.
 
-- Formula: `1 + log2(count + 1)`, capped at 3x
-- Example: Searching "authentication" finds 3 notes in `nextjs/` folder → all 3 get ~2.6x boost
+- Formula: `1 + log2(count + 1)`, capped at 1.5x
+- Example: Searching "authentication" finds 3 notes in `nextjs/` folder → all 3 get ~1.5x boost
 - Purpose: Surfaces topically related clusters from the same project/folder
 
 **Graph Boost**: Rewards notes that link to other search results.
 
-- Formula: `1 + weight × log(connections + 1)`, capped at 2x
+- Formula: `1 + weight × log(connections + 1)`, capped at 1.2x
 - Example: `auth-guide.md` links to `jwt-setup.md` and both appear in results → both get boosted
 - Purpose: Surfaces tightly connected knowledge networks
 
@@ -156,7 +159,7 @@ Both boosts multiply existing scores after RRF fusion, helping related content r
 
 ### Score Normalizer
 
-- Z-score normalization with tanh squashing
+- Min-max normalization (default) or Z-score with tanh squashing
 - Prevents artificial 1.0 scores
 - Clips to [0.02, 0.98] range
 - Preserves explainability metadata
@@ -182,9 +185,15 @@ interface NoteIdRank {
     lexicalMatches?: Array<{ field: string; query: string; weight: number }>;
     semanticScore?: number;
     folderBoost?: { folder: string; documentCount: number; boostFactor: number };
-    graphBoost?: { connections: number; boostFactor: number };
-    baseScore: number;
-    finalScore: number;
+    graphConnections?: {
+      backlinks: number;
+      coCitations: number;
+      sharedTags: number;
+      score: number;
+      boostMultiplier: number;
+    };
+    baseScore: number; // Score before normalization (after RRF fusion and boosts)
+    finalScore: number; // Score after normalization (final 0-1 range score)
   };
 }
 ```
@@ -233,5 +242,5 @@ interface NoteIdRank {
 3. **Parallel Search Architecture**: Lexical and semantic run concurrently for performance
 4. **Unified Boosting Stage**: All boosts applied post-RRF
 5. **Consistent Candidates**: Both lexical and semantic search same subset
-6. **Statistical Normalization**: Prevents artificial perfect scores
+6. **Min-Max Normalization**: Prevents artificial perfect scores while preserving monotonicity
 7. **Explainable Rankings**: Track contributing factors for transparency
