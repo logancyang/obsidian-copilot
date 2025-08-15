@@ -121,8 +121,23 @@ export class SourcesModal extends Modal {
       );
     }
 
-    // Add graph boost
-    if (explanation.graphBoost) {
+    // Add graph connections (new query-aware boost)
+    if (explanation.graphConnections) {
+      const gc = explanation.graphConnections;
+      const connectionParts = [];
+      if (gc.backlinks > 0) connectionParts.push(`${gc.backlinks} backlinks`);
+      if (gc.coCitations > 0) connectionParts.push(`${gc.coCitations} co-citations`);
+      if (gc.sharedTags > 0) connectionParts.push(`${gc.sharedTags} shared tags`);
+
+      if (connectionParts.length > 0) {
+        details.push(
+          `Graph connections: ${gc.score.toFixed(1)} score (${connectionParts.join(", ")})`
+        );
+      }
+    }
+
+    // Add old graph boost (if still present for backwards compatibility)
+    if (explanation.graphBoost && !explanation.graphConnections) {
       details.push(
         `Graph boost: ${explanation.graphBoost.boostFactor.toFixed(2)}x (${explanation.graphBoost.connections} connections)`
       );

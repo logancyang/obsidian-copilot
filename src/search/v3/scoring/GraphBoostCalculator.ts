@@ -1,55 +1,47 @@
 import { logInfo } from "@/logger";
-import { App, MetadataCache } from "obsidian";
+import { App, MetadataCache, TFile } from "obsidian";
+import { NoteIdRank } from "../interfaces";
 
 /**
- * Configuration for graph boost scoring
+ * Connection types for graph boost calculation
  */
-export interface GraphBoostConfig {
-  /** Enable graph boost scoring (default: true) */
-  enabled: boolean;
-  /** Overall weight for graph boost in final score (0.0-1.0, default: 0.3) */
-  weight: number;
-  /** Weight for connections between candidates (default: 0.2) */
-  candidateConnectionWeight: number;
-  /** Use logarithmic scaling for connection counts (default: true) */
-  useLogScale: boolean;
+interface GraphConnections {
+  backlinks: string[]; // Notes from top results that link TO this note
+  coCitations: string[]; // Notes from top results cited by same sources
+  sharedTags: string[]; // Notes from top results with common tags
+  connectionScore: number; // Weighted sum of connections
+  boostMultiplier: number; // Final boost multiplier
 }
 
 /**
- * Default configuration for graph boost
+ * Configuration for graph boost
  */
-export const DEFAULT_GRAPH_BOOST_CONFIG: GraphBoostConfig = {
+export interface GraphBoostConfig {
+  enabled: boolean;
+  maxCandidates: number; // Max results to analyze (default: 50)
+  backlinkWeight: number; // Weight for backlinks (default: 1.0)
+  coCitationWeight: number; // Weight for co-citations (default: 0.5)
+  sharedTagWeight: number; // Weight for shared tags (default: 0.3)
+  boostStrength: number; // Overall boost strength (default: 0.1)
+  maxBoostMultiplier: number; // Cap on boost (default: 1.2)
+}
+
+/**
+ * Default configuration
+ */
+export const DEFAULT_CONFIG: GraphBoostConfig = {
   enabled: true,
-  weight: 0.3,
-  candidateConnectionWeight: 0.2,
-  useLogScale: true,
+  maxCandidates: 50,
+  backlinkWeight: 1.0,
+  coCitationWeight: 0.5,
+  sharedTagWeight: 0.3,
+  boostStrength: 0.1,
+  maxBoostMultiplier: 1.2,
 };
 
 /**
- * Result of graph boost calculation for a single note
- */
-export interface GraphBoostResult {
-  /** Note ID (path) */
-  noteId: string;
-  /** Number of connections to other candidates */
-  candidateConnections: number;
-  /** Total number of outgoing links from this note */
-  totalOutgoingLinks: number;
-  /** Calculated boost multiplier (1.0 = no boost) */
-  boostMultiplier: number;
-}
-
-/**
- * Calculates graph-based boost scores for search candidates.
- *
- * This class implements a ranking signal based on link connections between
- * search result candidates. Notes that are connected to other relevant notes
- * receive a boost, similar to PageRank but computed only within the candidate set.
- *
- * Key principles:
- * - Graph connections are a SIGNAL not a retrieval mechanism
- * - Only analyzes connections within the candidate set (bounded complexity)
- * - Returns multiplicative boost factors (1.0 = no boost)
+ * Graph boost calculator that rewards notes connected to other relevant results
+ * through backlinks, co-citations, and shared tags.
  */
 export class GraphBoostCalculator {
   private metadataCache: MetadataCache;
@@ -57,178 +49,210 @@ export class GraphBoostCalculator {
 
   constructor(app: App, config: Partial<GraphBoostConfig> = {}) {
     this.metadataCache = app.metadataCache;
-    this.config = { ...DEFAULT_GRAPH_BOOST_CONFIG, ...config };
+    this.config = { ...DEFAULT_CONFIG, ...config };
   }
 
   /**
-   * Calculate graph boost scores for a set of candidate notes.
-   *
-   * @param candidateIds - Array of note paths that are search candidates
-   * @returns Map of note ID to boost result
+   * Apply query-aware graph boost to search results
    */
-  calculateBoosts(candidateIds: string[]): Map<string, GraphBoostResult> {
-    const results = new Map<string, GraphBoostResult>();
-
-    if (!this.config.enabled || candidateIds.length === 0) {
-      // Return neutral boosts if disabled or no candidates
-      candidateIds.forEach((id) => {
-        results.set(id, {
-          noteId: id,
-          candidateConnections: 0,
-          totalOutgoingLinks: 0,
-          boostMultiplier: 1.0,
-        });
-      });
+  applyBoost(results: NoteIdRank[]): NoteIdRank[] {
+    if (!this.config.enabled || results.length === 0) {
       return results;
     }
 
-    // Create a set for O(1) lookup of candidates
-    const candidateSet = new Set(candidateIds);
+    // Work with top N candidates only
+    const candidates = results.slice(0, this.config.maxCandidates);
+    const candidateSet = new Set(candidates.map((r) => r.id));
 
     // Calculate connections for each candidate
-    for (const candidateId of candidateIds) {
-      const connections = this.countCandidateConnections(candidateId, candidateSet);
-      const boostMultiplier = this.calculateBoostMultiplier(connections);
+    const connectionsMap = new Map<string, GraphConnections>();
 
-      results.set(candidateId, {
-        noteId: candidateId,
-        candidateConnections: connections.candidateConnections,
-        totalOutgoingLinks: connections.totalOutgoingLinks,
-        boostMultiplier,
-      });
+    for (const result of candidates) {
+      const connections = this.calculateConnections(result.id, candidateSet);
+      connectionsMap.set(result.id, connections);
     }
 
-    // Log summary statistics in debug mode
-    if (candidateIds.length > 0) {
-      const boosts = Array.from(results.values());
-      const avgConnections =
-        boosts.reduce((sum, b) => sum + b.candidateConnections, 0) / boosts.length;
-      const maxConnections = Math.max(...boosts.map((b) => b.candidateConnections));
+    // Apply boost to all results (not just top N)
+    const boostedResults = results.map((result) => {
+      const connections = connectionsMap.get(result.id);
 
-      logInfo(
-        `GraphBoost: Calculated for ${candidateIds.length} candidates. ` +
-          `Avg connections: ${avgConnections.toFixed(1)}, Max: ${maxConnections}`
-      );
+      if (!connections || connections.boostMultiplier === 1.0) {
+        return result;
+      }
+
+      return {
+        ...result,
+        score: result.score * connections.boostMultiplier,
+        explanation: result.explanation
+          ? {
+              ...result.explanation,
+              graphConnections: {
+                backlinks: connections.backlinks.length,
+                coCitations: connections.coCitations.length,
+                sharedTags: connections.sharedTags.length,
+                score: connections.connectionScore,
+                boostMultiplier: connections.boostMultiplier,
+              },
+            }
+          : undefined,
+      };
+    });
+
+    // Log summary
+    const boosted = boostedResults.filter((r) => {
+      const conn = connectionsMap.get(r.id);
+      return conn && conn.boostMultiplier > 1.0;
+    });
+
+    if (boosted.length > 0) {
+      logInfo(`GraphBoostCalculator: Boosted ${boosted.length} notes based on connections`);
     }
 
-    return results;
+    return boostedResults;
   }
 
   /**
-   * Count how many connections a note has to other candidates.
-   *
-   * @param noteId - The note to analyze
-   * @param candidateSet - Set of candidate note IDs for O(1) lookup
-   * @returns Connection counts
+   * Calculate all connections for a note within the candidate set
    */
-  private countCandidateConnections(
-    noteId: string,
-    candidateSet: Set<string>
-  ): { candidateConnections: number; totalOutgoingLinks: number } {
-    const cache = this.metadataCache.getCache(noteId);
+  private calculateConnections(noteId: string, candidateSet: Set<string>): GraphConnections {
+    const backlinks = this.findBacklinks(noteId, candidateSet);
+    const coCitations = this.findCoCitations(noteId, candidateSet);
+    const sharedTags = this.findSharedTags(noteId, candidateSet);
 
-    if (!cache?.links) {
-      return { candidateConnections: 0, totalOutgoingLinks: 0 };
-    }
+    // Calculate weighted connection score
+    const connectionScore =
+      backlinks.length * this.config.backlinkWeight +
+      coCitations.length * this.config.coCitationWeight +
+      sharedTags.length * this.config.sharedTagWeight;
 
-    // Extract unique link paths
-    const outgoingLinks = new Set<string>();
-
-    for (const link of cache.links) {
-      // Resolve the link to get the actual file path
-      const linkedFile = this.metadataCache.getFirstLinkpathDest(link.link, noteId);
-      if (linkedFile) {
-        outgoingLinks.add(linkedFile.path);
-      }
-    }
-
-    // Count connections to other candidates
-    let candidateConnections = 0;
-    for (const linkPath of outgoingLinks) {
-      if (candidateSet.has(linkPath)) {
-        candidateConnections++;
-      }
+    // Calculate boost multiplier with logarithmic scaling
+    let boostMultiplier = 1.0;
+    if (connectionScore > 0) {
+      boostMultiplier = 1 + this.config.boostStrength * Math.log(1 + connectionScore);
+      boostMultiplier = Math.min(boostMultiplier, this.config.maxBoostMultiplier);
     }
 
     return {
-      candidateConnections,
-      totalOutgoingLinks: outgoingLinks.size,
+      backlinks,
+      coCitations,
+      sharedTags,
+      connectionScore,
+      boostMultiplier,
     };
   }
 
   /**
-   * Calculate the boost multiplier based on connection counts.
-   *
-   * @param connections - Connection counts
-   * @returns Boost multiplier (1.0 = no boost)
+   * Find which candidates link TO this note
    */
-  private calculateBoostMultiplier(connections: {
-    candidateConnections: number;
-    totalOutgoingLinks: number;
-  }): number {
-    if (connections.candidateConnections === 0) {
-      return 1.0; // No boost if no connections
+  private findBacklinks(noteId: string, candidateSet: Set<string>): string[] {
+    const backlinks: string[] = [];
+
+    // Get all files that link to this note
+    const file = this.metadataCache.getFirstLinkpathDest(noteId, "");
+    if (!file || !(file instanceof TFile)) {
+      return backlinks;
     }
 
-    const { candidateConnectionWeight, useLogScale } = this.config;
-
-    // Calculate base boost from candidate connections
-    let connectionBoost: number;
-    if (useLogScale) {
-      // Logarithmic scaling: diminishing returns for many connections
-      // log(1) = 0, log(2) ≈ 0.69, log(5) ≈ 1.6, log(10) ≈ 2.3
-      connectionBoost = Math.log(connections.candidateConnections + 1);
-    } else {
-      // Linear scaling
-      connectionBoost = connections.candidateConnections;
+    const linksTo = this.metadataCache.getBacklinksForFile(file);
+    if (!linksTo) {
+      return backlinks;
     }
 
-    // Apply weight and convert to multiplier
-    // Formula: 1 + (weight * normalized_connections)
-    // This ensures we always get a multiplier >= 1.0
-    const boostMultiplier = 1 + candidateConnectionWeight * connectionBoost;
+    // Check which backlinks are in our candidate set
+    for (const [linkPath] of linksTo.data) {
+      if (candidateSet.has(linkPath) && linkPath !== noteId) {
+        backlinks.push(linkPath);
+      }
+    }
 
-    // Cap the maximum boost to prevent over-influence
-    const maxBoost = 2.0; // At most double the score
-    return Math.min(boostMultiplier, maxBoost);
+    return backlinks;
   }
 
   /**
-   * Apply graph boosts to an array of scored items.
-   *
-   * @param items - Array of items with id and score
-   * @returns Same array with scores modified by graph boost
+   * Find candidates that share citing sources with this note
    */
-  applyBoosts<T extends { id: string; score: number }>(items: T[]): T[] {
-    if (!this.config.enabled || items.length === 0) {
-      return items;
+  private findCoCitations(noteId: string, candidateSet: Set<string>): string[] {
+    const coCitations: string[] = [];
+    const citingSources = new Set<string>();
+
+    // Find all notes that link to this note
+    const file = this.metadataCache.getFirstLinkpathDest(noteId, "");
+    if (!file || !(file instanceof TFile)) {
+      return coCitations;
     }
 
-    const candidateIds = items.map((item) => item.id);
-    const boosts = this.calculateBoosts(candidateIds);
+    const linksTo = this.metadataCache.getBacklinksForFile(file);
+    if (!linksTo) {
+      return coCitations;
+    }
 
-    // Apply boosts to scores
-    for (const item of items) {
-      const boost = boosts.get(item.id);
-      if (boost && boost.boostMultiplier > 1.0) {
-        const boostedScore = item.score * boost.boostMultiplier;
-        item.score = boostedScore;
+    // Collect all citing sources
+    for (const [sourcePath] of linksTo.data) {
+      citingSources.add(sourcePath);
+    }
 
-        // Add graph boost to explanation if present
-        if ("explanation" in item && item.explanation) {
-          (item as any).explanation = {
-            ...(item as any).explanation,
-            graphBoost: {
-              connections: boost.candidateConnections,
-              boostFactor: boost.boostMultiplier,
-            },
-            finalScore: boostedScore,
-          };
+    if (citingSources.size === 0) {
+      return coCitations;
+    }
+
+    // Check other candidates for shared citing sources
+    for (const candidateId of candidateSet) {
+      if (candidateId === noteId) continue;
+
+      const candidateFile = this.metadataCache.getFirstLinkpathDest(candidateId, "");
+      if (!candidateFile || !(candidateFile instanceof TFile)) continue;
+
+      const candidateLinksTo = this.metadataCache.getBacklinksForFile(candidateFile);
+      if (!candidateLinksTo) continue;
+
+      // Check if they share any citing sources
+      for (const [sourcePath] of candidateLinksTo.data) {
+        if (citingSources.has(sourcePath)) {
+          coCitations.push(candidateId);
+          break; // Only count once per candidate
         }
       }
     }
 
-    return items;
+    return coCitations;
+  }
+
+  /**
+   * Find candidates that share tags with this note
+   */
+  private findSharedTags(noteId: string, candidateSet: Set<string>): string[] {
+    const sharedTags: string[] = [];
+
+    const file = this.metadataCache.getFirstLinkpathDest(noteId, "");
+    if (!file || !(file instanceof TFile)) {
+      return sharedTags;
+    }
+
+    const cache = this.metadataCache.getFileCache(file);
+    if (!cache || !cache.tags || cache.tags.length === 0) {
+      return sharedTags;
+    }
+
+    const noteTags = new Set(cache.tags.map((t) => t.tag));
+
+    // Check other candidates for shared tags
+    for (const candidateId of candidateSet) {
+      if (candidateId === noteId) continue;
+
+      const candidateFile = this.metadataCache.getFirstLinkpathDest(candidateId, "");
+      if (!candidateFile || !(candidateFile instanceof TFile)) continue;
+
+      const candidateCache = this.metadataCache.getFileCache(candidateFile);
+      if (!candidateCache || !candidateCache.tags) continue;
+
+      // Check if they share any tags
+      const hasSharedTag = candidateCache.tags.some((t) => noteTags.has(t.tag));
+      if (hasSharedTag) {
+        sharedTags.push(candidateId);
+      }
+    }
+
+    return sharedTags;
   }
 
   /**
@@ -236,12 +260,5 @@ export class GraphBoostCalculator {
    */
   setConfig(config: Partial<GraphBoostConfig>): void {
     this.config = { ...this.config, ...config };
-  }
-
-  /**
-   * Get current configuration
-   */
-  getConfig(): GraphBoostConfig {
-    return { ...this.config };
   }
 }

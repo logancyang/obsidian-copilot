@@ -114,6 +114,38 @@ describe("ScoreNormalizer", () => {
       // Middle score should be in between
       expect(normalized[1].score).toBeCloseTo(0.5, 1);
     });
+
+    it("should preserve monotonicity of scores (bug from screenshot)", () => {
+      const normalizer = new ScoreNormalizer({
+        method: "minmax",
+        clipMin: 0.02,
+        clipMax: 0.98,
+      });
+
+      // Test case from the bug report - scores that are not preserving order
+      const results: NoteIdRank[] = [
+        { id: "Superlinear Returns", score: 33.7378, engine: "lexical" },
+        { id: "Model Comparison Demo", score: 1.3114, engine: "lexical" },
+        { id: "doc3", score: 0.5, engine: "lexical" },
+      ];
+
+      const normalized = normalizer.normalize(results);
+
+      // Check monotonicity: if a.score > b.score before normalization,
+      // then a.score > b.score after normalization
+      for (let i = 0; i < results.length; i++) {
+        for (let j = i + 1; j < results.length; j++) {
+          const originalOrder = results[i].score > results[j].score;
+          const normalizedOrder = normalized[i].score > normalized[j].score;
+          expect(originalOrder).toBe(normalizedOrder);
+        }
+      }
+
+      // Specifically check the problematic case
+      // Superlinear (33.7378) > Model Comparison (1.3114) > doc3 (0.5)
+      expect(normalized[0].score).toBeGreaterThan(normalized[1].score);
+      expect(normalized[1].score).toBeGreaterThan(normalized[2].score);
+    });
   });
 
   describe("percentile normalization", () => {

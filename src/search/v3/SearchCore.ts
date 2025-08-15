@@ -41,10 +41,14 @@ export class SearchCore {
       timeout: LLM_GENERATION_TIMEOUT_MS,
     });
     this.folderBoostCalculator = new FolderBoostCalculator();
-    this.graphBoostCalculator = new GraphBoostCalculator(app);
+    this.graphBoostCalculator = new GraphBoostCalculator(app, {
+      enabled: true,
+      maxCandidates: 50,
+      boostStrength: 0.1,
+      maxBoostMultiplier: 1.15,
+    });
     this.scoreNormalizer = new ScoreNormalizer({
-      method: "zscore-tanh",
-      tanhScale: 2.5,
+      method: "minmax", // Use min-max to preserve monotonicity
       clipMin: 0.02,
       clipMax: 0.98,
     });
@@ -114,23 +118,48 @@ export class SearchCore {
         k: rrfK,
       });
 
-      // 9. Apply folder and graph boosts (after RRF, before final selection)
-      // Both boosts are applied in sequence as ranking adjustments
+      // 9. Apply folder boost (after RRF, before graph boost)
       fusedResults = this.folderBoostCalculator.applyBoosts(fusedResults);
+      logInfo("Folder boost applied to search results");
 
-      this.graphBoostCalculator.setConfig({
-        enabled: true,
-        candidateConnectionWeight: 0.3,
-      });
-      fusedResults = this.graphBoostCalculator.applyBoosts(fusedResults);
-      logInfo("Folder and graph boosts applied to search results");
+      // 10. Apply graph boost (analyzes connections within top results)
+      fusedResults = this.graphBoostCalculator.applyBoost(fusedResults);
+      logInfo("Graph boost applied to search results");
 
-      // 10. Apply score normalization (z-score + tanh) to prevent auto-1.0
+      // CRITICAL: Re-sort after boosts to maintain correct order
+      // Boosts modify scores but don't re-sort, which can lead to incorrect normalization
+      fusedResults.sort((a, b) => b.score - a.score);
+      logInfo("Results re-sorted after boosts");
+
+      // 10. Apply score normalization to prevent auto-1.0
+      // Log scores before normalization for debugging
+      if (fusedResults.length > 0) {
+        const preNormScores = fusedResults.slice(0, 5).map((r) => ({
+          id: r.id.split("/").pop(),
+          score: r.score.toFixed(4),
+        }));
+        logInfo("Pre-normalization scores (top 5):", preNormScores);
+      }
+
       fusedResults = this.scoreNormalizer.normalize(fusedResults);
-      logInfo("Score normalization applied (z-score + tanh)");
+
+      // Log scores after normalization
+      if (fusedResults.length > 0) {
+        const postNormScores = fusedResults.slice(0, 5).map((r) => ({
+          id: r.id.split("/").pop(),
+          score: r.score.toFixed(4),
+        }));
+        logInfo("Post-normalization scores (top 5):", postNormScores);
+      }
+
+      logInfo("Score normalization applied (min-max)");
 
       // 11. Clean up full-text index to free memory
+      logInfo("SearchCore: About to clear full-text engine");
+      const clearStartTime = Date.now();
       this.fullTextEngine.clear();
+      const clearTime = Date.now() - clearStartTime;
+      logInfo(`SearchCore: Full-text engine cleared in ${clearTime}ms`);
 
       // 12. Return top K results
       const finalResults = fusedResults.slice(0, maxResults);
@@ -219,17 +248,22 @@ export class SearchCore {
   ): Promise<NoteIdRank[]> {
     try {
       // Build ephemeral full-text index
+      logInfo(`executeLexicalSearch: Starting with ${candidates.length} candidates`);
+      const buildStartTime = Date.now();
       const indexed = await this.fullTextEngine.buildFromCandidates(candidates);
-      logInfo(`Full-text index: Built with ${indexed} documents`);
+      const buildTime = Date.now() - buildStartTime;
+      logInfo(`Full-text index: Built with ${indexed} documents in ${buildTime}ms`);
 
       // Search the index
+      const searchStartTime = Date.now();
       const results = this.fullTextEngine.search(
         queries,
         maxResults * FULLTEXT_RESULT_MULTIPLIER,
         salientTerms
       );
+      const searchTime = Date.now() - searchStartTime;
       logInfo(
-        `Full-text search: Found ${results.length} results (using ${queries.length} search inputs)`
+        `Full-text search: Found ${results.length} results in ${searchTime}ms (using ${queries.length} search inputs)`
       );
       return results;
     } catch (error) {

@@ -18,7 +18,8 @@ export class FullTextEngine {
 
   constructor(private app: App) {
     this.memoryManager = new MemoryManager();
-    this.index = this.createIndex();
+    // Defer index creation to avoid blocking UI on initialization
+    this.index = null as any;
   }
 
   /**
@@ -86,12 +87,37 @@ export class FullTextEngine {
    * @returns Number of documents indexed
    */
   async buildFromCandidates(candidatePaths: string[]): Promise<number> {
-    this.clear();
+    logInfo(
+      `FullTextEngine: Starting buildFromCandidates with ${candidatePaths.length} candidates`
+    );
+
+    // Clear existing data but defer index creation
+    logInfo(`FullTextEngine: Clearing indexed docs (current size: ${this.indexedDocs.size})`);
+    this.indexedDocs.clear();
+
+    logInfo(`FullTextEngine: About to reset memory manager`);
+    this.memoryManager.reset();
+    logInfo(`FullTextEngine: Memory manager reset complete`);
+
+    // Create new index only when needed (lazy initialization)
+    if (!this.index) {
+      logInfo(`FullTextEngine: Index doesn't exist, creating new FlexSearch index...`);
+      // Yield to UI thread before creating index
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const startTime = Date.now();
+      this.index = this.createIndex();
+      const createTime = Date.now() - startTime;
+      logInfo(`FullTextEngine: FlexSearch index created in ${createTime}ms`);
+    } else {
+      logInfo(`FullTextEngine: Reusing existing FlexSearch index`);
+    }
 
     let indexed = 0;
     const limitedCandidates = candidatePaths.slice(0, this.memoryManager.getCandidateLimit());
+    const BATCH_SIZE = 5; // Process fewer files between UI yields for better responsiveness
 
-    for (const path of limitedCandidates) {
+    for (let i = 0; i < limitedCandidates.length; i++) {
+      const path = limitedCandidates[i];
       // Guard against path traversal or invalid inputs
       if (!VaultPathValidator.isValid(path)) {
         logInfo(`FullText: Skipping unsafe path ${path}`);
@@ -128,6 +154,7 @@ export class FullTextEngine {
             // Extract frontmatter property values for searchability
             const propValues = this.extractPropertyValues(doc.props);
 
+            // Add to index (this is the expensive operation)
             this.index.add({
               id: doc.id,
               title: doc.title,
@@ -144,6 +171,11 @@ export class FullTextEngine {
             indexed++;
           }
         }
+      }
+
+      // Yield to UI thread periodically to prevent blocking
+      if (i > 0 && i % BATCH_SIZE === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
       }
     }
 
@@ -264,6 +296,11 @@ export class FullTextEngine {
    * @returns Array of NoteIdRank results
    */
   search(queries: string[], limit: number = 30, lowWeightTerms: string[] = []): NoteIdRank[] {
+    // Return empty results if index hasn't been created yet
+    if (!this.index) {
+      return [];
+    }
+
     const scoreMap = new Map<
       string,
       {
@@ -418,9 +455,44 @@ export class FullTextEngine {
    * Clear the ephemeral index and reset memory tracking
    */
   clear(): void {
-    this.index = this.createIndex();
+    logInfo(`FullTextEngine.clear(): Starting cleanup`);
+
+    // Check if we have an existing index to clear
+    if (this.index) {
+      logInfo(`FullTextEngine.clear(): Destroying existing FlexSearch index`);
+      try {
+        // Properly destroy the FlexSearch index to free up internal memory
+        // This is crucial to prevent memory leaks and UI freezes
+        if (typeof this.index.destroy === "function") {
+          const destroyStartTime = Date.now();
+          this.index.destroy();
+          const destroyTime = Date.now() - destroyStartTime;
+          logInfo(`FullTextEngine.clear(): FlexSearch index destroyed in ${destroyTime}ms`);
+        } else if (typeof this.index.clear === "function") {
+          // Fallback to clear if destroy is not available
+          const clearStartTime = Date.now();
+          this.index.clear();
+          const clearTime = Date.now() - clearStartTime;
+          logInfo(`FullTextEngine.clear(): FlexSearch index cleared in ${clearTime}ms`);
+        }
+      } catch (error) {
+        logInfo(`FullTextEngine.clear(): Error destroying FlexSearch index: ${error}`);
+      }
+
+      // Now nullify the reference
+      this.index = null as any;
+      logInfo(`FullTextEngine.clear(): Index reference nullified`);
+    }
+
+    logInfo(`FullTextEngine.clear(): Clearing indexed docs set (size: ${this.indexedDocs.size})`);
+    const docsClearStartTime = Date.now();
     this.indexedDocs.clear();
+    const docsClearTime = Date.now() - docsClearStartTime;
+    logInfo(`FullTextEngine.clear(): Indexed docs cleared in ${docsClearTime}ms`);
+
+    logInfo(`FullTextEngine.clear(): About to reset memory manager`);
     this.memoryManager.reset();
+    logInfo(`FullTextEngine.clear(): Cleanup complete`);
   }
 
   /**

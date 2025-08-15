@@ -16,7 +16,7 @@ export interface FolderBoostConfig {
 export const DEFAULT_FOLDER_BOOST_CONFIG: FolderBoostConfig = {
   enabled: true,
   minDocsForBoost: 2,
-  maxBoostFactor: 3.0,
+  maxBoostFactor: 1.5, // Reduced from 3.0 to 1.5 - max 50% boost instead of 3x
 };
 
 /**

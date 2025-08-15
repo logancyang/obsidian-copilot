@@ -98,6 +98,8 @@ export class ScoreNormalizer {
       const explanation = r.explanation
         ? {
             ...r.explanation,
+            // Update baseScore to be the pre-normalization score for accurate display
+            baseScore: r.score,
             finalScore: clipped,
           }
         : undefined;
@@ -133,7 +135,7 @@ export class ScoreNormalizer {
     const clipMin = this.config.clipMin || 0.02;
     const clipMax = this.config.clipMax || 0.98;
 
-    return results.map((r) => {
+    const normalizedResults = results.map((r) => {
       const normalized = (r.score - min) / (max - min);
       const clipped = clipMin + normalized * (clipMax - clipMin);
 
@@ -143,11 +145,15 @@ export class ScoreNormalizer {
         explanation: r.explanation
           ? {
               ...r.explanation,
+              // Update baseScore to be the pre-normalization score for accurate display
+              baseScore: r.score,
               finalScore: clipped,
             }
           : undefined,
       };
     });
+
+    return normalizedResults;
   }
 
   /**
@@ -182,6 +188,8 @@ export class ScoreNormalizer {
         explanation: r.explanation
           ? {
               ...r.explanation,
+              // Update baseScore to be the pre-normalization score for accurate display
+              baseScore: r.score,
               finalScore: percentileScore,
             }
           : undefined,

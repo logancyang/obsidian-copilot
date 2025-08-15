@@ -68,8 +68,11 @@ export class MemoryManager {
    * Reset memory tracking
    */
   reset(): void {
+    const previousBytes = this.bytesUsed;
     this.bytesUsed = 0;
-    logInfo(`MemoryManager: Reset memory tracking (max: ${this.maxBytes} bytes)`);
+    logInfo(
+      `MemoryManager: Reset memory tracking (was using ${previousBytes} bytes, max: ${this.maxBytes} bytes)`
+    );
   }
 
   /**
