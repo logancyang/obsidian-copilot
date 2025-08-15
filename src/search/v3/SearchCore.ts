@@ -69,7 +69,8 @@ export class SearchCore {
     const rrfK = Math.min(Math.max(1, options.rrfK || 60), 100);
 
     try {
-      logInfo(`\n=== SearchCore: Starting search for "${query}" ===`);
+      // Log search start with minimal verbosity
+      logInfo(`SearchCore: Searching for "${query}"`);
 
       // 1. Expand query into variants and terms
       const expanded = await this.queryExpander.expand(query);
@@ -79,29 +80,35 @@ export class SearchCore {
         ? [...new Set([...expanded.salientTerms, ...options.salientTerms])]
         : expanded.salientTerms;
 
-      logInfo(`Query expansion: ${queries.length} variants + ${salientTerms.length} terms`);
-      logInfo(`  Variants: [${queries.map((q) => `"${q}"`).join(", ")}]`);
-      logInfo(`  Terms: [${salientTerms.map((t) => `"${t}"`).join(", ")}]`);
+      // Only log details if expansion produced significant variants
+      if (queries.length > 1 || salientTerms.length > 3) {
+        logInfo(`Query expansion: ${queries.length} variants, ${salientTerms.length} terms`);
+      }
 
       // 2. GREP for initial candidates (use both queries and terms)
       const allSearchStrings = [...queries, ...salientTerms];
       const grepHits = await this.grepScanner.batchCachedReadGrep(allSearchStrings, 200);
 
-      logInfo(`Grep scan: Found ${grepHits.length} initial matches`);
-
       // 3. Limit candidates (no graph expansion - we use graph for boost only)
       const candidates = grepHits.slice(0, candidateLimit);
 
-      logInfo(`Using ${candidates.length} candidates for BOTH full-text and semantic search`);
+      // Log candidate info concisely
+      logInfo(`SearchCore: ${candidates.length} candidates (from ${grepHits.length} grep hits)`);
 
-      // Prepare queries for both engines
-      const allFullTextQueries = [...queries, ...salientTerms];
+      // Prepare queries for recall phase (all queries + terms)
+      const recallQueries = [...queries, ...salientTerms];
 
       // 5, 6 & 7. Run lexical and semantic searches in parallel
       const [fullTextResults, semanticResults] = await Promise.all([
-        this.executeLexicalSearch(candidates, allFullTextQueries, salientTerms, maxResults),
+        this.executeLexicalSearch(
+          candidates,
+          recallQueries,
+          salientTerms,
+          maxResults,
+          expanded.originalQuery
+        ),
         enableSemantic
-          ? this.executeSemanticSearch(candidates, allFullTextQueries, query, candidateLimit)
+          ? this.executeSemanticSearch(candidates, query, candidateLimit)
           : Promise.resolve([]),
       ]);
 
@@ -120,66 +127,31 @@ export class SearchCore {
 
       // 9. Apply folder boost (after RRF, before graph boost)
       fusedResults = this.folderBoostCalculator.applyBoosts(fusedResults);
-      logInfo("Folder boost applied to search results");
 
       // 10. Apply graph boost (analyzes connections within top results)
       fusedResults = this.graphBoostCalculator.applyBoost(fusedResults);
-      logInfo("Graph boost applied to search results");
 
       // CRITICAL: Re-sort after boosts to maintain correct order
       // Boosts modify scores but don't re-sort, which can lead to incorrect normalization
       fusedResults.sort((a, b) => b.score - a.score);
-      logInfo("Results re-sorted after boosts");
 
       // 10. Apply score normalization to prevent auto-1.0
-      // Log scores before normalization for debugging
-      if (fusedResults.length > 0) {
-        const preNormScores = fusedResults.slice(0, 5).map((r) => ({
-          id: r.id.split("/").pop(),
-          score: r.score.toFixed(4),
-        }));
-        logInfo("Pre-normalization scores (top 5):", preNormScores);
-      }
-
       fusedResults = this.scoreNormalizer.normalize(fusedResults);
 
-      // Log scores after normalization
-      if (fusedResults.length > 0) {
-        const postNormScores = fusedResults.slice(0, 5).map((r) => ({
-          id: r.id.split("/").pop(),
-          score: r.score.toFixed(4),
-        }));
-        logInfo("Post-normalization scores (top 5):", postNormScores);
-      }
-
-      logInfo("Score normalization applied (min-max)");
-
       // 11. Clean up full-text index to free memory
-      logInfo("SearchCore: About to clear full-text engine");
-      const clearStartTime = Date.now();
       this.fullTextEngine.clear();
-      const clearTime = Date.now() - clearStartTime;
-      logInfo(`SearchCore: Full-text engine cleared in ${clearTime}ms`);
 
       // 12. Return top K results
       const finalResults = fusedResults.slice(0, maxResults);
 
-      // Log results in an inspectable format
+      // Log final result summary
       if (finalResults.length > 0) {
-        const resultsForLogging = finalResults.map((result) => {
-          const file = this.app.vault.getAbstractFileByPath(result.id);
-          return {
-            title: file?.name || result.id,
-            path: result.id,
-            score: parseFloat(result.score.toFixed(4)),
-            engine: result.engine,
-          };
-        });
-        logInfo(`Final results: ${finalResults.length} documents (after RRF)`);
-        // Log as an array object for better inspection in console
-        logInfo("Search results:", resultsForLogging);
+        const topResult = this.app.vault.getAbstractFileByPath(finalResults[0].id);
+        logInfo(
+          `SearchCore: ${finalResults.length} results found (top: ${topResult?.name || finalResults[0].id})`
+        );
       } else {
-        logInfo("No results found");
+        logInfo("SearchCore: No results found");
       }
 
       return finalResults;
@@ -235,35 +207,38 @@ export class SearchCore {
   /**
    * Execute lexical search with full-text index
    * @param candidates - Candidate documents to index
-   * @param queries - Search queries
-   * @param salientTerms - Salient terms for boosting
+   * @param recallQueries - All queries for recall (original + expanded + salient terms)
+   * @param salientTerms - Salient terms for scoring (extracted from original query)
    * @param maxResults - Maximum number of results
+   * @param originalQuery - The original user query for scoring
    * @returns Ranked list of documents from lexical search
    */
   private async executeLexicalSearch(
     candidates: string[],
-    queries: string[],
+    recallQueries: string[],
     salientTerms: string[],
-    maxResults: number
+    maxResults: number,
+    originalQuery?: string
   ): Promise<NoteIdRank[]> {
     try {
       // Build ephemeral full-text index
-      logInfo(`executeLexicalSearch: Starting with ${candidates.length} candidates`);
       const buildStartTime = Date.now();
       const indexed = await this.fullTextEngine.buildFromCandidates(candidates);
       const buildTime = Date.now() - buildStartTime;
-      logInfo(`Full-text index: Built with ${indexed} documents in ${buildTime}ms`);
 
       // Search the index
       const searchStartTime = Date.now();
       const results = this.fullTextEngine.search(
-        queries,
+        recallQueries,
         maxResults * FULLTEXT_RESULT_MULTIPLIER,
-        salientTerms
+        salientTerms,
+        originalQuery
       );
       const searchTime = Date.now() - searchStartTime;
+
+      // Single consolidated log for lexical search
       logInfo(
-        `Full-text search: Found ${results.length} results in ${searchTime}ms (using ${queries.length} search inputs)`
+        `Full-text: ${indexed} docs indexed (${buildTime}ms), ${results.length} results (${searchTime}ms)`
       );
       return results;
     } catch (error) {
@@ -275,14 +250,12 @@ export class SearchCore {
   /**
    * Execute semantic search using embeddings
    * @param candidates - Candidate documents to search within
-   * @param allFullTextQueries - Base queries for semantic search
-   * @param originalQuery - Original user query for HyDE generation
+   * @param originalQuery - Original user query (used for embeddings and HyDE)
    * @param candidateLimit - Maximum number of candidates
    * @returns Ranked list of documents from semantic search
    */
   private async executeSemanticSearch(
     candidates: string[],
-    allFullTextQueries: string[],
     originalQuery: string,
     candidateLimit: number
   ): Promise<NoteIdRank[]> {
@@ -293,8 +266,9 @@ export class SearchCore {
       // Generate HyDE document for semantic diversity
       const hydeDoc = await this.generateHyDE(originalQuery);
 
-      // Build search queries: HyDE (if available) + original variants
-      const semanticQueries = hydeDoc ? [hydeDoc, ...allFullTextQueries] : allFullTextQueries;
+      // Build search queries: HyDE (if available) + original query only
+      // We only use the original query for semantic search, not expanded queries
+      const semanticQueries = hydeDoc ? [hydeDoc, originalQuery] : [originalQuery];
 
       // Pass the same candidates array to limit semantic search to the same subset
       const semanticHits = await index.search(semanticQueries, topK, candidates);

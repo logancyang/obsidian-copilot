@@ -142,14 +142,21 @@ export class GraphBoostCalculator {
   }
 
   /**
+   * Resolve a note ID to a TFile object
+   */
+  private resolveFile(noteId: string): TFile | null {
+    const file = this.metadataCache.getFirstLinkpathDest(noteId, "");
+    return file instanceof TFile ? file : null;
+  }
+
+  /**
    * Find which candidates link TO this note
    */
   private findBacklinks(noteId: string, candidateSet: Set<string>): string[] {
     const backlinks: string[] = [];
 
-    // Get all files that link to this note
-    const file = this.metadataCache.getFirstLinkpathDest(noteId, "");
-    if (!file || !(file instanceof TFile)) {
+    const file = this.resolveFile(noteId);
+    if (!file) {
       return backlinks;
     }
 

@@ -58,6 +58,7 @@ export function weightedRRF(config: RRFConfig): NoteIdRank[] {
 
   const scores = new Map<string, number>();
   const explanations = new Map<string, any>();
+  const semanticScores = new Map<string, number>(); // Track original semantic similarity scores
 
   [
     { items: lexical, weight: finalWeights.lexical, name: "lexical" },
@@ -68,6 +69,11 @@ export function weightedRRF(config: RRFConfig): NoteIdRank[] {
       items.forEach((item, idx) => {
         const current = scores.get(item.id) || 0;
         scores.set(item.id, current + weight / (k + idx + 1));
+
+        // Track semantic scores separately for later boosting
+        if (name === "semantic" && item.score) {
+          semanticScores.set(item.id, item.score);
+        }
 
         // Merge explanations from both lexical and semantic results
         if (item.explanation) {
@@ -111,12 +117,42 @@ export function weightedRRF(config: RRFConfig): NoteIdRank[] {
   // This maps typical RRF scores to a 0-1 range with good distribution
   if (sortedResults.length > 0) {
     const scaleFactor = k / 2;
-    const base = sortedResults.map(([id, score]) => ({
-      id,
-      score: Math.min(score * scaleFactor, 1),
-      engine: "rrf" as const,
-      explanation: explanations.get(id),
-    }));
+    const base = sortedResults.map(([id, score]) => {
+      let finalScore = Math.min(score * scaleFactor, 1);
+
+      // If we have semantic scores and semantic weight > 0, incorporate similarity directly
+      const semScore = semanticScores.get(id);
+      if (semScore !== undefined && finalWeights.semantic > 0) {
+        // Blend RRF score with actual semantic similarity
+        // High semantic similarity (e.g., 100%) should significantly boost the score
+        // Low semantic similarity (e.g., 53%) should reduce the score
+
+        // Calculate semantic influence based on weight
+        const semanticInfluence = finalWeights.semantic * 0.5; // Use up to 50% of semantic weight for direct similarity
+
+        const originalScore = finalScore;
+        // Blend: (1 - influence) * RRF + influence * semantic_similarity
+        finalScore = (1 - semanticInfluence) * finalScore + semanticInfluence * semScore;
+
+        // Log significant semantic score impacts
+        if (Math.abs(originalScore - finalScore) > 0.1) {
+          logInfo(
+            `RRF: Semantic similarity ${(semScore * 100).toFixed(1)}% adjusted score from ${originalScore.toFixed(3)} to ${finalScore.toFixed(3)}`
+          );
+        }
+      }
+
+      return {
+        id,
+        score: finalScore,
+        engine: "rrf" as const,
+        explanation: explanations.get(id),
+      };
+    });
+
+    // Re-sort after semantic score incorporation
+    base.sort((a, b) => b.score - a.score);
+
     // Dead-simple differentiation for saturated tops: subtract tiny rank-based epsilon
     const epsilon = 0.0005; // 5e-4 drop per rank to avoid walls of identical scores
     return base.map((r, idx) => ({

@@ -27,6 +27,24 @@ export class ScoreNormalizer {
   }
 
   /**
+   * Update explanation with normalized scores
+   */
+  private updateExplanation(
+    explanation: any | undefined,
+    originalScore: number,
+    normalizedScore: number
+  ): any | undefined {
+    if (!explanation) return undefined;
+
+    return {
+      ...explanation,
+      // Update baseScore to be the pre-normalization score for accurate display
+      baseScore: originalScore,
+      finalScore: normalizedScore,
+    };
+  }
+
+  /**
    * Normalize scores using configured method
    *
    * @param results - Search results with scores
@@ -70,12 +88,7 @@ export class ScoreNormalizer {
       return results.map((r) => ({
         ...r,
         score: 0.5, // All identical scores map to middle
-        explanation: r.explanation
-          ? {
-              ...r.explanation,
-              finalScore: 0.5,
-            }
-          : undefined,
+        explanation: this.updateExplanation(r.explanation, r.score, 0.5),
       }));
     }
 
@@ -94,20 +107,10 @@ export class ScoreNormalizer {
       // Clip to avoid exact 0 or 1
       const clipped = Math.max(clipMin, Math.min(clipMax, normalized));
 
-      // Update explanation if present
-      const explanation = r.explanation
-        ? {
-            ...r.explanation,
-            // Update baseScore to be the pre-normalization score for accurate display
-            baseScore: r.score,
-            finalScore: clipped,
-          }
-        : undefined;
-
       return {
         ...r,
         score: clipped,
-        explanation,
+        explanation: this.updateExplanation(r.explanation, r.score, clipped),
       };
     });
   }
@@ -129,6 +132,7 @@ export class ScoreNormalizer {
       return results.map((r) => ({
         ...r,
         score: 0.5,
+        explanation: this.updateExplanation(r.explanation, r.score, 0.5),
       }));
     }
 
@@ -142,14 +146,7 @@ export class ScoreNormalizer {
       return {
         ...r,
         score: clipped,
-        explanation: r.explanation
-          ? {
-              ...r.explanation,
-              // Update baseScore to be the pre-normalization score for accurate display
-              baseScore: r.score,
-              finalScore: clipped,
-            }
-          : undefined,
+        explanation: this.updateExplanation(r.explanation, r.score, clipped),
       };
     });
 
@@ -185,14 +182,7 @@ export class ScoreNormalizer {
       return {
         ...r,
         score: percentileScore,
-        explanation: r.explanation
-          ? {
-              ...r.explanation,
-              // Update baseScore to be the pre-normalization score for accurate display
-              baseScore: r.score,
-              finalScore: percentileScore,
-            }
-          : undefined,
+        explanation: this.updateExplanation(r.explanation, r.score, percentileScore),
       };
     });
   }
