@@ -4,14 +4,7 @@ import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { SettingSlider } from "@/components/ui/setting-slider";
+
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DEFAULT_MODEL_SETTING,
@@ -28,6 +21,7 @@ import { HelpCircle } from "lucide-react";
 import { App, Modal } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
+import { ParameterControl } from "@/components/ui/parameter-controls";
 
 interface ModelEditModalContentProps {
   model: CustomModel;
@@ -86,6 +80,19 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
       });
     },
     [originalModel, debouncedOnUpdate]
+  );
+
+  const handleLocalReset = useCallback(
+    (field: keyof CustomModel) => {
+      setLocalModel((prevModel) => {
+        const updatedModel = { ...prevModel };
+        delete updatedModel[field];
+        // Call the debounced update function, passing the stable originalModel and the new updatedModel
+        debouncedOnUpdate(originalModel, updatedModel);
+        return updatedModel; // Return the updated model for immediate state update
+      });
+    },
+    [debouncedOnUpdate, originalModel]
   );
 
   if (!localModel) return null;
@@ -245,138 +252,84 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
               </div>
             </FormField>
 
-            <FormField
-              label={
-                <div className="tw-flex tw-items-center tw-gap-2">
-                  Token limit
-                  <TooltipProvider delayDuration={0}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <HelpCircle className="tw-size-4 tw-text-muted" />
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">
-                        <div className="tw-w-[300px]">
-                          <p>
-                            The maximum number of <em>output tokens</em> to generate. Default is{" "}
-                            {DEFAULT_MODEL_SETTING.MAX_TOKENS}.
-                          </p>
-                          <em>
-                            This number plus the length of your prompt (input tokens) must be
-                            smaller than the context window of the model.
-                          </em>
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-              }
-            >
-              <SettingSlider
-                value={
-                  localModel.maxTokens ?? settings.maxTokens ?? DEFAULT_MODEL_SETTING.MAX_TOKENS
-                }
+            <FormField>
+              <ParameterControl
+                type={"slider"}
+                optional={false}
+                label="Token limit"
+                value={localModel.maxTokens ?? settings.maxTokens}
                 onChange={(value) => handleLocalUpdate("maxTokens", value)}
-                min={0}
                 max={65000}
+                min={0}
                 step={100}
+                defaultValue={DEFAULT_MODEL_SETTING.MAX_TOKENS}
+                helpText={
+                  <>
+                    <p>
+                      The maximum number of <em>output tokens</em> to generate. Default is{" "}
+                      {DEFAULT_MODEL_SETTING.MAX_TOKENS}.
+                    </p>
+                    <em>
+                      This number plus the length of your prompt (input tokens) must be smaller than
+                      the context window of the model.
+                    </em>
+                  </>
+                }
               />
             </FormField>
 
-            <FormField
-              label={
-                <div className="tw-flex tw-items-center tw-gap-2">
-                  Temperature
-                  <TooltipProvider delayDuration={0}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <HelpCircle className="tw-size-4 tw-text-muted" />
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">
-                        <div className="tw-max-w-[300px]">
-                          Default is {DEFAULT_MODEL_SETTING.TEMPERATURE}. Higher values will result
-                          in more creativeness, but also more mistakes. Set to 0 for no randomness.
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-              }
-            >
-              <SettingSlider
-                value={
-                  localModel.temperature ??
-                  settings.temperature ??
-                  DEFAULT_MODEL_SETTING.TEMPERATURE
-                }
+            <FormField>
+              <ParameterControl
+                type={"slider"}
+                optional={false}
+                label="Temperature"
+                value={localModel.temperature ?? settings.temperature}
                 onChange={(value) => handleLocalUpdate("temperature", value)}
                 max={2}
                 min={0}
                 step={0.05}
+                defaultValue={DEFAULT_MODEL_SETTING.TEMPERATURE}
+                helpText={`Default is ${DEFAULT_MODEL_SETTING.TEMPERATURE}. Higher values will result in more creativeness, but also more mistakes. Set to 0 for no randomness.`}
               />
             </FormField>
 
-            <FormField
-              label={
-                <div className="tw-flex tw-items-center tw-gap-2">
-                  Top-P
-                  <TooltipProvider delayDuration={0}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <HelpCircle className="tw-size-4 tw-text-muted" />
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">
-                        <div className="tw-w-[300px]">
-                          Default value is 0.9, the smaller the value, the less variety in the
-                          answers, the easier to understand, the larger the value, the larger the
-                          range of the Al&#39;s vocabulary, the more diverse
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-              }
-            >
-              <SettingSlider
-                value={localModel.topP ?? 0.9}
+            <FormField>
+              <ParameterControl
+                type={"slider"}
+                label="Top-P"
+                value={localModel.topP}
                 onChange={(value) => handleLocalUpdate("topP", value)}
+                disableFn={() => handleLocalReset("topP")}
                 max={1}
                 min={0}
                 step={0.05}
+                defaultValue={0.9}
+                helpText="Default value is 0.9, the smaller the value, the less variety in the answers, the easier to understand, the larger the value, the larger the range of the AI's vocabulary, the more diverse"
               />
             </FormField>
 
-            <FormField
-              label={
-                <div className="tw-flex tw-items-center tw-gap-2">
-                  Frequency Penalty
-                  <TooltipProvider delayDuration={0}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <HelpCircle className="tw-size-4 tw-text-muted" />
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">
-                        <div className="tw-w-[300px]">
-                          <p>
-                            The frequency penalty parameter tells the model not to repeat a word
-                            that has already been used multiple times in the conversation.
-                          </p>
-                          <em>
-                            The higher the value, the more the model is penalized for repeating
-                            words.
-                          </em>
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-              }
-            >
-              <SettingSlider
-                value={localModel.frequencyPenalty ?? 0}
+            <FormField>
+              <ParameterControl
+                type={"slider"}
+                label="Frequency Penalty"
+                value={localModel.frequencyPenalty}
                 onChange={(value) => handleLocalUpdate("frequencyPenalty", value)}
+                disableFn={() => handleLocalReset("frequencyPenalty")}
                 max={2}
                 min={0}
                 step={0.05}
+                defaultValue={0}
+                helpText={
+                  <>
+                    <p>
+                      The frequency penalty parameter tells the model not to repeat a word that has
+                      already been used multiple times in the conversation.
+                    </p>
+                    <em>
+                      The higher the value, the more the model is penalized for repeating words.
+                    </em>
+                  </>
+                }
               />
             </FormField>
 
@@ -387,94 +340,68 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
                 localModel.name.startsWith("o3") ||
                 localModel.name.startsWith("o4")) && (
                 <>
-                  <FormField
-                    label={
-                      <div className="tw-flex tw-items-center tw-gap-2">
-                        Reasoning Effort
-                        <TooltipProvider delayDuration={0}>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <HelpCircle className="tw-size-4 tw-text-muted" />
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom">
-                              <div className="tw-w-[300px]">
-                                <p>
-                                  Controls the amount of reasoning effort the model uses. Higher
-                                  effort provides more thorough reasoning but takes longer. Note:
-                                  thinking tokens are not available yet!
-                                </p>
-                                <ul className="tw-mt-2 tw-space-y-1 tw-text-xs">
-                                  <li>
-                                    Minimal: Fastest responses, minimal reasoning (GPT-5 only)
-                                  </li>
-                                  <li>Low: Faster responses, basic reasoning (default)</li>
-                                  <li>Medium: Balanced performance</li>
-                                  <li>High: Thorough reasoning, slower responses</li>
-                                </ul>
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                    }
-                  >
-                    <Select
-                      value={localModel.reasoningEffort || settings.reasoningEffort || "low"}
-                      onValueChange={(value) => handleLocalUpdate("reasoningEffort", value)}
-                    >
-                      <SelectTrigger className="tw-w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {localModel.name.startsWith("gpt-5") && (
-                          <SelectItem value="minimal">Minimal</SelectItem>
-                        )}
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <FormField>
+                    <ParameterControl
+                      type="select"
+                      label="Reasoning Effort"
+                      value={localModel.reasoningEffort}
+                      onChange={(value) => handleLocalUpdate("reasoningEffort", value)}
+                      disableFn={() => handleLocalReset("reasoningEffort")}
+                      defaultValue={
+                        settings.reasoningEffort ?? DEFAULT_MODEL_SETTING.REASONING_EFFORT
+                      }
+                      options={[
+                        ...(localModel.name.startsWith("gpt-5")
+                          ? [{ value: "minimal", label: "Minimal" }]
+                          : []),
+                        { value: "low", label: "Low" },
+                        { value: "medium", label: "Medium" },
+                        { value: "high", label: "High" },
+                      ]}
+                      helpText={
+                        <>
+                          <p>
+                            Controls the amount of reasoning effort the model uses. Higher effort
+                            provides more thorough reasoning but takes longer. Note: thinking tokens
+                            are not available yet!
+                          </p>
+                          <ul className="tw-mt-2 tw-space-y-1 tw-text-xs">
+                            <li>Minimal: Fastest responses, minimal reasoning (GPT-5 only)</li>
+                            <li>Low: Faster responses, basic reasoning (default)</li>
+                            <li>Medium: Balanced performance</li>
+                            <li>High: Thorough reasoning, slower responses</li>
+                          </ul>
+                        </>
+                      }
+                    />
                   </FormField>
 
                   {/* Verbosity only for GPT-5 models */}
                   {localModel.name.startsWith("gpt-5") && (
-                    <FormField
-                      label={
-                        <div className="tw-flex tw-items-center tw-gap-2">
-                          Verbosity
-                          <TooltipProvider delayDuration={0}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <HelpCircle className="tw-size-4 tw-text-muted" />
-                              </TooltipTrigger>
-                              <TooltipContent side="bottom">
-                                <div className="tw-w-[300px]">
-                                  <p>Controls the length and detail of the model responses.</p>
-                                  <ul className="tw-mt-2 tw-space-y-1 tw-text-xs">
-                                    <li>Low: Concise, brief responses</li>
-                                    <li>Medium: Balanced detail</li>
-                                    <li>High: Detailed, comprehensive responses</li>
-                                  </ul>
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                      }
-                    >
-                      <Select
-                        value={localModel.verbosity || settings.verbosity || "medium"}
-                        onValueChange={(value) => handleLocalUpdate("verbosity", value)}
-                      >
-                        <SelectTrigger className="tw-w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="low">Low</SelectItem>
-                          <SelectItem value="medium">Medium</SelectItem>
-                          <SelectItem value="high">High</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <FormField>
+                      <ParameterControl
+                        type="select"
+                        label="Verbosity"
+                        value={localModel.verbosity}
+                        onChange={(value) => handleLocalUpdate("verbosity", value)}
+                        disableFn={() => handleLocalReset("verbosity")}
+                        defaultValue={settings.verbosity ?? DEFAULT_MODEL_SETTING.VERBOSITY}
+                        options={[
+                          { value: "low", label: "Low" },
+                          { value: "medium", label: "Medium" },
+                          { value: "high", label: "High" },
+                        ]}
+                        helpText={
+                          <>
+                            <p>Controls the length and detail of the model responses.</p>
+                            <ul className="tw-mt-2 tw-space-y-1 tw-text-xs">
+                              <li>Low: Concise, brief responses</li>
+                              <li>Medium: Balanced detail</li>
+                              <li>High: Detailed, comprehensive responses</li>
+                            </ul>
+                          </>
+                        }
+                      />
                     </FormField>
                   )}
                 </>

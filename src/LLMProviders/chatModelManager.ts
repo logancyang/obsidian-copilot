@@ -7,7 +7,12 @@ import {
 } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { logError, logInfo } from "@/logger";
-import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
+import {
+  CopilotSettings,
+  getModelKeyFromModel,
+  getSettings,
+  subscribeToSettingsChange,
+} from "@/settings/model";
 import {
   err2String,
   getModelInfo,
@@ -104,7 +109,7 @@ export default class ChatModelManager {
   private getTemperatureForModel(
     modelInfo: ModelInfo,
     customModel: CustomModel,
-    settings: any
+    settings: CopilotSettings
   ): number | undefined {
     // Thinking-enabled models don't accept temperature
     if (modelInfo.isThinkingEnabled) {
@@ -354,16 +359,16 @@ export default class ChatModelManager {
 
     // Add reasoning parameters for O-series and GPT-5 models
     // LangChain 0.6.6 will handle the endpoint routing and parameter conversion
-    if (modelInfo.isOSeries || modelInfo.isGPT5) {
+    if ((modelInfo.isOSeries || modelInfo.isGPT5) && customModel?.reasoningEffort) {
       config.reasoning = {
-        effort: customModel?.reasoningEffort || settings.reasoningEffort || "low",
+        effort: customModel.reasoningEffort,
       };
 
       // Add verbosity for GPT-5 models (Responses API only)
       // This requires useResponsesApi=true which is set in createModelInstance()
       // In Responses API, verbosity must be passed as text.verbosity
-      if (modelInfo.isGPT5) {
-        const verbosityValue = customModel?.verbosity || settings.verbosity || "low";
+      if (modelInfo.isGPT5 && customModel?.verbosity) {
+        const verbosityValue = customModel.verbosity;
         // For Responses API, verbosity is nested under 'text' parameter
         config.text = {
           verbosity: verbosityValue,

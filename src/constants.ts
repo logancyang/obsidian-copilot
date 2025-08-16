@@ -116,7 +116,9 @@ export type PlusUtmMedium = (typeof PLUS_UTM_MEDIUMS)[keyof typeof PLUS_UTM_MEDI
 export const DEFAULT_MODEL_SETTING = {
   MAX_TOKENS: 6000,
   TEMPERATURE: 0.1,
-};
+  REASONING_EFFORT: "low",
+  VERBOSITY: "medium",
+} as const;
 
 export enum ChatModels {
   COPILOT_PLUS_FLASH = "copilot-plus-flash",
@@ -726,8 +728,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     "writeToFile",
     "replaceInFile",
   ],
-  reasoningEffort: "low",
-  verbosity: "medium",
+  reasoningEffort: DEFAULT_MODEL_SETTING.REASONING_EFFORT,
+  verbosity: DEFAULT_MODEL_SETTING.VERBOSITY,
 };
 
 export const EVENT_NAMES = {
