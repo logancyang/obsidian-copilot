@@ -394,6 +394,22 @@ ${params}
             availableTools,
             originalUserPrompt
           );
+
+          // Process localSearch results using the inherited method
+          if (toolCall.name === "localSearch") {
+            // Note: We don't have access to time expression in autonomous agent context
+            // as it processes tools individually, not in batch with toolCalls
+
+            // Use the inherited method for consistent processing
+            const processed = this.processLocalSearchResult(result);
+
+            // Collect sources for UI
+            collectedSources.push(...processed.sources);
+
+            // Update result with formatted text for LLM
+            result.result = processed.formattedForLLM;
+          }
+
           toolResults.push(result);
 
           // Update the tool call marker with the result if we have an ID
@@ -419,24 +435,6 @@ ${params}
 
           // Log tool result
           logToolResult(toolCall.name, result);
-
-          // Collect sources from localSearch results
-          if (toolCall.name === "localSearch" && result.success) {
-            try {
-              const searchResults = JSON.parse(result.result);
-              if (Array.isArray(searchResults)) {
-                const sources = searchResults.map((doc: any) => ({
-                  title: doc.title || doc.path,
-                  path: doc.path || doc.title || "",
-                  score: doc.rerank_score || doc.score || 0,
-                  explanation: doc.explanation || null,
-                }));
-                collectedSources.push(...sources);
-              }
-            } catch (e) {
-              logWarn("Failed to parse localSearch results for sources:", e);
-            }
-          }
         }
 
         // Add all tool call messages to history so they persist
