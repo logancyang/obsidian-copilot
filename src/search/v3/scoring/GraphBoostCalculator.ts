@@ -18,7 +18,8 @@ interface GraphConnections {
  */
 export interface GraphBoostConfig {
   enabled: boolean;
-  maxCandidates: number; // Max results to analyze (default: 50)
+  maxCandidates: number; // Absolute max results to analyze (default: 10)
+  semanticSimilarityThreshold?: number; // Min semantic similarity score to apply boost (0-1, default: 0.75)
   backlinkWeight: number; // Weight for backlinks (default: 1.0)
   coCitationWeight: number; // Weight for co-citations (default: 0.5)
   sharedTagWeight: number; // Weight for shared tags (default: 0.3)
@@ -31,7 +32,8 @@ export interface GraphBoostConfig {
  */
 export const DEFAULT_CONFIG: GraphBoostConfig = {
   enabled: true,
-  maxCandidates: 50,
+  maxCandidates: 10,
+  semanticSimilarityThreshold: 0.75,
   backlinkWeight: 1.0,
   coCitationWeight: 0.5,
   sharedTagWeight: 0.3,
@@ -60,8 +62,14 @@ export class GraphBoostCalculator {
       return results;
     }
 
-    // Work with top N candidates only
-    const candidates = results.slice(0, this.config.maxCandidates);
+    // Filter candidates
+    const candidates = this.filterCandidates(results);
+
+    // Early exit if no candidates or too few for meaningful connections
+    if (candidates.length < 2) {
+      return results;
+    }
+
     const candidateSet = new Set(candidates.map((r) => r.id));
 
     // Calculate connections for each candidate
@@ -262,6 +270,47 @@ export class GraphBoostCalculator {
     }
 
     return sharedTags;
+  }
+
+  /**
+   * Filter candidates based on semantic similarity threshold and max limit
+   */
+  private filterCandidates(results: NoteIdRank[]): NoteIdRank[] {
+    let candidates = results;
+
+    // Apply semantic similarity threshold if configured
+    if (this.config.semanticSimilarityThreshold !== undefined) {
+      const threshold = this.config.semanticSimilarityThreshold;
+      const initialCount = candidates.length;
+
+      // Check if any results have semantic scores
+      const hasSemanticScores = results.some((r) => r.explanation?.semanticScore !== undefined);
+
+      if (hasSemanticScores) {
+        // Only filter if semantic scores are available
+        candidates = results.filter((r) => {
+          const semanticScore = r.explanation?.semanticScore;
+          // Only include if semantic score exists and meets threshold
+          return semanticScore !== undefined && semanticScore >= threshold;
+        });
+
+        logInfo(
+          `GraphBoost: ${candidates.length}/${initialCount} results have semantic score ≥${threshold}`
+        );
+      }
+    }
+
+    // Apply max candidates limit
+    const beforeLimit = candidates.length;
+    candidates = candidates.slice(0, this.config.maxCandidates);
+
+    if (beforeLimit > this.config.maxCandidates) {
+      logInfo(
+        `GraphBoost: Limited to top ${this.config.maxCandidates} candidates (from ${beforeLimit})`
+      );
+    }
+
+    return candidates;
   }
 
   /**

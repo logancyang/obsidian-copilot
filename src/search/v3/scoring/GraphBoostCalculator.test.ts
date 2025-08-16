@@ -298,4 +298,226 @@ describe("GraphBoostCalculator", () => {
       expect(boosted[0].score).toBe(1.1);
     });
   });
+
+  describe("semantic similarity threshold", () => {
+    it("should only boost candidates above semantic similarity threshold", () => {
+      const boost = new GraphBoostCalculator(mockApp, {
+        semanticSimilarityThreshold: 0.75,
+        backlinkWeight: 1.0,
+        boostStrength: 0.5,
+      });
+
+      createMockFile("note1.md");
+      createMockFile("note2.md");
+      createMockFile("note3.md");
+      createMockFile("note4.md");
+
+      // Setup backlinks: note2 and note3 link to note1
+      mockBacklinks.set("note1.md", new Set(["note2.md", "note3.md"]));
+
+      const results: NoteIdRank[] = [
+        {
+          id: "note1.md",
+          score: 0.9,
+          engine: "semantic",
+          explanation: { semanticScore: 0.9, baseScore: 0.9, finalScore: 0.9 },
+        },
+        {
+          id: "note2.md",
+          score: 0.8,
+          engine: "semantic",
+          explanation: { semanticScore: 0.8, baseScore: 0.8, finalScore: 0.8 },
+        },
+        {
+          id: "note3.md",
+          score: 0.7,
+          engine: "semantic",
+          explanation: { semanticScore: 0.7, baseScore: 0.7, finalScore: 0.7 }, // Below threshold
+        },
+        {
+          id: "note4.md",
+          score: 0.6,
+          engine: "semantic",
+          explanation: { semanticScore: 0.6, baseScore: 0.6, finalScore: 0.6 }, // Below threshold
+        },
+      ];
+
+      const boosted = boost.applyBoost(results);
+
+      // Only note1 and note2 are above threshold (0.75)
+      // note1 should be boosted (has backlink from note2 which is above threshold)
+      expect(boosted[0].score).toBeGreaterThan(0.9);
+
+      // note2 should not be boosted (no backlinks from other above-threshold results)
+      expect(boosted[1].score).toBe(0.8);
+
+      // note3 and note4 are below threshold, so they should not be boosted
+      expect(boosted[2].score).toBe(0.7);
+      expect(boosted[3].score).toBe(0.6);
+    });
+
+    it("should ignore results without semantic scores when threshold is set", () => {
+      const boost = new GraphBoostCalculator(mockApp, {
+        semanticSimilarityThreshold: 0.75,
+        backlinkWeight: 1.0,
+        boostStrength: 0.5,
+      });
+
+      createMockFile("note1.md");
+      createMockFile("note2.md");
+      createMockFile("note3.md");
+
+      // Setup backlinks
+      mockBacklinks.set("note1.md", new Set(["note2.md", "note3.md"]));
+
+      const results: NoteIdRank[] = [
+        {
+          id: "note1.md",
+          score: 0.9,
+          engine: "semantic",
+          explanation: { semanticScore: 0.9, baseScore: 0.9, finalScore: 0.9 },
+        },
+        {
+          id: "note2.md",
+          score: 0.8,
+          engine: "lexical", // No semantic score
+        },
+        {
+          id: "note3.md",
+          score: 0.85,
+          engine: "rrf", // Composite score, no semantic score
+        },
+      ];
+
+      const boosted = boost.applyBoost(results);
+
+      // Only note1 has semantic score above threshold
+      // It should NOT be boosted because note2 and note3 don't have semantic scores
+      expect(boosted[0].score).toBe(0.9);
+      expect(boosted[1].score).toBe(0.8);
+      expect(boosted[2].score).toBe(0.85);
+    });
+
+    it("should respect both semantic threshold and max candidates limit", () => {
+      const boost = new GraphBoostCalculator(mockApp, {
+        semanticSimilarityThreshold: 0.7,
+        maxCandidates: 3,
+        backlinkWeight: 1.0,
+        boostStrength: 0.5,
+      });
+
+      createMockFile("note1.md");
+      createMockFile("note2.md");
+      createMockFile("note3.md");
+      createMockFile("note4.md");
+      createMockFile("note5.md");
+
+      // Setup backlinks
+      mockBacklinks.set("note1.md", new Set(["note2.md", "note4.md", "note5.md"]));
+
+      const results: NoteIdRank[] = [
+        {
+          id: "note1.md",
+          score: 0.95,
+          engine: "semantic",
+          explanation: { semanticScore: 0.95, baseScore: 0.95, finalScore: 0.95 },
+        },
+        {
+          id: "note2.md",
+          score: 0.85,
+          engine: "semantic",
+          explanation: { semanticScore: 0.85, baseScore: 0.85, finalScore: 0.85 },
+        },
+        {
+          id: "note3.md",
+          score: 0.75,
+          engine: "semantic",
+          explanation: { semanticScore: 0.75, baseScore: 0.75, finalScore: 0.75 },
+        },
+        {
+          id: "note4.md",
+          score: 0.72,
+          engine: "semantic",
+          explanation: { semanticScore: 0.72, baseScore: 0.72, finalScore: 0.72 },
+        },
+        {
+          id: "note5.md",
+          score: 0.71,
+          engine: "semantic",
+          explanation: { semanticScore: 0.71, baseScore: 0.71, finalScore: 0.71 },
+        },
+      ];
+
+      const boosted = boost.applyBoost(results);
+
+      // All 5 results are above threshold (0.7), but only top 3 should be analyzed
+      // note1 should be boosted (has backlink from note2 which is in top 3)
+      expect(boosted[0].score).toBeGreaterThan(0.95);
+
+      // note4 and note5 are above threshold but outside top 3, so their backlinks don't count
+      const explanation = (boosted[0].explanation as any)?.graphConnections;
+      expect(explanation?.backlinks).toBe(1); // Only note2, not note4 or note5
+    });
+
+    it("should work without semantic threshold (backward compatibility)", () => {
+      const boost = new GraphBoostCalculator(mockApp, {
+        // No semanticSimilarityThreshold set
+        maxCandidates: 2,
+        backlinkWeight: 1.0,
+        boostStrength: 0.5,
+      });
+
+      createMockFile("note1.md");
+      createMockFile("note2.md");
+      createMockFile("note3.md");
+
+      mockBacklinks.set("note1.md", new Set(["note2.md"]));
+
+      const results: NoteIdRank[] = [
+        { id: "note1.md", score: 1.0, engine: "rrf" },
+        { id: "note2.md", score: 0.9, engine: "rrf" },
+        { id: "note3.md", score: 0.8, engine: "rrf" },
+      ];
+
+      const boosted = boost.applyBoost(results);
+
+      // Should work as before, using only maxCandidates
+      expect(boosted[0].score).toBeGreaterThan(1.0);
+    });
+
+    it("should return results unchanged when fewer than 2 candidates pass threshold", () => {
+      const boost = new GraphBoostCalculator(mockApp, {
+        semanticSimilarityThreshold: 0.9,
+        backlinkWeight: 1.0,
+        boostStrength: 0.5,
+      });
+
+      createMockFile("note1.md");
+      createMockFile("note2.md");
+
+      mockBacklinks.set("note1.md", new Set(["note2.md"]));
+
+      const results: NoteIdRank[] = [
+        {
+          id: "note1.md",
+          score: 0.95,
+          engine: "semantic",
+          explanation: { semanticScore: 0.95, baseScore: 0.95, finalScore: 0.95 },
+        },
+        {
+          id: "note2.md",
+          score: 0.85,
+          engine: "semantic",
+          explanation: { semanticScore: 0.85, baseScore: 0.85, finalScore: 0.85 }, // Below 0.9
+        },
+      ];
+
+      const boosted = boost.applyBoost(results);
+
+      // Only 1 candidate passes threshold, need at least 2 for connections
+      // Results should be unchanged
+      expect(boosted[0].score).toBe(0.95);
+      expect(boosted[1].score).toBe(0.85);
+    });
+  });
 });
