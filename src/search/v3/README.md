@@ -84,7 +84,7 @@ Combines rankings with normalized weights (sum to 1.0):
 ### 5. Boosting Stage
 
 - **Folder Boost**: Notes in folders with multiple matches (logarithmic, 1-1.5x)
-- **Graph Boost**: Notes linked to other results (1.0-1.2x)
+- **Graph Boost**: Notes linked to other results (1.0-1.15x, only for high-similarity results)
 
 ### 6. Score Normalization
 
@@ -151,9 +151,17 @@ Min-max normalization prevents auto-1.0 scores
 
 **Graph Boost**: Rewards notes that link to other search results.
 
-- Formula: `1 + weight × log(connections + 1)`, capped at 1.2x
-- Example: `auth-guide.md` links to `jwt-setup.md` and both appear in results → both get boosted
-- Purpose: Surfaces tightly connected knowledge networks
+- **Intelligent Filtering**:
+  - Only analyzes notes with semantic similarity ≥75% (when semantic search is enabled)
+  - Maximum 10 candidates analyzed (performance cap)
+  - Requires at least 2 candidates for meaningful connections
+- **Connection Types**:
+  - Backlinks: Notes that link TO this note (weight: 1.0)
+  - Co-citations: Notes cited by same sources (weight: 0.5)
+  - Shared tags: Notes with common tags (weight: 0.3)
+- **Boost Formula**: `1 + strength × log(1 + connectionScore)`, capped at 1.15x
+- **Example**: `auth-guide.md` has 75% semantic similarity and links to `jwt-setup.md` → both get boosted
+- **Purpose**: Surfaces tightly connected knowledge networks while maintaining performance
 
 Both boosts multiply existing scores after RRF fusion, helping related content rise together.
 
@@ -221,8 +229,13 @@ interface NoteIdRank {
 
 - **Enable Semantic Search**: Master toggle for vector features
 - **Auto-Index Strategy**: NEVER | ON STARTUP | ON MODE SWITCH
-- **Graph Boost Weight**: Connection influence (0.1-1.0)
+- **Graph Boost Configuration**:
+  - Semantic Similarity Threshold: 75% (only boost highly relevant results)
+  - Max Candidates: 10 (performance cap)
+  - Boost Strength: 0.1 (connection influence)
+  - Max Boost Multiplier: 1.15x (prevents over-boosting)
 - **Lexical Search RAM Limit**: RAM usage for lexical search
+- **Embedding Batch Size**: Number of chunks to embed at once (reduce if token limits exceeded)
 - **Exclusions/Inclusions**: File patterns to index
 
 ## Implementation Status
@@ -244,3 +257,5 @@ interface NoteIdRank {
 5. **Consistent Candidates**: Both lexical and semantic search same subset
 6. **Min-Max Normalization**: Prevents artificial perfect scores while preserving monotonicity
 7. **Explainable Rankings**: Track contributing factors for transparency
+8. **Intelligent Graph Boost**: Only analyzes highly relevant results (≥75% similarity) to balance quality and performance
+9. **Token-Aware Indexing**: Automatic chunk truncation when embedding token limits approached
