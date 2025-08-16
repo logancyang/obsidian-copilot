@@ -143,11 +143,17 @@ Min-max normalization prevents auto-1.0 scores
 
 ### Folder & Graph Boost Calculators
 
-**Folder Boost**: Rewards notes that share folders with other search results.
+**Folder Boost**: Rewards notes that share folders with other search results, scaled by relevance ratio.
 
-- Formula: `1 + log2(count + 1)`, capped at 1.5x
-- Example: Searching "authentication" finds 3 notes in `nextjs/` folder → all 3 get ~1.5x boost
-- Purpose: Surfaces topically related clusters from the same project/folder
+- **Relevance Ratio**: `relevant_docs_in_folder / total_docs_in_folder`
+- **Requirements**:
+  - Minimum 2 relevant documents in folder (configurable)
+  - Minimum 40% relevance ratio (configurable)
+- **Formula**: `1 + (log2(count + 1) - 1) * sqrt(relevance_ratio)`, capped at 1.15x
+- **Example 1**: Searching "authentication" finds 3/5 notes in `nextjs/` folder (60% relevance) → 1.15x boost
+- **Example 2**: Finding 2/5 notes in folder (40% relevance) → 1.15x boost (meets threshold)
+- **Example 3**: Finding 3/10 notes in folder (30% relevance) → no boost (below 40% threshold)
+- **Purpose**: Only boosts truly coherent folders where a significant portion is relevant
 
 **Graph Boost**: Rewards notes that link to other search results.
 

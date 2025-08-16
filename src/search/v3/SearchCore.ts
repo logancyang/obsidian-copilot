@@ -40,7 +40,7 @@ export class SearchCore {
       maxVariants: 3,
       timeout: LLM_GENERATION_TIMEOUT_MS,
     });
-    this.folderBoostCalculator = new FolderBoostCalculator();
+    this.folderBoostCalculator = new FolderBoostCalculator(app);
     this.graphBoostCalculator = new GraphBoostCalculator(app, {
       enabled: true,
       maxCandidates: 10, // Absolute ceiling

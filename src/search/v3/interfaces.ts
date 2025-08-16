@@ -25,6 +25,8 @@ export interface SearchExplanation {
   folderBoost?: {
     folder: string;
     documentCount: number;
+    totalDocsInFolder: number;
+    relevanceRatio: number;
     boostFactor: number;
   };
   graphBoost?: {
