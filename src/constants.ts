@@ -741,4 +741,5 @@ export const EVENT_NAMES = {
 export enum ABORT_REASON {
   USER_STOPPED = "user-stopped",
   NEW_CHAT = "new-chat",
+  UNMOUNT = "component-unmount",
 }
