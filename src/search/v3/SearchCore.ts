@@ -43,7 +43,7 @@ export class SearchCore {
     this.folderBoostCalculator = new FolderBoostCalculator();
     this.graphBoostCalculator = new GraphBoostCalculator(app, {
       enabled: true,
-      maxCandidates: 50,
+      maxCandidates: 3,
       boostStrength: 0.1,
       maxBoostMultiplier: 1.15,
     });
