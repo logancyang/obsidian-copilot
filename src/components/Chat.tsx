@@ -71,8 +71,25 @@ const Chat: React.FC<ChatProps> = ({
   // null: keep default behavior; true: show; false: hide
   const [progressCardVisible, setProgressCardVisible] = useState<boolean | null>(null);
 
+  // Track if component is mounted to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+
   const [selectedTextContexts] = useSelectedTextContexts();
   const projectContextStatus = useProjectContextStatus();
+
+  // Safe wrapper for setCurrentAiMessage that checks if component is mounted
+  const safeSetCurrentAiMessage = useCallback((message: string) => {
+    if (isMountedRef.current) {
+      setCurrentAiMessage(message);
+    }
+  }, []);
+
+  // Safe wrapper for setLoadingMessage that checks if component is mounted
+  const safeSetLoadingMessage = useCallback((message: string) => {
+    if (isMountedRef.current) {
+      setLoadingMessage(message);
+    }
+  }, []);
 
   // Calculate whether to show ProgressCard based on status and user preference
   const shouldShowProgressCard = () => {
@@ -177,7 +194,7 @@ const Chat: React.FC<ChatProps> = ({
       setInputMessage("");
       setSelectedImages([]);
       setLoading(true);
-      setLoadingMessage(LOADING_MESSAGES.DEFAULT);
+      safeSetLoadingMessage(LOADING_MESSAGES.DEFAULT);
 
       // Send message through ChatManager (this handles all the complex context processing)
       const messageId = await chatUIState.sendMessage(
@@ -205,9 +222,9 @@ const Chat: React.FC<ChatProps> = ({
           llmMessage,
           chainManager,
           addMessage,
-          setCurrentAiMessage,
+          safeSetCurrentAiMessage,
           setAbortController,
-          { debug: settings.debug, updateLoadingMessage: setLoadingMessage }
+          { debug: settings.debug, updateLoadingMessage: safeSetLoadingMessage }
         );
       }
 
@@ -220,7 +237,7 @@ const Chat: React.FC<ChatProps> = ({
       new Notice("Failed to send message. Please try again.");
     } finally {
       setLoading(false);
-      setLoadingMessage(LOADING_MESSAGES.DEFAULT);
+      safeSetLoadingMessage(LOADING_MESSAGES.DEFAULT);
     }
   };
 
@@ -247,13 +264,25 @@ const Chat: React.FC<ChatProps> = ({
         }
         abortController.abort(reason);
         setLoading(false);
-        setLoadingMessage(LOADING_MESSAGES.DEFAULT);
+        safeSetLoadingMessage(LOADING_MESSAGES.DEFAULT);
         // Keep the partial AI message visible
         // Don't clear setCurrentAiMessage here
       }
     },
-    [abortController, settings.debug]
+    [abortController, settings.debug, safeSetLoadingMessage]
   );
+
+  // Cleanup on unmount - abort any ongoing streaming
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      // Abort any ongoing streaming when component unmounts
+      if (abortController) {
+        abortController.abort(ABORT_REASON.UNMOUNT);
+      }
+    };
+  }, [abortController]);
 
   const handleRegenerate = useCallback(
     async (messageIndex: number) => {
@@ -269,12 +298,12 @@ const Chat: React.FC<ChatProps> = ({
       }
 
       // Clear current AI message and set loading state
-      setCurrentAiMessage("");
+      safeSetCurrentAiMessage("");
       setLoading(true);
       try {
         const success = await chatUIState.regenerateMessage(
           messageToRegenerate.id!,
-          setCurrentAiMessage,
+          safeSetCurrentAiMessage,
           addMessage
         );
 
@@ -295,7 +324,15 @@ const Chat: React.FC<ChatProps> = ({
         setLoading(false);
       }
     },
-    [chatHistory, chatUIState, settings.debug, settings.autosaveChat, handleSaveAsNote, addMessage]
+    [
+      chatHistory,
+      chatUIState,
+      settings.debug,
+      settings.autosaveChat,
+      handleSaveAsNote,
+      addMessage,
+      safeSetCurrentAiMessage,
+    ]
   );
 
   const handleEdit = useCallback(
@@ -336,9 +373,9 @@ const Chat: React.FC<ChatProps> = ({
                   llmMessage,
                   chainManager,
                   addMessage,
-                  setCurrentAiMessage,
+                  safeSetCurrentAiMessage,
                   setAbortController,
-                  { debug: settings.debug, updateLoadingMessage: setLoadingMessage }
+                  { debug: settings.debug, updateLoadingMessage: safeSetLoadingMessage }
                 );
               }
             } catch (error) {
@@ -369,6 +406,8 @@ const Chat: React.FC<ChatProps> = ({
       settings.debug,
       settings.autosaveChat,
       handleSaveAsNote,
+      safeSetCurrentAiMessage,
+      safeSetLoadingMessage,
     ]
   );
 
@@ -488,7 +527,7 @@ const Chat: React.FC<ChatProps> = ({
     chatUIState.clearMessages();
 
     // Additional UI state reset specific to this component
-    setCurrentAiMessage("");
+    safeSetCurrentAiMessage("");
     setContextNotes([]);
     clearSelectedTextContexts();
     // Only modify includeActiveNote if in a non-COPILOT_PLUS_CHAIN mode
@@ -505,6 +544,7 @@ const Chat: React.FC<ChatProps> = ({
     settings.includeActiveNoteAsContext,
     selectedChain,
     handleSaveAsNote,
+    safeSetCurrentAiMessage,
   ]);
 
   const handleLoadHistory = useCallback(() => {
