@@ -99,24 +99,12 @@ export const QASettings: React.FC = () => {
           <SettingItem
             type="slider"
             title="Max Sources"
-            description="Copilot goes through your vault to find relevant blocks and passes the top N blocks to the LLM. Default for N is 3. Increase if you want more sources included in the answer generation step."
+            description="Copilot goes through your vault to find relevant notes and passes the top N to the LLM. Default for N is 15. Increase if you want more notes included in the answer generation step."
             min={1}
             max={128}
             step={1}
             value={settings.maxSourceChunks}
             onChange={(value) => updateSetting("maxSourceChunks", value)}
-          />
-
-          {/* Graph Hops */}
-          <SettingItem
-            type="slider"
-            title="Graph Expansion Hops"
-            description="How many hops to traverse in the Obsidian graph when expanding search results. Higher values find more related notes but may add less relevant results. Default is 1."
-            min={1}
-            max={3}
-            step={1}
-            value={settings.graphHops || 1}
-            onChange={(value) => updateSetting("graphHops", value)}
           />
 
           {/* Requests per Minute */}
@@ -141,6 +129,34 @@ export const QASettings: React.FC = () => {
             step={1}
             value={settings.embeddingBatchSize}
             onChange={(value) => updateSetting("embeddingBatchSize", value)}
+          />
+
+          {/* Semantic vs Lexical Weight */}
+          {settings.enableSemanticSearchV3 && (
+            <SettingItem
+              type="slider"
+              title="Semantic Search Weight"
+              description="Balance between semantic (meaning-based) and lexical (keyword-based) search. 0% = fully lexical, 100% = fully semantic. Default is 60% semantic."
+              min={0}
+              max={100}
+              step={10}
+              value={Math.round((settings.semanticSearchWeight ?? 0.6) * 100)}
+              onChange={(value) => updateSetting("semanticSearchWeight", value / 100)}
+              suffix="%"
+            />
+          )}
+
+          {/* Lexical Search RAM Limit */}
+          <SettingItem
+            type="slider"
+            title="Lexical Search RAM Limit"
+            description="Maximum RAM usage for full-text search index. Lower values use less memory but may limit search performance on large vaults. Default is 100 MB."
+            min={20}
+            max={1000}
+            step={20}
+            value={settings.lexicalSearchRamLimit || 100}
+            onChange={(value) => updateSetting("lexicalSearchRamLimit", value)}
+            suffix=" MB"
           />
 
           {/* Number of Partitions removed (auto-managed in v3) */}

@@ -1,5 +1,5 @@
 import { getStandaloneQuestion } from "@/chainUtils";
-import { PLUS_MODE_DEFAULT_SOURCE_CHUNKS, TEXT_WEIGHT } from "@/constants";
+import { TEXT_WEIGHT } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logInfo } from "@/logger";
 import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
@@ -28,12 +28,10 @@ const localSearchTool = createTool({
     const settings = getSettings();
 
     const returnAll = timeRange !== undefined;
-    const baseMax =
-      settings.maxSourceChunks < PLUS_MODE_DEFAULT_SOURCE_CHUNKS
-        ? PLUS_MODE_DEFAULT_SOURCE_CHUNKS
-        : settings.maxSourceChunks;
-    // For time-based queries, ensure a healthy cap to avoid starving recall when users set a very low max
-    const effectiveMaxK = returnAll ? Math.max(baseMax, 200) : baseMax;
+    // For time-based queries, ensure a healthy cap to avoid starving recall
+    const effectiveMaxK = returnAll
+      ? Math.max(settings.maxSourceChunks, 200)
+      : settings.maxSourceChunks;
 
     logInfo(`returnAll: ${returnAll}`);
 
@@ -63,13 +61,13 @@ const localSearchTool = createTool({
       );
     }
 
-    // Format the results - only include snippet, not full content
+    // Format the results - include full content for LLM context
     const formattedResults = documents.map((doc) => {
       const scored = doc.metadata.rerank_score ?? doc.metadata.score ?? 0;
       return {
         title: doc.metadata.title || "Untitled",
-        // Only include a snippet for display (first 200 chars)
-        content: doc.pageContent.substring(0, 200),
+        // Include full content for documents that will be sent to LLM
+        content: doc.pageContent,
         path: doc.metadata.path || "",
         // Ensure both fields reflect the same final fused score when present
         score: scored,
@@ -78,6 +76,8 @@ const localSearchTool = createTool({
         source: doc.metadata.source, // Pass through source for proper labeling
         // Show actual modified time for time-based queries
         mtime: doc.metadata.mtime ?? null,
+        // Include search explanation if available
+        explanation: doc.metadata.explanation ?? null,
       };
     });
 

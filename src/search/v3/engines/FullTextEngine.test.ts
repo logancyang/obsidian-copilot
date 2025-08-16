@@ -205,32 +205,32 @@ describe("FullTextEngine", () => {
     });
 
     it("should search indexed documents", () => {
-      const results = engine.search(["typescript"], 10);
+      const results = engine.search(["typescript"], 10, [], "typescript");
 
       expect(results.length).toBeGreaterThan(0);
       expect(results[0].engine).toBe("fulltext");
     });
 
     it("should handle multiple query variants", () => {
-      const results = engine.search(["typescript", "javascript"], 10);
+      const results = engine.search(["typescript", "javascript"], 10, [], "typescript");
 
       expect(results.length).toBeGreaterThan(0);
     });
 
     it("should return empty array for no matches", () => {
-      const results = engine.search(["nonexistentterm"], 10);
+      const results = engine.search(["nonexistentterm"], 10, [], "nonexistentterm");
 
       expect(results).toEqual([]);
     });
 
     it("should respect limit parameter", () => {
-      const results = engine.search(["typescript"], 1);
+      const results = engine.search(["typescript"], 1, [], "typescript");
 
       expect(results.length).toBeLessThanOrEqual(1);
     });
 
     it("should handle empty query array", () => {
-      const results = engine.search([], 10);
+      const results = engine.search([], 10, [], "");
 
       expect(results).toEqual([]);
     });
@@ -278,7 +278,7 @@ describe("FullTextEngine", () => {
     });
 
     it("should apply field weighting correctly", () => {
-      const results = engine.search(["piano"], 10);
+      const results = engine.search(["piano"], 10, [], "piano");
 
       // Title matches should score higher than body matches
       const titleMatch = results.find((r) => r.id.includes("Lesson"));
@@ -290,7 +290,7 @@ describe("FullTextEngine", () => {
     });
 
     it("should boost multi-field matches", () => {
-      const results = engine.search(["piano"], 10);
+      const results = engine.search(["piano"], 10, [], "piano");
 
       // The music.md file has "piano" in tags and body, should get multi-field bonus
       const multiFieldMatch = results.find((r) => r.id === "projects/music.md");
@@ -302,7 +302,7 @@ describe("FullTextEngine", () => {
     });
 
     it("should score path matches with proper weight", () => {
-      const results = engine.search(["piano lessons"], 10);
+      const results = engine.search(["piano lessons"], 10, [], "piano lessons");
 
       // Files in "Piano Lessons" folder should match on path field
       const lessonFiles = results.filter((r) => r.id.includes("Piano Lessons"));
@@ -317,7 +317,7 @@ describe("FullTextEngine", () => {
     });
 
     it("should handle position-based scoring", () => {
-      const results = engine.search(["piano"], 10);
+      const results = engine.search(["piano"], 10, [], "piano");
 
       // All results should have decreasing scores
       for (let i = 1; i < results.length; i++) {
@@ -331,11 +331,11 @@ describe("FullTextEngine", () => {
       const getFieldWeight = (engine as any).getFieldWeight.bind(engine);
 
       expect(getFieldWeight("title")).toBe(3);
-      expect(getFieldWeight("path")).toBe(2.5);
-      expect(getFieldWeight("headings")).toBe(2);
-      expect(getFieldWeight("tags")).toBe(2);
-      expect(getFieldWeight("props")).toBe(2);
-      expect(getFieldWeight("links")).toBe(2);
+      expect(getFieldWeight("path")).toBe(1.5);
+      expect(getFieldWeight("headings")).toBe(1.5);
+      expect(getFieldWeight("tags")).toBe(1.5);
+      expect(getFieldWeight("props")).toBe(1.5);
+      expect(getFieldWeight("links")).toBe(1.5);
       expect(getFieldWeight("body")).toBe(1);
     });
 
@@ -441,7 +441,7 @@ describe("FullTextEngine", () => {
       await engine.buildFromCandidates(["author-test.md"]);
 
       // Should find by author name
-      const results = engine.search(["John Doe"], 10);
+      const results = engine.search(["John Doe"], 10, [], "John Doe");
       expect(results.length).toBeGreaterThan(0);
       expect(results[0].id).toBe("author-test.md");
     });
@@ -450,7 +450,7 @@ describe("FullTextEngine", () => {
       await engine.buildFromCandidates(["project-test.md"]);
 
       // Should find by priority number (converted to string)
-      const results = engine.search(["1"], 10);
+      const results = engine.search(["1"], 10, [], "1");
       expect(results.some((r) => r.id === "project-test.md")).toBe(true);
     });
 
@@ -458,14 +458,14 @@ describe("FullTextEngine", () => {
       await engine.buildFromCandidates(["array-test.md"]);
 
       // Should find by array elements
-      const results1 = engine.search(["typescript"], 10);
+      const results1 = engine.search(["typescript"], 10, [], "typescript");
       expect(results1.some((r) => r.id === "array-test.md")).toBe(true);
 
-      const results2 = engine.search(["Alice"], 10);
+      const results2 = engine.search(["Alice"], 10, [], "Alice");
       expect(results2.some((r) => r.id === "array-test.md")).toBe(true);
 
       // Should find by number in array (converted to string)
-      const results3 = engine.search(["300"], 10);
+      const results3 = engine.search(["300"], 10, [], "300");
       expect(results3.some((r) => r.id === "array-test.md")).toBe(true);
     });
 
@@ -473,7 +473,7 @@ describe("FullTextEngine", () => {
       await engine.buildFromCandidates(["project-test.md"]);
 
       // Should NOT find by nested object value
-      const results = engine.search(["ignore"], 10);
+      const results = engine.search(["ignore"], 10, [], "ignore");
       expect(results.some((r) => r.id === "project-test.md")).toBe(false);
     });
 
@@ -482,7 +482,7 @@ describe("FullTextEngine", () => {
 
       // Should NOT find by property key alone
       // Use a unique property key that doesn't appear in values or body
-      const results = engine.search(["status"], 10);
+      const results = engine.search(["status"], 10, [], "status");
 
       // "status" key should not be indexed, but "draft" value should be
       // So searching for "status" should not find the document
@@ -490,7 +490,7 @@ describe("FullTextEngine", () => {
       expect(results.some((r) => r.id === "author-test.md")).toBe(false);
 
       // But searching for the value "draft" should find it
-      const valueResults = engine.search(["draft"], 10);
+      const valueResults = engine.search(["draft"], 10, [], "draft");
       expect(valueResults.some((r) => r.id === "author-test.md")).toBe(true);
     });
 
@@ -498,26 +498,28 @@ describe("FullTextEngine", () => {
       await engine.buildFromCandidates(["edge-cases.md"]);
 
       // Should find by boolean values converted to strings
-      const trueResults = engine.search(["true"], 10);
+      const trueResults = engine.search(["true"], 10, [], "true");
       expect(trueResults.some((r) => r.id === "edge-cases.md")).toBe(true);
 
-      const falseResults = engine.search(["false"], 10);
+      const falseResults = engine.search(["false"], 10, [], "false");
       expect(falseResults.some((r) => r.id === "edge-cases.md")).toBe(true);
     });
 
-    it("should downweight boolean/numeric tokens in props field", async () => {
+    it("should search for boolean/numeric tokens in props field", async () => {
       await engine.buildFromCandidates(["edge-cases.md", "project-test.md"]);
 
-      const boolResults = engine.search(["true"], 10);
-      const numResults = engine.search(["1"], 10);
+      const boolResults = engine.search(["true"], 10, [], "true");
+      const numResults = engine.search(["1"], 10, [], "1");
 
+      // Just verify they return results
       expect(boolResults.length).toBeGreaterThan(0);
       expect(numResults.length).toBeGreaterThan(0);
 
+      // Scoring is now uniform - no special downweighting
       const boolTop = boolResults[0];
       const numTop = numResults[0];
-      expect(boolTop.score).toBeLessThanOrEqual(0.5);
-      expect(numTop.score).toBeLessThanOrEqual(0.5);
+      expect(boolTop.score).toBeGreaterThan(0);
+      expect(numTop.score).toBeGreaterThan(0);
     });
 
     it("should index Date objects as ISO strings", async () => {
@@ -528,7 +530,7 @@ describe("FullTextEngine", () => {
 
       // The Date object should be converted to ISO string
       // Should find by searching for the ISO format
-      const results = engine.search(["2024-01-15T00:00:00"], 10);
+      const results = engine.search(["2024-01-15T00:00:00"], 10, [], "2024-01-15T00:00:00");
       expect(results.some((r) => r.id === "edge-cases.md")).toBe(true);
     });
 
@@ -536,7 +538,7 @@ describe("FullTextEngine", () => {
       await engine.buildFromCandidates(["edge-cases.md"]);
 
       // Should NOT find by "null" string
-      const nullResults = engine.search(["null"], 10);
+      const nullResults = engine.search(["null"], 10, [], "null");
       expect(nullResults.some((r) => r.id === "edge-cases.md")).toBe(false);
 
       // Empty strings should also be skipped (no way to test directly)
@@ -546,11 +548,11 @@ describe("FullTextEngine", () => {
       await engine.buildFromCandidates(["edge-cases.md"]);
 
       // Should find the string in the nested array
-      const results = engine.search(["but this works"], 10);
+      const results = engine.search(["but this works"], 10, [], "but this works");
       expect(results.some((r) => r.id === "edge-cases.md")).toBe(true);
 
       // Should NOT find the nested array elements
-      const nestedResults = engine.search(["should"], 10);
+      const nestedResults = engine.search(["should"], 10, [], "should");
       expect(nestedResults.some((r) => r.id === "edge-cases.md")).toBe(false);
     });
 

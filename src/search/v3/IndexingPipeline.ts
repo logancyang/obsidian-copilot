@@ -1,12 +1,14 @@
 import { CHUNK_SIZE } from "@/constants";
+import ChatModelManager from "@/LLMProviders/chatModelManager";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
+import { logInfo } from "@/logger";
+import { RateLimiter } from "@/rateLimiter";
 import { getSettings } from "@/settings/model";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
-import { TFile, App } from "obsidian";
-import { RateLimiter } from "@/rateLimiter";
-import { JsonlChunkRecord } from "./IndexPersistenceManager";
-import { IndexingProgressTracker } from "./IndexingProgressTracker";
+import { App, TFile } from "obsidian";
 import { IndexingNotificationManager } from "./IndexingNotificationManager";
+import { IndexingProgressTracker } from "./IndexingProgressTracker";
+import { JsonlChunkRecord } from "./IndexPersistenceManager";
 
 export interface ChunkInfo {
   text: string;
@@ -123,7 +125,23 @@ export class IndexingPipeline {
 
       // Apply rate limiting
       await this.rateLimiter.wait();
-      const vecs = await embeddings.embedDocuments(texts);
+
+      let vecs;
+      try {
+        vecs = await embeddings.embedDocuments(texts);
+      } catch (error: any) {
+        // Log token counts for debugging when embedding fails
+        if (error?.message?.includes("context length") || error?.message?.includes("token")) {
+          logInfo("Embedding error - analyzing token counts for batch:");
+          const chatModelManager = ChatModelManager.getInstance();
+          const totalTokens = await chatModelManager.countTokens(texts.join(""));
+          logInfo(`  Total batch tokens: ${totalTokens}`);
+          logInfo(
+            "Please reduce your batch size in Copilot QA settings to avoid exceeding embedding token limits."
+          );
+        }
+        throw error;
+      }
 
       vecs.forEach((embedding, j) => {
         const chunk = batch[j];
@@ -168,7 +186,31 @@ export class IndexingPipeline {
       const texts = batch.map((chunk) => chunk.text);
 
       await this.rateLimiter.wait();
-      const vecs = await embeddings.embedDocuments(texts);
+
+      let vecs;
+      try {
+        vecs = await embeddings.embedDocuments(texts);
+      } catch (error: any) {
+        // Log token counts for debugging when embedding fails
+        if (error?.message?.includes("context length") || error?.message?.includes("token")) {
+          logInfo("Embedding error - analyzing token counts for batch:");
+          const chatModelManager = ChatModelManager.getInstance();
+          for (let idx = 0; idx < texts.length; idx++) {
+            const text = texts[idx];
+            const chunk = batch[idx];
+            const tokenCount = await chatModelManager.countTokens(text);
+            logInfo(
+              `  Chunk ${idx} (${chunk.path}#${chunk.chunkIndex}): ${tokenCount} tokens, ${text.length} characters`
+            );
+          }
+          const totalTokens = await chatModelManager.countTokens(texts.join(""));
+          logInfo(`  Total batch tokens: ${totalTokens}`);
+          logInfo(
+            "Please reduce your batch size in Copilot QA settings to avoid exceeding token limits."
+          );
+        }
+        throw error;
+      }
 
       vecs.forEach((embedding, j) => {
         const chunk = batch[j];

@@ -2,36 +2,56 @@ import { logError, logInfo } from "@/logger";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { App } from "obsidian";
 import { FullTextEngine } from "./engines/FullTextEngine";
-import { GraphExpander } from "./expanders/GraphExpander";
 import { NoteIdRank, SearchOptions } from "./interfaces";
 import { MemoryIndexManager } from "./MemoryIndexManager";
 import { QueryExpander } from "./QueryExpander";
 import { GrepScanner } from "./scanners/GrepScanner";
+import { FolderBoostCalculator } from "./scoring/FolderBoostCalculator";
+import { GraphBoostCalculator } from "./scoring/GraphBoostCalculator";
 import { weightedRRF } from "./utils/RRF";
+import { ScoreNormalizer } from "./utils/ScoreNormalizer";
 
 // LLM timeout for query expansion and HyDE generation
-const LLM_GENERATION_TIMEOUT_MS = 4000;
+const LLM_GENERATION_TIMEOUT_MS = 5000;
+
+// Search constants
+const DEFAULT_SEMANTIC_TOP_K_LIMIT = 200;
+const FULLTEXT_RESULT_MULTIPLIER = 2;
 
 /**
  * Core search engine that orchestrates the multi-stage retrieval pipeline
  */
 export class SearchCore {
   private grepScanner: GrepScanner;
-  private graphExpander: GraphExpander;
   private fullTextEngine: FullTextEngine;
   private queryExpander: QueryExpander;
+  private folderBoostCalculator: FolderBoostCalculator;
+  private graphBoostCalculator: GraphBoostCalculator;
+  private scoreNormalizer: ScoreNormalizer;
 
   constructor(
     private app: App,
     private getChatModel?: () => Promise<BaseChatModel | null>
   ) {
     this.grepScanner = new GrepScanner(app);
-    this.graphExpander = new GraphExpander(app);
     this.fullTextEngine = new FullTextEngine(app);
     this.queryExpander = new QueryExpander({
       getChatModel: this.getChatModel,
       maxVariants: 3,
       timeout: LLM_GENERATION_TIMEOUT_MS,
+    });
+    this.folderBoostCalculator = new FolderBoostCalculator(app);
+    this.graphBoostCalculator = new GraphBoostCalculator(app, {
+      enabled: true,
+      maxCandidates: 10, // Absolute ceiling
+      semanticSimilarityThreshold: 0.75, // Only boost results with 75%+ similarity
+      boostStrength: 0.1,
+      maxBoostMultiplier: 1.15,
+    });
+    this.scoreNormalizer = new ScoreNormalizer({
+      method: "minmax", // Use min-max to preserve monotonicity
+      clipMin: 0.02,
+      clipMax: 0.98,
     });
   }
 
@@ -45,13 +65,13 @@ export class SearchCore {
     // Validate and sanitize options
     const maxResults = Math.min(Math.max(1, options.maxResults || 30), 100);
     const enableSemantic = options.enableSemantic || false;
-    const semanticWeight = Math.min(Math.max(0, options.semanticWeight || 1.5), 10);
+    const semanticWeight = Math.min(Math.max(0, options.semanticWeight ?? 0.6), 1); // Default 60% semantic
     const candidateLimit = Math.min(Math.max(10, options.candidateLimit || 500), 1000);
-    const graphHops = Math.min(Math.max(1, options.graphHops || 1), 3);
     const rrfK = Math.min(Math.max(1, options.rrfK || 60), 100);
 
     try {
-      logInfo(`\n=== SearchCore: Starting search for "${query}" ===`);
+      // Log search start with minimal verbosity
+      logInfo(`SearchCore: Searching for "${query}"`);
 
       // 1. Expand query into variants and terms
       const expanded = await this.queryExpander.expand(query);
@@ -61,125 +81,78 @@ export class SearchCore {
         ? [...new Set([...expanded.salientTerms, ...options.salientTerms])]
         : expanded.salientTerms;
 
-      logInfo(`Query expansion: ${queries.length} variants + ${salientTerms.length} terms`);
-      logInfo(`  Variants: [${queries.map((q) => `"${q}"`).join(", ")}]`);
-      logInfo(`  Terms: [${salientTerms.map((t) => `"${t}"`).join(", ")}]`);
+      // Only log details if expansion produced significant variants
+      if (queries.length > 1 || salientTerms.length > 3) {
+        logInfo(`Query expansion: ${queries.length} variants, ${salientTerms.length} terms`);
+      }
 
       // 2. GREP for initial candidates (use both queries and terms)
       const allSearchStrings = [...queries, ...salientTerms];
       const grepHits = await this.grepScanner.batchCachedReadGrep(allSearchStrings, 200);
 
-      logInfo(`Grep scan: Found ${grepHits.length} initial matches`);
+      // 3. Limit candidates (no graph expansion - we use graph for boost only)
+      const candidates = grepHits.slice(0, candidateLimit);
 
-      // 3. Graph expansion from grep results
-      const activeFile = this.app.workspace.getActiveFile();
-      const expandedCandidates = await this.graphExpander.expandCandidates(
-        grepHits,
-        activeFile,
-        graphHops
-      );
+      // Log candidate info concisely
+      logInfo(`SearchCore: ${candidates.length} candidates (from ${grepHits.length} grep hits)`);
 
-      // 4. Limit candidates
-      const candidates = expandedCandidates.slice(0, candidateLimit);
+      // Prepare queries for recall phase (all queries + terms)
+      const recallQueries = [...queries, ...salientTerms];
 
-      logInfo(
-        `Graph expansion: ${grepHits.length} grep → ${expandedCandidates.length} expanded → ${candidates.length} final candidates`
-      );
+      // 5, 6 & 7. Run lexical and semantic searches in parallel
+      const [fullTextResults, semanticResults] = await Promise.all([
+        this.executeLexicalSearch(
+          candidates,
+          recallQueries,
+          salientTerms,
+          maxResults,
+          expanded.originalQuery
+        ),
+        enableSemantic
+          ? this.executeSemanticSearch(candidates, query, candidateLimit)
+          : Promise.resolve([]),
+      ]);
 
-      // 5. Build ephemeral full-text index
-      const indexed = await this.fullTextEngine.buildFromCandidates(candidates);
-
-      logInfo(`Full-text index: Built with ${indexed} documents`);
-
-      // 6. Search full-text index with both query variants AND salient terms
-      // This hybrid approach maximizes both precision (from phrases) and recall (from terms)
-      const allFullTextQueries = [...queries, ...salientTerms];
-      // Pass salient terms as low-weight terms
-      const fullTextResults = this.fullTextEngine.search(
-        allFullTextQueries,
-        maxResults * 2,
-        salientTerms
-      );
-
-      logInfo(
-        `Full-text search: Found ${fullTextResults.length} results (using ${allFullTextQueries.length} search inputs)`
-      );
-
-      // Only log in debug mode
-      // if (fullTextResults.length > 0) {
-      //   logInfo("Full-text top 10 results before RRF:");
-      //   fullTextResults.slice(0, 10).forEach((r, i) => {
-      //     logInfo(`  ${i+1}. ${r.id} (score: ${r.score.toFixed(4)})`);
-      //   });
-      // }
-
-      // 7. Optional semantic retrieval (vector-only, in-memory JSONL-backed index)
-      let semanticResults: NoteIdRank[] = [];
-      if (enableSemantic) {
-        try {
-          const index = MemoryIndexManager.getInstance(this.app);
-          const topK = Math.min(candidateLimit, 200);
-
-          // Generate HyDE document for semantic diversity
-          const hydeDoc = await this.generateHyDE(query);
-
-          // Build search queries: original variants + HyDE if available
-          const semanticQueries = [...allFullTextQueries];
-          if (hydeDoc) {
-            // Add HyDE document as the first query for higher weight
-            semanticQueries.unshift(hydeDoc);
-          }
-
-          const hits = await index.search(semanticQueries, topK, candidates);
-          semanticResults = hits.map((h) => ({ id: h.id, score: h.score, engine: "semantic" }));
-        } catch (error) {
-          logInfo("SearchCore: Semantic retrieval failed", error as any);
-        }
-      }
-
-      // 8. Rank grep hits by evidence quality before fusion (path/content × phrase/term)
-      const rankedGrep = await this.rankGrepHits(allSearchStrings, grepHits.slice(0, 100));
-      const grepPrior: NoteIdRank[] = rankedGrep.slice(0, 50).map((id, idx) => ({
-        id,
-        score: 1 / (idx + 1),
-        engine: "grep",
-      }));
-
-      // 9. Weighted RRF
-      const fusedResults = weightedRRF({
+      // 8. Weighted RRF with normalized weights
+      // semanticWeight now represents the percentage (0-1) for semantic
+      // lexical gets the remainder to ensure weights sum to 1.0
+      let fusedResults = weightedRRF({
         lexical: fullTextResults,
         semantic: semanticResults,
-        grepPrior: grepPrior,
         weights: {
-          lexical: 1.0,
+          lexical: 1.0 - semanticWeight,
           semantic: semanticWeight,
-          grepPrior: 0.2,
         },
         k: rrfK,
       });
 
-      // 10. Clean up full-text index to free memory
+      // 9. Apply folder boost (after RRF, before graph boost)
+      fusedResults = this.folderBoostCalculator.applyBoosts(fusedResults);
+
+      // 10. Apply graph boost (analyzes connections within top results)
+      fusedResults = this.graphBoostCalculator.applyBoost(fusedResults);
+
+      // CRITICAL: Re-sort after boosts to maintain correct order
+      // Boosts modify scores but don't re-sort, which can lead to incorrect normalization
+      fusedResults.sort((a, b) => b.score - a.score);
+
+      // 10. Apply score normalization to prevent auto-1.0
+      fusedResults = this.scoreNormalizer.normalize(fusedResults);
+
+      // 11. Clean up full-text index to free memory
       this.fullTextEngine.clear();
 
-      // 11. Return top K results
+      // 12. Return top K results
       const finalResults = fusedResults.slice(0, maxResults);
 
-      // Log results in an inspectable format
+      // Log final result summary
       if (finalResults.length > 0) {
-        const resultsForLogging = finalResults.map((result) => {
-          const file = this.app.vault.getAbstractFileByPath(result.id);
-          return {
-            title: file?.name || result.id,
-            path: result.id,
-            score: parseFloat(result.score.toFixed(4)),
-            engine: result.engine,
-          };
-        });
-        logInfo(`Final results: ${finalResults.length} documents (after RRF)`);
-        // Log as an array object for better inspection in console
-        logInfo("Search results:", resultsForLogging);
+        const topResult = this.app.vault.getAbstractFileByPath(finalResults[0].id);
+        logInfo(
+          `SearchCore: ${finalResults.length} results found (top: ${topResult?.name || finalResults[0].id})`
+        );
       } else {
-        logInfo("No results found");
+        logInfo("SearchCore: No results found");
       }
 
       return finalResults;
@@ -233,6 +206,102 @@ export class SearchCore {
   }
 
   /**
+   * Execute lexical search with full-text index
+   * @param candidates - Candidate documents to index
+   * @param recallQueries - All queries for recall (original + expanded + salient terms)
+   * @param salientTerms - Salient terms for scoring (extracted from original query)
+   * @param maxResults - Maximum number of results
+   * @param originalQuery - The original user query for scoring
+   * @returns Ranked list of documents from lexical search
+   */
+  private async executeLexicalSearch(
+    candidates: string[],
+    recallQueries: string[],
+    salientTerms: string[],
+    maxResults: number,
+    originalQuery?: string
+  ): Promise<NoteIdRank[]> {
+    try {
+      // Build ephemeral full-text index
+      const buildStartTime = Date.now();
+      const indexed = await this.fullTextEngine.buildFromCandidates(candidates);
+      const buildTime = Date.now() - buildStartTime;
+
+      // Search the index
+      const searchStartTime = Date.now();
+      const results = this.fullTextEngine.search(
+        recallQueries,
+        maxResults * FULLTEXT_RESULT_MULTIPLIER,
+        salientTerms,
+        originalQuery
+      );
+      const searchTime = Date.now() - searchStartTime;
+
+      // Single consolidated log for lexical search
+      logInfo(
+        `Full-text: ${indexed} docs indexed (${buildTime}ms), ${results.length} results (${searchTime}ms)`
+      );
+      return results;
+    } catch (error) {
+      logError("Full-text search failed", error);
+      return [];
+    }
+  }
+
+  /**
+   * Execute semantic search using embeddings
+   * @param candidates - Candidate documents to search within
+   * @param originalQuery - Original user query (used for embeddings and HyDE)
+   * @param candidateLimit - Maximum number of candidates
+   * @returns Ranked list of documents from semantic search
+   */
+  private async executeSemanticSearch(
+    candidates: string[],
+    originalQuery: string,
+    candidateLimit: number
+  ): Promise<NoteIdRank[]> {
+    try {
+      const index = MemoryIndexManager.getInstance(this.app);
+      const topK = Math.min(candidateLimit, DEFAULT_SEMANTIC_TOP_K_LIMIT);
+
+      // Generate HyDE document for semantic diversity
+      const hydeDoc = await this.generateHyDE(originalQuery);
+
+      // Build search queries: HyDE (if available) + original query only
+      // We only use the original query for semantic search, not expanded queries
+      const semanticQueries = hydeDoc ? [hydeDoc, originalQuery] : [originalQuery];
+
+      // Pass the same candidates array to limit semantic search to the same subset
+      const semanticHits = await index.search(semanticQueries, topK, candidates);
+      const results = semanticHits.map(this.mapSemanticHit);
+
+      logInfo(
+        `Semantic search: Found ${results.length} results (restricted to ${candidates.length} candidates)`
+      );
+      return results;
+    } catch (error) {
+      logInfo("SearchCore: Semantic retrieval failed", error as any);
+      return [];
+    }
+  }
+
+  /**
+   * Map semantic search hit to NoteIdRank format
+   * @param hit - Semantic search hit
+   * @returns NoteIdRank with explanation
+   */
+  private mapSemanticHit = (hit: any): NoteIdRank => ({
+    id: hit.id,
+    score: hit.score,
+    engine: "semantic" as const,
+    explanation: {
+      semanticScore: hit.score,
+      baseScore: hit.score,
+      finalScore: hit.score,
+    },
+  });
+
+  /**
    * Generate a hypothetical document using HyDE (Hypothetical Document Embeddings)
    * Creates a synthetic answer to help find semantically similar documents
    */
@@ -262,7 +331,15 @@ Answer:`;
       const response = await chatModel.invoke(prompt, { signal: controller.signal });
       clearTimeout(timeoutId);
 
-      const hydeDoc = response.content?.toString() || null;
+      // Extract string content from the response
+      let hydeDoc: string | null = null;
+      if (typeof response.content === "string") {
+        hydeDoc = response.content;
+      } else if (response.content && typeof response.content === "object") {
+        // Handle AIMessage or complex content structure
+        hydeDoc = String(response.content);
+      }
+
       if (hydeDoc) {
         logInfo(`HyDE generated: ${hydeDoc.slice(0, 100)}...`);
       }
@@ -275,66 +352,5 @@ Answer:`;
       }
       return null;
     }
-  }
-
-  /**
-   * Rank grep hits by evidence strength using path/content and phrase/term categories
-   */
-  private async rankGrepHits(queries: string[], hits: string[]): Promise<string[]> {
-    const phraseQueries = queries.filter((q) => q.trim().includes(" "));
-    const termQueries = queries.filter((q) => !q.trim().includes(" "));
-
-    const scored: Array<{ id: string; score: number }> = [];
-
-    for (const id of hits) {
-      let score = 0;
-      try {
-        const file = this.app.vault.getAbstractFileByPath(id);
-        const pathLower = id.toLowerCase();
-        const contentLower = file
-          ? (await this.app.vault.cachedRead(file as any)).toLowerCase()
-          : "";
-
-        // Prefer phrase matches
-        let pathPhrase = 0;
-        let contentPhrase = 0;
-        for (const pq of phraseQueries) {
-          const p = pq.toLowerCase();
-          if (pathLower.includes(p)) pathPhrase++;
-          if (contentLower.includes(p)) contentPhrase++;
-        }
-
-        // Term matches
-        let pathTerm = 0;
-        let contentTerm = 0;
-        const distinctMatched = new Set<string>();
-        for (const tq of termQueries) {
-          const t = tq.toLowerCase();
-          if (pathLower.includes(t)) {
-            pathTerm++;
-            distinctMatched.add(t);
-          } else if (contentLower.includes(t)) {
-            contentTerm++;
-            distinctMatched.add(t);
-          }
-        }
-
-        // Compute raw evidence score
-        const raw =
-          4 * pathPhrase +
-          3 * contentPhrase +
-          2 * pathTerm +
-          1 * contentTerm +
-          0.5 * distinctMatched.size;
-        // Use tanh for natural 0-1 normalization with soft saturation
-        score = Math.tanh(raw / 4);
-      } catch {
-        score = 0;
-      }
-      scored.push({ id, score });
-    }
-
-    scored.sort((a, b) => b.score - a.score);
-    return scored.map((s) => s.id);
   }
 }

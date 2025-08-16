@@ -86,11 +86,12 @@ export class TieredLexicalRetriever extends BaseRetriever {
       }
 
       // Perform the tiered search
+      const settings = getSettings();
       const searchResults = await this.searchCore.retrieve(query, {
         maxResults: this.options.maxK,
         salientTerms: enhancedSalientTerms,
-        enableSemantic: !!getSettings().enableSemanticSearchV3,
-        graphHops: getSettings().graphHops || 1,
+        enableSemantic: !!settings.enableSemanticSearchV3,
+        semanticWeight: settings.semanticSearchWeight || 0.6,
       });
 
       // Get title-matched notes that should always be included
@@ -317,7 +318,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
    * Convert v3 search results to LangChain Document format.
    */
   private async convertToDocuments(
-    searchResults: Array<{ id: string; score: number; engine?: string }>
+    searchResults: Array<{ id: string; score: number; engine?: string; explanation?: any }>
   ): Promise<Document[]> {
     const documents: Document[] = [];
 
@@ -344,6 +345,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
               rerank_score: result.score,
               engine: result.engine || "v3",
               includeInContext: result.score > (this.options.minSimilarityScore || 0.1),
+              explanation: result.explanation,
             },
           })
         );

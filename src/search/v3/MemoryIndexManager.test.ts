@@ -1,6 +1,19 @@
 import { DEFAULT_SETTINGS } from "@/constants";
 import { setSettings } from "@/settings/model";
 import { App } from "obsidian";
+
+// Mock ChatModelManager to avoid importing Anthropic SDK in tests
+jest.mock("@/LLMProviders/chatModelManager", () => {
+  return {
+    __esModule: true,
+    default: {
+      getInstance: jest.fn().mockReturnValue({
+        countTokens: jest.fn().mockResolvedValue(100),
+      }),
+    },
+  };
+});
+
 import { MemoryIndexManager } from "./MemoryIndexManager";
 
 jest.mock("@/LLMProviders/embeddingManager", () => {

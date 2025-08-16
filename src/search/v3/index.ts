@@ -7,7 +7,6 @@ export type { NoteDoc, NoteIdRank, SearchOptions } from "./interfaces";
 
 // Individual components (for testing/advanced use)
 export { GrepScanner } from "./scanners/GrepScanner";
-export { GraphExpander } from "./expanders/GraphExpander";
 export { FullTextEngine } from "./engines/FullTextEngine";
 export { SemanticReranker } from "./rerankers/SemanticReranker";
 

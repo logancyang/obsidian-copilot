@@ -13,6 +13,8 @@ export interface QueryExpanderOptions {
 export interface ExpandedQuery {
   queries: string[]; // Original query + expanded variants
   salientTerms: string[]; // Unique important terms extracted from all queries
+  originalQuery: string; // The original user query
+  expandedQueries: string[]; // Only the expanded variants (not including original)
 }
 
 /**
@@ -85,7 +87,7 @@ Format your response using XML tags:
   async expand(query: string): Promise<ExpandedQuery> {
     // Check if query is valid
     if (!query?.trim()) {
-      return { queries: [], salientTerms: [] };
+      return { queries: [], salientTerms: [], originalQuery: "", expandedQueries: [] };
     }
 
     // Check cache first (and update LRU position)
@@ -265,9 +267,12 @@ Format your response using XML tags:
       }
     });
 
+    const expandedQueries = queries.slice(1); // Exclude the original query
     return {
       queries: queries.slice(0, this.config.maxVariants + 1), // +1 for original
       salientTerms: Array.from(terms),
+      originalQuery: originalQuery,
+      expandedQueries: expandedQueries.slice(0, this.config.maxVariants),
     };
   }
 
@@ -328,9 +333,12 @@ Format your response using XML tags:
     const extractedTerms = this.extractTermsFromQueries([originalQuery]);
     extractedTerms.forEach((term) => terms.add(term));
 
+    const expandedQueries = queries.slice(1);
     return {
       queries: queries.slice(0, this.config.maxVariants + 1),
       salientTerms: Array.from(terms),
+      originalQuery: originalQuery,
+      expandedQueries: expandedQueries.slice(0, this.config.maxVariants),
     };
   }
 
@@ -373,6 +381,8 @@ Format your response using XML tags:
     return {
       queries: queryArray,
       salientTerms: terms,
+      originalQuery: query,
+      expandedQueries: [], // No expansion in fallback
     };
   }
 

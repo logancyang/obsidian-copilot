@@ -13,21 +13,47 @@ export interface NoteDoc {
 }
 
 /**
+ * Explanation for why a note ranked high in search results
+ */
+export interface SearchExplanation {
+  lexicalMatches?: {
+    field: string; // title, path, tags, body, etc.
+    query: string; // which query matched
+    weight: number; // field weight used
+  }[];
+  semanticScore?: number; // similarity score if semantic search was used
+  folderBoost?: {
+    folder: string;
+    documentCount: number;
+    totalDocsInFolder: number;
+    relevanceRatio: number;
+    boostFactor: number;
+  };
+  graphBoost?: {
+    connections: number;
+    boostFactor: number;
+  };
+  baseScore: number; // score before boosts
+  finalScore: number; // score after all adjustments
+}
+
+/**
  * Simplified structure for ranking results
  */
 export interface NoteIdRank {
   id: string; // note path
   score: number; // relevance score
   engine?: string; // source engine (l1, semantic, grepPrior)
+  explanation?: SearchExplanation; // explanation of scoring factors
 }
 
 export interface SearchOptions {
   maxResults?: number;
   rrfK?: number;
   enableSemantic?: boolean;
+  /** Weight for semantic results (0-1, default: 0.6 = 60% semantic, 40% lexical) */
   semanticWeight?: number;
   l1ByteCap?: number;
   candidateLimit?: number;
-  graphHops?: number;
   salientTerms?: string[]; // Additional terms to enhance the search
 }

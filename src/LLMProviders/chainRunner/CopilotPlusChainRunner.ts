@@ -35,6 +35,11 @@ import {
   processedMessagesToTextOnly,
 } from "./utils/chatHistoryUtils";
 import { checkIsPlusUser } from "@/plusUtils";
+import {
+  formatSearchResultsForLLM,
+  formatSearchResultStringForLLM,
+  extractSourcesFromSearchResults,
+} from "./utils/searchResultUtils";
 
 export class CopilotPlusChainRunner extends BaseChainRunner {
   private isYoutubeOnlyMessage(message: string): boolean {
@@ -337,7 +342,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
   ): Promise<string> {
     const { updateLoadingMessage } = options;
     let fullAIResponse = "";
-    let sources: { title: string; path: string; score: number }[] = [];
+    let sources: { title: string; path: string; score: number; explanation?: any }[] = [];
     let currentPartialResponse = "";
     const isPlusUser = await checkIsPlusUser({
       isCopilotPlus: true,
@@ -414,25 +419,19 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         .join(" ")
         .trim();
 
-      const toolOutputs = await this.executeToolCalls(toolCalls, updateLoadingMessage);
+      const { toolOutputs, sources: toolSources } = await this.executeToolCalls(
+        toolCalls,
+        updateLoadingMessage
+      );
 
-      // Extract sources from localSearch if present
+      // Use sources from tool execution
+      sources = toolSources;
+
+      // Check if localSearch has results
       const localSearchResult = toolOutputs.find(
         (output) => output.tool === "localSearch" && output.output != null
       );
-
-      let hasLocalSearchWithResults = false;
-      if (localSearchResult) {
-        try {
-          const documents = JSON.parse(localSearchResult.output);
-          if (Array.isArray(documents) && documents.length > 0) {
-            hasLocalSearchWithResults = true;
-            sources = this.getSources(documents);
-          }
-        } catch (error) {
-          logWarn("Failed to parse localSearch results for sources:", error);
-        }
-      }
+      const hasLocalSearchWithResults = localSearchResult && sources.length > 0;
 
       // Format chat history from memory
       const memory = this.chainManager.memoryManager.getMemory();
@@ -514,7 +513,9 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     );
   }
 
-  private getSources(documents: any): { title: string; path: string; score: number }[] {
+  private getSources(
+    documents: any
+  ): { title: string; path: string; score: number; explanation?: any }[] {
     if (!documents || !Array.isArray(documents)) {
       logWarn("No valid documents provided to getSources");
       return [];
@@ -545,6 +546,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
           path: doc.path || doc.title, // Use path if available, otherwise use title
           score: docScore,
           isReranked: isReranked,
+          explanation: doc.explanation || null, // Preserve explanation data
         });
       }
     }
@@ -556,8 +558,13 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
   private async executeToolCalls(
     toolCalls: any[],
     updateLoadingMessage?: (message: string) => void
-  ) {
+  ): Promise<{
+    toolOutputs: { tool: string; output: any }[];
+    sources: { title: string; path: string; score: number; explanation?: any }[];
+  }> {
     const toolOutputs = [];
+    const allSources: { title: string; path: string; score: number; explanation?: any }[] = [];
+
     for (const toolCall of toolCalls) {
       logInfo(`==== Step 2: Calling tool: ${toolCall.tool.name} ====`);
       if (toolCall.tool.name === "localSearch") {
@@ -568,9 +575,26 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         updateLoadingMessage?.(LOADING_MESSAGES.READING_FILE_TREE);
       }
       const output = await ToolManager.callTool(toolCall.tool, toolCall.args);
-      toolOutputs.push({ tool: toolCall.tool.name, output });
+
+      // Process localSearch results immediately
+      if (toolCall.tool.name === "localSearch") {
+        // Convert output to string if needed
+        const outputStr = typeof output === "string" ? output : JSON.stringify(output);
+        const result = { result: outputStr, success: output != null };
+        const timeExpression = this.getTimeExpression(toolCalls);
+        const processed = this.processLocalSearchResult(result, timeExpression);
+
+        // Collect sources
+        allSources.push(...processed.sources);
+
+        // Store the formatted output for LLM
+        toolOutputs.push({ tool: toolCall.tool.name, output: processed.formattedForLLM });
+      } else {
+        toolOutputs.push({ tool: toolCall.tool.name, output });
+      }
     }
-    return toolOutputs;
+
+    return { toolOutputs, sources: allSources };
   }
 
   private prepareEnhancedUserMessage(userMessage: string, toolOutputs: any[], toolCalls?: any[]) {
@@ -607,39 +631,21 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
             .map((output) => {
               let content = output.output;
 
-              // Special formatting for localSearch results
-              if (output.tool === "localSearch" && typeof content === "string") {
-                try {
-                  const documents = JSON.parse(content);
-                  if (Array.isArray(documents) && documents.length > 0) {
-                    // Get time expression from toolCalls if available
-                    const timeExpression = toolCalls ? this.getTimeExpression(toolCalls) : "";
-                    const formattedContent = this.prepareLocalSearchResult(
-                      documents,
-                      timeExpression
-                    );
-                    content = formattedContent;
-                  }
-                } catch (error) {
-                  // If parsing fails, use the raw output
-                  logWarn("Failed to parse localSearch output for formatting:", error);
-                }
-              }
+              // localSearch results are already formatted by executeToolCalls
+              // No need for special processing here
 
               // Ensure content is string
               if (typeof content !== "string") {
                 content = JSON.stringify(content);
               }
 
-              // Only wrap in XML tags if there are multiple tools
-              if (validOutputs.length > 1) {
-                return `<${output.tool}>\n${content}\n</${output.tool}>`;
-              } else if (output.tool === "localSearch" && hasLocalSearchWithResults) {
-                // For localSearch with results only, don't wrap in XML to maintain QA format
+              // localSearch is already wrapped in XML tags, don't double-wrap
+              if (output.tool === "localSearch") {
                 return content;
-              } else {
-                return `<${output.tool}>\n${content}\n</${output.tool}>`;
               }
+
+              // All other tools get wrapped consistently
+              return `<${output.tool}>\n${content}\n</${output.tool}>`;
             })
             .join("\n\n");
       }
@@ -653,7 +659,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     return `${userMessage}${context}`;
   }
 
-  private getTimeExpression(toolCalls: any[]): string {
+  protected getTimeExpression(toolCalls: any[]): string {
     const timeRangeCall = toolCalls.find((call) => call.tool.name === "getTimeRangeMs");
     return timeRangeCall ? timeRangeCall.args.timeExpression : "";
   }
@@ -662,27 +668,80 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     // First filter documents with includeInContext
     const includedDocs = documents.filter((doc) => doc.includeInContext);
 
-    // Calculate total content length
-    const totalLength = includedDocs.reduce((sum, doc) => sum + doc.content.length, 0);
+    // Calculate total content length (only content, not metadata)
+    const totalContentLength = includedDocs.reduce(
+      (sum, doc) => sum + (doc.content?.length || 0),
+      0
+    );
 
-    // If total length exceeds threshold, calculate truncation ratio
-    let truncatedDocs = includedDocs;
-    if (totalLength > MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT) {
-      const truncationRatio = MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT / totalLength;
-      logInfo("Truncating documents to fit context length. Truncation ratio:", truncationRatio);
-      truncatedDocs = includedDocs.map((doc) => ({
+    // If total content length exceeds threshold, truncate content proportionally
+    let processedDocs = includedDocs;
+    if (totalContentLength > MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT) {
+      const truncationRatio = MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT / totalContentLength;
+      logInfo(
+        "Truncating document contents to fit context length. Truncation ratio:",
+        truncationRatio
+      );
+      processedDocs = includedDocs.map((doc) => ({
         ...doc,
-        content: doc.content.slice(0, Math.floor(doc.content.length * truncationRatio)),
+        // Truncate only content, preserve all metadata
+        content:
+          doc.content?.slice(0, Math.floor((doc.content?.length || 0) * truncationRatio)) || "",
       }));
     }
 
-    const formattedDocs = truncatedDocs
-      .map((doc: any) => `Note in Vault: ${doc.content}`)
-      .join("\n\n");
+    // Format documents with essential metadata
+    const formattedContent = formatSearchResultsForLLM(processedDocs);
 
+    // Wrap in XML-like tags for better LLM understanding
     return timeExpression
-      ? `Local Search Result for ${timeExpression}:\n${formattedDocs}`
-      : `Local Search Result:\n${formattedDocs}`;
+      ? `<localSearch timeRange="${timeExpression}">\n${formattedContent}\n</localSearch>`
+      : `<localSearch>\n${formattedContent}\n</localSearch>`;
+  }
+
+  /**
+   * Processes localSearch tool results for LLM consumption and source extraction
+   * @param toolResult - The result from localSearch tool execution
+   * @param timeExpression - Optional time expression for contextualizing results
+   * @returns Object containing formatted result for LLM and extracted sources for UI
+   */
+  protected processLocalSearchResult(
+    toolResult: { result: string; success: boolean },
+    timeExpression?: string
+  ): {
+    formattedForLLM: string;
+    sources: { title: string; path: string; score: number; explanation?: any }[];
+  } {
+    let sources: { title: string; path: string; score: number; explanation?: any }[] = [];
+    let formattedForLLM: string;
+
+    if (!toolResult.success) {
+      formattedForLLM = "<localSearch>\nSearch failed.\n</localSearch>";
+      return { formattedForLLM, sources };
+    }
+
+    try {
+      const searchResults = JSON.parse(toolResult.result);
+      if (!Array.isArray(searchResults)) {
+        formattedForLLM = "<localSearch>\nInvalid search results format.\n</localSearch>";
+        return { formattedForLLM, sources };
+      }
+
+      // Extract sources with explanation for UI display
+      sources = extractSourcesFromSearchResults(searchResults);
+
+      // Prepare and format results for LLM
+      formattedForLLM = this.prepareLocalSearchResult(searchResults, timeExpression || "");
+    } catch (error) {
+      logWarn("Failed to parse localSearch results:", error);
+      // Fallback: try to format as text
+      const formatted = formatSearchResultStringForLLM(toolResult.result);
+      formattedForLLM = timeExpression
+        ? `<localSearch timeRange="${timeExpression}">\n${formatted}\n</localSearch>`
+        : `<localSearch>\n${formatted}\n</localSearch>`;
+    }
+
+    return { formattedForLLM, sources };
   }
 
   protected async getSystemPrompt(): Promise<string> {

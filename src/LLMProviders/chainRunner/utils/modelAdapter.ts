@@ -1,6 +1,6 @@
-import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { logInfo } from "@/logger";
 import { ToolMetadata } from "@/tools/ToolRegistry";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 
 export const STREAMING_TRUNCATE_THRESHOLD = 50;
 
@@ -139,6 +139,8 @@ Example for "meetings about project X last week":
 3. salientTerms: ["meetings", "project", "X"] - these words exist in the original query
 
 ${toolSpecificInstructions ? toolSpecificInstructions + "\n\n" : ""}## General Guidelines
+- Think hard about whether a query could potentially be answered from personal knowledge or notes, if yes, call a vault search (localSearch) first
+- Only use web search if: the query explicitly asks for web search, OR the query explicitly requires current/web information
 - NEVER mention tool names like "localSearch", "webSearch", etc. in your responses. Use natural language like "searching your vault", "searching the web", etc.
 
 You can use multiple tools in sequence. After each tool execution, you'll receive the results and can decide whether to use more tools or provide your final response.
@@ -397,7 +399,7 @@ CORRECT: Using tools first, then providing answer based on results`;
 - Brief action statement (1 sentence)
 - Tool calls
 - STOP (wait for results)
-- Brief transition statement (1 sentence) 
+- Brief transition statement (1 sentence)
 - More tool calls OR final answer
 
 🎯 CORRECT FIRST RESPONSE PATTERN (when tools needed):

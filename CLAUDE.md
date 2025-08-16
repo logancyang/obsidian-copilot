@@ -156,6 +156,7 @@ For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE
 ### MAJOR PRINCIPLES
 
 - **ALWAYS WRITE GENERALIZABLE SOLUTIONS**: Never add edge-case handling or hardcoded logic for specific scenarios (like "piano notes" or "daily notes"). Solutions must work for all cases.
+- **NEVER MODIFY AI PROMPT CONTENT**: Do not update, edit, or change any AI prompts, system prompts, or model adapter prompts unless explicitly asked to do so by the user
 - **Avoid hardcoding**: No hardcoded folder names, file patterns, or special-case logic
 - **Configuration over convention**: If behavior needs to vary, make it configurable, not hardcoded
 - **Universal patterns**: Solutions should work equally well for any folder structure, naming convention, or content type
