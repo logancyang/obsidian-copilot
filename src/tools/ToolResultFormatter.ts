@@ -61,6 +61,60 @@ export class ToolResultFormatter {
   }
 
   private static formatLocalSearch(result: any): string {
+    // Handle XML-wrapped results from chain runners
+    if (typeof result === "string") {
+      // Check if it's XML-wrapped content
+      const xmlMatch = result.match(/<localSearch[^>]*>([\s\S]*)<\/localSearch>/);
+      if (xmlMatch) {
+        // Extract the content from XML wrapper
+        const xmlContent = xmlMatch[1].trim();
+
+        // Count documents in the XML
+        const documentMatches = xmlContent.match(/<document>/g);
+        const count = documentMatches ? documentMatches.length : 0;
+
+        if (count === 0) {
+          return "📚 Found 0 relevant notes\n\nNo matching notes found.";
+        }
+
+        // Extract document information for display
+        const documents: any[] = [];
+        const docRegex =
+          /<document>\s*<title>([^<]*)<\/title>(?:\s*<path>([^<]*)<\/path>)?(?:\s*<modified>([^<]*)<\/modified>)?[\s\S]*?<\/document>/g;
+        let match;
+
+        while ((match = docRegex.exec(xmlContent)) !== null) {
+          documents.push({
+            title: match[1] || "Untitled",
+            path: match[2] || "",
+            mtime: match[3] || null,
+          });
+        }
+
+        const topResults = documents.slice(0, 10);
+        const formattedItems = topResults
+          .map((item, index) => {
+            const lines = [`${index + 1}. ${item.title}`];
+
+            if (item.mtime) {
+              lines.push(`   🕒 Modified: ${item.mtime}`);
+            }
+
+            if (item.path && item.path !== item.title) {
+              lines.push(`   📁 ${item.path}`);
+            }
+
+            return lines.join("\n");
+          })
+          .join("\n\n");
+
+        const footer = count > 10 ? `\n\n... and ${count - 10} more results` : "";
+
+        return `📚 Found ${count} relevant notes\n\nTop results:\n\n${formattedItems}${footer}`;
+      }
+    }
+
+    // Fall back to original JSON parsing logic
     const searchResults = this.parseSearchResults(result);
 
     if (!Array.isArray(searchResults)) {
