@@ -15,7 +15,7 @@ import CopilotPlugin from "@/main";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { CopilotSettings, getSettings, updateSetting } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
-import { isLivePreviewModeOn } from "@/utils";
+import { isSourceModeOn } from "@/utils";
 import { Editor, MarkdownView, Notice, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";
@@ -104,13 +104,13 @@ export function registerCommands(
     const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
 
     if (checking) {
-      // Return true only if we're in live preview mode
-      return !!(isLivePreviewModeOn() && activeView && activeView.editor);
+      // Return true only if we're not in source mode
+      return !!(!isSourceModeOn() && activeView && activeView.editor);
     }
 
     // Need to check this again because it can still be triggered via shortcut.
-    if (!isLivePreviewModeOn()) {
-      new Notice("Quick commands are only available in live preview mode.");
+    if (isSourceModeOn()) {
+      new Notice("Quick command is not available in source mode.");
       return false;
     }
 
