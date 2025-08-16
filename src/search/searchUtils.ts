@@ -324,17 +324,23 @@ function matchFilePathWithPatterns(filePath: string, patterns: PatternCategory):
 export function extractAppIgnoreSettings(app: App): string[] {
   const appIgnoreFolders: string[] = [];
   try {
-    const userIgnoreFilters: unknown = (app.vault as any).getConfig("userIgnoreFilters");
+    // Check if getConfig method exists (it won't in tests)
+    if (typeof (app.vault as any).getConfig === "function") {
+      const userIgnoreFilters: unknown = (app.vault as any).getConfig("userIgnoreFilters");
 
-    if (!!userIgnoreFilters && Array.isArray(userIgnoreFilters)) {
-      userIgnoreFilters.forEach((it) => {
-        if (typeof it === "string") {
-          appIgnoreFolders.push(it.endsWith("/") ? it.slice(0, -1) : it);
-        }
-      });
+      if (!!userIgnoreFilters && Array.isArray(userIgnoreFilters)) {
+        userIgnoreFilters.forEach((it) => {
+          if (typeof it === "string") {
+            appIgnoreFolders.push(it.endsWith("/") ? it.slice(0, -1) : it);
+          }
+        });
+      }
     }
   } catch (e) {
-    console.warn("Error getting userIgnoreFilters from Obsidian config", e);
+    // Only log in non-test environments
+    if (process.env.NODE_ENV !== "test") {
+      console.warn("Error getting userIgnoreFilters from Obsidian config", e);
+    }
   }
 
   return appIgnoreFolders;
