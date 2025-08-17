@@ -176,23 +176,25 @@ export function registerCommands(
 
   addCommand(plugin, COMMAND_IDS.INDEX_VAULT_TO_COPILOT_INDEX, async () => {
     try {
-      const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
-      await MemoryIndexManager.getInstance(plugin.app).indexVaultIncremental();
-      await MemoryIndexManager.getInstance(plugin.app).ensureLoaded();
+      const { SearchSystemFactory } = await import("@/search/SearchSystem");
+      const result = await SearchSystemFactory.getIndexer().indexVaultIncremental(plugin.app);
+      const count = result.documentCount ?? 0;
+      new Notice(`Index refreshed with ${count} documents.`);
     } catch (err) {
-      logError("Error building semantic memory index:", err);
-      new Notice("An error occurred while building the semantic memory index.");
+      logError("Error building index:", err);
+      new Notice("An error occurred while building the index.");
     }
   });
 
   addCommand(plugin, COMMAND_IDS.FORCE_REINDEX_VAULT_TO_COPILOT_INDEX, async () => {
     try {
-      const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
-      await MemoryIndexManager.getInstance(plugin.app).indexVault();
-      await MemoryIndexManager.getInstance(plugin.app).ensureLoaded();
+      const { SearchSystemFactory } = await import("@/search/SearchSystem");
+      const result = await SearchSystemFactory.getIndexer().indexVaultFull(plugin.app);
+      const count = result.documentCount ?? 0;
+      new Notice(`Index rebuilt with ${count} documents.`);
     } catch (err) {
-      logError("Error rebuilding semantic memory index:", err);
-      new Notice("An error occurred while rebuilding the semantic memory index.");
+      logError("Error rebuilding index:", err);
+      new Notice("An error occurred while rebuilding the index.");
     }
   });
 

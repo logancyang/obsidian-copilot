@@ -19,14 +19,16 @@ export const QASettings: React.FC = () => {
     <div className="tw-space-y-4">
       <section>
         <div className="tw-space-y-4">
-          {/* Enable Semantic Search (v3) */}
-          <SettingItem
-            type="switch"
-            title="Enable Semantic Search (v3)"
-            description="Optional semantic search component to boost the default search performance. Use 'Refresh Vault Index' or 'Force Reindex Vault' to build the embedding index."
-            checked={settings.enableSemanticSearchV3}
-            onCheckedChange={(checked) => updateSetting("enableSemanticSearchV3", checked)}
-          />
+          {/* Enable Semantic Search (v3) - Only show when not using legacy search */}
+          {!settings.useLegacySearch && (
+            <SettingItem
+              type="switch"
+              title="Enable Semantic Search (v3)"
+              description="Optional semantic search component to boost the default search performance. Use 'Refresh Vault Index' or 'Force Reindex Vault' to build the embedding index."
+              checked={settings.enableSemanticSearchV3}
+              onCheckedChange={(checked) => updateSetting("enableSemanticSearchV3", checked)}
+            />
+          )}
 
           {/* Auto-Index Strategy */}
           <SettingItem
@@ -131,8 +133,8 @@ export const QASettings: React.FC = () => {
             onChange={(value) => updateSetting("embeddingBatchSize", value)}
           />
 
-          {/* Semantic vs Lexical Weight */}
-          {settings.enableSemanticSearchV3 && (
+          {/* Semantic vs Lexical Weight - Only show when using v3 search with semantic enabled */}
+          {!settings.useLegacySearch && settings.enableSemanticSearchV3 && (
             <SettingItem
               type="slider"
               title="Semantic Search Weight"
@@ -146,20 +148,20 @@ export const QASettings: React.FC = () => {
             />
           )}
 
-          {/* Lexical Search RAM Limit */}
-          <SettingItem
-            type="slider"
-            title="Lexical Search RAM Limit"
-            description="Maximum RAM usage for full-text search index. Lower values use less memory but may limit search performance on large vaults. Default is 100 MB."
-            min={20}
-            max={1000}
-            step={20}
-            value={settings.lexicalSearchRamLimit || 100}
-            onChange={(value) => updateSetting("lexicalSearchRamLimit", value)}
-            suffix=" MB"
-          />
-
-          {/* Number of Partitions removed (auto-managed in v3) */}
+          {/* Lexical Search RAM Limit - Only show when using v3 search */}
+          {!settings.useLegacySearch && (
+            <SettingItem
+              type="slider"
+              title="Lexical Search RAM Limit"
+              description="Maximum RAM usage for full-text search index. Lower values use less memory but may limit search performance on large vaults. Default is 100 MB."
+              min={20}
+              max={1000}
+              step={20}
+              value={settings.lexicalSearchRamLimit || 100}
+              onChange={(value) => updateSetting("lexicalSearchRamLimit", value)}
+              suffix=" MB"
+            />
+          )}
 
           {/* Exclusions */}
           <SettingItem
@@ -233,6 +235,47 @@ export const QASettings: React.FC = () => {
             checked={settings.disableIndexOnMobile}
             onCheckedChange={(checked) => updateSetting("disableIndexOnMobile", checked)}
           />
+
+          {/* Legacy Search Section - At the bottom */}
+          <div className="tw-mt-6 tw-border-t tw-pt-4">
+            <h3 className="tw-mb-4 tw-text-lg tw-font-semibold">Legacy Search Options</h3>
+
+            {/* Use Legacy Search */}
+            <SettingItem
+              type="switch"
+              title="Use Legacy Search (Orama)"
+              description="Fallback to the legacy HybridRetriever with Orama instead of the new v3 search system. Enable this if you experience issues with the new search."
+              checked={settings.useLegacySearch}
+              onCheckedChange={(checked) => {
+                updateSetting("useLegacySearch", checked);
+                // Disable v3 semantic search when enabling legacy search
+                if (checked) {
+                  updateSetting("enableSemanticSearchV3", false);
+                }
+              }}
+            />
+
+            {/* Number of Partitions - Only show when using legacy search */}
+            {settings.useLegacySearch && (
+              <SettingItem
+                type="select"
+                title="Number of Partitions"
+                description="Split the Orama index into multiple partitions to handle large vaults. Increase if you get 'string length' errors. Default is 1."
+                value={String(settings.numPartitions || 1)}
+                onChange={(value) => updateSetting("numPartitions", Number(value))}
+                options={[
+                  { label: "1", value: "1" },
+                  { label: "2", value: "2" },
+                  { label: "4", value: "4" },
+                  { label: "8", value: "8" },
+                  { label: "16", value: "16" },
+                  { label: "32", value: "32" },
+                  { label: "40", value: "40" },
+                ]}
+                placeholder="Select partitions"
+              />
+            )}
+          </div>
         </div>
       </section>
     </div>

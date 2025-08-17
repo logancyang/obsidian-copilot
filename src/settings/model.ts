@@ -112,6 +112,8 @@ export interface CopilotSettings {
   enableCustomPromptTemplating: boolean;
   /** Enable semantic stage in v3 search (requires Memory Index JSONL) */
   enableSemanticSearchV3: boolean;
+  /** Use legacy HybridRetriever with Orama instead of v3 search */
+  useLegacySearch: boolean;
   /**
    * Weight for semantic search in hybrid retrieval (0-1 range)
    * - 0 = fully lexical (keyword-based) search

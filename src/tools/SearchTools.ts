@@ -2,7 +2,7 @@ import { getStandaloneQuestion } from "@/chainUtils";
 import { TEXT_WEIGHT } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logInfo } from "@/logger";
-import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
+import { SearchSystemFactory } from "@/search/SearchSystem";
 import { getSettings } from "@/settings/model";
 import { z } from "zod";
 import { createTool, SimpleTool } from "./SimpleTool";
@@ -35,8 +35,8 @@ const localSearchTool = createTool({
 
     logInfo(`returnAll: ${returnAll}`);
 
-    // Use tiered lexical retriever for multi-stage search
-    const retriever = new TieredLexicalRetriever(app, {
+    // Use retriever factory to get appropriate retriever based on settings
+    const retriever = SearchSystemFactory.createRetriever(app, {
       minSimilarityScore: returnAll ? 0.0 : 0.1,
       maxK: effectiveMaxK,
       salientTerms,
@@ -85,21 +85,44 @@ const localSearchTool = createTool({
   },
 });
 
-// Note: indexTool is kept for backward compatibility but is no longer used with v3 search
+// Note: indexTool behavior depends on which retriever is active
 const indexTool = createTool({
   name: "indexVault",
   description: "Index the vault to the Copilot index",
   schema: z.void(), // No parameters
   handler: async () => {
-    // Tiered lexical retriever doesn't require manual indexing - it builds ephemeral indexes on demand
-    const indexResultPrompt = `The tiered lexical retriever builds indexes on demand and doesn't require manual indexing.\n`;
-    return (
-      indexResultPrompt +
-      JSON.stringify({
-        success: true,
-        message: "Tiered lexical retriever uses on-demand indexing. No manual indexing required.",
-      })
-    );
+    const settings = getSettings();
+    if (settings.useLegacySearch) {
+      // Legacy search uses persistent Orama index - trigger actual indexing
+      try {
+        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+        const count = await VectorStoreManager.getInstance().indexVaultToVectorStore();
+        const indexResultPrompt = `Legacy search (Orama) index refreshed with ${count} documents.\n`;
+        return (
+          indexResultPrompt +
+          JSON.stringify({
+            success: true,
+            message: `Legacy Orama index has been refreshed with ${count} documents.`,
+            documentCount: count,
+          })
+        );
+      } catch (error) {
+        return JSON.stringify({
+          success: false,
+          message: `Failed to index with legacy search: ${error.message}`,
+        });
+      }
+    } else {
+      // V3 search builds indexes on demand
+      const indexResultPrompt = `The tiered lexical retriever builds indexes on demand and doesn't require manual indexing.\n`;
+      return (
+        indexResultPrompt +
+        JSON.stringify({
+          success: true,
+          message: "Tiered lexical retriever uses on-demand indexing. No manual indexing required.",
+        })
+      );
+    }
   },
   isBackground: true,
 });

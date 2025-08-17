@@ -25,8 +25,8 @@ import { MessageRepository } from "@/core/MessageRepository";
 import { encryptAllKeys } from "@/encryptionService";
 import { logInfo, logWarn } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
+import { SearchSystemFactory } from "@/search/SearchSystem";
 import { MemoryIndexManager } from "@/search/v3/MemoryIndexManager";
-import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
 import {
   getModelKeyFromModel,
@@ -126,17 +126,18 @@ export default class CopilotPlugin extends Plugin {
 
     IntentAnalyzer.initTools(this.app.vault);
 
-    // Auto-index per strategy when semantic toggle is enabled
+    // Auto-index per strategy when search is enabled
     try {
       const settings = getSettings();
-      const semanticOn = settings.enableSemanticSearchV3;
-      if (semanticOn) {
+      const searchEnabled = settings.useLegacySearch || settings.enableSemanticSearchV3;
+      if (searchEnabled) {
         const strategy = settings.indexVaultToVectorStore;
         const isMobileDisabled = settings.disableIndexOnMobile && (this.app as any).isMobile;
         if (!isMobileDisabled && strategy === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP) {
-          await MemoryIndexManager.getInstance(this.app).indexVaultIncremental();
-          await MemoryIndexManager.getInstance(this.app).ensureLoaded();
-        } else {
+          const { SearchSystemFactory } = await import("@/search/SearchSystem");
+          await SearchSystemFactory.getIndexer().indexVaultIncremental(this.app);
+        } else if (!settings.useLegacySearch) {
+          // For v3, check if index exists
           const loaded = isMobileDisabled
             ? false
             : await MemoryIndexManager.getInstance(this.app).loadIfExists();
@@ -476,7 +477,7 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async customSearchDB(query: string, salientTerms: string[], textWeight: number): Promise<any[]> {
-    const retriever = new TieredLexicalRetriever(app, {
+    const retriever = SearchSystemFactory.createRetriever(app, {
       minSimilarityScore: 0.3,
       maxK: 20,
       salientTerms: salientTerms,
