@@ -100,10 +100,13 @@ class V3SearchIndexer implements SearchIndexer {
     logInfo("V3SearchIndexer: Incremental indexing");
     try {
       const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
-      await MemoryIndexManager.getInstance(app).indexVaultIncremental();
+      const documentCount = await MemoryIndexManager.getInstance(app).indexVaultIncremental();
       await MemoryIndexManager.getInstance(app).ensureLoaded();
-      // V3 doesn't provide a direct count
-      return { success: true, message: "V3 index updated" };
+      return {
+        success: true,
+        documentCount,
+        message: `V3 index updated with ${documentCount} documents`,
+      };
     } catch (error) {
       return { success: false, message: error.message };
     }
@@ -113,9 +116,13 @@ class V3SearchIndexer implements SearchIndexer {
     logInfo("V3SearchIndexer: Full indexing");
     try {
       const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
-      await MemoryIndexManager.getInstance(app).indexVault();
+      const documentCount = await MemoryIndexManager.getInstance(app).indexVault();
       await MemoryIndexManager.getInstance(app).ensureLoaded();
-      return { success: true, message: "V3 index rebuilt" };
+      return {
+        success: true,
+        documentCount,
+        message: `V3 index rebuilt with ${documentCount} documents`,
+      };
     } catch (error) {
       return { success: false, message: error.message };
     }
