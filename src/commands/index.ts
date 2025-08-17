@@ -178,6 +178,13 @@ export function registerCommands(
     try {
       const { SearchSystemFactory } = await import("@/search/SearchSystem");
       const result = await SearchSystemFactory.getIndexer().indexVaultIncremental(plugin.app);
+
+      if (!result.success) {
+        logError("Index refresh failed:", result.message);
+        new Notice(`Failed to refresh index: ${result.message || "Unknown error"}`);
+        return;
+      }
+
       const count = result.documentCount ?? 0;
       new Notice(`Index refreshed with ${count} documents.`);
     } catch (err) {
@@ -190,6 +197,13 @@ export function registerCommands(
     try {
       const { SearchSystemFactory } = await import("@/search/SearchSystem");
       const result = await SearchSystemFactory.getIndexer().indexVaultFull(plugin.app);
+
+      if (!result.success) {
+        logError("Index rebuild failed:", result.message);
+        new Notice(`Failed to rebuild index: ${result.message || "Unknown error"}`);
+        return;
+      }
+
       const count = result.documentCount ?? 0;
       new Notice(`Index rebuilt with ${count} documents.`);
     } catch (err) {

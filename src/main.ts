@@ -134,17 +134,16 @@ export default class CopilotPlugin extends Plugin {
         const strategy = settings.indexVaultToVectorStore;
         const isMobileDisabled = settings.disableIndexOnMobile && (this.app as any).isMobile;
         if (!isMobileDisabled && strategy === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP) {
+          // Use SearchSystemFactory for both legacy and v3
           const { SearchSystemFactory } = await import("@/search/SearchSystem");
-          await SearchSystemFactory.getIndexer().indexVaultIncremental(this.app);
-        } else if (!settings.useLegacySearch) {
-          // For v3, check if index exists
-          const loaded = isMobileDisabled
-            ? false
-            : await MemoryIndexManager.getInstance(this.app).loadIfExists();
-          if (!loaded) {
-            logWarn("MemoryIndex: embedding index not found; falling back to full-text only");
-            new Notice("embedding index doesn't exist, fall back to full-text search");
+          const result = await SearchSystemFactory.getIndexer().indexVaultIncremental(this.app);
+          if (!result.success) {
+            logWarn(`Index loading failed: ${result.message}`);
           }
+        } else if (!isMobileDisabled) {
+          // For non-ON_STARTUP strategies, ensure index is loaded for the active system
+          const { SearchSystemFactory } = await import("@/search/SearchSystem");
+          await SearchSystemFactory.getIndexer().ensureLoaded(this.app);
         }
       } else {
         // If semantic is off, we still try to load index for features that depend on it
