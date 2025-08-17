@@ -146,9 +146,11 @@ export default class CopilotPlugin extends Plugin {
           await SearchSystemFactory.getIndexer().ensureLoaded(this.app);
         }
       } else {
-        // If semantic is off, we still try to load index for features that depend on it
+        // If search is off, we still try to load index for features that depend on it
         if (!(settings.disableIndexOnMobile && (this.app as any).isMobile)) {
-          await MemoryIndexManager.getInstance(this.app).loadIfExists();
+          // Use SearchSystemFactory for consistency, even when search is disabled
+          const { SearchSystemFactory } = await import("@/search/SearchSystem");
+          await SearchSystemFactory.getIndexer().ensureLoaded(this.app);
         }
       }
     } catch {
@@ -170,7 +172,7 @@ export default class CopilotPlugin extends Plugin {
             // if semantic search v3 is enabled and file was modified while active
             try {
               const settings = getSettings();
-              if (settings.enableSemanticSearchV3) {
+              if (settings.enableSemanticSearchV3 && !settings.useLegacySearch) {
                 const { lastActiveFile, lastActiveMtime } = this.fileTracker;
                 if (
                   lastActiveFile &&
