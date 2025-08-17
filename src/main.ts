@@ -25,8 +25,8 @@ import { MessageRepository } from "@/core/MessageRepository";
 import { encryptAllKeys } from "@/encryptionService";
 import { logInfo, logWarn } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
+import { SearchSystemFactory } from "@/search/SearchSystem";
 import { MemoryIndexManager } from "@/search/v3/MemoryIndexManager";
-import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
 import {
   getModelKeyFromModel,
@@ -126,29 +126,31 @@ export default class CopilotPlugin extends Plugin {
 
     IntentAnalyzer.initTools(this.app.vault);
 
-    // Auto-index per strategy when semantic toggle is enabled
+    // Auto-index per strategy when search is enabled
     try {
       const settings = getSettings();
-      const semanticOn = settings.enableSemanticSearchV3;
-      if (semanticOn) {
+      const searchEnabled = settings.useLegacySearch || settings.enableSemanticSearchV3;
+      if (searchEnabled) {
         const strategy = settings.indexVaultToVectorStore;
         const isMobileDisabled = settings.disableIndexOnMobile && (this.app as any).isMobile;
         if (!isMobileDisabled && strategy === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP) {
-          await MemoryIndexManager.getInstance(this.app).indexVaultIncremental();
-          await MemoryIndexManager.getInstance(this.app).ensureLoaded();
-        } else {
-          const loaded = isMobileDisabled
-            ? false
-            : await MemoryIndexManager.getInstance(this.app).loadIfExists();
-          if (!loaded) {
-            logWarn("MemoryIndex: embedding index not found; falling back to full-text only");
-            new Notice("embedding index doesn't exist, fall back to full-text search");
+          // Use SearchSystemFactory for both legacy and v3
+          const { SearchSystemFactory } = await import("@/search/SearchSystem");
+          const result = await SearchSystemFactory.getIndexer().indexVaultIncremental(this.app);
+          if (!result.success) {
+            logWarn(`Index loading failed: ${result.message}`);
           }
+        } else if (!isMobileDisabled) {
+          // For non-ON_STARTUP strategies, ensure index is loaded for the active system
+          const { SearchSystemFactory } = await import("@/search/SearchSystem");
+          await SearchSystemFactory.getIndexer().ensureLoaded(this.app);
         }
       } else {
-        // If semantic is off, we still try to load index for features that depend on it
+        // If search is off, we still try to load index for features that depend on it
         if (!(settings.disableIndexOnMobile && (this.app as any).isMobile)) {
-          await MemoryIndexManager.getInstance(this.app).loadIfExists();
+          // Use SearchSystemFactory for consistency, even when search is disabled
+          const { SearchSystemFactory } = await import("@/search/SearchSystem");
+          await SearchSystemFactory.getIndexer().ensureLoaded(this.app);
         }
       }
     } catch {
@@ -170,7 +172,7 @@ export default class CopilotPlugin extends Plugin {
             // if semantic search v3 is enabled and file was modified while active
             try {
               const settings = getSettings();
-              if (settings.enableSemanticSearchV3) {
+              if (settings.enableSemanticSearchV3 && !settings.useLegacySearch) {
                 const { lastActiveFile, lastActiveMtime } = this.fileTracker;
                 if (
                   lastActiveFile &&
@@ -476,7 +478,7 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async customSearchDB(query: string, salientTerms: string[], textWeight: number): Promise<any[]> {
-    const retriever = new TieredLexicalRetriever(app, {
+    const retriever = SearchSystemFactory.createRetriever(app, {
       minSimilarityScore: 0.3,
       maxK: 20,
       salientTerms: salientTerms,

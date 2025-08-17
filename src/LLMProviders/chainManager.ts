@@ -16,7 +16,7 @@ import {
   VaultQAChainRunner,
 } from "@/LLMProviders/chainRunner/index";
 import { logError, logInfo } from "@/logger";
-import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
+import { SearchSystemFactory } from "@/search/SearchSystem";
 import { getSettings, getSystemPrompt, subscribeToSettingsChange } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { findCustomModel, isOSeriesModel, isSupportedChain } from "@/utils";
@@ -206,7 +206,7 @@ export default class ChainManager {
         // TODO: VaultQAChainRunner now handles this directly without chains
         await this.initializeQAChain(options);
 
-        const retriever = new TieredLexicalRetriever(app, {
+        const retriever = SearchSystemFactory.createRetriever(app, {
           minSimilarityScore: 0.01,
           maxK: getSettings().maxSourceChunks,
           salientTerms: [],
@@ -289,10 +289,10 @@ export default class ChainManager {
   private async initializeQAChain(options: SetChainOptions) {
     // Handle index refresh if needed
     if (options.refreshIndex) {
-      // New semantic index auto-refresh path
-      const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
-      await MemoryIndexManager.getInstance(this.app).indexVaultIncremental();
-      await MemoryIndexManager.getInstance(this.app).ensureLoaded();
+      // Auto-refresh index based on active search system
+      const { SearchSystemFactory } = await import("@/search/SearchSystem");
+      await SearchSystemFactory.getIndexer().indexVaultIncremental(this.app);
+      await SearchSystemFactory.getIndexer().ensureLoaded(this.app);
     }
   }
 

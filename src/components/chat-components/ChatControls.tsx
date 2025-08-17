@@ -9,7 +9,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { PLUS_UTM_MEDIUMS } from "@/constants";
 import { logError } from "@/logger";
 import { navigateToPlusPage, useIsPlusUser } from "@/plusUtils";
-import { MemoryIndexManager } from "@/search/v3/MemoryIndexManager";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { Docs4LLMParser } from "@/tools/FileParserManager";
 import { isRateLimitError } from "@/utils/rateLimitUtils";
@@ -32,9 +31,16 @@ import React from "react";
 
 export async function refreshVaultIndex() {
   try {
-    // v3 semantic index: show progress and perform incremental update
-    await MemoryIndexManager.getInstance(app).indexVaultIncremental();
-    await MemoryIndexManager.getInstance(app).ensureLoaded();
+    const { SearchSystemFactory } = await import("@/search/SearchSystem");
+    const result = await SearchSystemFactory.getIndexer().indexVaultIncremental(app);
+
+    if (!result.success) {
+      new Notice(`Failed to refresh index: ${result.message || "Unknown error"}`);
+      return;
+    }
+
+    const count = result.documentCount ?? 0;
+    new Notice(`Index refreshed with ${count} documents.`);
   } catch (error) {
     console.error("Error refreshing vault index:", error);
     new Notice("Failed to refresh vault index. Check console for details.");
@@ -43,8 +49,16 @@ export async function refreshVaultIndex() {
 
 export async function forceReindexVault() {
   try {
-    await MemoryIndexManager.getInstance(app).indexVault();
-    await MemoryIndexManager.getInstance(app).ensureLoaded();
+    const { SearchSystemFactory } = await import("@/search/SearchSystem");
+    const result = await SearchSystemFactory.getIndexer().indexVaultFull(app);
+
+    if (!result.success) {
+      new Notice(`Failed to rebuild index: ${result.message || "Unknown error"}`);
+      return;
+    }
+
+    const count = result.documentCount ?? 0;
+    new Notice(`Index rebuilt with ${count} documents.`);
   } catch (error) {
     console.error("Error force reindexing vault:", error);
     new Notice("Failed to force reindex vault. Check console for details.");

@@ -1,6 +1,6 @@
 import { ABORT_REASON, RETRIEVED_DOCUMENT_TAG } from "@/constants";
 import { logInfo } from "@/logger";
-import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
+import { SearchSystemFactory } from "@/search/SearchSystem";
 import { getSettings, getSystemPrompt } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import {
@@ -43,8 +43,8 @@ export class VaultQAChainRunner extends BaseChainRunner {
         standaloneQuestion = userMessage.message;
       }
 
-      // Create retriever using tiered lexical approach
-      const retriever = new TieredLexicalRetriever(app, {
+      // Create retriever using factory (selects between legacy and v3 based on settings)
+      const retriever = SearchSystemFactory.createRetriever(app, {
         minSimilarityScore: 0.01,
         maxK: getSettings().maxSourceChunks,
         salientTerms: [],
