@@ -546,7 +546,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           )}
           <textarea
             ref={textAreaRef}
-            className="tw-max-h-40 tw-min-h-[60px] tw-w-full tw-resize-none tw-overflow-y-auto tw-rounded-md tw-border-none tw-bg-transparent tw-px-2 tw-text-sm tw-text-normal focus-visible:tw-ring-0"
+            className="tw-max-h-40 tw-min-h-[60px] tw-w-full tw-resize-none tw-overflow-y-auto tw-rounded-md tw-border-none tw-bg-transparent tw-px-2 tw-text-sm tw-text-normal placeholder:tw-text-sm placeholder:tw-text-muted/60 focus-visible:tw-ring-0"
             placeholder={
               "Ask anything. [[ for notes. / for custom prompts. " +
               (isCopilotPlus ? "@ for tools." : "")
@@ -572,7 +572,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
         <div className="tw-flex tw-h-6 tw-justify-between tw-gap-1 tw-px-1">
           {isGenerating ? (
-            <div className="tw-flex tw-items-center tw-gap-1 tw-px-1 tw-text-sm tw-text-faint">
+            <div className="tw-flex tw-items-center tw-gap-1 tw-px-1 tw-text-sm tw-text-muted">
               <Loader2 className="tw-size-3 tw-animate-spin" />
               <span>Generating...</span>
             </div>
