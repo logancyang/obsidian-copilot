@@ -526,7 +526,7 @@ export async function safeFetch(url: string, options: RequestInit = {}): Promise
   const response = await requestUrl({
     url,
     contentType: "application/json",
-    headers: headers as Record<string, string>,
+    headers: headers,
     method: method,
     ...(methodsWithBody.includes(method) && { body: options.body?.toString() }),
     throw: false, // Don't throw so we can get the response body
@@ -561,6 +561,9 @@ export async function safeFetch(url: string, options: RequestInit = {}): Promise
       error.message = reason ? `${message}: ${reason}` : message;
     } else if (errorJson?.detail) {
       error.message = JSON.stringify(errorJson.detail);
+    } else if (errorJson) {
+      // for external error, add more msg
+      error.message += ". " + JSON.stringify(errorJson);
     }
 
     throw error;
