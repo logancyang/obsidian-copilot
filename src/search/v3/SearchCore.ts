@@ -72,6 +72,7 @@ export class SearchCore {
     const semanticWeight = Math.min(Math.max(0, options.semanticWeight ?? 0.6), 1); // Default 60% semantic
     const candidateLimit = Math.min(Math.max(10, options.candidateLimit || 500), 1000);
     const rrfK = Math.min(Math.max(1, options.rrfK || 60), 100);
+    const enableLexicalBoosts = options.enableLexicalBoosts ?? true; // Default to enabled
 
     try {
       // Log search start with minimal verbosity
@@ -86,22 +87,21 @@ export class SearchCore {
         : expanded.salientTerms;
 
       // Only log details if expansion produced significant variants
-      if (queries.length > 1 || salientTerms.length > 3) {
-        logInfo(`Query expansion: ${queries.length} variants, ${salientTerms.length} terms`);
+      if (queries.length > 1 || salientTerms.length > 3 || expanded.expandedTerms.length > 0) {
+        logInfo(
+          `Query expansion: ${queries.length} variants, ${salientTerms.length} scoring terms (from original), ${expanded.expandedTerms.length} recall terms (LLM-generated)`
+        );
       }
 
-      // 2. GREP for initial candidates (use both queries and terms)
-      const allSearchStrings = [...queries, ...salientTerms];
-      const grepHits = await this.grepScanner.batchCachedReadGrep(allSearchStrings, 200);
+      // 2. GREP for initial candidates (use all terms for maximum recall)
+      const recallQueries = [...queries, ...expanded.expandedTerms, ...salientTerms];
+      const grepHits = await this.grepScanner.batchCachedReadGrep(recallQueries, 200);
 
       // 3. Limit candidates (no graph expansion - we use graph for boost only)
       const candidates = grepHits.slice(0, candidateLimit);
 
       // Log candidate info concisely
       logInfo(`SearchCore: ${candidates.length} candidates (from ${grepHits.length} grep hits)`);
-
-      // Prepare queries for recall phase (all queries + terms)
-      const recallQueries = [...queries, ...salientTerms];
 
       // 5, 6 & 7. Run lexical and semantic searches in parallel
       const [lexicalResults, semanticResults] = await Promise.all([
@@ -117,10 +117,13 @@ export class SearchCore {
           : Promise.resolve([]),
       ]);
 
-      // 8. Apply boosts to lexical results BEFORE RRF fusion
+      // 8. Apply boosts to lexical results BEFORE RRF fusion (if enabled)
       // This ensures boosts are applied as lexical reranking
-      let fullTextResults = this.folderBoostCalculator.applyBoosts(lexicalResults);
-      fullTextResults = this.graphBoostCalculator.applyBoost(fullTextResults);
+      let fullTextResults = lexicalResults;
+      if (enableLexicalBoosts) {
+        fullTextResults = this.folderBoostCalculator.applyBoosts(fullTextResults);
+        fullTextResults = this.graphBoostCalculator.applyBoost(fullTextResults);
+      }
 
       // 9. Weighted RRF with normalized weights (boosts already applied to lexical)
       // semanticWeight now represents the percentage (0-1) for semantic

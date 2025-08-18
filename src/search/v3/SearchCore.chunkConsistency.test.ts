@@ -121,6 +121,8 @@ describe("SearchCore - Chunk Consistency", () => {
         queries: ["OAuth authentication"],
         salientTerms: ["oauth", "auth"],
         originalQuery: "OAuth authentication",
+        expandedQueries: [],
+        expandedTerms: [],
       });
 
       // Mock grep scanner to return candidates

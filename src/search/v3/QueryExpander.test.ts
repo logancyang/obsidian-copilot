@@ -27,6 +27,7 @@ describe("QueryExpander", () => {
         salientTerms: [],
         originalQuery: "",
         expandedQueries: [],
+        expandedTerms: [],
       });
     });
 
@@ -37,6 +38,7 @@ describe("QueryExpander", () => {
         salientTerms: [],
         originalQuery: "",
         expandedQueries: [],
+        expandedTerms: [],
       });
     });
 
@@ -153,8 +155,9 @@ describe("QueryExpander", () => {
       let result = await expander.expand("test1");
       expect(result.queries).toContain("test1");
       expect(result.queries).toContain("xml variant");
-      expect(result.salientTerms).toContain("important");
-      expect(result.salientTerms).toContain("keyword");
+      expect(result.salientTerms).toContain("test1"); // Only from original query
+      expect(result.expandedTerms).toContain("important"); // LLM-generated terms
+      expect(result.expandedTerms).toContain("keyword");
 
       // Clear cache for next test
       expander.clearCache();
@@ -170,8 +173,9 @@ TERMS:
       result = await expander.expand("test2");
       expect(result.queries).toContain("test2");
       expect(result.queries).toContain("legacy variant");
-      expect(result.salientTerms).toContain("legacy");
-      expect(result.salientTerms).toContain("term");
+      expect(result.salientTerms).toContain("test2"); // Only from original query
+      expect(result.expandedTerms).toContain("legacy"); // LLM-generated terms
+      expect(result.expandedTerms).toContain("term");
     });
 
     it("should validate terms and filter action verbs", async () => {

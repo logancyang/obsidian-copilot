@@ -114,6 +114,8 @@ export interface CopilotSettings {
   enableSemanticSearchV3: boolean;
   /** Use legacy HybridRetriever with Orama instead of v3 search */
   useLegacySearch: boolean;
+  /** Enable lexical boosts (folder and graph) in v3 search - default: true */
+  enableLexicalBoosts: boolean;
   /**
    * Weight for semantic search in hybrid retrieval (0-1 range)
    * - 0 = fully lexical (keyword-based) search

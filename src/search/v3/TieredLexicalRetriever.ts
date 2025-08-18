@@ -95,6 +95,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
         salientTerms: enhancedSalientTerms,
         enableSemantic: !!settings.enableSemanticSearchV3,
         semanticWeight: settings.semanticSearchWeight || 0.6,
+        enableLexicalBoosts: settings.enableLexicalBoosts,
       });
 
       // Get title-matched notes that should always be included

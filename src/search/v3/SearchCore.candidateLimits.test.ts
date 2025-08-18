@@ -36,6 +36,9 @@ describe("SearchCore - Candidate Limits", () => {
     queryExpander.expand = jest.fn().mockResolvedValue({
       queries: ["test query"],
       salientTerms: ["test"],
+      originalQuery: "test query",
+      expandedQueries: [],
+      expandedTerms: [],
     });
 
     // Track what candidates are passed to full-text
@@ -91,6 +94,9 @@ describe("SearchCore - Candidate Limits", () => {
     queryExpander.expand = jest.fn().mockResolvedValue({
       queries: ["test"],
       salientTerms: [],
+      originalQuery: "test",
+      expandedQueries: [],
+      expandedTerms: [],
     });
 
     // Track candidates

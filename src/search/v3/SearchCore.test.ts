@@ -122,6 +122,46 @@ describe("SearchCore - HyDE Integration", () => {
     }
   });
 
+  it("should skip boosts when enableLexicalBoosts is false", async () => {
+    const core = new SearchCore(app, getChatModel);
+
+    // Mock boost calculators to verify they're not called
+    const mockFolderBoost = (core as any).folderBoostCalculator;
+    const mockGraphBoost = (core as any).graphBoostCalculator;
+    const applyBoostsSpy = jest.spyOn(mockFolderBoost, "applyBoosts");
+    const applyBoostSpy = jest.spyOn(mockGraphBoost, "applyBoost");
+
+    await core.retrieve("test query", {
+      maxResults: 10,
+      enableSemantic: false,
+      enableLexicalBoosts: false,
+    });
+
+    // Verify boost calculators were NOT called
+    expect(applyBoostsSpy).not.toHaveBeenCalled();
+    expect(applyBoostSpy).not.toHaveBeenCalled();
+  });
+
+  it("should apply boosts when enableLexicalBoosts is true", async () => {
+    const core = new SearchCore(app, getChatModel);
+
+    // Mock boost calculators to verify they're called
+    const mockFolderBoost = (core as any).folderBoostCalculator;
+    const mockGraphBoost = (core as any).graphBoostCalculator;
+    const applyBoostsSpy = jest.spyOn(mockFolderBoost, "applyBoosts").mockImplementation((r) => r);
+    const applyBoostSpy = jest.spyOn(mockGraphBoost, "applyBoost").mockImplementation((r) => r);
+
+    await core.retrieve("test query", {
+      maxResults: 10,
+      enableSemantic: false,
+      enableLexicalBoosts: true,
+    });
+
+    // Verify boost calculators were called
+    expect(applyBoostsSpy).toHaveBeenCalled();
+    expect(applyBoostSpy).toHaveBeenCalled();
+  });
+
   it("should work without chat model", async () => {
     const core = new SearchCore(app, undefined);
 

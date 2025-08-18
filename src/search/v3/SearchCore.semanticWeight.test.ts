@@ -62,6 +62,9 @@ describe("SearchCore - Semantic Weight Configuration", () => {
     queryExpander.expand = jest.fn().mockResolvedValue({
       queries: ["test"],
       salientTerms: [],
+      originalQuery: "test",
+      expandedQueries: [],
+      expandedTerms: [],
     });
 
     // Mock full-text engine
@@ -103,6 +106,9 @@ describe("SearchCore - Semantic Weight Configuration", () => {
     queryExpander.expand = jest.fn().mockResolvedValue({
       queries: ["test"],
       salientTerms: [],
+      originalQuery: "test",
+      expandedQueries: [],
+      expandedTerms: [],
     });
     fullTextEngine.buildFromCandidates = jest.fn().mockResolvedValue(1);
     fullTextEngine.search = jest.fn().mockReturnValue([]);

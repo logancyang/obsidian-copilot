@@ -12,9 +12,10 @@ export interface QueryExpanderOptions {
 
 export interface ExpandedQuery {
   queries: string[]; // Original query + expanded variants
-  salientTerms: string[]; // Unique important terms extracted from all queries
+  salientTerms: string[]; // Important terms extracted ONLY from original query (used for scoring)
   originalQuery: string; // The original user query
   expandedQueries: string[]; // Only the expanded variants (not including original)
+  expandedTerms: string[]; // LLM-generated terms (used for recall only, not scoring)
 }
 
 /**
@@ -87,7 +88,13 @@ Format your response using XML tags:
   async expand(query: string): Promise<ExpandedQuery> {
     // Check if query is valid
     if (!query?.trim()) {
-      return { queries: [], salientTerms: [], originalQuery: "", expandedQueries: [] };
+      return {
+        queries: [],
+        salientTerms: [],
+        originalQuery: "",
+        expandedQueries: [],
+        expandedTerms: [],
+      };
     }
 
     // Check cache first (and update LRU position)
@@ -224,6 +231,15 @@ Format your response using XML tags:
   }
 
   /**
+   * Extracts salient terms from the original query only (used for scoring).
+   * @param originalQuery - The original user query
+   * @returns Array of valid terms extracted from the original query
+   */
+  private extractSalientTermsFromOriginal(originalQuery: string): string[] {
+    return this.extractTermsFromQueries([originalQuery]).filter((term) => this.isValidTerm(term));
+  }
+
+  /**
    * Parses XML-formatted LLM response to extract queries and terms.
    * Falls back to legacy format if XML tags are not found.
    * @param content - The LLM response content
@@ -232,7 +248,7 @@ Format your response using XML tags:
    */
   private parseXMLResponse(content: string, originalQuery: string): ExpandedQuery {
     const queries: string[] = [originalQuery]; // Always include original
-    const terms = new Set<string>();
+    const llmExpandedTerms = new Set<string>(); // LLM-generated terms for recall only
 
     // Extract queries from XML tags
     const queryRegex = /<query>(.*?)<\/query>/g;
@@ -244,35 +260,31 @@ Format your response using XML tags:
       }
     }
 
-    // Extract terms from XML tags
+    // Extract LLM-generated terms from XML tags (for recall only)
     const termRegex = /<term>(.*?)<\/term>/g;
     let termMatch;
     while ((termMatch = termRegex.exec(content)) !== null) {
       const term = termMatch[1]?.trim().toLowerCase();
       if (term && this.isValidTerm(term)) {
-        terms.add(term);
+        llmExpandedTerms.add(term);
       }
     }
 
     // If no XML tags found, try legacy parsing
-    if (queries.length === 1 && terms.size === 0) {
+    if (queries.length === 1 && llmExpandedTerms.size === 0) {
       return this.parseLegacyFormat(content, originalQuery);
     }
 
-    // Also extract terms from the ORIGINAL query only (as fallback)
-    const extractedTerms = this.extractTermsFromQueries([originalQuery]);
-    extractedTerms.forEach((term) => {
-      if (this.isValidTerm(term)) {
-        terms.add(term);
-      }
-    });
+    // Extract salient terms ONLY from the original query (for scoring)
+    const salientTerms = this.extractSalientTermsFromOriginal(originalQuery);
 
     const expandedQueries = queries.slice(1); // Exclude the original query
     return {
       queries: queries.slice(0, this.config.maxVariants + 1), // +1 for original
-      salientTerms: Array.from(terms),
+      salientTerms: salientTerms, // Only terms from original query
       originalQuery: originalQuery,
       expandedQueries: expandedQueries.slice(0, this.config.maxVariants),
+      expandedTerms: Array.from(llmExpandedTerms), // LLM-generated terms for recall
     };
   }
 
@@ -286,7 +298,7 @@ Format your response using XML tags:
     // Fallback parser for non-XML responses
     const lines = content.split("\n").map((line) => line.trim());
     const queries: string[] = [originalQuery];
-    const terms = new Set<string>();
+    const llmExpandedTerms = new Set<string>(); // LLM-generated terms
 
     let section: "queries" | "terms" | null = null;
 
@@ -315,13 +327,13 @@ Format your response using XML tags:
           .trim()
           .toLowerCase();
         if (cleanTerm && this.isValidTerm(cleanTerm)) {
-          terms.add(cleanTerm);
+          llmExpandedTerms.add(cleanTerm); // Store as expanded terms
         }
       }
     }
 
     // If no sections found, treat lines as queries
-    if (queries.length === 1 && terms.size === 0) {
+    if (queries.length === 1 && llmExpandedTerms.size === 0) {
       for (const line of lines.slice(0, this.config.maxVariants)) {
         if (line && !line.toUpperCase().includes("QUERY")) {
           queries.push(line);
@@ -329,16 +341,16 @@ Format your response using XML tags:
       }
     }
 
-    // Extract terms from ORIGINAL query only
-    const extractedTerms = this.extractTermsFromQueries([originalQuery]);
-    extractedTerms.forEach((term) => terms.add(term));
+    // Extract salient terms ONLY from the original query
+    const salientTerms = this.extractSalientTermsFromOriginal(originalQuery);
 
     const expandedQueries = queries.slice(1);
     return {
       queries: queries.slice(0, this.config.maxVariants + 1),
-      salientTerms: Array.from(terms),
+      salientTerms: salientTerms, // Only from original query
       originalQuery: originalQuery,
       expandedQueries: expandedQueries.slice(0, this.config.maxVariants),
+      expandedTerms: Array.from(llmExpandedTerms), // LLM-generated terms
     };
   }
 
@@ -383,6 +395,7 @@ Format your response using XML tags:
       salientTerms: terms,
       originalQuery: query,
       expandedQueries: [], // No expansion in fallback
+      expandedTerms: [], // No LLM expansion in fallback
     };
   }
 

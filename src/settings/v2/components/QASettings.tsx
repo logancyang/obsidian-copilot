@@ -163,6 +163,17 @@ export const QASettings: React.FC = () => {
             />
           )}
 
+          {/* Enable Lexical Boosts - Only show when using v3 search */}
+          {!settings.useLegacySearch && (
+            <SettingItem
+              type="switch"
+              title="Enable Lexical Boosts"
+              description="Enable folder and graph-based relevance boosts for lexical search results. When disabled, provides pure keyword-based relevance scoring without folder or connection-based adjustments."
+              checked={settings.enableLexicalBoosts}
+              onCheckedChange={(checked) => updateSetting("enableLexicalBoosts", checked)}
+            />
+          )}
+
           {/* Exclusions */}
           <SettingItem
             type="custom"
