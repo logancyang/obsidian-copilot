@@ -103,40 +103,64 @@ export class SearchCore {
       // Log candidate info concisely
       logInfo(`SearchCore: ${candidates.length} candidates (from ${grepHits.length} grep hits)`);
 
-      // 5, 6 & 7. Run lexical and semantic searches in parallel
+      // 5, 6 & 7. Run lexical and semantic searches (skip unused pipelines for performance)
+      const skipLexical = enableSemantic && semanticWeight >= 1.0; // 100% semantic
+      const skipSemantic = !enableSemantic || semanticWeight <= 0.0; // 0% semantic or disabled
+
+      if (skipLexical) {
+        logInfo("SearchCore: Skipping lexical search (100% semantic weight)");
+      }
+      if (skipSemantic && enableSemantic) {
+        logInfo("SearchCore: Skipping semantic search (0% semantic weight)");
+      }
+
       const [lexicalResults, semanticResults] = await Promise.all([
-        this.executeLexicalSearch(
-          candidates,
-          recallQueries,
-          salientTerms,
-          maxResults,
-          expanded.originalQuery
-        ),
-        enableSemantic
-          ? this.executeSemanticSearch(candidates, query, candidateLimit)
-          : Promise.resolve([]),
+        skipLexical
+          ? Promise.resolve([])
+          : this.executeLexicalSearch(
+              candidates,
+              recallQueries,
+              salientTerms,
+              maxResults,
+              expanded.originalQuery
+            ),
+        skipSemantic
+          ? Promise.resolve([])
+          : this.executeSemanticSearch(candidates, query, candidateLimit),
       ]);
 
       // 8. Apply boosts to lexical results BEFORE RRF fusion (if enabled)
       // This ensures boosts are applied as lexical reranking
       let fullTextResults = lexicalResults;
-      if (enableLexicalBoosts) {
+      if (enableLexicalBoosts && !skipLexical) {
         fullTextResults = this.folderBoostCalculator.applyBoosts(fullTextResults);
         fullTextResults = this.graphBoostCalculator.applyBoost(fullTextResults);
       }
 
-      // 9. Weighted RRF with normalized weights (boosts already applied to lexical)
-      // semanticWeight now represents the percentage (0-1) for semantic
-      // lexical gets the remainder to ensure weights sum to 1.0
-      let fusedResults = weightedRRF({
-        lexical: fullTextResults,
-        semantic: semanticResults,
-        weights: {
-          lexical: 1.0 - semanticWeight,
-          semantic: semanticWeight,
-        },
-        k: rrfK,
-      });
+      // 9. Fusion: Skip RRF when using single pipeline (100% weight)
+      let fusedResults: NoteIdRank[];
+      if (skipLexical) {
+        // 100% semantic: use semantic results directly
+        fusedResults = semanticResults.slice(0, maxResults);
+        logInfo("SearchCore: Using pure semantic results (no fusion needed)");
+      } else if (skipSemantic) {
+        // 100% lexical: use lexical results directly
+        fusedResults = fullTextResults.slice(0, maxResults);
+        logInfo("SearchCore: Using pure lexical results (no fusion needed)");
+      } else {
+        // Weighted RRF with normalized weights (boosts already applied to lexical)
+        // semanticWeight now represents the percentage (0-1) for semantic
+        // lexical gets the remainder to ensure weights sum to 1.0
+        fusedResults = weightedRRF({
+          lexical: fullTextResults,
+          semantic: semanticResults,
+          weights: {
+            lexical: 1.0 - semanticWeight,
+            semantic: semanticWeight,
+          },
+          k: rrfK,
+        });
+      }
 
       // 10. Apply score normalization to prevent auto-1.0
       fusedResults = this.scoreNormalizer.normalize(fusedResults);

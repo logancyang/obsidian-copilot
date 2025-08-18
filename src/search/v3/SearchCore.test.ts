@@ -162,6 +162,64 @@ describe("SearchCore - HyDE Integration", () => {
     expect(applyBoostSpy).toHaveBeenCalled();
   });
 
+  it("should skip lexical search when semantic weight is 100%", async () => {
+    const core = new SearchCore(app, getChatModel);
+
+    // Spy on the lexical search method
+    const executeLexicalSpy = jest.spyOn(core as any, "executeLexicalSearch");
+    const executeSemanticSpy = jest
+      .spyOn(core as any, "executeSemanticSearch")
+      .mockResolvedValue([]);
+
+    await core.retrieve("test query", {
+      maxResults: 10,
+      enableSemantic: true,
+      semanticWeight: 1.0, // 100% semantic
+    });
+
+    // Verify lexical search was skipped but semantic was called
+    expect(executeLexicalSpy).not.toHaveBeenCalled();
+    expect(executeSemanticSpy).toHaveBeenCalled();
+  });
+
+  it("should skip semantic search when semantic weight is 0%", async () => {
+    const core = new SearchCore(app, getChatModel);
+
+    // Spy on the search methods
+    const executeLexicalSpy = jest.spyOn(core as any, "executeLexicalSearch").mockResolvedValue([]);
+    const executeSemanticSpy = jest.spyOn(core as any, "executeSemanticSearch");
+
+    await core.retrieve("test query", {
+      maxResults: 10,
+      enableSemantic: true,
+      semanticWeight: 0.0, // 0% semantic
+    });
+
+    // Verify semantic search was skipped but lexical was called
+    expect(executeLexicalSpy).toHaveBeenCalled();
+    expect(executeSemanticSpy).not.toHaveBeenCalled();
+  });
+
+  it("should run both searches when semantic weight is between 0% and 100%", async () => {
+    const core = new SearchCore(app, getChatModel);
+
+    // Spy on the search methods
+    const executeLexicalSpy = jest.spyOn(core as any, "executeLexicalSearch").mockResolvedValue([]);
+    const executeSemanticSpy = jest
+      .spyOn(core as any, "executeSemanticSearch")
+      .mockResolvedValue([]);
+
+    await core.retrieve("test query", {
+      maxResults: 10,
+      enableSemantic: true,
+      semanticWeight: 0.6, // 60% semantic
+    });
+
+    // Verify both searches were called
+    expect(executeLexicalSpy).toHaveBeenCalled();
+    expect(executeSemanticSpy).toHaveBeenCalled();
+  });
+
   it("should work without chat model", async () => {
     const core = new SearchCore(app, undefined);
 
