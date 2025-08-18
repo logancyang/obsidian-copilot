@@ -5,6 +5,7 @@ import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { App, TFile } from "obsidian";
+import { ChunkManager } from "./chunks";
 import { SearchCore } from "./SearchCore";
 // Defer requiring ChatModelManager until runtime to avoid test-time import issues
 let getChatModelManagerSingleton: (() => any) | null = null;
@@ -35,6 +36,7 @@ async function safeGetChatModel() {
 export class TieredLexicalRetriever extends BaseRetriever {
   public lc_namespace = ["tiered_lexical_retriever"];
   private searchCore: SearchCore;
+  private chunkManager: ChunkManager;
 
   constructor(
     private app: App,
@@ -51,6 +53,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
     super();
     // Provide safe getter for chat model (returns null in tests if unavailable)
     this.searchCore = new SearchCore(app, safeGetChatModel);
+    this.chunkManager = (this.searchCore as any).getChunkManager?.() || new ChunkManager(app); // Use shared instance or fallback
   }
 
   /**
@@ -316,6 +319,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
 
   /**
    * Convert v3 search results to LangChain Document format.
+   * Now supports both chunk IDs (note_path#chunk_index) and note IDs
    */
   private async convertToDocuments(
     searchResults: Array<{ id: string; score: number; engine?: string; explanation?: any }>
@@ -324,77 +328,124 @@ export class TieredLexicalRetriever extends BaseRetriever {
 
     for (const result of searchResults) {
       try {
-        const file = this.app.vault.getAbstractFileByPath(result.id);
-        if (!file || !(file instanceof TFile)) continue;
+        // Check if this is a chunk ID (contains #) or note ID
+        const isChunkId = result.id.includes("#");
 
-        const content = await this.app.vault.cachedRead(file);
-        if (!content) continue;
+        if (isChunkId) {
+          // Handle chunk result: get chunk content from ChunkManager
+          const [notePath] = result.id.split("#");
+          const file = this.app.vault.getAbstractFileByPath(notePath);
+          if (!file || !(file instanceof TFile)) continue;
 
-        const cache = this.app.metadataCache.getFileCache(file);
+          // Get chunk content (not full note content)
+          const chunkContent = this.chunkManager.getChunkText(result.id);
+          if (!chunkContent) continue;
 
-        documents.push(
-          new Document({
-            pageContent: content,
-            metadata: {
-              path: result.id,
-              title: file.basename,
-              mtime: file.stat.mtime,
-              ctime: file.stat.ctime,
-              tags: cache?.tags?.map((t) => t.tag) || [],
-              score: result.score,
-              rerank_score: result.score,
-              engine: result.engine || "v3",
-              includeInContext: result.score > (this.options.minSimilarityScore || 0.1),
-              explanation: result.explanation,
-            },
-          })
-        );
+          const cache = this.app.metadataCache.getFileCache(file);
+
+          documents.push(
+            new Document({
+              pageContent: chunkContent, // KEY CHANGE: chunk content, not full note
+              metadata: {
+                path: notePath, // Note path for compatibility
+                chunkId: result.id, // Full chunk ID
+                title: file.basename,
+                mtime: file.stat.mtime,
+                ctime: file.stat.ctime,
+                tags: cache?.tags?.map((t) => t.tag) || [],
+                score: result.score,
+                rerank_score: result.score,
+                engine: result.engine || "chunk-v3",
+                includeInContext: result.score > (this.options.minSimilarityScore || 0.1),
+                explanation: result.explanation,
+                isChunk: true, // Flag to indicate this is chunk content
+              },
+            })
+          );
+        } else {
+          // Handle note result: full note content (legacy path)
+          const file = this.app.vault.getAbstractFileByPath(result.id);
+          if (!file || !(file instanceof TFile)) continue;
+
+          const content = await this.app.vault.cachedRead(file);
+          if (!content) continue;
+
+          const cache = this.app.metadataCache.getFileCache(file);
+
+          documents.push(
+            new Document({
+              pageContent: content, // Full note content (legacy)
+              metadata: {
+                path: result.id,
+                title: file.basename,
+                mtime: file.stat.mtime,
+                ctime: file.stat.ctime,
+                tags: cache?.tags?.map((t) => t.tag) || [],
+                score: result.score,
+                rerank_score: result.score,
+                engine: result.engine || "v3",
+                includeInContext: result.score > (this.options.minSimilarityScore || 0.1),
+                explanation: result.explanation,
+                isChunk: false, // Flag to indicate this is full note content
+              },
+            })
+          );
+        }
       } catch (error) {
         logWarn(`TieredLexicalRetriever: Failed to convert result ${result.id}`, error);
       }
     }
 
+    logInfo(`TieredLexicalRetriever: Converted ${documents.length} results to Documents`);
     return documents;
   }
 
   /**
-   * Combine search results with mentioned notes, deduplicating by path.
+   * Combine search results with mentioned notes. Allow all relevant chunks regardless of source note.
    */
   private combineResults(searchDocuments: Document[], titleMatches: Document[]): Document[] {
-    const documentMap = new Map<string, Document>();
+    const allDocuments: Document[] = [];
 
     // Add title matches first (they have priority for inclusion)
-    for (const doc of titleMatches) {
-      documentMap.set(doc.metadata.path, doc);
-    }
+    allDocuments.push(...titleMatches);
 
-    // Add search results; if title-match already exists, attach fused score as rerank_score (keep original score for tests/UI semantics)
+    // Add all search results (including multiple chunks from same note)
     for (const doc of searchDocuments) {
-      const key = doc.metadata.path;
-      if (!documentMap.has(key)) {
-        documentMap.set(key, doc);
-      } else {
-        const existing = documentMap.get(key)!;
-        const fused = (doc.metadata as any).rerank_score ?? doc.metadata.score ?? 0;
-        const merged: Document = {
-          ...existing,
-          metadata: {
-            ...existing.metadata,
-            // Preserve original score from title match; add fused score as rerank_score for consistency across displays
-            rerank_score: fused,
-            engine: (doc.metadata as any).engine || existing.metadata.engine,
-            includeInContext: true,
-          },
-        } as Document;
-        documentMap.set(key, merged);
+      // Check if this chunk is from a note that already has a title match
+      const hasExistingTitleMatch = titleMatches.some(
+        (titleDoc) => titleDoc.metadata.path === doc.metadata.path
+      );
+
+      if (hasExistingTitleMatch) {
+        // If there's a title match for this note, we don't need to add chunk results
+        // since the full note is already included via title match
+        continue;
       }
+
+      // Add all chunk results (no per-note limits)
+      allDocuments.push(doc);
     }
 
-    // Sort by score descending
-    return Array.from(documentMap.values()).sort((a, b) => {
+    // Sort by score descending, but maintain chunk order within each note
+    return allDocuments.sort((a, b) => {
       const scoreA = a.metadata.score || 0;
       const scoreB = b.metadata.score || 0;
-      return scoreB - scoreA;
+
+      // If scores are significantly different, sort by score
+      const scoreDiff = scoreB - scoreA;
+      if (Math.abs(scoreDiff) > 0.01) {
+        return scoreDiff;
+      }
+
+      // If scores are similar and both are chunks from the same note, sort by chunk index
+      if (a.metadata.isChunk && b.metadata.isChunk && a.metadata.path === b.metadata.path) {
+        const aChunkIndex = parseInt(a.metadata.chunkId?.split("#")[1] || "0");
+        const bChunkIndex = parseInt(b.metadata.chunkId?.split("#")[1] || "0");
+        return aChunkIndex - bChunkIndex; // Ascending order for chunks within same note
+      }
+
+      // Otherwise, maintain score order
+      return scoreDiff;
     });
   }
 }

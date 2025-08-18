@@ -1,6 +1,7 @@
 import { logError, logInfo } from "@/logger";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { App } from "obsidian";
+import { ChunkManager } from "./chunks";
 import { FullTextEngine } from "./engines/FullTextEngine";
 import { NoteIdRank, SearchOptions } from "./interfaces";
 import { MemoryIndexManager } from "./MemoryIndexManager";
@@ -20,6 +21,7 @@ const FULLTEXT_RESULT_MULTIPLIER = 2;
 
 /**
  * Core search engine that orchestrates the multi-stage retrieval pipeline
+ * Updated to support unified chunking architecture
  */
 export class SearchCore {
   private grepScanner: GrepScanner;
@@ -28,13 +30,15 @@ export class SearchCore {
   private folderBoostCalculator: FolderBoostCalculator;
   private graphBoostCalculator: GraphBoostCalculator;
   private scoreNormalizer: ScoreNormalizer;
+  private chunkManager: ChunkManager;
 
   constructor(
     private app: App,
     private getChatModel?: () => Promise<BaseChatModel | null>
   ) {
     this.grepScanner = new GrepScanner(app);
-    this.fullTextEngine = new FullTextEngine(app);
+    this.chunkManager = new ChunkManager(app);
+    this.fullTextEngine = new FullTextEngine(app, this.chunkManager);
     this.queryExpander = new QueryExpander({
       getChatModel: this.getChatModel,
       maxVariants: 3,
@@ -56,10 +60,10 @@ export class SearchCore {
   }
 
   /**
-   * Main retrieval pipeline
+   * Main retrieval pipeline (now chunk-based by default)
    * @param query - User's search query
    * @param options - Search options
-   * @returns Ranked list of note IDs
+   * @returns Ranked list of chunk IDs
    */
   async retrieve(query: string, options: SearchOptions = {}): Promise<NoteIdRank[]> {
     // Validate and sanitize options
@@ -100,7 +104,7 @@ export class SearchCore {
       const recallQueries = [...queries, ...salientTerms];
 
       // 5, 6 & 7. Run lexical and semantic searches in parallel
-      const [fullTextResults, semanticResults] = await Promise.all([
+      const [lexicalResults, semanticResults] = await Promise.all([
         this.executeLexicalSearch(
           candidates,
           recallQueries,
@@ -113,7 +117,12 @@ export class SearchCore {
           : Promise.resolve([]),
       ]);
 
-      // 8. Weighted RRF with normalized weights
+      // 8. Apply boosts to lexical results BEFORE RRF fusion
+      // This ensures boosts are applied as lexical reranking
+      let fullTextResults = this.folderBoostCalculator.applyBoosts(lexicalResults);
+      fullTextResults = this.graphBoostCalculator.applyBoost(fullTextResults);
+
+      // 9. Weighted RRF with normalized weights (boosts already applied to lexical)
       // semanticWeight now represents the percentage (0-1) for semantic
       // lexical gets the remainder to ensure weights sum to 1.0
       let fusedResults = weightedRRF({
@@ -125,16 +134,6 @@ export class SearchCore {
         },
         k: rrfK,
       });
-
-      // 9. Apply folder boost (after RRF, before graph boost)
-      fusedResults = this.folderBoostCalculator.applyBoosts(fusedResults);
-
-      // 10. Apply graph boost (analyzes connections within top results)
-      fusedResults = this.graphBoostCalculator.applyBoost(fusedResults);
-
-      // CRITICAL: Re-sort after boosts to maintain correct order
-      // Boosts modify scores but don't re-sort, which can lead to incorrect normalization
-      fusedResults.sort((a, b) => b.score - a.score);
 
       // 10. Apply score normalization to prevent auto-1.0
       fusedResults = this.scoreNormalizer.normalize(fusedResults);
@@ -194,6 +193,13 @@ export class SearchCore {
     return {
       fullTextStats: this.fullTextEngine.getStats(),
     };
+  }
+
+  /**
+   * Get the shared ChunkManager instance
+   */
+  getChunkManager(): ChunkManager {
+    return this.chunkManager;
   }
 
   /**

@@ -1,9 +1,10 @@
 import { logInfo } from "@/logger";
+import { CHUNK_SIZE } from "@/constants";
 import FlexSearch from "flexsearch";
 import { App, TFile, getAllTags } from "obsidian";
+import { ChunkManager } from "../chunks";
 import { NoteDoc, NoteIdRank, SearchExplanation } from "../interfaces";
 import { MemoryManager } from "../utils/MemoryManager";
-import { VaultPathValidator } from "../utils/VaultPathValidator";
 
 /**
  * Full-text search engine using ephemeral FlexSearch index built per-query
@@ -11,19 +12,40 @@ import { VaultPathValidator } from "../utils/VaultPathValidator";
 export class FullTextEngine {
   private index: any; // FlexSearch.Document
   private memoryManager: MemoryManager;
-  private indexedDocs = new Set<string>();
+  private indexedChunks = new Set<string>();
+  private chunkManager: ChunkManager;
 
-  // Security: Maximum content size to prevent memory exhaustion (10MB)
-  private static readonly MAX_CONTENT_SIZE = 10 * 1024 * 1024;
+  // Configuration constants
+  private static readonly MAX_CONTENT_SIZE = 10 * 1024 * 1024; // 10MB security limit
+  private static readonly BATCH_SIZE = 10; // Chunk indexing batch size for UI yielding
+  private static readonly CHUNK_MEMORY_PERCENTAGE = 0.35; // 35% of memory budget for chunks
+  private static readonly MAX_ARRAY_ITEMS = 10; // Max items to process from arrays
+  private static readonly MAX_EXTRACTION_DEPTH = 2; // Max recursion depth for property extraction
 
-  constructor(private app: App) {
+  // Field weights for search scoring
+  private static readonly FIELD_WEIGHTS = {
+    title: 3,
+    path: 1.5,
+    headings: 1.5,
+    tags: 1.5,
+    props: 1.5,
+    links: 1.5,
+    body: 1,
+  } as const;
+
+  constructor(
+    private app: App,
+    chunkManager?: ChunkManager
+  ) {
     this.memoryManager = new MemoryManager();
+    this.chunkManager = chunkManager || new ChunkManager(app);
     // Defer index creation to avoid blocking UI on initialization
     this.index = null as any;
   }
 
   /**
    * Create a new FlexSearch index with multilingual tokenization
+   * Updated for chunk-based indexing
    */
   private createIndex(): any {
     const Document = (FlexSearch as any).Document;
@@ -35,15 +57,12 @@ export class FullTextEngine {
       document: {
         id: "id",
         index: [
-          { field: "title", tokenize: tokenizer, weight: 3 },
-          { field: "path", tokenize: tokenizer, weight: 2.5 }, // Path components are highly relevant
-          { field: "headings", tokenize: tokenizer, weight: 2 },
-          { field: "tags", tokenize: tokenizer, weight: 2 },
-          { field: "props", tokenize: tokenizer, weight: 2 }, // Frontmatter property values
-          { field: "links", tokenize: tokenizer, weight: 2 },
-          { field: "body", tokenize: tokenizer, weight: 1 },
+          { field: "title", tokenize: tokenizer, weight: 3 }, // Note title
+          { field: "heading", tokenize: tokenizer, weight: 2.5 }, // Section heading
+          { field: "path", tokenize: tokenizer, weight: 2 }, // Path components
+          { field: "body", tokenize: tokenizer, weight: 1 }, // Chunk content
         ],
-        store: false, // Don't store docs to save memory
+        store: ["id", "notePath", "title", "heading", "chunkIndex"], // Store metadata only, not body
       },
     });
   }
@@ -82,105 +101,120 @@ export class FullTextEngine {
   }
 
   /**
-   * Build ephemeral index from candidate note paths
+   * Build ephemeral index from candidate note paths by chunking them
    * @param candidatePaths - Array of note paths to index
-   * @returns Number of documents indexed
+   * @returns Number of chunks indexed
    */
   async buildFromCandidates(candidatePaths: string[]): Promise<number> {
-    logInfo(
-      `FullTextEngine: Starting buildFromCandidates with ${candidatePaths.length} candidates`
-    );
+    logInfo(`FullTextEngine: [CHUNKS] Starting with ${candidatePaths.length} candidate notes`);
 
-    // Clear existing data but defer index creation
-    logInfo(`FullTextEngine: Clearing indexed docs (current size: ${this.indexedDocs.size})`);
-    this.indexedDocs.clear();
-
-    logInfo(`FullTextEngine: About to reset memory manager`);
+    // Clear existing data
+    this.indexedChunks.clear();
     this.memoryManager.reset();
-    logInfo(`FullTextEngine: Memory manager reset complete`);
 
-    // Create new index only when needed (lazy initialization)
+    // Create new index
     if (!this.index) {
-      logInfo(`FullTextEngine: Index doesn't exist, creating new FlexSearch index...`);
-      // Yield to UI thread before creating index
       await new Promise((resolve) => setTimeout(resolve, 0));
       const startTime = Date.now();
       this.index = this.createIndex();
       const createTime = Date.now() - startTime;
       logInfo(`FullTextEngine: FlexSearch index created in ${createTime}ms`);
-    } else {
-      logInfo(`FullTextEngine: Reusing existing FlexSearch index`);
     }
 
-    let indexed = 0;
-    const limitedCandidates = candidatePaths.slice(0, this.memoryManager.getCandidateLimit());
-    const BATCH_SIZE = 5; // Process fewer files between UI yields for better responsiveness
+    // Convert note paths to chunks
+    const chunkOptions = {
+      maxChars: CHUNK_SIZE,
+      overlap: 0,
+      maxBytesTotal: this.memoryManager.getMaxBytes() * FullTextEngine.CHUNK_MEMORY_PERCENTAGE,
+    };
 
-    for (let i = 0; i < limitedCandidates.length; i++) {
-      const path = limitedCandidates[i];
-      // Guard against path traversal or invalid inputs
-      if (!VaultPathValidator.isValid(path)) {
-        logInfo(`FullText: Skipping unsafe path ${path}`);
-        continue;
-      }
-      if (!this.memoryManager.canAddContent(1000)) {
-        // Rough estimate
-        logInfo(
-          `FullText: Memory limit reached (${indexed} docs, ${this.memoryManager.getUsagePercent()}% used)`
-        );
+    const chunks = await this.chunkManager.getChunks(candidatePaths, chunkOptions);
+
+    if (chunks.length === 0) {
+      logInfo("FullTextEngine: No chunks generated");
+      return 0;
+    }
+
+    logInfo(
+      `FullTextEngine: Generated ${chunks.length} chunks from ${candidatePaths.length} notes`
+    );
+
+    // Index chunks
+    let indexed = 0;
+    const BATCH_SIZE = FullTextEngine.BATCH_SIZE;
+    const processedNotes = new Map<string, { tags: string[]; links: string[]; props: string[] }>();
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+
+      const contentSize = Buffer.byteLength(chunk.content, "utf8");
+      if (!this.memoryManager.canAddContent(contentSize)) {
+        logInfo(`FullTextEngine: Memory limit reached at ${indexed} chunks`);
         break;
       }
 
-      const file = this.app.vault.getAbstractFileByPath(path);
-      if (file instanceof TFile) {
-        const doc = await this.createNoteDoc(file);
-        if (doc) {
-          const bodySize = MemoryManager.getByteSize(doc.body);
+      // Extract path components for searchability
+      const pathComponents = chunk.notePath.replace(/\.md$/, "").split("/").join(" ");
 
-          if (this.memoryManager.canAddContent(bodySize)) {
-            // Extract basenames from links for searchability (optimized)
-            const linkBasenames = [...doc.linksOut, ...doc.linksIn]
-              .map((path) => {
-                const lastSlash = path.lastIndexOf("/");
-                const basename = lastSlash >= 0 ? path.slice(lastSlash + 1) : path;
-                return basename.endsWith(".md") ? basename.slice(0, -3) : basename;
-              })
-              .join(" ");
+      // Extract note metadata (cache per note for efficiency)
+      let noteMetadata = processedNotes.get(chunk.notePath);
+      if (!noteMetadata) {
+        const file = this.app.vault.getAbstractFileByPath(chunk.notePath);
+        if (file instanceof TFile) {
+          const cache = this.app.metadataCache.getFileCache(file);
+          const allTags = cache ? (getAllTags(cache) ?? []) : [];
+          const frontmatter = cache?.frontmatter ?? {};
 
-            // Extract path components for searchability
-            // "Piano Lessons/Lesson 2.md" → "Piano Lessons Lesson 2"
-            const pathComponents = doc.id.replace(/\.md$/, "").split("/").join(" ");
+          // Get links
+          const outgoing = this.app.metadataCache.resolvedLinks[file.path] ?? {};
+          const backlinks = this.app.metadataCache.getBacklinksForFile(file)?.data ?? {};
+          const linksOut = Object.keys(outgoing);
+          const linksIn = Object.keys(backlinks);
+          const allLinks = [...linksOut, ...linksIn];
 
-            // Extract frontmatter property values for searchability
-            const propValues = this.extractPropertyValues(doc.props);
+          // Extract frontmatter property values for search indexing
+          const propValues = this.extractPropertyValues(frontmatter);
 
-            // Add to index (this is the expensive operation)
-            this.index.add({
-              id: doc.id,
-              title: doc.title,
-              path: pathComponents, // Index folder and file names
-              headings: doc.headings.join(" "),
-              tags: doc.tags.join(" "),
-              props: propValues.join(" "), // Index frontmatter property values
-              links: linkBasenames, // Index link basenames for search
-              body: doc.body,
-            });
-
-            this.memoryManager.addBytes(bodySize);
-            this.indexedDocs.add(doc.id);
-            indexed++;
-          }
+          noteMetadata = {
+            tags: allTags,
+            links: allLinks,
+            props: propValues,
+          };
+          processedNotes.set(chunk.notePath, noteMetadata);
+        } else {
+          noteMetadata = { tags: [], links: [], props: [] };
         }
       }
 
-      // Yield to UI thread periodically to prevent blocking
+      // Add chunk to index (body indexed but not stored)
+      // Include frontmatter properties in body for searchability
+      const bodyWithProps = [chunk.content, ...noteMetadata.props].join(" ");
+
+      this.index.add({
+        id: chunk.id,
+        title: chunk.title,
+        heading: chunk.heading,
+        path: pathComponents,
+        body: bodyWithProps, // Include frontmatter values in searchable content
+        tags: noteMetadata.tags,
+        links: noteMetadata.links,
+        props: noteMetadata.props.join(" "), // Keep props as string for potential future use
+        notePath: chunk.notePath,
+        chunkIndex: chunk.chunkIndex,
+      });
+
+      this.memoryManager.addBytes(contentSize);
+      this.indexedChunks.add(chunk.id);
+      indexed++;
+
+      // Yield to UI thread periodically
       if (i > 0 && i % BATCH_SIZE === 0) {
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
     }
 
     logInfo(
-      `FullText: Indexed ${indexed}/${candidatePaths.length} docs (${this.memoryManager.getUsagePercent()}% memory, ${this.memoryManager.getBytesUsed()} bytes)`
+      `FullTextEngine: [CHUNKS] Indexed ${indexed}/${chunks.length} chunks (${this.memoryManager.getUsagePercent()}% memory)`
     );
     return indexed;
   }
@@ -248,7 +282,7 @@ export class FullTextEngine {
     const propValues: string[] = [];
     if (props && typeof props === "object") {
       for (const value of Object.values(props)) {
-        this.extractPrimitiveValues(value, propValues, 2);
+        this.extractPrimitiveValues(value, propValues, FullTextEngine.MAX_EXTRACTION_DEPTH);
       }
     }
     return propValues;
@@ -273,8 +307,8 @@ export class FullTextEngine {
     } else if (value instanceof Date) {
       output.push(value.toISOString());
     } else if (Array.isArray(value)) {
-      // Limit array processing to first 10 items for performance
-      value.slice(0, 10).forEach((item) => {
+      // Limit array processing to first MAX_ARRAY_ITEMS items for performance
+      value.slice(0, FullTextEngine.MAX_ARRAY_ITEMS).forEach((item) => {
         if (typeof item === "string" || typeof item === "number" || typeof item === "boolean") {
           const str = typeof item === "string" ? item.trim() : String(item);
           if (str) output.push(str);
@@ -485,16 +519,9 @@ export class FullTextEngine {
    * Get field weight for scoring
    */
   private getFieldWeight(fieldName: string): number {
-    const weights: Record<string, number> = {
-      title: 3, // 3x weight for title matches
-      path: 1.5, // 1.5x weight for metadata fields
-      headings: 1.5, // 1.5x weight for metadata fields
-      tags: 1.5, // 1.5x weight for metadata fields
-      props: 1.5, // 1.5x weight for metadata fields
-      links: 1.5, // 1.5x weight for metadata fields
-      body: 1, // 1x weight (baseline)
-    };
-    return weights[fieldName] || 1;
+    return (
+      FullTextEngine.FIELD_WEIGHTS[fieldName as keyof typeof FullTextEngine.FIELD_WEIGHTS] || 1
+    );
   }
 
   /**
@@ -530,11 +557,13 @@ export class FullTextEngine {
       logInfo(`FullTextEngine.clear(): Index reference nullified`);
     }
 
-    logInfo(`FullTextEngine.clear(): Clearing indexed docs set (size: ${this.indexedDocs.size})`);
-    const docsClearStartTime = Date.now();
-    this.indexedDocs.clear();
-    const docsClearTime = Date.now() - docsClearStartTime;
-    logInfo(`FullTextEngine.clear(): Indexed docs cleared in ${docsClearTime}ms`);
+    logInfo(
+      `FullTextEngine.clear(): Clearing indexed chunks set (size: ${this.indexedChunks.size})`
+    );
+    const chunksClearStartTime = Date.now();
+    this.indexedChunks.clear();
+    const chunksClearTime = Date.now() - chunksClearStartTime;
+    logInfo(`FullTextEngine.clear(): Indexed chunks cleared in ${chunksClearTime}ms`);
 
     logInfo(`FullTextEngine.clear(): About to reset memory manager`);
     this.memoryManager.reset();
@@ -550,7 +579,7 @@ export class FullTextEngine {
     memoryPercent: number;
   } {
     return {
-      documentsIndexed: this.indexedDocs.size,
+      documentsIndexed: this.indexedChunks.size,
       memoryUsed: this.memoryManager.getBytesUsed(),
       memoryPercent: this.memoryManager.getUsagePercent(),
     };
