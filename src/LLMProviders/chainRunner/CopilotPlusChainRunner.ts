@@ -40,6 +40,7 @@ import {
   formatSearchResultStringForLLM,
   extractSourcesFromSearchResults,
 } from "./utils/searchResultUtils";
+import { deduplicateSources } from "./utils/toolExecution";
 
 export class CopilotPlusChainRunner extends BaseChainRunner {
   private isYoutubeOnlyMessage(message: string): boolean {
@@ -594,7 +595,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       }
     }
 
-    return { toolOutputs, sources: allSources };
+    return { toolOutputs, sources: deduplicateSources(allSources) };
   }
 
   private prepareEnhancedUserMessage(userMessage: string, toolOutputs: any[], toolCalls?: any[]) {

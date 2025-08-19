@@ -170,6 +170,7 @@ export class SearchCore {
         // Weighted RRF with normalized weights (boosts already applied to lexical)
         // semanticWeight now represents the percentage (0-1) for semantic
         // lexical gets the remainder to ensure weights sum to 1.0
+        // Both lexical and semantic now return chunk IDs so no normalization needed
         fusedResults = weightedRRF({
           lexical: fullTextResults,
           semantic: semanticResults,

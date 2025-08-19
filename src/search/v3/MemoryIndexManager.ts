@@ -176,7 +176,7 @@ export class MemoryIndexManager {
 
     if (variantVectors.length === 0) return [];
 
-    const noteToScores = new Map<string, number[]>();
+    const chunkToScores = new Map<string, number[]>();
     const candidateSet = candidates && candidates.length > 0 ? new Set(candidates) : null;
 
     // Log candidate restriction for verification
@@ -197,16 +197,19 @@ export class MemoryIndexManager {
     for (const qv of variantVectors) {
       const results = await this.vectorStore.similaritySearchVectorWithScore(qv, kPerQuery);
       for (const [doc, score] of results) {
-        const path = (doc.metadata as any)?.path as string;
-        if (candidateSet && !candidateSet.has(path)) {
+        const chunkId = (doc.metadata as any)?.id as string;
+        const notePath = (doc.metadata as any)?.path as string;
+
+        // Filter by candidate note paths (chunk ID should start with candidate path)
+        if (candidateSet && !candidateSet.has(notePath)) {
           totalSkipped++;
           continue;
         }
         totalIncluded++;
         const normalized = Math.max(0, Math.min(1, typeof score === "number" ? score : 0));
-        const arr = noteToScores.get(path) ?? [];
+        const arr = chunkToScores.get(chunkId) ?? [];
         arr.push(normalized);
-        noteToScores.set(path, arr);
+        chunkToScores.set(chunkId, arr);
       }
     }
 
@@ -217,8 +220,8 @@ export class MemoryIndexManager {
       );
     }
 
-    // Aggregate scores per note
-    const aggregated = this.aggregateScores(noteToScores);
+    // Aggregate scores per chunk (multiple queries may hit the same chunk)
+    const aggregated = this.aggregateChunkScores(chunkToScores);
 
     // Optional score normalization
     if (aggregated.length > 1) {
@@ -229,7 +232,7 @@ export class MemoryIndexManager {
   }
 
   /**
-   * Aggregate multiple scores per note
+   * Aggregate multiple scores per note (legacy method for backward compatibility)
    */
   private aggregateScores(
     noteToScores: Map<string, number[]>
@@ -241,6 +244,23 @@ export class MemoryIndexManager {
       const top = arr.slice(0, Math.min(MemoryIndexManager.SCORE_AGGREGATION_TOP_K, arr.length));
       const avg = top.reduce((s, v) => s + v, 0) / top.length;
       aggregated.push({ id, score: avg });
+    }
+
+    return aggregated;
+  }
+
+  /**
+   * Aggregate multiple scores per chunk (for individual chunk results)
+   */
+  private aggregateChunkScores(
+    chunkToScores: Map<string, number[]>
+  ): Array<{ id: string; score: number }> {
+    const aggregated: Array<{ id: string; score: number }> = [];
+
+    for (const [chunkId, scores] of chunkToScores.entries()) {
+      // Take the best score from multiple query variants for this chunk
+      const bestScore = Math.max(...scores);
+      aggregated.push({ id: chunkId, score: bestScore });
     }
 
     return aggregated;
