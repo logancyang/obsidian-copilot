@@ -532,9 +532,9 @@ export class FullTextEngine {
       // Simple: destroy index if it exists
       if (this.index) {
         try {
-          if (this.index.destroy) {
+          if (this.index?.destroy) {
             this.index.destroy();
-          } else if (this.index.clear) {
+          } else if (this.index?.clear) {
             this.index.clear();
           }
         } catch (error) {

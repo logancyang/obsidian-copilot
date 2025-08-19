@@ -813,4 +813,125 @@ describe("FullTextEngine", () => {
       await expect(engine.buildFromCandidates(["circular.md"])).resolves.toBe(1);
     });
   });
+
+  describe("clear method", () => {
+    it("should safely clear when index is null (not yet created)", () => {
+      // Engine starts with null index
+      expect((engine as any).index).toBeNull();
+
+      // Should not throw error when clearing uninitialized index
+      expect(() => engine.clear()).not.toThrow();
+
+      // Should still reset collections
+      expect((engine as any).indexedChunks.size).toBe(0);
+    });
+
+    it("should properly clear after index has been created", async () => {
+      // Build index first
+      await engine.buildFromCandidates(["note1.md", "note2.md"]);
+
+      // Verify index was created and chunks indexed
+      expect((engine as any).index).not.toBeNull();
+      expect((engine as any).indexedChunks.size).toBeGreaterThan(0);
+
+      // Clear should not throw
+      expect(() => engine.clear()).not.toThrow();
+
+      // Should reset state
+      expect((engine as any).index).toBeNull();
+      expect((engine as any).indexedChunks.size).toBe(0);
+    });
+
+    it("should allow multiple clear calls safely", async () => {
+      // Build index
+      await engine.buildFromCandidates(["note1.md"]);
+
+      // Multiple clears should all work
+      expect(() => engine.clear()).not.toThrow();
+      expect(() => engine.clear()).not.toThrow();
+      expect(() => engine.clear()).not.toThrow();
+
+      // State should remain clean
+      expect((engine as any).index).toBeNull();
+      expect((engine as any).indexedChunks.size).toBe(0);
+    });
+
+    it("should handle index with destroy method", async () => {
+      await engine.buildFromCandidates(["note1.md"]);
+
+      // Mock index with destroy method
+      const mockDestroy = jest.fn();
+      (engine as any).index = {
+        destroy: mockDestroy,
+      };
+
+      engine.clear();
+
+      // Should call destroy method
+      expect(mockDestroy).toHaveBeenCalledTimes(1);
+      expect((engine as any).index).toBeNull();
+    });
+
+    it("should handle index with clear method when destroy is not available", async () => {
+      await engine.buildFromCandidates(["note1.md"]);
+
+      // Mock index with only clear method
+      const mockClear = jest.fn();
+      (engine as any).index = {
+        clear: mockClear,
+      };
+
+      engine.clear();
+
+      // Should call clear method
+      expect(mockClear).toHaveBeenCalledTimes(1);
+      expect((engine as any).index).toBeNull();
+    });
+
+    it("should handle index without destroy or clear methods", async () => {
+      await engine.buildFromCandidates(["note1.md"]);
+
+      // Mock index without cleanup methods
+      (engine as any).index = {
+        someOtherMethod: jest.fn(),
+      };
+
+      // Should not throw and still reset
+      expect(() => engine.clear()).not.toThrow();
+      expect((engine as any).index).toBeNull();
+    });
+
+    it("should continue cleanup even if index cleanup throws", async () => {
+      await engine.buildFromCandidates(["note1.md"]);
+
+      // Mock index that throws on cleanup
+      (engine as any).index = {
+        destroy: jest.fn(() => {
+          throw new Error("Mock cleanup failure");
+        }),
+      };
+
+      // Should not throw despite index cleanup error
+      expect(() => engine.clear()).not.toThrow();
+
+      // Should still reset state
+      expect((engine as any).index).toBeNull();
+      expect((engine as any).indexedChunks.size).toBe(0);
+    });
+
+    it("should reset memory manager during clear", async () => {
+      await engine.buildFromCandidates(["note1.md", "note2.md"]);
+
+      // Verify some memory is used
+      const statsBefore = engine.getStats();
+      expect(statsBefore.memoryUsed).toBeGreaterThan(0);
+
+      engine.clear();
+
+      // Memory should be reset
+      const statsAfter = engine.getStats();
+      expect(statsAfter.memoryUsed).toBe(0);
+      expect(statsAfter.documentsIndexed).toBe(0);
+    });
+  });
 });
