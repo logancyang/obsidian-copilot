@@ -28,6 +28,7 @@ export class IndexingPipeline {
 
   private splitter: RecursiveCharacterTextSplitter;
   private rateLimiter: RateLimiter;
+  private baselineMemoryMB: number | null = null;
 
   constructor(
     private app: App,
@@ -103,12 +104,20 @@ export class IndexingPipeline {
   ): Promise<JsonlChunkRecord[]> {
     if (chunks.length === 0) return [];
 
+    // Set baseline memory at start of batch processing
+    this.baselineMemoryMB = this.getMemoryUsageMB();
+    logInfo(
+      `IndexingPipeline: Starting batch processing - Baseline memory: ${this.baselineMemoryMB.toFixed(1)}MB, ${chunks.length} chunks, ${fileChunkMap.size} files`
+    );
+
     const embeddings = await EmbeddingManager.getInstance().getEmbeddingsAPI();
     const batchSize = Math.max(
       IndexingPipeline.MIN_BATCH_SIZE,
       getSettings().embeddingBatchSize || IndexingPipeline.DEFAULT_BATCH_SIZE
     );
     const records: JsonlChunkRecord[] = [];
+
+    logInfo(`IndexingPipeline: Using batch size ${batchSize} for embedding generation`);
 
     // Initialize progress tracking
     for (const [path, fileChunks] of fileChunkMap.entries()) {
@@ -123,12 +132,29 @@ export class IndexingPipeline {
       const batch = chunks.slice(i, i + batchSize);
       const texts = batch.map((chunk) => chunk.text);
 
+      // Log incremental memory usage before embedding API call
+      const preEmbeddingMemory = this.getMemoryUsageMB();
+      const preEmbeddingIncremental = preEmbeddingMemory - this.baselineMemoryMB!;
+      const batchNumber = Math.floor(i / batchSize) + 1;
+      const totalBatches = Math.ceil(chunks.length / batchSize);
+      logInfo(
+        `IndexingPipeline: Processing batch ${batchNumber}/${totalBatches} (${batch.length} chunks) - Incremental memory before embedding: +${preEmbeddingIncremental.toFixed(1)}MB`
+      );
+
       // Apply rate limiting
       await this.rateLimiter.wait();
 
       let vecs;
       try {
         vecs = await embeddings.embedDocuments(texts);
+
+        // Log incremental memory usage after embedding generation
+        const postEmbeddingMemory = this.getMemoryUsageMB();
+        const postEmbeddingIncremental = postEmbeddingMemory - this.baselineMemoryMB!;
+        const batchMemoryIncrease = postEmbeddingIncremental - preEmbeddingIncremental;
+        logInfo(
+          `IndexingPipeline: Batch ${batchNumber} embeddings complete - Incremental memory after: +${postEmbeddingIncremental.toFixed(1)}MB (+${batchMemoryIncrease.toFixed(1)}MB for this batch)`
+        );
       } catch (error: any) {
         // Log token counts for debugging when embedding fails
         if (error?.message?.includes("context length") || error?.message?.includes("token")) {
@@ -146,7 +172,7 @@ export class IndexingPipeline {
       vecs.forEach((embedding, j) => {
         const chunk = batch[j];
         records.push({
-          id: `${chunk.path}#${chunk.chunkIndex.toString().padStart(3, "0")}`,
+          id: `${chunk.path}#${chunk.chunkIndex.toString()}`,
           path: chunk.path,
           title: chunk.title,
           mtime: chunk.mtime,
@@ -215,7 +241,7 @@ export class IndexingPipeline {
       vecs.forEach((embedding, j) => {
         const chunk = batch[j];
         records.push({
-          id: `${chunk.path}#${chunk.chunkIndex.toString().padStart(3, "0")}`,
+          id: `${chunk.path}#${chunk.chunkIndex.toString()}`,
           path: chunk.path,
           title: chunk.title,
           mtime: chunk.mtime,
@@ -233,5 +259,20 @@ export class IndexingPipeline {
    */
   updateRateLimiter(requestsPerMin: number): void {
     this.rateLimiter.setRequestsPerMin(requestsPerMin);
+  }
+
+  /**
+   * Get current memory usage in MB
+   */
+  private getMemoryUsageMB(): number {
+    if (typeof process !== "undefined" && process.memoryUsage) {
+      const usage = process.memoryUsage();
+      return usage.heapUsed / 1024 / 1024;
+    }
+    // Fallback for browser environments
+    if (typeof performance !== "undefined" && (performance as any).memory) {
+      return (performance as any).memory.usedJSHeapSize / 1024 / 1024;
+    }
+    return 0;
   }
 }

@@ -21,9 +21,10 @@ export class IndexPersistenceManager {
   private static readonly MAX_PARTITIONS = 1000;
   private static readonly PARTITION_INDEX_PADDING = 3; // for padStart(3, "0")
 
-  // Memory safety thresholds
-  private static readonly MEMORY_WARNING_THRESHOLD_MB = 500; // Warn at 500MB
-  private static readonly MEMORY_CRITICAL_THRESHOLD_MB = 800; // Critical at 800MB
+  // Memory safety thresholds for INCREMENTAL memory usage during indexing
+  private static readonly INCREMENTAL_MEMORY_WARNING_THRESHOLD_MB = 500; // Warn if indexing uses more than 500MB
+
+  private baselineMemoryMB: number | null = null;
 
   // Processing batch constants
   private static readonly WRITE_BATCH_SIZE = 1000; // Records per batch for writeRecords
@@ -54,17 +55,39 @@ export class IndexPersistenceManager {
   }
 
   /**
-   * Check if current memory usage is within safe limits
+   * Set baseline memory usage at the start of indexing operations
+   */
+  private setBaselineMemory(): void {
+    this.baselineMemoryMB = this.getMemoryUsageMB();
+    logInfo(`IndexPersistence: Baseline memory set to ${this.baselineMemoryMB.toFixed(1)}MB`);
+  }
+
+  /**
+   * Check if current incremental memory usage is within safe limits
    */
   private checkMemorySafety(operation: string): void {
-    const memoryMB = this.getMemoryUsageMB();
+    const currentMemoryMB = this.getMemoryUsageMB();
 
-    if (memoryMB > IndexPersistenceManager.MEMORY_CRITICAL_THRESHOLD_MB) {
-      throw new Error(
-        `Memory usage critical (${memoryMB.toFixed(1)}MB) during ${operation}. Operation aborted to prevent OOM.`
+    if (this.baselineMemoryMB === null) {
+      // If baseline not set, set it now and log absolute usage
+      this.setBaselineMemory();
+      logInfo(
+        `Memory usage: ${currentMemoryMB.toFixed(1)}MB during ${operation} (baseline established)`
       );
-    } else if (memoryMB > IndexPersistenceManager.MEMORY_WARNING_THRESHOLD_MB) {
-      logWarn(`High memory usage detected (${memoryMB.toFixed(1)}MB) during ${operation}`);
+      return;
+    }
+
+    const incrementalMemoryMB = currentMemoryMB - this.baselineMemoryMB;
+
+    // Always log incremental memory usage during indexing operations for debugging
+    logInfo(
+      `Incremental memory usage: +${incrementalMemoryMB.toFixed(1)}MB (${currentMemoryMB.toFixed(1)}MB total) during ${operation}`
+    );
+
+    if (incrementalMemoryMB > IndexPersistenceManager.INCREMENTAL_MEMORY_WARNING_THRESHOLD_MB) {
+      logWarn(
+        `High incremental memory usage detected (+${incrementalMemoryMB.toFixed(1)}MB) during ${operation}`
+      );
     }
   }
 

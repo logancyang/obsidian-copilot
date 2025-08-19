@@ -7,7 +7,7 @@ import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
  * Chunk interface for unified search system
  */
 export interface Chunk {
-  id: string; // note_path#chunk_index (zero-padded)
+  id: string; // note_path#chunk_index (0-based, non-padded)
   notePath: string; // original note path
   chunkIndex: number; // 0-based chunk position
   content: string; // chunk text with headers
@@ -410,12 +410,12 @@ export class ChunkManager {
   }
 
   /**
-   * Generate deterministic chunk ID with zero-padded index
+   * Generate deterministic chunk ID with numeric index
+   * Format: "note_path#chunk_index" (e.g., "note.md#0", "note.md#123")
+   * No padding allows unlimited chunks per note
    */
   private generateChunkId(notePath: string, chunkIndex: number): string {
-    // Zero-pad index to 3 digits for consistent sorting
-    const paddedIndex = chunkIndex.toString().padStart(3, "0");
-    return `${notePath}#${paddedIndex}`;
+    return `${notePath}#${chunkIndex}`;
   }
 
   /**

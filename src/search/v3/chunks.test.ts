@@ -148,7 +148,7 @@ describe("ChunkManager", () => {
       const chunks = await chunkManager.getChunks(["short.md"], defaultOptions);
 
       expect(chunks).toHaveLength(1);
-      expect(chunks[0].id).toBe("short.md#000");
+      expect(chunks[0].id).toBe("short.md#0");
       expect(chunks[0].notePath).toBe("short.md");
       expect(chunks[0].chunkIndex).toBe(0);
       expect(chunks[0].content).toContain("This is a short note");
@@ -161,10 +161,10 @@ describe("ChunkManager", () => {
 
       expect(chunks.length).toBeGreaterThan(1);
 
-      // Verify chunk IDs are sequential with zero-padding
+      // Verify chunk IDs are sequential
       chunks.forEach((chunk, index) => {
-        const paddedIndex = index.toString().padStart(3, "0");
-        expect(chunk.id).toBe(`long.md#${paddedIndex}`);
+        const chunkIndex = index.toString();
+        expect(chunk.id).toBe(`long.md#${chunkIndex}`);
         expect(chunk.notePath).toBe("long.md");
         expect(chunk.chunkIndex).toBe(index);
       });
@@ -439,7 +439,7 @@ describe("ChunkManager", () => {
       });
     };
 
-    it("should always use zero-padded format for chunk IDs", async () => {
+    it("should use non-padded format for chunk IDs", async () => {
       // Create content that will generate multiple chunks - make it much longer
       const paragraph =
         "This is a substantial paragraph with enough content to create multiple chunks when split by the chunking algorithm. ".repeat(
@@ -457,16 +457,9 @@ describe("ChunkManager", () => {
       expect(chunks.length).toBeGreaterThan(1);
 
       chunks.forEach((chunk, index) => {
-        // Verify format is always zero-padded to 3 digits
-        const expectedId = `test.md#${index.toString().padStart(3, "0")}`;
+        // Verify format uses simple numeric index (no padding)
+        const expectedId = `test.md#${index.toString()}`;
         expect(chunk.id).toBe(expectedId);
-
-        // Verify no old format IDs are generated
-        const oldFormatId = `test.md#${index}`;
-        if (index < 10) {
-          // Only check for single digits where old/new would differ
-          expect(chunk.id).not.toBe(oldFormatId);
-        }
       });
     });
 
@@ -498,10 +491,10 @@ describe("ChunkManager", () => {
       expect(chunks.length).toBeGreaterThanOrEqual(10);
 
       // Check various indices
-      expect(chunks[0].id).toBe("multi-chunk.md#000");
-      expect(chunks[5].id).toBe("multi-chunk.md#005");
+      expect(chunks[0].id).toBe("multi-chunk.md#0");
+      expect(chunks[5].id).toBe("multi-chunk.md#5");
       if (chunks.length > 10) {
-        expect(chunks[10].id).toBe("multi-chunk.md#010");
+        expect(chunks[10].id).toBe("multi-chunk.md#10");
       }
     });
 
@@ -516,18 +509,13 @@ describe("ChunkManager", () => {
 
       expect(chunks).toHaveLength(1);
 
-      const correctId = "exact-match.md#000";
-      const incorrectId = "exact-match.md#0"; // old format
+      const correctId = "exact-match.md#0";
 
       expect(chunks[0].id).toBe(correctId);
 
       // Should find with correct ID
       const foundContent = chunkManager.getChunkTextSync(correctId);
       expect(foundContent).toBeTruthy();
-
-      // Should NOT find with old format ID
-      const notFoundContent = chunkManager.getChunkTextSync(incorrectId);
-      expect(notFoundContent).toBe("");
     });
 
     it("should maintain ID format consistency in async methods", async () => {
@@ -541,26 +529,27 @@ describe("ChunkManager", () => {
 
       const chunkId = chunks[0].id;
 
-      expect(chunkId).toBe("async-test.md#000");
+      expect(chunkId).toBe("async-test.md#0");
 
       // Test async getChunkText
       const asyncContent = await chunkManager.getChunkText(chunkId);
       expect(asyncContent).toBeTruthy();
 
-      // Test with wrong format should not work
-      const wrongFormatContent = await chunkManager.getChunkText("async-test.md#0");
-      expect(wrongFormatContent).toBe("");
+      // Test with current format should work
+      const currentFormatContent = await chunkManager.getChunkText("async-test.md#0");
+      expect(currentFormatContent).toBeTruthy();
     });
 
-    it("should generate IDs with correct zero-padding for all ranges", async () => {
+    it("should generate IDs with non-padded format for all ranges", async () => {
       // Test edge cases: 0-9, 10-99, 100+
       const testCases = [
-        { index: 0, expected: "000" },
-        { index: 5, expected: "005" },
-        { index: 10, expected: "010" },
-        { index: 99, expected: "099" },
+        { index: 0, expected: "0" },
+        { index: 5, expected: "5" },
+        { index: 10, expected: "10" },
+        { index: 99, expected: "99" },
         { index: 100, expected: "100" },
         { index: 999, expected: "999" },
+        { index: 1000, expected: "1000" },
       ];
 
       for (const testCase of testCases) {

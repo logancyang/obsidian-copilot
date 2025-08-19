@@ -32,6 +32,7 @@ export class MemoryIndexManager {
   private records: JsonlChunkRecord[] = [];
   private vectorStore: MemoryVectorStore | null = null;
   private rateLimiter: RateLimiter;
+  private baselineMemoryMB: number | null = null;
 
   // Helper managers
   private persistenceManager: IndexPersistenceManager;
@@ -291,12 +292,19 @@ export class MemoryIndexManager {
    */
   async indexVault(): Promise<number> {
     try {
+      const startTime = Date.now();
+      this.baselineMemoryMB = this.getMemoryUsageMB();
+
       const { inclusions, exclusions } = getMatchingPatterns();
       const files = this.app.vault
         .getMarkdownFiles()
         .filter((f) => shouldIndexFile(f, inclusions, exclusions));
 
       if (files.length === 0) return 0;
+
+      logInfo(
+        `MemoryIndex: Starting full vault indexing - ${files.length} files, baseline memory: ${this.baselineMemoryMB.toFixed(1)}MB`
+      );
 
       // Show notification
       this.notificationManager.show(files.length);
@@ -305,7 +313,21 @@ export class MemoryIndexManager {
       const progressTracker = new IndexingProgressTracker(files.length);
 
       // Prepare chunks
+      const chunksStartTime = Date.now();
+      const chunksStartMemory = this.getMemoryUsageMB();
+      const chunksStartIncremental = chunksStartMemory - this.baselineMemoryMB!;
+      logInfo(
+        `MemoryIndex: Preparing chunks - incremental memory before chunking: +${chunksStartIncremental.toFixed(1)}MB`
+      );
+
       const { chunks, fileChunkMap } = await this.indexingPipeline.prepareFileChunks(files);
+
+      const chunksEndMemory = this.getMemoryUsageMB();
+      const chunksEndIncremental = chunksEndMemory - this.baselineMemoryMB!;
+      const chunkingTime = Date.now() - chunksStartTime;
+      logInfo(
+        `MemoryIndex: Chunks prepared - ${chunks.length} chunks from ${files.length} files in ${chunkingTime}ms, incremental memory after chunking: +${chunksEndIncremental.toFixed(1)}MB (+${(chunksEndIncremental - chunksStartIncremental).toFixed(1)}MB for chunking)`
+      );
 
       if (chunks.length === 0 || this.notificationManager.shouldCancel) {
         this.notificationManager.finalize(0);
@@ -313,10 +335,24 @@ export class MemoryIndexManager {
       }
 
       // Process chunks
+      const embeddingStartTime = Date.now();
+      const embeddingStartMemory = this.getMemoryUsageMB();
+      const embeddingStartIncremental = embeddingStartMemory - this.baselineMemoryMB!;
+      logInfo(
+        `MemoryIndex: Starting embedding generation - incremental memory before embeddings: +${embeddingStartIncremental.toFixed(1)}MB`
+      );
+
       const records = await this.indexingPipeline.processChunksBatched(
         chunks,
         fileChunkMap,
         progressTracker
+      );
+
+      const embeddingEndMemory = this.getMemoryUsageMB();
+      const embeddingEndIncremental = embeddingEndMemory - this.baselineMemoryMB!;
+      const embeddingTime = Date.now() - embeddingStartTime;
+      logInfo(
+        `MemoryIndex: Embeddings generated - ${records.length} records in ${embeddingTime}ms, incremental memory after embeddings: +${embeddingEndIncremental.toFixed(1)}MB (+${(embeddingEndIncremental - embeddingStartIncremental).toFixed(1)}MB for embeddings)`
       );
 
       if (this.notificationManager.shouldCancel) {
@@ -325,11 +361,32 @@ export class MemoryIndexManager {
       }
 
       // Persist
+      const persistStartTime = Date.now();
+      const persistStartMemory = this.getMemoryUsageMB();
+      const persistStartIncremental = persistStartMemory - this.baselineMemoryMB!;
+      logInfo(
+        `MemoryIndex: Starting persistence - incremental memory before writing: +${persistStartIncremental.toFixed(1)}MB`
+      );
+
       await this.persistenceManager.writeRecords(records);
+
+      const persistEndMemory = this.getMemoryUsageMB();
+      const persistEndIncremental = persistEndMemory - this.baselineMemoryMB!;
+      const persistTime = Date.now() - persistStartTime;
+      logInfo(
+        `MemoryIndex: Persistence complete - written in ${persistTime}ms, incremental memory after writing: +${persistEndIncremental.toFixed(1)}MB (+${(persistEndIncremental - persistStartIncremental).toFixed(1)}MB for persistence)`
+      );
+
       this.loaded = false; // force reload
 
       const processedCount = fileChunkMap.size;
-      logInfo(`MemoryIndex: Indexed ${records.length} chunks from ${processedCount} files`);
+      const totalTime = Date.now() - startTime;
+      const finalMemory = this.getMemoryUsageMB();
+      const finalIncremental = finalMemory - this.baselineMemoryMB!;
+      logInfo(
+        `MemoryIndex: Indexing complete - ${records.length} chunks from ${processedCount} files in ${totalTime}ms, total incremental memory used: +${finalIncremental.toFixed(1)}MB`
+      );
+
       this.notificationManager.finalize(processedCount);
 
       return processedCount;
@@ -564,5 +621,20 @@ export class MemoryIndexManager {
    */
   public getVectorStore(): MemoryVectorStore | null {
     return this.vectorStore;
+  }
+
+  /**
+   * Get current memory usage in MB
+   */
+  private getMemoryUsageMB(): number {
+    if (typeof process !== "undefined" && process.memoryUsage) {
+      const usage = process.memoryUsage();
+      return usage.heapUsed / 1024 / 1024;
+    }
+    // Fallback for browser environments
+    if (typeof performance !== "undefined" && (performance as any).memory) {
+      return (performance as any).memory.usedJSHeapSize / 1024 / 1024;
+    }
+    return 0;
   }
 }

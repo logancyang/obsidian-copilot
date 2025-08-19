@@ -345,7 +345,14 @@ export class TieredLexicalRetriever extends BaseRetriever {
           if (!file || !(file instanceof TFile)) continue;
 
           // Get chunk content (not full note content)
-          const chunkContent = this.chunkManager.getChunkTextSync(result.id);
+          // Prefer async getter to auto-regenerate on cache miss; fall back to sync for test mocks
+          let chunkContent = "";
+          const cm: any = this.chunkManager as any;
+          if (typeof cm.getChunkText === "function") {
+            chunkContent = await cm.getChunkText(result.id);
+          } else if (typeof cm.getChunkTextSync === "function") {
+            chunkContent = cm.getChunkTextSync(result.id) || "";
+          }
           if (!chunkContent) continue;
 
           const cache = this.app.metadataCache.getFileCache(file);
