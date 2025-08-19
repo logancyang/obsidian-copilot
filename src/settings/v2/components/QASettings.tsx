@@ -1,4 +1,5 @@
 import { PatternMatchingModal } from "@/components/modals/PatternMatchingModal";
+import { SemanticSearchToggleModal } from "@/components/modals/SemanticSearchToggleModal";
 // import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
 import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
@@ -26,7 +27,14 @@ export const QASettings: React.FC = () => {
               title="Enable Semantic Search (v3)"
               description="Optional semantic search component to boost the default search performance. Use 'Refresh Vault Index' or 'Force Reindex Vault' to build the embedding index."
               checked={settings.enableSemanticSearchV3}
-              onCheckedChange={(checked) => updateSetting("enableSemanticSearchV3", checked)}
+              onCheckedChange={(checked) => {
+                // Show confirmation modal with appropriate message
+                new SemanticSearchToggleModal(
+                  app,
+                  () => updateSetting("enableSemanticSearchV3", checked),
+                  checked // true = enabling, false = disabling
+                ).open();
+              }}
             />
           )}
 
