@@ -128,20 +128,19 @@ Format your response using XML tags:
    * @returns Expanded query or fallback if timeout is reached
    */
   private async expandWithTimeout(query: string): Promise<ExpandedQuery> {
-    const controller = new AbortController();
-
-    const timeoutId = setTimeout(() => {
-      logInfo(`QueryExpander: Timeout reached for "${query}"`);
-      controller.abort();
-    }, this.config.timeout);
-
     try {
-      const result = await this.expandWithLLM(query, controller.signal);
-      clearTimeout(timeoutId);
+      const expandPromise = this.expandWithLLM(query);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          logInfo(`QueryExpander: Timeout reached for "${query}"`);
+          reject(new Error("Query expansion timeout"));
+        }, this.config.timeout);
+      });
+
+      const result = await Promise.race([expandPromise, timeoutPromise]);
       return result;
     } catch (error: any) {
-      clearTimeout(timeoutId);
-      if (error?.name === "AbortError" || controller.signal.aborted) {
+      if (error?.message === "Query expansion timeout") {
         return this.fallbackExpansion(query);
       }
       throw error;
@@ -153,12 +152,7 @@ Format your response using XML tags:
    * @param query - The query to expand
    * @returns Expanded queries and extracted salient terms
    */
-  private async expandWithLLM(query: string, signal?: AbortSignal): Promise<ExpandedQuery> {
-    // Check if already aborted
-    if (signal?.aborted) {
-      return this.fallbackExpansion(query);
-    }
-
+  private async expandWithLLM(query: string): Promise<ExpandedQuery> {
     try {
       if (!this.options.getChatModel) {
         logInfo("QueryExpander: No chat model getter provided");
@@ -178,24 +172,10 @@ Format your response using XML tags:
 
       // Invoke model with token warnings suppressed
       const response = await withSuppressedTokenWarnings(async () => {
-        // Pass AbortSignal when supported by the model implementation
-        const anyModel = model as any;
-        if (typeof anyModel.invoke === "function") {
-          try {
-            return await anyModel.invoke(prompt, { signal });
-          } catch (err) {
-            if ((err as any)?.name === "AbortError") {
-              logInfo("QueryExpander: LLM request aborted by timeout");
-              return null;
-            }
-            throw err;
-          }
-        }
         return await model.invoke(prompt);
       });
 
-      // Check if aborted after the call
-      if (signal?.aborted || !response) {
+      if (!response) {
         return this.fallbackExpansion(query);
       }
 

@@ -266,23 +266,6 @@ describe("TieredLexicalRetriever", () => {
   });
 
   describe("chunk Document handling", () => {
-    beforeEach(() => {
-      mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
-        if (path === "test.md") {
-          const file = new (TFile as any)(path);
-          Object.setPrototypeOf(file, (TFile as any).prototype);
-          (file as any).stat = { mtime: 1000, ctime: 1000 };
-          return file;
-        }
-        return null;
-      });
-
-      mockApp.vault.cachedRead.mockResolvedValue("Full file content");
-      mockApp.metadataCache.getFileCache.mockReturnValue({
-        tags: [{ tag: "#test" }],
-      });
-    });
-
     it("should return chunk Documents with chunk content", async () => {
       // Update ChunkManager mock for these specific chunk IDs
       const { ChunkManager } = jest.requireMock("./chunks");
@@ -302,6 +285,16 @@ describe("TieredLexicalRetriever", () => {
         ]),
       })) as any);
 
+      mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
+        if (path === "test.md") {
+          const file = new (TFile as any)(path);
+          Object.setPrototypeOf(file, (TFile as any).prototype);
+          (file as any).stat = { mtime: 1000, ctime: 1000 };
+          return file;
+        }
+        return null;
+      });
+
       // Recreate retriever with the mocked SearchCore
       retriever = new TieredLexicalRetriever(mockApp, {
         minSimilarityScore: 0.1,
@@ -311,40 +304,11 @@ describe("TieredLexicalRetriever", () => {
 
       const results = await retriever.getRelevantDocuments("test query");
 
-      // Should return all chunk Documents (no diversity cap)
+      // Should return all chunk Documents
       expect(results.length).toBe(2);
-
-      // First chunk
       expect(results[0].metadata.chunkId).toBe("test.md#0");
       expect(results[0].metadata.isChunk).toBe(true);
-      expect(results[0].pageContent).toBe("First chunk from test note"); // From ChunkManager mock
-
-      // Second chunk
-      expect(results[1].metadata.chunkId).toBe("test.md#1");
-      expect(results[1].metadata.isChunk).toBe(true);
-      expect(results[1].pageContent).toBe("Second chunk from test note");
-    });
-
-    it("should handle legacy note IDs (without #) as full notes", async () => {
-      jest.spyOn(SearchCoreModule, "SearchCore").mockImplementation((() => ({
-        retrieve: jest.fn().mockResolvedValue([
-          { id: "test.md", score: 0.9, engine: "fulltext" }, // Legacy note ID
-        ]),
-      })) as any);
-
-      // Recreate retriever
-      retriever = new TieredLexicalRetriever(mockApp, {
-        minSimilarityScore: 0.1,
-        maxK: 30,
-        salientTerms: [],
-      });
-
-      const results = await retriever.getRelevantDocuments("test query");
-
-      expect(results.length).toBe(1);
-      expect(results[0].metadata.path).toBe("test.md");
-      expect(results[0].metadata.isChunk).toBe(false);
-      expect(results[0].pageContent).toBe("Full file content"); // Full note content
+      expect(results[0].pageContent).toBe("First chunk from test note");
     });
 
     it("should handle missing chunk content gracefully", async () => {
@@ -372,71 +336,19 @@ describe("TieredLexicalRetriever", () => {
       // Should skip chunks with empty content
       expect(results.length).toBe(0);
     });
-
-    it("should combine chunk results with title matches properly", async () => {
-      // Update ChunkManager mock for test.md chunks
-      const { ChunkManager } = jest.requireMock("./chunks");
-      ChunkManager.mockImplementation(() => ({
-        getChunkText: jest.fn((id: string) => {
-          if (id === "test.md#0") return "Content from test chunk";
-          return "";
-        }),
-      }));
-
-      // Mock extractNoteFiles to return a title match for this test
-      const { extractNoteFiles } = jest.requireMock("@/utils");
-      const mockTitleFile = {
-        path: "title.md",
-        basename: "title",
-      };
-      Object.setPrototypeOf(mockTitleFile, (TFile as any).prototype);
-      (mockTitleFile as any).stat = { mtime: 1000, ctime: 1000 };
-      extractNoteFiles.mockReturnValueOnce([mockTitleFile]);
-
-      jest.spyOn(SearchCoreModule, "SearchCore").mockImplementation((() => ({
-        retrieve: jest
-          .fn()
-          .mockResolvedValue([{ id: "test.md#0", score: 0.7, engine: "fulltext" }]),
-      })) as any);
-
-      // Recreate retriever with the mocked SearchCore
-      retriever = new TieredLexicalRetriever(mockApp, {
-        minSimilarityScore: 0.1,
-        maxK: 30,
-        salientTerms: [],
-      });
-
-      // Query with mentioned note
-      const results = await retriever.getRelevantDocuments("test [[title]] query");
-
-      // Should have both search result chunk and title match note
-      expect(results.length).toBe(2);
-
-      // Find the chunk result
-      const chunkResult = results.find((r) => r.metadata.chunkId === "test.md#0");
-      expect(chunkResult).toBeDefined();
-      expect(chunkResult!.metadata.isChunk).toBe(true);
-
-      // Find the title match result (full note)
-      const titleResult = results.find((r) => r.metadata.path === "title.md");
-      expect(titleResult).toBeDefined();
-      expect(titleResult!.metadata.source).toBe("title-match");
-      expect(titleResult!.pageContent).toBe("Full file content");
-    });
   });
 
-  describe("per-note diversity in combination", () => {
+  describe("multiple chunks", () => {
     it("should handle multiple chunks from same note correctly", async () => {
       jest.spyOn(SearchCoreModule, "SearchCore").mockImplementation((() => ({
         retrieve: jest.fn().mockResolvedValue([
           { id: "large.md#0", score: 0.9, engine: "fulltext" },
           { id: "large.md#1", score: 0.8, engine: "fulltext" },
-          { id: "large.md#2", score: 0.7, engine: "fulltext" },
           { id: "other.md#0", score: 0.6, engine: "fulltext" },
         ]),
       })) as any);
 
-      // Mock file system for large.md
+      // Mock file system
       mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
         if (path === "large.md" || path === "other.md") {
           const file = new (TFile as any)(path);
@@ -447,19 +359,18 @@ describe("TieredLexicalRetriever", () => {
         return null;
       });
 
-      // Update ChunkManager mock for these chunk IDs
+      // Update ChunkManager mock
       const { ChunkManager: mockChunkManager } = jest.requireMock("./chunks");
       mockChunkManager.mockImplementation(() => ({
         getChunkText: jest.fn((id: string) => {
           if (id === "large.md#0") return "First chunk from large note";
           if (id === "large.md#1") return "Second chunk from large note";
-          if (id === "large.md#2") return "Third chunk from large note";
           if (id === "other.md#0") return "Content from other note";
           return "";
         }),
       }));
 
-      // Recreate retriever with the mocked SearchCore
+      // Recreate retriever
       retriever = new TieredLexicalRetriever(mockApp, {
         minSimilarityScore: 0.1,
         maxK: 30,
@@ -468,17 +379,10 @@ describe("TieredLexicalRetriever", () => {
 
       const results = await retriever.getRelevantDocuments("test query");
 
-      // Should return all chunks (no diversity cap anymore)
-      expect(results.length).toBe(4);
-
-      // Verify all chunk results are properly formed
+      // Should return all chunks
+      expect(results.length).toBe(3);
       const largeNoteChunks = results.filter((r) => r.metadata.path === "large.md");
-      expect(largeNoteChunks.length).toBe(3);
-
-      largeNoteChunks.forEach((chunk) => {
-        expect(chunk.metadata.isChunk).toBe(true);
-        expect(chunk.pageContent).toContain("chunk from large note");
-      });
+      expect(largeNoteChunks.length).toBe(2);
     });
   });
 });

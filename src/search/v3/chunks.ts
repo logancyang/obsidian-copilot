@@ -55,36 +55,73 @@ export class ChunkManager {
    * Algorithm: heading-first → size-cap sections
    */
   async getChunks(notePaths: string[], opts: Partial<ChunkOptions> = {}): Promise<Chunk[]> {
-    const options = { ...DEFAULT_CHUNK_OPTIONS, ...opts };
-    const allChunks: Chunk[] = [];
-
-    for (const notePath of notePaths) {
-      // Check cache first
-      let chunks = this.cache.get(notePath);
-
-      if (!chunks) {
-        // Generate chunks for this note
-        chunks = await this.generateChunksForNote(notePath, options);
-
-        // Simple cache (no LRU eviction for day 1)
-        if (chunks.length > 0) {
-          const chunkBytes = this.calculateChunkBytes(chunks);
-          if (this.memoryUsage + chunkBytes <= options.maxBytesTotal) {
-            this.cache.set(notePath, chunks);
-            this.memoryUsage += chunkBytes;
-          } else {
-            logWarn(`ChunkManager: Skipping cache for ${notePath}, would exceed memory budget`);
-          }
-        }
+    try {
+      // Input validation
+      if (!Array.isArray(notePaths)) {
+        logWarn("ChunkManager: Invalid notePaths provided");
+        return [];
       }
 
-      allChunks.push(...chunks);
-    }
+      if (notePaths.length === 0) {
+        return [];
+      }
 
-    logInfo(
-      `ChunkManager: Retrieved ${allChunks.length} chunks from ${notePaths.length} notes (${this.formatMemoryUsage()})`
-    );
-    return allChunks;
+      if (notePaths.length > 1000) {
+        logWarn("ChunkManager: Too many note paths, limiting to 1000");
+        notePaths = notePaths.slice(0, 1000);
+      }
+
+      // Validate note paths
+      const validPaths = notePaths.filter((path) => {
+        if (!path || typeof path !== "string") {
+          return false;
+        }
+        // Basic security: prevent path traversal
+        if (path.includes("..") || path.startsWith("/")) {
+          return false;
+        }
+        return true;
+      });
+
+      if (validPaths.length === 0) {
+        logWarn("ChunkManager: No valid note paths provided");
+        return [];
+      }
+
+      const options = { ...DEFAULT_CHUNK_OPTIONS, ...opts };
+      const allChunks: Chunk[] = [];
+
+      for (const notePath of validPaths) {
+        // Check cache first
+        let chunks = this.cache.get(notePath);
+
+        if (!chunks) {
+          // Generate chunks for this note
+          chunks = await this.generateChunksForNote(notePath, options);
+
+          // Simple cache (no LRU eviction for day 1)
+          if (chunks.length > 0) {
+            const chunkBytes = this.calculateChunkBytes(chunks);
+            if (this.memoryUsage + chunkBytes <= options.maxBytesTotal) {
+              this.cache.set(notePath, chunks);
+              this.memoryUsage += chunkBytes;
+            } else {
+              logWarn(`ChunkManager: Skipping cache for ${notePath}, would exceed memory budget`);
+            }
+          }
+        }
+
+        allChunks.push(...chunks);
+      }
+
+      logInfo(
+        `ChunkManager: Retrieved ${allChunks.length} chunks from ${validPaths.length} notes (${this.formatMemoryUsage()})`
+      );
+      return allChunks;
+    } catch (error) {
+      logWarn("ChunkManager: Failed to get chunks", error);
+      return []; // Always return empty array on error
+    }
   }
 
   /**

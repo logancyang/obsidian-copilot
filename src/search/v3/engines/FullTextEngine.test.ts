@@ -400,6 +400,28 @@ describe("FullTextEngine", () => {
       // The new index may have different number of chunks
     });
 
+    it("should handle clear errors gracefully", async () => {
+      await engine.buildFromCandidates(["note1.md"]);
+
+      // Mock the index to throw an error on destroy/clear
+      const mockIndex = (engine as any).index;
+      if (mockIndex) {
+        mockIndex.destroy = jest.fn(() => {
+          throw new Error("Mock cleanup error");
+        });
+        mockIndex.clear = jest.fn(() => {
+          throw new Error("Mock cleanup error");
+        });
+      }
+
+      // Clear should not throw despite index cleanup error
+      expect(() => engine.clear()).not.toThrow();
+
+      // Should still reset state
+      expect((engine as any).index).toBeNull();
+      expect((engine as any).indexedChunks.size).toBe(0);
+    });
+
     it("should skip unsafe vault paths", async () => {
       // Mock vault to return files for any safe path
       mockApp.vault.getAbstractFileByPath = jest.fn((path) => {

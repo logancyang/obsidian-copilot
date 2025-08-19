@@ -67,9 +67,13 @@ Chunks: 8 chunks with size 800-2000 chars each
 Output: ["auth/oauth-guide.md#0", "auth/oauth-guide.md#1", "nextjs/auth.md#0", ...]
 ```
 
-### 4. Parallel Search Execution
+### 4. Smart Pipeline Execution
 
-**Full-Text Search (L1)** and **Semantic Search (Optional)** run in parallel on chunks:
+**Full-Text Search (L1)** and **Semantic Search (Optional)** run based on semantic weight:
+
+- **0% Semantic Weight**: Only runs lexical search (pure keyword mode)
+- **100% Semantic Weight**: Only runs semantic search (pure meaning mode)
+- **Mixed Weight (1-99%)**: Runs both searches in parallel for optimal performance
 
 #### Full-Text Branch:
 
@@ -89,18 +93,20 @@ Both branches complete before fusion begins.
 
 ### 5. Lexical Reranking (Boosting Stage)
 
-Applied to lexical results BEFORE RRF fusion:
+Applied to lexical results BEFORE RRF fusion (when `enableLexicalBoosts: true`):
 
 - **Folder Boost**: Notes in folders with multiple matches (logarithmic, 1-1.5x)
 - **Graph Boost**: Notes linked to other results (1.0-1.15x, only for high-similarity results)
+- **Pure Relevance Mode**: When boosts disabled, provides keyword-only scoring without folder/graph influence
 
-### 6. RRF Fusion
+### 6. Smart Fusion
 
-Combines boosted lexical rankings with semantic rankings:
+Intelligently combines results based on semantic weight:
 
-- Default: 40% lexical + 60% semantic (when enabled)
-- Configurable via slider (0-100% semantic weight)
-- Weights normalized to sum to 1.0
+- **0% Semantic**: Uses lexical results directly (no fusion overhead)
+- **100% Semantic**: Uses semantic results directly (no fusion overhead)
+- **Mixed Weight**: RRF fusion with configurable balance (40% lexical + 60% semantic default)
+- Weights normalized to sum to 1.0 when fusion is used
 
 ### 7. Score Normalization
 
@@ -140,8 +146,10 @@ Min-max normalization prevents auto-1.0 scores
 ### Query Expander
 
 - Generates alternative phrasings using LLM (5s timeout)
-- Extracts salient terms (nouns only, language-agnostic)
+- **Critical Fix**: Separates salient terms (from original query, used for scoring) from expanded terms (LLM-generated, used for recall only)
+- Extracts salient terms (nouns only, language-agnostic) exclusively from original user query
 - Falls back to original query if LLM unavailable
+- Prevents false positives by ensuring expanded terms don't influence ranking
 
 ### Grep Scanner
 
@@ -323,10 +331,12 @@ interface Chunk {
 - `candidateLimit`: Max candidates for full-text (default: 500, range: 10-1000)
 - `rrfK`: RRF smoothing parameter (default: 60, range: 1-100)
 - `salientTerms`: Additional terms to enhance the search (optional)
+- `enableLexicalBoosts`: Enable folder and graph boosts (default: true)
 
 ### Settings
 
 - **Enable Semantic Search**: Master toggle for vector features
+- **Enable Lexical Boosts**: Toggle for folder and graph relevance boosts (v3 only)
 - **Auto-Index Strategy**: NEVER | ON STARTUP | ON MODE SWITCH
 - **Chunk Configuration**:
   - Chunk Size: 6000 characters (uses CHUNK_SIZE constant)
@@ -344,8 +354,10 @@ interface Chunk {
 
 ✅ **Core Pipeline**: Query expansion, grep, chunking, parallel search, RRF fusion
 ✅ **Chunking System**: Heading-first algorithm with memory-bounded processing
-✅ **Parallel Execution**: Full-text and semantic searches run concurrently on chunks
-✅ **Lexical Reranking**: Folder and graph boosts applied before RRF fusion
+✅ **Smart Pipeline Execution**: Skips unused search pipelines when weight is 0% or 100% for optimal performance
+✅ **Query Expansion Fix**: Separated salient terms (scoring) from expanded terms (recall only)
+✅ **Lexical Boosts Control**: Optional folder and graph boosts with pure relevance mode
+✅ **Lexical Reranking**: Folder and graph boosts applied before RRF fusion (when enabled)
 ✅ **Relevance-Based Results**: All relevant chunks included regardless of source note
 ✅ **Frontmatter Property Indexing**: Complete frontmatter property extraction and indexing in chunk-based system
 ✅ **Normalization**: Min-max normalization with explainability
@@ -449,3 +461,58 @@ Remove from `package.json`:
 1. **v2.x** (Current): Dual support with deprecation warnings
 2. **v2.x+1**: Legacy search disabled by default, requires opt-in
 3. **v3.0.0**: Complete removal of legacy search code
+
+## Known Issues & Future Improvements
+
+### Critical Issues to Address
+
+1. **Memory Management**: `FullTextEngine.clear()` complexity could cause silent failures
+2. **Error Handling**: Inconsistent error patterns across components
+3. **Input Validation**: Missing bounds checking for public API inputs
+4. **Race Conditions**: Timeout handling in `QueryExpander` has potential races
+
+### Performance Optimizations
+
+1. **Sequential Chunking**: `ChunkManager` processes files sequentially, could benefit from batching
+2. **Search Scoring**: Nested loops in `FullTextEngine.search()` create O(n²) complexity
+3. **Vector Store Rebuilding**: Full rebuilds on each load instead of incremental updates
+4. **Memory Estimation**: Simplistic heuristics may lead to inaccurate memory budgeting
+
+### Performance Features ✅
+
+1. **Pipeline Skipping**: Automatically skips unused search pipelines when semantic weight is 0% or 100%
+2. **Smart Fusion**: Bypasses RRF fusion overhead for pure lexical (0%) or pure semantic (100%) searches
+3. **Boost Optimization**: Skips boost calculations when lexical search is not used
+
+### Architecture Improvements
+
+1. **Dependency Injection**: `SearchCore` tightly couples to all dependencies
+2. **Configuration Management**: Search settings scattered across multiple files
+3. **Error Standardization**: Some components return empty arrays, others null/undefined
+4. **Separation of Concerns**: RRF module handles multiple responsibilities
+
+### Missing Test Coverage
+
+1. **Concurrency**: No tests for concurrent search requests
+2. **Large Scale**: No performance tests with realistic vault sizes (1000+ files)
+3. **Memory Limits**: No tests for memory exhaustion scenarios
+4. **Provider Switching**: No tests for switching embedding providers mid-session
+
+### Security Considerations
+
+1. **Input Sanitization**: Search queries sent to LLM without sanitization
+2. **Resource Limits**: Memory limits exist but no CPU time limits
+3. **Prompt Injection**: Potential vulnerability in query expansion
+
+### Recommended Next Steps
+
+**High Priority:**
+
+1. Simplify memory management and add error recovery
+2. Standardize error handling patterns
+3. Add comprehensive input validation
+4. Fix race conditions in timeout handling
+
+**Medium Priority:** 5. Implement batch processing for better performance 6. Refactor for proper dependency injection 7. Centralize configuration management 8. Add structured logging for observability
+
+**Low Priority:** 9. Complete API documentation 10. Add comprehensive integration tests 11. Create architecture flow diagrams

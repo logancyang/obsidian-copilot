@@ -1,4 +1,4 @@
-import { logInfo } from "@/logger";
+import { logInfo, logWarn } from "@/logger";
 import { CHUNK_SIZE } from "@/constants";
 import FlexSearch from "flexsearch";
 import { App, TFile, getAllTags } from "obsidian";
@@ -528,46 +528,29 @@ export class FullTextEngine {
    * Clear the ephemeral index and reset memory tracking
    */
   clear(): void {
-    logInfo(`FullTextEngine.clear(): Starting cleanup`);
-
-    // Check if we have an existing index to clear
-    if (this.index) {
-      logInfo(`FullTextEngine.clear(): Destroying existing FlexSearch index`);
-      try {
-        // Properly destroy the FlexSearch index to free up internal memory
-        // This is crucial to prevent memory leaks and UI freezes
-        if (typeof this.index.destroy === "function") {
-          const destroyStartTime = Date.now();
-          this.index.destroy();
-          const destroyTime = Date.now() - destroyStartTime;
-          logInfo(`FullTextEngine.clear(): FlexSearch index destroyed in ${destroyTime}ms`);
-        } else if (typeof this.index.clear === "function") {
-          // Fallback to clear if destroy is not available
-          const clearStartTime = Date.now();
-          this.index.clear();
-          const clearTime = Date.now() - clearStartTime;
-          logInfo(`FullTextEngine.clear(): FlexSearch index cleared in ${clearTime}ms`);
+    try {
+      // Simple: destroy index if it exists
+      if (this.index) {
+        try {
+          if (this.index.destroy) {
+            this.index.destroy();
+          } else if (this.index.clear) {
+            this.index.clear();
+          }
+        } catch (error) {
+          // Log index cleanup error but continue with state reset
+          logWarn(`FullTextEngine: Index cleanup error: ${error}`);
         }
-      } catch (error) {
-        logInfo(`FullTextEngine.clear(): Error destroying FlexSearch index: ${error}`);
+        this.index = null;
       }
-
-      // Now nullify the reference
-      this.index = null as any;
-      logInfo(`FullTextEngine.clear(): Index reference nullified`);
+      // Clear collections
+      this.indexedChunks.clear();
+      this.memoryManager.reset();
+      logInfo("FullTextEngine: Cleanup completed successfully");
+    } catch (error) {
+      // Log but don't fail - cleanup is best effort
+      logWarn(`FullTextEngine: Cleanup error: ${error}`);
     }
-
-    logInfo(
-      `FullTextEngine.clear(): Clearing indexed chunks set (size: ${this.indexedChunks.size})`
-    );
-    const chunksClearStartTime = Date.now();
-    this.indexedChunks.clear();
-    const chunksClearTime = Date.now() - chunksClearStartTime;
-    logInfo(`FullTextEngine.clear(): Indexed chunks cleared in ${chunksClearTime}ms`);
-
-    logInfo(`FullTextEngine.clear(): About to reset memory manager`);
-    this.memoryManager.reset();
-    logInfo(`FullTextEngine.clear(): Cleanup complete`);
   }
 
   /**

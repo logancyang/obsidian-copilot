@@ -1,4 +1,4 @@
-import { logError, logInfo } from "@/logger";
+import { logError, logInfo, logWarn } from "@/logger";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { App } from "obsidian";
 import { ChunkManager } from "./chunks";
@@ -66,13 +66,32 @@ export class SearchCore {
    * @returns Ranked list of chunk IDs
    */
   async retrieve(query: string, options: SearchOptions = {}): Promise<NoteIdRank[]> {
-    // Validate and sanitize options
+    // Input validation: check query
+    if (!query || typeof query !== "string") {
+      logWarn("SearchCore: Invalid query provided");
+      return [];
+    }
+
+    const trimmedQuery = query.trim();
+    if (trimmedQuery.length === 0) {
+      logWarn("SearchCore: Empty query provided");
+      return [];
+    }
+
+    if (trimmedQuery.length > 1000) {
+      logWarn("SearchCore: Query too long, truncating");
+      query = trimmedQuery.substring(0, 1000);
+    } else {
+      query = trimmedQuery;
+    }
+
+    // Validate and sanitize options with bounds checking
     const maxResults = Math.min(Math.max(1, options.maxResults || 30), 100);
-    const enableSemantic = options.enableSemantic || false;
+    const enableSemantic = Boolean(options.enableSemantic);
     const semanticWeight = Math.min(Math.max(0, options.semanticWeight ?? 0.6), 1); // Default 60% semantic
     const candidateLimit = Math.min(Math.max(10, options.candidateLimit || 500), 1000);
     const rrfK = Math.min(Math.max(1, options.rrfK || 60), 100);
-    const enableLexicalBoosts = options.enableLexicalBoosts ?? true; // Default to enabled
+    const enableLexicalBoosts = Boolean(options.enableLexicalBoosts ?? true); // Default to enabled
 
     try {
       // Log search start with minimal verbosity
@@ -185,9 +204,14 @@ export class SearchCore {
     } catch (error) {
       logError("SearchCore: Retrieval failed", error);
 
-      // Fallback to simple grep results
-      const fallbackResults = await this.fallbackSearch(query, maxResults);
-      return fallbackResults;
+      // Fallback to simple grep results (guaranteed to return [])
+      try {
+        const fallbackResults = await this.fallbackSearch(query, maxResults);
+        return fallbackResults;
+      } catch (fallbackError) {
+        logError("SearchCore: Fallback search also failed", fallbackError);
+        return []; // Always return empty array on complete failure
+      }
     }
   }
 
@@ -357,12 +381,18 @@ Question: ${query}
 
 Answer:`;
 
-      // Generate with timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), LLM_GENERATION_TIMEOUT_MS);
+      // Generate with timeout using Promise.race
+      const hydePromise = chatModel.invoke(prompt);
+      const timeoutPromise = new Promise<null>((_, reject) => {
+        setTimeout(() => reject(new Error("HyDE generation timeout")), LLM_GENERATION_TIMEOUT_MS);
+      });
 
-      const response = await chatModel.invoke(prompt, { signal: controller.signal });
-      clearTimeout(timeoutId);
+      const response = await Promise.race([hydePromise, timeoutPromise]);
+
+      // Handle null response from timeout
+      if (!response) {
+        return null;
+      }
 
       // Extract string content from the response
       let hydeDoc: string | null = null;
@@ -378,7 +408,7 @@ Answer:`;
       }
       return hydeDoc;
     } catch (error: any) {
-      if (error?.name === "AbortError") {
+      if (error?.message === "HyDE generation timeout") {
         logInfo(`HyDE generation timed out (${LLM_GENERATION_TIMEOUT_MS / 1000}s limit)`);
       } else {
         logInfo(`HyDE generation skipped: ${error?.message || "Unknown error"}`);
