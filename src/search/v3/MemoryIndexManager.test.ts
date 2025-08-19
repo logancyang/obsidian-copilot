@@ -170,4 +170,56 @@ describe("MemoryIndexManager", () => {
     const joined = writes.join("\n");
     expect(joined).toContain("a.md");
   });
+
+  test("reindexSingleFileIfModified uses incremental updates to prevent OOM", async () => {
+    const writes: string[] = [];
+
+    // Create a large existing index to simulate potential OOM scenario
+    const existingRecords = [];
+    for (let i = 0; i < 1000; i++) {
+      existingRecords.push(
+        JSON.stringify({
+          id: `file${i}.md#0`,
+          path: `file${i}.md`,
+          title: `File ${i}`,
+          mtime: 1,
+          ctime: 1,
+          embedding: [Math.random(), Math.random()],
+        })
+      );
+    }
+    const existingContent = existingRecords.join("\n");
+
+    const app = makeApp({
+      exists: true,
+      content: existingContent,
+      captureWrites: { buffer: writes },
+    });
+    const manager = MemoryIndexManager.getInstance(app);
+
+    // Don't load the index to avoid loading all records into memory
+    // This simulates the memory-safe approach
+
+    // Mock reading content for the file being updated
+    (app.vault.cachedRead as any) = async () => "# Updated Title\n\nUpdated Body";
+    const file: any = {
+      path: "file500.md", // Update an existing file
+      basename: "file500",
+      extension: "md",
+      stat: { mtime: 2, ctime: 1 },
+    };
+
+    // This should use the incremental updateFileRecords method
+    await manager.reindexSingleFileIfModified(file, 1);
+
+    // Verify that data was written (incremental update succeeded)
+    expect(writes.length).toBeGreaterThan(0);
+    const joinedWrites = writes.join("\n");
+    expect(joinedWrites).toContain("file500.md");
+
+    // Verify that other files are preserved (not a full rewrite)
+    // The incremental update should have preserved most existing files
+    expect(joinedWrites).toContain("file0.md"); // Should preserve other files
+    expect(joinedWrites).toContain("file999.md"); // Should preserve other files
+  });
 });

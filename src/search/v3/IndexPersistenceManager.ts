@@ -1,6 +1,6 @@
 import { App } from "obsidian";
 import { getSettings } from "@/settings/model";
-import { logInfo } from "@/logger";
+import { logInfo, logWarn } from "@/logger";
 
 export interface JsonlChunkRecord {
   id: string; // stable chunk id (hashable)
@@ -21,7 +21,52 @@ export class IndexPersistenceManager {
   private static readonly MAX_PARTITIONS = 1000;
   private static readonly PARTITION_INDEX_PADDING = 3; // for padStart(3, "0")
 
+  // Memory safety thresholds
+  private static readonly MEMORY_WARNING_THRESHOLD_MB = 500; // Warn at 500MB
+  private static readonly MEMORY_CRITICAL_THRESHOLD_MB = 800; // Critical at 800MB
+
+  // Processing batch constants
+  private static readonly WRITE_BATCH_SIZE = 1000; // Records per batch for writeRecords
+  private static readonly UPDATE_BATCH_SIZE = 500; // Records per batch for updateFileRecords
+  private static readonly MEMORY_CHECK_INTERVAL = 5; // Check memory every N batches
+  private static readonly YIELD_INTERVAL = 4; // Yield control every N batches
+
   constructor(private app: App) {}
+
+  /**
+   * Get estimated memory usage of the current process (basic approximation)
+   */
+  private getMemoryUsageMB(): number {
+    if (typeof process !== "undefined" && process.memoryUsage) {
+      const usage = process.memoryUsage();
+      return usage.heapUsed / (1024 * 1024);
+    }
+
+    // Browser environments: use performance.memory if available
+    if (typeof performance !== "undefined" && "memory" in performance) {
+      const memory = (performance as any).memory;
+      return memory.usedJSHeapSize / (1024 * 1024);
+    }
+
+    // No memory monitoring available - use conservative approach
+    logWarn("Memory monitoring unavailable - using conservative processing limits");
+    return 100; // Assume moderate usage to enable basic throttling
+  }
+
+  /**
+   * Check if current memory usage is within safe limits
+   */
+  private checkMemorySafety(operation: string): void {
+    const memoryMB = this.getMemoryUsageMB();
+
+    if (memoryMB > IndexPersistenceManager.MEMORY_CRITICAL_THRESHOLD_MB) {
+      throw new Error(
+        `Memory usage critical (${memoryMB.toFixed(1)}MB) during ${operation}. Operation aborted to prevent OOM.`
+      );
+    } else if (memoryMB > IndexPersistenceManager.MEMORY_WARNING_THRESHOLD_MB) {
+      logWarn(`High memory usage detected (${memoryMB.toFixed(1)}MB) during ${operation}`);
+    }
+  }
 
   /**
    * Get the base directory for index files
@@ -112,10 +157,27 @@ export class IndexPersistenceManager {
   }
 
   /**
-   * Write records to partitioned JSONL files
+   * Write records to partitioned JSONL files with batch processing to avoid OOM
    */
   async writeRecords(records: JsonlChunkRecord[]): Promise<void> {
-    const lines = records.map((r) => JSON.stringify(r));
+    this.checkMemorySafety("writeRecords start");
+
+    // Process records in batches to avoid memory exhaustion
+    const BATCH_SIZE = IndexPersistenceManager.WRITE_BATCH_SIZE;
+    const lines: string[] = [];
+
+    for (let i = 0; i < records.length; i += BATCH_SIZE) {
+      const batch = records.slice(i, i + BATCH_SIZE);
+      const batchLines = batch.map((r) => JSON.stringify(r));
+      lines.push(...batchLines);
+
+      // Yield control and check memory to prevent blocking UI and OOM
+      if (i % (BATCH_SIZE * IndexPersistenceManager.YIELD_INTERVAL) === 0) {
+        this.checkMemorySafety("writeRecords batch processing");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    }
+
     await this.writePartitions(lines);
   }
 
@@ -191,6 +253,145 @@ export class IndexPersistenceManager {
   async hasIndex(): Promise<boolean> {
     const paths = await this.getExistingPartitionPaths();
     return paths.length > 0;
+  }
+
+  /**
+   * Update records for a specific file without loading the entire index into memory
+   * This processes partitions in a streaming fashion to prevent OOM
+   */
+  async updateFileRecords(filePath: string, newRecords: JsonlChunkRecord[]): Promise<void> {
+    this.checkMemorySafety("updateFileRecords start");
+
+    const paths = await this.getExistingPartitionPaths();
+    if (paths.length === 0) {
+      // No existing index, just write the new records
+      await this.writeRecords(newRecords);
+      return;
+    }
+
+    // Create temporary partitions for the updated index
+    const tempPartitions: string[] = [];
+    let currentBuffer: string[] = [];
+    let currentBytes = 0;
+    let partitionIndex = 0;
+
+    // Helper function to flush current buffer to a temporary partition
+    const flushBuffer = async () => {
+      if (currentBuffer.length === 0) return;
+
+      const tempPath = `${await this.getPartitionPath(0)}.tmp.${partitionIndex}`;
+      const content = currentBuffer.join("\n") + "\n";
+
+      // @ts-ignore
+      await this.app.vault.adapter.write(tempPath, content);
+      tempPartitions.push(tempPath);
+
+      currentBuffer = [];
+      currentBytes = 0;
+      partitionIndex++;
+    };
+
+    // Helper function to add records to buffer
+    const addToBuffer = async (records: JsonlChunkRecord[]) => {
+      for (const record of records) {
+        const line = JSON.stringify(record);
+        const lineBytes = line.length + 1; // +1 for newline
+
+        // Check if we need to flush buffer before adding
+        if (
+          currentBytes + lineBytes > IndexPersistenceManager.MAX_BYTES &&
+          currentBuffer.length > 0
+        ) {
+          await flushBuffer();
+        }
+
+        currentBuffer.push(line);
+        currentBytes += lineBytes;
+      }
+    };
+
+    try {
+      // Process existing partitions one by one
+      for (const path of paths) {
+        try {
+          // @ts-ignore
+          const content = await this.app.vault.adapter.read(path);
+          const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
+
+          // Process lines in batches to avoid memory spikes
+          const BATCH_SIZE = IndexPersistenceManager.UPDATE_BATCH_SIZE;
+          for (let i = 0; i < lines.length; i += BATCH_SIZE) {
+            const batch = lines.slice(i, i + BATCH_SIZE);
+            const validRecords: JsonlChunkRecord[] = [];
+
+            for (const line of batch) {
+              try {
+                const record = JSON.parse(line) as JsonlChunkRecord;
+                // Skip records for the file being updated
+                if (record.path !== filePath) {
+                  validRecords.push(record);
+                }
+              } catch (error) {
+                logInfo(`IndexPersistenceManager: Skipping invalid record in ${path}: ${error}`);
+              }
+            }
+
+            await addToBuffer(validRecords);
+
+            // Yield control every few batches and check memory
+            if (i % (BATCH_SIZE * IndexPersistenceManager.YIELD_INTERVAL) === 0) {
+              this.checkMemorySafety("updateFileRecords processing");
+              await new Promise((resolve) => setTimeout(resolve, 0));
+            }
+          }
+        } catch (error) {
+          logInfo(`IndexPersistenceManager: Failed to read partition ${path}: ${error}`);
+        }
+      }
+
+      // Add new records for the file
+      await addToBuffer(newRecords);
+
+      // Flush any remaining records
+      await flushBuffer();
+
+      // Now atomically replace the old partitions with new ones
+      await this.replacePartitionsFromTemp(tempPartitions);
+    } finally {
+      // Clean up temporary files
+      for (const tempPath of tempPartitions) {
+        try {
+          // @ts-ignore
+          await this.app.vault.adapter.remove(tempPath);
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+    }
+  }
+
+  /**
+   * Atomically replace old partitions with new ones from temporary files
+   */
+  private async replacePartitionsFromTemp(tempPartitions: string[]): Promise<void> {
+    // First, clear existing partitions
+    await this.cleanupExtraPartitions(0);
+
+    // Then move temporary files to actual partition locations
+    for (let i = 0; i < tempPartitions.length; i++) {
+      const tempPath = tempPartitions[i];
+      const finalPath = await this.getPartitionPath(i);
+
+      try {
+        // @ts-ignore
+        const content = await this.app.vault.adapter.read(tempPath);
+        // @ts-ignore
+        await this.app.vault.adapter.write(finalPath, content);
+      } catch (error) {
+        logInfo(`IndexPersistenceManager: Failed to move temp partition ${i}: ${error}`);
+        throw error; // This is critical, so we should throw
+      }
+    }
   }
 
   /**

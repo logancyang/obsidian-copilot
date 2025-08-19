@@ -458,16 +458,26 @@ export class MemoryIndexManager {
    * Reindex a single modified file
    */
   async reindexSingleFileIfModified(file: any, previousMtime: number | null): Promise<void> {
-    const existed = await this.loadIfExists();
-    if (!existed) return;
-
     try {
       if (!file || file.extension !== "md") return;
 
-      const indexedMtime = Math.max(
-        0,
-        ...this.records.filter((r) => r.path === file.path).map((r) => r.mtime)
-      );
+      // Check if we have an existing index
+      const hasIndex = await this.persistenceManager.hasIndex();
+      if (!hasIndex) return;
+
+      // For memory efficiency, we'll check mtime without loading all records
+      // First, try to get the indexed mtime from memory if already loaded
+      let indexedMtime = 0;
+      if (this.loaded && this.records.length > 0) {
+        indexedMtime = Math.max(
+          0,
+          ...this.records.filter((r) => r.path === file.path).map((r) => r.mtime)
+        );
+      } else {
+        // If not loaded, we'll assume it needs updating if previousMtime suggests it
+        // This avoids loading the entire index just to check one file's mtime
+        indexedMtime = previousMtime ?? 0;
+      }
 
       const prev = previousMtime ?? indexedMtime;
       if (!file.stat?.mtime || file.stat.mtime <= prev) {
@@ -478,19 +488,29 @@ export class MemoryIndexManager {
       const chunks = await this.indexingPipeline.prepareFileChunksForSingle(file);
       const newRecords = await this.indexingPipeline.processSingleFileChunks(chunks);
 
-      // Remove old records for this file
-      this.records = this.records.filter((r) => r.path !== file.path);
+      // Use memory-safe incremental update instead of rewriting entire index
+      await this.persistenceManager.updateFileRecords(file.path, newRecords);
 
-      // Add new records
-      this.records.push(...newRecords);
+      // If we have records in memory, update them too
+      if (this.loaded && this.records.length > 0) {
+        // Remove old records for this file
+        this.records = this.records.filter((r) => r.path !== file.path);
+        // Add new records
+        this.records.push(...newRecords);
+      }
 
-      // Persist
-      await this.persistenceManager.writeRecords(this.records);
-      this.loaded = false; // force rebuild of vector store
+      // Force rebuild of vector store since file changed
+      this.loaded = false;
 
-      logInfo(`MemoryIndex: Reindexed modified file ${file.path} with ${newRecords.length} chunks`);
+      logInfo(
+        `MemoryIndex: Reindexed modified file ${file.path} with ${newRecords.length} chunks using incremental update`
+      );
     } catch (error) {
       logWarn("MemoryIndex: reindexSingleFileIfModified failed", error);
+
+      // If incremental update fails, we could fallback to full reindex
+      // but that might still cause OOM, so we'll just log the error
+      throw error;
     }
   }
 
