@@ -94,7 +94,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
         maxResults: this.options.maxK,
         salientTerms: enhancedSalientTerms,
         enableSemantic: !!settings.enableSemanticSearchV3,
-        semanticWeight: settings.semanticSearchWeight || 0.6,
+        semanticWeight: settings.semanticSearchWeight ?? 0.6,
         enableLexicalBoosts: settings.enableLexicalBoosts,
       });
 
