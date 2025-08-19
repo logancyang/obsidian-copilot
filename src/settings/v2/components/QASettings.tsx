@@ -1,16 +1,28 @@
 import { PatternMatchingModal } from "@/components/modals/PatternMatchingModal";
+import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
 import { SemanticSearchToggleModal } from "@/components/modals/SemanticSearchToggleModal";
-// import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
 import { Button } from "@/components/ui/button";
+import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { SettingItem } from "@/components/ui/setting-item";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
-import { updateSetting, useSettingsValue } from "@/settings/model";
+import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
 import { HelpCircle } from "lucide-react";
 import React from "react";
 
 export const QASettings: React.FC = () => {
   const settings = useSettingsValue();
+
+  const handleSetDefaultEmbeddingModel = async (modelKey: string) => {
+    if (modelKey !== settings.embeddingModelKey) {
+      new RebuildIndexConfirmModal(app, async () => {
+        updateSetting("embeddingModelKey", modelKey);
+        const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
+        await MemoryIndexManager.getInstance(app).indexVault();
+        await MemoryIndexManager.getInstance(app).ensureLoaded();
+      }).open();
+    }
+  };
 
   // Partitions are automatically managed in v3 (150MB per JSONL partition).
   // Remove UI control; keep handler stub to avoid accidental usage.
@@ -20,23 +32,62 @@ export const QASettings: React.FC = () => {
     <div className="tw-space-y-4">
       <section>
         <div className="tw-space-y-4">
-          {/* Enable Semantic Search (v3) - Only show when not using legacy search */}
-          {!settings.useLegacySearch && (
-            <SettingItem
-              type="switch"
-              title="Enable Semantic Search (v3)"
-              description="Optional semantic search component to boost the default search performance. Use 'Refresh Vault Index' or 'Force Reindex Vault' to build the embedding index."
-              checked={settings.enableSemanticSearchV3}
-              onCheckedChange={(checked) => {
-                // Show confirmation modal with appropriate message
-                new SemanticSearchToggleModal(
-                  app,
-                  () => updateSetting("enableSemanticSearchV3", checked),
-                  checked // true = enabling, false = disabling
-                ).open();
-              }}
-            />
-          )}
+          {/* Enable Semantic Search (v3) */}
+          <SettingItem
+            type="switch"
+            title="Enable Semantic Search (v3)"
+            description="Optional semantic search component to boost the default search performance. Use 'Refresh Vault Index' or 'Force Reindex Vault' to build the embedding index."
+            checked={settings.enableSemanticSearchV3}
+            onCheckedChange={(checked) => {
+              // Show confirmation modal with appropriate message
+              new SemanticSearchToggleModal(
+                app,
+                () => updateSetting("enableSemanticSearchV3", checked),
+                checked // true = enabling, false = disabling
+              ).open();
+            }}
+          />
+
+          {/* Embedding Model */}
+          <SettingItem
+            type="select"
+            title="Embedding Model"
+            description={
+              <div className="tw-space-y-2">
+                <div className="tw-flex tw-items-center tw-gap-1.5">
+                  <span className="tw-font-medium tw-leading-none tw-text-accent">
+                    Powers Semantic Local Vault Search
+                  </span>
+                  <TooltipProvider delayDuration={0}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="tw-size-4" />
+                      </TooltipTrigger>
+                      <TooltipContent className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
+                        <div className="tw-pt-2 tw-text-sm tw-text-muted">
+                          This model converts text into vector representations, essential for
+                          semantic search and Question Answering (QA) functionality. Changing the
+                          embedding model will:
+                        </div>
+                        <ul className="tw-pl-4 tw-text-sm tw-text-muted">
+                          <li>Require rebuilding your vault&#39;s vector index</li>
+                          <li>Affect semantic search quality</li>
+                          <li>Impact Question Answering feature performance</li>
+                        </ul>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </div>
+            }
+            value={settings.embeddingModelKey}
+            onChange={handleSetDefaultEmbeddingModel}
+            options={settings.activeEmbeddingModels.map((model) => ({
+              label: getModelDisplayWithIcons(model),
+              value: getModelKeyFromModel(model),
+            }))}
+            placeholder="Model"
+          />
 
           {/* Auto-Index Strategy */}
           <SettingItem
@@ -141,46 +192,40 @@ export const QASettings: React.FC = () => {
             onChange={(value) => updateSetting("embeddingBatchSize", value)}
           />
 
-          {/* Semantic vs Lexical Weight - Only show when using v3 search with semantic enabled */}
-          {!settings.useLegacySearch && settings.enableSemanticSearchV3 && (
-            <SettingItem
-              type="slider"
-              title="Semantic Search Weight"
-              description="Balance between semantic (meaning-based) and lexical (keyword-based) search. 0% = fully lexical, 100% = fully semantic. Default is 60% semantic."
-              min={0}
-              max={100}
-              step={10}
-              value={Math.round((settings.semanticSearchWeight ?? 0.6) * 100)}
-              onChange={(value) => updateSetting("semanticSearchWeight", value / 100)}
-              suffix="%"
-            />
-          )}
+          {/* Semantic vs Lexical Weight */}
+          <SettingItem
+            type="slider"
+            title="Semantic Search Weight"
+            description="Balance between semantic (meaning-based) and lexical (keyword-based) search. 0% = fully lexical, 100% = fully semantic. Default is 60% semantic."
+            min={0}
+            max={100}
+            step={10}
+            value={Math.round((settings.semanticSearchWeight ?? 0.6) * 100)}
+            onChange={(value) => updateSetting("semanticSearchWeight", value / 100)}
+            suffix="%"
+          />
 
-          {/* Lexical Search RAM Limit - Only show when using v3 search */}
-          {!settings.useLegacySearch && (
-            <SettingItem
-              type="slider"
-              title="Lexical Search RAM Limit"
-              description="Maximum RAM usage for full-text search index. Lower values use less memory but may limit search performance on large vaults. Default is 100 MB."
-              min={20}
-              max={1000}
-              step={20}
-              value={settings.lexicalSearchRamLimit || 100}
-              onChange={(value) => updateSetting("lexicalSearchRamLimit", value)}
-              suffix=" MB"
-            />
-          )}
+          {/* Lexical Search RAM Limit */}
+          <SettingItem
+            type="slider"
+            title="Lexical Search RAM Limit"
+            description="Maximum RAM usage for full-text search index. Lower values use less memory but may limit search performance on large vaults. Default is 100 MB."
+            min={20}
+            max={1000}
+            step={20}
+            value={settings.lexicalSearchRamLimit || 100}
+            onChange={(value) => updateSetting("lexicalSearchRamLimit", value)}
+            suffix=" MB"
+          />
 
-          {/* Enable Lexical Boosts - Only show when using v3 search */}
-          {!settings.useLegacySearch && (
-            <SettingItem
-              type="switch"
-              title="Enable Lexical Boosts"
-              description="Enable folder and graph-based relevance boosts for lexical search results. When disabled, provides pure keyword-based relevance scoring without folder or connection-based adjustments."
-              checked={settings.enableLexicalBoosts}
-              onCheckedChange={(checked) => updateSetting("enableLexicalBoosts", checked)}
-            />
-          )}
+          {/* Enable Folder and Graph Boosts */}
+          <SettingItem
+            type="switch"
+            title="Enable Folder and Graph Boosts"
+            description="Enable folder and graph-based relevance boosts for lexical search results. When disabled, provides pure keyword-based relevance scoring without folder or connection-based adjustments."
+            checked={settings.enableLexicalBoosts}
+            onCheckedChange={(checked) => updateSetting("enableLexicalBoosts", checked)}
+          />
 
           {/* Exclusions */}
           <SettingItem
@@ -274,26 +319,24 @@ export const QASettings: React.FC = () => {
               }}
             />
 
-            {/* Number of Partitions - Only show when using legacy search */}
-            {settings.useLegacySearch && (
-              <SettingItem
-                type="select"
-                title="Number of Partitions"
-                description="Split the Orama index into multiple partitions to handle large vaults. Increase if you get 'string length' errors. Default is 1."
-                value={String(settings.numPartitions || 1)}
-                onChange={(value) => updateSetting("numPartitions", Number(value))}
-                options={[
-                  { label: "1", value: "1" },
-                  { label: "2", value: "2" },
-                  { label: "4", value: "4" },
-                  { label: "8", value: "8" },
-                  { label: "16", value: "16" },
-                  { label: "32", value: "32" },
-                  { label: "40", value: "40" },
-                ]}
-                placeholder="Select partitions"
-              />
-            )}
+            {/* Number of Partitions */}
+            <SettingItem
+              type="select"
+              title="Number of Partitions"
+              description="Split the Orama index into multiple partitions to handle large vaults. Increase if you get 'string length' errors. Default is 1."
+              value={String(settings.numPartitions || 1)}
+              onChange={(value) => updateSetting("numPartitions", Number(value))}
+              options={[
+                { label: "1", value: "1" },
+                { label: "2", value: "2" },
+                { label: "4", value: "4" },
+                { label: "8", value: "8" },
+                { label: "16", value: "16" },
+                { label: "32", value: "32" },
+                { label: "40", value: "40" },
+              ]}
+              placeholder="Select partitions"
+            />
           </div>
         </div>
       </section>
