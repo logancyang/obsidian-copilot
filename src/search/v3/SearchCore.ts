@@ -1,4 +1,6 @@
 import { logError, logInfo, logWarn } from "@/logger";
+import { TimeoutError } from "@/error";
+import { withTimeout } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { App } from "obsidian";
 import { ChunkManager } from "./chunks";
@@ -382,39 +384,37 @@ Question: ${query}
 
 Answer:`;
 
-      // Generate with timeout using Promise.race
-      const hydePromise = chatModel.invoke(prompt);
-      const timeoutPromise = new Promise<null>((_, reject) => {
-        setTimeout(() => reject(new Error("HyDE generation timeout")), LLM_GENERATION_TIMEOUT_MS);
-      });
+      const response = await withTimeout(
+        (signal) => chatModel.invoke(prompt, { signal }),
+        LLM_GENERATION_TIMEOUT_MS,
+        "HyDE generation"
+      );
 
-      const response = await Promise.race([hydePromise, timeoutPromise]);
-
-      // Handle null response from timeout
-      if (!response) {
-        return null;
-      }
-
-      // Extract string content from the response
-      let hydeDoc: string | null = null;
-      if (typeof response.content === "string") {
-        hydeDoc = response.content;
-      } else if (response.content && typeof response.content === "object") {
-        // Handle AIMessage or complex content structure
-        hydeDoc = String(response.content);
-      }
-
+      const hydeDoc = this.extractContent(response);
       if (hydeDoc) {
         logInfo(`HyDE generated: ${hydeDoc.slice(0, 100)}...`);
       }
       return hydeDoc;
     } catch (error: any) {
-      if (error?.message === "HyDE generation timeout") {
+      if (error instanceof TimeoutError) {
         logInfo(`HyDE generation timed out (${LLM_GENERATION_TIMEOUT_MS / 1000}s limit)`);
       } else {
         logInfo(`HyDE generation skipped: ${error?.message || "Unknown error"}`);
       }
       return null;
     }
+  }
+
+  /**
+   * Extract string content from LLM response
+   */
+  private extractContent(response: any): string | null {
+    if (typeof response.content === "string") {
+      return response.content;
+    } else if (response.content && typeof response.content === "object") {
+      // Handle AIMessage or complex content structure
+      return String(response.content);
+    }
+    return null;
   }
 }

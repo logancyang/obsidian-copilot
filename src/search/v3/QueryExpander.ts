@@ -1,5 +1,6 @@
 import { logError, logInfo, logWarn } from "@/logger";
-import { withSuppressedTokenWarnings } from "@/utils";
+import { TimeoutError } from "@/error";
+import { withSuppressedTokenWarnings, withTimeout } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { FuzzyMatcher } from "./utils/FuzzyMatcher";
 
@@ -129,18 +130,14 @@ Format your response using XML tags:
    */
   private async expandWithTimeout(query: string): Promise<ExpandedQuery> {
     try {
-      const expandPromise = this.expandWithLLM(query);
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => {
-          logInfo(`QueryExpander: Timeout reached for "${query}"`);
-          reject(new Error("Query expansion timeout"));
-        }, this.config.timeout);
-      });
-
-      const result = await Promise.race([expandPromise, timeoutPromise]);
-      return result;
+      return await withTimeout(
+        (signal) => this.expandWithLLM(query, signal),
+        this.config.timeout,
+        "Query expansion"
+      );
     } catch (error: any) {
-      if (error?.message === "Query expansion timeout") {
+      if (error instanceof TimeoutError) {
+        logInfo(`QueryExpander: Timeout reached for "${query}"`);
         return this.fallbackExpansion(query);
       }
       throw error;
@@ -150,9 +147,10 @@ Format your response using XML tags:
   /**
    * Performs the actual LLM call to expand the query.
    * @param query - The query to expand
+   * @param signal - Optional abort signal for request cancellation
    * @returns Expanded queries and extracted salient terms
    */
-  private async expandWithLLM(query: string): Promise<ExpandedQuery> {
+  private async expandWithLLM(query: string, signal?: AbortSignal): Promise<ExpandedQuery> {
     try {
       if (!this.options.getChatModel) {
         logInfo("QueryExpander: No chat model getter provided");
@@ -170,9 +168,9 @@ Format your response using XML tags:
         this.config.maxVariants.toString()
       ).replace("{query}", query);
 
-      // Invoke model with token warnings suppressed
+      // Invoke model with token warnings suppressed and abort signal
       const response = await withSuppressedTokenWarnings(async () => {
-        return await model.invoke(prompt);
+        return await model.invoke(prompt, signal ? { signal } : undefined);
       });
 
       if (!response) {

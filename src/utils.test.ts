@@ -7,7 +7,9 @@ import {
   isFolderMatch,
   processVariableNameForNotePath,
   removeThinkTags,
+  withTimeout,
 } from "./utils";
+import { TimeoutError } from "./error";
 
 // Mock Obsidian's TFile class
 jest.mock("obsidian", () => {
@@ -450,5 +452,83 @@ I need to consider:
     const input = "Main content here<think>Final thoughts</think>";
     const expected = "Main content here";
     expect(removeThinkTags(input)).toBe(expected);
+  });
+});
+
+describe("withTimeout", () => {
+  it("should return result when operation completes within timeout", async () => {
+    const operation = async (signal: AbortSignal) => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return "success";
+    };
+
+    const result = await withTimeout(operation, 200, "Test operation");
+    expect(result).toBe("success");
+  });
+
+  it("should throw TimeoutError when operation exceeds timeout", async () => {
+    const operation = async (signal: AbortSignal) => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      return "should not complete";
+    };
+
+    await expect(withTimeout(operation, 50, "Test operation")).rejects.toThrow(TimeoutError);
+
+    await expect(withTimeout(operation, 50, "Test operation")).rejects.toThrow(
+      "Test operation timed out after 50ms"
+    );
+  });
+
+  it("should abort the operation when timeout is reached", async () => {
+    let wasAborted = false;
+    const operation = async (signal: AbortSignal) => {
+      signal.addEventListener("abort", () => {
+        wasAborted = true;
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      return "should not complete";
+    };
+
+    try {
+      await withTimeout(operation, 50, "Test operation");
+    } catch {
+      // Expected to timeout
+    }
+
+    // Give time for abort event to fire
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(wasAborted).toBe(true);
+  });
+
+  it("should handle operation that throws non-timeout errors", async () => {
+    const operation = async (signal: AbortSignal) => {
+      throw new Error("Operation failed");
+    };
+
+    await expect(withTimeout(operation, 200, "Test operation")).rejects.toThrow("Operation failed");
+  });
+
+  it("should clean up timeout even when operation throws", async () => {
+    const operation = async (signal: AbortSignal) => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      throw new Error("Operation failed");
+    };
+
+    await expect(withTimeout(operation, 200, "Test operation")).rejects.toThrow("Operation failed");
+
+    // If timeout cleanup failed, this would log warnings about unhandled timeouts
+    // The fact that this test passes cleanly indicates proper cleanup
+  });
+});
+
+describe("TimeoutError", () => {
+  it("should create error with correct message and name", () => {
+    const error = new TimeoutError("Test operation", 5000);
+
+    expect(error.message).toBe("Test operation timed out after 5000ms");
+    expect(error.name).toBe("TimeoutError");
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toBeInstanceOf(TimeoutError);
   });
 });

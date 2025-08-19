@@ -120,6 +120,63 @@ describe("QueryExpander", () => {
       expect(result.salientTerms).toContain("handling");
     });
 
+    it("should properly handle AbortController signal", async () => {
+      // Mock LLM call to verify AbortController signal is passed
+      let receivedSignal: AbortSignal | undefined;
+      mockChatModel.invoke.mockImplementation(
+        async (prompt: string, options?: { signal?: AbortSignal }) => {
+          receivedSignal = options?.signal;
+          return { content: "mocked response" };
+        }
+      );
+
+      const expander = new QueryExpander({
+        timeout: 5000, // Long timeout to ensure it doesn't trigger
+        getChatModel: async () => mockChatModel,
+      });
+
+      await expander.expand("test query");
+
+      // Verify that the AbortSignal was passed to the LLM call
+      expect(receivedSignal).toBeDefined();
+      expect(receivedSignal).toBeInstanceOf(AbortSignal);
+    });
+
+    it("should cancel LLM request when timeout is reached", async () => {
+      let isAborted = false;
+      mockChatModel.invoke.mockImplementation(
+        async (prompt: string, options?: { signal?: AbortSignal }) => {
+          // Set up listener to detect when request is aborted
+          options?.signal?.addEventListener("abort", () => {
+            isAborted = true;
+          });
+
+          // Simulate slow response that should be aborted
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+
+          // This should not complete due to timeout
+          return { content: "slow response" };
+        }
+      );
+
+      const expander = new QueryExpander({
+        timeout: 100, // Short timeout to trigger abort
+        getChatModel: async () => mockChatModel,
+      });
+
+      const result = await expander.expand("test timeout abort");
+
+      // Should fallback due to timeout
+      expect(result.queries).toEqual(["test timeout abort"]);
+      expect(result.salientTerms).toContain("test");
+      expect(result.salientTerms).toContain("timeout");
+      expect(result.salientTerms).toContain("abort");
+
+      // Give a moment for abort event to fire
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(isAborted).toBe(true);
+    });
+
     it("should handle missing chat model", async () => {
       const expander = new QueryExpander({
         getChatModel: async () => null,

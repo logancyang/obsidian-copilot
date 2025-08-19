@@ -80,7 +80,8 @@ describe("SearchCore - HyDE Integration", () => {
     // Verify HyDE was called
     expect(generateHyDESpy).toHaveBeenCalledWith("How do I implement authentication?");
     expect(mockChatModel.invoke).toHaveBeenCalledWith(
-      expect.stringContaining("Write a brief, informative passage")
+      expect.stringContaining("Write a brief, informative passage"),
+      expect.objectContaining({ signal: expect.any(Object) })
     );
   });
 

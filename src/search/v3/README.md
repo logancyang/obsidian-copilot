@@ -369,9 +369,9 @@ interface Chunk {
 - **Memory peak**: < 20MB mobile, < 100MB desktop
 - **Memory split**: 35% chunk cache, 65% FlexSearch index
 
-## Configuration
+## Configuration & Usage
 
-### Search Options
+### Search Parameters
 
 - `maxResults`: Number of results to return (default: 30, max: 100)
 - `enableSemantic`: Enable vector search (default: false)
@@ -381,38 +381,22 @@ interface Chunk {
 - `salientTerms`: Additional terms to enhance the search (optional)
 - `enableLexicalBoosts`: Enable folder and graph boosts (default: true)
 
-### Settings
+### Plugin Settings
 
 - **Enable Semantic Search**: Master toggle for vector features
-- **Enable Lexical Boosts**: Toggle for folder and graph relevance boosts (v3 only)
+- **Enable Lexical Boosts**: Toggle for folder and graph relevance boosts
 - **Auto-Index Strategy**: NEVER | ON STARTUP | ON MODE SWITCH
 - **Chunk Configuration**:
   - Chunk Size: 6000 characters (uses CHUNK_SIZE constant)
-  - No per-note limits: All relevant chunks included
+  - All relevant chunks included from matching notes
 - **Graph Boost Configuration**:
   - Semantic Similarity Threshold: 75% (only boost highly relevant results)
   - Max Candidates: 10 (performance cap)
   - Boost Strength: 0.1 (connection influence)
   - Max Boost Multiplier: 1.15x (prevents over-boosting)
-- **Lexical Search RAM Limit**: RAM usage split between chunks (35%) and FlexSearch (65%)
+- **Memory Management**: RAM usage split between chunks (35%) and FlexSearch (65%)
 - **Embedding Batch Size**: Number of chunks to embed at once (reduce if token limits exceeded)
-- **Exclusions/Inclusions**: File patterns to index
-
-## Implementation Status
-
-✅ **Core Pipeline**: Query expansion, grep, chunking, parallel search, RRF fusion
-✅ **Chunking System**: Heading-first algorithm with memory-bounded processing
-✅ **Smart Pipeline Execution**: Skips unused search pipelines when weight is 0% or 100% for optimal performance
-✅ **Query Expansion Fix**: Separated salient terms (scoring) from expanded terms (recall only)
-✅ **Lexical Boosts Control**: Optional folder and graph boosts with pure relevance mode
-✅ **Lexical Reranking**: Folder and graph boosts applied before RRF fusion (when enabled)
-✅ **Relevance-Based Results**: All relevant chunks included regardless of source note
-✅ **Frontmatter Property Indexing**: Complete frontmatter property extraction and indexing in chunk-based system
-✅ **Normalization**: Min-max normalization with explainability
-✅ **Semantic Search Fixed**: Returns chunk IDs consistently with lexical search, operates on actual chunk content
-✅ **Chunk ID Unification**: Both lexical and semantic engines use identical chunk ID format for proper explanation merging
-✅ **Security**: Path validation, size limits, circular reference handling
-✅ **UX**: Progress notifications, incremental indexing, commands
+- **File Filtering**: Pattern-based inclusions and exclusions for indexing
 
 ## Key Design Decisions
 
@@ -428,140 +412,3 @@ interface Chunk {
 10. **Min-Max Normalization**: Prevents artificial perfect scores while preserving monotonicity
 11. **Explainable Rankings**: Track contributing factors for transparency including chunk-level details
 12. **Memory Budget Split**: Fixed 35%/65% allocation between chunk cache and FlexSearch index
-
-## Legacy Search Migration
-
-### Current State (v2.x)
-
-The codebase currently supports both legacy Orama-based search and v3 tiered lexical search via a toggle in settings. The implementation uses a factory pattern (`SearchSystemFactory`) to route between systems.
-
-### Architecture for Dual Support
-
-```typescript
-// SearchSystem.ts provides unified interface
-interface SearchSystem {
-  createRetriever(app: App, options: RetrieverOptions): BaseRetriever;
-  getIndexer(): SearchIndexer;
-  isSemanticSearchEnabled(): boolean;
-}
-
-// Factory routes based on settings
-SearchSystemFactory.getSearchSystem(); // Returns appropriate implementation
-```
-
-### Legacy Removal Steps (v3.0.0)
-
-When ready to remove legacy search support:
-
-#### 1. Remove Legacy Classes from `SearchSystem.ts`
-
-- Delete `LegacySearchIndexer` class
-- Delete `LegacySearchSystem` class
-- Update `SearchSystemFactory.getSearchSystem()` to always return `V3SearchSystem`
-
-#### 2. Remove Settings Properties
-
-- Delete `useLegacySearch` from:
-  - `src/settings/model.ts`
-  - `src/constants.ts` (DEFAULT_SETTINGS)
-- Delete `numPartitions` setting (legacy partitioning)
-
-#### 3. Remove UI Components
-
-- Remove legacy search toggle from `src/settings/v2/components/QASettings.tsx`
-- Remove partition dropdown UI
-- Clean up conditional rendering logic
-
-#### 4. Delete Legacy Files
-
-```bash
-# Core legacy files to remove
-src/search/hybridRetriever.ts
-src/search/vectorStoreManager.ts
-src/search/chunkedStorage.ts
-src/search/dbOperations.ts
-src/search/indexOperations.ts
-src/search/indexEventHandler.ts
-```
-
-#### 5. Clean Package Dependencies
-
-Remove from `package.json`:
-
-- `@orama/orama`
-- Any Orama-related plugins
-
-#### 6. Update Documentation
-
-- Remove legacy search references from user documentation
-- Update API documentation
-- Remove deprecation warnings
-
-### Benefits After Removal
-
-- **Reduced Bundle Size**: ~200KB reduction from removing Orama
-- **Simpler Codebase**: Single search implementation path
-- **Better Performance**: No conditional checks or dynamic imports
-- **Cleaner Architecture**: Direct use of v3 components without abstraction layer
-- **Easier Maintenance**: One search system to maintain and optimize
-
-### Migration Timeline
-
-1. **v2.x** (Current): Dual support with deprecation warnings
-2. **v2.x+1**: Legacy search disabled by default, requires opt-in
-3. **v3.0.0**: Complete removal of legacy search code
-
-## Known Issues & Future Improvements
-
-### Critical Issues to Address
-
-1. **Memory Management**: `FullTextEngine.clear()` complexity could cause silent failures
-2. **Error Handling**: Inconsistent error patterns across components
-3. **Input Validation**: Missing bounds checking for public API inputs
-4. **Race Conditions**: Timeout handling in `QueryExpander` has potential races
-
-### Performance Optimizations
-
-1. **Sequential Chunking**: `ChunkManager` processes files sequentially, could benefit from batching
-2. **Search Scoring**: Nested loops in `FullTextEngine.search()` create O(n²) complexity
-3. **Vector Store Rebuilding**: Full rebuilds on each load instead of incremental updates
-4. **Memory Estimation**: Simplistic heuristics may lead to inaccurate memory budgeting
-
-### Performance Features ✅
-
-1. **Pipeline Skipping**: Automatically skips unused search pipelines when semantic weight is 0% or 100%
-2. **Smart Fusion**: Bypasses RRF fusion overhead for pure lexical (0%) or pure semantic (100%) searches
-3. **Boost Optimization**: Skips boost calculations when lexical search is not used
-
-### Architecture Improvements
-
-1. **Dependency Injection**: `SearchCore` tightly couples to all dependencies
-2. **Configuration Management**: Search settings scattered across multiple files
-3. **Error Standardization**: Some components return empty arrays, others null/undefined
-4. **Separation of Concerns**: RRF module handles multiple responsibilities
-
-### Missing Test Coverage
-
-1. **Concurrency**: No tests for concurrent search requests
-2. **Large Scale**: No performance tests with realistic vault sizes (1000+ files)
-3. **Memory Limits**: No tests for memory exhaustion scenarios
-4. **Provider Switching**: No tests for switching embedding providers mid-session
-
-### Security Considerations
-
-1. **Input Sanitization**: Search queries sent to LLM without sanitization
-2. **Resource Limits**: Memory limits exist but no CPU time limits
-3. **Prompt Injection**: Potential vulnerability in query expansion
-
-### Recommended Next Steps
-
-**High Priority:**
-
-1. Simplify memory management and add error recovery
-2. Standardize error handling patterns
-3. Add comprehensive input validation
-4. Fix race conditions in timeout handling
-
-**Medium Priority:** 5. Implement batch processing for better performance 6. Refactor for proper dependency injection 7. Centralize configuration management 8. Add structured logging for observability
-
-**Low Priority:** 9. Complete API documentation 10. Add comprehensive integration tests 11. Create architecture flow diagrams
