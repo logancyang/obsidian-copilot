@@ -25,7 +25,7 @@ const EMBEDDING_PROVIDER_CONSTRUCTORS = {
   [EmbeddingModelProviders.GOOGLE]: GoogleGenerativeAIEmbeddings,
   [EmbeddingModelProviders.AZURE_OPENAI]: AzureOpenAIEmbeddings,
   [EmbeddingModelProviders.OLLAMA]: OllamaEmbeddings,
-  [EmbeddingModelProviders.LM_STUDIO]: OpenAIEmbeddings,
+  [EmbeddingModelProviders.LM_STUDIO]: CustomOpenAIEmbeddings,
   [EmbeddingModelProviders.OPENAI_FORMAT]: OpenAIEmbeddings,
 } as const;
 
