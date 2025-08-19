@@ -148,7 +148,7 @@ describe("ChunkManager", () => {
       const chunks = await chunkManager.getChunks(["short.md"], defaultOptions);
 
       expect(chunks).toHaveLength(1);
-      expect(chunks[0].id).toBe("short.md#0");
+      expect(chunks[0].id).toBe("short.md#000");
       expect(chunks[0].notePath).toBe("short.md");
       expect(chunks[0].chunkIndex).toBe(0);
       expect(chunks[0].content).toContain("This is a short note");
@@ -161,9 +161,10 @@ describe("ChunkManager", () => {
 
       expect(chunks.length).toBeGreaterThan(1);
 
-      // Verify chunk IDs are sequential
+      // Verify chunk IDs are sequential with zero-padding
       chunks.forEach((chunk, index) => {
-        expect(chunk.id).toBe(`long.md#${index}`);
+        const paddedIndex = index.toString().padStart(3, "0");
+        expect(chunk.id).toBe(`long.md#${paddedIndex}`);
         expect(chunk.notePath).toBe("long.md");
         expect(chunk.chunkIndex).toBe(index);
       });
@@ -305,20 +306,20 @@ describe("ChunkManager", () => {
         maxBytesTotal: 1024 * 1024,
       });
 
-      const chunkText = chunkManager.getChunkText(chunks[0].id);
+      const chunkText = chunkManager.getChunkTextSync(chunks[0].id);
       expect(chunkText).toBe(chunks[0].content);
     });
 
     it("should return empty string for non-existent chunk ID", () => {
-      const chunkText = chunkManager.getChunkText("non-existent.md#999");
+      const chunkText = chunkManager.getChunkTextSync("non-existent.md#999");
       expect(chunkText).toBe("");
     });
 
     it("should handle malformed chunk IDs", () => {
-      const chunkText1 = chunkManager.getChunkText("malformed-id");
+      const chunkText1 = chunkManager.getChunkTextSync("malformed-id");
       expect(chunkText1).toBe("");
 
-      const chunkText2 = chunkManager.getChunkText("file.md#notanumber");
+      const chunkText2 = chunkManager.getChunkTextSync("file.md#notanumber");
       expect(chunkText2).toBe("");
     });
   });
@@ -420,6 +421,153 @@ describe("ChunkManager", () => {
       chunks.forEach((chunk, index) => {
         expect(chunk.chunkIndex).toBe(index);
       });
+    });
+  });
+
+  describe("ID format consistency", () => {
+    // Helper function to create a mock file with specific content
+    const createMockFile = (path: string, content: string) => {
+      mockApp.vault.cachedRead = jest.fn((file) => {
+        if (file.path === path) return Promise.resolve(content);
+        return Promise.resolve("");
+      });
+      mockApp.metadataCache.getFileCache = jest.fn((file) => {
+        if (file.path === path) {
+          return { headings: [], frontmatter: null };
+        }
+        return { headings: [], frontmatter: null };
+      });
+    };
+
+    it("should always use zero-padded format for chunk IDs", async () => {
+      // Create content that will generate multiple chunks - make it much longer
+      const paragraph =
+        "This is a substantial paragraph with enough content to create multiple chunks when split by the chunking algorithm. ".repeat(
+          20
+        );
+      const longContent = Array(10).fill(paragraph).join("\n\n");
+      createMockFile("test.md", longContent);
+
+      const chunks = await chunkManager.getChunks(["test.md"], {
+        maxChars: 1000, // Force multiple chunks
+        overlap: 0,
+        maxBytesTotal: 1024 * 1024,
+      });
+
+      expect(chunks.length).toBeGreaterThan(1);
+
+      chunks.forEach((chunk, index) => {
+        // Verify format is always zero-padded to 3 digits
+        const expectedId = `test.md#${index.toString().padStart(3, "0")}`;
+        expect(chunk.id).toBe(expectedId);
+
+        // Verify no old format IDs are generated
+        const oldFormatId = `test.md#${index}`;
+        if (index < 10) {
+          // Only check for single digits where old/new would differ
+          expect(chunk.id).not.toBe(oldFormatId);
+        }
+      });
+    });
+
+    it("should handle single and double digit indices correctly", async () => {
+      // Create content that will generate 15+ chunks
+      const sections = Array(15)
+        .fill(0)
+        .map((_, i) => `# Section ${i}\n` + "Content ".repeat(200))
+        .join("\n\n");
+
+      createMockFile("multi-chunk.md", sections);
+      mockApp.metadataCache.getFileCache = jest.fn(() => ({
+        headings: Array(15)
+          .fill(0)
+          .map((_, i) => ({
+            heading: `Section ${i}`,
+            level: 1,
+            position: { start: { offset: i * 1000 } },
+          })),
+        frontmatter: null,
+      }));
+
+      const chunks = await chunkManager.getChunks(["multi-chunk.md"], {
+        maxChars: 800,
+        overlap: 0,
+        maxBytesTotal: 1024 * 1024,
+      });
+
+      expect(chunks.length).toBeGreaterThanOrEqual(10);
+
+      // Check various indices
+      expect(chunks[0].id).toBe("multi-chunk.md#000");
+      expect(chunks[5].id).toBe("multi-chunk.md#005");
+      if (chunks.length > 10) {
+        expect(chunks[10].id).toBe("multi-chunk.md#010");
+      }
+    });
+
+    it("should find chunks by exact ID match only", async () => {
+      createMockFile("exact-match.md", "Content for testing exact ID matching");
+
+      const chunks = await chunkManager.getChunks(["exact-match.md"], {
+        maxChars: 2000,
+        overlap: 0,
+        maxBytesTotal: 1024 * 1024,
+      });
+
+      expect(chunks).toHaveLength(1);
+
+      const correctId = "exact-match.md#000";
+      const incorrectId = "exact-match.md#0"; // old format
+
+      expect(chunks[0].id).toBe(correctId);
+
+      // Should find with correct ID
+      const foundContent = chunkManager.getChunkTextSync(correctId);
+      expect(foundContent).toBeTruthy();
+
+      // Should NOT find with old format ID
+      const notFoundContent = chunkManager.getChunkTextSync(incorrectId);
+      expect(notFoundContent).toBe("");
+    });
+
+    it("should maintain ID format consistency in async methods", async () => {
+      createMockFile("async-test.md", "Test content for async ID consistency");
+
+      const chunks = await chunkManager.getChunks(["async-test.md"], {
+        maxChars: 2000,
+        overlap: 0,
+        maxBytesTotal: 1024 * 1024,
+      });
+
+      const chunkId = chunks[0].id;
+
+      expect(chunkId).toBe("async-test.md#000");
+
+      // Test async getChunkText
+      const asyncContent = await chunkManager.getChunkText(chunkId);
+      expect(asyncContent).toBeTruthy();
+
+      // Test with wrong format should not work
+      const wrongFormatContent = await chunkManager.getChunkText("async-test.md#0");
+      expect(wrongFormatContent).toBe("");
+    });
+
+    it("should generate IDs with correct zero-padding for all ranges", async () => {
+      // Test edge cases: 0-9, 10-99, 100+
+      const testCases = [
+        { index: 0, expected: "000" },
+        { index: 5, expected: "005" },
+        { index: 10, expected: "010" },
+        { index: 99, expected: "099" },
+        { index: 100, expected: "100" },
+        { index: 999, expected: "999" },
+      ];
+
+      for (const testCase of testCases) {
+        const manager = new ChunkManager(mockApp);
+        const generatedId = (manager as any).generateChunkId("test.md", testCase.index);
+        expect(generatedId).toBe(`test.md#${testCase.expected}`);
+      }
     });
   });
 });

@@ -146,7 +146,7 @@ export class IndexingPipeline {
       vecs.forEach((embedding, j) => {
         const chunk = batch[j];
         records.push({
-          id: `${chunk.path}#${chunk.chunkIndex}`,
+          id: `${chunk.path}#${chunk.chunkIndex.toString().padStart(3, "0")}`,
           path: chunk.path,
           title: chunk.title,
           mtime: chunk.mtime,
@@ -215,7 +215,7 @@ export class IndexingPipeline {
       vecs.forEach((embedding, j) => {
         const chunk = batch[j];
         records.push({
-          id: `${chunk.path}#${chunk.chunkIndex}`,
+          id: `${chunk.path}#${chunk.chunkIndex.toString().padStart(3, "0")}`,
           path: chunk.path,
           title: chunk.title,
           mtime: chunk.mtime,

@@ -1,6 +1,6 @@
 # Search v3: Chunk-Based Tiered Retrieval with Optional Semantic
 
-A high-performance, memory-bounded search system for Obsidian that uses intelligent chunking to deliver precise, contextual results without content explosion.
+A high-performance, memory-bounded search system for Obsidian that uses intelligent chunking to deliver precise, contextual results without content explosion. Both lexical and semantic search engines operate on individual chunks and return consistent chunk IDs for unified result assembly.
 
 ## Architecture Overview
 
@@ -24,6 +24,54 @@ graph TD
     style I fill:#f3e5f5
     style K fill:#fff3e0
 ```
+
+## Chunk ID Mapping and Result Assembly
+
+### How Chunk IDs Work
+
+Both lexical and semantic search engines operate on individual chunks and return consistent chunk IDs in the format `note_path#chunk_index` (e.g., `Piano Lessons/Lesson 4.md#0`, `Piano Lessons/Lesson 4.md#1`).
+
+### Chunk-to-Text Mapping Process
+
+1. **ChunkManager.getChunkText()**: Maps chunk IDs back to their text content
+
+   ```typescript
+   // Example: "Piano Lessons/Lesson 4.md#1" → full chunk text with headers
+   const chunkText = chunkManager.getChunkText("Piano Lessons/Lesson 4.md#1");
+   ```
+
+2. **Search Result Assembly**:
+   - **Lexical Search**: Returns chunk IDs from FlexSearch index with lexical match explanations
+   - **Semantic Search**: Returns chunk IDs from vector store with semantic similarity scores
+   - **RRF Fusion**: Combines results using chunk IDs as unified identifiers
+   - **Final Assembly**: ChunkManager retrieves chunk text for LLM context generation
+
+### Semantic Search Architecture Fix
+
+Previously, semantic search had a critical bug where it:
+
+- Only stored note titles in vector store `pageContent`
+- Returned note paths instead of chunk IDs
+- Aggregated scores by note instead of individual chunks
+
+**Fixed Implementation**:
+
+```typescript
+// MemoryIndexManager now properly stores and returns chunk IDs
+const chunkToScores = new Map<string, number[]>();
+for (const [doc, score] of results) {
+  const chunkId = (doc.metadata as any)?.id as string; // Now returns chunk ID
+  const normalized = Math.max(0, Math.min(1, score));
+  chunkToScores.set(chunkId, [normalized]);
+}
+```
+
+### Benefits of Unified Chunk Architecture
+
+- **Consistent Results**: Both engines return same chunk ID format
+- **Explanation Merging**: RRF can properly merge lexical matches with semantic scores for same note
+- **Granular Context**: LLM receives specific chunk content, not entire notes
+- **Memory Efficiency**: Only relevant chunks loaded for generation
 
 ## Key Features
 
@@ -361,7 +409,8 @@ interface Chunk {
 ✅ **Relevance-Based Results**: All relevant chunks included regardless of source note
 ✅ **Frontmatter Property Indexing**: Complete frontmatter property extraction and indexing in chunk-based system
 ✅ **Normalization**: Min-max normalization with explainability
-✅ **Semantic**: Optional vector search with consistent chunk candidates
+✅ **Semantic Search Fixed**: Returns chunk IDs consistently with lexical search, operates on actual chunk content
+✅ **Chunk ID Unification**: Both lexical and semantic engines use identical chunk ID format for proper explanation merging
 ✅ **Security**: Path validation, size limits, circular reference handling
 ✅ **UX**: Progress notifications, incremental indexing, commands
 

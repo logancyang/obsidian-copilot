@@ -7,10 +7,11 @@ import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
  * Chunk interface for unified search system
  */
 export interface Chunk {
-  id: string; // note_path#chunk_index
+  id: string; // note_path#chunk_index (zero-padded)
   notePath: string; // original note path
   chunkIndex: number; // 0-based chunk position
   content: string; // chunk text with headers
+  contentHash: string; // hash to validate content integrity
   title: string; // note title
   heading: string; // section heading (first-class field)
   mtime: number; // note modification time
@@ -44,9 +45,12 @@ export class ChunkManager {
   private splitter: RecursiveCharacterTextSplitter;
 
   constructor(private app: App) {
-    // Create splitter for fallback paragraph splitting
+    // Create splitter for deterministic paragraph splitting
     this.splitter = RecursiveCharacterTextSplitter.fromLanguage("markdown", {
       chunkSize: CHUNK_SIZE,
+      chunkOverlap: 0, // Explicit overlap for determinism
+      separators: ["\n\n", "\n", ". ", " ", ""], // Explicit separators
+      keepSeparator: false, // Consistent separator handling
     });
   }
 
@@ -125,19 +129,107 @@ export class ChunkManager {
   }
 
   /**
-   * Get chunk text by ID (for LLM context)
+   * Get chunk text by ID (for LLM context) with automatic cache validation and regeneration
    */
-  getChunkText(id: string): string {
+  async getChunkText(id: string): Promise<string> {
+    const chunk = await this.ensureChunkExists(id);
+    return chunk?.content || "";
+  }
+
+  /**
+   * Ensure chunk exists in cache with automatic validation and regeneration
+   */
+  private async ensureChunkExists(id: string): Promise<Chunk | null> {
+    const [notePath] = id.split("#");
+    const chunks = await this.getValidatedChunks(notePath);
+
+    const chunk = chunks.find((c) => c.id === id);
+    if (!chunk) {
+      logWarn(`ChunkManager: Chunk ${id} not found after regeneration`);
+    }
+    return chunk || null;
+  }
+
+  /**
+   * Get validated chunks for a note path with automatic cache validation and regeneration
+   */
+  private async getValidatedChunks(notePath: string): Promise<Chunk[]> {
+    let chunks = this.cache.get(notePath);
+
+    if (!chunks) {
+      // FALLBACK: Regenerate chunks for this note
+      logInfo(`ChunkManager: Cache miss for ${notePath}, regenerating...`);
+      chunks = await this.regenerateChunks(notePath);
+      if (!chunks || chunks.length === 0) {
+        logWarn(`ChunkManager: Failed to regenerate chunks for ${notePath}`);
+        return [];
+      }
+    }
+
+    // VALIDATE: Check if file has been modified since chunks were created
+    const file = this.app.vault.getAbstractFileByPath(notePath);
+    if (file && file instanceof TFile && chunks.length > 0 && file.stat.mtime > chunks[0].mtime) {
+      logInfo(`ChunkManager: File ${notePath} modified, regenerating chunks`);
+      chunks = await this.regenerateChunks(notePath);
+      if (!chunks || chunks.length === 0) {
+        logWarn(`ChunkManager: Failed to regenerate chunks after modification for ${notePath}`);
+        return [];
+      }
+    }
+
+    return chunks;
+  }
+
+  /**
+   * Synchronous version for backward compatibility (with warning)
+   * @deprecated Use async getChunkText() instead for proper cache validation
+   */
+  getChunkTextSync(id: string): string {
     const [notePath] = id.split("#");
     const chunks = this.cache.get(notePath);
 
     if (!chunks) {
-      logWarn(`ChunkManager: Chunk not in cache: ${id}`);
+      logWarn(
+        `ChunkManager: Chunk not in cache: ${id} (use async getChunkText for auto-regeneration)`
+      );
       return "";
     }
 
     const chunk = chunks.find((c) => c.id === id);
     return chunk?.content || "";
+  }
+
+  /**
+   * Regenerate chunks for a specific note (used for cache misses and file changes)
+   */
+  private async regenerateChunks(notePath: string): Promise<Chunk[]> {
+    try {
+      const chunks = await this.generateChunksForNote(notePath, DEFAULT_CHUNK_OPTIONS);
+
+      if (chunks.length > 0) {
+        // Update cache
+        const chunkBytes = this.calculateChunkBytes(chunks);
+        if (this.memoryUsage + chunkBytes <= DEFAULT_CHUNK_OPTIONS.maxBytesTotal) {
+          // Remove old entry if it exists
+          const oldChunks = this.cache.get(notePath);
+          if (oldChunks) {
+            this.memoryUsage -= this.calculateChunkBytes(oldChunks);
+          }
+
+          this.cache.set(notePath, chunks);
+          this.memoryUsage += chunkBytes;
+        } else {
+          logWarn(
+            `ChunkManager: Cannot cache regenerated chunks for ${notePath}, would exceed memory budget`
+          );
+        }
+      }
+
+      return chunks;
+    } catch (error) {
+      logWarn(`ChunkManager: Failed to regenerate chunks for ${notePath}`, error);
+      return [];
+    }
   }
 
   /**
@@ -150,7 +242,7 @@ export class ChunkManager {
   }
 
   /**
-   * Generate chunks for a single note using heading-first algorithm
+   * Generate chunks for a single note using deterministic heading-first algorithm
    */
   private async generateChunksForNote(notePath: string, options: ChunkOptions): Promise<Chunk[]> {
     try {
@@ -159,14 +251,16 @@ export class ChunkManager {
         return [];
       }
 
-      const content = await this.app.vault.cachedRead(file);
+      const content = await this.safeReadFile(file);
       if (!content?.trim()) {
         return [];
       }
 
-      // Use metadata cache to get headings
+      // Use metadata cache to get headings and ensure deterministic order
       const cache = this.app.metadataCache.getFileCache(file);
-      const headings = cache?.headings || [];
+      const headings = (cache?.headings || [])
+        .slice() // Don't mutate original array
+        .sort((a, b) => a.position.start.offset - b.position.start.offset); // Ensure consistent order
 
       const chunks: Chunk[] = [];
       let chunkIndex = 0;
@@ -234,11 +328,15 @@ export class ChunkManager {
 
     if (fullContent.length <= options.maxChars) {
       // Section fits in one chunk
+      const chunkId = this.generateChunkId(file.path, startChunkIndex);
+      const contentHash = this.calculateContentHash(fullContent);
+
       chunks.push({
-        id: `${file.path}#${startChunkIndex}`,
+        id: chunkId,
         notePath: file.path,
         chunkIndex: startChunkIndex,
         content: fullContent,
+        contentHash,
         title,
         heading,
         mtime: file.stat.mtime,
@@ -252,11 +350,16 @@ export class ChunkManager {
         });
 
         docs.forEach((doc, index) => {
+          const chunkIndex = startChunkIndex + index;
+          const chunkId = this.generateChunkId(file.path, chunkIndex);
+          const contentHash = this.calculateContentHash(doc.pageContent);
+
           chunks.push({
-            id: `${file.path}#${startChunkIndex + index}`,
+            id: chunkId,
             notePath: file.path,
-            chunkIndex: startChunkIndex + index,
+            chunkIndex,
             content: doc.pageContent,
+            contentHash,
             title,
             heading,
             mtime: file.stat.mtime,
@@ -265,11 +368,15 @@ export class ChunkManager {
       } catch (error) {
         logWarn(`ChunkManager: Failed to split section in ${file.path}`, error);
         // Fallback to single chunk even if large
+        const chunkId = this.generateChunkId(file.path, startChunkIndex);
+        const contentHash = this.calculateContentHash(fullContent);
+
         chunks.push({
-          id: `${file.path}#${startChunkIndex}`,
+          id: chunkId,
           notePath: file.path,
           chunkIndex: startChunkIndex,
           content: fullContent,
+          contentHash,
           title,
           heading,
           mtime: file.stat.mtime,
@@ -287,6 +394,38 @@ export class ChunkManager {
     return chunks.reduce((total, chunk) => {
       return total + Buffer.byteLength(chunk.content, "utf8");
     }, 0);
+  }
+
+  /**
+   * Safe file reading with error handling
+   */
+  private async safeReadFile(file: TFile): Promise<string> {
+    try {
+      const content = await this.app.vault.cachedRead(file);
+      return content?.trim() || "";
+    } catch (error) {
+      logWarn(`ChunkManager: Failed to read ${file.path}`, error);
+      return "";
+    }
+  }
+
+  /**
+   * Generate deterministic chunk ID with zero-padded index
+   */
+  private generateChunkId(notePath: string, chunkIndex: number): string {
+    // Zero-pad index to 3 digits for consistent sorting
+    const paddedIndex = chunkIndex.toString().padStart(3, "0");
+    return `${notePath}#${paddedIndex}`;
+  }
+
+  /**
+   * Calculate content hash for integrity validation
+   */
+  private calculateContentHash(content: string): string {
+    // Lightweight hash using length + content sample for cache validation
+    const lengthHex = content.length.toString(16);
+    const contentSample = content.slice(0, 32).replace(/\s/g, "").substring(0, 8);
+    return lengthHex + contentSample;
   }
 
   /**

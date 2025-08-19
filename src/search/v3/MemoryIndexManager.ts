@@ -176,7 +176,7 @@ export class MemoryIndexManager {
 
     if (variantVectors.length === 0) return [];
 
-    const chunkToScores = new Map<string, number[]>();
+    const chunkScoreMap = new Map<string, number[]>();
     const candidateSet = candidates && candidates.length > 0 ? new Set(candidates) : null;
 
     // Log candidate restriction for verification
@@ -207,9 +207,9 @@ export class MemoryIndexManager {
         }
         totalIncluded++;
         const normalized = Math.max(0, Math.min(1, typeof score === "number" ? score : 0));
-        const arr = chunkToScores.get(chunkId) ?? [];
+        const arr = chunkScoreMap.get(chunkId) ?? [];
         arr.push(normalized);
-        chunkToScores.set(chunkId, arr);
+        chunkScoreMap.set(chunkId, arr);
       }
     }
 
@@ -221,7 +221,7 @@ export class MemoryIndexManager {
     }
 
     // Aggregate scores per chunk (multiple queries may hit the same chunk)
-    const aggregated = this.aggregateChunkScores(chunkToScores);
+    const aggregated = this.aggregateChunkScores(chunkScoreMap);
 
     // Optional score normalization
     if (aggregated.length > 1) {
@@ -253,11 +253,11 @@ export class MemoryIndexManager {
    * Aggregate multiple scores per chunk (for individual chunk results)
    */
   private aggregateChunkScores(
-    chunkToScores: Map<string, number[]>
+    chunkScoreMap: Map<string, number[]>
   ): Array<{ id: string; score: number }> {
     const aggregated: Array<{ id: string; score: number }> = [];
 
-    for (const [chunkId, scores] of chunkToScores.entries()) {
+    for (const [chunkId, scores] of chunkScoreMap.entries()) {
       // Take the best score from multiple query variants for this chunk
       const bestScore = Math.max(...scores);
       aggregated.push({ id: chunkId, score: bestScore });

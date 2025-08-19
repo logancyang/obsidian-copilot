@@ -53,7 +53,13 @@ export class TieredLexicalRetriever extends BaseRetriever {
     super();
     // Provide safe getter for chat model (returns null in tests if unavailable)
     this.searchCore = new SearchCore(app, safeGetChatModel);
-    this.chunkManager = (this.searchCore as any).getChunkManager?.() || new ChunkManager(app); // Use shared instance or fallback
+    // CRITICAL: Use the same ChunkManager instance as SearchCore to share cache
+    if (typeof this.searchCore.getChunkManager === "function") {
+      this.chunkManager = this.searchCore.getChunkManager();
+    } else {
+      // Fallback for tests where SearchCore is mocked
+      this.chunkManager = new ChunkManager(app);
+    }
   }
 
   /**
@@ -339,7 +345,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
           if (!file || !(file instanceof TFile)) continue;
 
           // Get chunk content (not full note content)
-          const chunkContent = this.chunkManager.getChunkText(result.id);
+          const chunkContent = this.chunkManager.getChunkTextSync(result.id);
           if (!chunkContent) continue;
 
           const cache = this.app.metadataCache.getFileCache(file);

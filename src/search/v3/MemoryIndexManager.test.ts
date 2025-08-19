@@ -112,13 +112,13 @@ describe("MemoryIndexManager", () => {
 
     const resultsAlpha = await manager.search(["alpha"], 5);
     expect(resultsAlpha.length).toBeGreaterThan(0);
-    expect(resultsAlpha[0].id).toBe("a.md");
-    // After per-note aggregation + min-max scaling, score should be near 1 and others below
+    expect(resultsAlpha[0].id).toBe("a#0");
+    // After chunk-level aggregation + min-max scaling, score should be near 1 and others below
     expect(resultsAlpha[0].score).toBeGreaterThan(0.5);
 
     const resultsBetaOnlyCandidate = await manager.search(["alpha"], 5, ["b.md"]);
-    // Candidate filter should ensure only b.md is considered
-    expect(resultsBetaOnlyCandidate.every((r) => r.id === "b.md")).toBe(true);
+    // Candidate filter should ensure only b.md chunks are considered
+    expect(resultsBetaOnlyCandidate.every((r) => r.id.startsWith("b#"))).toBe(true);
   });
 
   test("indexVault writes JSONL lines", async () => {
