@@ -400,7 +400,7 @@ interface Chunk {
 
 ## Key Design Decisions
 
-1. **Unified Chunking**: Both lexical and semantic search operate on same chunk candidates
+1. **Independent Search Pipelines**: Lexical operates on grep candidates, semantic searches entire embedding index
 2. **Heading-First Algorithm**: Preserves document structure while respecting size limits
 3. **No Persistent Full-Text Index**: Grep provides fast initial seeding, chunks built per-query
 4. **Ephemeral Everything**: Eliminates maintenance overhead

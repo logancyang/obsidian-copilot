@@ -145,9 +145,7 @@ export class SearchCore {
               maxResults,
               expanded.originalQuery
             ),
-        skipSemantic
-          ? Promise.resolve([])
-          : this.executeSemanticSearch(candidates, query, candidateLimit),
+        skipSemantic ? Promise.resolve([]) : this.executeSemanticSearch(query, candidateLimit),
       ]);
 
       // 8. Apply boosts to lexical results BEFORE RRF fusion (if enabled)
@@ -309,14 +307,12 @@ export class SearchCore {
   }
 
   /**
-   * Execute semantic search using embeddings
-   * @param candidates - Candidate documents to search within
+   * Execute semantic search using embeddings (searches entire index independently)
    * @param originalQuery - Original user query (used for embeddings and HyDE)
-   * @param candidateLimit - Maximum number of candidates
+   * @param candidateLimit - Maximum number of results to return
    * @returns Ranked list of documents from semantic search
    */
   private async executeSemanticSearch(
-    candidates: string[],
     originalQuery: string,
     candidateLimit: number
   ): Promise<NoteIdRank[]> {
@@ -331,12 +327,12 @@ export class SearchCore {
       // We only use the original query for semantic search, not expanded queries
       const semanticQueries = hydeDoc ? [hydeDoc, originalQuery] : [originalQuery];
 
-      // Pass the same candidates array to limit semantic search to the same subset
-      const semanticHits = await index.search(semanticQueries, topK, candidates);
+      // Search entire semantic index without candidate restrictions - semantic should be independent
+      const semanticHits = await index.search(semanticQueries, topK);
       const results = semanticHits.map(this.mapSemanticHit);
 
       logInfo(
-        `Semantic search: Found ${results.length} results (restricted to ${candidates.length} candidates)`
+        `Semantic search: Found ${results.length} results (unrestricted - searched entire index)`
       );
       return results;
     } catch (error) {

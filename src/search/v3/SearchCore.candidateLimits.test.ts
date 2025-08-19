@@ -23,7 +23,7 @@ describe("SearchCore - Candidate Limits", () => {
     searchCore = new SearchCore(app);
   });
 
-  it("should pass the same candidates to both full-text and semantic search", async () => {
+  it("should pass candidates to full-text but NOT to semantic search (semantic is independent)", async () => {
     const grepScanner = (searchCore as any).grepScanner;
     const fullTextEngine = (searchCore as any).fullTextEngine;
     const queryExpander = (searchCore as any).queryExpander;
@@ -75,13 +75,14 @@ describe("SearchCore - Candidate Limits", () => {
       maxResults: 10,
     });
 
-    // Verify both engines got the same candidates
+    // Verify full-text gets restricted candidates, semantic gets NO candidates (unrestricted)
     expect(fullTextCandidates).toHaveLength(candidateLimit);
-    expect(semanticCandidates).toEqual(fullTextCandidates);
-    expect(semanticCandidates).toEqual(grepResults.slice(0, candidateLimit));
+    expect(fullTextCandidates).toEqual(grepResults.slice(0, candidateLimit));
+    // Semantic search should NOT receive any candidates - it should search the entire index
+    expect(semanticCandidates).toBeUndefined();
   });
 
-  it("should not exceed candidateLimit even with fewer grep results", async () => {
+  it("should restrict full-text to available grep results but leave semantic unrestricted", async () => {
     const grepScanner = (searchCore as any).grepScanner;
     const fullTextEngine = (searchCore as any).fullTextEngine;
     const queryExpander = (searchCore as any).queryExpander;
@@ -132,8 +133,9 @@ describe("SearchCore - Candidate Limits", () => {
       maxResults: 10,
     });
 
-    // Should only use the available candidates
+    // Full-text should be limited to available grep results
     expect(fullTextCandidates).toEqual(grepResults);
-    expect(semanticCandidates).toEqual(grepResults);
+    // Semantic search should NOT receive any candidates - it should search the entire index
+    expect(semanticCandidates).toBeUndefined();
   });
 });
