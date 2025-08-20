@@ -955,6 +955,39 @@ export async function withSuppressedTokenWarnings<T>(fn: () => Promise<T>): Prom
 }
 
 /**
+ * Execute an operation with a timeout using AbortController for proper cancellation
+ * @param operation - Function that accepts an AbortSignal and returns a Promise
+ * @param timeoutMs - Timeout in milliseconds
+ * @param operationName - Name of the operation for error messages
+ * @returns Promise that resolves with the operation result or rejects with TimeoutError
+ */
+export async function withTimeout<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  operationName: string = "Operation"
+): Promise<T> {
+  const { TimeoutError } = await import("@/error");
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await Promise.race([
+      operation(controller.signal),
+      new Promise<never>((_, reject) => {
+        controller.signal.addEventListener("abort", () => {
+          reject(new TimeoutError(operationName, timeoutMs));
+        });
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
  * Check if the current Obsidian editor setting is in source mode
  */
 export function isSourceModeOn(): boolean {

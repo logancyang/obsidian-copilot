@@ -2,7 +2,7 @@ import { addSelectedTextContext, getChainType } from "@/aiParams";
 import { FileCache } from "@/cache/fileCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { ChainType } from "@/chainFactory";
-import { logError, logWarn } from "@/logger";
+import { logError } from "@/logger";
 
 import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
 import { EMPTY_COMMAND, QUICK_COMMAND_CODE_BLOCK } from "@/commands/constants";
@@ -144,28 +144,17 @@ export function registerCommands(
   addCommand(plugin, COMMAND_IDS.CLEAR_LOCAL_COPILOT_INDEX, async () => {
     try {
       const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
+      const { IndexPersistenceManager } = await import("@/search/v3/IndexPersistenceManager");
+
+      // Clear v3 index files (respects settings)
+      const persistenceManager = new IndexPersistenceManager(plugin.app);
+      await persistenceManager.clearIndex();
+
+      // Clear in-memory cache
       const manager = MemoryIndexManager.getInstance(plugin.app);
-      const cfgDir = plugin.app.vault.configDir;
-      // List all files in config dir; remove any starting with copilot-index
-      // @ts-ignore
-      const { files } = await plugin.app.vault.adapter.list(cfgDir);
-      for (const f of files || []) {
-        const name = typeof f === "string" ? f : f;
-        if (
-          name.includes("/copilot-index") &&
-          (name.endsWith(".json") || name.endsWith(".jsonl"))
-        ) {
-          try {
-            // @ts-ignore
-            await plugin.app.vault.adapter.remove(name);
-          } catch (e) {
-            logWarn("Failed to remove index file:", name, e);
-          }
-        }
-      }
-      // Reset in-memory using public method
       manager.clearIndex();
-      new Notice("Cleared semantic memory index files.");
+
+      new Notice("Cleared local Copilot semantic index.");
     } catch (err) {
       logError("Error clearing semantic memory index:", err);
       new Notice("Failed to clear semantic memory index.");

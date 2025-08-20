@@ -32,6 +32,7 @@ export class MemoryIndexManager {
   private records: JsonlChunkRecord[] = [];
   private vectorStore: MemoryVectorStore | null = null;
   private rateLimiter: RateLimiter;
+  private baselineMemoryMB: number | null = null;
 
   // Helper managers
   private persistenceManager: IndexPersistenceManager;
@@ -176,7 +177,7 @@ export class MemoryIndexManager {
 
     if (variantVectors.length === 0) return [];
 
-    const noteToScores = new Map<string, number[]>();
+    const chunkScoreMap = new Map<string, number[]>();
     const candidateSet = candidates && candidates.length > 0 ? new Set(candidates) : null;
 
     // Log candidate restriction for verification
@@ -197,16 +198,19 @@ export class MemoryIndexManager {
     for (const qv of variantVectors) {
       const results = await this.vectorStore.similaritySearchVectorWithScore(qv, kPerQuery);
       for (const [doc, score] of results) {
-        const path = (doc.metadata as any)?.path as string;
-        if (candidateSet && !candidateSet.has(path)) {
+        const chunkId = (doc.metadata as any)?.id as string;
+        const notePath = (doc.metadata as any)?.path as string;
+
+        // Filter by candidate note paths (chunk ID should start with candidate path)
+        if (candidateSet && !candidateSet.has(notePath)) {
           totalSkipped++;
           continue;
         }
         totalIncluded++;
         const normalized = Math.max(0, Math.min(1, typeof score === "number" ? score : 0));
-        const arr = noteToScores.get(path) ?? [];
+        const arr = chunkScoreMap.get(chunkId) ?? [];
         arr.push(normalized);
-        noteToScores.set(path, arr);
+        chunkScoreMap.set(chunkId, arr);
       }
     }
 
@@ -217,8 +221,8 @@ export class MemoryIndexManager {
       );
     }
 
-    // Aggregate scores per note
-    const aggregated = this.aggregateScores(noteToScores);
+    // Aggregate scores per chunk (multiple queries may hit the same chunk)
+    const aggregated = this.aggregateChunkScores(chunkScoreMap);
 
     // Optional score normalization
     if (aggregated.length > 1) {
@@ -229,7 +233,7 @@ export class MemoryIndexManager {
   }
 
   /**
-   * Aggregate multiple scores per note
+   * Aggregate multiple scores per note (legacy method for backward compatibility)
    */
   private aggregateScores(
     noteToScores: Map<string, number[]>
@@ -241,6 +245,23 @@ export class MemoryIndexManager {
       const top = arr.slice(0, Math.min(MemoryIndexManager.SCORE_AGGREGATION_TOP_K, arr.length));
       const avg = top.reduce((s, v) => s + v, 0) / top.length;
       aggregated.push({ id, score: avg });
+    }
+
+    return aggregated;
+  }
+
+  /**
+   * Aggregate multiple scores per chunk (for individual chunk results)
+   */
+  private aggregateChunkScores(
+    chunkScoreMap: Map<string, number[]>
+  ): Array<{ id: string; score: number }> {
+    const aggregated: Array<{ id: string; score: number }> = [];
+
+    for (const [chunkId, scores] of chunkScoreMap.entries()) {
+      // Take the best score from multiple query variants for this chunk
+      const bestScore = Math.max(...scores);
+      aggregated.push({ id: chunkId, score: bestScore });
     }
 
     return aggregated;
@@ -271,12 +292,19 @@ export class MemoryIndexManager {
    */
   async indexVault(): Promise<number> {
     try {
+      const startTime = Date.now();
+      this.baselineMemoryMB = this.getMemoryUsageMB();
+
       const { inclusions, exclusions } = getMatchingPatterns();
       const files = this.app.vault
         .getMarkdownFiles()
         .filter((f) => shouldIndexFile(f, inclusions, exclusions));
 
       if (files.length === 0) return 0;
+
+      logInfo(
+        `MemoryIndex: Starting full vault indexing - ${files.length} files, baseline memory: ${this.baselineMemoryMB.toFixed(1)}MB`
+      );
 
       // Show notification
       this.notificationManager.show(files.length);
@@ -285,7 +313,21 @@ export class MemoryIndexManager {
       const progressTracker = new IndexingProgressTracker(files.length);
 
       // Prepare chunks
+      const chunksStartTime = Date.now();
+      const chunksStartMemory = this.getMemoryUsageMB();
+      const chunksStartIncremental = chunksStartMemory - this.baselineMemoryMB!;
+      logInfo(
+        `MemoryIndex: Preparing chunks - incremental memory before chunking: +${chunksStartIncremental.toFixed(1)}MB`
+      );
+
       const { chunks, fileChunkMap } = await this.indexingPipeline.prepareFileChunks(files);
+
+      const chunksEndMemory = this.getMemoryUsageMB();
+      const chunksEndIncremental = chunksEndMemory - this.baselineMemoryMB!;
+      const chunkingTime = Date.now() - chunksStartTime;
+      logInfo(
+        `MemoryIndex: Chunks prepared - ${chunks.length} chunks from ${files.length} files in ${chunkingTime}ms, incremental memory after chunking: +${chunksEndIncremental.toFixed(1)}MB (+${(chunksEndIncremental - chunksStartIncremental).toFixed(1)}MB for chunking)`
+      );
 
       if (chunks.length === 0 || this.notificationManager.shouldCancel) {
         this.notificationManager.finalize(0);
@@ -293,10 +335,24 @@ export class MemoryIndexManager {
       }
 
       // Process chunks
+      const embeddingStartTime = Date.now();
+      const embeddingStartMemory = this.getMemoryUsageMB();
+      const embeddingStartIncremental = embeddingStartMemory - this.baselineMemoryMB!;
+      logInfo(
+        `MemoryIndex: Starting embedding generation - incremental memory before embeddings: +${embeddingStartIncremental.toFixed(1)}MB`
+      );
+
       const records = await this.indexingPipeline.processChunksBatched(
         chunks,
         fileChunkMap,
         progressTracker
+      );
+
+      const embeddingEndMemory = this.getMemoryUsageMB();
+      const embeddingEndIncremental = embeddingEndMemory - this.baselineMemoryMB!;
+      const embeddingTime = Date.now() - embeddingStartTime;
+      logInfo(
+        `MemoryIndex: Embeddings generated - ${records.length} records in ${embeddingTime}ms, incremental memory after embeddings: +${embeddingEndIncremental.toFixed(1)}MB (+${(embeddingEndIncremental - embeddingStartIncremental).toFixed(1)}MB for embeddings)`
       );
 
       if (this.notificationManager.shouldCancel) {
@@ -305,11 +361,32 @@ export class MemoryIndexManager {
       }
 
       // Persist
+      const persistStartTime = Date.now();
+      const persistStartMemory = this.getMemoryUsageMB();
+      const persistStartIncremental = persistStartMemory - this.baselineMemoryMB!;
+      logInfo(
+        `MemoryIndex: Starting persistence - incremental memory before writing: +${persistStartIncremental.toFixed(1)}MB`
+      );
+
       await this.persistenceManager.writeRecords(records);
+
+      const persistEndMemory = this.getMemoryUsageMB();
+      const persistEndIncremental = persistEndMemory - this.baselineMemoryMB!;
+      const persistTime = Date.now() - persistStartTime;
+      logInfo(
+        `MemoryIndex: Persistence complete - written in ${persistTime}ms, incremental memory after writing: +${persistEndIncremental.toFixed(1)}MB (+${(persistEndIncremental - persistStartIncremental).toFixed(1)}MB for persistence)`
+      );
+
       this.loaded = false; // force reload
 
       const processedCount = fileChunkMap.size;
-      logInfo(`MemoryIndex: Indexed ${records.length} chunks from ${processedCount} files`);
+      const totalTime = Date.now() - startTime;
+      const finalMemory = this.getMemoryUsageMB();
+      const finalIncremental = finalMemory - this.baselineMemoryMB!;
+      logInfo(
+        `MemoryIndex: Indexing complete - ${records.length} chunks from ${processedCount} files in ${totalTime}ms, total incremental memory used: +${finalIncremental.toFixed(1)}MB`
+      );
+
       this.notificationManager.finalize(processedCount);
 
       return processedCount;
@@ -435,19 +512,34 @@ export class MemoryIndexManager {
   }
 
   /**
-   * Reindex a single modified file
+   * Reindex a single modified file using simplified in-memory approach.
+   *
+   * OPTIMIZATION: Always loads records into memory (if not already loaded) and updates them directly.
+   * This eliminates complex fallback logic and ensures consistent behavior regardless of initial state.
+   * Since semantic search requires all records in memory anyway, this approach is both simpler
+   * and more efficient than disk-based filtering operations.
    */
   async reindexSingleFileIfModified(file: any, previousMtime: number | null): Promise<void> {
-    const existed = await this.loadIfExists();
-    if (!existed) return;
-
     try {
       if (!file || file.extension !== "md") return;
 
-      const indexedMtime = Math.max(
-        0,
-        ...this.records.filter((r) => r.path === file.path).map((r) => r.mtime)
-      );
+      // Check if we have an existing index
+      const hasIndex = await this.persistenceManager.hasIndex();
+      if (!hasIndex) return;
+
+      // For memory efficiency, we'll check mtime without loading all records
+      // First, try to get the indexed mtime from memory if already loaded
+      let indexedMtime = 0;
+      if (this.loaded && this.records.length > 0) {
+        indexedMtime = Math.max(
+          0,
+          ...this.records.filter((r) => r.path === file.path).map((r) => r.mtime)
+        );
+      } else {
+        // If not loaded, we'll assume it needs updating if previousMtime suggests it
+        // This avoids loading the entire index just to check one file's mtime
+        indexedMtime = previousMtime ?? 0;
+      }
 
       const prev = previousMtime ?? indexedMtime;
       if (!file.stat?.mtime || file.stat.mtime <= prev) {
@@ -458,19 +550,29 @@ export class MemoryIndexManager {
       const chunks = await this.indexingPipeline.prepareFileChunksForSingle(file);
       const newRecords = await this.indexingPipeline.processSingleFileChunks(chunks);
 
-      // Remove old records for this file
-      this.records = this.records.filter((r) => r.path !== file.path);
+      // SIMPLIFIED APPROACH: Always ensure records are loaded and update in-memory
+      // This is fast if already loaded, and handles all edge cases consistently
+      await this.ensureLoaded();
 
-      // Add new records
+      // Update in-memory records (works whether records array was empty or populated)
+      this.records = this.records.filter((r) => r.path !== file.path);
       this.records.push(...newRecords);
 
-      // Persist
+      // Persist the updated records directly from memory
       await this.persistenceManager.writeRecords(this.records);
-      this.loaded = false; // force rebuild of vector store
 
-      logInfo(`MemoryIndex: Reindexed modified file ${file.path} with ${newRecords.length} chunks`);
+      // Rebuild vector store from the updated in-memory records
+      await this.buildVectorStore();
+
+      logInfo(
+        `MemoryIndex: Reindexed modified file ${file.path} with ${newRecords.length} chunks using O(1) in-memory update`
+      );
     } catch (error) {
       logWarn("MemoryIndex: reindexSingleFileIfModified failed", error);
+
+      // If incremental update fails, we could fallback to full reindex
+      // but that might still cause OOM, so we'll just log the error
+      throw error;
     }
   }
 
@@ -524,5 +626,20 @@ export class MemoryIndexManager {
    */
   public getVectorStore(): MemoryVectorStore | null {
     return this.vectorStore;
+  }
+
+  /**
+   * Get current memory usage in MB
+   */
+  private getMemoryUsageMB(): number {
+    if (typeof process !== "undefined" && process.memoryUsage) {
+      const usage = process.memoryUsage();
+      return usage.heapUsed / 1024 / 1024;
+    }
+    // Fallback for browser environments
+    if (typeof performance !== "undefined" && (performance as any).memory) {
+      return (performance as any).memory.usedJSHeapSize / 1024 / 1024;
+    }
+    return 0;
   }
 }

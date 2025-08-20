@@ -56,4 +56,6 @@ export interface SearchOptions {
   l1ByteCap?: number;
   candidateLimit?: number;
   salientTerms?: string[]; // Additional terms to enhance the search
+  /** Enable lexical boosts (folder and graph) - default: true */
+  enableLexicalBoosts?: boolean;
 }

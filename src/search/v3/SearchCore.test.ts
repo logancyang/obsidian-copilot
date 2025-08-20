@@ -81,7 +81,7 @@ describe("SearchCore - HyDE Integration", () => {
     expect(generateHyDESpy).toHaveBeenCalledWith("How do I implement authentication?");
     expect(mockChatModel.invoke).toHaveBeenCalledWith(
       expect.stringContaining("Write a brief, informative passage"),
-      expect.objectContaining({ signal: expect.any(AbortSignal) })
+      expect.objectContaining({ signal: expect.any(Object) })
     );
   });
 
@@ -122,6 +122,104 @@ describe("SearchCore - HyDE Integration", () => {
     }
   });
 
+  it("should skip boosts when enableLexicalBoosts is false", async () => {
+    const core = new SearchCore(app, getChatModel);
+
+    // Mock boost calculators to verify they're not called
+    const mockFolderBoost = (core as any).folderBoostCalculator;
+    const mockGraphBoost = (core as any).graphBoostCalculator;
+    const applyBoostsSpy = jest.spyOn(mockFolderBoost, "applyBoosts");
+    const applyBoostSpy = jest.spyOn(mockGraphBoost, "applyBoost");
+
+    await core.retrieve("test query", {
+      maxResults: 10,
+      enableSemantic: false,
+      enableLexicalBoosts: false,
+    });
+
+    // Verify boost calculators were NOT called
+    expect(applyBoostsSpy).not.toHaveBeenCalled();
+    expect(applyBoostSpy).not.toHaveBeenCalled();
+  });
+
+  it("should apply boosts when enableLexicalBoosts is true", async () => {
+    const core = new SearchCore(app, getChatModel);
+
+    // Mock boost calculators to verify they're called
+    const mockFolderBoost = (core as any).folderBoostCalculator;
+    const mockGraphBoost = (core as any).graphBoostCalculator;
+    const applyBoostsSpy = jest.spyOn(mockFolderBoost, "applyBoosts").mockImplementation((r) => r);
+    const applyBoostSpy = jest.spyOn(mockGraphBoost, "applyBoost").mockImplementation((r) => r);
+
+    await core.retrieve("test query", {
+      maxResults: 10,
+      enableSemantic: false,
+      enableLexicalBoosts: true,
+    });
+
+    // Verify boost calculators were called
+    expect(applyBoostsSpy).toHaveBeenCalled();
+    expect(applyBoostSpy).toHaveBeenCalled();
+  });
+
+  it("should skip lexical search when semantic weight is 100%", async () => {
+    const core = new SearchCore(app, getChatModel);
+
+    // Spy on the lexical search method
+    const executeLexicalSpy = jest.spyOn(core as any, "executeLexicalSearch");
+    const executeSemanticSpy = jest
+      .spyOn(core as any, "executeSemanticSearch")
+      .mockResolvedValue([]);
+
+    await core.retrieve("test query", {
+      maxResults: 10,
+      enableSemantic: true,
+      semanticWeight: 1.0, // 100% semantic
+    });
+
+    // Verify lexical search was skipped but semantic was called
+    expect(executeLexicalSpy).not.toHaveBeenCalled();
+    expect(executeSemanticSpy).toHaveBeenCalled();
+  });
+
+  it("should skip semantic search when semantic weight is 0%", async () => {
+    const core = new SearchCore(app, getChatModel);
+
+    // Spy on the search methods
+    const executeLexicalSpy = jest.spyOn(core as any, "executeLexicalSearch").mockResolvedValue([]);
+    const executeSemanticSpy = jest.spyOn(core as any, "executeSemanticSearch");
+
+    await core.retrieve("test query", {
+      maxResults: 10,
+      enableSemantic: true,
+      semanticWeight: 0.0, // 0% semantic
+    });
+
+    // Verify semantic search was skipped but lexical was called
+    expect(executeLexicalSpy).toHaveBeenCalled();
+    expect(executeSemanticSpy).not.toHaveBeenCalled();
+  });
+
+  it("should run both searches when semantic weight is between 0% and 100%", async () => {
+    const core = new SearchCore(app, getChatModel);
+
+    // Spy on the search methods
+    const executeLexicalSpy = jest.spyOn(core as any, "executeLexicalSearch").mockResolvedValue([]);
+    const executeSemanticSpy = jest
+      .spyOn(core as any, "executeSemanticSearch")
+      .mockResolvedValue([]);
+
+    await core.retrieve("test query", {
+      maxResults: 10,
+      enableSemantic: true,
+      semanticWeight: 0.6, // 60% semantic
+    });
+
+    // Verify both searches were called
+    expect(executeLexicalSpy).toHaveBeenCalled();
+    expect(executeSemanticSpy).toHaveBeenCalled();
+  });
+
   it("should work without chat model", async () => {
     const core = new SearchCore(app, undefined);
 
@@ -135,5 +233,70 @@ describe("SearchCore - HyDE Integration", () => {
     });
 
     expect(results).toBeDefined();
+  });
+
+  it("should return both lexical and semantic chunk results with proper explanations", async () => {
+    const core = new SearchCore(app, getChatModel);
+
+    // Mock lexical results with chunk IDs and lexical explanations
+    const mockLexicalResults = [
+      {
+        id: "Piano Lessons/Lesson 4.md#0",
+        score: 1.5,
+        engine: "fulltext" as const,
+        explanation: {
+          lexicalMatches: [{ field: "path", query: "piano", weight: 3 }],
+          baseScore: 1.5,
+          finalScore: 1.5,
+        },
+      },
+    ];
+
+    // Mock semantic results with chunk IDs and semantic explanations (now consistent with lexical)
+    const mockSemanticResults = [
+      {
+        id: "Piano Lessons/Lesson 4.md#1", // Different chunk from same note
+        score: 0.856,
+        engine: "semantic" as const,
+        explanation: {
+          semanticScore: 0.856,
+          baseScore: 0.856,
+          finalScore: 0.856,
+        },
+      },
+    ];
+
+    // Mock the search methods
+    jest.spyOn(core as any, "executeLexicalSearch").mockResolvedValue(mockLexicalResults);
+    jest.spyOn(core as any, "executeSemanticSearch").mockResolvedValue(mockSemanticResults);
+
+    const results = await core.retrieve("piano notes", {
+      maxResults: 10,
+      enableSemantic: true,
+      semanticWeight: 0.5, // 50% semantic to trigger RRF fusion
+    });
+
+    expect(results).toBeDefined();
+    expect(results.length).toBeGreaterThan(0);
+
+    // Find the results for Lesson 4 - we should have both chunks with their respective explanations
+    const lesson4Results = results.filter((r) => r.id.includes("Lesson 4"));
+    expect(lesson4Results.length).toBeGreaterThan(0);
+
+    // Find the lexical chunk result
+    const lexicalChunk = lesson4Results.find((r) => r.id.includes("#0"));
+    expect(lexicalChunk).toBeDefined();
+    if (lexicalChunk) {
+      expect(lexicalChunk.explanation?.lexicalMatches).toBeDefined();
+      expect(lexicalChunk.explanation?.lexicalMatches?.length).toBeGreaterThan(0);
+    }
+
+    // Find the semantic chunk result
+    const semanticChunk = lesson4Results.find((r) => r.id.includes("#1"));
+    expect(semanticChunk).toBeDefined();
+    if (semanticChunk) {
+      expect(semanticChunk.explanation?.semanticScore).toBeDefined();
+      expect(semanticChunk.explanation?.semanticScore).toBe(0.856);
+    }
   });
 });

@@ -1,5 +1,4 @@
 import { ChainType } from "@/chainFactory";
-import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getModelDisplayWithIcons } from "@/components/ui/model-display";
@@ -29,17 +28,6 @@ export const BasicSettings: React.FC = () => {
   const [conversationNoteName, setConversationNoteName] = useState(
     settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}"
   );
-
-  const handleSetDefaultEmbeddingModel = async (modelKey: string) => {
-    if (modelKey !== settings.embeddingModelKey) {
-      new RebuildIndexConfirmModal(app, async () => {
-        updateSetting("embeddingModelKey", modelKey);
-        const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
-        await MemoryIndexManager.getInstance(app).indexVault();
-        await MemoryIndexManager.getInstance(app).ensureLoaded();
-      }).open();
-    }
-  };
 
   const applyCustomNoteFormat = () => {
     setIsChecking(true);
@@ -170,45 +158,6 @@ export const BasicSettings: React.FC = () => {
                 ? enableActivatedModels
                 : [{ label: "Select Model", value: "Select Model" }, ...enableActivatedModels]
             }
-            placeholder="Model"
-          />
-
-          <SettingItem
-            type="select"
-            title="Embedding Model"
-            description={
-              <div className="tw-space-y-2">
-                <div className="tw-flex tw-items-center tw-gap-1.5">
-                  <span className="tw-font-medium tw-leading-none tw-text-accent">
-                    Core Feature: Powers Semantic Search & QA
-                  </span>
-                  <TooltipProvider delayDuration={0}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <HelpCircle className="tw-size-4" />
-                      </TooltipTrigger>
-                      <TooltipContent className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
-                        <div className="tw-pt-2 tw-text-sm tw-text-muted">
-                          This model converts text into vector representations, essential for
-                          semantic search and QA functionality. Changing the embedding model will:
-                        </div>
-                        <ul className="tw-pl-4 tw-text-sm tw-text-muted">
-                          <li>Require rebuilding your vault&#39;s vector index</li>
-                          <li>Affect semantic search quality</li>
-                          <li>Impact QA feature performance</li>
-                        </ul>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-              </div>
-            }
-            value={settings.embeddingModelKey}
-            onChange={handleSetDefaultEmbeddingModel}
-            options={settings.activeEmbeddingModels.map((model) => ({
-              label: getModelDisplayWithIcons(model),
-              value: getModelKeyFromModel(model),
-            }))}
             placeholder="Model"
           />
 

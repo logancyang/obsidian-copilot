@@ -1,6 +1,9 @@
-import { logError, logInfo } from "@/logger";
+import { logError, logInfo, logWarn } from "@/logger";
+import { TimeoutError } from "@/error";
+import { withTimeout } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { App } from "obsidian";
+import { ChunkManager } from "./chunks";
 import { FullTextEngine } from "./engines/FullTextEngine";
 import { NoteIdRank, SearchOptions } from "./interfaces";
 import { MemoryIndexManager } from "./MemoryIndexManager";
@@ -20,6 +23,7 @@ const FULLTEXT_RESULT_MULTIPLIER = 2;
 
 /**
  * Core search engine that orchestrates the multi-stage retrieval pipeline
+ * Updated to support unified chunking architecture
  */
 export class SearchCore {
   private grepScanner: GrepScanner;
@@ -28,13 +32,15 @@ export class SearchCore {
   private folderBoostCalculator: FolderBoostCalculator;
   private graphBoostCalculator: GraphBoostCalculator;
   private scoreNormalizer: ScoreNormalizer;
+  private chunkManager: ChunkManager;
 
   constructor(
     private app: App,
     private getChatModel?: () => Promise<BaseChatModel | null>
   ) {
     this.grepScanner = new GrepScanner(app);
-    this.fullTextEngine = new FullTextEngine(app);
+    this.chunkManager = new ChunkManager(app);
+    this.fullTextEngine = new FullTextEngine(app, this.chunkManager);
     this.queryExpander = new QueryExpander({
       getChatModel: this.getChatModel,
       maxVariants: 3,
@@ -56,18 +62,38 @@ export class SearchCore {
   }
 
   /**
-   * Main retrieval pipeline
+   * Main retrieval pipeline (now chunk-based by default)
    * @param query - User's search query
    * @param options - Search options
-   * @returns Ranked list of note IDs
+   * @returns Ranked list of chunk IDs
    */
   async retrieve(query: string, options: SearchOptions = {}): Promise<NoteIdRank[]> {
-    // Validate and sanitize options
+    // Input validation: check query
+    if (!query || typeof query !== "string") {
+      logWarn("SearchCore: Invalid query provided");
+      return [];
+    }
+
+    const trimmedQuery = query.trim();
+    if (trimmedQuery.length === 0) {
+      logWarn("SearchCore: Empty query provided");
+      return [];
+    }
+
+    if (trimmedQuery.length > 1000) {
+      logWarn("SearchCore: Query too long, truncating");
+      query = trimmedQuery.substring(0, 1000);
+    } else {
+      query = trimmedQuery;
+    }
+
+    // Validate and sanitize options with bounds checking
     const maxResults = Math.min(Math.max(1, options.maxResults || 30), 100);
-    const enableSemantic = options.enableSemantic || false;
+    const enableSemantic = Boolean(options.enableSemantic);
     const semanticWeight = Math.min(Math.max(0, options.semanticWeight ?? 0.6), 1); // Default 60% semantic
     const candidateLimit = Math.min(Math.max(10, options.candidateLimit || 500), 1000);
     const rrfK = Math.min(Math.max(1, options.rrfK || 60), 100);
+    const enableLexicalBoosts = Boolean(options.enableLexicalBoosts ?? true); // Default to enabled
 
     try {
       // Log search start with minimal verbosity
@@ -82,13 +108,15 @@ export class SearchCore {
         : expanded.salientTerms;
 
       // Only log details if expansion produced significant variants
-      if (queries.length > 1 || salientTerms.length > 3) {
-        logInfo(`Query expansion: ${queries.length} variants, ${salientTerms.length} terms`);
+      if (queries.length > 1 || salientTerms.length > 3 || expanded.expandedTerms.length > 0) {
+        logInfo(
+          `Query expansion: ${queries.length} variants, ${salientTerms.length} scoring terms (from original), ${expanded.expandedTerms.length} recall terms (LLM-generated)`
+        );
       }
 
-      // 2. GREP for initial candidates (use both queries and terms)
-      const allSearchStrings = [...queries, ...salientTerms];
-      const grepHits = await this.grepScanner.batchCachedReadGrep(allSearchStrings, 200);
+      // 2. GREP for initial candidates (use all terms for maximum recall)
+      const recallQueries = [...queries, ...expanded.expandedTerms, ...salientTerms];
+      const grepHits = await this.grepScanner.batchCachedReadGrep(recallQueries, 200);
 
       // 3. Limit candidates (no graph expansion - we use graph for boost only)
       const candidates = grepHits.slice(0, candidateLimit);
@@ -96,45 +124,63 @@ export class SearchCore {
       // Log candidate info concisely
       logInfo(`SearchCore: ${candidates.length} candidates (from ${grepHits.length} grep hits)`);
 
-      // Prepare queries for recall phase (all queries + terms)
-      const recallQueries = [...queries, ...salientTerms];
+      // 5, 6 & 7. Run lexical and semantic searches (skip unused pipelines for performance)
+      const skipLexical = enableSemantic && semanticWeight >= 1.0; // 100% semantic
+      const skipSemantic = !enableSemantic || semanticWeight <= 0.0; // 0% semantic or disabled
 
-      // 5, 6 & 7. Run lexical and semantic searches in parallel
-      const [fullTextResults, semanticResults] = await Promise.all([
-        this.executeLexicalSearch(
-          candidates,
-          recallQueries,
-          salientTerms,
-          maxResults,
-          expanded.originalQuery
-        ),
-        enableSemantic
-          ? this.executeSemanticSearch(candidates, query, candidateLimit)
-          : Promise.resolve([]),
+      if (skipLexical) {
+        logInfo("SearchCore: Skipping lexical search (100% semantic weight)");
+      }
+      if (skipSemantic && enableSemantic) {
+        logInfo("SearchCore: Skipping semantic search (0% semantic weight)");
+      }
+
+      const [lexicalResults, semanticResults] = await Promise.all([
+        skipLexical
+          ? Promise.resolve([])
+          : this.executeLexicalSearch(
+              candidates,
+              recallQueries,
+              salientTerms,
+              maxResults,
+              expanded.originalQuery
+            ),
+        skipSemantic ? Promise.resolve([]) : this.executeSemanticSearch(query, candidateLimit),
       ]);
 
-      // 8. Weighted RRF with normalized weights
-      // semanticWeight now represents the percentage (0-1) for semantic
-      // lexical gets the remainder to ensure weights sum to 1.0
-      let fusedResults = weightedRRF({
-        lexical: fullTextResults,
-        semantic: semanticResults,
-        weights: {
-          lexical: 1.0 - semanticWeight,
-          semantic: semanticWeight,
-        },
-        k: rrfK,
-      });
+      // 8. Apply boosts to lexical results BEFORE RRF fusion (if enabled)
+      // This ensures boosts are applied as lexical reranking
+      let fullTextResults = lexicalResults;
+      if (enableLexicalBoosts && !skipLexical) {
+        fullTextResults = this.folderBoostCalculator.applyBoosts(fullTextResults);
+        fullTextResults = this.graphBoostCalculator.applyBoost(fullTextResults);
+      }
 
-      // 9. Apply folder boost (after RRF, before graph boost)
-      fusedResults = this.folderBoostCalculator.applyBoosts(fusedResults);
-
-      // 10. Apply graph boost (analyzes connections within top results)
-      fusedResults = this.graphBoostCalculator.applyBoost(fusedResults);
-
-      // CRITICAL: Re-sort after boosts to maintain correct order
-      // Boosts modify scores but don't re-sort, which can lead to incorrect normalization
-      fusedResults.sort((a, b) => b.score - a.score);
+      // 9. Fusion: Skip RRF when using single pipeline (100% weight)
+      let fusedResults: NoteIdRank[];
+      if (skipLexical) {
+        // 100% semantic: use semantic results directly
+        fusedResults = semanticResults.slice(0, maxResults);
+        logInfo("SearchCore: Using pure semantic results (no fusion needed)");
+      } else if (skipSemantic) {
+        // 100% lexical: use lexical results directly
+        fusedResults = fullTextResults.slice(0, maxResults);
+        logInfo("SearchCore: Using pure lexical results (no fusion needed)");
+      } else {
+        // Weighted RRF with normalized weights (boosts already applied to lexical)
+        // semanticWeight now represents the percentage (0-1) for semantic
+        // lexical gets the remainder to ensure weights sum to 1.0
+        // Both lexical and semantic now return chunk IDs so no normalization needed
+        fusedResults = weightedRRF({
+          lexical: fullTextResults,
+          semantic: semanticResults,
+          weights: {
+            lexical: 1.0 - semanticWeight,
+            semantic: semanticWeight,
+          },
+          k: rrfK,
+        });
+      }
 
       // 10. Apply score normalization to prevent auto-1.0
       fusedResults = this.scoreNormalizer.normalize(fusedResults);
@@ -159,9 +205,14 @@ export class SearchCore {
     } catch (error) {
       logError("SearchCore: Retrieval failed", error);
 
-      // Fallback to simple grep results
-      const fallbackResults = await this.fallbackSearch(query, maxResults);
-      return fallbackResults;
+      // Fallback to simple grep results (guaranteed to return [])
+      try {
+        const fallbackResults = await this.fallbackSearch(query, maxResults);
+        return fallbackResults;
+      } catch (fallbackError) {
+        logError("SearchCore: Fallback search also failed", fallbackError);
+        return []; // Always return empty array on complete failure
+      }
     }
   }
 
@@ -194,6 +245,13 @@ export class SearchCore {
     return {
       fullTextStats: this.fullTextEngine.getStats(),
     };
+  }
+
+  /**
+   * Get the shared ChunkManager instance
+   */
+  getChunkManager(): ChunkManager {
+    return this.chunkManager;
   }
 
   /**
@@ -249,14 +307,12 @@ export class SearchCore {
   }
 
   /**
-   * Execute semantic search using embeddings
-   * @param candidates - Candidate documents to search within
+   * Execute semantic search using embeddings (searches entire index independently)
    * @param originalQuery - Original user query (used for embeddings and HyDE)
-   * @param candidateLimit - Maximum number of candidates
+   * @param candidateLimit - Maximum number of results to return
    * @returns Ranked list of documents from semantic search
    */
   private async executeSemanticSearch(
-    candidates: string[],
     originalQuery: string,
     candidateLimit: number
   ): Promise<NoteIdRank[]> {
@@ -271,12 +327,12 @@ export class SearchCore {
       // We only use the original query for semantic search, not expanded queries
       const semanticQueries = hydeDoc ? [hydeDoc, originalQuery] : [originalQuery];
 
-      // Pass the same candidates array to limit semantic search to the same subset
-      const semanticHits = await index.search(semanticQueries, topK, candidates);
+      // Search entire semantic index without candidate restrictions - semantic should be independent
+      const semanticHits = await index.search(semanticQueries, topK);
       const results = semanticHits.map(this.mapSemanticHit);
 
       logInfo(
-        `Semantic search: Found ${results.length} results (restricted to ${candidates.length} candidates)`
+        `Semantic search: Found ${results.length} results (unrestricted - searched entire index)`
       );
       return results;
     } catch (error) {
@@ -324,33 +380,37 @@ Question: ${query}
 
 Answer:`;
 
-      // Generate with timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), LLM_GENERATION_TIMEOUT_MS);
+      const response = await withTimeout(
+        (signal) => chatModel.invoke(prompt, { signal }),
+        LLM_GENERATION_TIMEOUT_MS,
+        "HyDE generation"
+      );
 
-      const response = await chatModel.invoke(prompt, { signal: controller.signal });
-      clearTimeout(timeoutId);
-
-      // Extract string content from the response
-      let hydeDoc: string | null = null;
-      if (typeof response.content === "string") {
-        hydeDoc = response.content;
-      } else if (response.content && typeof response.content === "object") {
-        // Handle AIMessage or complex content structure
-        hydeDoc = String(response.content);
-      }
-
+      const hydeDoc = this.extractContent(response);
       if (hydeDoc) {
         logInfo(`HyDE generated: ${hydeDoc.slice(0, 100)}...`);
       }
       return hydeDoc;
     } catch (error: any) {
-      if (error?.name === "AbortError") {
+      if (error instanceof TimeoutError) {
         logInfo(`HyDE generation timed out (${LLM_GENERATION_TIMEOUT_MS / 1000}s limit)`);
       } else {
         logInfo(`HyDE generation skipped: ${error?.message || "Unknown error"}`);
       }
       return null;
     }
+  }
+
+  /**
+   * Extract string content from LLM response
+   */
+  private extractContent(response: any): string | null {
+    if (typeof response.content === "string") {
+      return response.content;
+    } else if (response.content && typeof response.content === "object") {
+      // Handle AIMessage or complex content structure
+      return String(response.content);
+    }
+    return null;
   }
 }

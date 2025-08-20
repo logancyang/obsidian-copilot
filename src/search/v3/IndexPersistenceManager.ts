@@ -1,6 +1,6 @@
-import { App } from "obsidian";
+import { logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
-import { logInfo } from "@/logger";
+import { App } from "obsidian";
 
 export interface JsonlChunkRecord {
   id: string; // stable chunk id (hashable)
@@ -21,7 +21,73 @@ export class IndexPersistenceManager {
   private static readonly MAX_PARTITIONS = 1000;
   private static readonly PARTITION_INDEX_PADDING = 3; // for padStart(3, "0")
 
+  // Memory safety thresholds for INCREMENTAL memory usage during indexing
+  private static readonly INCREMENTAL_MEMORY_WARNING_THRESHOLD_MB = 500; // Warn if indexing uses more than 500MB
+
+  private baselineMemoryMB: number | null = null;
+
+  // Processing batch constants
+  private static readonly WRITE_BATCH_SIZE = 1000; // Records per batch for writeRecords
+  private static readonly YIELD_INTERVAL = 4; // Yield control every N batches
+
   constructor(private app: App) {}
+
+  /**
+   * Get estimated memory usage of the current process (basic approximation)
+   */
+  private getMemoryUsageMB(): number {
+    if (typeof process !== "undefined" && process.memoryUsage) {
+      const usage = process.memoryUsage();
+      return usage.heapUsed / (1024 * 1024);
+    }
+
+    // Browser environments: use performance.memory if available
+    if (typeof performance !== "undefined" && "memory" in performance) {
+      const memory = (performance as any).memory;
+      return memory.usedJSHeapSize / (1024 * 1024);
+    }
+
+    // No memory monitoring available - use conservative approach
+    logWarn("Memory monitoring unavailable - using conservative processing limits");
+    return 100; // Assume moderate usage to enable basic throttling
+  }
+
+  /**
+   * Set baseline memory usage at the start of indexing operations
+   */
+  private setBaselineMemory(): void {
+    this.baselineMemoryMB = this.getMemoryUsageMB();
+    logInfo(`IndexPersistence: Baseline memory set to ${this.baselineMemoryMB.toFixed(1)}MB`);
+  }
+
+  /**
+   * Check if current incremental memory usage is within safe limits
+   */
+  private checkMemorySafety(operation: string): void {
+    const currentMemoryMB = this.getMemoryUsageMB();
+
+    if (this.baselineMemoryMB === null) {
+      // If baseline not set, set it now and log absolute usage
+      this.setBaselineMemory();
+      logInfo(
+        `Memory usage: ${currentMemoryMB.toFixed(1)}MB during ${operation} (baseline established)`
+      );
+      return;
+    }
+
+    const incrementalMemoryMB = currentMemoryMB - this.baselineMemoryMB;
+
+    // Always log incremental memory usage during indexing operations for debugging
+    logInfo(
+      `Incremental memory usage: +${incrementalMemoryMB.toFixed(1)}MB (${currentMemoryMB.toFixed(1)}MB total) during ${operation}`
+    );
+
+    if (incrementalMemoryMB > IndexPersistenceManager.INCREMENTAL_MEMORY_WARNING_THRESHOLD_MB) {
+      logWarn(
+        `High incremental memory usage detected (+${incrementalMemoryMB.toFixed(1)}MB) during ${operation}`
+      );
+    }
+  }
 
   /**
    * Get the base directory for index files
@@ -112,10 +178,27 @@ export class IndexPersistenceManager {
   }
 
   /**
-   * Write records to partitioned JSONL files
+   * Write records to partitioned JSONL files with batch processing to avoid OOM
    */
   async writeRecords(records: JsonlChunkRecord[]): Promise<void> {
-    const lines = records.map((r) => JSON.stringify(r));
+    this.checkMemorySafety("writeRecords start");
+
+    // Process records in batches to avoid memory exhaustion
+    const BATCH_SIZE = IndexPersistenceManager.WRITE_BATCH_SIZE;
+    const lines: string[] = [];
+
+    for (let i = 0; i < records.length; i += BATCH_SIZE) {
+      const batch = records.slice(i, i + BATCH_SIZE);
+      const batchLines = batch.map((r) => JSON.stringify(r));
+      lines.push(...batchLines);
+
+      // Yield control and check memory to prevent blocking UI and OOM
+      if (i % (BATCH_SIZE * IndexPersistenceManager.YIELD_INTERVAL) === 0) {
+        this.checkMemorySafety("writeRecords batch processing");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    }
+
     await this.writePartitions(lines);
   }
 

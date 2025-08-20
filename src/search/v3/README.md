@@ -1,6 +1,6 @@
-# Search v3: Tiered Lexical Retrieval with Optional Semantic
+# Search v3: Chunk-Based Tiered Retrieval with Optional Semantic
 
-A high-performance, memory-bounded search system for Obsidian that combines multiple retrieval and ranking techniques.
+A high-performance, memory-bounded search system for Obsidian that uses intelligent chunking to deliver precise, contextual results without content explosion. Both lexical and semantic search engines operate on individual chunks and return consistent chunk IDs for unified result assembly.
 
 ## Architecture Overview
 
@@ -8,21 +8,70 @@ A high-performance, memory-bounded search system for Obsidian that combines mult
 graph TD
     A[User Query] --> B[Query Expansion<br/>LLM rewrites + terms]
     B --> C[Grep Scan<br/>Fast substring search]
-    C --> D{Parallel Search}
-    D --> E[Full-Text Search<br/>Build index + Search]
-    D --> F[Semantic Search<br/>HyDE + Embeddings]
-    E --> G[RRF Fusion<br/>Combine rankings]
-    F --> G
-    G --> H[Folder Boost<br/>Topical clustering]
-    H --> I[Graph Boost<br/>Link connections]
-    I --> J[Score Normalization<br/>Z-score + tanh]
-    J --> K[Final Results]
+    C --> D[Chunking<br/>Heading-first + size-cap]
+    D --> E{Parallel Search}
+    E --> F[Full-Text Search<br/>Chunk-level indexing]
+    E --> G[Semantic Search<br/>HyDE + Embeddings]
+    F --> H[Lexical Boost<br/>Folder + Graph]
+    G --> I[RRF Fusion<br/>Combine rankings]
+    H --> I
+    I --> J[Score Normalization<br/>Min-max clipping]
+    J --> K[Chunk Results]
 
     style B fill:#e1f5fe
-    style D fill:#ffe0b2
-    style G fill:#f3e5f5
-    style J fill:#fff3e0
+    style D fill:#ffecb3
+    style E fill:#ffe0b2
+    style I fill:#f3e5f5
+    style K fill:#fff3e0
 ```
+
+## Chunk ID Mapping and Result Assembly
+
+### How Chunk IDs Work
+
+Both lexical and semantic search engines operate on individual chunks and return consistent chunk IDs in the format `note_path#chunk_index` (e.g., `Piano Lessons/Lesson 4.md#0`, `Piano Lessons/Lesson 4.md#1`).
+
+### Chunk-to-Text Mapping Process
+
+1. **ChunkManager.getChunkText()**: Maps chunk IDs back to their text content
+
+   ```typescript
+   // Example: "Piano Lessons/Lesson 4.md#1" → full chunk text with headers
+   const chunkText = chunkManager.getChunkText("Piano Lessons/Lesson 4.md#1");
+   ```
+
+2. **Search Result Assembly**:
+   - **Lexical Search**: Returns chunk IDs from FlexSearch index with lexical match explanations
+   - **Semantic Search**: Returns chunk IDs from vector store with semantic similarity scores
+   - **RRF Fusion**: Combines results using chunk IDs as unified identifiers
+   - **Final Assembly**: ChunkManager retrieves chunk text for LLM context generation
+
+### Semantic Search Architecture Fix
+
+Previously, semantic search had a critical bug where it:
+
+- Only stored note titles in vector store `pageContent`
+- Returned note paths instead of chunk IDs
+- Aggregated scores by note instead of individual chunks
+
+**Fixed Implementation**:
+
+```typescript
+// MemoryIndexManager now properly stores and returns chunk IDs
+const chunkToScores = new Map<string, number[]>();
+for (const [doc, score] of results) {
+  const chunkId = (doc.metadata as any)?.id as string; // Now returns chunk ID
+  const normalized = Math.max(0, Math.min(1, score));
+  chunkToScores.set(chunkId, [normalized]);
+}
+```
+
+### Benefits of Unified Chunk Architecture
+
+- **Consistent Results**: Both engines return same chunk ID format
+- **Explanation Merging**: RRF can properly merge lexical matches with semantic scores for same note
+- **Granular Context**: LLM receives specific chunk content, not entire notes
+- **Memory Efficiency**: Only relevant chunks loaded for generation
 
 ## Key Features
 
@@ -56,67 +105,99 @@ Finds: ["auth/oauth-guide.md", "nextjs/auth.md", "tutorials/oauth.md"]
        (up to 200 candidates)
 ```
 
-### 3. Parallel Search Execution
+### 3. Chunking (L1)
 
-**Full-Text Search (L1)** and **Semantic Search (Optional)** run in parallel:
+Heading-first intelligent chunking converts candidate notes into manageable pieces:
+
+```
+Input:  3 candidate notes ("auth/oauth-guide.md", "nextjs/auth.md", "tutorials/oauth.md")
+Chunks: 8 chunks with size 800-2000 chars each
+Output: ["auth/oauth-guide.md#0", "auth/oauth-guide.md#1", "nextjs/auth.md#0", ...]
+```
+
+### 4. Smart Pipeline Execution
+
+**Full-Text Search (L1)** and **Semantic Search (Optional)** run based on semantic weight:
+
+- **0% Semantic Weight**: Only runs lexical search (pure keyword mode)
+- **100% Semantic Weight**: Only runs semantic search (pure meaning mode)
+- **Mixed Weight (1-99%)**: Runs both searches in parallel for optimal performance
 
 #### Full-Text Branch:
 
-- Builds ephemeral FlexSearch index from candidates
-- Searches with field weights: Title (3x), Path (1.5x), Tags/Links/Props/Headings (1.5x), Body (1x)
+- Builds ephemeral FlexSearch index from chunks (not full notes)
+- **Frontmatter Replication**: Extracts note-level frontmatter once and replicates property values across all chunks from that note
+- Indexes frontmatter properties (author, tags, status, etc.) by including them in each chunk's body content
+- Searches with field weights: Title (3x), Heading (2.5x), Path (2x), Body (1x including frontmatter)
 - Returns up to 2x maxResults for better recall
 
 #### Semantic Branch (if enabled):
 
 - Generates HyDE synthetic answer for query expansion
-- Searches vector store limited to same candidates
+- Searches vector store limited to same chunk candidates
 - Combines HyDE document with query variants
 
 Both branches complete before fusion begins.
 
-### 4. RRF Fusion
+### 5. Lexical Reranking (Boosting Stage)
 
-Combines rankings with normalized weights (sum to 1.0):
-
-- Default: 40% lexical + 60% semantic (when enabled)
-- Configurable via slider (0-100% semantic weight)
-
-### 5. Boosting Stage
+Applied to lexical results BEFORE RRF fusion (when `enableLexicalBoosts: true`):
 
 - **Folder Boost**: Notes in folders with multiple matches (logarithmic, 1-1.5x)
 - **Graph Boost**: Notes linked to other results (1.0-1.15x, only for high-similarity results)
+- **Pure Relevance Mode**: When boosts disabled, provides keyword-only scoring without folder/graph influence
 
-### 6. Score Normalization
+### 6. Smart Fusion
+
+Intelligently combines results based on semantic weight:
+
+- **0% Semantic**: Uses lexical results directly (no fusion overhead)
+- **100% Semantic**: Uses semantic results directly (no fusion overhead)
+- **Mixed Weight**: RRF fusion with configurable balance (40% lexical + 60% semantic default)
+- Weights normalized to sum to 1.0 when fusion is used
+
+### 7. Score Normalization
 
 Min-max normalization prevents auto-1.0 scores
 
 - `baseScore`: The raw score after RRF fusion and all boosts are applied
 - `finalScore`: The normalized score in [0.02, 0.98] range that users see
 
-### 7. Final Results
+### 9. Final Results
 
 ```
-1. nextjs/auth.md (0.95) - Title match, folder boost, graph connections
-2. nextjs/config.md (0.38) - Folder boost, linked from auth.md
-3. auth/oauth-guide.md (0.21) - Title match, no boosts
+1. nextjs/auth.md#0 (0.95) - Title match chunk, folder boost, graph connections
+2. nextjs/config.md#1 (0.38) - Configuration section, folder boost
+3. auth/oauth-guide.md#0 (0.21) - Introduction section, title match
 ```
 
 ## Core Components
 
 ### SearchCore
 
-- Orchestrates the entire search pipeline
+- Orchestrates the entire chunk-based search pipeline
 - Executes lexical and semantic searches in parallel via `Promise.all()`
 - Methods:
-  - `executeLexicalSearch()`: Builds index and searches in isolation
-  - `executeSemanticSearch()`: Runs HyDE + embedding search independently
+  - `executeLexicalSearch()`: Chunks candidates, builds index, and searches
+  - `executeSemanticSearch()`: Runs HyDE + embedding search on chunks
   - `mapSemanticHit()`: Transforms semantic results to unified format
+
+### ChunkManager
+
+- Converts notes into intelligent chunks using heading-first algorithm
+- Simple Map-based cache for performance
+- Memory-bounded chunking with configurable size limits
+- Methods:
+  - `getChunks()`: Creates chunks from note paths with size constraints
+  - `getChunkText()`: Retrieves chunk content by ID for LLM context
 
 ### Query Expander
 
 - Generates alternative phrasings using LLM (5s timeout)
-- Extracts salient terms (nouns only, language-agnostic)
+- **Critical Fix**: Separates salient terms (from original query, used for scoring) from expanded terms (LLM-generated, used for recall only)
+- Extracts salient terms (nouns only, language-agnostic) exclusively from original user query
 - Falls back to original query if LLM unavailable
+- Prevents false positives by ensuring expanded terms don't influence ranking
 
 ### Grep Scanner
 
@@ -127,12 +208,19 @@ Min-max normalization prevents auto-1.0 scores
 
 ### Full-Text Engine
 
-- Ephemeral FlexSearch index built per-query
-- Runs independently in lexical search branch
+- Ephemeral FlexSearch index built from chunks per-query
+- Indexes chunk content but stores only metadata (no body storage)
 - Custom tokenizer for ASCII words + CJK bigrams
-- Multi-field indexing with configurable weights
+- Multi-field indexing: title (3x), heading (2.5x), path (2x), body (1x)
+- **Frontmatter Property Indexing**: Extracts and indexes frontmatter property values for searchability
+  - **Note-Level Metadata, Chunk-Level Indexing**: Frontmatter is extracted once per note and replicated across all chunks from that note
+  - Supports primitive values (strings, numbers, booleans), arrays, and Date objects
+  - Converts values to searchable strings and includes them in each chunk's body content
+  - Skips nested objects and null/undefined values for safety
+  - Configurable array processing limit and recursion depth
+  - **Performance Optimization**: Per-note metadata caching prevents redundant frontmatter extraction
 - Path components indexed for folder/file search
-- Frontmatter values indexed (not keys)
+- Memory-efficient: chunk content retrieved from ChunkManager when needed
 
 ### RRF (Reciprocal Rank Fusion)
 
@@ -183,15 +271,64 @@ Both boosts multiply existing scores after RRF fusion, helping related content r
 - JSONL-backed vector store in memory
 - Runs in parallel with lexical search when enabled
 - HyDE generation for query expansion (5s timeout)
-- Incremental indexing for changed files
+- **O(1) Memory Incremental Indexing**: Single file updates use in-memory data without loading entire partitions from disk
 - Auto-index strategies: NEVER, ON STARTUP, ON MODE SWITCH
 - Partitioned storage (~150MB per file)
+
+## Frontmatter and Chunk Architecture
+
+### How Note-Level Frontmatter Works with Chunk-Level Search
+
+**The Challenge**: Frontmatter properties (like `author`, `tags`, `status`) are defined once per note, but our search operates on chunks within notes.
+
+**The Solution**: Frontmatter replication with performance optimization:
+
+1. **Extraction Phase** (per note):
+
+   ```typescript
+   // Extract frontmatter once per note during chunk indexing
+   const frontmatter = cache?.frontmatter ?? {};
+   const propValues = this.extractPropertyValues(frontmatter);
+   // Cache the extracted values per note path
+   processedNotes.set(chunk.notePath, { tags, links, props: propValues });
+   ```
+
+2. **Replication Phase** (per chunk):
+
+   ```typescript
+   // Include frontmatter in each chunk's searchable body
+   const bodyWithProps = [chunk.content, ...noteMetadata.props].join(" ");
+   ```
+
+3. **Search Behavior**:
+   - Searching for `author: "John Doe"` finds ALL chunks from notes where `author` is "John Doe"
+   - Each chunk from that note becomes independently searchable by frontmatter properties
+   - Maintains chunk-level granularity while preserving note-level metadata searchability
+
+**Benefits**:
+
+- ✅ **Complete Searchability**: Every frontmatter property is findable via any chunk
+- ✅ **Performance**: Per-note caching prevents redundant frontmatter extraction
+- ✅ **Consistency**: All chunks from same note have identical frontmatter properties
+- ✅ **Granular Results**: Can return specific chunks while preserving metadata context
+
+**Example**:
+
+```
+Note: "project-notes.md"
+Frontmatter: { author: "Alice", status: "draft", priority: 1 }
+Chunks: ["project-notes.md#0", "project-notes.md#1", "project-notes.md#2"]
+
+Search: "Alice" → Finds all 3 chunks, each containing "Alice" in searchable content
+Search: "draft" → Finds all 3 chunks, each containing "draft" in searchable content
+Search: "priority 1" → Finds all 3 chunks, each containing "1" in searchable content
+```
 
 ## Data Model
 
 ```typescript
 interface NoteIdRank {
-  id: string; // Note path
+  id: string; // Chunk ID (note_path#chunk_index) or note path for legacy
   score: number; // Relevance score [0-1]
   engine?: string; // Source engine
   explanation?: {
@@ -210,19 +347,31 @@ interface NoteIdRank {
     finalScore: number; // Score after normalization (final 0-1 range score)
   };
 }
+
+interface Chunk {
+  id: string; // note_path#chunk_index
+  notePath: string; // original note path
+  chunkIndex: number; // 0-based chunk position
+  content: string; // chunk text with headers + frontmatter properties
+  title: string; // note title
+  heading: string; // section heading
+  mtime: number; // note modification time
+}
 ```
 
 ## Performance Characteristics
 
 - **Grep scan**: < 50ms for 1k files
-- **Full-text build**: < 100ms for 500 candidates
-- **Parallel search**: Lexical and semantic run concurrently
-- **Total latency**: < 200ms P95 (reduced from sequential execution)
+- **Chunking**: < 50ms for 500 candidates → ~1000 chunks
+- **Full-text build**: < 100ms for 1000 chunks (memory-bounded)
+- **Parallel search**: Lexical and semantic run concurrently on chunks
+- **Total latency**: < 250ms P95 (chunking overhead + existing pipeline)
 - **Memory peak**: < 20MB mobile, < 100MB desktop
+- **Memory split**: 35% chunk cache, 65% FlexSearch index
 
-## Configuration
+## Configuration & Usage
 
-### Search Options
+### Search Parameters
 
 - `maxResults`: Number of results to return (default: 30, max: 100)
 - `enableSemantic`: Enable vector search (default: false)
@@ -230,120 +379,36 @@ interface NoteIdRank {
 - `candidateLimit`: Max candidates for full-text (default: 500, range: 10-1000)
 - `rrfK`: RRF smoothing parameter (default: 60, range: 1-100)
 - `salientTerms`: Additional terms to enhance the search (optional)
+- `enableLexicalBoosts`: Enable folder and graph boosts (default: true)
 
-### Settings
+### Plugin Settings
 
 - **Enable Semantic Search**: Master toggle for vector features
+- **Enable Lexical Boosts**: Toggle for folder and graph relevance boosts
 - **Auto-Index Strategy**: NEVER | ON STARTUP | ON MODE SWITCH
+- **Chunk Configuration**:
+  - Chunk Size: 6000 characters (uses CHUNK_SIZE constant)
+  - All relevant chunks included from matching notes
 - **Graph Boost Configuration**:
   - Semantic Similarity Threshold: 75% (only boost highly relevant results)
   - Max Candidates: 10 (performance cap)
   - Boost Strength: 0.1 (connection influence)
   - Max Boost Multiplier: 1.15x (prevents over-boosting)
-- **Lexical Search RAM Limit**: RAM usage for lexical search
+- **Memory Management**: RAM usage split between chunks (35%) and FlexSearch (65%)
 - **Embedding Batch Size**: Number of chunks to embed at once (reduce if token limits exceeded)
-- **Exclusions/Inclusions**: File patterns to index
-
-## Implementation Status
-
-✅ **Core Pipeline**: Query expansion, grep, parallel search, RRF fusion
-✅ **Parallel Execution**: Full-text and semantic searches run concurrently
-✅ **Boosting**: Folder and graph boost calculators
-✅ **Normalization**: Z-score + tanh with explainability
-✅ **Semantic**: Optional vector search with consistent candidates
-✅ **Security**: Path validation, size limits, circular reference handling
-✅ **UX**: Progress notifications, incremental indexing, commands
+- **File Filtering**: Pattern-based inclusions and exclusions for indexing
 
 ## Key Design Decisions
 
-1. **No Persistent Full-Text Index**: Grep provides fast initial seeding
-2. **Ephemeral Everything**: Eliminates maintenance overhead
-3. **Parallel Search Architecture**: Lexical and semantic run concurrently for performance
-4. **Unified Boosting Stage**: All boosts applied post-RRF
-5. **Consistent Candidates**: Both lexical and semantic search same subset
-6. **Min-Max Normalization**: Prevents artificial perfect scores while preserving monotonicity
-7. **Explainable Rankings**: Track contributing factors for transparency
-8. **Intelligent Graph Boost**: Only analyzes highly relevant results (≥75% similarity) to balance quality and performance
-9. **Token-Aware Indexing**: Automatic chunk truncation when embedding token limits approached
-
-## Legacy Search Migration
-
-### Current State (v2.x)
-
-The codebase currently supports both legacy Orama-based search and v3 tiered lexical search via a toggle in settings. The implementation uses a factory pattern (`SearchSystemFactory`) to route between systems.
-
-### Architecture for Dual Support
-
-```typescript
-// SearchSystem.ts provides unified interface
-interface SearchSystem {
-  createRetriever(app: App, options: RetrieverOptions): BaseRetriever;
-  getIndexer(): SearchIndexer;
-  isSemanticSearchEnabled(): boolean;
-}
-
-// Factory routes based on settings
-SearchSystemFactory.getSearchSystem(); // Returns appropriate implementation
-```
-
-### Legacy Removal Steps (v3.0.0)
-
-When ready to remove legacy search support:
-
-#### 1. Remove Legacy Classes from `SearchSystem.ts`
-
-- Delete `LegacySearchIndexer` class
-- Delete `LegacySearchSystem` class
-- Update `SearchSystemFactory.getSearchSystem()` to always return `V3SearchSystem`
-
-#### 2. Remove Settings Properties
-
-- Delete `useLegacySearch` from:
-  - `src/settings/model.ts`
-  - `src/constants.ts` (DEFAULT_SETTINGS)
-- Delete `numPartitions` setting (legacy partitioning)
-
-#### 3. Remove UI Components
-
-- Remove legacy search toggle from `src/settings/v2/components/QASettings.tsx`
-- Remove partition dropdown UI
-- Clean up conditional rendering logic
-
-#### 4. Delete Legacy Files
-
-```bash
-# Core legacy files to remove
-src/search/hybridRetriever.ts
-src/search/vectorStoreManager.ts
-src/search/chunkedStorage.ts
-src/search/dbOperations.ts
-src/search/indexOperations.ts
-src/search/indexEventHandler.ts
-```
-
-#### 5. Clean Package Dependencies
-
-Remove from `package.json`:
-
-- `@orama/orama`
-- Any Orama-related plugins
-
-#### 6. Update Documentation
-
-- Remove legacy search references from user documentation
-- Update API documentation
-- Remove deprecation warnings
-
-### Benefits After Removal
-
-- **Reduced Bundle Size**: ~200KB reduction from removing Orama
-- **Simpler Codebase**: Single search implementation path
-- **Better Performance**: No conditional checks or dynamic imports
-- **Cleaner Architecture**: Direct use of v3 components without abstraction layer
-- **Easier Maintenance**: One search system to maintain and optimize
-
-### Migration Timeline
-
-1. **v2.x** (Current): Dual support with deprecation warnings
-2. **v2.x+1**: Legacy search disabled by default, requires opt-in
-3. **v3.0.0**: Complete removal of legacy search code
+1. **Independent Search Pipelines**: Lexical operates on grep candidates, semantic searches entire embedding index
+2. **Heading-First Algorithm**: Preserves document structure while respecting size limits
+3. **No Persistent Full-Text Index**: Grep provides fast initial seeding, chunks built per-query
+4. **Ephemeral Everything**: Eliminates maintenance overhead
+5. **Parallel Search Architecture**: Lexical and semantic run concurrently on chunks for performance
+6. **Lexical Reranking**: Folder and graph boosts applied to lexical results before RRF fusion
+7. **Memory-Efficient Indexing**: FlexSearch stores metadata only, chunk content retrieved when needed
+8. **Frontmatter Property Integration**: Extract note-level frontmatter once and replicate across all chunks for seamless search
+9. **Chunk Sequence Preservation**: Chunks from same note served in order for LLM context
+10. **Min-Max Normalization**: Prevents artificial perfect scores while preserving monotonicity
+11. **Explainable Rankings**: Track contributing factors for transparency including chunk-level details
+12. **Memory Budget Split**: Fixed 35%/65% allocation between chunk cache and FlexSearch index

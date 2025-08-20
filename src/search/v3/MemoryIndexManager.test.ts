@@ -112,13 +112,13 @@ describe("MemoryIndexManager", () => {
 
     const resultsAlpha = await manager.search(["alpha"], 5);
     expect(resultsAlpha.length).toBeGreaterThan(0);
-    expect(resultsAlpha[0].id).toBe("a.md");
-    // After per-note aggregation + min-max scaling, score should be near 1 and others below
+    expect(resultsAlpha[0].id).toBe("a#0");
+    // After chunk-level aggregation + min-max scaling, score should be near 1 and others below
     expect(resultsAlpha[0].score).toBeGreaterThan(0.5);
 
     const resultsBetaOnlyCandidate = await manager.search(["alpha"], 5, ["b.md"]);
-    // Candidate filter should ensure only b.md is considered
-    expect(resultsBetaOnlyCandidate.every((r) => r.id === "b.md")).toBe(true);
+    // Candidate filter should ensure only b.md chunks are considered
+    expect(resultsBetaOnlyCandidate.every((r) => r.id.startsWith("b#"))).toBe(true);
   });
 
   test("indexVault writes JSONL lines", async () => {
@@ -170,4 +170,55 @@ describe("MemoryIndexManager", () => {
     const joined = writes.join("\n");
     expect(joined).toContain("a.md");
   });
+
+  test("reindexSingleFileIfModified uses simplified in-memory approach", async () => {
+    const writes: string[] = [];
+
+    // Create a large existing index to simulate real usage
+    const existingRecords = [];
+    for (let i = 0; i < 1000; i++) {
+      existingRecords.push({
+        id: `file${i}.md#0`,
+        path: `file${i}.md`,
+        title: `File ${i}`,
+        mtime: 1,
+        ctime: 1,
+        embedding: [Math.random(), Math.random()],
+      });
+    }
+
+    const app = makeApp({
+      exists: true,
+      content: existingRecords.map((r) => JSON.stringify(r)).join("\n"),
+      captureWrites: { buffer: writes },
+    });
+    const manager = MemoryIndexManager.getInstance(app);
+
+    // Load the index into memory (this is the key difference from the previous test)
+    await manager.ensureLoaded();
+
+    // Mock reading content for the file being updated
+    (app.vault.cachedRead as any) = async () => "# Updated Title\n\nUpdated Body";
+    const file: any = {
+      path: "file500.md", // Update an existing file
+      basename: "file500",
+      extension: "md",
+      stat: { mtime: 2, ctime: 1 },
+    };
+
+    // This should use the simplified in-memory approach (loads records automatically)
+    await manager.reindexSingleFileIfModified(file, 1);
+
+    // Verify that data was written (update succeeded)
+    expect(writes.length).toBeGreaterThan(0);
+    const joinedWrites = writes.join("\n");
+    expect(joinedWrites).toContain("file500.md");
+
+    // Verify that other files are preserved
+    expect(joinedWrites).toContain("file0.md"); // Should preserve other files
+    expect(joinedWrites).toContain("file999.md"); // Should preserve other files
+
+    // Verify the manager still has records loaded (no reload occurred)
+    expect(manager.isAvailable()).toBe(true);
+  }, 8000); // Should be reasonably fast with simplified approach
 });

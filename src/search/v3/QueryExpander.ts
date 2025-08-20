@@ -1,5 +1,6 @@
 import { logError, logInfo, logWarn } from "@/logger";
-import { withSuppressedTokenWarnings } from "@/utils";
+import { TimeoutError } from "@/error";
+import { withSuppressedTokenWarnings, withTimeout } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { FuzzyMatcher } from "./utils/FuzzyMatcher";
 
@@ -12,9 +13,10 @@ export interface QueryExpanderOptions {
 
 export interface ExpandedQuery {
   queries: string[]; // Original query + expanded variants
-  salientTerms: string[]; // Unique important terms extracted from all queries
+  salientTerms: string[]; // Important terms extracted ONLY from original query (used for scoring)
   originalQuery: string; // The original user query
   expandedQueries: string[]; // Only the expanded variants (not including original)
+  expandedTerms: string[]; // LLM-generated terms (used for recall only, not scoring)
 }
 
 /**
@@ -87,7 +89,13 @@ Format your response using XML tags:
   async expand(query: string): Promise<ExpandedQuery> {
     // Check if query is valid
     if (!query?.trim()) {
-      return { queries: [], salientTerms: [], originalQuery: "", expandedQueries: [] };
+      return {
+        queries: [],
+        salientTerms: [],
+        originalQuery: "",
+        expandedQueries: [],
+        expandedTerms: [],
+      };
     }
 
     // Check cache first (and update LRU position)
@@ -121,20 +129,15 @@ Format your response using XML tags:
    * @returns Expanded query or fallback if timeout is reached
    */
   private async expandWithTimeout(query: string): Promise<ExpandedQuery> {
-    const controller = new AbortController();
-
-    const timeoutId = setTimeout(() => {
-      logInfo(`QueryExpander: Timeout reached for "${query}"`);
-      controller.abort();
-    }, this.config.timeout);
-
     try {
-      const result = await this.expandWithLLM(query, controller.signal);
-      clearTimeout(timeoutId);
-      return result;
+      return await withTimeout(
+        (signal) => this.expandWithLLM(query, signal),
+        this.config.timeout,
+        "Query expansion"
+      );
     } catch (error: any) {
-      clearTimeout(timeoutId);
-      if (error?.name === "AbortError" || controller.signal.aborted) {
+      if (error instanceof TimeoutError) {
+        logInfo(`QueryExpander: Timeout reached for "${query}"`);
         return this.fallbackExpansion(query);
       }
       throw error;
@@ -144,14 +147,10 @@ Format your response using XML tags:
   /**
    * Performs the actual LLM call to expand the query.
    * @param query - The query to expand
+   * @param signal - Optional abort signal for request cancellation
    * @returns Expanded queries and extracted salient terms
    */
   private async expandWithLLM(query: string, signal?: AbortSignal): Promise<ExpandedQuery> {
-    // Check if already aborted
-    if (signal?.aborted) {
-      return this.fallbackExpansion(query);
-    }
-
     try {
       if (!this.options.getChatModel) {
         logInfo("QueryExpander: No chat model getter provided");
@@ -169,26 +168,12 @@ Format your response using XML tags:
         this.config.maxVariants.toString()
       ).replace("{query}", query);
 
-      // Invoke model with token warnings suppressed
+      // Invoke model with token warnings suppressed and abort signal
       const response = await withSuppressedTokenWarnings(async () => {
-        // Pass AbortSignal when supported by the model implementation
-        const anyModel = model as any;
-        if (typeof anyModel.invoke === "function") {
-          try {
-            return await anyModel.invoke(prompt, { signal });
-          } catch (err) {
-            if ((err as any)?.name === "AbortError") {
-              logInfo("QueryExpander: LLM request aborted by timeout");
-              return null;
-            }
-            throw err;
-          }
-        }
-        return await model.invoke(prompt);
+        return await model.invoke(prompt, signal ? { signal } : undefined);
       });
 
-      // Check if aborted after the call
-      if (signal?.aborted || !response) {
+      if (!response) {
         return this.fallbackExpansion(query);
       }
 
@@ -224,6 +209,15 @@ Format your response using XML tags:
   }
 
   /**
+   * Extracts salient terms from the original query only (used for scoring).
+   * @param originalQuery - The original user query
+   * @returns Array of valid terms extracted from the original query
+   */
+  private extractSalientTermsFromOriginal(originalQuery: string): string[] {
+    return this.extractTermsFromQueries([originalQuery]).filter((term) => this.isValidTerm(term));
+  }
+
+  /**
    * Parses XML-formatted LLM response to extract queries and terms.
    * Falls back to legacy format if XML tags are not found.
    * @param content - The LLM response content
@@ -232,7 +226,7 @@ Format your response using XML tags:
    */
   private parseXMLResponse(content: string, originalQuery: string): ExpandedQuery {
     const queries: string[] = [originalQuery]; // Always include original
-    const terms = new Set<string>();
+    const llmExpandedTerms = new Set<string>(); // LLM-generated terms for recall only
 
     // Extract queries from XML tags
     const queryRegex = /<query>(.*?)<\/query>/g;
@@ -244,35 +238,31 @@ Format your response using XML tags:
       }
     }
 
-    // Extract terms from XML tags
+    // Extract LLM-generated terms from XML tags (for recall only)
     const termRegex = /<term>(.*?)<\/term>/g;
     let termMatch;
     while ((termMatch = termRegex.exec(content)) !== null) {
       const term = termMatch[1]?.trim().toLowerCase();
       if (term && this.isValidTerm(term)) {
-        terms.add(term);
+        llmExpandedTerms.add(term);
       }
     }
 
     // If no XML tags found, try legacy parsing
-    if (queries.length === 1 && terms.size === 0) {
+    if (queries.length === 1 && llmExpandedTerms.size === 0) {
       return this.parseLegacyFormat(content, originalQuery);
     }
 
-    // Also extract terms from the ORIGINAL query only (as fallback)
-    const extractedTerms = this.extractTermsFromQueries([originalQuery]);
-    extractedTerms.forEach((term) => {
-      if (this.isValidTerm(term)) {
-        terms.add(term);
-      }
-    });
+    // Extract salient terms ONLY from the original query (for scoring)
+    const salientTerms = this.extractSalientTermsFromOriginal(originalQuery);
 
     const expandedQueries = queries.slice(1); // Exclude the original query
     return {
       queries: queries.slice(0, this.config.maxVariants + 1), // +1 for original
-      salientTerms: Array.from(terms),
+      salientTerms: salientTerms, // Only terms from original query
       originalQuery: originalQuery,
       expandedQueries: expandedQueries.slice(0, this.config.maxVariants),
+      expandedTerms: Array.from(llmExpandedTerms), // LLM-generated terms for recall
     };
   }
 
@@ -286,7 +276,7 @@ Format your response using XML tags:
     // Fallback parser for non-XML responses
     const lines = content.split("\n").map((line) => line.trim());
     const queries: string[] = [originalQuery];
-    const terms = new Set<string>();
+    const llmExpandedTerms = new Set<string>(); // LLM-generated terms
 
     let section: "queries" | "terms" | null = null;
 
@@ -315,13 +305,13 @@ Format your response using XML tags:
           .trim()
           .toLowerCase();
         if (cleanTerm && this.isValidTerm(cleanTerm)) {
-          terms.add(cleanTerm);
+          llmExpandedTerms.add(cleanTerm); // Store as expanded terms
         }
       }
     }
 
     // If no sections found, treat lines as queries
-    if (queries.length === 1 && terms.size === 0) {
+    if (queries.length === 1 && llmExpandedTerms.size === 0) {
       for (const line of lines.slice(0, this.config.maxVariants)) {
         if (line && !line.toUpperCase().includes("QUERY")) {
           queries.push(line);
@@ -329,16 +319,16 @@ Format your response using XML tags:
       }
     }
 
-    // Extract terms from ORIGINAL query only
-    const extractedTerms = this.extractTermsFromQueries([originalQuery]);
-    extractedTerms.forEach((term) => terms.add(term));
+    // Extract salient terms ONLY from the original query
+    const salientTerms = this.extractSalientTermsFromOriginal(originalQuery);
 
     const expandedQueries = queries.slice(1);
     return {
       queries: queries.slice(0, this.config.maxVariants + 1),
-      salientTerms: Array.from(terms),
+      salientTerms: salientTerms, // Only from original query
       originalQuery: originalQuery,
       expandedQueries: expandedQueries.slice(0, this.config.maxVariants),
+      expandedTerms: Array.from(llmExpandedTerms), // LLM-generated terms
     };
   }
 
@@ -383,6 +373,7 @@ Format your response using XML tags:
       salientTerms: terms,
       originalQuery: query,
       expandedQueries: [], // No expansion in fallback
+      expandedTerms: [], // No LLM expansion in fallback
     };
   }
 

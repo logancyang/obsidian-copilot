@@ -8,3 +8,15 @@ export class CustomError extends Error {
     Object.setPrototypeOf(this, CustomError.prototype);
   }
 }
+
+/**
+ * TimeoutError class for consistent timeout error handling
+ */
+export class TimeoutError extends Error {
+  constructor(operation: string, timeoutMs: number) {
+    super(`${operation} timed out after ${timeoutMs}ms`);
+    this.name = "TimeoutError";
+    // This is needed in TypeScript when extending built-in classes
+    Object.setPrototypeOf(this, TimeoutError.prototype);
+  }
+}
