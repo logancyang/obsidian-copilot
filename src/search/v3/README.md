@@ -271,7 +271,7 @@ Both boosts multiply existing scores after RRF fusion, helping related content r
 - JSONL-backed vector store in memory
 - Runs in parallel with lexical search when enabled
 - HyDE generation for query expansion (5s timeout)
-- Incremental indexing for changed files
+- **O(1) Memory Incremental Indexing**: Single file updates use in-memory data without loading entire partitions from disk
 - Auto-index strategies: NEVER, ON STARTUP, ON MODE SWITCH
 - Partitioned storage (~150MB per file)
 

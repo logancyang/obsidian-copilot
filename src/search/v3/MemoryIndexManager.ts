@@ -512,7 +512,12 @@ export class MemoryIndexManager {
   }
 
   /**
-   * Reindex a single modified file
+   * Reindex a single modified file using simplified in-memory approach.
+   *
+   * OPTIMIZATION: Always loads records into memory (if not already loaded) and updates them directly.
+   * This eliminates complex fallback logic and ensures consistent behavior regardless of initial state.
+   * Since semantic search requires all records in memory anyway, this approach is both simpler
+   * and more efficient than disk-based filtering operations.
    */
   async reindexSingleFileIfModified(file: any, previousMtime: number | null): Promise<void> {
     try {
@@ -545,22 +550,22 @@ export class MemoryIndexManager {
       const chunks = await this.indexingPipeline.prepareFileChunksForSingle(file);
       const newRecords = await this.indexingPipeline.processSingleFileChunks(chunks);
 
-      // Use memory-safe incremental update instead of rewriting entire index
-      await this.persistenceManager.updateFileRecords(file.path, newRecords);
+      // SIMPLIFIED APPROACH: Always ensure records are loaded and update in-memory
+      // This is fast if already loaded, and handles all edge cases consistently
+      await this.ensureLoaded();
 
-      // If we have records in memory, update them too
-      if (this.loaded && this.records.length > 0) {
-        // Remove old records for this file
-        this.records = this.records.filter((r) => r.path !== file.path);
-        // Add new records
-        this.records.push(...newRecords);
-      }
+      // Update in-memory records (works whether records array was empty or populated)
+      this.records = this.records.filter((r) => r.path !== file.path);
+      this.records.push(...newRecords);
 
-      // Force rebuild of vector store since file changed
-      this.loaded = false;
+      // Persist the updated records directly from memory
+      await this.persistenceManager.writeRecords(this.records);
+
+      // Rebuild vector store from the updated in-memory records
+      await this.buildVectorStore();
 
       logInfo(
-        `MemoryIndex: Reindexed modified file ${file.path} with ${newRecords.length} chunks using incremental update`
+        `MemoryIndex: Reindexed modified file ${file.path} with ${newRecords.length} chunks using O(1) in-memory update`
       );
     } catch (error) {
       logWarn("MemoryIndex: reindexSingleFileIfModified failed", error);

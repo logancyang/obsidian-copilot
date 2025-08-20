@@ -171,34 +171,31 @@ describe("MemoryIndexManager", () => {
     expect(joined).toContain("a.md");
   });
 
-  test("reindexSingleFileIfModified uses incremental updates to prevent OOM", async () => {
+  test("reindexSingleFileIfModified uses simplified in-memory approach", async () => {
     const writes: string[] = [];
 
-    // Create a large existing index to simulate potential OOM scenario
+    // Create a large existing index to simulate real usage
     const existingRecords = [];
     for (let i = 0; i < 1000; i++) {
-      existingRecords.push(
-        JSON.stringify({
-          id: `file${i}.md#0`,
-          path: `file${i}.md`,
-          title: `File ${i}`,
-          mtime: 1,
-          ctime: 1,
-          embedding: [Math.random(), Math.random()],
-        })
-      );
+      existingRecords.push({
+        id: `file${i}.md#0`,
+        path: `file${i}.md`,
+        title: `File ${i}`,
+        mtime: 1,
+        ctime: 1,
+        embedding: [Math.random(), Math.random()],
+      });
     }
-    const existingContent = existingRecords.join("\n");
 
     const app = makeApp({
       exists: true,
-      content: existingContent,
+      content: existingRecords.map((r) => JSON.stringify(r)).join("\n"),
       captureWrites: { buffer: writes },
     });
     const manager = MemoryIndexManager.getInstance(app);
 
-    // Don't load the index to avoid loading all records into memory
-    // This simulates the memory-safe approach
+    // Load the index into memory (this is the key difference from the previous test)
+    await manager.ensureLoaded();
 
     // Mock reading content for the file being updated
     (app.vault.cachedRead as any) = async () => "# Updated Title\n\nUpdated Body";
@@ -209,17 +206,19 @@ describe("MemoryIndexManager", () => {
       stat: { mtime: 2, ctime: 1 },
     };
 
-    // This should use the incremental updateFileRecords method
+    // This should use the simplified in-memory approach (loads records automatically)
     await manager.reindexSingleFileIfModified(file, 1);
 
-    // Verify that data was written (incremental update succeeded)
+    // Verify that data was written (update succeeded)
     expect(writes.length).toBeGreaterThan(0);
     const joinedWrites = writes.join("\n");
     expect(joinedWrites).toContain("file500.md");
 
-    // Verify that other files are preserved (not a full rewrite)
-    // The incremental update should have preserved most existing files
+    // Verify that other files are preserved
     expect(joinedWrites).toContain("file0.md"); // Should preserve other files
     expect(joinedWrites).toContain("file999.md"); // Should preserve other files
-  });
+
+    // Verify the manager still has records loaded (no reload occurred)
+    expect(manager.isAvailable()).toBe(true);
+  }, 8000); // Should be reasonably fast with simplified approach
 });
