@@ -8,14 +8,16 @@ import {
   useModelKey,
   useSelectedTextContexts,
 } from "@/aiParams";
-import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
 import { ChainType } from "@/chainFactory";
+import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
+import { logInfo } from "@/logger";
 
 import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
 import { NewVersionBanner } from "@/components/chat-components/NewVersionBanner";
 import { ProjectList } from "@/components/chat-components/ProjectList";
+import ProgressCard from "@/components/project/progress-card";
 import { ABORT_REASON, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
 import { useChatManager } from "@/hooks/useChatManager";
@@ -31,7 +33,6 @@ import { err2String } from "@/utils";
 import { Buffer } from "buffer";
 import { Notice, TFile } from "obsidian";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
-import ProgressCard from "@/components/project/progress-card";
 
 type ChatMode = "default" | "project";
 
@@ -61,7 +62,13 @@ const Chat: React.FC<ChatProps> = ({
   const [currentChain] = useChainType();
   const [currentAiMessage, setCurrentAiMessage] = useState("");
   const [inputMessage, setInputMessage] = useState("");
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Function to set the abort controller ref (for getAIResponse compatibility)
+  const setAbortController = useCallback((controller: AbortController | null) => {
+    abortControllerRef.current = controller;
+  }, []);
+
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES.DEFAULT);
   const [contextNotes, setContextNotes] = useState<TFile[]>([]);
@@ -258,18 +265,16 @@ const Chat: React.FC<ChatProps> = ({
 
   const handleStopGenerating = useCallback(
     (reason?: ABORT_REASON) => {
-      if (abortController) {
-        if (settings.debug) {
-          console.log(`stopping generation..., reason: ${reason}`);
-        }
-        abortController.abort(reason);
+      if (abortControllerRef.current) {
+        logInfo(`stopping generation..., reason: ${reason}`);
+        abortControllerRef.current.abort(reason);
         setLoading(false);
         safeSetLoadingMessage(LOADING_MESSAGES.DEFAULT);
         // Keep the partial AI message visible
         // Don't clear setCurrentAiMessage here
       }
     },
-    [abortController, settings.debug, safeSetLoadingMessage]
+    [safeSetLoadingMessage]
   );
 
   // Cleanup on unmount - abort any ongoing streaming
@@ -278,11 +283,11 @@ const Chat: React.FC<ChatProps> = ({
     return () => {
       isMountedRef.current = false;
       // Abort any ongoing streaming when component unmounts
-      if (abortController) {
-        abortController.abort(ABORT_REASON.UNMOUNT);
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort(ABORT_REASON.UNMOUNT);
       }
     };
-  }, [abortController]);
+  }, []); // No dependencies - only run on mount/unmount
 
   const handleRegenerate = useCallback(
     async (messageIndex: number) => {
@@ -408,6 +413,7 @@ const Chat: React.FC<ChatProps> = ({
       handleSaveAsNote,
       safeSetCurrentAiMessage,
       safeSetLoadingMessage,
+      setAbortController,
     ]
   );
 
