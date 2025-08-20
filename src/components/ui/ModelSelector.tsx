@@ -11,6 +11,7 @@ import { ModelDisplay } from "@/components/ui/model-display";
 import { useSettingsValue, getModelKeyFromModel } from "@/settings/model";
 import { checkModelApiKey, err2String } from "@/utils";
 import { ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface ModelSelectorProps {
   disabled?: boolean;
@@ -40,7 +41,12 @@ export function ModelSelector({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant={variant} size={size} disabled={disabled} className={className}>
+        <Button
+          variant={variant}
+          size={size}
+          disabled={disabled}
+          className={cn("tw-text-muted", className)}
+        >
           {modelError ? (
             <span className="tw-text-error">Model Load Failed</span>
           ) : currentModel ? (

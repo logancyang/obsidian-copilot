@@ -42,6 +42,7 @@ function ContextNote({
         size="fit"
         onClick={() => onRemoveContext(note.path)}
         aria-label="Remove from context"
+        className="tw-text-muted"
       >
         <X className="tw-size-4" />
       </Button>
@@ -61,6 +62,7 @@ function ContextUrl({ url, onRemoveUrl }: { url: string; onRemoveUrl: (url: stri
         size="fit"
         onClick={() => onRemoveUrl(url)}
         aria-label="Remove from context"
+        className="tw-text-muted"
       >
         <X className="tw-size-4" />
       </Button>
@@ -91,6 +93,7 @@ function ContextSelection({
         size="fit"
         onClick={() => onRemoveSelectedText(selectedText.id)}
         aria-label="Remove from context"
+        className="tw-text-muted"
       >
         <X className="tw-size-4" />
       </Button>
@@ -155,10 +158,10 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
           onClick={onAddContext}
           variant="ghost2"
           size="fit"
-          className="tw-ml-1 tw-rounded-sm tw-border tw-border-solid tw-border-border"
+          className="tw-ml-1 tw-rounded-sm tw-border tw-border-solid tw-border-border tw-text-muted"
         >
           <Plus className="tw-size-4" />
-          {!hasContext && <span className="tw-pr-1 tw-text-xs tw-leading-4">Add context</span>}
+          {!hasContext && <span className="tw-pr-1 tw-text-sm tw-leading-4">Add context</span>}
         </Button>
       </div>
       <div className="tw-flex tw-flex-1 tw-flex-wrap tw-gap-1">

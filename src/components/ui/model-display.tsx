@@ -60,7 +60,7 @@ export const ModelDisplay: React.FC<ModelDisplayProps> = ({ model, iconSize = 14
   const displayName = model.displayName || model.name;
   return (
     <div className="tw-flex tw-items-center tw-gap-1">
-      <span>{displayName}</span>
+      <span className="tw-text-sm hover:tw-text-normal">{displayName}</span>
       {model.capabilities && model.capabilities.length > 0 && (
         <div className="tw-flex tw-items-center tw-gap-0.5">
           <ModelCapabilityIcons capabilities={model.capabilities} iconSize={iconSize} />
