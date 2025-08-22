@@ -19,6 +19,127 @@ const localSearchSchema = z.object({
     .describe("Time range for search"),
 });
 
+// Lexical-only search tool using v3 TieredLexicalRetriever
+const lexicalSearchTool = createTool({
+  name: "lexicalSearch",
+  description: "Search for notes using lexical/keyword-based search",
+  schema: localSearchSchema,
+  handler: async ({ timeRange, query, salientTerms }) => {
+    const settings = getSettings();
+
+    const returnAll = timeRange !== undefined;
+    const effectiveMaxK = returnAll
+      ? Math.max(settings.maxSourceChunks, 200)
+      : settings.maxSourceChunks;
+
+    logInfo(`lexicalSearch returnAll: ${returnAll}`);
+
+    // Always use TieredLexicalRetriever for lexical search
+    const retriever = new (
+      await import("@/search/v3/TieredLexicalRetriever")
+    ).TieredLexicalRetriever(app, {
+      minSimilarityScore: returnAll ? 0.0 : 0.1,
+      maxK: effectiveMaxK,
+      salientTerms,
+      timeRange: timeRange
+        ? {
+            startTime: timeRange.startTime.epoch,
+            endTime: timeRange.endTime.epoch,
+          }
+        : undefined,
+      textWeight: TEXT_WEIGHT,
+      returnAll: returnAll,
+      useRerankerThreshold: 0.5,
+    });
+
+    const documents = await retriever.getRelevantDocuments(query);
+
+    logInfo(`lexicalSearch found ${documents.length} documents for query: "${query}"`);
+    if (timeRange) {
+      logInfo(
+        `Time range search from ${new Date(timeRange.startTime.epoch).toISOString()} to ${new Date(timeRange.endTime.epoch).toISOString()}`
+      );
+    }
+
+    const formattedResults = documents.map((doc) => {
+      const scored = doc.metadata.rerank_score ?? doc.metadata.score ?? 0;
+      return {
+        title: doc.metadata.title || "Untitled",
+        content: doc.pageContent,
+        path: doc.metadata.path || "",
+        score: scored,
+        rerank_score: scored,
+        includeInContext: doc.metadata.includeInContext ?? true,
+        source: doc.metadata.source,
+        mtime: doc.metadata.mtime ?? null,
+        explanation: doc.metadata.explanation ?? null,
+      };
+    });
+
+    return JSON.stringify(formattedResults);
+  },
+});
+
+// Semantic search tool using Orama-based HybridRetriever
+const semanticSearchTool = createTool({
+  name: "semanticSearch",
+  description: "Search for notes using semantic/meaning-based search with embeddings",
+  schema: localSearchSchema,
+  handler: async ({ timeRange, query, salientTerms }) => {
+    const settings = getSettings();
+
+    const returnAll = timeRange !== undefined;
+    const effectiveMaxK = returnAll
+      ? Math.max(settings.maxSourceChunks, 200)
+      : settings.maxSourceChunks;
+
+    logInfo(`semanticSearch returnAll: ${returnAll}`);
+
+    // Always use HybridRetriever for semantic search
+    const retriever = new (await import("@/search/hybridRetriever")).HybridRetriever({
+      minSimilarityScore: returnAll ? 0.0 : 0.1,
+      maxK: effectiveMaxK,
+      salientTerms,
+      timeRange: timeRange
+        ? {
+            startTime: timeRange.startTime.epoch,
+            endTime: timeRange.endTime.epoch,
+          }
+        : undefined,
+      textWeight: TEXT_WEIGHT,
+      returnAll: returnAll,
+      useRerankerThreshold: 0.5,
+    });
+
+    const documents = await retriever.getRelevantDocuments(query);
+
+    logInfo(`semanticSearch found ${documents.length} documents for query: "${query}"`);
+    if (timeRange) {
+      logInfo(
+        `Time range search from ${new Date(timeRange.startTime.epoch).toISOString()} to ${new Date(timeRange.endTime.epoch).toISOString()}`
+      );
+    }
+
+    const formattedResults = documents.map((doc) => {
+      const scored = doc.metadata.rerank_score ?? doc.metadata.score ?? 0;
+      return {
+        title: doc.metadata.title || "Untitled",
+        content: doc.pageContent,
+        path: doc.metadata.path || "",
+        score: scored,
+        rerank_score: scored,
+        includeInContext: doc.metadata.includeInContext ?? true,
+        source: doc.metadata.source,
+        mtime: doc.metadata.mtime ?? null,
+        explanation: doc.metadata.explanation ?? null,
+      };
+    });
+
+    return JSON.stringify(formattedResults);
+  },
+});
+
+// Smart wrapper that delegates to either lexical or semantic search based on settings
 const localSearchTool = createTool({
   name: "localSearch",
   description: "Search for notes based on the time range and query",
@@ -26,76 +147,14 @@ const localSearchTool = createTool({
   handler: async ({ timeRange, query, salientTerms }) => {
     const settings = getSettings();
 
-    const returnAll = timeRange !== undefined;
-    // For time-based queries, ensure a healthy cap to avoid starving recall
-    const effectiveMaxK = returnAll
-      ? Math.max(settings.maxSourceChunks, 200)
-      : settings.maxSourceChunks;
+    logInfo(
+      `localSearch delegating to ${settings.enableSemanticSearchV3 ? "semantic" : "lexical"} search`
+    );
 
-    logInfo(`returnAll: ${returnAll}`);
-
-    // Create retriever based on semantic search setting
-    const retriever = settings.enableSemanticSearchV3
-      ? new (await import("@/search/hybridRetriever")).HybridRetriever({
-          minSimilarityScore: returnAll ? 0.0 : 0.1,
-          maxK: effectiveMaxK,
-          salientTerms,
-          timeRange: timeRange
-            ? {
-                startTime: timeRange.startTime.epoch,
-                endTime: timeRange.endTime.epoch,
-              }
-            : undefined,
-          textWeight: TEXT_WEIGHT,
-          returnAll: returnAll,
-          useRerankerThreshold: 0.5,
-        })
-      : new (await import("@/search/v3/TieredLexicalRetriever")).TieredLexicalRetriever(app, {
-          minSimilarityScore: returnAll ? 0.0 : 0.1,
-          maxK: effectiveMaxK,
-          salientTerms,
-          timeRange: timeRange
-            ? {
-                startTime: timeRange.startTime.epoch,
-                endTime: timeRange.endTime.epoch,
-              }
-            : undefined,
-          textWeight: TEXT_WEIGHT,
-          returnAll: returnAll,
-          useRerankerThreshold: 0.5,
-        });
-
-    // Perform the search
-    const documents = await retriever.getRelevantDocuments(query);
-
-    logInfo(`localSearch found ${documents.length} documents for query: "${query}"`);
-    if (timeRange) {
-      logInfo(
-        `Time range search from ${new Date(timeRange.startTime.epoch).toISOString()} to ${new Date(timeRange.endTime.epoch).toISOString()}`
-      );
-    }
-
-    // Format the results - include full content for LLM context
-    const formattedResults = documents.map((doc) => {
-      const scored = doc.metadata.rerank_score ?? doc.metadata.score ?? 0;
-      return {
-        title: doc.metadata.title || "Untitled",
-        // Include full content for documents that will be sent to LLM
-        content: doc.pageContent,
-        path: doc.metadata.path || "",
-        // Ensure both fields reflect the same final fused score when present
-        score: scored,
-        rerank_score: scored,
-        includeInContext: doc.metadata.includeInContext ?? true,
-        source: doc.metadata.source, // Pass through source for proper labeling
-        // Show actual modified time for time-based queries
-        mtime: doc.metadata.mtime ?? null,
-        // Include search explanation if available
-        explanation: doc.metadata.explanation ?? null,
-      };
-    });
-
-    return JSON.stringify(formattedResults);
+    // Delegate to appropriate search tool based on settings
+    return settings.enableSemanticSearchV3
+      ? await semanticSearchTool.call({ timeRange, query, salientTerms })
+      : await lexicalSearchTool.call({ timeRange, query, salientTerms });
   },
 });
 
@@ -189,5 +248,5 @@ const webSearchTool = createTool({
   },
 });
 
-export { indexTool, localSearchTool, webSearchTool };
+export { indexTool, lexicalSearchTool, localSearchTool, semanticSearchTool, webSearchTool };
 export type { SimpleTool };

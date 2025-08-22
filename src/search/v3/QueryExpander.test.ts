@@ -131,7 +131,7 @@ describe("QueryExpander", () => {
       );
 
       const expander = new QueryExpander({
-        timeout: 5000, // Long timeout to ensure it doesn't trigger
+        timeout: 10000, // Long timeout to ensure it doesn't trigger during tests
         getChatModel: async () => mockChatModel,
       });
 

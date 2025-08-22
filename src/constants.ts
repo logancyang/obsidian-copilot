@@ -99,6 +99,7 @@ export const EMPTY_INDEX_ERROR_MESSAGE =
 export const CHUNK_SIZE = 6000;
 export const TEXT_WEIGHT = 0.4;
 export const MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT = 448000;
+export const LLM_TIMEOUT_MS = 10000; // 10 seconds timeout for LLM operations
 export const LOADING_MESSAGES = {
   DEFAULT: "",
   READING_FILES: "Reading files",

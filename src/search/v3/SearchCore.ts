@@ -1,3 +1,4 @@
+import { LLM_TIMEOUT_MS } from "@/constants";
 import { logError, logInfo, logWarn } from "@/logger";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { App } from "obsidian";
@@ -36,13 +37,12 @@ export class SearchCore {
     this.queryExpander = new QueryExpander({
       getChatModel: this.getChatModel,
       maxVariants: 3,
-      timeout: 5000, // 5 seconds timeout
+      timeout: LLM_TIMEOUT_MS,
     });
     this.folderBoostCalculator = new FolderBoostCalculator(app);
     this.graphBoostCalculator = new GraphBoostCalculator(app, {
       enabled: true,
       maxCandidates: 10, // Absolute ceiling
-      semanticSimilarityThreshold: 0.75, // Only boost results with 75%+ similarity
       boostStrength: 0.1,
       maxBoostMultiplier: 1.15,
     });
