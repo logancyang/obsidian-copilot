@@ -21,7 +21,6 @@ export interface SearchExplanation {
     query: string; // which query matched
     weight: number; // field weight used
   }[];
-  semanticScore?: number; // similarity score if semantic search was used
   folderBoost?: {
     folder: string;
     documentCount: number;
@@ -49,10 +48,6 @@ export interface NoteIdRank {
 
 export interface SearchOptions {
   maxResults?: number;
-  rrfK?: number;
-  enableSemantic?: boolean;
-  /** Weight for semantic results (0-1, default: 0.6 = 60% semantic, 40% lexical) */
-  semanticWeight?: number;
   l1ByteCap?: number;
   candidateLimit?: number;
   salientTerms?: string[]; // Additional terms to enhance the search

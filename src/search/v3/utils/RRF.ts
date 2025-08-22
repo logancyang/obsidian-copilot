@@ -87,13 +87,7 @@ export function weightedRRF(config: RRFConfig): NoteIdRank[] {
               merged.lexicalMatches = item.explanation.lexicalMatches;
             }
 
-            // Merge semantic score
-            if (
-              item.explanation.semanticScore !== undefined &&
-              existing.semanticScore === undefined
-            ) {
-              merged.semanticScore = item.explanation.semanticScore;
-            }
+            // Semantic score merging removed with v3 semantic search
 
             // Update base and final scores to reflect fusion
             merged.baseScore = existing.baseScore || item.explanation.baseScore;

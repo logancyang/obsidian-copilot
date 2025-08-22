@@ -31,16 +31,18 @@ import React from "react";
 
 export async function refreshVaultIndex() {
   try {
-    const { SearchSystemFactory } = await import("@/search/SearchSystem");
-    const result = await SearchSystemFactory.getIndexer().indexVaultIncremental(app);
+    const { getSettings } = await import("@/settings/model");
+    const settings = getSettings();
 
-    if (!result.success) {
-      new Notice(`Failed to refresh index: ${result.message || "Unknown error"}`);
-      return;
+    if (settings.enableSemanticSearchV3) {
+      // Use VectorStoreManager for semantic search indexing
+      const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+      const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(false);
+      new Notice(`Semantic search index refreshed with ${count} documents.`);
+    } else {
+      // V3 search builds indexes on demand
+      new Notice("Lexical search builds indexes on demand. No manual indexing required.");
     }
-
-    const count = result.documentCount ?? 0;
-    new Notice(`Index refreshed with ${count} documents.`);
   } catch (error) {
     console.error("Error refreshing vault index:", error);
     new Notice("Failed to refresh vault index. Check console for details.");
@@ -49,16 +51,18 @@ export async function refreshVaultIndex() {
 
 export async function forceReindexVault() {
   try {
-    const { SearchSystemFactory } = await import("@/search/SearchSystem");
-    const result = await SearchSystemFactory.getIndexer().indexVaultFull(app);
+    const { getSettings } = await import("@/settings/model");
+    const settings = getSettings();
 
-    if (!result.success) {
-      new Notice(`Failed to rebuild index: ${result.message || "Unknown error"}`);
-      return;
+    if (settings.enableSemanticSearchV3) {
+      // Use VectorStoreManager for semantic search indexing
+      const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+      const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(true);
+      new Notice(`Semantic search index rebuilt with ${count} documents.`);
+    } else {
+      // V3 search builds indexes on demand
+      new Notice("Lexical search builds indexes on demand. No manual indexing required.");
     }
-
-    const count = result.documentCount ?? 0;
-    new Notice(`Index rebuilt with ${count} documents.`);
   } catch (error) {
     console.error("Error force reindexing vault:", error);
     new Notice("Failed to force reindex vault. Check console for details.");

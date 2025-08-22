@@ -278,27 +278,7 @@ export class GraphBoostCalculator {
   private filterCandidates(results: NoteIdRank[]): NoteIdRank[] {
     let candidates = results;
 
-    // Apply semantic similarity threshold if configured
-    if (this.config.semanticSimilarityThreshold !== undefined) {
-      const threshold = this.config.semanticSimilarityThreshold;
-      const initialCount = candidates.length;
-
-      // Check if any results have semantic scores
-      const hasSemanticScores = results.some((r) => r.explanation?.semanticScore !== undefined);
-
-      if (hasSemanticScores) {
-        // Only filter if semantic scores are available
-        candidates = results.filter((r) => {
-          const semanticScore = r.explanation?.semanticScore;
-          // Only include if semantic score exists and meets threshold
-          return semanticScore !== undefined && semanticScore >= threshold;
-        });
-
-        logInfo(
-          `GraphBoost: ${candidates.length}/${initialCount} results have semantic score ≥${threshold}`
-        );
-      }
-    }
+    // Semantic similarity threshold filtering removed with v3 semantic search
 
     // Apply max candidates limit
     const beforeLimit = candidates.length;

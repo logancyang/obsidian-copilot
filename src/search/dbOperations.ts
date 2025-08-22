@@ -96,12 +96,12 @@ export class DBOperations {
       try {
         if (await this.chunkedStorage.exists()) {
           this.oramaDb = await this.chunkedStorage.loadDatabase();
-          logInfo("Loaded existing chunked Orama database from disk.");
+          logInfo("Loaded existing chunked semantic index database from disk.");
           return this.oramaDb;
         }
       } catch (error) {
         // If loading fails, we'll create a new database
-        logError("Failed to load existing database, creating new one:", error);
+        logError("Failed to load existing semantic index database, creating new one:", error);
       }
 
       // Create new database if none exists or loading failed
@@ -109,7 +109,7 @@ export class DBOperations {
       this.oramaDb = newDb;
       return newDb;
     } catch (error) {
-      logError(`Error initializing Orama database:`, error);
+      logError(`Error initializing semantic index database:`, error);
       new Notice("Failed to initialize Copilot database. Some features may be limited.");
       return undefined;
     }
@@ -127,7 +127,7 @@ export class DBOperations {
         await this.initializeDB(await EmbeddingsManager.getInstance().getEmbeddingsAPI());
         // If still not initialized after attempt, then throw
         if (!this.oramaDb || !this.chunkedStorage) {
-          throw new CustomError("Orama database not found.");
+          throw new CustomError("Semantic index database not found.");
         }
       } catch (error) {
         logError("Failed to initialize database during save:", error);
@@ -140,10 +140,10 @@ export class DBOperations {
       this.hasUnsavedChanges = false;
 
       if (getSettings().debug) {
-        logInfo("Orama database saved successfully at:", this.dbPath);
+        logInfo("Semantic index database saved successfully at:", this.dbPath);
       }
     } catch (error) {
-      logError(`Error saving Orama database:`, error);
+      logError(`Error saving semantic index database:`, error);
       throw error;
     }
   }
@@ -178,7 +178,7 @@ export class DBOperations {
 
   public async removeDocs(filePath: string) {
     if (!this.oramaDb) {
-      throw new CustomError("Orama database not found.");
+      throw new CustomError("Semantic index database not found.");
     }
     try {
       const searchResult = await search(this.oramaDb, {
@@ -283,7 +283,7 @@ export class DBOperations {
       },
     });
     logInfo(
-      `Created new Orama database for ${this.dbPath}. ` +
+      `Created new semantic index database for ${this.dbPath}. ` +
         `Embedding model: ${EmbeddingsManager.getModelName(embeddingInstance)} with vector length ${vectorLength}.`
     );
     this.isIndexLoaded = true;
@@ -445,7 +445,7 @@ export class DBOperations {
   async checkAndHandleEmbeddingModelChange(embeddingInstance: Embeddings): Promise<boolean> {
     if (!this.oramaDb) {
       logInfo(
-        "Embedding model change detected. Orama database not found. Initializing new database..."
+        "Embedding model change detected. Semantic index database not found. Initializing new database..."
       );
       try {
         await this.initializeDB(embeddingInstance);
@@ -453,7 +453,7 @@ export class DBOperations {
       } catch (error) {
         logError("Failed to initialize database:", error);
         throw new CustomError(
-          "Failed to initialize Orama database. Please check your embedding model settings."
+          "Failed to initialize semantic index database. Please check your embedding model settings."
         );
       }
     }
@@ -510,7 +510,9 @@ export class DBOperations {
 
   public async garbageCollect(): Promise<number> {
     if (!this.oramaDb) {
-      logInfo("Orama database not found during garbage collection. Attempting to initialize...");
+      logInfo(
+        "Semantic index database not found during garbage collection. Attempting to initialize..."
+      );
       try {
         const embeddingInstance = await EmbeddingsManager.getInstance().getEmbeddingsAPI();
         if (!embeddingInstance) {
@@ -566,7 +568,7 @@ export class DBOperations {
 
   public async getIndexedFiles(): Promise<string[]> {
     if (!this.oramaDb) {
-      throw new CustomError("Orama database not found.");
+      throw new CustomError("Semantic index database not found.");
     }
 
     try {
@@ -632,7 +634,7 @@ export class DBOperations {
 
   async getDocsJsonByPaths(paths: string[]): Promise<Record<string, any[]>> {
     if (!this.oramaDb) {
-      throw new CustomError("Orama database not found.");
+      throw new CustomError("Semantic index database not found.");
     }
 
     const result: Record<string, any[]> = {};

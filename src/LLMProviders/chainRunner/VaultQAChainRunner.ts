@@ -1,6 +1,7 @@
 import { ABORT_REASON, RETRIEVED_DOCUMENT_TAG } from "@/constants";
 import { logInfo } from "@/logger";
-import { SearchSystemFactory } from "@/search/SearchSystem";
+import { HybridRetriever } from "@/search/hybridRetriever";
+import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
 import { getSettings, getSystemPrompt } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import {
@@ -43,12 +44,19 @@ export class VaultQAChainRunner extends BaseChainRunner {
         standaloneQuestion = userMessage.message;
       }
 
-      // Create retriever using factory (selects between legacy and v3 based on settings)
-      const retriever = SearchSystemFactory.createRetriever(app, {
-        minSimilarityScore: 0.01,
-        maxK: getSettings().maxSourceChunks,
-        salientTerms: [],
-      });
+      // Create retriever based on semantic search setting
+      const settings = getSettings();
+      const retriever = settings.enableSemanticSearchV3
+        ? new HybridRetriever({
+            minSimilarityScore: 0.01,
+            maxK: settings.maxSourceChunks,
+            salientTerms: [],
+          })
+        : new TieredLexicalRetriever(app, {
+            minSimilarityScore: 0.01,
+            maxK: settings.maxSourceChunks,
+            salientTerms: [],
+          });
 
       // Retrieve relevant documents
       const retrievedDocs = await retriever.getRelevantDocuments(standaloneQuestion);

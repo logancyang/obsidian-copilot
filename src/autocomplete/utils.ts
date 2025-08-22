@@ -1,4 +1,4 @@
-import { findRelevantNotes } from "@/search/findRelevantNotes";
+import { findRelevantNotes, RelevantNoteEntry } from "@/search/findRelevantNotes";
 import { Editor, TFile } from "obsidian";
 
 /**
@@ -153,7 +153,16 @@ export class RelevantNotesCache {
     }
 
     // Otherwise, fetch and cache new relevant notes
-    const relevantNotes = await findRelevantNotes({ filePath: file.path });
+    let relevantNotes: RelevantNoteEntry[] = [];
+    try {
+      const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+      const db = await VectorStoreManager.getInstance().getDb();
+      if (db) {
+        relevantNotes = await findRelevantNotes({ db, filePath: file.path });
+      }
+    } catch (error) {
+      console.warn("Failed to fetch relevant notes for autocomplete:", error);
+    }
 
     // Get top N relevant notes
     const topNotes = relevantNotes.slice(0, RelevantNotesCache.MAX_RELEVANT_NOTES);

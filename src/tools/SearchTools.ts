@@ -2,7 +2,6 @@ import { getStandaloneQuestion } from "@/chainUtils";
 import { TEXT_WEIGHT } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logInfo } from "@/logger";
-import { SearchSystemFactory } from "@/search/SearchSystem";
 import { getSettings } from "@/settings/model";
 import { z } from "zod";
 import { createTool, SimpleTool } from "./SimpleTool";
@@ -35,21 +34,27 @@ const localSearchTool = createTool({
 
     logInfo(`returnAll: ${returnAll}`);
 
-    // Use retriever factory to get appropriate retriever based on settings
-    const retriever = SearchSystemFactory.createRetriever(app, {
-      minSimilarityScore: returnAll ? 0.0 : 0.1,
-      maxK: effectiveMaxK,
-      salientTerms,
-      timeRange: timeRange
-        ? {
-            startTime: timeRange.startTime.epoch,
-            endTime: timeRange.endTime.epoch,
-          }
-        : undefined,
-      textWeight: TEXT_WEIGHT,
-      returnAll: returnAll,
-      useRerankerThreshold: 0.5,
-    });
+    // Create retriever based on semantic search setting
+    const retriever = settings.enableSemanticSearchV3
+      ? new (await import("@/search/hybridRetriever")).HybridRetriever({
+          minSimilarityScore: returnAll ? 0.0 : 0.1,
+          maxK: effectiveMaxK,
+          salientTerms,
+          timeRange: timeRange
+            ? {
+                startTime: timeRange.startTime.epoch,
+                endTime: timeRange.endTime.epoch,
+              }
+            : undefined,
+          textWeight: TEXT_WEIGHT,
+          returnAll: returnAll,
+          useRerankerThreshold: 0.5,
+        })
+      : new (await import("@/search/v3/TieredLexicalRetriever")).TieredLexicalRetriever(app, {
+          minSimilarityScore: returnAll ? 0.0 : 0.1,
+          maxK: effectiveMaxK,
+          salientTerms,
+        });
 
     // Perform the search
     const documents = await retriever.getRelevantDocuments(query);
@@ -92,24 +97,24 @@ const indexTool = createTool({
   schema: z.void(), // No parameters
   handler: async () => {
     const settings = getSettings();
-    if (settings.useLegacySearch) {
-      // Legacy search uses persistent Orama index - trigger actual indexing
+    if (settings.enableSemanticSearchV3) {
+      // Semantic search uses persistent Orama index - trigger actual indexing
       try {
         const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
         const count = await VectorStoreManager.getInstance().indexVaultToVectorStore();
-        const indexResultPrompt = `Legacy search (Orama) index refreshed with ${count} documents.\n`;
+        const indexResultPrompt = `Semantic search index refreshed with ${count} documents.\n`;
         return (
           indexResultPrompt +
           JSON.stringify({
             success: true,
-            message: `Legacy Orama index has been refreshed with ${count} documents.`,
+            message: `Semantic search index has been refreshed with ${count} documents.`,
             documentCount: count,
           })
         );
       } catch (error) {
         return JSON.stringify({
           success: false,
-          message: `Failed to index with legacy search: ${error.message}`,
+          message: `Failed to index with semantic search: ${error.message}`,
         });
       }
     } else {

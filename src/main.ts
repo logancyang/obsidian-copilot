@@ -13,20 +13,13 @@ import { registerContextMenu } from "@/commands/contextMenu";
 import { CustomCommandRegister } from "@/commands/customCommandRegister";
 import { migrateCommands, suggestDefaultCommands } from "@/commands/migrator";
 import { createQuickCommandContainer } from "@/components/QuickCommand";
-import {
-  ABORT_REASON,
-  CHAT_VIEWTYPE,
-  DEFAULT_OPEN_AREA,
-  EVENT_NAMES,
-  VAULT_VECTOR_STORE_STRATEGY,
-} from "@/constants";
+import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
 import { encryptAllKeys } from "@/encryptionService";
-import { logInfo, logWarn } from "@/logger";
+import { logInfo } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
-import { SearchSystemFactory } from "@/search/SearchSystem";
-import { MemoryIndexManager } from "@/search/v3/MemoryIndexManager";
+import VectorStoreManager from "@/search/vectorStoreManager";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
 import {
   getModelKeyFromModel,
@@ -50,22 +43,19 @@ import {
 } from "obsidian";
 import { IntentAnalyzer } from "./LLMProviders/intentAnalyzer";
 
-interface FileTrackingState {
-  lastActiveFile: TFile | null;
-  lastActiveMtime: number | null;
-}
+// Removed unused FileTrackingState interface
 
 export default class CopilotPlugin extends Plugin {
   // Plugin components
   projectManager: ProjectManager;
   brevilabsClient: BrevilabsClient;
   userMessageHistory: string[] = [];
+  vectorStoreManager: VectorStoreManager;
   fileParserManager: FileParserManager;
   customCommandRegister: CustomCommandRegister;
   settingsUnsubscriber?: () => void;
   private autocompleteService: AutocompleteService;
   chatUIState: ChatUIState;
-  private fileTracker: FileTrackingState = { lastActiveFile: null, lastActiveMtime: null };
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -91,6 +81,9 @@ export default class CopilotPlugin extends Plugin {
 
     // Initialize ProjectManager
     this.projectManager = ProjectManager.getInstance(this.app, this);
+
+    // Initialize VectorStoreManager
+    this.vectorStoreManager = VectorStoreManager.getInstance();
 
     // Initialize FileParserManager early with other core services
     this.fileParserManager = new FileParserManager(this.brevilabsClient, this.app.vault);
@@ -126,37 +119,6 @@ export default class CopilotPlugin extends Plugin {
 
     IntentAnalyzer.initTools(this.app.vault);
 
-    // Auto-index per strategy when search is enabled
-    try {
-      const settings = getSettings();
-      const searchEnabled = settings.useLegacySearch || settings.enableSemanticSearchV3;
-      if (searchEnabled) {
-        const strategy = settings.indexVaultToVectorStore;
-        const isMobileDisabled = settings.disableIndexOnMobile && (this.app as any).isMobile;
-        if (!isMobileDisabled && strategy === VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP) {
-          // Use SearchSystemFactory for both legacy and v3
-          const { SearchSystemFactory } = await import("@/search/SearchSystem");
-          const result = await SearchSystemFactory.getIndexer().indexVaultIncremental(this.app);
-          if (!result.success) {
-            logWarn(`Index loading failed: ${result.message}`);
-          }
-        } else if (!isMobileDisabled) {
-          // For non-ON_STARTUP strategies, ensure index is loaded for the active system
-          const { SearchSystemFactory } = await import("@/search/SearchSystem");
-          await SearchSystemFactory.getIndexer().ensureLoaded(this.app);
-        }
-      } else {
-        // If search is off, we still try to load index for features that depend on it
-        if (!(settings.disableIndexOnMobile && (this.app as any).isMobile)) {
-          // Use SearchSystemFactory for consistency, even when search is disabled
-          const { SearchSystemFactory } = await import("@/search/SearchSystem");
-          await SearchSystemFactory.getIndexer().ensureLoaded(this.app);
-        }
-      }
-    } catch {
-      // Swallow errors to avoid disrupting startup
-    }
-
     this.registerEvent(
       this.app.workspace.on("editor-menu", (menu: Menu) => {
         return registerContextMenu(menu);
@@ -168,34 +130,8 @@ export default class CopilotPlugin extends Plugin {
         if (leaf && leaf.view instanceof MarkdownView) {
           const file = leaf.view.file;
           if (file) {
-            // On switching to a new file, opportunistically re-index the previous active file
-            // if semantic search v3 is enabled and file was modified while active
-            try {
-              const settings = getSettings();
-              if (settings.enableSemanticSearchV3 && !settings.useLegacySearch) {
-                const { lastActiveFile, lastActiveMtime } = this.fileTracker;
-                if (
-                  lastActiveFile &&
-                  typeof lastActiveMtime === "number" &&
-                  lastActiveFile.extension === "md"
-                ) {
-                  if (lastActiveFile.stat?.mtime && lastActiveFile.stat.mtime > lastActiveMtime) {
-                    // Reindex only the last active file that changed
-                    void MemoryIndexManager.getInstance(this.app).reindexSingleFileIfModified(
-                      lastActiveFile,
-                      lastActiveMtime
-                    );
-                  }
-                }
-                // update trackers
-                this.fileTracker = {
-                  lastActiveFile: file,
-                  lastActiveMtime: file.stat?.mtime ?? null,
-                };
-              }
-            } catch {
-              // non-fatal: ignore indexing errors during active file switch
-            }
+            // Note: File tracking and real-time reindexing removed for simplicity
+            // Semantic search indexes are rebuilt manually or on startup as needed
             const activeCopilotView = this.app.workspace
               .getLeavesOfType(CHAT_VIEWTYPE)
               .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
@@ -478,12 +414,19 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async customSearchDB(query: string, salientTerms: string[], textWeight: number): Promise<any[]> {
-    const retriever = SearchSystemFactory.createRetriever(app, {
-      minSimilarityScore: 0.3,
-      maxK: 20,
-      salientTerms: salientTerms,
-      textWeight: textWeight,
-    });
+    const settings = getSettings();
+    const retriever = settings.enableSemanticSearchV3
+      ? new (await import("@/search/hybridRetriever")).HybridRetriever({
+          minSimilarityScore: 0.3,
+          maxK: 20,
+          salientTerms: salientTerms,
+          textWeight: textWeight,
+        })
+      : new (await import("@/search/v3/TieredLexicalRetriever")).TieredLexicalRetriever(this.app, {
+          minSimilarityScore: 0.3,
+          maxK: 20,
+          salientTerms: salientTerms,
+        });
 
     const results = await retriever.getRelevantDocuments(query);
     return results.map((doc) => ({

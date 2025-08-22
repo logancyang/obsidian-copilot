@@ -16,7 +16,6 @@ import {
   VaultQAChainRunner,
 } from "@/LLMProviders/chainRunner/index";
 import { logError, logInfo } from "@/logger";
-import { SearchSystemFactory } from "@/search/SearchSystem";
 import { getSettings, getSystemPrompt, subscribeToSettingsChange } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { findCustomModel, isOSeriesModel, isSupportedChain } from "@/utils";
@@ -206,11 +205,19 @@ export default class ChainManager {
         // TODO: VaultQAChainRunner now handles this directly without chains
         await this.initializeQAChain(options);
 
-        const retriever = SearchSystemFactory.createRetriever(app, {
-          minSimilarityScore: 0.01,
-          maxK: getSettings().maxSourceChunks,
-          salientTerms: [],
-        });
+        // Create retriever based on semantic search setting
+        const settings = getSettings();
+        const retriever = settings.enableSemanticSearchV3
+          ? new (await import("@/search/hybridRetriever")).HybridRetriever({
+              minSimilarityScore: 0.01,
+              maxK: settings.maxSourceChunks,
+              salientTerms: [],
+            })
+          : new (await import("@/search/v3/TieredLexicalRetriever")).TieredLexicalRetriever(app, {
+              minSimilarityScore: 0.01,
+              maxK: settings.maxSourceChunks,
+              salientTerms: [],
+            });
 
         // Create new conversational retrieval chain
         this.retrievalChain = ChainFactory.createConversationalRetrievalChain(
@@ -289,10 +296,13 @@ export default class ChainManager {
   private async initializeQAChain(options: SetChainOptions) {
     // Handle index refresh if needed
     if (options.refreshIndex) {
-      // Auto-refresh index based on active search system
-      const { SearchSystemFactory } = await import("@/search/SearchSystem");
-      await SearchSystemFactory.getIndexer().indexVaultIncremental(this.app);
-      await SearchSystemFactory.getIndexer().ensureLoaded(this.app);
+      const settings = getSettings();
+      if (settings.enableSemanticSearchV3) {
+        // Use VectorStoreManager for Orama indexing
+        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+        await VectorStoreManager.getInstance().indexVaultToVectorStore(false);
+      }
+      // V3 search builds indexes on demand, no action needed
     }
   }
 
