@@ -19,7 +19,6 @@ interface GraphConnections {
 export interface GraphBoostConfig {
   enabled: boolean;
   maxCandidates: number; // Absolute max results to analyze (default: 10)
-  semanticSimilarityThreshold?: number; // Min semantic similarity score to apply boost (0-1, default: 0.75)
   backlinkWeight: number; // Weight for backlinks (default: 1.0)
   coCitationWeight: number; // Weight for co-citations (default: 0.5)
   sharedTagWeight: number; // Weight for shared tags (default: 0.3)
@@ -33,7 +32,6 @@ export interface GraphBoostConfig {
 export const DEFAULT_CONFIG: GraphBoostConfig = {
   enabled: true,
   maxCandidates: 10,
-  semanticSimilarityThreshold: 0.75,
   backlinkWeight: 1.0,
   coCitationWeight: 0.5,
   sharedTagWeight: 0.3,
@@ -273,12 +271,10 @@ export class GraphBoostCalculator {
   }
 
   /**
-   * Filter candidates based on semantic similarity threshold and max limit
+   * Filter candidates based on max limit
    */
   private filterCandidates(results: NoteIdRank[]): NoteIdRank[] {
     let candidates = results;
-
-    // Semantic similarity threshold filtering removed with v3 semantic search
 
     // Apply max candidates limit
     const beforeLimit = candidates.length;
