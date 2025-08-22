@@ -50,11 +50,14 @@ function getAverageEmbedding(noteEmbeddings: number[][]): number[] {
 
   const embeddingLength = noteEmbeddings[0].length;
   const averageEmbedding = Array(embeddingLength).fill(0);
-  noteEmbeddings.forEach((embedding) => {
-    embedding.forEach((value, index) => {
-      averageEmbedding[index] += value / embeddingLength;
-    });
-  });
+  for (const embedding of noteEmbeddings) {
+    for (let i = 0; i < embeddingLength; i++) {
+      averageEmbedding[i] += embedding[i];
+    }
+  }
+  for (let i = 0; i < embeddingLength; i++) {
+    averageEmbedding[i] /= noteEmbeddings.length;
+  }
   return averageEmbedding;
 }
 

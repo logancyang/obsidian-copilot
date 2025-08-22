@@ -54,6 +54,15 @@ const localSearchTool = createTool({
           minSimilarityScore: returnAll ? 0.0 : 0.1,
           maxK: effectiveMaxK,
           salientTerms,
+          timeRange: timeRange
+            ? {
+                startTime: timeRange.startTime.epoch,
+                endTime: timeRange.endTime.epoch,
+              }
+            : undefined,
+          textWeight: TEXT_WEIGHT,
+          returnAll: returnAll,
+          useRerankerThreshold: 0.5,
         });
 
     // Perform the search

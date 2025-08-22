@@ -56,6 +56,10 @@ export class VaultQAChainRunner extends BaseChainRunner {
             minSimilarityScore: 0.01,
             maxK: settings.maxSourceChunks,
             salientTerms: [],
+            timeRange: undefined,
+            textWeight: undefined,
+            returnAll: false,
+            useRerankerThreshold: undefined,
           });
 
       // Retrieve relevant documents

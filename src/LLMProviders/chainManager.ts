@@ -217,6 +217,10 @@ export default class ChainManager {
               minSimilarityScore: 0.01,
               maxK: settings.maxSourceChunks,
               salientTerms: [],
+              timeRange: undefined,
+              textWeight: undefined,
+              returnAll: false,
+              useRerankerThreshold: undefined,
             });
 
         // Create new conversational retrieval chain
