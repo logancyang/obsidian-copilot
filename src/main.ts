@@ -426,6 +426,10 @@ export default class CopilotPlugin extends Plugin {
           minSimilarityScore: 0.3,
           maxK: 20,
           salientTerms: salientTerms,
+          textWeight: textWeight,
+          timeRange: undefined,
+          returnAll: false,
+          useRerankerThreshold: undefined,
         });
 
     const results = await retriever.getRelevantDocuments(query);
