@@ -534,16 +534,10 @@ export class FullTextEngine {
 
           if (indexValue != null && typeof indexValue === "object") {
             try {
-              // Check for destroy method with maximum safety
-              if (
-                Object.prototype.hasOwnProperty.call(indexValue, "destroy") &&
-                typeof indexValue.destroy === "function"
-              ) {
+              // Check for methods in prototype chain (not just own properties)
+              if ("destroy" in indexValue && typeof indexValue.destroy === "function") {
                 indexValue.destroy();
-              } else if (
-                Object.prototype.hasOwnProperty.call(indexValue, "clear") &&
-                typeof indexValue.clear === "function"
-              ) {
+              } else if ("clear" in indexValue && typeof indexValue.clear === "function") {
                 indexValue.clear();
               }
             } catch (methodError) {
