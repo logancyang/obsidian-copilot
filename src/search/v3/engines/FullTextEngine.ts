@@ -376,13 +376,10 @@ export class FullTextEngine {
       }
     >();
 
-    // Build list of scoring queries: original + salient terms only
-    const scoringQueries: string[] = [];
-    if (originalQuery) {
-      scoringQueries.push(originalQuery);
-    }
-    // Add salient terms for scoring
-    scoringQueries.push(...salientTerms);
+    // Build list of scoring queries: ONLY salient terms (original query contains stopwords)
+    // If no salient terms provided, fallback to original query for backward compatibility
+    const scoringQueries: string[] =
+      salientTerms.length > 0 ? [...salientTerms] : originalQuery ? [originalQuery] : [];
 
     // Score documents that were found in recall phase
     if (scoringQueries.length > 0 && candidateDocs.size > 0) {
@@ -390,7 +387,7 @@ export class FullTextEngine {
         this.scoreWithQuery(query, candidateDocs, scoreMap, limit);
       }
       logInfo(
-        `FullText: Scored with ${scoringQueries.length} queries (original + ${salientTerms.length} salient terms)`
+        `FullText: Scored with ${scoringQueries.length} terms (${salientTerms.length > 0 ? "salient terms" : "original query fallback"})`
       );
     }
 
@@ -399,8 +396,8 @@ export class FullTextEngine {
   }
 
   /**
-   * Score documents using a specific query (original or salient term)
-   * This ensures expanded queries don't affect ranking, only recall
+   * Score documents using a salient term query
+   * This ensures expanded queries and stopwords don't affect ranking, only recall
    */
   private scoreWithQuery(
     query: string,
@@ -532,11 +529,13 @@ export class FullTextEngine {
       // Simple: destroy index if it exists
       if (this.index) {
         try {
-          if (this.index?.destroy) {
+          // Check if destroy method exists and is a function
+          if (typeof this.index.destroy === "function") {
             this.index.destroy();
-          } else if (this.index?.clear) {
+          } else if (typeof this.index.clear === "function") {
             this.index.clear();
           }
+          // If neither method exists, just nullify the reference
         } catch (error) {
           // Log index cleanup error but continue with state reset
           logWarn(`FullTextEngine: Index cleanup error: ${error}`);
