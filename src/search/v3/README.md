@@ -55,6 +55,29 @@ The lexical search engine operates on individual chunks and returns consistent c
 - **Explainable**: Tracks why documents ranked highly
 - **Fault-Tolerant**: Graceful fallbacks at each stage
 - **Chunk-Based**: Operates on intelligent document chunks for precise context
+- **Smart Term Separation**: Recall uses all terms, ranking uses only salient terms
+
+## Recall vs Ranking: Critical Architecture Decision
+
+**The Problem**: Using the same terms for both finding documents (recall) and scoring them (ranking) leads to poor search quality when queries contain stopwords like "and", "the", "me", "how", "do", etc.
+
+**The Solution**: Separate recall and ranking phases:
+
+### Recall Phase (Maximum Coverage)
+
+- **Purpose**: Find all potentially relevant documents
+- **Terms Used**: Original query + LLM expansions + salient terms
+- **Example**: `["How do I set up OAuth?", "OAuth setup guide", "OAuth configuration", "oauth", "setup"]`
+- **Goal**: Cast the widest net to avoid missing relevant content
+
+### Ranking Phase (Quality Scoring)
+
+- **Purpose**: Score documents based on meaningful relevance
+- **Terms Used**: ONLY salient terms (filtered nouns from original query)
+- **Example**: `["oauth", "setup"]` (excludes "How", "do", "I", etc.)
+- **Goal**: Prevent stopword pollution in relevance calculations
+
+**Result**: Better search results where documents rank based on meaningful term matches, not stopword frequency.
 
 ## Example: Search Flow
 
@@ -70,14 +93,21 @@ Output: ["How do I set up OAuth in Next.js?",
 Terms:  ["oauth", "nextjs"]
 ```
 
-### 2. Grep Scan (L0)
+### 2. Grep Scan (L0) - RECALL PHASE
 
-Searches for both full queries AND individual terms:
+Searches for **ALL recall terms** (maximum coverage for candidate discovery):
 
 ```
+Recall Terms: ["How do I set up OAuth in Next.js?",
+               "Next.js OAuth configuration",
+               "NextJS OAuth setup",
+               "oauth", "nextjs"]
+
 Finds: ["auth/oauth-guide.md", "nextjs/auth.md", "tutorials/oauth.md"]
        (up to 200 candidates)
 ```
+
+**Purpose**: Cast the widest net possible to ensure no relevant documents are missed.
 
 ### 3. Chunking (L1)
 
@@ -89,14 +119,28 @@ Chunks: 8 chunks with size 800-2000 chars each
 Output: ["auth/oauth-guide.md#0", "auth/oauth-guide.md#1", "nextjs/auth.md#0", ...]
 ```
 
-### 4. Full-Text Search Execution
+### 4. Full-Text Search Execution - RECALL + RANKING PHASES
 
-**Full-Text Search** processes chunks with lexical indexing:
+**Full-Text Search** processes chunks with two-phase approach:
+
+**Phase 1: Document Discovery (Recall)**
+
+- Uses ALL recall terms to find candidate documents in FlexSearch index
+- Combines original query + expanded variants + salient terms
+- Maximizes document coverage to avoid missing relevant content
+
+**Phase 2: Relevance Scoring (Ranking)**
+
+- Scores documents using ONLY salient terms: `["oauth", "nextjs"]`
+- **Critical Fix**: Excludes original query to prevent stopword pollution ("How", "do", "I", "set", "up")
+- **Fallback**: If no salient terms available, uses original query for backward compatibility
+
+**Index Structure**:
 
 - Builds ephemeral FlexSearch index from chunks (not full notes)
 - **Frontmatter Replication**: Extracts note-level frontmatter once and replicates property values across all chunks from that note
 - Indexes frontmatter properties (author, tags, status, etc.) by including them in each chunk's body content
-- Searches with field weights: Title (3x), Heading (2.5x), Path (2x), Body (1x including frontmatter)
+- Field weights for ranking: Title (3x), Heading (2.5x), Path (2x), Body (1x including frontmatter)
 - Returns up to 2x maxResults for better recall
 
 ### 5. Lexical Reranking (Boosting Stage)
@@ -144,10 +188,12 @@ Min-max normalization prevents auto-1.0 scores
 ### Query Expander
 
 - Generates alternative phrasings using LLM (5s timeout)
-- **Critical Fix**: Separates salient terms (from original query, used for scoring) from expanded terms (LLM-generated, used for recall only)
+- **Critical Separation**: Distinguishes between recall terms and ranking terms:
+  - **Recall Terms**: Original query + expanded variants + salient terms (used for candidate discovery)
+  - **Ranking Terms**: ONLY salient terms (used for relevance scoring)
 - Extracts salient terms (nouns only, language-agnostic) exclusively from original user query
-- Falls back to original query if LLM unavailable
-- Prevents false positives by ensuring expanded terms don't influence ranking
+- Falls back to original query if LLM unavailable or no salient terms extracted
+- **Prevents Stopword Pollution**: Original query contains stopwords ("and", "the", "me") that hurt ranking quality
 
 ### Grep Scanner
 
@@ -159,9 +205,13 @@ Min-max normalization prevents auto-1.0 scores
 ### Full-Text Engine
 
 - Ephemeral FlexSearch index built from chunks per-query
+- **Two-Phase Search Architecture**:
+  - **Recall Phase**: Uses all available terms (original + expanded + salient) to find candidate documents
+  - **Ranking Phase**: Scores candidates using ONLY salient terms to avoid stopword noise
+  - **Quality Improvement**: Prevents common words ("and", "the", "me") from affecting relevance scores
 - Indexes chunk content but stores only metadata (no body storage)
 - Custom tokenizer for ASCII words + CJK bigrams
-- Multi-field indexing: title (3x), heading (2.5x), path (2x), body (1x)
+- Multi-field indexing with weights: title (3x), heading (2.5x), path (2x), body (1x)
 - **Frontmatter Property Indexing**: Extracts and indexes frontmatter property values for searchability
   - **Note-Level Metadata, Chunk-Level Indexing**: Frontmatter is extracted once per note and replicated across all chunks from that note
   - Supports primitive values (strings, numbers, booleans), arrays, and Date objects
@@ -171,6 +221,7 @@ Min-max normalization prevents auto-1.0 scores
   - **Performance Optimization**: Per-note metadata caching prevents redundant frontmatter extraction
 - Path components indexed for folder/file search
 - Memory-efficient: chunk content retrieved from ChunkManager when needed
+- **Ultra-Defensive Cleanup**: Robust index destruction handling for all edge cases
 
 ### Folder & Graph Boost Calculators
 

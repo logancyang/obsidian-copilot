@@ -529,16 +529,31 @@ export class FullTextEngine {
       // Simple: destroy index if it exists
       if (this.index) {
         try {
-          // Check if destroy method exists and is a function
-          if (typeof this.index.destroy === "function") {
-            this.index.destroy();
-          } else if (typeof this.index.clear === "function") {
-            this.index.clear();
+          // Ultra-defensive cleanup: handle all possible index states
+          const indexValue = this.index;
+
+          if (indexValue != null && typeof indexValue === "object") {
+            try {
+              // Check for destroy method with maximum safety
+              if (
+                Object.prototype.hasOwnProperty.call(indexValue, "destroy") &&
+                typeof indexValue.destroy === "function"
+              ) {
+                indexValue.destroy();
+              } else if (
+                Object.prototype.hasOwnProperty.call(indexValue, "clear") &&
+                typeof indexValue.clear === "function"
+              ) {
+                indexValue.clear();
+              }
+            } catch (methodError) {
+              // Even method calls can fail, so handle that too
+              logWarn(`FullTextEngine: Index method call error: ${methodError}`);
+            }
           }
-          // If neither method exists, just nullify the reference
         } catch (error) {
           // Log index cleanup error but continue with state reset
-          logWarn(`FullTextEngine: Index cleanup error: ${error}`);
+          logWarn(`FullTextEngine: Index cleanup error (type: ${typeof this.index}): ${error}`);
         }
         this.index = null;
       }
