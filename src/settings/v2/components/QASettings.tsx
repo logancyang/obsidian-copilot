@@ -176,7 +176,7 @@ export const QASettings: React.FC = () => {
               <SettingItem
                 type="slider"
                 title="Requests per Minute"
-                description="Default is 30. Decrease if you are rate limited by your embedding provider."
+                description="Default is 60. Decrease if you are rate limited by your embedding provider."
                 min={10}
                 max={60}
                 step={10}

@@ -705,7 +705,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   groqApiKey: "",
   activeModels: BUILTIN_CHAT_MODELS,
   activeEmbeddingModels: BUILTIN_EMBEDDING_MODELS,
-  embeddingRequestsPerMin: 90,
+  embeddingRequestsPerMin: 60,
   embeddingBatchSize: 16,
   disableIndexOnMobile: true,
   showSuggestedPrompts: true,
