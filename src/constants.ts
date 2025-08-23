@@ -359,6 +359,7 @@ export enum EmbeddingModels {
   AZURE_OPENAI = "azure-openai",
   COHEREAI_EMBED_MULTILINGUAL_LIGHT_V3_0 = "embed-multilingual-light-v3.0",
   GOOGLE_ENG = "text-embedding-004",
+  GOOGLE_GEMINI_EMBEDDING = "gemini-embedding-001",
   COPILOT_PLUS_SMALL = "copilot-plus-small",
   COPILOT_PLUS_LARGE = "copilot-plus-large",
   COPILOT_PLUS_MULTILINGUAL = "copilot-plus-multilingual",
@@ -425,6 +426,14 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
     isEmbeddingModel: true,
   },
   {
+    name: EmbeddingModels.GOOGLE_GEMINI_EMBEDDING,
+    provider: EmbeddingModelProviders.GOOGLE,
+    enabled: true,
+    isBuiltIn: true,
+    isEmbeddingModel: true,
+    core: true,
+  },
+  {
     name: EmbeddingModels.AZURE_OPENAI,
     provider: EmbeddingModelProviders.AZURE_OPENAI,
     enabled: true,
@@ -457,6 +466,20 @@ export interface ProviderMetadata {
 
 // Unified provider information
 export const ProviderInfo: Record<Provider, ProviderMetadata> = {
+  [ChatModelProviders.OPENROUTERAI]: {
+    label: "OpenRouter",
+    host: "https://openrouter.ai/api/v1/",
+    keyManagementURL: "https://openrouter.ai/keys",
+    listModelURL: "https://openrouter.ai/api/v1/models",
+    testModel: ChatModels.OPENROUTER_GPT_4o,
+  },
+  [ChatModelProviders.GOOGLE]: {
+    label: "Gemini",
+    host: "https://generativelanguage.googleapis.com",
+    keyManagementURL: "https://makersuite.google.com/app/apikey",
+    listModelURL: "https://generativelanguage.googleapis.com/v1beta/models",
+    testModel: ChatModels.GEMINI_FLASH,
+  },
   [ChatModelProviders.OPENAI]: {
     label: "OpenAI",
     host: "https://api.openai.com",
@@ -485,26 +508,12 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     listModelURL: "https://api.cohere.com/v1/models",
     testModel: ChatModels.COMMAND_R,
   },
-  [ChatModelProviders.GOOGLE]: {
-    label: "Gemini",
-    host: "https://generativelanguage.googleapis.com",
-    keyManagementURL: "https://makersuite.google.com/app/apikey",
-    listModelURL: "https://generativelanguage.googleapis.com/v1beta/models",
-    testModel: ChatModels.GEMINI_FLASH,
-  },
   [ChatModelProviders.XAI]: {
     label: "XAI",
     host: "https://api.x.ai/v1",
     keyManagementURL: "https://console.x.ai",
     listModelURL: "https://api.x.ai/v1/models",
     testModel: ChatModels.GROK3,
-  },
-  [ChatModelProviders.OPENROUTERAI]: {
-    label: "OpenRouter",
-    host: "https://openrouter.ai/api/v1/",
-    keyManagementURL: "https://openrouter.ai/keys",
-    listModelURL: "https://openrouter.ai/api/v1/models",
-    testModel: ChatModels.OPENROUTER_GPT_4o,
   },
   [ChatModelProviders.GROQ]: {
     label: "Groq",
