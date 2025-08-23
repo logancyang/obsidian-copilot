@@ -152,6 +152,17 @@ export function registerCommands(
     }
   });
 
+  addCommand(plugin, COMMAND_IDS.GARBAGE_COLLECT_COPILOT_INDEX, async () => {
+    try {
+      const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+      const removedCount = await VectorStoreManager.getInstance().garbageCollectVectorStore();
+      new Notice(`Garbage collection completed. Removed ${removedCount} stale documents.`);
+    } catch (err) {
+      logError("Error during garbage collection:", err);
+      new Notice("Failed to garbage collect semantic index.");
+    }
+  });
+
   // Removed legacy build-only command; use refresh and force reindex commands instead
 
   addCommand(plugin, COMMAND_IDS.INDEX_VAULT_TO_COPILOT_INDEX, async () => {
