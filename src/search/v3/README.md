@@ -55,6 +55,7 @@ The lexical search engine operates on individual chunks and returns consistent c
 - **Explainable**: Tracks why documents ranked highly
 - **Fault-Tolerant**: Graceful fallbacks at each stage
 - **Chunk-Based**: Operates on intelligent document chunks for precise context
+- **Recall/Ranking Separation**: Uses all terms for finding documents, only salient terms for scoring
 
 ## Example: Search Flow
 
@@ -72,7 +73,7 @@ Terms:  ["oauth", "nextjs"]
 
 ### 2. Grep Scan (L0)
 
-Searches for both full queries AND individual terms:
+Searches for all recall terms (original + expanded + salient):
 
 ```
 Finds: ["auth/oauth-guide.md", "nextjs/auth.md", "tutorials/oauth.md"]
@@ -91,13 +92,14 @@ Output: ["auth/oauth-guide.md#0", "auth/oauth-guide.md#1", "nextjs/auth.md#0", .
 
 ### 4. Full-Text Search Execution
 
-**Full-Text Search** processes chunks with lexical indexing:
+**Two-phase approach**:
+
+- **Recall**: Uses all terms to find candidates in FlexSearch index
+- **Ranking**: Scores using only salient terms to avoid stopword noise
 
 - Builds ephemeral FlexSearch index from chunks (not full notes)
 - **Frontmatter Replication**: Extracts note-level frontmatter once and replicates property values across all chunks from that note
-- Indexes frontmatter properties (author, tags, status, etc.) by including them in each chunk's body content
-- Searches with field weights: Title (3x), Heading (2.5x), Path (2x), Body (1x including frontmatter)
-- Returns up to 2x maxResults for better recall
+- Field weights: Title (3x), Heading (2.5x), Path (2x), Body (1x)
 
 ### 5. Lexical Reranking (Boosting Stage)
 
@@ -144,10 +146,9 @@ Min-max normalization prevents auto-1.0 scores
 ### Query Expander
 
 - Generates alternative phrasings using LLM (5s timeout)
-- **Critical Fix**: Separates salient terms (from original query, used for scoring) from expanded terms (LLM-generated, used for recall only)
-- Extracts salient terms (nouns only, language-agnostic) exclusively from original user query
+- Separates recall terms (all) from ranking terms (salient only) to prevent stopword pollution
+- Extracts salient terms (nouns) from original user query
 - Falls back to original query if LLM unavailable
-- Prevents false positives by ensuring expanded terms don't influence ranking
 
 ### Grep Scanner
 
@@ -159,17 +160,13 @@ Min-max normalization prevents auto-1.0 scores
 ### Full-Text Engine
 
 - Ephemeral FlexSearch index built from chunks per-query
-- Indexes chunk content but stores only metadata (no body storage)
+- **Two-phase search**: Recall uses all terms, ranking uses only salient terms
 - Custom tokenizer for ASCII words + CJK bigrams
-- Multi-field indexing: title (3x), heading (2.5x), path (2x), body (1x)
+- Multi-field indexing with weights: title (3x), heading (2.5x), path (2x), body (1x)
 - **Frontmatter Property Indexing**: Extracts and indexes frontmatter property values for searchability
-  - **Note-Level Metadata, Chunk-Level Indexing**: Frontmatter is extracted once per note and replicated across all chunks from that note
-  - Supports primitive values (strings, numbers, booleans), arrays, and Date objects
-  - Converts values to searchable strings and includes them in each chunk's body content
-  - Skips nested objects and null/undefined values for safety
-  - Configurable array processing limit and recursion depth
-  - **Performance Optimization**: Per-note metadata caching prevents redundant frontmatter extraction
-- Path components indexed for folder/file search
+  - **Note-Level Metadata, Chunk-Level Indexing**: Frontmatter extracted once per note, replicated across all chunks
+  - Supports primitive values, arrays, and Date objects
+  - **Performance Optimization**: Per-note metadata caching
 - Memory-efficient: chunk content retrieved from ChunkManager when needed
 
 ### Folder & Graph Boost Calculators
