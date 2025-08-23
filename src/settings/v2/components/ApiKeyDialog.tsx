@@ -245,8 +245,7 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
                       }}
                       disabled={!item.apiKey}
                       variant="secondary"
-                      size="sm"
-                      className="tw-flex tw-w-full tw-items-center tw-justify-center tw-gap-1 tw-whitespace-nowrap tw-p-0.5"
+                      className="tw-flex tw-w-full tw-items-center tw-justify-center tw-gap-2 tw-whitespace-nowrap tw-px-4 tw-py-2"
                     >
                       Add Model
                       {expandedProvider === item.provider ? (

@@ -138,7 +138,27 @@ export const BasicSettings: React.FC = () => {
           <SettingItem
             type="select"
             title="Default Chat Model"
-            description="Select the Chat model to use"
+            description={
+              <div className="tw-flex tw-items-center tw-gap-1.5">
+                <span className="tw-leading-none">Select the Chat model to use</span>
+                <TooltipProvider delayDuration={0}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="tw-size-4" />
+                    </TooltipTrigger>
+                    <TooltipContent className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
+                      <div className="tw-text-sm tw-font-medium tw-text-accent">
+                        Default model is OpenRouter Gemini 2.5 Flash
+                      </div>
+                      <div className="tw-text-xs tw-text-muted">
+                        Set your OpenRouter API key in &apos;API keys&apos; to use this model, or
+                        select a different model from another provider.
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            }
             value={defaultModelActivated ? settings.defaultModelKey : "Select Model"}
             onChange={(value) => {
               const selectedModel = settings.activeModels.find(
