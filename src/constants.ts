@@ -669,7 +669,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   mistralApiKey: "",
   deepseekApiKey: "",
   defaultChainType: ChainType.LLM_CHAIN,
-  defaultModelKey: ChatModels.GPT_41 + "|" + ChatModelProviders.OPENAI,
+  defaultModelKey: ChatModels.OPENROUTER_GEMINI_2_5_FLASH + "|" + ChatModelProviders.OPENROUTERAI,
   embeddingModelKey: EmbeddingModels.OPENAI_EMBEDDING_SMALL + "|" + EmbeddingModelProviders.OPENAI,
   temperature: DEFAULT_MODEL_SETTING.TEMPERATURE,
   maxTokens: DEFAULT_MODEL_SETTING.MAX_TOKENS,
