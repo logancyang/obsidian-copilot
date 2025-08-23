@@ -110,19 +110,10 @@ export interface CopilotSettings {
   passMarkdownImages: boolean;
   enableAutonomousAgent: boolean;
   enableCustomPromptTemplating: boolean;
-  /** Enable semantic stage in v3 search (requires Memory Index JSONL) */
+  /** Enable semantic search using Orama for meaning-based document retrieval */
   enableSemanticSearchV3: boolean;
-  /** Use legacy HybridRetriever with Orama instead of v3 search */
-  useLegacySearch: boolean;
-  /** Enable lexical boosts (folder and graph) in v3 search - default: true */
+  /** Enable lexical boosts (folder and graph) in search - default: true */
   enableLexicalBoosts: boolean;
-  /**
-   * Weight for semantic search in hybrid retrieval (0-1 range)
-   * - 0 = fully lexical (keyword-based) search
-   * - 1 = fully semantic (meaning-based) search
-   * - Default: 0.6 (60% semantic, 40% lexical)
-   */
-  semanticSearchWeight: number;
   /**
    * RAM limit for lexical search index (in MB)
    * Controls memory usage for full-text search operations
@@ -254,14 +245,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   sanitizedSettings.embeddingBatchSize = isNaN(embeddingBatchSize)
     ? DEFAULT_SETTINGS.embeddingBatchSize
     : embeddingBatchSize;
-
-  // Sanitize semanticSearchWeight (0-1 range)
-  const semanticSearchWeight = Number(settingsToSanitize.semanticSearchWeight);
-  if (isNaN(semanticSearchWeight) || semanticSearchWeight < 0 || semanticSearchWeight > 1) {
-    sanitizedSettings.semanticSearchWeight = DEFAULT_SETTINGS.semanticSearchWeight;
-  } else {
-    sanitizedSettings.semanticSearchWeight = semanticSearchWeight;
-  }
 
   // Sanitize lexicalSearchRamLimit (20-1000 MB range)
   const lexicalSearchRamLimit = Number(settingsToSanitize.lexicalSearchRamLimit);

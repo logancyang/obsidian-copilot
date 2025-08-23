@@ -99,8 +99,6 @@ export class TieredLexicalRetriever extends BaseRetriever {
       const searchResults = await this.searchCore.retrieve(query, {
         maxResults: this.options.maxK,
         salientTerms: enhancedSalientTerms,
-        enableSemantic: !!settings.enableSemanticSearchV3,
-        semanticWeight: settings.semanticSearchWeight ?? 0.6,
         enableLexicalBoosts: settings.enableLexicalBoosts,
       });
 

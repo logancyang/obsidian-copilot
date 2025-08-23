@@ -99,6 +99,7 @@ export const EMPTY_INDEX_ERROR_MESSAGE =
 export const CHUNK_SIZE = 6000;
 export const TEXT_WEIGHT = 0.4;
 export const MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT = 448000;
+export const LLM_TIMEOUT_MS = 10000; // 10 seconds timeout for LLM operations
 export const LOADING_MESSAGES = {
   DEFAULT: "",
   READING_FILES: "Reading files",
@@ -631,7 +632,7 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.NEW_CHAT]: "New Copilot Chat",
   [COMMAND_IDS.OPEN_COPILOT_CHAT_WINDOW]: "Open Copilot Chat Window",
   [COMMAND_IDS.REMOVE_FILES_FROM_COPILOT_INDEX]: "Remove files from Copilot index (debug)",
-  [COMMAND_IDS.SEARCH_ORAMA_DB]: "Search OramaDB (debug)",
+  [COMMAND_IDS.SEARCH_ORAMA_DB]: "Search semantic index (debug)",
   [COMMAND_IDS.TOGGLE_COPILOT_CHAT_WINDOW]: "Toggle Copilot Chat Window",
   [COMMAND_IDS.TOGGLE_AUTOCOMPLETE]: "Toggle autocomplete",
   [COMMAND_IDS.ADD_SELECTION_TO_CHAT_CONTEXT]: "Add selection to chat context",
@@ -701,7 +702,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   showSuggestedPrompts: true,
   showRelevantNotes: true,
   numPartitions: 1,
-  semanticSearchWeight: 0.6, // Default 60% semantic, 40% lexical
   lexicalSearchRamLimit: 100, // Default 100 MB
   promptUsageTimestamps: {},
   promptSortStrategy: PromptSortStrategy.TIMESTAMP,
@@ -718,7 +718,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableAutonomousAgent: false,
   enableCustomPromptTemplating: true,
   enableSemanticSearchV3: false,
-  useLegacySearch: false,
   enableLexicalBoosts: true,
   suggestedDefaultCommands: false,
   autonomousAgentMaxIterations: 4,

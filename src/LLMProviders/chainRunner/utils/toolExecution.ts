@@ -1,5 +1,6 @@
 import { logError, logInfo, logWarn } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
+import { getSettings } from "@/settings/model";
 import { ToolManager } from "@/tools/toolManager";
 import { err2String } from "@/utils";
 import { ToolCall } from "./xmlParsing";
@@ -118,8 +119,15 @@ export async function executeSequentialToolCall(
  * Get display name for tool (user-friendly version)
  */
 export function getToolDisplayName(toolName: string): string {
+  // Special handling for localSearch to show the actual search type being used
+  if (toolName === "localSearch") {
+    const settings = getSettings();
+    return settings.enableSemanticSearchV3
+      ? "vault search (semantic)"
+      : "vault search (index-free)";
+  }
+
   const displayNameMap: Record<string, string> = {
-    localSearch: "vault search",
     webSearch: "web search",
     getFileTree: "file tree",
     getCurrentTime: "current time",
@@ -167,10 +175,23 @@ export function getToolEmoji(toolName: string): string {
 /**
  * Get user confirmation message for tool call
  */
-export function getToolConfirmtionMessage(toolName: string): string | null {
+export function getToolConfirmtionMessage(toolName: string, toolArgs?: any): string | null {
   if (toolName == "writeToFile" || toolName == "replaceInFile") {
     return "Accept / reject in the Preview";
   }
+
+  // Display salient terms for lexical search
+  if (toolName === "localSearch" && toolArgs?.salientTerms) {
+    const settings = getSettings();
+    // Only show salient terms for lexical search (index-free)
+    if (!settings.enableSemanticSearchV3) {
+      const terms = Array.isArray(toolArgs.salientTerms) ? toolArgs.salientTerms : [];
+      if (terms.length > 0) {
+        return `Terms: ${terms.slice(0, 3).join(", ")}${terms.length > 3 ? "..." : ""}`;
+      }
+    }
+  }
+
   return null;
 }
 

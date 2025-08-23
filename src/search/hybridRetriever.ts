@@ -4,8 +4,14 @@ import EmbeddingManager from "@/LLMProviders/embeddingManager";
 import ProjectManager from "@/LLMProviders/projectManager";
 import { logInfo } from "@/logger";
 import VectorStoreManager from "@/search/vectorStoreManager";
+import { LLM_TIMEOUT_MS } from "@/constants";
 import { getSettings } from "@/settings/model";
-import { extractNoteFiles, removeThinkTags, withSuppressedTokenWarnings } from "@/utils";
+import {
+  extractNoteFiles,
+  removeThinkTags,
+  withSuppressedTokenWarnings,
+  withTimeout,
+} from "@/utils";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
 import { BaseChatModelCallOptions } from "@langchain/core/language_models/chat_models";
@@ -133,25 +139,27 @@ export class HybridRetriever extends BaseRetriever {
 
   private async rewriteQuery(query: string): Promise<string> {
     try {
-      const promptResult = await this.queryRewritePrompt.format({ question: query });
+      return await withTimeout(async () => {
+        const promptResult = await this.queryRewritePrompt.format({ question: query });
 
-      // Execute model invocation with warnings suppressed
-      const rewrittenQueryObject = await withSuppressedTokenWarnings(() => {
-        const chatModel = ProjectManager.instance
-          .getCurrentChainManager()
-          .chatModelManager.getChatModel()
-          .bind({ temperature: 0 } as BaseChatModelCallOptions);
+        // Execute model invocation with warnings suppressed
+        const rewrittenQueryObject = await withSuppressedTokenWarnings(() => {
+          const chatModel = ProjectManager.instance
+            .getCurrentChainManager()
+            .chatModelManager.getChatModel()
+            .bind({ temperature: 0 } as BaseChatModelCallOptions);
 
-        return chatModel.invoke(promptResult);
-      });
+          return chatModel.invoke(promptResult);
+        });
 
-      // Process the result
-      if (rewrittenQueryObject && "content" in rewrittenQueryObject) {
-        return removeThinkTags(rewrittenQueryObject.content as string);
-      }
+        // Process the result
+        if (rewrittenQueryObject && "content" in rewrittenQueryObject) {
+          return removeThinkTags(rewrittenQueryObject.content as string);
+        }
 
-      console.warn("Unexpected rewrittenQuery format. Falling back to original query.");
-      return query;
+        console.warn("Unexpected rewrittenQuery format. Falling back to original query.");
+        return query;
+      }, LLM_TIMEOUT_MS); // Timeout for HyDE query generation
     } catch (error) {
       console.error("Error in rewriteQuery:", error);
       return query;

@@ -1,5 +1,6 @@
-import { logError, logInfo, logWarn } from "@/logger";
+import { LLM_TIMEOUT_MS } from "@/constants";
 import { TimeoutError } from "@/error";
+import { logError, logInfo, logWarn } from "@/logger";
 import { withSuppressedTokenWarnings, withTimeout } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { FuzzyMatcher } from "./utils/FuzzyMatcher";
@@ -74,7 +75,7 @@ Format your response using XML tags:
   constructor(private readonly options: QueryExpanderOptions = {}) {
     this.config = {
       maxVariants: options.maxVariants ?? 2,
-      timeout: options.timeout ?? 500,
+      timeout: options.timeout ?? LLM_TIMEOUT_MS,
       cacheSize: options.cacheSize ?? 100,
       minTermLength: 2,
     };

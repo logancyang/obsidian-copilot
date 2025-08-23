@@ -32,21 +32,20 @@ function useRelevantNotes(refresher: number) {
   useEffect(() => {
     async function fetchNotes() {
       if (!activeFile?.path) return;
-      // Only show when embedding index is available
+      // Only show when semantic search is enabled and database is available
       try {
-        const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
-        const manager = MemoryIndexManager.getInstance(app);
-        await manager.loadIfExists();
-        if (!manager.isAvailable()) {
+        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+        const db = await VectorStoreManager.getInstance().getDb();
+        if (!db) {
           setRelevantNotes([]);
           return;
         }
-      } catch {
+        const notes = await findRelevantNotes({ db, filePath: activeFile.path });
+        setRelevantNotes(notes);
+      } catch (error) {
+        console.warn("Failed to fetch relevant notes:", error);
         setRelevantNotes([]);
-        return;
       }
-      const notes = await findRelevantNotes({ filePath: activeFile.path });
-      setRelevantNotes(notes);
     }
     fetchNotes();
   }, [activeFile?.path, refresher]);
@@ -59,17 +58,10 @@ function useHasIndex(notePath: string, refresher: number) {
   useEffect(() => {
     if (!notePath) return;
     async function fetchHasIndex() {
-      // For v3 memory index, hide when index is unavailable
       try {
-        const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
-        const manager = MemoryIndexManager.getInstance(app);
-        await manager.loadIfExists();
-        if (!manager.isAvailable()) {
-          setHasIndex(false);
-          return;
-        }
-        // Use public method to check if file is indexed
-        setHasIndex(manager.hasFile(notePath));
+        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+        const has = await VectorStoreManager.getInstance().hasIndex(notePath);
+        setHasIndex(has);
       } catch {
         setHasIndex(false);
       }
@@ -279,24 +271,8 @@ export const RelevantNotes = memo(
     };
     const refreshIndex = async () => {
       if (activeFile) {
-        const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
-        const manager = MemoryIndexManager.getInstance(app);
-
-        // First ensure the index is loaded
-        await manager.ensureLoaded();
-
-        // Check if index exists
-        if (!manager.isAvailable()) {
-          // No index exists, need to build it first
-          new Notice("No index found. Building index for the first time...");
-          await manager.indexVaultIncremental();
-        } else {
-          // Index exists, just reindex the current file
-          await manager.reindexSingleFileIfModified(activeFile, 0);
-        }
-
-        // Reload to ensure UI updates
-        await manager.ensureLoaded();
+        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+        await VectorStoreManager.getInstance().reindexFile(activeFile);
         new Notice(`Refreshed index for ${activeFile.basename}`);
         setRefresher(refresher + 1);
       }

@@ -10,7 +10,7 @@ import { CustomCommandManager } from "@/commands/customCommandManager";
 import { removeQuickCommandBlocks } from "@/commands/customCommandUtils";
 import { getCachedCustomCommands } from "@/commands/state";
 import { ApplyCustomCommandModal } from "@/components/modals/ApplyCustomCommandModal";
-// Orama-based debug modals removed in v3
+// Debug modals removed with search v3
 import CopilotPlugin from "@/main";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { CopilotSettings, getSettings, updateSetting } from "@/settings/model";
@@ -143,21 +143,12 @@ export function registerCommands(
 
   addCommand(plugin, COMMAND_IDS.CLEAR_LOCAL_COPILOT_INDEX, async () => {
     try {
-      const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
-      const { IndexPersistenceManager } = await import("@/search/v3/IndexPersistenceManager");
-
-      // Clear v3 index files (respects settings)
-      const persistenceManager = new IndexPersistenceManager(plugin.app);
-      await persistenceManager.clearIndex();
-
-      // Clear in-memory cache
-      const manager = MemoryIndexManager.getInstance(plugin.app);
-      manager.clearIndex();
-
+      const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+      await VectorStoreManager.getInstance().clearIndex();
       new Notice("Cleared local Copilot semantic index.");
     } catch (err) {
-      logError("Error clearing semantic memory index:", err);
-      new Notice("Failed to clear semantic memory index.");
+      logError("Error clearing semantic index:", err);
+      new Notice("Failed to clear semantic index.");
     }
   });
 
@@ -165,17 +156,18 @@ export function registerCommands(
 
   addCommand(plugin, COMMAND_IDS.INDEX_VAULT_TO_COPILOT_INDEX, async () => {
     try {
-      const { SearchSystemFactory } = await import("@/search/SearchSystem");
-      const result = await SearchSystemFactory.getIndexer().indexVaultIncremental(plugin.app);
+      const { getSettings } = await import("@/settings/model");
+      const settings = getSettings();
 
-      if (!result.success) {
-        logError("Index refresh failed:", result.message);
-        new Notice(`Failed to refresh index: ${result.message || "Unknown error"}`);
-        return;
+      if (settings.enableSemanticSearchV3) {
+        // Use VectorStoreManager for semantic search indexing
+        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+        const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(false);
+        new Notice(`Semantic search index refreshed with ${count} documents.`);
+      } else {
+        // V3 search builds indexes on demand
+        new Notice("Lexical search builds indexes on demand. No manual indexing required.");
       }
-
-      const count = result.documentCount ?? 0;
-      new Notice(`Index refreshed with ${count} documents.`);
     } catch (err) {
       logError("Error building index:", err);
       new Notice("An error occurred while building the index.");
@@ -184,17 +176,18 @@ export function registerCommands(
 
   addCommand(plugin, COMMAND_IDS.FORCE_REINDEX_VAULT_TO_COPILOT_INDEX, async () => {
     try {
-      const { SearchSystemFactory } = await import("@/search/SearchSystem");
-      const result = await SearchSystemFactory.getIndexer().indexVaultFull(plugin.app);
+      const { getSettings } = await import("@/settings/model");
+      const settings = getSettings();
 
-      if (!result.success) {
-        logError("Index rebuild failed:", result.message);
-        new Notice(`Failed to rebuild index: ${result.message || "Unknown error"}`);
-        return;
+      if (settings.enableSemanticSearchV3) {
+        // Use VectorStoreManager for semantic search indexing
+        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+        const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(true);
+        new Notice(`Semantic search index rebuilt with ${count} documents.`);
+      } else {
+        // V3 search builds indexes on demand
+        new Notice("Lexical search builds indexes on demand. No manual indexing required.");
       }
-
-      const count = result.documentCount ?? 0;
-      new Notice(`Index rebuilt with ${count} documents.`);
     } catch (err) {
       logError("Error rebuilding index:", err);
       new Notice("An error occurred while rebuilding the index.");
@@ -207,17 +200,8 @@ export function registerCommands(
 
   addCommand(plugin, COMMAND_IDS.LIST_INDEXED_FILES, async () => {
     try {
-      // Get the MemoryIndexManager for v3
-      const { MemoryIndexManager } = await import("@/search/v3/MemoryIndexManager");
-      const manager = MemoryIndexManager.getInstance(plugin.app);
-      await manager.ensureLoaded();
-
-      // Get indexed files from the manager using public method
-      const indexedFiles = new Set<string>();
-      if (manager.isAvailable()) {
-        const paths = manager.getIndexedPaths();
-        paths.forEach((path) => indexedFiles.add(path));
-      }
+      const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+      const indexedPaths = await VectorStoreManager.getInstance().getIndexedFiles();
 
       // Get all markdown files from vault
       const { getMatchingPatterns, shouldIndexFile } = await import("@/search/searchUtils");
@@ -226,6 +210,8 @@ export function registerCommands(
       const emptyFiles = new Set<string>();
       const unindexedFiles = new Set<string>();
       const excludedFiles = new Set<string>();
+
+      const indexedFiles = new Set<string>(indexedPaths);
 
       // Categorize files
       for (const file of allMarkdownFiles) {

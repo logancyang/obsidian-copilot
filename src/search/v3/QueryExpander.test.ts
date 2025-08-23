@@ -1,5 +1,10 @@
 import { QueryExpander } from "./QueryExpander";
 
+// Mock the settings module
+jest.mock("@/settings/model", () => ({
+  getSettings: jest.fn(() => ({ debug: false })),
+}));
+
 describe("QueryExpander", () => {
   let expander: QueryExpander;
   let mockChatModel: any;
@@ -131,7 +136,7 @@ describe("QueryExpander", () => {
       );
 
       const expander = new QueryExpander({
-        timeout: 5000, // Long timeout to ensure it doesn't trigger
+        timeout: 10000, // Long timeout to ensure it doesn't trigger during tests
         getChatModel: async () => mockChatModel,
       });
 
