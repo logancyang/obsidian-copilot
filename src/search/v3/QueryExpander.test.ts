@@ -1,5 +1,10 @@
 import { QueryExpander } from "./QueryExpander";
 
+// Mock the settings module
+jest.mock("@/settings/model", () => ({
+  getSettings: jest.fn(() => ({ debug: false })),
+}));
+
 describe("QueryExpander", () => {
   let expander: QueryExpander;
   let mockChatModel: any;

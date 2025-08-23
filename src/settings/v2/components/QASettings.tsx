@@ -195,6 +195,25 @@ export const QASettings: React.FC = () => {
                 value={settings.embeddingBatchSize}
                 onChange={(value) => updateSetting("embeddingBatchSize", value)}
               />
+
+              {/* Number of Partitions */}
+              <SettingItem
+                type="select"
+                title="Number of Partitions"
+                description="Number of partitions for Copilot index. Default is 1. Increase if you have issues indexing large vaults. Warning: Changes require clearing and rebuilding the index!"
+                value={String(settings.numPartitions || 1)}
+                onChange={(value) => updateSetting("numPartitions", Number(value))}
+                options={[
+                  { label: "1", value: "1" },
+                  { label: "2", value: "2" },
+                  { label: "4", value: "4" },
+                  { label: "8", value: "8" },
+                  { label: "16", value: "16" },
+                  { label: "32", value: "32" },
+                  { label: "40", value: "40" },
+                ]}
+                placeholder="Select partitions"
+              />
             </>
           )}
 
@@ -292,27 +311,6 @@ export const QASettings: React.FC = () => {
             checked={settings.disableIndexOnMobile}
             onCheckedChange={(checked) => updateSetting("disableIndexOnMobile", checked)}
           />
-
-          {/* Number of Partitions - Only shown when semantic search is enabled */}
-          {settings.enableSemanticSearchV3 && (
-            <SettingItem
-              type="select"
-              title="Number of Partitions"
-              description="Split the semantic index into multiple partitions to handle large vaults. Increase if you get 'string length' errors. Default is 1."
-              value={String(settings.numPartitions || 1)}
-              onChange={(value) => updateSetting("numPartitions", Number(value))}
-              options={[
-                { label: "1", value: "1" },
-                { label: "2", value: "2" },
-                { label: "4", value: "4" },
-                { label: "8", value: "8" },
-                { label: "16", value: "16" },
-                { label: "32", value: "32" },
-                { label: "40", value: "40" },
-              ]}
-              placeholder="Select partitions"
-            />
-          )}
         </div>
       </section>
     </div>
