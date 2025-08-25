@@ -380,7 +380,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const handlePaste = useCallback(
       async (e: React.ClipboardEvent) => {
         const items = e.clipboardData?.items;
-        if (!items || !isCopilotPlus) return;
+        if (!items) return;
 
         const imageItems = Array.from(items).filter((item) => item.type.indexOf("image") !== -1);
 
@@ -401,7 +401,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           }
         }
       },
-      [onAddImage, isCopilotPlus]
+      [onAddImage]
     );
 
     useEffect(() => {
@@ -536,7 +536,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           </div>
         )}
 
-        <div className="tw-relative" {...(isCopilotPlus ? getRootProps() : {})}>
+        <div className="tw-relative" {...getRootProps()}>
           {isProjectLoading && (
             <div className="tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-bg-primary tw-opacity-80 tw-backdrop-blur-sm">
               <div className="tw-flex tw-items-center tw-gap-2">
@@ -558,16 +558,12 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
             onPaste={handlePaste}
             disabled={isProjectLoading}
           />
-          {isCopilotPlus && (
-            <>
-              <input {...getInputProps()} />
-              {/* Overlay that appears when dragging */}
-              {isDragActive && (
-                <div className="tw-absolute tw-inset-0 tw-flex tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-dashed tw-bg-primary">
-                  <span>Drop images here...</span>
-                </div>
-              )}
-            </>
+          <input {...getInputProps()} />
+          {/* Overlay that appears when dragging */}
+          {isDragActive && (
+            <div className="tw-absolute tw-inset-0 tw-flex tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-dashed tw-bg-primary">
+              <span>Drop images here...</span>
+            </div>
           )}
         </div>
 
@@ -695,23 +691,21 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                   </>
                 )}
 
-                {isCopilotPlus && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost2"
-                        size="fit"
-                        className="tw-text-muted hover:tw-text-accent"
-                        onClick={() => {
-                          new AddImageModal(app, onAddImage).open();
-                        }}
-                      >
-                        <Image className="tw-size-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent className="tw-px-1 tw-py-0.5">Add image(s)</TooltipContent>
-                  </Tooltip>
-                )}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost2"
+                      size="fit"
+                      className="tw-text-muted hover:tw-text-accent"
+                      onClick={() => {
+                        new AddImageModal(app, onAddImage).open();
+                      }}
+                    >
+                      <Image className="tw-size-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="tw-px-1 tw-py-0.5">Add image(s)</TooltipContent>
+                </Tooltip>
                 <Button
                   variant="ghost2"
                   size="fit"
