@@ -18,7 +18,13 @@ import ChatMessages from "@/components/chat-components/ChatMessages";
 import { NewVersionBanner } from "@/components/chat-components/NewVersionBanner";
 import { ProjectList } from "@/components/chat-components/ProjectList";
 import ProgressCard from "@/components/project/progress-card";
-import { ABORT_REASON, EVENT_NAMES, LOADING_MESSAGES, USER_SENDER } from "@/constants";
+import {
+  ABORT_REASON,
+  EVENT_NAMES,
+  LOADING_MESSAGES,
+  USER_SENDER,
+  RESTRICTION_MESSAGES,
+} from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
 import { useChatManager } from "@/hooks/useChatManager";
 import { getAIResponse } from "@/langchainStream";
@@ -29,7 +35,7 @@ import { useIsPlusUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
-import { err2String } from "@/utils";
+import { err2String, isPlusChain } from "@/utils";
 import { Buffer } from "buffer";
 import { Notice, TFile } from "obsidian";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -152,6 +158,15 @@ const Chat: React.FC<ChatProps> = ({
   } = {}) => {
     if (!inputMessage && selectedImages.length === 0) return;
 
+    // Check for URL restrictions in non-Plus chains and show notice, but continue processing
+    const hasUrlsInContext = urls && urls.length > 0;
+    const hasUrlsInMessage = inputMessage && mention.extractAllUrls(inputMessage).length > 0;
+
+    if ((hasUrlsInContext || hasUrlsInMessage) && !isPlusChain(currentChain)) {
+      // Show notice but continue processing the message without URL context
+      new Notice(RESTRICTION_MESSAGES.URL_PROCESSING_RESTRICTED);
+    }
+
     try {
       // Create message content array
       const content: any[] = [];
@@ -190,10 +205,10 @@ const Chat: React.FC<ChatProps> = ({
         displayText += " " + toolCalls.join("\n");
       }
 
-      // Create message context
+      // Create message context - filter out URLs for non-Plus chains
       const context = {
         notes,
-        urls: urls || [],
+        urls: isPlusChain(currentChain) ? urls || [] : [],
         selectedTextContexts,
       };
 

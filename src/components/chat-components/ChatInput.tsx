@@ -20,6 +20,7 @@ import { ContextProcessor } from "@/contextProcessor";
 import { cn } from "@/lib/utils";
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
+import { isPlusChain } from "@/utils";
 
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
@@ -111,8 +112,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       return isAllowedFileForContext(activeFile) ? activeFile : null;
     });
     const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
-    const isCopilotPlus =
-      currentChain === ChainType.COPILOT_PLUS_CHAIN || currentChain === ChainType.PROJECT_CHAIN;
+    const isCopilotPlus = isPlusChain(currentChain);
 
     // Toggle states for vault, web search, composer, and autonomous agent
     const [vaultToggle, setVaultToggle] = useState(false);
@@ -227,6 +227,12 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       // Update URLs in context, ensuring uniqueness
       const newUrls = urls.filter((url) => !contextUrls.includes(url));
       if (newUrls.length > 0) {
+        // Check if URL processing is supported for the current chain
+        if (!isPlusChain(currentChain)) {
+          // Don't add URLs to context for non-Plus chains, but don't show Notice
+          // The restriction will be handled when the user tries to send the message
+          return;
+        }
         // Use Set to ensure uniqueness
         setContextUrls((prev) => Array.from(new Set([...prev, ...newUrls])));
       }
@@ -448,8 +454,22 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       );
 
       // Remove any URLs that are no longer present in the input
-      setContextUrls((prev) => prev.filter((url) => currentUrls.includes(url)));
-    }, [inputMessage, includeActiveNote, currentActiveNote, mention, setContextNotes, app.vault]);
+      // Only keep URLs if URL processing is supported for the current chain
+      if (isPlusChain(currentChain)) {
+        setContextUrls((prev) => prev.filter((url) => currentUrls.includes(url)));
+      } else {
+        // Clear all URLs for non-Plus chains
+        setContextUrls([]);
+      }
+    }, [
+      inputMessage,
+      includeActiveNote,
+      currentActiveNote,
+      mention,
+      setContextNotes,
+      app.vault,
+      currentChain,
+    ]);
 
     // Update the current active note whenever it changes
     useEffect(() => {

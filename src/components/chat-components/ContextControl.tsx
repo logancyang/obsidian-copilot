@@ -1,6 +1,7 @@
 import { App } from "obsidian";
 import React from "react";
 
+import { useChainType } from "@/aiParams";
 import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
 import { SelectedTextContext } from "@/types/message";
 import { TFile } from "obsidian";
@@ -35,6 +36,7 @@ const ContextControl: React.FC<ChatControlsProps> = ({
   onRemoveSelectedText,
   showProgressCard,
 }) => {
+  const [selectedChain] = useChainType();
   const handleAddContext = () => {
     new AddContextNoteModal({
       app,
@@ -49,6 +51,7 @@ const ContextControl: React.FC<ChatControlsProps> = ({
         }
       },
       excludeNotePaths,
+      chainType: selectedChain,
     }).open();
   };
 
