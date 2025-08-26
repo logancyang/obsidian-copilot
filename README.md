@@ -26,10 +26,9 @@ Copilot for Obsidian is your ultimate in‑vault AI assistant with chat-based va
 
 - **🔒 Your data is 100% yours**: Local search and storage, and full control of your data if you use self-hosted models.
 - **🧠 Bring Your Own Model**: Tap any OpenAI-compatible or local model to uncover insights, spark connections, and create content.
-- **🌐 Multimedia understanding**: Drop in webpages, YouTube videos, images, PDFs, EPUBS, or real-time web search for quick insights.
+- **🖼️ Multimedia understanding**: Drop in webpages, YouTube videos, images, PDFs, EPUBS, or real-time web search for quick insights.
 - **🔍 Smart Vault Search**: Search your vault with chat, no setup required. Embeddings are optional. Copilot delivers results right away.
 - **✍️ Composer and Quick Commands**: Interact with your writing with chat, apply changes with 1 click.
-- **🖼️ Multimedia Ready**: Drop in a webpage, YouTube link, image, or PDF. Copilot understands them and brings the right insights into your notes.
 - **🗂️ Project Mode**: Create AI-ready context based on folders and tags. Think NotebookLM but inside your vault!
 - **🤖 Agent Mode (Plus)**: Unlock an autonomous agent with built-in tool calling. No commands needed. Copilot automatically triggers vault, web searches or any other relevant tool when relevant.
 
