@@ -22,19 +22,33 @@ The Ultimate AI Assistant for Your Second Brain
   </a>
 </p>
 
-Copilot for Obsidian is your best in‑vault AI assistant, designed to listen, act at the speed of thought, and keep you creating in flow—all within Obsidian’s integrated, tab‑free workspace.
+Copilot for Obsidian is your ultimate in‑vault AI assistant with chat-based vault search, web and youtube support, powerful context processing and ever-expanding agentic capabilities—all within Obsidian’s highly customizable workspace.
 
-- **🔒 Your data is 100% yours**: Local storage, no ads, and full control of your API keys.
-- **🧠 Elevate your second brain**: Tap any OpenAI-compatible or local model to uncover insights, spark connections, and create powerful content.
-- **🌐 Instant multimedia understanding**: Drop in webpages, YouTube videos, images, PDFs, or real-time web search for quick insights and summaries.
-- **✍️ Create at the speed of thought**: Launch Prompt Palette or edit with AI in one click—your ideas, amplified effortlessly.
+- **🔒 Your data is 100% yours**: Local search and storage, and full control of your data if you use self-hosted models.
+- **🧠 Bring Your Own Model**: Tap any OpenAI-compatible or local model to uncover insights, spark connections, and create content.
+- **🌐 Multimedia understanding**: Drop in webpages, YouTube videos, images, PDFs, EPUBS, or real-time web search for quick insights.
+- **🔍 Smart Vault Search**: Search your vault with chat, no setup required. Embeddings are optional. Copilot delivers results right away.
+- **✍️ Composer and Quick Commands**: Interact with your writing with chat, apply changes with 1 click.
+- **🖼️ Multimedia Ready**: Drop in a webpage, YouTube link, image, or PDF. Copilot understands them and brings the right insights into your notes.
+- **🗂️ Project Mode**: Create AI-ready context based on folders and tags. Think NotebookLM but inside your vault!
+- **🤖 Agent Mode (Plus)**: Unlock an autonomous agent with built-in tool calling. No commands needed. Copilot automatically triggers vault, web searches or any other relevant tool when relevant.
 
 <p align="center">
-  <em>Your AI assistant in Obsidian—powerful yet intuitive, keeping you in the creative flow.</em>
+  <em>Copilot's Agent can call the proper tools on its own upon your request.</em>
 </p>
 <p align="center">
-  <img src="./images/product-UI-screenshot.png" alt="Product UI screenshot" width="800"/>
+  <img src="./images/product-ui-screenshot.jpeg" alt="Product UI screenshot" width="800"/>
 </p>
+
+## Copilot V3 is a New Era 🔥
+
+After months of hard work, we have revamped the codebase and adopted a new paradigm for our agentic infrastructure. It opens the door for easier addition of agentic tools (MCP support coming). We will provide a new version of the documentation soon. Here is a couple of new things that you cannot miss!
+
+- FOR ALL USERS: You can do vault search out-of-the-box **without building an index first** (Indexing is still available but optional behind the "Semantic Search" toggle in QA settings).
+- FOR FREE USERS: Image support and chat context menu are available to all users starting from v3.0.0!
+- FOR PLUS USERS: Autonomous agent is available with vault search, web search, youtube, composer and soon a lot other tools!
+
+Read the [Changelog](https://github.com/logancyang/obsidian-copilot/releases/tag/3.0.0).
 
 ## Why People Love It ❤️
 
@@ -198,7 +212,6 @@ First, go to https://www.obsidiancopilot.com/en to subscribe to Copilot Plus. Th
   </a><br>
   <em>Click the image to watch the video on YouTube</em>
 </p>
-
 
 # **💡 Need Help?**
 
