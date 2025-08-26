@@ -290,6 +290,38 @@ export function isAllowedFileForContext(file: TFile | null): boolean {
   return file.extension === "md" || file.extension === "pdf" || file.extension === "canvas";
 }
 
+/**
+ * Checks if a chain type is a Plus mode chain (Copilot Plus or Project Chain).
+ * Plus mode chains have access to premium features like PDF processing and URL processing.
+ * @param chainType The chain type to check
+ * @returns true if this is a Plus mode chain, false otherwise
+ */
+export function isPlusChain(chainType: ChainType): boolean {
+  return chainType === ChainType.COPILOT_PLUS_CHAIN || chainType === ChainType.PROJECT_CHAIN;
+}
+
+/**
+ * Checks if a file extension is allowed for context based on the chain type.
+ * All chains support markdown and canvas files.
+ * Plus chains support all file types (PDF, EPUB, PPT, DOCX, etc.).
+ * Free chains only support markdown and canvas files.
+ * @param file The file to check
+ * @param chainType The current chain type
+ * @returns true if the file is allowed for this chain type, false otherwise
+ */
+export function isAllowedFileForChainContext(file: TFile | null, chainType: ChainType): boolean {
+  if (!file) return false;
+
+  // All chains support markdown and canvas files
+  if (file.extension === "md" || file.extension === "canvas") {
+    return true;
+  }
+
+  // Plus chains support all other file types (PDF, EPUB, PPT, DOCX, etc.)
+  // Free chains only support markdown and canvas
+  return isPlusChain(chainType);
+}
+
 export async function getAllNotesContent(vault: Vault): Promise<string> {
   const vaultNotes: string[] = [];
 

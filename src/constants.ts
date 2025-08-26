@@ -99,7 +99,7 @@ export const EMPTY_INDEX_ERROR_MESSAGE =
 export const CHUNK_SIZE = 6000;
 export const TEXT_WEIGHT = 0.4;
 export const MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT = 448000;
-export const LLM_TIMEOUT_MS = 10000; // 10 seconds timeout for LLM operations
+export const LLM_TIMEOUT_MS = 30000; // 30 seconds timeout for LLM operations
 export const LOADING_MESSAGES = {
   DEFAULT: "",
   READING_FILES: "Reading files",
@@ -656,6 +656,15 @@ export const AUTOCOMPLETE_CONFIG = {
   MIN_TRIGGER_LENGTH: 3,
   MAX_CONTEXT_LENGTH: 10000,
   KEYBIND: "Tab" as AcceptKeyOption,
+} as const;
+
+export const RESTRICTION_MESSAGES = {
+  NON_MARKDOWN_FILES_RESTRICTED:
+    "Non-markdown files are only available in Copilot Plus mode. Please upgrade to access this file type.",
+  URL_PROCESSING_RESTRICTED:
+    "URL processing is only available in Copilot Plus mode. URLs will not be processed for context.",
+  UNSUPPORTED_FILE_TYPE: (extension: string) =>
+    `${extension.toUpperCase()} files are not supported in the current mode.`,
 } as const;
 
 export const DEFAULT_SETTINGS: CopilotSettings = {

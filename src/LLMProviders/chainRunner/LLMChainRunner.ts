@@ -45,11 +45,18 @@ export class LLMChainRunner extends BaseChainRunner {
         messages.push({ role: entry.role, content: entry.content });
       }
 
-      // Add current user message
-      messages.push({
-        role: "user",
-        content: userMessage.message,
-      });
+      // Add current user message - support multimodal content if available
+      if (userMessage.content && Array.isArray(userMessage.content)) {
+        messages.push({
+          role: "user",
+          content: userMessage.content,
+        });
+      } else {
+        messages.push({
+          role: "user",
+          content: userMessage.message,
+        });
+      }
 
       logInfo("==== Final Request to AI ====\n", messages);
 

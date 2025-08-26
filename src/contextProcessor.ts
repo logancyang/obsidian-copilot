@@ -1,7 +1,9 @@
 import { getSelectedTextContexts } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
+import { RESTRICTION_MESSAGES } from "@/constants";
 import { FileParserManager } from "@/tools/FileParserManager";
-import { TFile, Vault } from "obsidian";
+import { isPlusChain } from "@/utils";
+import { TFile, Vault, Notice } from "obsidian";
 import { NOTE_CONTEXT_PROMPT_TAG, EMBEDDED_PDF_TAG, SELECTED_TEXT_TAG } from "./constants";
 
 export class ContextProcessor {
@@ -93,15 +95,13 @@ export class ContextProcessor {
         }
 
         // 2. Apply chain restrictions only to supported files that are NOT md or canvas
-        if (
-          currentChain !== ChainType.COPILOT_PLUS_CHAIN &&
-          note.extension !== "md" &&
-          note.extension !== "canvas"
-        ) {
+        if (!isPlusChain(currentChain) && note.extension !== "md" && note.extension !== "canvas") {
           // This file type is supported, but requires Plus mode (e.g., PDF)
           console.warn(
             `File type ${note.extension} requires Copilot Plus mode for context processing.`
           );
+          // Show user-facing notice about the restriction
+          new Notice(RESTRICTION_MESSAGES.NON_MARKDOWN_FILES_RESTRICTED);
           return;
         }
 
@@ -109,7 +109,7 @@ export class ContextProcessor {
         let content = await fileParserManager.parseFile(note, vault);
 
         // Special handling for embedded PDFs within markdown (only in Plus mode)
-        if (note.extension === "md" && currentChain === ChainType.COPILOT_PLUS_CHAIN) {
+        if (note.extension === "md" && isPlusChain(currentChain)) {
           content = await this.processEmbeddedPDFs(content, vault, fileParserManager);
         }
 

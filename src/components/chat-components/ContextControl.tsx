@@ -1,8 +1,7 @@
-import { useChainType } from "@/aiParams";
 import { App } from "obsidian";
 import React from "react";
 
-import { ChainType } from "@/chainFactory";
+import { useChainType } from "@/aiParams";
 import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
 import { SelectedTextContext } from "@/types/message";
 import { TFile } from "obsidian";
@@ -38,7 +37,6 @@ const ContextControl: React.FC<ChatControlsProps> = ({
   showProgressCard,
 }) => {
   const [selectedChain] = useChainType();
-
   const handleAddContext = () => {
     new AddContextNoteModal({
       app,
@@ -53,6 +51,7 @@ const ContextControl: React.FC<ChatControlsProps> = ({
         }
       },
       excludeNotePaths,
+      chainType: selectedChain,
     }).open();
   };
 
@@ -74,9 +73,7 @@ const ContextControl: React.FC<ChatControlsProps> = ({
     }
   };
 
-  if (selectedChain !== ChainType.COPILOT_PLUS_CHAIN && selectedChain !== ChainType.PROJECT_CHAIN) {
-    return null;
-  }
+  // Context menu is now available for all chain types
 
   return (
     <ChatContextMenu

@@ -1,13 +1,16 @@
 import { App, FuzzySuggestModal, TFile } from "obsidian";
-import { isAllowedFileForContext } from "@/utils";
+import { isAllowedFileForChainContext } from "@/utils";
+import { ChainType } from "@/chainFactory";
 
 export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
   protected activeNote: TFile | null;
   protected availableNotes: T[];
+  protected chainType: ChainType;
 
-  constructor(app: App) {
+  constructor(app: App, chainType: ChainType = ChainType.COPILOT_PLUS_CHAIN) {
     super(app);
     this.activeNote = app.workspace.getActiveFile();
+    this.chainType = chainType;
   }
 
   protected getOrderedNotes(excludeNotePaths: string[] = []): TFile[] {
@@ -18,13 +21,15 @@ export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
       .filter(
         (file): file is TFile =>
           file instanceof TFile &&
-          isAllowedFileForContext(file) &&
+          isAllowedFileForChainContext(file, this.chainType) &&
           !excludeNotePaths.includes(file.path) &&
           file.path !== this.activeNote?.path
       );
 
     // Get all other files that weren't recently opened
-    const allFiles = this.app.vault.getFiles().filter((file) => isAllowedFileForContext(file));
+    const allFiles = this.app.vault
+      .getFiles()
+      .filter((file) => isAllowedFileForChainContext(file, this.chainType));
 
     const otherFiles = allFiles.filter(
       (file) =>
@@ -35,7 +40,9 @@ export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
 
     // Combine active note (if exists and is allowed type) with recent files and other files
     const activeNoteArray =
-      this.activeNote && isAllowedFileForContext(this.activeNote) ? [this.activeNote] : [];
+      this.activeNote && isAllowedFileForChainContext(this.activeNote, this.chainType)
+        ? [this.activeNote]
+        : [];
     return [...activeNoteArray, ...recentFiles, ...otherFiles];
   }
 
