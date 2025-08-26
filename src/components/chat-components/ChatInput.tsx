@@ -226,13 +226,8 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
       // Update URLs in context, ensuring uniqueness
       const newUrls = urls.filter((url) => !contextUrls.includes(url));
-      if (newUrls.length > 0) {
-        // Check if URL processing is supported for the current chain
-        if (!isPlusChain(currentChain)) {
-          // Don't add URLs to context for non-Plus chains, but don't show Notice
-          // The restriction will be handled when the user tries to send the message
-          return;
-        }
+      if (newUrls.length > 0 && isPlusChain(currentChain)) {
+        // Only add URLs to context for Plus chains
         // Use Set to ensure uniqueness
         setContextUrls((prev) => Array.from(new Set([...prev, ...newUrls])));
       }
