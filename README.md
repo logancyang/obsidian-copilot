@@ -1,3 +1,5 @@
+[![MSeeP.ai Security Assessment Badge](https://mseep.net/pr/logancyang-obsidian-copilot-badge.png)](https://mseep.ai/app/logancyang-obsidian-copilot)
+
 <h1 align="center">Copilot for Obsidian</h1>
 
 <h2 align="center">
