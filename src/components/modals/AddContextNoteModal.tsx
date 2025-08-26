@@ -49,11 +49,7 @@ export class AddContextNoteModal extends BaseNoteModal<TFile> {
   onChooseItem(note: TFile, evt: MouseEvent | KeyboardEvent) {
     // Check if the file is allowed for the current chain type
     if (!isAllowedFileForChainContext(note, this.chainType)) {
-      if (note.extension !== "md" && note.extension !== "canvas") {
-        new Notice(RESTRICTION_MESSAGES.NON_MARKDOWN_FILES_RESTRICTED);
-      } else {
-        new Notice(RESTRICTION_MESSAGES.UNSUPPORTED_FILE_TYPE(note.extension));
-      }
+      new Notice(RESTRICTION_MESSAGES.NON_MARKDOWN_FILES_RESTRICTED);
       return;
     }
 
