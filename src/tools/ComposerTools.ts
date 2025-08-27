@@ -191,7 +191,7 @@ const replaceInFileTool = createTool({
       let modifiedContent = originalContent;
 
       // Reject this tool if the original content is small
-      const MIN_FILE_SIZE_FOR_REPLACE = 3000; // Files smaller than 3KB should use writeToFile for simplicity
+      const MIN_FILE_SIZE_FOR_REPLACE = 3000;
       if (originalContent.length < MIN_FILE_SIZE_FOR_REPLACE) {
         return `File is too small to use this tool. Please use writeToFile instead.`;
       }
