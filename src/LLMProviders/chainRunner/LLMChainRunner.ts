@@ -47,9 +47,17 @@ export class LLMChainRunner extends BaseChainRunner {
 
       // Add current user message - support multimodal content if available
       if (userMessage.content && Array.isArray(userMessage.content)) {
+        // For multimodal messages with images, replace the text content with processed text
+        const updatedContent = userMessage.content.map((item: any) => {
+          if (item.type === "text") {
+            // Use processed message text that includes context
+            return { ...item, text: userMessage.message };
+          }
+          return item;
+        });
         messages.push({
           role: "user",
-          content: userMessage.content,
+          content: updatedContent,
         });
       } else {
         messages.push({
