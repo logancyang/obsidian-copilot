@@ -214,8 +214,9 @@ Example usage:
     tool: replaceInFileTool,
     metadata: {
       id: "replaceInFile",
-      displayName: "Replace in File",
-      description: "Make targeted changes to existing files using SEARCH/REPLACE blocks",
+      displayName: "Replace in File (Experimental)",
+      description:
+        "Make targeted changes to existing files using SEARCH/REPLACE blocks. (This tool is experimental and may only work well with very advanced models like Gemini Flash 2.5 or GPT-5)",
       category: "file",
       requiresVault: true,
       customPromptInstructions: `For replaceInFile:

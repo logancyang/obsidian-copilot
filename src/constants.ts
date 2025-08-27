@@ -745,7 +745,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     "pomodoro",
     "youtubeTranscription",
     "writeToFile",
-    "replaceInFile",
   ],
   reasoningEffort: DEFAULT_MODEL_SETTING.REASONING_EFFORT,
   verbosity: DEFAULT_MODEL_SETTING.VERBOSITY,
