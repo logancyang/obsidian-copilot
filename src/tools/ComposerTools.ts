@@ -1,4 +1,3 @@
-import { logWarn } from "@/logger";
 import { Notice, TFile } from "obsidian";
 import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
 import { diffTrimmedLines } from "diff";
@@ -192,7 +191,8 @@ const replaceInFileTool = createTool({
       let modifiedContent = originalContent;
 
       // Reject this tool if the original content is small
-      if (originalContent.length < 3000) {
+      const MIN_FILE_SIZE_FOR_REPLACE = 3000; // Files smaller than 3KB should use writeToFile for simplicity
+      if (originalContent.length < MIN_FILE_SIZE_FOR_REPLACE) {
         return `File is too small to use this tool. Please use writeToFile instead.`;
       }
 
@@ -219,10 +219,7 @@ const replaceInFileTool = createTool({
             searchText = searchText.trimEnd();
             replaceText = replaceText.trimEnd();
           } else {
-            logWarn(
-              `Search text not found in file ${path}. Block ${changesApplied + 1}: "${searchText}".`
-            );
-            continue;
+            return `Search text not found in file ${path} : "${searchText}".`;
           }
         }
 

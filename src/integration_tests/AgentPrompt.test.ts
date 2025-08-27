@@ -135,7 +135,7 @@ async function generateSystemPrompt(availableTools: any[]): Promise<string> {
   // Create a mock Gemini model to get the adapter
   const { ChatGoogleGenerativeAI } = await import("@langchain/google-genai");
   const mockModel = new ChatGoogleGenerativeAI({
-    model: "gemini-2.5-flash",
+    model: "gemini-2.5-flash-lite",
     apiKey: process.env.GEMINI_API_KEY || "",
   });
 
@@ -299,10 +299,14 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
       expectedCalls: [
         {
           toolName: "replaceInFile",
+          // Check if args.diff contains the correct search text
           argumentValidator: (args) => {
             expect(args).toEqual(
               expect.objectContaining({
                 path: "test.md",
+                diff: expect.stringContaining(
+                  `------- SEARCH\nLondon, UK - A city of kings and punks, rain and rebellion. London blends royal heritage with cutting-edge creativity, from the Tower of London to Shoreditch street art.\n=======`
+                ),
               })
             );
           },
