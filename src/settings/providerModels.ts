@@ -335,6 +335,7 @@ export interface ProviderResponseMap {
   [ChatModelProviders.OPENROUTERAI]: OpenRouterAIModelResponse;
   [ChatModelProviders.COPILOT_PLUS]: null;
   [ChatModelProviders.AZURE_OPENAI]: null;
+  [ChatModelProviders.CLAUDE_CODE]: null;
 }
 
 // Adapter type definition - converts provider-specific models to standard format

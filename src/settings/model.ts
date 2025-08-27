@@ -60,6 +60,16 @@ export interface CopilotSettings {
   xaiApiKey: string;
   mistralApiKey: string;
   deepseekApiKey: string;
+  claudeCodeApiKey: string; // Deprecated - kept for backward compatibility
+  claudeCode?: {
+    enabled: boolean;
+    cliPath: string;
+    autoDetected: boolean;
+    model: "claude-3.5-sonnet" | "claude-3-opus" | "claude-3-haiku";
+    sessionMode: "new" | "continue";
+    fallbackEnabled: boolean;
+    timeout: number;
+  };
   defaultChainType: ChainType;
   defaultModelKey: string;
   embeddingModelKey: string;

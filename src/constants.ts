@@ -168,6 +168,7 @@ export enum ChatModelProviders {
   COPILOT_PLUS = "copilot-plus",
   MISTRAL = "mistralai",
   DEEPSEEK = "deepseek",
+  CLAUDE_CODE = "claude-code (local)",
 }
 
 export enum ModelCapability {
@@ -554,6 +555,12 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     listModelURL: "https://api.deepseek.com/models",
     testModel: ChatModels.DEEPSEEK_CHAT,
   },
+  [ChatModelProviders.CLAUDE_CODE]: {
+    label: "Claude Code",
+    host: "http://localhost:8080",
+    keyManagementURL: "",
+    listModelURL: "",
+  },
   [EmbeddingModelProviders.COPILOT_PLUS]: {
     label: "Copilot Plus",
     host: "https://api.brevilabs.com/v1",
@@ -581,6 +588,7 @@ export const ProviderSettingsKeyMap: Record<SettingKeyProviders, keyof CopilotSe
   "copilot-plus": "plusLicenseKey",
   mistralai: "mistralApiKey",
   deepseek: "deepseekApiKey",
+  "claude-code (local)": "claudeCodeApiKey",
 };
 
 export enum VAULT_VECTOR_STORE_STRATEGY {
@@ -686,6 +694,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   xaiApiKey: "",
   mistralApiKey: "",
   deepseekApiKey: "",
+  claudeCodeApiKey: "local",
   defaultChainType: ChainType.LLM_CHAIN,
   defaultModelKey: ChatModels.OPENROUTER_GEMINI_2_5_FLASH + "|" + ChatModelProviders.OPENROUTERAI,
   embeddingModelKey: EmbeddingModels.OPENAI_EMBEDDING_SMALL + "|" + EmbeddingModelProviders.OPENAI,
