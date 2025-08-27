@@ -226,7 +226,7 @@ Example usage:
 <use_tool>
 <name>replaceInFile</name>
 <path>notes/meeting.md</path>
-<diff>\`\`\`
+<diff>
 ------- SEARCH
 ## Attendees
 - John Smith
@@ -237,7 +237,7 @@ Example usage:
 - Jane Doe
 - Bob Johnson
 +++++++ REPLACE
-\`\`\`</diff>
+</diff>
 </use_tool>`,
     },
   },
