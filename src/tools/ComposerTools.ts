@@ -1,4 +1,3 @@
-import { logWarn } from "@/logger";
 import { Notice, TFile } from "obsidian";
 import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
 import { diffTrimmedLines } from "diff";
@@ -113,13 +112,11 @@ const replaceInFileSchema = z.object({
   diff: z.string()
     .describe(`(Required) One or more SEARCH/REPLACE blocks. Each block MUST follow this exact format with these exact markers:
 
-\`\`\`
 ------- SEARCH
 [exact content to find, including all whitespace and indentation]
 =======
 [new content to replace with]
 +++++++ REPLACE
-\`\`\`
 
 WHEN TO USE THIS TOOL vs writeToFile:
 - Use replaceInFile for: small edits, fixing typos, updating specific sections, targeted changes
@@ -127,14 +124,12 @@ WHEN TO USE THIS TOOL vs writeToFile:
 
 CRITICAL RULES:
 1. SEARCH content must match EXACTLY - every character, space, and line break
-2. Always wrap blocks in triple backticks (\`\`\`)
-3. Use the exact markers: "------- SEARCH", "=======", "+++++++ REPLACE"
-4. For multiple changes, include multiple SEARCH/REPLACE blocks in order
-5. Keep blocks concise - include only the lines being changed plus minimal context
+2. Use the exact markers: "------- SEARCH", "=======", "+++++++ REPLACE"
+3. For multiple changes, include multiple SEARCH/REPLACE blocks in order
+4. Keep blocks concise - include only the lines being changed plus minimal context
 
 COMMON MISTAKES TO AVOID:
 - Wrong: Using different markers like "---- SEARCH" or "SEARCH -------"
-- Wrong: Forgetting the triple backticks
 - Wrong: Including too many unchanged lines
 - Wrong: Not matching whitespace/indentation exactly`),
 });
@@ -182,7 +177,7 @@ function replaceWithLineEndingAwareness(
 
 const replaceInFileTool = createTool({
   name: "replaceInFile",
-  description: `Request to replace sections of content in an existing file using SEARCH/REPLACE blocks that define exact changes to specific parts of the file. This tool should be used when you need to make targeted changes to specific parts of a file.`,
+  description: `Request to replace sections of content in an existing file using SEARCH/REPLACE blocks that define exact changes to specific parts of the file. This tool should be used when you need to make targeted changes to specific parts of a LARGE file.`,
   schema: replaceInFileSchema,
   handler: async ({ path, diff }: { path: string; diff: string }) => {
     const file = app.vault.getAbstractFileByPath(path);
@@ -195,6 +190,12 @@ const replaceInFileTool = createTool({
       const originalContent = await app.vault.read(file);
       let modifiedContent = originalContent;
 
+      // Reject this tool if the original content is small
+      const MIN_FILE_SIZE_FOR_REPLACE = 3000;
+      if (originalContent.length < MIN_FILE_SIZE_FOR_REPLACE) {
+        return `File is too small to use this tool. Please use writeToFile instead.`;
+      }
+
       // Parse SEARCH/REPLACE blocks from diff
       const searchReplaceBlocks = parseSearchReplaceBlocks(diff);
 
@@ -206,17 +207,20 @@ const replaceInFileTool = createTool({
 
       // Apply each SEARCH/REPLACE block in order
       for (const block of searchReplaceBlocks) {
-        const { searchText, replaceText } = block;
+        let { searchText, replaceText } = block;
 
         // Check if the search text exists in the current content (with line ending normalization)
         const normalizedContent = normalizeLineEndings(modifiedContent);
         const normalizedSearchText = normalizeLineEndings(searchText);
 
         if (!normalizedContent.includes(normalizedSearchText)) {
-          logWarn(
-            `Search text not found in file ${path}. Block ${changesApplied + 1}: "${searchText}".`
-          );
-          continue;
+          // Handle corner case where the search text is at the end of the file
+          if (normalizedContent.includes(normalizedSearchText.trimEnd())) {
+            searchText = searchText.trimEnd();
+            replaceText = replaceText.trimEnd();
+          } else {
+            return `Search text not found in file ${path} : "${searchText}".`;
+          }
         }
 
         // Replace all occurrences using line ending aware replacement

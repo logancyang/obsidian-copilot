@@ -230,13 +230,13 @@ EXAMPLE 1 - User says "fix the typo 'teh' to 'the' in my note":
 <use_tool>
 <name>replaceInFile</name>
 <path>path/to/note.md</path>
-<diff>\`\`\`
+<diff>
 ------- SEARCH
 teh
 =======
 the
 +++++++ REPLACE
-\`\`\`</diff>
+</diff>
 </use_tool>"
 
 EXAMPLE 2 - User says "add item 4 to the list":
@@ -246,7 +246,7 @@ EXAMPLE 2 - User says "add item 4 to the list":
 <use_tool>
 <name>replaceInFile</name>
 <path>path/to/file.md</path>
-<diff>\`\`\`
+<diff>
 ------- SEARCH
 - Item 1
 - Item 2
@@ -257,7 +257,7 @@ EXAMPLE 2 - User says "add item 4 to the list":
 - Item 3
 - Item 4
 +++++++ REPLACE
-\`\`\`</diff>
+</diff>
 </use_tool>"
 
 ❌ WRONG (DO NOT DO THIS):
