@@ -1,5 +1,3 @@
-[![MSeeP.ai Security Assessment Badge](https://mseep.net/pr/logancyang-obsidian-copilot-badge.png)](https://mseep.ai/app/logancyang-obsidian-copilot)
-
 <h1 align="center">Copilot for Obsidian</h1>
 
 <h2 align="center">
@@ -279,28 +277,6 @@ Please refer to your model provider’s documentation for the context window siz
 
 </details>
 
-# **💎 Choose the Copilot Plan That’s Right for You**
-
-| **Feature**                                                        | **Free Plan ✅** | **Plus Plan 💎** | **Believer Plan 🛡️** |
-| ------------------------------------------------------------------ | ---------------- | ---------------- | -------------------- |
-| No credit card or sign-up required                                 | ✅               | ❌               | ❌                   |
-| All open-source features                                           | ✅               | ✅               | ✅                   |
-| Bring your own API key                                             | ✅               | ✅               | ✅                   |
-| Best-in-class AI chat in Obsidian                                  | ✅               | ✅               | ✅                   |
-| Local data store for Vault QA                                      | ✅               | ✅               | ✅                   |
-| Support                                                            | ✅ Essential     | ✅ Pro           | ✅ Elite             |
-| AI agent capabilities                                              | ❌               | ✅               | ✅                   |
-| Image and PDF support                                              | ❌               | ✅               | ✅                   |
-| Enhanced chat UI (context menu)                                    | ❌               | ✅               | ✅                   |
-| State-of-the-art embedding models included                         | ❌               | ✅               | ✅                   |
-| Exclusive @AI tools (e.g., web, YouTube)                           | ❌               | ✅               | ✅                   |
-| Exclusive chat model included in plan                              | ❌               | ✅               | ✅                   |
-| Access to exclusive Discord channel                                | ❌               | ✅               | ✅                   |
-| Lifetime access                                                    | ❌               | ❌               | ✅                   |
-| Priority access to new features                                    | ❌               | ❌               | ✅                   |
-| Prioritized feature requests                                       | ❌               | ❌               | ✅                   |
-| Exclusive access to next-gen chat & embedding models (coming soon) | ❌               | ❌               | ✅                   |
-
 ## **🙏 Thank You**
 
 If you share the vision of building the most powerful AI agent for our second brain, consider [sponsoring this project](https://github.com/sponsors/logancyang) or buying me a coffee. Help spread the word by sharing Copilot for Obsidian on Twitter/X, Reddit, or your favorite platform!
@@ -327,3 +303,5 @@ Copilot Plus is a premium product of Brevilabs LLC and it is not affiliated with
 ## **Authors**
 
 Brevilabs Team | Email: logan@brevilabs.com | X/Twitter: [@logancyang](https://twitter.com/logancyang)
+
+[![MSeeP.ai Security Assessment Badge](https://mseep.net/pr/logancyang-obsidian-copilot-badge.png)](https://mseep.ai/app/logancyang-obsidian-copilot)
