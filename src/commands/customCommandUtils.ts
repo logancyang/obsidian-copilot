@@ -412,7 +412,15 @@ export async function processPrompt(
         const ctime = stats ? new Date(stats.ctime).toISOString() : "Unknown";
         const mtime = stats ? new Date(stats.mtime).toISOString() : "Unknown";
 
-        const noteContext = `<${NOTE_CONTEXT_PROMPT_TAG}>\n<title>${noteFile.basename}</title>\n<path>${noteFile.path}</path>\n<ctime>${ctime}</ctime>\n<mtime>${mtime}</mtime>\n<content>\n${noteContent}\n</content>\n</${NOTE_CONTEXT_PROMPT_TAG}>`;
+        const noteContext = `<${NOTE_CONTEXT_PROMPT_TAG}>
+<title>${noteFile.basename}</title>
+<path>${noteFile.path}</path>
+<ctime>${ctime}</ctime>
+<mtime>${mtime}</mtime>
+<content>
+${noteContent}
+</content>
+</${NOTE_CONTEXT_PROMPT_TAG}>`;
         if (additionalInfo) {
           additionalInfo += `\n\n`;
         }
