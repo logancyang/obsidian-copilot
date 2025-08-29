@@ -36,6 +36,7 @@ import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { err2String, isPlusChain } from "@/utils";
+import { getFilesInFolder } from "@/utils/addContextUtils";
 import { Buffer } from "buffer";
 import { Notice, TFile } from "obsidian";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -78,6 +79,7 @@ const Chat: React.FC<ChatProps> = ({
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES.DEFAULT);
   const [contextNotes, setContextNotes] = useState<TFile[]>([]);
+  const [contextFolders, setContextFolders] = useState<string[]>([]);
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [showChatUI, setShowChatUI] = useState(false);
@@ -192,7 +194,15 @@ const Chat: React.FC<ChatProps> = ({
       }
 
       // Prepare context notes and deduplicate by path
-      const allNotes = [...(passedContextNotes || []), ...contextNotes];
+
+      // Get files from context folders
+      const folderFiles: TFile[] = [];
+      contextFolders.forEach((folderPath) => {
+        const filesInFolder = getFilesInFolder(app, folderPath, currentChain);
+        folderFiles.push(...filesInFolder);
+      });
+
+      const allNotes = [...(passedContextNotes || []), ...contextNotes, ...folderFiles];
       const notes = allNotes.filter(
         (note, index, array) => array.findIndex((n) => n.path === note.path) === index
       );
@@ -549,6 +559,7 @@ const Chat: React.FC<ChatProps> = ({
     // Additional UI state reset specific to this component
     safeSet.setCurrentAiMessage("");
     setContextNotes([]);
+    setContextFolders([]);
     clearSelectedTextContexts();
     // Only modify includeActiveNote if in a non-COPILOT_PLUS_CHAIN mode
     // In COPILOT_PLUS_CHAIN mode, respect the settings.includeActiveNoteAsContext value
@@ -652,6 +663,8 @@ const Chat: React.FC<ChatProps> = ({
               app={app}
               contextNotes={contextNotes}
               setContextNotes={setContextNotes}
+              contextFolders={contextFolders}
+              setContextFolders={setContextFolders}
               includeActiveNote={includeActiveNote}
               setIncludeActiveNote={setIncludeActiveNote}
               mention={mention}

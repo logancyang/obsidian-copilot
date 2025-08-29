@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle, CircleDashed, Loader2, Plus, X } from "lucide-react";
+import { AlertCircle, CheckCircle, CircleDashed, Loader2, Plus, X, Folder } from "lucide-react";
 import { TFile } from "obsidian";
 import React from "react";
 import { Button } from "@/components/ui/button";
@@ -12,10 +12,12 @@ import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
 interface ChatContextMenuProps {
   activeNote: TFile | null;
   contextNotes: TFile[];
+  contextFolders: string[];
   contextUrls: string[];
   selectedTextContexts?: SelectedTextContext[];
   onAddContext: () => void;
   onRemoveContext: (path: string) => void;
+  onRemoveFolder: (path: string) => void;
   onRemoveUrl: (url: string) => void;
   onRemoveSelectedText?: (id: string) => void;
   showProgressCard: () => void;
@@ -70,6 +72,33 @@ function ContextUrl({ url, onRemoveUrl }: { url: string; onRemoveUrl: (url: stri
   );
 }
 
+function ContextFolder({
+  folderPath,
+  onRemoveFolder,
+}: {
+  folderPath: string;
+  onRemoveFolder: (path: string) => void;
+}) {
+  const folderName = folderPath.split("/").pop() || folderPath;
+  return (
+    <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
+      <div className="tw-flex tw-items-center tw-gap-1">
+        <Folder className="tw-size-3" />
+        <span className="tw-max-w-40 tw-truncate">{folderName}</span>
+      </div>
+      <Button
+        variant="ghost2"
+        size="fit"
+        onClick={() => onRemoveFolder(folderPath)}
+        aria-label="Remove folder from context"
+        className="tw-text-muted"
+      >
+        <X className="tw-size-4" />
+      </Button>
+    </Badge>
+  );
+}
+
 function ContextSelection({
   selectedText,
   onRemoveSelectedText,
@@ -104,10 +133,12 @@ function ContextSelection({
 export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   activeNote,
   contextNotes,
+  contextFolders,
   contextUrls,
   selectedTextContexts = [],
   onAddContext,
   onRemoveContext,
+  onRemoveFolder,
   onRemoveUrl,
   onRemoveSelectedText,
   showProgressCard,
@@ -133,6 +164,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
 
   const hasContext =
     uniqueNotes.length > 0 ||
+    contextFolders.length > 0 ||
     uniqueUrls.length > 0 ||
     selectedTextContexts.length > 0 ||
     !!activeNote;
@@ -180,6 +212,9 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
             isActive={false}
             onRemoveContext={onRemoveContext}
           />
+        ))}
+        {contextFolders.map((folderPath) => (
+          <ContextFolder key={folderPath} folderPath={folderPath} onRemoveFolder={onRemoveFolder} />
         ))}
         {uniqueUrls.map((url) => (
           <ContextUrl key={url} url={url} onRemoveUrl={onRemoveUrl} />

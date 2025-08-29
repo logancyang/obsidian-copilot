@@ -64,6 +64,8 @@ interface ChatInputProps {
   app: App;
   contextNotes: TFile[];
   setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
+  contextFolders: string[];
+  setContextFolders: React.Dispatch<React.SetStateAction<string[]>>;
   includeActiveNote: boolean;
   setIncludeActiveNote: (include: boolean) => void;
   mention: Mention;
@@ -87,6 +89,8 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       app,
       contextNotes,
       setContextNotes,
+      contextFolders,
+      setContextFolders,
       includeActiveNote,
       setIncludeActiveNote,
       mention,
@@ -520,6 +524,8 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           excludeNotePaths={excludeNotePaths}
           contextNotes={contextNotes}
           setContextNotes={setContextNotes}
+          contextFolders={contextFolders}
+          setContextFolders={setContextFolders}
           includeActiveNote={includeActiveNote}
           setIncludeActiveNote={setIncludeActiveNote}
           activeNote={currentActiveNote}

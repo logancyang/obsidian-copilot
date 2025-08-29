@@ -1,10 +1,8 @@
-import { App } from "obsidian";
-import React from "react";
-
+import { App, TFile } from "obsidian";
+import React, { useState } from "react";
 import { useChainType } from "@/aiParams";
-import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
+import { AddContextModal } from "@/components/AddContextModal";
 import { SelectedTextContext } from "@/types/message";
-import { TFile } from "obsidian";
 import { ChatContextMenu } from "./ChatContextMenu";
 
 interface ChatControlsProps {
@@ -12,6 +10,8 @@ interface ChatControlsProps {
   excludeNotePaths: string[];
   contextNotes: TFile[];
   setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
+  contextFolders: string[];
+  setContextFolders: React.Dispatch<React.SetStateAction<string[]>>;
   includeActiveNote: boolean;
   setIncludeActiveNote: React.Dispatch<React.SetStateAction<boolean>>;
   activeNote: TFile | null;
@@ -27,6 +27,8 @@ const ContextControl: React.FC<ChatControlsProps> = ({
   excludeNotePaths,
   contextNotes,
   setContextNotes,
+  contextFolders,
+  setContextFolders,
   includeActiveNote,
   setIncludeActiveNote,
   activeNote,
@@ -37,22 +39,42 @@ const ContextControl: React.FC<ChatControlsProps> = ({
   showProgressCard,
 }) => {
   const [selectedChain] = useChainType();
+  const [isAddContextModalOpen, setIsAddContextModalOpen] = useState(false);
   const handleAddContext = () => {
-    new AddContextNoteModal({
-      app,
-      onNoteSelect: (note) => {
-        if (activeNote && note.path === activeNote.path) {
-          setIncludeActiveNote(true);
-          // Remove the note from contextNotes if it exists there
-          setContextNotes((prev) => prev.filter((n) => n.path !== note.path));
-        } else {
-          // Add wasAddedManually flag to distinguish from reference-added notes
-          setContextNotes((prev) => [...prev, Object.assign(note, { wasAddedManually: true })]);
-        }
-      },
-      excludeNotePaths,
-      chainType: selectedChain,
-    }).open();
+    setIsAddContextModalOpen(true);
+  };
+
+  // Callback for handling file/folder selection
+  const handleNoteSelect = (noteOrPath: TFile | string) => {
+    if (typeof noteOrPath === "string") {
+      // Handle special removal commands from AddContextModal
+      if (noteOrPath.startsWith("REMOVE_FOLDER:")) {
+        const folderPath = noteOrPath.replace("REMOVE_FOLDER:", "");
+        handleRemoveFolder(folderPath);
+        return;
+      } else if (noteOrPath.startsWith("REMOVE_FILE:")) {
+        const filePath = noteOrPath.replace("REMOVE_FILE:", "");
+        handleRemoveContext(filePath);
+        return;
+      }
+
+      // Processing folder paths
+      const folderPath = noteOrPath;
+      if (!contextFolders.includes(folderPath)) {
+        setContextFolders((prev) => [...prev, folderPath]);
+      }
+    } else {
+      // Processing file
+      const note = noteOrPath;
+      if (activeNote && note.path === activeNote.path) {
+        setIncludeActiveNote(true);
+        // Remove the note from contextNotes if it exists there
+        setContextNotes((prev) => prev.filter((n) => n.path !== note.path));
+      } else {
+        // Add wasAddedManually flag to distinguish from reference-added notes
+        setContextNotes((prev) => [...prev, Object.assign(note, { wasAddedManually: true })]);
+      }
+    }
   };
 
   const handleRemoveContext = (path: string) => {
@@ -73,20 +95,41 @@ const ContextControl: React.FC<ChatControlsProps> = ({
     }
   };
 
+  const handleRemoveFolder = (folderPath: string) => {
+    setContextFolders((prev) => prev.filter((path) => path !== folderPath));
+  };
+
   // Context menu is now available for all chain types
 
   return (
-    <ChatContextMenu
-      activeNote={includeActiveNote ? activeNote : null}
-      contextNotes={contextNotes}
-      onAddContext={handleAddContext}
-      onRemoveContext={handleRemoveContext}
-      contextUrls={contextUrls}
-      onRemoveUrl={onRemoveUrl}
-      selectedTextContexts={selectedTextContexts}
-      onRemoveSelectedText={onRemoveSelectedText}
-      showProgressCard={showProgressCard}
-    />
+    <>
+      <ChatContextMenu
+        activeNote={includeActiveNote ? activeNote : null}
+        contextNotes={contextNotes}
+        contextFolders={contextFolders}
+        onAddContext={handleAddContext}
+        onRemoveContext={handleRemoveContext}
+        onRemoveFolder={handleRemoveFolder}
+        contextUrls={contextUrls}
+        onRemoveUrl={onRemoveUrl}
+        selectedTextContexts={selectedTextContexts}
+        onRemoveSelectedText={onRemoveSelectedText}
+        showProgressCard={showProgressCard}
+      />
+      <AddContextModal
+        app={app}
+        chainType={selectedChain}
+        excludeNotePaths={excludeNotePaths}
+        activeNote={activeNote}
+        contextNotes={contextNotes}
+        contextFolders={contextFolders}
+        onNoteSelect={handleNoteSelect}
+        isOpen={isAddContextModalOpen}
+        onClose={() => setIsAddContextModalOpen(false)}
+      >
+        <div />
+      </AddContextModal>
+    </>
   );
 };
 
