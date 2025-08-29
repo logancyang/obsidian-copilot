@@ -12,32 +12,23 @@ import { sortSlashCommands } from "@/commands/customCommandUtils";
 import { getCachedCustomCommands } from "@/commands/state";
 import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
 import { AddImageModal } from "@/components/modals/AddImageModal";
+
 import { ListPromptModal } from "@/components/modals/ListPromptModal";
 import { Button } from "@/components/ui/button";
 import { ModelSelector } from "@/components/ui/ModelSelector";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ChatToolControls } from "./ChatToolControls";
 import { ContextProcessor } from "@/contextProcessor";
-import { cn } from "@/lib/utils";
+
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
 import { isPlusChain } from "@/utils";
 
-import { updateSetting, useSettingsValue } from "@/settings/model";
+import { useSettingsValue } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
 import { getToolDescription } from "@/tools/toolManager";
 import { extractNoteFiles, isAllowedFileForContext, isNoteTitleUnique } from "@/utils";
-import {
-  CornerDownLeft,
-  Database,
-  Globe,
-  Image,
-  Loader2,
-  StopCircle,
-  X,
-  Pen,
-  Sparkles,
-  Brain,
-} from "lucide-react";
+import { CornerDownLeft, Image, Loader2, StopCircle, X } from "lucide-react";
 import { App, Platform, TFile } from "obsidian";
 import React, {
   forwardRef,
@@ -616,111 +607,37 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                 Stop
               </Button>
             ) : (
-              <TooltipProvider delayDuration={0}>
-                {/* Autonomous Agent button - only show in Copilot Plus mode and NOT in Projects mode */}
-                {isCopilotPlus && currentChain !== ChainType.PROJECT_CHAIN && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost2"
-                        size="fit"
-                        onClick={() => {
-                          const newValue = !autonomousAgentToggle;
-                          setAutonomousAgentToggle(newValue);
-                          updateSetting("enableAutonomousAgent", newValue);
-                        }}
-                        className={cn(
-                          "tw-mr-2 tw-text-muted hover:tw-text-accent",
-                          autonomousAgentToggle && "tw-text-accent tw-bg-accent/10"
-                        )}
-                      >
-                        <Brain className="tw-size-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent className="tw-px-1 tw-py-0.5">
-                      Toggle autonomous agent mode
-                    </TooltipContent>
-                  </Tooltip>
+              <>
+                <ChatToolControls
+                  vaultToggle={vaultToggle}
+                  setVaultToggle={setVaultToggle}
+                  webToggle={webToggle}
+                  setWebToggle={setWebToggle}
+                  composerToggle={composerToggle}
+                  setComposerToggle={setComposerToggle}
+                  autonomousAgentToggle={autonomousAgentToggle}
+                  setAutonomousAgentToggle={setAutonomousAgentToggle}
+                  currentChain={currentChain}
+                />
+                {isCopilotPlus && (
+                  <TooltipProvider delayDuration={0}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost2"
+                          size="fit"
+                          className="tw-text-muted hover:tw-text-accent"
+                          onClick={() => {
+                            new AddImageModal(app, onAddImage).open();
+                          }}
+                        >
+                          <Image className="tw-size-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="tw-px-1 tw-py-0.5">Add image(s)</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
-
-                {/* Toggle buttons for vault, web search, and composer - show when Autonomous Agent is off */}
-                {!autonomousAgentToggle && isCopilotPlus && (
-                  <>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost2"
-                          size="fit"
-                          onClick={() => setVaultToggle(!vaultToggle)}
-                          className={cn(
-                            "tw-mr-2 tw-text-muted hover:tw-text-accent",
-                            vaultToggle && "tw-text-accent tw-bg-accent/10"
-                          )}
-                        >
-                          <Database className="tw-size-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent className="tw-px-1 tw-py-0.5">
-                        Toggle vault search
-                      </TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost2"
-                          size="fit"
-                          onClick={() => setWebToggle(!webToggle)}
-                          className={cn(
-                            "tw-mr-2 tw-text-muted hover:tw-text-accent",
-                            webToggle && "tw-text-accent tw-bg-accent/10"
-                          )}
-                        >
-                          <Globe className="tw-size-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent className="tw-px-1 tw-py-0.5">
-                        Toggle web search
-                      </TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost2"
-                          size="fit"
-                          onClick={() => setComposerToggle(!composerToggle)}
-                          className={cn(
-                            "tw-mr-2 tw-text-muted hover:tw-text-accent",
-                            composerToggle && "tw-text-accent tw-bg-accent/10"
-                          )}
-                        >
-                          <span className="tw-flex tw-items-center tw-gap-0.5">
-                            <Sparkles className="tw-size-2" />
-                            <Pen className="tw-size-3" />
-                          </span>
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent className="tw-px-1 tw-py-0.5">
-                        Toggle composer (note editing)
-                      </TooltipContent>
-                    </Tooltip>
-                  </>
-                )}
-
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost2"
-                      size="fit"
-                      className="tw-text-muted hover:tw-text-accent"
-                      onClick={() => {
-                        new AddImageModal(app, onAddImage).open();
-                      }}
-                    >
-                      <Image className="tw-size-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="tw-px-1 tw-py-0.5">Add image(s)</TooltipContent>
-                </Tooltip>
                 <Button
                   variant="ghost2"
                   size="fit"
@@ -730,7 +647,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                   <CornerDownLeft className="!tw-size-3" />
                   <span>chat</span>
                 </Button>
-              </TooltipProvider>
+              </>
             )}
           </div>
         </div>
