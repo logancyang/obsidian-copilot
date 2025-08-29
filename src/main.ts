@@ -18,6 +18,7 @@ import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
 import { encryptAllKeys } from "@/encryptionService";
 import { logInfo } from "@/logger";
+import { updateMemoryWithConversation } from "@/memory/MemoryManager";
 import { checkIsPlusUser } from "@/plusUtils";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
@@ -378,6 +379,15 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async handleNewChat() {
+    // Analyze chat messages for memory if enabled
+    if (getSettings().enableMemory) {
+      try {
+        await updateMemoryWithConversation(this.app, this.chatUIState.getMessages());
+      } catch (error) {
+        logInfo("Failed to analyze chat messages for memory:", error);
+      }
+    }
+
     // First autosave the current chat if the setting is enabled
     await this.autosaveCurrentChat();
 

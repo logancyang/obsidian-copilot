@@ -2,6 +2,8 @@ import CopilotView from "@/components/CopilotView";
 import { CHAT_VIEWTYPE } from "@/constants";
 import CopilotPlugin from "@/main";
 import { getSettings } from "@/settings/model";
+import { updateMemoryWithConversation } from "@/memory/MemoryManager";
+import { logInfo } from "@/logger";
 import { App, Notice, PluginSettingTab } from "obsidian";
 import React from "react";
 import { createRoot } from "react-dom/client";
@@ -18,8 +20,18 @@ export class CopilotSettingTab extends PluginSettingTab {
 
   async reloadPlugin() {
     try {
-      // Autosave the current chat before reloading
       const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view as CopilotView;
+
+      // Analyze chat messages for memory if enabled
+      if (chatView && getSettings().enableMemory) {
+        try {
+          await updateMemoryWithConversation(this.app, this.plugin.chatUIState.getMessages());
+        } catch (error) {
+          logInfo("Failed to analyze chat messages for memory:", error);
+        }
+      }
+
+      // Autosave the current chat before reloading
       if (chatView && getSettings().autosaveChat) {
         await this.plugin.autosaveCurrentChat();
       }

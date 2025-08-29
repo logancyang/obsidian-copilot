@@ -11,6 +11,7 @@ import {
 import { ChainType } from "@/chainFactory";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
 import { logInfo } from "@/logger";
+import { updateMemoryWithConversation } from "@/memory/MemoryManager";
 
 import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatInput";
@@ -538,6 +539,15 @@ const Chat: React.FC<ChatProps> = ({
   const handleNewChat = useCallback(async () => {
     handleStopGenerating(ABORT_REASON.NEW_CHAT);
 
+    // Analyze chat messages for memory if enabled
+    if (settings.enableMemory) {
+      try {
+        await updateMemoryWithConversation(app, chatUIState.getMessages());
+      } catch (error) {
+        logInfo("Failed to analyze chat messages for memory:", error);
+      }
+    }
+
     // First autosave the current chat if the setting is enabled
     if (settings.autosaveChat) {
       await handleSaveAsNote();
@@ -561,10 +571,12 @@ const Chat: React.FC<ChatProps> = ({
     handleStopGenerating,
     chatUIState,
     settings.autosaveChat,
+    settings.enableMemory,
     settings.includeActiveNoteAsContext,
     selectedChain,
     handleSaveAsNote,
     safeSet,
+    app,
   ]);
 
   const handleLoadHistory = useCallback(() => {
