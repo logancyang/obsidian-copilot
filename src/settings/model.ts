@@ -129,6 +129,10 @@ export interface CopilotSettings {
   reasoningEffort: "minimal" | "low" | "medium" | "high";
   /** Default verbosity level for models that support it */
   verbosity: "low" | "medium" | "high";
+  /** Folder where memory data is stored */
+  memoryFolderName: string;
+  /** Enable memory feature to build user memory from conversation history */
+  enableMemory: boolean;
 }
 
 export const settingsStore = createStore();
@@ -296,6 +300,19 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   if (!Array.isArray(sanitizedSettings.autonomousAgentEnabledToolIds)) {
     sanitizedSettings.autonomousAgentEnabledToolIds =
       DEFAULT_SETTINGS.autonomousAgentEnabledToolIds;
+  }
+
+  // Ensure memoryFolderName has a default value
+  if (
+    !sanitizedSettings.memoryFolderName ||
+    typeof sanitizedSettings.memoryFolderName !== "string"
+  ) {
+    sanitizedSettings.memoryFolderName = DEFAULT_SETTINGS.memoryFolderName;
+  }
+
+  // Ensure enableMemory has a default value
+  if (typeof sanitizedSettings.enableMemory !== "boolean") {
+    sanitizedSettings.enableMemory = DEFAULT_SETTINGS.enableMemory;
   }
 
   return sanitizedSettings;

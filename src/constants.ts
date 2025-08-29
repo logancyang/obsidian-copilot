@@ -749,6 +749,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   ],
   reasoningEffort: DEFAULT_MODEL_SETTING.REASONING_EFFORT,
   verbosity: DEFAULT_MODEL_SETTING.VERBOSITY,
+  memoryFolderName: "copilot-memory",
+  enableMemory: false,
 };
 
 export const EVENT_NAMES = {

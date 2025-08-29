@@ -116,6 +116,29 @@ export const CopilotPlusSettings: React.FC = () => {
             </>
           )}
 
+          <div className="tw-pt-4 tw-text-xl tw-font-semibold">Memory</div>
+
+          <SettingItem
+            type="switch"
+            title="Enable Memory"
+            description="When enabled, Copilot builds a memory profile based on your conversation history. This includes factual data about you, your response preferences, and recent conversation context. All memory data is stored locally in your vault."
+            checked={settings.enableMemory}
+            onCheckedChange={(checked) => {
+              updateSetting("enableMemory", checked);
+            }}
+          />
+
+          <SettingItem
+            type="text"
+            title="Memory Folder Name"
+            description="Specify the folder where memory data is stored."
+            value={settings.memoryFolderName}
+            onChange={(value) => {
+              updateSetting("memoryFolderName", value);
+            }}
+            placeholder="copilot-memory"
+          />
+
           <div className="tw-pt-4 tw-text-xl tw-font-semibold">Autocomplete</div>
 
           <SettingItem
