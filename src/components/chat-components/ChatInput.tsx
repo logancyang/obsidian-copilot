@@ -619,25 +619,23 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                   setAutonomousAgentToggle={setAutonomousAgentToggle}
                   currentChain={currentChain}
                 />
-                {isCopilotPlus && (
-                  <TooltipProvider delayDuration={0}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost2"
-                          size="fit"
-                          className="tw-text-muted hover:tw-text-accent"
-                          onClick={() => {
-                            new AddImageModal(app, onAddImage).open();
-                          }}
-                        >
-                          <Image className="tw-size-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent className="tw-px-1 tw-py-0.5">Add image(s)</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
+                <TooltipProvider delayDuration={0}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost2"
+                        size="fit"
+                        className="tw-text-muted hover:tw-text-accent"
+                        onClick={() => {
+                          new AddImageModal(app, onAddImage).open();
+                        }}
+                      >
+                        <Image className="tw-size-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="tw-px-1 tw-py-0.5">Add image(s)</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
                 <Button
                   variant="ghost2"
                   size="fit"
