@@ -45,16 +45,18 @@ export function ModelSelector({
           variant={variant}
           size={size}
           disabled={disabled}
-          className={cn("tw-text-muted", className)}
+          className={cn("tw-min-w-0 tw-justify-start tw-text-muted", className)}
         >
-          {modelError ? (
-            <span className="tw-text-error">Model Load Failed</span>
-          ) : currentModel ? (
-            <ModelDisplay model={currentModel} iconSize={8} />
-          ) : (
-            "Select Model"
-          )}
-          {!disabled && <ChevronDown className="tw-mt-0.5 tw-size-5" />}
+          <div className="tw-min-w-0 tw-flex-1 tw-truncate">
+            {modelError ? (
+              <span className="tw-truncate tw-text-error">Model Load Failed</span>
+            ) : currentModel ? (
+              <ModelDisplay model={currentModel} iconSize={8} />
+            ) : (
+              <span className="tw-truncate">Select Model</span>
+            )}
+          </div>
+          {!disabled && <ChevronDown className="tw-mt-0.5 tw-size-5 tw-shrink-0" />}
         </Button>
       </DropdownMenuTrigger>
 
