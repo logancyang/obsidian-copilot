@@ -6,10 +6,16 @@ import { z } from "zod";
 import { createTool } from "./SimpleTool";
 
 async function show_preview(file_path: string, content: string): Promise<ApplyViewResult> {
-  const file = app.vault.getAbstractFileByPath(file_path);
+  let file = app.vault.getAbstractFileByPath(file_path);
 
   // Check if the current active note is the same as the target note
   const activeFile = app.workspace.getActiveFile();
+  // Create the file with empty content if it doesn't exist
+  if (!file) {
+    await app.vault.create(file_path, "");
+    file = app.vault.getAbstractFileByPath(file_path);
+  }
+
   if (file && (!activeFile || activeFile.path !== file_path)) {
     // If not, open the target file in the current leaf
     await app.workspace.getLeaf().openFile(file as TFile);
