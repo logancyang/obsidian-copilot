@@ -59,10 +59,10 @@ export const ModelCapabilityIcons: React.FC<ModelCapabilityIconsProps> = ({
 export const ModelDisplay: React.FC<ModelDisplayProps> = ({ model, iconSize = 14 }) => {
   const displayName = model.displayName || model.name;
   return (
-    <div className="tw-flex tw-items-center tw-gap-1">
-      <span className="tw-text-sm hover:tw-text-normal">{displayName}</span>
+    <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
+      <span className="tw-truncate tw-text-sm hover:tw-text-normal">{displayName}</span>
       {model.capabilities && model.capabilities.length > 0 && (
-        <div className="tw-flex tw-items-center tw-gap-0.5">
+        <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-0.5">
           <ModelCapabilityIcons capabilities={model.capabilities} iconSize={iconSize} />
         </div>
       )}

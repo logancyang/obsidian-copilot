@@ -580,19 +580,22 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
               <span>Generating...</span>
             </div>
           ) : (
-            <ModelSelector
-              variant="ghost2"
-              size="fit"
-              disabled={disableModelSwitch}
-              value={getDisplayModelKey()}
-              onChange={(modelKey) => {
-                // In project mode, we don't update the global model key
-                // as the project model takes precedence
-                if (currentChain !== ChainType.PROJECT_CHAIN) {
-                  setCurrentModelKey(modelKey);
-                }
-              }}
-            />
+            <div className="tw-min-w-0 tw-flex-1">
+              <ModelSelector
+                variant="ghost2"
+                size="fit"
+                disabled={disableModelSwitch}
+                value={getDisplayModelKey()}
+                onChange={(modelKey) => {
+                  // In project mode, we don't update the global model key
+                  // as the project model takes precedence
+                  if (currentChain !== ChainType.PROJECT_CHAIN) {
+                    setCurrentModelKey(modelKey);
+                  }
+                }}
+                className="tw-max-w-full tw-truncate"
+              />
+            </div>
           )}
 
           <div className="tw-flex tw-items-center tw-gap-1">
