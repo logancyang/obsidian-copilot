@@ -2,7 +2,7 @@ import CopilotView from "@/components/CopilotView";
 import { CHAT_VIEWTYPE } from "@/constants";
 import CopilotPlugin from "@/main";
 import { getSettings } from "@/settings/model";
-import { updateMemoryWithConversation } from "@/memory/MemoryManager";
+import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { logInfo } from "@/logger";
 import { App, Notice, PluginSettingTab } from "obsidian";
 import React from "react";
@@ -25,7 +25,14 @@ export class CopilotSettingTab extends PluginSettingTab {
       // Analyze chat messages for memory if enabled
       if (chatView && getSettings().enableMemory) {
         try {
-          await updateMemoryWithConversation(this.app, this.plugin.chatUIState.getMessages());
+          // Get the current chat model from the chain manager
+          const chainManager = this.plugin.projectManager.getCurrentChainManager();
+          const chatModel = chainManager.chatModelManager.getChatModel();
+          UserMemoryManager.updateRecentConversations(
+            this.app,
+            this.plugin.chatUIState.getMessages(),
+            chatModel
+          );
         } catch (error) {
           logInfo("Failed to analyze chat messages for memory:", error);
         }

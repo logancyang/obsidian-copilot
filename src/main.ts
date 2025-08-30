@@ -18,7 +18,7 @@ import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
 import { encryptAllKeys } from "@/encryptionService";
 import { logInfo } from "@/logger";
-import { updateMemoryWithConversation } from "@/memory/MemoryManager";
+import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { checkIsPlusUser } from "@/plusUtils";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
@@ -382,7 +382,14 @@ export default class CopilotPlugin extends Plugin {
     // Analyze chat messages for memory if enabled
     if (getSettings().enableMemory) {
       try {
-        await updateMemoryWithConversation(this.app, this.chatUIState.getMessages());
+        // Get the current chat model from the chain manager
+        const chainManager = this.projectManager.getCurrentChainManager();
+        const chatModel = chainManager.chatModelManager.getChatModel();
+        UserMemoryManager.updateRecentConversations(
+          this.app,
+          this.chatUIState.getMessages(),
+          chatModel
+        );
       } catch (error) {
         logInfo("Failed to analyze chat messages for memory:", error);
       }

@@ -11,7 +11,7 @@ import {
 import { ChainType } from "@/chainFactory";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
 import { logInfo } from "@/logger";
-import { updateMemoryWithConversation } from "@/memory/MemoryManager";
+import { UserMemoryManager } from "@/memory/UserMemoryManager";
 
 import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatInput";
@@ -542,7 +542,9 @@ const Chat: React.FC<ChatProps> = ({
     // Analyze chat messages for memory if enabled
     if (settings.enableMemory) {
       try {
-        await updateMemoryWithConversation(app, chatUIState.getMessages());
+        // Get the current chat model from the chain manager
+        const chatModel = chainManager.chatModelManager.getChatModel();
+        UserMemoryManager.updateRecentConversations(app, chatUIState.getMessages(), chatModel);
       } catch (error) {
         logInfo("Failed to analyze chat messages for memory:", error);
       }
@@ -569,6 +571,7 @@ const Chat: React.FC<ChatProps> = ({
     }
   }, [
     handleStopGenerating,
+    chainManager.chatModelManager,
     chatUIState,
     settings.autosaveChat,
     settings.enableMemory,
