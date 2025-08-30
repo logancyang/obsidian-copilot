@@ -47,10 +47,18 @@ const writeToFileSchema = z.object({
           The path must end with explicit file extension, such as .md or .canvas .
           Prefer to create new files in existing folders or root folder unless the user's request specifies otherwise.
           The path must be relative to the root of the vault.`),
-  content: z.string().describe(`(Required) The content to write to the file. 
+  content: z.union([z.string(), z.object({}).passthrough()])
+    .describe(`(Required) The content to write to the file. Can be either a string or an object.
           ALWAYS provide the COMPLETE intended content of the file, without any truncation or omissions. 
           You MUST include ALL parts of the file, even if they haven't been modified.
 
+          # For string content
+          * Use when writing text files like .md, .txt, etc.
+          
+          # For object content  
+          * Use when writing structured data files like .json, .canvas, etc.
+          * The object will be automatically converted to JSON string format
+          
           # Rules for Obsidian Canvas content
           * For canvas files, both 'nodes' and 'edges' arrays must be properly closed with ]
           * Every node must have: id, type, x, y, width, height
@@ -58,7 +66,7 @@ const writeToFileSchema = z.object({
           * All IDs must be unique
           * Edge fromNode and toNode must reference existing node IDs
           
-          # Example content of a canvas file
+          # Example content of a canvas file (as object)
           {
             "nodes": [
               {
@@ -93,7 +101,10 @@ const writeToFileTool = createTool({
       `,
   schema: writeToFileSchema,
   handler: async ({ path, content }) => {
-    const result = await show_preview(path, content);
+    // Convert object content to JSON string if needed
+    const contentString = typeof content === "string" ? content : JSON.stringify(content, null, 2);
+
+    const result = await show_preview(path, contentString);
     // Simple JSON wrapper for consistent parsing
     return JSON.stringify({
       result: result,
