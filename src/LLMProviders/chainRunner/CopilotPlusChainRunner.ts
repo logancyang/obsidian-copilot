@@ -14,7 +14,7 @@ import {
 } from "@/imageProcessing/imageProcessor";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logError, logInfo, logWarn } from "@/logger";
-import { getSettings, getSystemPrompt } from "@/settings/model";
+import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
 import { ToolManager } from "@/tools/toolManager";
 import { writeToFileTool } from "@/tools/ComposerTools";
 import { ChatMessage } from "@/types/message";
@@ -746,6 +746,6 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
   }
 
   protected async getSystemPrompt(): Promise<string> {
-    return getSystemPrompt();
+    return getSystemPromptWithMemory(this.chainManager.app);
   }
 }

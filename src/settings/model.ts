@@ -12,6 +12,9 @@ import {
   DEFAULT_SYSTEM_PROMPT,
   EmbeddingModelProviders,
 } from "@/constants";
+import { UserMemoryManager } from "@/memory/UserMemoryManager";
+import { App } from "obsidian";
+import { logError } from "@/logger";
 
 /**
  * We used to store commands in the settings file with the following interface.
@@ -329,6 +332,19 @@ ${userPrompt}
 </user_custom_instructions>`;
   }
   return basePrompt;
+}
+
+export async function getSystemPromptWithMemory(app: App | undefined): Promise<string> {
+  const systemPrompt = getSystemPrompt();
+  if (!app) {
+    logError("No app provided to getSystemPromptWithMemory");
+    return getSystemPrompt();
+  }
+  const memoryPrompt = await UserMemoryManager.getUserMemoryPrompt(app);
+  return `${systemPrompt}
+  <user_memory>
+  ${memoryPrompt}
+  </user_memory>`;
 }
 
 function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {

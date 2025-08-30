@@ -64,7 +64,7 @@ export class UserMemoryManager {
  */
 function getRecentConversationFilePath(): string {
   const settings = getSettings();
-  return `${settings.memoryFolderName}/recent_conversation_context.md`;
+  return `${settings.memoryFolderName}/recent_conversation_content.md`;
 }
 
 /**

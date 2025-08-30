@@ -1,7 +1,8 @@
 import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { logError, logInfo, logWarn } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
-import { getSettings, getSystemPrompt } from "@/settings/model";
+import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
+import { App } from "obsidian";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
 import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
 import { ToolRegistry } from "@/tools/ToolRegistry";
@@ -78,11 +79,12 @@ ${params}
       .join("\n\n");
   }
 
-  public static generateSystemPrompt(
+  public static async generateSystemPrompt(
     availableTools: SimpleTool<any, any>[],
-    adapter: ModelAdapter
-  ): string {
-    const basePrompt = getSystemPrompt();
+    adapter: ModelAdapter,
+    app?: App
+  ): Promise<string> {
+    const basePrompt = await getSystemPromptWithMemory(app);
     const toolDescriptions = AutonomousAgentChainRunner.generateToolDescriptions(availableTools);
 
     const toolNames = availableTools.map((tool) => tool.name);
@@ -96,14 +98,18 @@ ${params}
     return adapter.enhanceSystemPrompt(basePrompt, toolDescriptions, toolNames, toolMetadata);
   }
 
-  private generateSystemPrompt(): string {
+  private async generateSystemPrompt(): Promise<string> {
     const availableTools = this.getAvailableTools();
 
     // Use model adapter for clean model-specific handling
     const chatModel = this.chainManager.chatModelManager.getChatModel();
     const adapter = ModelAdapterFactory.createAdapter(chatModel);
 
-    return AutonomousAgentChainRunner.generateSystemPrompt(availableTools, adapter);
+    return AutonomousAgentChainRunner.generateSystemPrompt(
+      availableTools,
+      adapter,
+      this.chainManager.app
+    );
   }
 
   private getTemporaryToolCallId(toolName: string, index: number): string {
@@ -144,7 +150,8 @@ ${params}
       const rawHistory = memoryVariables.history || [];
 
       // Build initial conversation messages
-      const customSystemPrompt = this.generateSystemPrompt();
+      const customSystemPrompt = await this.generateSystemPrompt();
+      console.log("customSystemPrompt", customSystemPrompt);
 
       const chatModel = this.chainManager.chatModelManager.getChatModel();
       const adapter = ModelAdapterFactory.createAdapter(chatModel);
