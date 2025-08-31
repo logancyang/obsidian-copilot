@@ -12,8 +12,26 @@ async function show_preview(file_path: string, content: string): Promise<ApplyVi
   const activeFile = app.workspace.getActiveFile();
   // Create the file with empty content if it doesn't exist
   if (!file) {
-    await app.vault.create(file_path, "");
-    file = app.vault.getAbstractFileByPath(file_path);
+    try {
+      await app.vault.create(file_path, "");
+    } catch (error) {
+      // If creation failed due to a race, re-check if the file now exists
+      const maybeNowExists = app.vault.getAbstractFileByPath(file_path);
+      if (maybeNowExists && maybeNowExists instanceof TFile) {
+        file = maybeNowExists;
+      } else {
+        console.error(`Failed to create file at ${file_path}`, error);
+        new Notice(`Failed to create file: ${file_path}`);
+        return "failed";
+      }
+    }
+    if (!file) {
+      file = app.vault.getAbstractFileByPath(file_path);
+      if (!file) {
+        new Notice(`File not found after creation: ${file_path}`);
+        return "failed";
+      }
+    }
   }
 
   if (file && (!activeFile || activeFile.path !== file_path)) {
