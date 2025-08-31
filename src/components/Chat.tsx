@@ -544,7 +544,7 @@ const Chat: React.FC<ChatProps> = ({
       try {
         // Get the current chat model from the chain manager
         const chatModel = chainManager.chatModelManager.getChatModel();
-        UserMemoryManager.updateRecentConversations(app, chatUIState.getMessages(), chatModel);
+        UserMemoryManager.updateUserMemory(app, chatUIState.getMessages(), chatModel);
       } catch (error) {
         logInfo("Failed to analyze chat messages for memory:", error);
       }

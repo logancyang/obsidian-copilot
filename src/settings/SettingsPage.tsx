@@ -28,7 +28,7 @@ export class CopilotSettingTab extends PluginSettingTab {
           // Get the current chat model from the chain manager
           const chainManager = this.plugin.projectManager.getCurrentChainManager();
           const chatModel = chainManager.chatModelManager.getChatModel();
-          UserMemoryManager.updateRecentConversations(
+          UserMemoryManager.updateUserMemory(
             this.app,
             this.plugin.chatUIState.getMessages(),
             chatModel
