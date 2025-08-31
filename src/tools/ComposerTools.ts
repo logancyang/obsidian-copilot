@@ -6,10 +6,34 @@ import { z } from "zod";
 import { createTool } from "./SimpleTool";
 
 async function show_preview(file_path: string, content: string): Promise<ApplyViewResult> {
-  const file = app.vault.getAbstractFileByPath(file_path);
+  let file = app.vault.getAbstractFileByPath(file_path);
 
   // Check if the current active note is the same as the target note
   const activeFile = app.workspace.getActiveFile();
+  // Create the file with empty content if it doesn't exist
+  if (!file) {
+    try {
+      await app.vault.create(file_path, "");
+    } catch (error) {
+      // If creation failed due to a race, re-check if the file now exists
+      const maybeNowExists = app.vault.getAbstractFileByPath(file_path);
+      if (maybeNowExists && maybeNowExists instanceof TFile) {
+        file = maybeNowExists;
+      } else {
+        console.error(`Failed to create file at ${file_path}`, error);
+        new Notice(`Failed to create file: ${file_path}`);
+        return "failed";
+      }
+    }
+    if (!file) {
+      file = app.vault.getAbstractFileByPath(file_path);
+      if (!file) {
+        new Notice(`File not found after creation: ${file_path}`);
+        return "failed";
+      }
+    }
+  }
+
   if (file && (!activeFile || activeFile.path !== file_path)) {
     // If not, open the target file in the current leaf
     await app.workspace.getLeaf().openFile(file as TFile);
