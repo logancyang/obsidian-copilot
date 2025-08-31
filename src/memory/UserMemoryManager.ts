@@ -45,7 +45,6 @@ export class UserMemoryManager {
     const memoryFileMap = {
       "Recent Conversation Content": getRecentConversationFilePath(),
       "User Insights": getUserInsightsFilePath(),
-      "Response Preferences": getResponsePreferencesFilePath(),
     };
 
     try {
@@ -110,6 +109,7 @@ async function updateMemory(
     // 2. Save user insights (if extracted)
     if (extractedInfo.userInsights) {
       try {
+        console.log("[UserMemoryManager] Saving user insights:", extractedInfo.userInsights);
         await addToMemoryFile(app, getUserInsightsFilePath(), extractedInfo.userInsights);
       } catch (error) {
         logError("[UserMemoryManager] Error saving user insights:", error);
@@ -201,11 +201,19 @@ async function extractConversationInfo(
     logError("[UserMemoryManager] Error reading existing memory files:", error);
   }
 
-  const systemPrompt = `You are an AI assistant that analyzes conversations and extracts three types of information:
+  const systemPrompt = `You are an AI assistant that analyzes conversations and extracts two types of information:
 
-1. CONVERSATION SUMMARY: Create a very brief summary in 2-5 words maximum (e.g., "Travel Plan", "Tokyo Weather")
+1. CONVERSATION SUMMARY: A very brief summary in 2-5 words maximum 
 
-2. USER INSIGHTS: Extract NEW factual information or preferences about the user such as:
+Examples: "Travel Plan", "Tokyo Weather"
+
+2. USER INSIGHTS: NEW factual information or preferences written in a short sentence.
+
+The insights should have long-term impact on the user's behavior or preferences. Like their name, profession, learning goals, etc.
+
+Examples: "User's name is John", "User is studying software engineering"
+
+  The insights can be about the user such as:
    - Their role/profession
    - Technologies they work with  
    - Projects they're working on
@@ -225,8 +233,8 @@ ${existingInsights || "None"}
 
 # OUTPUT FORMAT
 Return your analysis in this exact JSON format with below keys:
-* summary: brief 2-5 word summary.
-* userInsights (optional): Only return if there are new insights found.`;
+* summary: String. brief 2-5 word summary.
+* userInsights (optional): String. Only return if there are new insights found.`;
 
   const humanPrompt = `Analyze this conversation and extract the summary and any NEW user insights not already captured:
 
@@ -237,11 +245,18 @@ ${conversationText}`;
   try {
     const response = await chatModel.invoke(messages_llm);
     const responseText = response.content.toString().trim();
+    // Unwrap the response if it's wrapped in code blocks
+    let unwrappedResponse = responseText;
+    if (responseText.startsWith("```json") && responseText.endsWith("```")) {
+      unwrappedResponse = responseText.slice(7, -3).trim();
+    } else if (responseText.startsWith("```") && responseText.endsWith("```")) {
+      unwrappedResponse = responseText.slice(3, -3).trim();
+    }
 
     // Parse JSON response
     let parsedResponse;
     try {
-      parsedResponse = JSON.parse(responseText);
+      parsedResponse = JSON.parse(unwrappedResponse);
     } catch (parseError) {
       logError("[UserMemoryManager] Failed to parse LLM response as JSON:", parseError);
     }
