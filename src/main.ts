@@ -57,6 +57,7 @@ export default class CopilotPlugin extends Plugin {
   settingsUnsubscriber?: () => void;
   private autocompleteService: AutocompleteService;
   chatUIState: ChatUIState;
+  userMemoryManager: UserMemoryManager;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -94,6 +95,9 @@ export default class CopilotPlugin extends Plugin {
     const chainManager = this.projectManager.getCurrentChainManager();
     const chatManager = new ChatManager(messageRepo, chainManager, this.fileParserManager, this);
     this.chatUIState = new ChatUIState(chatManager);
+
+    // Initialize UserMemoryManager
+    this.userMemoryManager = new UserMemoryManager(this.app);
 
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
     this.registerView(APPLY_VIEW_TYPE, (leaf: WorkspaceLeaf) => new ApplyView(leaf));
@@ -385,7 +389,7 @@ export default class CopilotPlugin extends Plugin {
         // Get the current chat model from the chain manager
         const chainManager = this.projectManager.getCurrentChainManager();
         const chatModel = chainManager.chatModelManager.getChatModel();
-        UserMemoryManager.updateUserMemory(this.app, this.chatUIState.getMessages(), chatModel);
+        this.userMemoryManager.updateUserMemory(this.chatUIState.getMessages(), chatModel);
       } catch (error) {
         logInfo("Failed to analyze chat messages for memory:", error);
       }

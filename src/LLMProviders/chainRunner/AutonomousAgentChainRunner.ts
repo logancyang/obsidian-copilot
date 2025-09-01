@@ -2,7 +2,7 @@ import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { logError, logInfo, logWarn } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
 import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
-import { App } from "obsidian";
+import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
 import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
 import { ToolRegistry } from "@/tools/ToolRegistry";
@@ -82,9 +82,9 @@ ${params}
   public static async generateSystemPrompt(
     availableTools: SimpleTool<any, any>[],
     adapter: ModelAdapter,
-    app?: App
+    userMemoryManager?: UserMemoryManager
   ): Promise<string> {
-    const basePrompt = await getSystemPromptWithMemory(app);
+    const basePrompt = await getSystemPromptWithMemory(userMemoryManager);
     const toolDescriptions = AutonomousAgentChainRunner.generateToolDescriptions(availableTools);
 
     const toolNames = availableTools.map((tool) => tool.name);
@@ -108,7 +108,7 @@ ${params}
     return AutonomousAgentChainRunner.generateSystemPrompt(
       availableTools,
       adapter,
-      this.chainManager.app
+      this.chainManager.plugin?.userMemoryManager
     );
   }
 

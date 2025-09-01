@@ -1,6 +1,7 @@
 import { CustomModel, ProjectConfig } from "@/aiParams";
 import { atom, createStore, useAtomValue } from "jotai";
 import { v4 as uuidv4 } from "uuid";
+import { UserMemoryManager } from "@/memory/UserMemoryManager";
 
 import { AcceptKeyOption } from "@/autocomplete/codemirrorIntegration";
 import { type ChainType } from "@/chainFactory";
@@ -12,8 +13,6 @@ import {
   DEFAULT_SYSTEM_PROMPT,
   EmbeddingModelProviders,
 } from "@/constants";
-import { UserMemoryManager } from "@/memory/UserMemoryManager";
-import { App } from "obsidian";
 import { logError } from "@/logger";
 
 /**
@@ -334,13 +333,15 @@ ${userPrompt}
   return basePrompt;
 }
 
-export async function getSystemPromptWithMemory(app: App | undefined): Promise<string> {
+export async function getSystemPromptWithMemory(
+  userMemoryManager: UserMemoryManager | undefined
+): Promise<string> {
   const systemPrompt = getSystemPrompt();
-  if (!app) {
-    logError("No app provided to getSystemPromptWithMemory");
+  if (!userMemoryManager) {
+    logError("No UserMemoryManager provided to getSystemPromptWithMemory");
     return getSystemPrompt();
   }
-  const memoryPrompt = await UserMemoryManager.getUserMemoryPrompt(app);
+  const memoryPrompt = await userMemoryManager.getUserMemoryPrompt();
   return `${systemPrompt}
   <user_memory>
   ${memoryPrompt}

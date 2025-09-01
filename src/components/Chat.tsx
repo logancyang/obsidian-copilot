@@ -11,7 +11,6 @@ import {
 import { ChainType } from "@/chainFactory";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
 import { logInfo } from "@/logger";
-import { UserMemoryManager } from "@/memory/UserMemoryManager";
 
 import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatInput";
@@ -544,7 +543,7 @@ const Chat: React.FC<ChatProps> = ({
       try {
         // Get the current chat model from the chain manager
         const chatModel = chainManager.chatModelManager.getChatModel();
-        UserMemoryManager.updateUserMemory(app, chatUIState.getMessages(), chatModel);
+        plugin.userMemoryManager.updateUserMemory(chatUIState.getMessages(), chatModel);
       } catch (error) {
         logInfo("Failed to analyze chat messages for memory:", error);
       }
@@ -579,7 +578,7 @@ const Chat: React.FC<ChatProps> = ({
     selectedChain,
     handleSaveAsNote,
     safeSet,
-    app,
+    plugin.userMemoryManager,
   ]);
 
   const handleLoadHistory = useCallback(() => {

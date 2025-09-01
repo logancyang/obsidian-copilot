@@ -14,9 +14,10 @@ import {
 } from "@/imageProcessing/imageProcessor";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logError, logInfo, logWarn } from "@/logger";
+import { checkIsPlusUser } from "@/plusUtils";
 import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
-import { ToolManager } from "@/tools/toolManager";
 import { writeToFileTool } from "@/tools/ComposerTools";
+import { ToolManager } from "@/tools/toolManager";
 import { ChatMessage } from "@/types/message";
 import {
   extractYoutubeUrl,
@@ -28,18 +29,17 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "../intentAnalyzer";
 import { BaseChainRunner } from "./BaseChainRunner";
 import { ActionBlockStreamer } from "./utils/ActionBlockStreamer";
-import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import {
   addChatHistoryToMessages,
-  processRawChatHistory,
   processedMessagesToTextOnly,
+  processRawChatHistory,
 } from "./utils/chatHistoryUtils";
-import { checkIsPlusUser } from "@/plusUtils";
 import {
+  extractSourcesFromSearchResults,
   formatSearchResultsForLLM,
   formatSearchResultStringForLLM,
-  extractSourcesFromSearchResults,
 } from "./utils/searchResultUtils";
+import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { deduplicateSources } from "./utils/toolExecution";
 
 export class CopilotPlusChainRunner extends BaseChainRunner {
@@ -76,6 +76,38 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     );
     ImageBatchProcessor.showFailedImagesNotice(failedImages);
     return processedImages;
+  }
+
+  private extractNoteContent(textContent: string): string {
+    // Extract content from both <note_context> and <active_note> blocks, but not from <url_content> blocks
+    const noteContextRegex = /<note_context>([\s\S]*?)<\/note_context>/g;
+    const activeNoteRegex = /<active_note>([\s\S]*?)<\/active_note>/g;
+    const contentRegex = /<content>([\s\S]*?)<\/content>/g;
+
+    let noteContent = "";
+    let match;
+
+    // Find all note_context blocks
+    while ((match = noteContextRegex.exec(textContent)) !== null) {
+      const noteBlock = match[1];
+      // Extract content from within this note_context block
+      let contentMatch;
+      while ((contentMatch = contentRegex.exec(noteBlock)) !== null) {
+        noteContent += contentMatch[1] + "\n\n";
+      }
+    }
+
+    // Find all active_note blocks
+    while ((match = activeNoteRegex.exec(textContent)) !== null) {
+      const noteBlock = match[1];
+      // Extract content from within this active_note block
+      let contentMatch;
+      while ((contentMatch = contentRegex.exec(noteBlock)) !== null) {
+        noteContent += contentMatch[1] + "\n\n";
+      }
+    }
+
+    return noteContent.trim();
   }
 
   private async extractEmbeddedImages(content: string, sourcePath?: string): Promise<string[]> {
@@ -162,11 +194,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     // Collect all image sources
     const imageSources: { urls: string[]; type: string }[] = [];
 
-    // Safely check and add context URLs
-    const contextUrls = userMessage.context?.urls;
-    if (contextUrls && contextUrls.length > 0) {
-      imageSources.push({ urls: contextUrls, type: "context" });
-    }
+    // NOTE: Context URLs are web pages we fetched content from, NOT images to process
+    // Do not add context URLs as image sources
 
     // Process embedded images only if setting is enabled
     if (settings.passMarkdownImages) {
@@ -185,9 +214,13 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         }
       }
 
-      const embeddedImages = await this.extractEmbeddedImages(textContent, sourcePath);
-      if (embeddedImages.length > 0) {
-        imageSources.push({ urls: embeddedImages, type: "embedded" });
+      // Extract note content (excluding URL content) for image processing
+      const noteContent = this.extractNoteContent(textContent);
+      if (noteContent) {
+        const embeddedImages = await this.extractEmbeddedImages(noteContent, sourcePath);
+        if (embeddedImages.length > 0) {
+          imageSources.push({ urls: embeddedImages, type: "embedded" });
+        }
       }
     }
 
@@ -746,6 +779,6 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
   }
 
   protected async getSystemPrompt(): Promise<string> {
-    return getSystemPromptWithMemory(this.chainManager.app);
+    return getSystemPromptWithMemory(this.chainManager.plugin?.userMemoryManager);
   }
 }

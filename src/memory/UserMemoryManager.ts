@@ -7,18 +7,61 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 
 const MAX_MEMORY_LINES = 40;
+const INSIGHT_UPDATE_THRESHOLD = 10; // Update insights every 10 new conversations
+
 /**
  * User Memory Management Class
  *
- * Static methods for building and managing user memory based on conversations.
+ * Instance-based methods for building and managing user memory based on conversations.
  * The UserMemoryManager has methods to add recent conversations, user facts to the user memory
  * which can then be used to personalize LLM response.
  */
 export class UserMemoryManager {
+  private app: App;
+  private recentConversationsContent: string = "";
+  private userInsightsContent: string = "";
+  private newestUserInsightTimestamp: Date | null = null;
+  private isUpdatingMemory: boolean = false;
+
+  constructor(app: App) {
+    this.app = app;
+  }
+
+  /**
+   * Load memory data from files into class fields
+   */
+  async loadMemory(): Promise<void> {
+    try {
+      const recentConversationsFile = this.app.vault.getAbstractFileByPath(
+        this.getRecentConversationFilePath()
+      );
+      if (recentConversationsFile instanceof TFile) {
+        this.recentConversationsContent = await this.app.vault.read(recentConversationsFile);
+      }
+    } catch (error) {
+      logError("[UserMemoryManager] Error reading recent conversations file:", error);
+    }
+
+    try {
+      const userInsightsFile = this.app.vault.getAbstractFileByPath(this.getUserInsightsFilePath());
+      if (userInsightsFile instanceof TFile) {
+        this.userInsightsContent = await this.app.vault.read(userInsightsFile);
+        const userInsightsLines = this.userInsightsContent
+          .split("\n")
+          .filter((line) => line.trim().startsWith("- "));
+        this.newestUserInsightTimestamp = this.extractTimestampFromLine(
+          userInsightsLines[userInsightsLines.length - 1]
+        );
+      }
+    } catch (error) {
+      logError("[UserMemoryManager] Error reading user insights file:", error);
+    }
+  }
+
   /**
    * Runs the user memory operation in the background without blocking execution
    */
-  static updateUserMemory(app: App, messages: ChatMessage[], chatModel?: BaseChatModel): void {
+  updateUserMemory(messages: ChatMessage[], chatModel?: BaseChatModel): void {
     const settings = getSettings();
 
     // Only proceed if memory is enabled
@@ -33,7 +76,7 @@ export class UserMemoryManager {
     }
 
     // Fire and forget - run in background
-    updateMemory(app, messages, chatModel).catch((error) => {
+    this.updateMemory(messages, chatModel).catch((error) => {
       logError("[UserMemoryManager] Background user memory operation failed:", error);
     });
   }
@@ -41,24 +84,18 @@ export class UserMemoryManager {
   /**
    * Get user memory prompt
    */
-  static async getUserMemoryPrompt(app: App): Promise<string | null> {
-    const memoryFileMap = {
-      "Recent Conversation Content": getRecentConversationFilePath(),
-      "User Insights": getUserInsightsFilePath(),
-    };
+  async getUserMemoryPrompt(): Promise<string | null> {
+    await this.loadMemory();
 
     try {
       let memoryPrompt = "";
 
-      // Read all memory files using the map
-      for (const [sectionName, filePath] of Object.entries(memoryFileMap)) {
-        const file = app.vault.getAbstractFileByPath(filePath);
-        if (file instanceof TFile) {
-          const content = await app.vault.read(file);
-          if (content) {
-            memoryPrompt += `\n# ${sectionName}\n${content}\n`;
-          }
-        }
+      if (this.recentConversationsContent) {
+        memoryPrompt += `\n# Recent Conversation Content\n${this.recentConversationsContent}\n`;
+      }
+
+      if (this.userInsightsContent) {
+        memoryPrompt += `\n# User Insights\n${this.userInsightsContent}\n`;
       }
 
       return memoryPrompt.length > 0 ? memoryPrompt : null;
@@ -67,147 +104,231 @@ export class UserMemoryManager {
       return null;
     }
   }
-}
 
-/**
- * Analyze chat messages and store useful information in user memory files
- */
-async function updateMemory(
-  app: App,
-  messages: ChatMessage[],
-  chatModel?: BaseChatModel
-): Promise<void> {
-  try {
-    // Ensure user memory folder exists
-    await ensureMemoryFolderExists(app);
-
-    if (!chatModel) {
-      logError("[UserMemoryManager] No chat model available, skipping memory update");
-      return;
-    }
-
-    if (messages.length === 0) {
-      logInfo("[UserMemoryManager] No messages available, skipping memory update");
-      return;
-    }
-
-    // Extract all information in a single LLM call for better performance
-    const extractedInfo = await extractConversationInfo(app, messages, chatModel);
-
-    // 1. Save conversation summary to recent conversations
-    const timestamp = new Date().toISOString().split(".")[0]; // Remove milliseconds and Z
+  /**
+   * Create a conversation line from messages and return it
+   */
+  private async createConversationLine(
+    messages: ChatMessage[],
+    chatModel: BaseChatModel
+  ): Promise<string> {
+    const conversationSummary = await this.extractConversationSummary(messages, chatModel);
+    const timestamp = new Date().toISOString().split(".")[0] + "Z"; // Remove milliseconds but keep Z for UTC
     const userMessageTexts = messages
       .filter((message) => message.sender === USER_SENDER)
       .map((message) => message.message);
     const content = userMessageTexts.join("||||");
-    const conversationLine = `${timestamp} ${extractedInfo.summary}||||${content}`;
+    return `${timestamp} ${conversationSummary}||||${content}`;
+  }
 
-    if (conversationLine) {
-      await addToMemoryFile(app, getRecentConversationFilePath(), conversationLine);
+  /**
+   * Analyze chat messages and store useful information in user memory files
+   */
+  private async updateMemory(messages: ChatMessage[], chatModel?: BaseChatModel): Promise<void> {
+    // Prevent race conditions by ensuring only one memory update operation runs at a time
+    if (this.isUpdatingMemory) {
+      logInfo("[UserMemoryManager] Memory update already in progress, skipping.");
+      return;
     }
 
-    // 2. Save user insights (if extracted)
-    if (extractedInfo.userInsights) {
-      try {
-        console.log("[UserMemoryManager] Saving user insights:", extractedInfo.userInsights);
-        await addToMemoryFile(app, getUserInsightsFilePath(), extractedInfo.userInsights);
-      } catch (error) {
-        logError("[UserMemoryManager] Error saving user insights:", error);
+    this.isUpdatingMemory = true;
+    try {
+      // Ensure user memory folder exists
+      await this.ensureMemoryFolderExists();
+
+      if (!chatModel) {
+        logError("[UserMemoryManager] No chat model available, skipping memory update");
+        return;
       }
+
+      if (messages.length === 0) {
+        logInfo("[UserMemoryManager] No messages available, skipping memory update");
+        return;
+      }
+
+      // 1. Always extract and save conversation summary to recent conversations
+      const conversationLine = await this.createConversationLine(messages, chatModel);
+      await this.addToMemoryFile(this.getRecentConversationFilePath(), conversationLine);
+
+      // 2. Check if user insights should be updated
+      // We update insights every INSIGHT_UPDATE_THRESHOLD conversations to ensure
+      // important user information is preserved in long-term memory before being
+      // rotated out of the short-term conversation buffer
+      await this.loadMemory();
+      if (this.shouldUpdateUserInsights()) {
+        logInfo("[UserMemoryManager] Updating user insights based on recent conversation activity");
+        const userInsights = await this.extractUserInsights(chatModel);
+        if (userInsights) {
+          try {
+            console.log("[UserMemoryManager] Saving user insights:", userInsights);
+            const timestamp = new Date().toISOString().split(".")[0] + "Z";
+            const timestampedInsight = `${timestamp} ${userInsights}`;
+            await this.addToMemoryFile(this.getUserInsightsFilePath(), timestampedInsight);
+          } catch (error) {
+            logError("[UserMemoryManager] Error saving user insights:", error);
+          }
+        }
+      } else {
+        logInfo(
+          "[UserMemoryManager] Skipping user insights update - not enough new conversations since last insight"
+        );
+      }
+    } catch (error) {
+      logError("[UserMemoryManager] Error analyzing chat messages for user memory:", error);
+    } finally {
+      this.isUpdatingMemory = false;
     }
-  } catch (error) {
-    logError("[UserMemoryManager] Error analyzing chat messages for user memory:", error);
   }
-}
 
-/**
- * Ensure the user memory folder exists
- */
-async function ensureMemoryFolderExists(app: App): Promise<void> {
-  const settings = getSettings();
-  const memoryFolderPath = settings.memoryFolderName;
+  /**
+   * Ensure the user memory folder exists
+   */
+  private async ensureMemoryFolderExists(): Promise<void> {
+    const settings = getSettings();
+    const memoryFolderPath = settings.memoryFolderName;
 
-  const folder = app.vault.getAbstractFileByPath(memoryFolderPath);
-  if (!folder) {
-    await app.vault.createFolder(memoryFolderPath);
-    logInfo(`[UserMemoryManager] Created user memory folder: ${memoryFolderPath}`);
+    const folder = this.app.vault.getAbstractFileByPath(memoryFolderPath);
+    if (!folder) {
+      await this.app.vault.createFolder(memoryFolderPath);
+      logInfo(`[UserMemoryManager] Created user memory folder: ${memoryFolderPath}`);
+    }
   }
-}
 
-function getRecentConversationFilePath(): string {
-  const settings = getSettings();
-  return `${settings.memoryFolderName}/recent_conversation_content.md`;
-}
+  private getRecentConversationFilePath(): string {
+    const settings = getSettings();
+    return `${settings.memoryFolderName}/recent_conversation_content.md`;
+  }
 
-function getUserInsightsFilePath(): string {
-  const settings = getSettings();
-  return `${settings.memoryFolderName}/user_insights.md`;
-}
+  private getUserInsightsFilePath(): string {
+    const settings = getSettings();
+    return `${settings.memoryFolderName}/user_insights.md`;
+  }
 
-/**
- * Save content to the user memory file by appending new conversation
- */
-async function addToMemoryFile(app: App, filePath: string, newContent: string): Promise<void> {
-  const newConversationLine = `- ${newContent}`;
+  /**
+   * Save content to the user memory file by appending new conversation
+   * Maintains a rolling buffer of conversations by removing the oldest when limit is exceeded
+   */
+  private async addToMemoryFile(filePath: string, newContent: string): Promise<void> {
+    const newConversationLine = `- ${newContent}`;
 
-  try {
-    const existingFile = app.vault.getAbstractFileByPath(filePath);
+    const existingFile = this.app.vault.getAbstractFileByPath(filePath);
 
     if (existingFile instanceof TFile) {
       // Read existing conversation lines, append the new line.
       // Make sure the content lines do not exceed 40 lines. If it does, remove the first line.
-      const fileContent = await app.vault.read(existingFile);
+      const fileContent = await this.app.vault.read(existingFile);
       const lines = fileContent.split("\n");
       lines.push(newConversationLine);
 
       if (lines.length > MAX_MEMORY_LINES) {
-        // Remove the first line to keep within 40 lines limit
+        // Remove the first line to keep within the limit
         lines.shift();
       }
 
       const updatedContent = lines.join("\n");
-      await app.vault.modify(existingFile, updatedContent);
+      await this.app.vault.modify(existingFile, updatedContent);
     } else {
-      await app.vault.create(filePath, newConversationLine);
+      await this.app.vault.create(filePath, newConversationLine);
     }
-  } catch (error) {
-    logError(`[UserMemoryManager] Error saving to user memory file ${filePath}:`, error);
-    throw error;
-  }
-}
-
-/**
- * Extract all conversation information using a single LLM call for better performance
- */
-async function extractConversationInfo(
-  app: App,
-  messages: ChatMessage[],
-  chatModel: BaseChatModel
-): Promise<{
-  summary: string;
-  userInsights: string | null;
-}> {
-  const conversationText = messages.map((msg) => `${msg.sender}: ${msg.message}`).join("\n\n");
-
-  // Read existing memory to avoid duplication
-  let existingInsights = "";
-
-  try {
-    const userInsightsFile = app.vault.getAbstractFileByPath(getUserInsightsFilePath());
-    if (userInsightsFile instanceof TFile) {
-      existingInsights = await app.vault.read(userInsightsFile);
-    }
-  } catch (error) {
-    logError("[UserMemoryManager] Error reading existing memory files:", error);
   }
 
-  const systemPrompt = `You are an AI assistant that analyzes conversations and extracts two types of information:
+  /**
+   * Check if user insights should be updated based on conversation count
+   * Updates when there are at least INSIGHT_UPDATE_THRESHOLD new conversations since the last insight
+   */
+  private shouldUpdateUserInsights(): boolean {
+    try {
+      // Always update if no insights exist yet
+      if (this.newestUserInsightTimestamp === null) {
+        return true;
+      }
 
-1. CONVERSATION SUMMARY: A very brief summary in 2-5 words maximum 
+      // Always update if no recent conversations exist
+      if (!this.recentConversationsContent.trim()) {
+        return false;
+      }
+
+      // Count conversations newer than the latest insight
+      const recentLines = this.recentConversationsContent
+        .split("\n")
+        .filter((line) => line.trim().startsWith("- "));
+      const newConversationsCount = recentLines.filter((line) => {
+        const timestamp = this.extractTimestampFromLine(line);
+        return timestamp && timestamp > this.newestUserInsightTimestamp!;
+      }).length;
+
+      // Update if we have enough new conversations
+      return newConversationsCount >= INSIGHT_UPDATE_THRESHOLD;
+    } catch (error) {
+      logError("[UserMemoryManager] Error checking if user insights should be updated:", error);
+      // If there's an error, err on the side of updating
+      return true;
+    }
+  }
+
+  /**
+   * Extract timestamp from a memory line (format: "- YYYY-MM-DDTHH:mm:ss ...")
+   */
+  private extractTimestampFromLine(line: string): Date | null {
+    if (!line) return null;
+
+    // Remove "- " prefix and extract timestamp
+    const trimmed = line.replace(/^-\s*/, "");
+    const timestampMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/);
+
+    if (!timestampMatch) {
+      logError("[UserMemoryManager] Error extracting timestamp from line:", line);
+      return null;
+    }
+    return new Date(timestampMatch[1] + "Z"); // Add Z for UTC
+  }
+
+  /**
+   * Extract conversation summary using LLM
+   */
+  private async extractConversationSummary(
+    messages: ChatMessage[],
+    chatModel: BaseChatModel
+  ): Promise<string> {
+    const conversationText = messages.map((msg) => `${msg.sender}: ${msg.message}`).join("\n\n");
+
+    const systemPrompt = `You are an AI assistant that analyzes conversations and extracts a brief summary.
+
+CONVERSATION SUMMARY: A very brief summary in 2-5 words maximum 
 
 Examples: "Travel Plan", "Tokyo Weather"
 
-2. USER INSIGHTS: NEW factual information or preferences written in a short sentence.
+# OUTPUT FORMAT
+Return only the brief 2-5 word summary as plain text, no JSON format needed.`;
+
+    const humanPrompt = `Analyze this conversation and extract a brief summary:
+
+${conversationText}`;
+
+    const messages_llm = [new SystemMessage(systemPrompt), new HumanMessage(humanPrompt)];
+
+    try {
+      const response = await chatModel.invoke(messages_llm);
+      const summary = response.content.toString().trim();
+      return summary || "No summary";
+    } catch (error) {
+      logError("[UserMemoryManager] Failed to extract conversation summary:", error);
+      return "No summary";
+    }
+  }
+
+  /**
+   * Extract user insights using LLM with deduplication from class fields
+   */
+  private async extractUserInsights(chatModel: BaseChatModel): Promise<string | null> {
+    if (!this.recentConversationsContent.trim()) {
+      logInfo("[UserMemoryManager] No recent conversations found for insight extraction");
+      return null;
+    }
+
+    const systemPrompt = `You are an AI assistant that analyzes past conversations and extracts user insights.
+
+USER INSIGHTS: NEW factual information or preferences written in a short sentence.
 
 The insights should have long-term impact on the user's behavior or preferences. Like their name, profession, learning goals, etc.
 
@@ -228,45 +349,36 @@ Examples: "User's name is John", "User is studying software engineering"
 IMPORTANT: Only extract NEW information that is NOT already captured in the existing memory below.
 
 <existing_insights>
-${existingInsights || "None"}
+${this.userInsightsContent || "None"}
 </existing_insights>
 
 # OUTPUT FORMAT
-Return your analysis in this exact JSON format with below keys:
-* summary: String. brief 2-5 word summary.
-* userInsights (optional): String. Only return if there are new insights found.`;
+Return only the new user insight as plain text, or return "NONE" if no new insights are found.`;
 
-  const humanPrompt = `Analyze this conversation and extract the summary and any NEW user insights not already captured:
+    const humanPrompt = `Analyze these recent conversations and extract any NEW user insights not already captured.
 
-${conversationText}`;
+  Each line is a separate conversation in the format: "<timestamp> <conversation summary>||||<user messages>".
 
-  const messages_llm = [new SystemMessage(systemPrompt), new HumanMessage(humanPrompt)];
+${this.recentConversationsContent}`;
 
-  try {
-    const response = await chatModel.invoke(messages_llm);
-    const responseText = response.content.toString().trim();
-    // Unwrap the response if it's wrapped in code blocks
-    let unwrappedResponse = responseText;
-    if (responseText.startsWith("```json") && responseText.endsWith("```")) {
-      unwrappedResponse = responseText.slice(7, -3).trim();
-    } else if (responseText.startsWith("```") && responseText.endsWith("```")) {
-      unwrappedResponse = responseText.slice(3, -3).trim();
-    }
+    const messages_llm = [new SystemMessage(systemPrompt), new HumanMessage(humanPrompt)];
 
-    // Parse JSON response
-    let parsedResponse;
     try {
-      parsedResponse = JSON.parse(unwrappedResponse);
-    } catch (parseError) {
-      logError("[UserMemoryManager] Failed to parse LLM response as JSON:", parseError);
-    }
+      const response = await chatModel.invoke(messages_llm);
+      const insight = response.content.toString().trim();
 
-    return parsedResponse;
-  } catch (error) {
-    logError("[UserMemoryManager] Failed to extract conversation info:", error);
-    return {
-      summary: "No summary",
-      userInsights: null,
-    };
+      if (
+        !insight ||
+        insight.toLowerCase() === "none" ||
+        insight.toLowerCase() === "no new insights"
+      ) {
+        return null;
+      }
+
+      return insight;
+    } catch (error) {
+      logError("[UserMemoryManager] Failed to extract user insights:", error);
+      return null;
+    }
   }
 }

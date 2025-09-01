@@ -2,7 +2,6 @@ import CopilotView from "@/components/CopilotView";
 import { CHAT_VIEWTYPE } from "@/constants";
 import CopilotPlugin from "@/main";
 import { getSettings } from "@/settings/model";
-import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { logInfo } from "@/logger";
 import { App, Notice, PluginSettingTab } from "obsidian";
 import React from "react";
@@ -28,8 +27,7 @@ export class CopilotSettingTab extends PluginSettingTab {
           // Get the current chat model from the chain manager
           const chainManager = this.plugin.projectManager.getCurrentChainManager();
           const chatModel = chainManager.chatModelManager.getChatModel();
-          UserMemoryManager.updateUserMemory(
-            this.app,
+          this.plugin.userMemoryManager.updateUserMemory(
             this.plugin.chatUIState.getMessages(),
             chatModel
           );
