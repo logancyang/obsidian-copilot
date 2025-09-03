@@ -175,7 +175,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         const unwrapXmlCodeblocks = (text: string): string => {
           // Pattern to match XML codeblocks that contain writeToFile tags
           const xmlCodeblockRegex =
-            /```xml\s*([\s\S]*?<writeToFile>[\s\S]*?<\/writeToFile>[\s\S]*?)\s*```/g;
+            /```(?:xml)?\s*([\s\S]*?<writeToFile>[\s\S]*?<\/writeToFile>[\s\S]*?)\s*```/g;
 
           return text.replace(xmlCodeblockRegex, (match, xmlContent) => {
             // Extract just the content inside the codeblock and return it without the codeblock wrapper
