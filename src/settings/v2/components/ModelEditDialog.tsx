@@ -18,7 +18,7 @@ import {
 import { getSettings } from "@/settings/model";
 import { debounce, getProviderInfo, getProviderLabel } from "@/utils";
 import { HelpCircle } from "lucide-react";
-import { App, Modal } from "obsidian";
+import { App, Modal, Platform } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { ParameterControl } from "@/components/ui/parameter-controls";
@@ -430,7 +430,11 @@ export class ModelEditModal extends Modal {
   }
 
   onOpen() {
-    const { contentEl } = this;
+    const { contentEl, modalEl } = this;
+    // It occupies only 80% of the height, leaving a clickable blank area to prevent the close icon from malfunctioning.
+    if (Platform.isMobile) {
+      modalEl.style.height = "80%";
+    }
     this.root = createRoot(contentEl);
 
     const handleUpdate = (
