@@ -7,31 +7,43 @@ import {
   useProjectLoading,
 } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { CustomCommandManager } from "@/commands/customCommandManager";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { sortSlashCommands } from "@/commands/customCommandUtils";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { getCachedCustomCommands } from "@/commands/state";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
 import { AddImageModal } from "@/components/modals/AddImageModal";
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { ListPromptModal } from "@/components/modals/ListPromptModal";
 import { Button } from "@/components/ui/button";
 import { ModelSelector } from "@/components/ui/ModelSelector";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChatToolControls } from "./ChatToolControls";
+import LexicalEditor from "./LexicalEditor";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { ContextProcessor } from "@/contextProcessor";
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
 import { isPlusChain } from "@/utils";
 
 import { useSettingsValue } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { getToolDescription } from "@/tools/toolManager";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { extractNoteFiles, isAllowedFileForContext, isNoteTitleUnique } from "@/utils";
 import { CornerDownLeft, Image, Loader2, StopCircle, X } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { App, Platform, TFile } from "obsidian";
 import React, {
   forwardRef,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -196,6 +208,13 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       });
     };
 
+    // TODO: Re-implement these features for Lexical editor:
+    // - Slash commands (/)
+    // - Note references ([[]])
+    // - Tool mentions (@)
+    // - URL extraction and context updates
+
+    /* LEGACY TEXTAREA HANDLERS - TO BE ADAPTED FOR LEXICAL
     const handleInputChange = async (event: React.ChangeEvent<HTMLTextAreaElement>) => {
       const inputValue = event.target.value;
       const cursorPos = event.target.selectionStart;
@@ -241,10 +260,55 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       }
     };
 
-    useEffect(() => {
-      adjustTextareaHeight();
-    }, [inputMessage]);
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.nativeEvent.isComposing) return;
 
+      if (e.key === "Enter") {
+        // send msg:
+        // 1. non-mobile platforms: only input Enter
+        // 2. mobile platforms: Shift+Enter
+        const shouldSendMessage =
+          (!e.shiftKey && !Platform.isMobile) || (e.shiftKey && Platform.isMobile);
+
+        if (!shouldSendMessage) {
+          // do nothing here, allowing the default newline behavior
+          return;
+        }
+
+        e.preventDefault();
+        onSendMessage();
+      }
+    };
+
+    const handlePaste = useCallback(
+      async (e: React.ClipboardEvent) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+
+        const imageItems = Array.from(items).filter((item) => item.type.indexOf("image") !== -1);
+
+        if (imageItems.length > 0) {
+          e.preventDefault();
+
+          const files = await Promise.all(
+            imageItems.map((item) => {
+              const file = item.getAsFile();
+              if (!file) return null;
+              return file;
+            })
+          );
+
+          const validFiles = files.filter((file) => file !== null);
+          if (validFiles.length > 0) {
+            onAddImage(validFiles);
+          }
+        }
+      },
+      [onAddImage]
+    );
+    */
+
+    /* LEGACY HELPER FUNCTIONS - TO BE ADAPTED FOR LEXICAL
     const showNoteTitleModal = (cursorPos: number) => {
       const fetchNoteTitles = async () => {
         const contextProcessor = ContextProcessor.getInstance();
@@ -346,55 +410,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         optionsWithDescriptions.map((o) => o.description)
       ).open();
     };
-
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.nativeEvent.isComposing) return;
-
-      if (e.key === "Enter") {
-        /**
-         * send msg:
-         *         1. non-mobile platforms: only input Enter
-         *         2. mobile platforms: Shift+Enter
-         */
-        const shouldSendMessage =
-          (!e.shiftKey && !Platform.isMobile) || (e.shiftKey && Platform.isMobile);
-
-        if (!shouldSendMessage) {
-          // do nothing here, allowing the default newline behavior
-          return;
-        }
-
-        e.preventDefault();
-        onSendMessage();
-      }
-    };
-
-    const handlePaste = useCallback(
-      async (e: React.ClipboardEvent) => {
-        const items = e.clipboardData?.items;
-        if (!items) return;
-
-        const imageItems = Array.from(items).filter((item) => item.type.indexOf("image") !== -1);
-
-        if (imageItems.length > 0) {
-          e.preventDefault();
-
-          const files = await Promise.all(
-            imageItems.map((item) => {
-              const file = item.getAsFile();
-              if (!file) return null;
-              return file;
-            })
-          );
-
-          const validFiles = files.filter((file) => file !== null);
-          if (validFiles.length > 0) {
-            onAddImage(validFiles);
-          }
-        }
-      },
-      [onAddImage]
-    );
+    */
 
     useEffect(() => {
       // Get all note titles that are referenced using [[note]] syntax in the input
@@ -551,17 +567,15 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
               </div>
             </div>
           )}
-          <textarea
+          <LexicalEditor
             ref={textAreaRef}
-            className="tw-max-h-40 tw-min-h-[60px] tw-w-full tw-resize-none tw-overflow-y-auto tw-rounded-md tw-border-none tw-bg-transparent tw-px-2 tw-text-sm tw-text-normal placeholder:tw-text-sm placeholder:tw-text-muted/60 focus-visible:tw-ring-0"
+            value={inputMessage}
+            onChange={(value) => setInputMessage(value)}
+            onSubmit={onSendMessage}
             placeholder={
               "Ask anything. [[ for notes. / for custom prompts. " +
               (isCopilotPlus ? "@ for tools." : "")
             }
-            value={inputMessage}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
             disabled={isProjectLoading}
           />
           <input {...getInputProps()} />
