@@ -9,6 +9,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { KEY_ENTER_COMMAND } from "lexical";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { SlashCommandPlugin } from "./SlashCommandPlugin";
+import { NoteCommandPlugin } from "./NoteCommandPlugin";
 import { cn } from "@/lib/utils";
 
 interface LexicalEditorProps {
@@ -142,6 +143,7 @@ const LexicalEditor = forwardRef<{ focus: () => void }, LexicalEditorProps>(
           <ValueSyncPlugin value={value} />
           <FocusPlugin onFocus={setFocusFn} />
           <SlashCommandPlugin />
+          <NoteCommandPlugin />
         </div>
       </LexicalComposer>
     );
