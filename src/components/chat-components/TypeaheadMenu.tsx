@@ -185,7 +185,7 @@ export const TypeaheadMenu: React.FC<TypeaheadMenuProps> = ({
   const menu = (
     <div
       className={cn(
-        "tw-absolute tw-max-h-60 tw-min-w-80 tw-max-w-96 tw-overflow-y-auto tw-rounded-lg tw-border tw-border-border tw-bg-primary tw-shadow-lg"
+        "tw-absolute tw-max-h-60 tw-min-w-80 tw-max-w-96 tw-overflow-y-auto tw-rounded-lg tw-border tw-border-solid tw-border-border tw-bg-primary tw-shadow-lg"
       )}
       style={{
         top: position.top,
@@ -224,9 +224,7 @@ export const TypeaheadMenu: React.FC<TypeaheadMenuProps> = ({
   const preview =
     showPreview && previewPosition && options[selectedIndex]?.content ? (
       <div
-        className={cn(
-          "tw-overflow-hidden tw-rounded-md tw-border tw-border-border tw-bg-primary tw-shadow-lg"
-        )}
+        className={cn("tw-overflow-hidden tw-rounded-md tw-bg-primary tw-shadow-xl")}
         style={{
           position: "absolute",
           top: previewPosition.top ?? 0,
