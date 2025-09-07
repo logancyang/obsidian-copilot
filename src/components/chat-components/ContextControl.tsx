@@ -20,6 +20,7 @@ interface ChatControlsProps {
   selectedTextContexts?: SelectedTextContext[];
   onRemoveSelectedText?: (id: string) => void;
   showProgressCard: () => void;
+  onContextRemoved?: (notePath: string) => void;
 }
 
 const ContextControl: React.FC<ChatControlsProps> = ({
@@ -35,6 +36,7 @@ const ContextControl: React.FC<ChatControlsProps> = ({
   selectedTextContexts,
   onRemoveSelectedText,
   showProgressCard,
+  onContextRemoved,
 }) => {
   const [selectedChain] = useChainType();
   const handleAddContext = () => {
@@ -77,6 +79,11 @@ const ContextControl: React.FC<ChatControlsProps> = ({
 
     // Always remove from contextNotes - this triggers pill removal
     setContextNotes((prev) => prev.filter((note) => note.path !== path));
+
+    // Call the callback to remove pills from the editor
+    if (onContextRemoved) {
+      onContextRemoved(path);
+    }
   };
 
   // Context menu is now available for all chain types
