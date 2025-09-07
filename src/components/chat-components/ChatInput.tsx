@@ -23,6 +23,7 @@ import { CornerDownLeft, Image, Loader2, StopCircle, X } from "lucide-react";
 import { App, TFile } from "obsidian";
 import React, {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -543,6 +544,10 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       [contextNotes, includeActiveNote, currentActiveNote]
     );
 
+    const onEditorReady = useCallback((editor: any) => {
+      editorRef.current = editor;
+    }, []);
+
     return (
       <div
         className="tw-flex tw-w-full tw-flex-col tw-gap-0.5 tw-rounded-md tw-border tw-border-solid tw-border-border tw-px-1 tw-pb-1 tw-pt-2 tw-@container/chat-input"
@@ -601,9 +606,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
             onSubmit={onSendMessage}
             onNotesChange={setNotesFromPills}
             onNotesRemoved={handlePillsRemoved}
-            onEditorReady={(editor) => {
-              editorRef.current = editor;
-            }}
+            onEditorReady={onEditorReady}
             placeholder={
               "Ask anything. [[ for notes. / for custom prompts. " +
               (isCopilotPlus ? "@ for tools." : "")
