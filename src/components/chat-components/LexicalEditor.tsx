@@ -10,6 +10,7 @@ import { KEY_ENTER_COMMAND } from "lexical";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { SlashCommandPlugin } from "./SlashCommandPlugin";
 import { NoteCommandPlugin } from "./NoteCommandPlugin";
+import { NotePillPlugin, NotePillNode, $isNotePillNode } from "./NotePillPlugin";
 import { cn } from "@/lib/utils";
 
 interface LexicalEditorProps {
@@ -19,6 +20,8 @@ interface LexicalEditorProps {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  contextNotes?: { path: string; basename: string }[];
+  onNotesChange?: (notes: { path: string; basename: string }[]) => void;
 }
 
 // Custom plugin to handle keyboard events
@@ -80,6 +83,119 @@ function FocusPlugin({ onFocus }: { onFocus: (focusFn: () => void) => void }) {
   return null;
 }
 
+// Plugin to sync pills with context notes and track pill changes
+function NotePillSyncPlugin({
+  contextNotes = [],
+  onNotesChange,
+}: {
+  contextNotes?: { path: string; basename: string }[];
+  onNotesChange?: (notes: { path: string; basename: string }[]) => void;
+}) {
+  const [editor] = useLexicalComposerContext();
+  const prevContextNotesRef = React.useRef<{ path: string; basename: string }[]>([]);
+
+  // Sync pills with context - remove pills that are no longer in context
+  React.useEffect(() => {
+    // Check if contextNotes actually changed to avoid unnecessary processing
+    const prevPaths = prevContextNotesRef.current.map((note) => note.path).sort();
+    const currentPaths = contextNotes.map((note) => note.path).sort();
+
+    if (JSON.stringify(prevPaths) === JSON.stringify(currentPaths)) {
+      return; // No change, skip processing
+    }
+
+    prevContextNotesRef.current = contextNotes;
+    const contextPaths = new Set(contextNotes.map((note) => note.path));
+    console.log("NotePillSyncPlugin: Context notes changed, paths:", Array.from(contextPaths));
+
+    // Add small delay to avoid race conditions
+    const timeoutId = setTimeout(() => {
+      editor.update(() => {
+        const root = $getRoot();
+        const pillsToRemove: NotePillNode[] = [];
+        const currentPills: string[] = [];
+
+        function traverse(node: any) {
+          if ($isNotePillNode(node)) {
+            const notePath = node.getNotePath();
+            currentPills.push(notePath);
+            if (!contextPaths.has(notePath)) {
+              console.log("Marking pill for removal:", notePath);
+              pillsToRemove.push(node);
+            }
+          }
+
+          // Only traverse children if the node has the getChildren method
+          if (typeof node.getChildren === "function") {
+            const children = node.getChildren();
+            for (const child of children) {
+              traverse(child);
+            }
+          }
+        }
+
+        traverse(root);
+
+        console.log("Current pills in editor:", currentPills);
+        console.log("Pills to remove count:", pillsToRemove.length);
+
+        // Remove pills that are no longer in context
+        pillsToRemove.forEach((pill) => {
+          console.log("Actually removing pill:", pill.getNoteTitle());
+          const textNode = $createTextNode(`[[${pill.getNoteTitle()}]]`);
+          pill.replace(textNode);
+        });
+      });
+    }, 10); // Small delay
+
+    return () => clearTimeout(timeoutId);
+  }, [editor, contextNotes]);
+
+  // Track pill changes and notify parent
+  React.useEffect(() => {
+    if (!onNotesChange) return;
+
+    const prevNotesRef = { current: [] as { path: string; basename: string }[] };
+
+    return editor.registerUpdateListener(({ editorState }) => {
+      editorState.read(() => {
+        const notes: { path: string; basename: string }[] = [];
+        const root = $getRoot();
+
+        function traverse(node: any) {
+          if ($isNotePillNode(node)) {
+            notes.push({
+              path: node.getNotePath(),
+              basename: node.getNoteTitle(),
+            });
+          }
+
+          // Only traverse children if the node has the getChildren method
+          if (typeof node.getChildren === "function") {
+            const children = node.getChildren();
+            for (const child of children) {
+              traverse(child);
+            }
+          }
+        }
+
+        traverse(root);
+
+        // Only call onNotesChange if the notes actually changed
+        const prevPaths = prevNotesRef.current.map((note) => note.path).sort();
+        const currentPaths = notes.map((note) => note.path).sort();
+
+        if (JSON.stringify(prevPaths) !== JSON.stringify(currentPaths)) {
+          prevNotesRef.current = notes;
+          onNotesChange(notes);
+        }
+      });
+    });
+  }, [editor, onNotesChange]);
+
+  return null;
+}
+
 const LexicalEditor = forwardRef<{ focus: () => void }, LexicalEditorProps>(
   (
     {
@@ -89,6 +205,8 @@ const LexicalEditor = forwardRef<{ focus: () => void }, LexicalEditorProps>(
       placeholder = "Type a message...",
       disabled = false,
       className = "",
+      contextNotes = [],
+      onNotesChange,
     },
     ref
   ) => {
@@ -106,6 +224,7 @@ const LexicalEditor = forwardRef<{ focus: () => void }, LexicalEditorProps>(
         root: "tw-outline-none",
         paragraph: "tw-m-0",
       },
+      nodes: [NotePillNode],
       onError: (error: Error) => {
         console.error("Lexical error:", error);
       },
@@ -142,8 +261,10 @@ const LexicalEditor = forwardRef<{ focus: () => void }, LexicalEditorProps>(
           <KeyboardPlugin onSubmit={onSubmit} />
           <ValueSyncPlugin value={value} />
           <FocusPlugin onFocus={setFocusFn} />
+          <NotePillSyncPlugin contextNotes={contextNotes} onNotesChange={onNotesChange} />
           <SlashCommandPlugin />
           <NoteCommandPlugin />
+          <NotePillPlugin />
         </div>
       </LexicalComposer>
     );

@@ -10,11 +10,13 @@ import {
   KEY_ENTER_COMMAND,
   KEY_ESCAPE_COMMAND,
   KEY_TAB_COMMAND,
+  $createTextNode,
 } from "lexical";
 import fuzzysort from "fuzzysort";
 import { TFile, App } from "obsidian";
 import { logInfo } from "@/logger";
 import { TypeaheadMenu, tryToPositionRange, TypeaheadOption } from "./TypeaheadMenu";
+import { $createNotePillNode } from "./NotePillPlugin";
 
 // Get app instance
 declare const app: App;
@@ -160,7 +162,7 @@ export function NoteCommandPlugin(): JSX.Element {
         const selection = $getSelection();
         if (!$isRangeSelection(selection)) return;
 
-        // Replace the [[ and query text with the note link
+        // Replace the [[ and query text with a note pill
         const anchor = selection.anchor;
 
         // Find the [[ position
@@ -170,17 +172,33 @@ export function NoteCommandPlugin(): JSX.Element {
           const bracketIndex = textContent.lastIndexOf("[[", anchor.offset);
 
           if (bracketIndex !== -1) {
-            // Replace from [[ to current position
+            // Split the text and insert pill
             const beforeBracket = textContent.slice(0, bracketIndex);
             const afterQuery = textContent.slice(anchor.offset);
 
-            const noteLink = `[[${option.title}]]`;
-            const newText = beforeBracket + noteLink + afterQuery;
-            anchorNode.setTextContent(newText);
+            // Check if this is the active note
+            const activeNote = app?.workspace.getActiveFile();
+            const isActive = activeNote?.path === option.file.path;
 
-            // Set cursor after the inserted note link
-            const newOffset = beforeBracket.length + noteLink.length;
-            anchorNode.select(newOffset, newOffset);
+            // Create the pill node
+            const pillNode = $createNotePillNode(option.title, option.file.path, isActive);
+
+            // Replace the text with before + pill + after
+            if (beforeBracket) {
+              anchorNode.setTextContent(beforeBracket);
+              anchorNode.insertAfter(pillNode);
+              if (afterQuery) {
+                pillNode.insertAfter($createTextNode(afterQuery));
+              }
+            } else {
+              anchorNode.replace(pillNode);
+              if (afterQuery) {
+                pillNode.insertAfter($createTextNode(afterQuery));
+              }
+            }
+
+            // Set cursor after the pill
+            pillNode.selectNext();
           }
         }
       });
