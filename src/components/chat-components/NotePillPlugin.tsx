@@ -2,6 +2,8 @@ import React from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
   $getRoot,
+  $getSelection,
+  $isRangeSelection,
   DecoratorNode,
   DOMConversionMap,
   DOMConversionOutput,
@@ -10,6 +12,8 @@ import {
   LexicalNode,
   NodeKey,
   SerializedLexicalNode,
+  DELETE_CHARACTER_COMMAND,
+  COMMAND_PRIORITY_HIGH,
 } from "lexical";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -118,11 +122,11 @@ export class NotePillNode extends DecoratorNode<JSX.Element> {
   }
 
   canInsertTextBefore(): boolean {
-    return false;
+    return true;
   }
 
   canInsertTextAfter(): boolean {
-    return false;
+    return true;
   }
 
   canBeEmpty(): boolean {
@@ -130,6 +134,10 @@ export class NotePillNode extends DecoratorNode<JSX.Element> {
   }
 
   isKeyboardSelectable(): boolean {
+    return true;
+  }
+
+  isIsolated(): boolean {
     return true;
   }
 }
@@ -166,6 +174,7 @@ function NotePillComponent({ node }: NotePillComponentProps): JSX.Element {
 
   return (
     <Badge
+      variant="secondary"
       className={cn(
         "tw-mx-0.5 tw-items-center tw-px-2 tw-py-0 tw-text-xs",
         isActive && "tw-bg-accent"
@@ -183,10 +192,68 @@ export function NotePillPlugin(): null {
   const [editor] = useLexicalComposerContext();
 
   React.useEffect(() => {
-    // This plugin is mainly for registering the node type
-    // The actual conversion from [[note]] to pills is handled by the NoteCommandPlugin
-    // We could add a transform here if needed for paste handling or other cases
-    return () => {};
+    const removeDeleteCommand = editor.registerCommand(
+      DELETE_CHARACTER_COMMAND,
+      (isBackward: boolean): boolean => {
+        let handled = false;
+        editor.update(() => {
+          const selection = $getSelection();
+          if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
+            handled = false;
+            return;
+          }
+
+          const anchor = selection.anchor;
+          const anchorNode = anchor.getNode();
+
+          // If cursor is directly on a pill node
+          if ($isNotePillNode(anchorNode)) {
+            // Backspace when cursor is after the pill (offset 1)
+            if (isBackward && anchor.offset === 1) {
+              anchorNode.remove();
+              handled = true;
+              return;
+            }
+            // Delete when cursor is before the pill (offset 0)
+            if (!isBackward && anchor.offset === 0) {
+              anchorNode.remove();
+              handled = true;
+              return;
+            }
+            handled = false;
+            return;
+          }
+
+          // Handle backspace at start of text node - check previous sibling
+          if (isBackward && anchor.offset === 0) {
+            const previousSibling = anchorNode.getPreviousSibling();
+            if ($isNotePillNode(previousSibling)) {
+              previousSibling.remove();
+              handled = true;
+              return;
+            }
+          }
+
+          // Handle delete at end of text node - check next sibling
+          if (!isBackward && anchor.offset === anchorNode.getTextContent().length) {
+            const nextSibling = anchorNode.getNextSibling();
+            if ($isNotePillNode(nextSibling)) {
+              nextSibling.remove();
+              handled = true;
+              return;
+            }
+          }
+
+          handled = false;
+        });
+        return handled;
+      },
+      COMMAND_PRIORITY_HIGH
+    );
+
+    return () => {
+      removeDeleteCommand();
+    };
   }, [editor]);
 
   return null;
