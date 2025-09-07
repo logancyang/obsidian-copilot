@@ -46,8 +46,19 @@ const ContextControl: React.FC<ChatControlsProps> = ({
           // Remove the note from contextNotes if it exists there
           setContextNotes((prev) => prev.filter((n) => n.path !== note.path));
         } else {
-          // Add wasAddedManually flag to distinguish from reference-added notes
-          setContextNotes((prev) => [...prev, Object.assign(note, { wasAddedManually: true })]);
+          // Check if this note already exists (added via token)
+          setContextNotes((prev) => {
+            const existingNote = prev.find((n) => n.path === note.path);
+            if (existingNote) {
+              // Note already exists via token, mark it as also manually added
+              return prev.map((n) =>
+                n.path === note.path ? Object.assign(n, { wasAddedManually: true }) : n
+              );
+            } else {
+              // New note, add with manual flag
+              return [...prev, Object.assign(note, { wasAddedManually: true })];
+            }
+          });
         }
       },
       excludeNotePaths,
@@ -56,21 +67,16 @@ const ContextControl: React.FC<ChatControlsProps> = ({
   };
 
   const handleRemoveContext = (path: string) => {
-    // First check if this note was added manually
-    const noteToRemove = contextNotes.find((note) => note.path === path);
-    const wasAddedManually = noteToRemove && (noteToRemove as any).wasAddedManually;
+    // When removing from context menu, ALWAYS remove from contextNotes
+    // This will trigger the pill sync to remove all corresponding tokens
 
-    if (wasAddedManually) {
-      // If it was added manually, just remove it from contextNotes
-      setContextNotes((prev) => prev.filter((note) => note.path !== path));
-    } else {
-      // If it wasn't added manually, it could be either:
-      // 1. The active note (controlled by includeActiveNote)
-      // 2. A note added via [[reference]]
-      // In either case, we should:
-      setIncludeActiveNote(false); // Turn off includeActiveNote if this was the active note
-      setContextNotes((prev) => prev.filter((note) => note.path !== path)); // Remove from contextNotes if it was there
+    // Handle active note case
+    if (activeNote && path === activeNote.path) {
+      setIncludeActiveNote(false);
     }
+
+    // Always remove from contextNotes - this triggers pill removal
+    setContextNotes((prev) => prev.filter((note) => note.path !== path));
   };
 
   // Context menu is now available for all chain types

@@ -115,6 +115,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       return isAllowedFileForContext(activeFile) ? activeFile : null;
     });
     const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
+    const [notesFromPills, setNotesFromPills] = useState<{ path: string; basename: string }[]>([]);
     const isCopilotPlus = isPlusChain(currentChain);
 
     // Toggle states for vault, web search, composer, and autonomous agent
@@ -412,66 +413,96 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     };
     */
 
+    // Handle pill-to-context synchronization
+    const prevNotesFromPillsRef = useRef<{ path: string; basename: string }[]>([]);
     useEffect(() => {
-      // Get all note titles that are referenced using [[note]] syntax in the input
-      const currentFiles = new Set(extractNoteFiles(inputMessage, app.vault));
+      // Check if notesFromPills actually changed to avoid unnecessary processing
+      const prevPillPaths = prevNotesFromPillsRef.current.map((note) => note.path).sort();
+      const currentPillPaths = notesFromPills.map((note) => note.path).sort();
+
+      if (JSON.stringify(prevPillPaths) === JSON.stringify(currentPillPaths)) {
+        return; // No change, skip processing
+      }
+
+      prevNotesFromPillsRef.current = notesFromPills;
+
+      // Add notes from pills to context if they're not already there
+      const pillPaths = new Set(notesFromPills.map((note) => note.path));
+      const contextPaths = new Set(contextNotes.map((note) => note.path));
+
+      // Find new pills that need to be added to context
+      const newNotesFromPills = notesFromPills.filter((pillNote) => {
+        // Don't add if already in context
+        if (contextPaths.has(pillNote.path)) return false;
+
+        // Don't add if it's the active note and includeActiveNote is already true
+        if (currentActiveNote?.path === pillNote.path && includeActiveNote) return false;
+
+        return true;
+      });
+
+      if (newNotesFromPills.length > 0) {
+        setContextNotes((prev) => {
+          const newFiles: TFile[] = [];
+          newNotesFromPills.forEach((pillNote) => {
+            const file = app.vault.getAbstractFileByPath(pillNote.path);
+            if (file instanceof TFile) {
+              newFiles.push(Object.assign(file, { wasAddedViaReference: true }));
+            }
+          });
+
+          return [...prev, ...newFiles];
+        });
+      }
+
+      // Remove notes from context if their pills were removed (only for reference-added notes)
+      setContextNotes((prev) =>
+        prev.filter((note) => {
+          const wasAddedManually = (note as any).wasAddedManually === true;
+          const wasAddedViaReference = (note as any).wasAddedViaReference === true;
+
+          // Always keep manually added notes
+          if (wasAddedManually && !wasAddedViaReference) return true;
+
+          // For reference-added notes, keep only if there's still a pill for them
+          if (wasAddedViaReference) {
+            return pillPaths.has(note.path);
+          }
+
+          // Default: keep the note
+          return true;
+        })
+      );
+    }, [
+      notesFromPills,
+      contextNotes,
+      currentActiveNote,
+      includeActiveNote,
+      app.vault,
+      setContextNotes,
+    ]);
+
+    // Handle URL extraction and context updates
+    useEffect(() => {
       // Get all URLs mentioned in the input
       const currentUrls = mention.extractAllUrls(inputMessage);
 
-      setContextNotes((prev) =>
-        prev.filter((note) => {
-          // Check if this note was added manually via the "+" button
-          const wasAddedManually = (note as any).wasAddedManually === true;
-          // If it was added manually, always keep it
-          if (wasAddedManually) return true;
-
-          // Check if this note was added by typing [[note]] in the input
-          // as opposed to being added via the "Add Note to Context" button
-          const wasAddedViaReference = (note as any).wasAddedViaReference === true;
-
-          // Special handling for the active note
-          if (note.path === currentActiveNote?.path) {
-            if (wasAddedViaReference) {
-              // Case 1: Active note was added by typing [[note]]
-              // Keep it only if its file is still in the input
-              return currentFiles.has(note);
-            } else {
-              // Case 2: Active note was NOT added by [[note]], but by the includeActiveNote toggle
-              // Keep it only if includeActiveNote is true
-              return includeActiveNote;
-            }
-          } else {
-            // Handling for all other notes (not the active note)
-            if (wasAddedViaReference) {
-              // Case 3: Other note was added by typing [[note]]
-              // Keep it only if its file is still in the input
-              return currentFiles.has(note);
-            } else {
-              // Case 4: Other note was added via "Add Note to Context" button
-              // Always keep these notes as they were manually added
-              return true;
-            }
-          }
-        })
-      );
-
-      // Remove any URLs that are no longer present in the input
       // Only keep URLs if URL processing is supported for the current chain
       if (isPlusChain(currentChain)) {
-        setContextUrls((prev) => prev.filter((url) => currentUrls.includes(url)));
+        setContextUrls((prev) => {
+          // Only add new URLs that aren't already in context
+          const newUrls = currentUrls.filter((url) => !prev.includes(url));
+          if (newUrls.length > 0) {
+            return Array.from(new Set([...prev, ...newUrls]));
+          }
+          // Remove URLs that are no longer in the input
+          return prev.filter((url) => currentUrls.includes(url));
+        });
       } else {
         // Clear all URLs for non-Plus chains
         setContextUrls([]);
       }
-    }, [
-      inputMessage,
-      includeActiveNote,
-      currentActiveNote,
-      mention,
-      setContextNotes,
-      app.vault,
-      currentChain,
-    ]);
+    }, [inputMessage, mention, currentChain]);
 
     // Update the current active note whenever it changes
     useEffect(() => {
@@ -516,6 +547,18 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         ].filter((note) => note != null),
       [contextNotes, includeActiveNote, currentActiveNote]
     );
+
+    // Memoize the contextNotes for LexicalEditor
+    const lexicalContextNotes = useMemo(() => {
+      console.log("ChatInput: Memoizing lexicalContextNotes");
+      const notes = [
+        ...contextNotes.map((note) => ({ path: note.path, basename: note.basename })),
+        ...(includeActiveNote && currentActiveNote
+          ? [{ path: currentActiveNote.path, basename: currentActiveNote.basename }]
+          : []),
+      ];
+      return notes;
+    }, [contextNotes, includeActiveNote, currentActiveNote]);
 
     return (
       <div
@@ -572,6 +615,8 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
             value={inputMessage}
             onChange={(value) => setInputMessage(value)}
             onSubmit={onSendMessage}
+            onNotesChange={setNotesFromPills}
+            contextNotes={lexicalContextNotes}
             placeholder={
               "Ask anything. [[ for notes. / for custom prompts. " +
               (isCopilotPlus ? "@ for tools." : "")
