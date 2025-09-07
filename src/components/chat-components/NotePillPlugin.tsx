@@ -1,6 +1,7 @@
 import React from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
+  $getRoot,
   DecoratorNode,
   DOMConversionMap,
   DOMConversionOutput,
@@ -39,7 +40,7 @@ export class NotePillNode extends DecoratorNode<JSX.Element> {
     this.__isActive = isActive;
   }
 
-  createDOM(config: EditorConfig): HTMLElement {
+  createDOM(_config: EditorConfig): HTMLElement {
     const span = document.createElement("span");
     span.className = "note-pill-wrapper";
     return span;
@@ -189,4 +190,25 @@ export function NotePillPlugin(): null {
   }, [editor]);
 
   return null;
+}
+
+// Add a utility function to remove pills by path
+export function $removePillsByPath(notePath: string): number {
+  const root = $getRoot();
+  let removedCount = 0;
+
+  function traverse(node: any): void {
+    if ($isNotePillNode(node) && node.getNotePath() === notePath) {
+      node.remove();
+      removedCount++;
+    } else if (typeof node.getChildren === "function") {
+      const children = node.getChildren();
+      for (const child of children) {
+        traverse(child);
+      }
+    }
+  }
+
+  traverse(root);
+  return removedCount;
 }

@@ -20,8 +20,9 @@ interface LexicalEditorProps {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
-  contextNotes?: { path: string; basename: string }[];
   onNotesChange?: (notes: { path: string; basename: string }[]) => void;
+  onNotesRemoved?: (removedNotes: { path: string; basename: string }[]) => void;
+  onEditorReady?: (editor: any) => void;
 }
 
 // Custom plugin to handle keyboard events
@@ -69,8 +70,14 @@ function ValueSyncPlugin({ value }: { value: string }) {
   return null;
 }
 
-// Plugin to provide focus method
-function FocusPlugin({ onFocus }: { onFocus: (focusFn: () => void) => void }) {
+// Plugin to provide focus method and editor instance
+function FocusPlugin({
+  onFocus,
+  onEditorReady,
+}: {
+  onFocus: (focusFn: () => void) => void;
+  onEditorReady?: (editor: any) => void;
+}) {
   const [editor] = useLexicalComposerContext();
 
   React.useEffect(() => {
@@ -78,82 +85,29 @@ function FocusPlugin({ onFocus }: { onFocus: (focusFn: () => void) => void }) {
       editor.focus();
     };
     onFocus(focusEditor);
-  }, [editor, onFocus]);
+
+    // Also provide the editor instance
+    if (onEditorReady) {
+      onEditorReady(editor);
+    }
+  }, [editor, onFocus, onEditorReady]);
 
   return null;
 }
 
-// Plugin to sync pills with context notes and track pill changes
+// Plugin to track pill changes and notify parent
 function NotePillSyncPlugin({
-  contextNotes = [],
   onNotesChange,
+  onNotesRemoved,
 }: {
-  contextNotes?: { path: string; basename: string }[];
   onNotesChange?: (notes: { path: string; basename: string }[]) => void;
+  onNotesRemoved?: (removedNotes: { path: string; basename: string }[]) => void;
 }) {
   const [editor] = useLexicalComposerContext();
-  const prevContextNotesRef = React.useRef<{ path: string; basename: string }[]>([]);
-
-  // Sync pills with context - remove pills that are no longer in context
-  React.useEffect(() => {
-    // Check if contextNotes actually changed to avoid unnecessary processing
-    const prevPaths = prevContextNotesRef.current.map((note) => note.path).sort();
-    const currentPaths = contextNotes.map((note) => note.path).sort();
-
-    if (JSON.stringify(prevPaths) === JSON.stringify(currentPaths)) {
-      return; // No change, skip processing
-    }
-
-    prevContextNotesRef.current = contextNotes;
-    const contextPaths = new Set(contextNotes.map((note) => note.path));
-    console.log("NotePillSyncPlugin: Context notes changed, paths:", Array.from(contextPaths));
-
-    // Add small delay to avoid race conditions
-    const timeoutId = setTimeout(() => {
-      editor.update(() => {
-        const root = $getRoot();
-        const pillsToRemove: NotePillNode[] = [];
-        const currentPills: string[] = [];
-
-        function traverse(node: any) {
-          if ($isNotePillNode(node)) {
-            const notePath = node.getNotePath();
-            currentPills.push(notePath);
-            if (!contextPaths.has(notePath)) {
-              console.log("Marking pill for removal:", notePath);
-              pillsToRemove.push(node);
-            }
-          }
-
-          // Only traverse children if the node has the getChildren method
-          if (typeof node.getChildren === "function") {
-            const children = node.getChildren();
-            for (const child of children) {
-              traverse(child);
-            }
-          }
-        }
-
-        traverse(root);
-
-        console.log("Current pills in editor:", currentPills);
-        console.log("Pills to remove count:", pillsToRemove.length);
-
-        // Remove pills that are no longer in context
-        pillsToRemove.forEach((pill) => {
-          console.log("Actually removing pill:", pill.getNoteTitle());
-          const textNode = $createTextNode(`[[${pill.getNoteTitle()}]]`);
-          pill.replace(textNode);
-        });
-      });
-    }, 10); // Small delay
-
-    return () => clearTimeout(timeoutId);
-  }, [editor, contextNotes]);
 
   // Track pill changes and notify parent
   React.useEffect(() => {
-    if (!onNotesChange) return;
+    if (!onNotesChange && !onNotesRemoved) return;
 
     const prevNotesRef = { current: [] as { path: string; basename: string }[] };
 
@@ -181,17 +135,31 @@ function NotePillSyncPlugin({
 
         traverse(root);
 
-        // Only call onNotesChange if the notes actually changed
-        const prevPaths = prevNotesRef.current.map((note) => note.path).sort();
+        // Check for changes
+        const prevNotes = prevNotesRef.current;
         const currentPaths = notes.map((note) => note.path).sort();
+        const prevPaths = prevNotes.map((note) => note.path).sort();
 
         if (JSON.stringify(prevPaths) !== JSON.stringify(currentPaths)) {
+          // Detect removed notes
+          if (onNotesRemoved) {
+            const currentPathSet = new Set(currentPaths);
+            const removedNotes = prevNotes.filter((note) => !currentPathSet.has(note.path));
+
+            if (removedNotes.length > 0) {
+              onNotesRemoved(removedNotes);
+            }
+          }
+
+          // Update current notes
           prevNotesRef.current = notes;
-          onNotesChange(notes);
+          if (onNotesChange) {
+            onNotesChange(notes);
+          }
         }
       });
     });
-  }, [editor, onNotesChange]);
+  }, [editor, onNotesChange, onNotesRemoved]);
 
   return null;
 }
@@ -205,8 +173,9 @@ const LexicalEditor = forwardRef<{ focus: () => void }, LexicalEditorProps>(
       placeholder = "Type a message...",
       disabled = false,
       className = "",
-      contextNotes = [],
       onNotesChange,
+      onNotesRemoved,
+      onEditorReady,
     },
     ref
   ) => {
@@ -260,8 +229,8 @@ const LexicalEditor = forwardRef<{ focus: () => void }, LexicalEditorProps>(
           <HistoryPlugin />
           <KeyboardPlugin onSubmit={onSubmit} />
           <ValueSyncPlugin value={value} />
-          <FocusPlugin onFocus={setFocusFn} />
-          <NotePillSyncPlugin contextNotes={contextNotes} onNotesChange={onNotesChange} />
+          <FocusPlugin onFocus={setFocusFn} onEditorReady={onEditorReady} />
+          <NotePillSyncPlugin onNotesChange={onNotesChange} onNotesRemoved={onNotesRemoved} />
           <SlashCommandPlugin />
           <NoteCommandPlugin />
           <NotePillPlugin />

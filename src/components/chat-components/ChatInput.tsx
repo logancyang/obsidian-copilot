@@ -7,44 +7,22 @@ import {
   useProjectLoading,
 } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { CustomCommandManager } from "@/commands/customCommandManager";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { sortSlashCommands } from "@/commands/customCommandUtils";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { getCachedCustomCommands } from "@/commands/state";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
 import { AddImageModal } from "@/components/modals/AddImageModal";
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { ListPromptModal } from "@/components/modals/ListPromptModal";
 import { Button } from "@/components/ui/button";
 import { ModelSelector } from "@/components/ui/ModelSelector";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChatToolControls } from "./ChatToolControls";
 import LexicalEditor from "./LexicalEditor";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { ContextProcessor } from "@/contextProcessor";
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
 import { Mention } from "@/mentions/Mention";
 import { isPlusChain } from "@/utils";
 
 import { useSettingsValue } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { getToolDescription } from "@/tools/toolManager";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { extractNoteFiles, isAllowedFileForContext, isNoteTitleUnique } from "@/utils";
+import { isAllowedFileForContext } from "@/utils";
 import { CornerDownLeft, Image, Loader2, StopCircle, X } from "lucide-react";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { App, Platform, TFile } from "obsidian";
+import { App, TFile } from "obsidian";
 import React, {
   forwardRef,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -53,6 +31,7 @@ import React, {
 } from "react";
 import { useDropzone } from "react-dropzone";
 import ContextControl from "./ContextControl";
+import { $removePillsByPath } from "./NotePillPlugin";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -106,6 +85,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const [contextUrls, setContextUrls] = useState<string[]>([]);
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const editorRef = useRef<any>(null);
     const [currentModelKey, setCurrentModelKey] = useModelKey();
     const [currentChain] = useChainType();
     const [isProjectLoading] = useProjectLoading();
@@ -198,7 +178,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       // When autonomous agent is on, it handles all tools internally
       if (!autonomousAgentToggle) {
         if (vaultToggle) toolCalls.push("@vault");
-        if (webToggle) toolCalls.push("@websearch");
+        if (webToggle) toolCalls.push("@web-search");
         if (composerToggle) toolCalls.push("@composer");
       }
 
@@ -413,74 +393,89 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     };
     */
 
-    // Handle pill-to-context synchronization
-    const prevNotesFromPillsRef = useRef<{ path: string; basename: string }[]>([]);
-    useEffect(() => {
-      // Check if notesFromPills actually changed to avoid unnecessary processing
-      const prevPillPaths = prevNotesFromPillsRef.current.map((note) => note.path).sort();
-      const currentPillPaths = notesFromPills.map((note) => note.path).sort();
+    // Handle when pills are removed from the editor
+    const handlePillsRemoved = (removedNotes: { path: string; basename: string }[]) => {
+      const removedPaths = new Set(removedNotes.map((note) => note.path));
 
-      if (JSON.stringify(prevPillPaths) === JSON.stringify(currentPillPaths)) {
-        return; // No change, skip processing
-      }
-
-      prevNotesFromPillsRef.current = notesFromPills;
-
-      // Add notes from pills to context if they're not already there
-      const pillPaths = new Set(notesFromPills.map((note) => note.path));
-      const contextPaths = new Set(contextNotes.map((note) => note.path));
-
-      // Find new pills that need to be added to context
-      const newNotesFromPills = notesFromPills.filter((pillNote) => {
-        // Don't add if already in context
-        if (contextPaths.has(pillNote.path)) return false;
-
-        // Don't add if it's the active note and includeActiveNote is already true
-        if (currentActiveNote?.path === pillNote.path && includeActiveNote) return false;
-
-        return true;
-      });
-
-      if (newNotesFromPills.length > 0) {
-        setContextNotes((prev) => {
-          const newFiles: TFile[] = [];
-          newNotesFromPills.forEach((pillNote) => {
-            const file = app.vault.getAbstractFileByPath(pillNote.path);
-            if (file instanceof TFile) {
-              newFiles.push(Object.assign(file, { wasAddedViaReference: true }));
+      setContextNotes((prev) => {
+        return prev
+          .filter((contextNote) => {
+            // Only remove if the note was removed via pill AND was not added manually
+            if (removedPaths.has(contextNote.path)) {
+              const wasAddedManually = (contextNote as any).wasAddedManually;
+              // If it was added manually, keep it in context
+              // If it was only added via reference, remove it
+              return wasAddedManually;
             }
+            return true;
+          })
+          .map((contextNote) => {
+            // If the note is being kept but pills were removed, remove the wasAddedViaReference flag
+            if (removedPaths.has(contextNote.path)) {
+              const updatedNote = { ...contextNote };
+              delete (updatedNote as any).wasAddedViaReference;
+              return updatedNote;
+            }
+            return contextNote;
           });
+      });
+    };
 
-          return [...prev, ...newFiles];
+    // Handle when context notes are removed from the context menu
+    // This should remove all corresponding pills from the editor
+    const handleContextRemoved = (notePath: string) => {
+      if (editorRef.current) {
+        editorRef.current.update(() => {
+          $removePillsByPath(notePath);
         });
       }
 
-      // Remove notes from context if their pills were removed (only for reference-added notes)
-      setContextNotes((prev) =>
-        prev.filter((note) => {
-          const wasAddedManually = (note as any).wasAddedManually === true;
-          const wasAddedViaReference = (note as any).wasAddedViaReference === true;
+      // Also immediately update notesFromPills to prevent stale data from re-adding the note
+      setNotesFromPills((prev) => prev.filter((note) => note.path !== notePath));
+    };
 
-          // Always keep manually added notes
-          if (wasAddedManually && !wasAddedViaReference) return true;
+    // Pill-to-context synchronization (when pills are added)
+    useEffect(() => {
+      setContextNotes((prev) => {
+        const contextPaths = new Set(prev.map((note) => note.path));
+        const pillPaths = new Set(notesFromPills.map((note) => note.path));
 
-          // For reference-added notes, keep only if there's still a pill for them
-          if (wasAddedViaReference) {
-            return pillPaths.has(note.path);
+        // Find notes that need to be added
+        const newNotesFromPills = notesFromPills.filter((pillNote) => {
+          // Don't add if it's the active note and includeActiveNote is already true
+          if (currentActiveNote?.path === pillNote.path && includeActiveNote) return false;
+          // Only add if not already in context
+          return !contextPaths.has(pillNote.path);
+        });
+
+        // Update existing notes to mark them as having pills
+        const updated = prev.map((contextNote) => {
+          // If this note is now represented by pills, mark it as added via reference too
+          if (pillPaths.has(contextNote.path)) {
+            // Preserve existing flags, only add wasAddedViaReference
+            const updatedNote = { ...contextNote };
+            (updatedNote as any).wasAddedViaReference = true;
+            // Preserve wasAddedManually if it exists
+            if ((contextNote as any).wasAddedManually) {
+              (updatedNote as any).wasAddedManually = true;
+            }
+            return updatedNote;
           }
+          return contextNote;
+        });
 
-          // Default: keep the note
-          return true;
-        })
-      );
-    }, [
-      notesFromPills,
-      contextNotes,
-      currentActiveNote,
-      includeActiveNote,
-      app.vault,
-      setContextNotes,
-    ]);
+        // Add completely new notes from pills
+        const newFiles: TFile[] = [];
+        newNotesFromPills.forEach((pillNote) => {
+          const file = app.vault.getAbstractFileByPath(pillNote.path);
+          if (file instanceof TFile) {
+            newFiles.push(Object.assign(file, { wasAddedViaReference: true }));
+          }
+        });
+
+        return [...updated, ...newFiles];
+      });
+    }, [notesFromPills, currentActiveNote, includeActiveNote, app.vault, setContextNotes]);
 
     // Handle URL extraction and context updates
     useEffect(() => {
@@ -523,7 +518,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
       return () => {
         clearTimeout(timeoutId); // Clean up any pending timeout
-        app.workspace.offref(eventRef); // unregister
+        app.workspace.offref(eventRef); // off-ref to unregister
       };
     }, [app.workspace]);
 
@@ -548,18 +543,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       [contextNotes, includeActiveNote, currentActiveNote]
     );
 
-    // Memoize the contextNotes for LexicalEditor
-    const lexicalContextNotes = useMemo(() => {
-      console.log("ChatInput: Memoizing lexicalContextNotes");
-      const notes = [
-        ...contextNotes.map((note) => ({ path: note.path, basename: note.basename })),
-        ...(includeActiveNote && currentActiveNote
-          ? [{ path: currentActiveNote.path, basename: currentActiveNote.basename }]
-          : []),
-      ];
-      return notes;
-    }, [contextNotes, includeActiveNote, currentActiveNote]);
-
     return (
       <div
         className="tw-flex tw-w-full tw-flex-col tw-gap-0.5 tw-rounded-md tw-border tw-border-solid tw-border-border tw-px-1 tw-pb-1 tw-pt-2 tw-@container/chat-input"
@@ -578,6 +561,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           selectedTextContexts={selectedTextContexts}
           onRemoveSelectedText={onRemoveSelectedText}
           showProgressCard={showProgressCard}
+          onContextRemoved={handleContextRemoved}
         />
 
         {selectedImages.length > 0 && (
@@ -616,7 +600,10 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
             onChange={(value) => setInputMessage(value)}
             onSubmit={onSendMessage}
             onNotesChange={setNotesFromPills}
-            contextNotes={lexicalContextNotes}
+            onNotesRemoved={handlePillsRemoved}
+            onEditorReady={(editor) => {
+              editorRef.current = editor;
+            }}
             placeholder={
               "Ask anything. [[ for notes. / for custom prompts. " +
               (isCopilotPlus ? "@ for tools." : "")
