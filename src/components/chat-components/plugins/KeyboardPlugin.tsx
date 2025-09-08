@@ -1,6 +1,6 @@
 import React from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { KEY_ENTER_COMMAND } from "lexical";
+import { COMMAND_PRIORITY_LOW, KEY_ENTER_COMMAND } from "lexical";
 
 /**
  * Props for the KeyboardPlugin component
@@ -31,7 +31,7 @@ export function KeyboardPlugin({ onSubmit }: KeyboardPluginProps) {
         onSubmit();
         return true;
       },
-      1 // High priority
+      COMMAND_PRIORITY_LOW
     );
   }, [editor, onSubmit]);
 

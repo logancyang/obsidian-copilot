@@ -14,6 +14,7 @@ import { KeyboardPlugin } from "./plugins/KeyboardPlugin";
 import { ValueSyncPlugin } from "./plugins/ValueSyncPlugin";
 import { FocusPlugin } from "./plugins/FocusPlugin";
 import { NotePillSyncPlugin } from "./plugins/NotePillSyncPlugin";
+import { PastePlugin } from "./plugins/PastePlugin";
 import { cn } from "@/lib/utils";
 
 interface LexicalEditorProps {
@@ -99,6 +100,7 @@ const LexicalEditor = forwardRef<{ focus: () => void }, LexicalEditorProps>(
           <FocusPlugin onFocus={setFocusFn} onEditorReady={onEditorReady} />
           <NotePillSyncPlugin onNotesChange={onNotesChange} onNotesRemoved={onNotesRemoved} />
           <PillDeletionPlugin />
+          <PastePlugin />
           <SlashCommandPlugin />
           <NoteCommandPlugin />
           <NotePillPlugin />
