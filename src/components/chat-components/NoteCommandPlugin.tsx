@@ -365,14 +365,13 @@ export function NoteCommandPlugin(): JSX.Element {
           const query = textContent.slice(bracketIndex + 2, cursorOffset);
           logInfo("NoteMenu opening with query:", JSON.stringify(query));
 
-          // Use Range for accurate positioning (smart-composer approach)
+          // Use Range for accurate positioning
           const editorWindow = editor._window ?? window;
-          const range = editorWindow.document.createRange();
 
-          // Use the helper function to properly position the range
-          const isRangePositioned = tryToPositionRange(bracketIndex, range, editorWindow);
+          // Create range from bracket position to cursor
+          const range = tryToPositionRange(bracketIndex, editorWindow);
 
-          if (isRangePositioned) {
+          if (range) {
             logInfo("NoteMenu positioned range rect:", range.getBoundingClientRect());
 
             setNoteCommandState({

@@ -266,14 +266,13 @@ export function SlashCommandPlugin(): JSX.Element {
           // Extract query after slash
           const query = textContent.slice(slashIndex + 1, cursorOffset);
 
-          // Use Range for accurate positioning (smart-composer approach)
+          // Use Range for accurate positioning
           const editorWindow = editor._window ?? window;
-          const range = editorWindow.document.createRange();
 
-          // Use the helper function to properly position the range
-          const isRangePositioned = tryToPositionRange(slashIndex, range, editorWindow);
+          // Create range from slash position to cursor
+          const range = tryToPositionRange(slashIndex, editorWindow);
 
-          if (isRangePositioned) {
+          if (range) {
             setSlashCommandState({
               isOpen: true,
               query,

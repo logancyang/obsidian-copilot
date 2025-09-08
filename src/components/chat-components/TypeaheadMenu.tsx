@@ -2,28 +2,45 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
-// Helper function from smart-composer
-function tryToPositionRange(leadOffset: number, range: Range, editorWindow: Window): boolean {
+/**
+ * Creates a DOM Range from a trigger character position to the current cursor position.
+ *
+ * @param leadOffset - The character offset where the trigger (like '[' or '/') was found
+ * @param editorWindow - The window containing the editor
+ * @returns Range object if successfully positioned, null if positioning failed
+ *
+ * Positioning can fail when:
+ * - User has text selected (non-collapsed selection)
+ * - No DOM selection exists
+ * - Cursor is not in a text node
+ * - Range boundaries would be invalid (offset out of bounds, node removed, etc.)
+ *
+ * When this returns null, the calling plugin should not display its menu to prevent
+ * broken UI states.
+ */
+function tryToPositionRange(leadOffset: number, editorWindow: Window): Range | null {
   const domSelection = editorWindow.getSelection();
   if (domSelection === null || !domSelection.isCollapsed) {
-    return false;
+    return null;
   }
   const anchorNode = domSelection.anchorNode;
   const startOffset = leadOffset;
   const endOffset = domSelection.anchorOffset;
 
   if (anchorNode == null || endOffset == null) {
-    return false;
+    return null;
   }
+
+  const range = editorWindow.document.createRange();
 
   try {
     range.setStart(anchorNode, startOffset);
     range.setEnd(anchorNode, endOffset);
   } catch {
-    return false;
+    return null;
   }
 
-  return true;
+  return range;
 }
 
 const MENU_WIDTH = 384;
