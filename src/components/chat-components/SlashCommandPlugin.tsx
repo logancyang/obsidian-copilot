@@ -15,7 +15,6 @@ import fuzzysort from "fuzzysort";
 import { useCustomCommands } from "@/commands/state";
 import { CustomCommand } from "@/commands/type";
 import { sortSlashCommands } from "@/commands/customCommandUtils";
-import { logInfo } from "@/logger";
 import { TypeaheadMenu, tryToPositionRange, TypeaheadOption } from "./TypeaheadMenu";
 
 interface SlashCommandOption extends TypeaheadOption {
@@ -44,13 +43,7 @@ export function SlashCommandPlugin(): JSX.Element {
 
   // Get all available slash commands
   const allCommands = useMemo(() => {
-    logInfo("SlashMenu All cached commands:", commands.length);
     const slashCommands = sortSlashCommands(commands.filter((cmd) => cmd.showInSlashMenu));
-    logInfo(
-      "SlashMenu available commands:",
-      slashCommands.length,
-      slashCommands.map((c) => c.title)
-    );
 
     return slashCommands.map((command, index) => ({
       key: `${command.title}-${index}`,
@@ -252,12 +245,6 @@ export function SlashCommandPlugin(): JSX.Element {
 
         const textContent = anchorNode.getTextContent();
         const cursorOffset = anchor.offset;
-        logInfo(
-          "SlashMenu text content:",
-          JSON.stringify(textContent),
-          "cursor offset:",
-          cursorOffset
-        );
 
         // Look for slash before cursor
         let slashIndex = -1;
@@ -267,7 +254,6 @@ export function SlashCommandPlugin(): JSX.Element {
             // Check if slash is at start or preceded by whitespace
             if (i === 0 || /\s/.test(textContent[i - 1])) {
               slashIndex = i;
-              logInfo("SlashMenu found slash at index:", i);
               break;
             }
           } else if (/\s/.test(char)) {
@@ -279,7 +265,6 @@ export function SlashCommandPlugin(): JSX.Element {
         if (slashIndex !== -1) {
           // Extract query after slash
           const query = textContent.slice(slashIndex + 1, cursorOffset);
-          logInfo("SlashMenu opening with query:", JSON.stringify(query));
 
           // Use Range for accurate positioning (smart-composer approach)
           const editorWindow = editor._window ?? window;
@@ -289,8 +274,6 @@ export function SlashCommandPlugin(): JSX.Element {
           const isRangePositioned = tryToPositionRange(slashIndex, range, editorWindow);
 
           if (isRangePositioned) {
-            logInfo("SlashMenu positioned range rect:", range.getBoundingClientRect());
-
             setSlashCommandState({
               isOpen: true,
               query,
@@ -299,24 +282,34 @@ export function SlashCommandPlugin(): JSX.Element {
               startOffset: slashIndex,
               range: range,
             });
-          } else {
-            logInfo("SlashMenu failed to position range");
           }
         } else if (slashCommandState.isOpen) {
-          logInfo("SlashMenu closing");
           closeSlashCommand();
         }
       });
     });
   }, [editor, slashCommandState.isOpen, closeSlashCommand]);
 
-  // Reset selected index when filtered commands change
+  // Reset selected index only when query changes, not when filtered commands change
   useEffect(() => {
     setSlashCommandState((prev) => ({
       ...prev,
       selectedIndex: 0,
     }));
-  }, [filteredCommands]);
+  }, [slashCommandState.query]);
+
+  // Ensure selectedIndex stays within bounds when filteredCommands change
+  useEffect(() => {
+    setSlashCommandState((prev) => {
+      if (prev.selectedIndex >= filteredCommands.length && filteredCommands.length > 0) {
+        return {
+          ...prev,
+          selectedIndex: Math.max(0, filteredCommands.length - 1),
+        };
+      }
+      return prev;
+    });
+  }, [filteredCommands.length]);
 
   return (
     <>

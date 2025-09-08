@@ -105,12 +105,11 @@ function NotePillSyncPlugin({
   onNotesRemoved?: (removedNotes: { path: string; basename: string }[]) => void;
 }) {
   const [editor] = useLexicalComposerContext();
+  const prevNotesRef = React.useRef<{ path: string; basename: string }[]>([]);
 
   // Track pill changes and notify parent
   React.useEffect(() => {
     if (!onNotesChange && !onNotesRemoved) return;
-
-    const prevNotesRef = { current: [] as { path: string; basename: string }[] };
 
     return editor.registerUpdateListener(({ editorState }) => {
       editorState.read(() => {

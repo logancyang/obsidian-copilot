@@ -394,18 +394,33 @@ export function NoteCommandPlugin(): JSX.Element {
     });
   }, [editor, noteCommandState.isOpen, closeNoteCommand]);
 
-  // Reset selected index when filtered notes change and load content for first note
+  // Reset selected index only when query changes
   useEffect(() => {
     setNoteCommandState((prev) => ({
       ...prev,
       selectedIndex: 0,
     }));
+  }, [noteCommandState.query]);
 
-    // Load content for the first note if available
+  // Load content for the first note when filteredNotes change
+  useEffect(() => {
     if (filteredNotes.length > 0 && !notePreviewContent.has(filteredNotes[0].file.path)) {
       loadNoteContent(filteredNotes[0].file);
     }
   }, [filteredNotes, notePreviewContent, loadNoteContent]);
+
+  // Ensure selectedIndex stays within bounds when filteredNotes change
+  useEffect(() => {
+    setNoteCommandState((prev) => {
+      if (prev.selectedIndex >= filteredNotes.length && filteredNotes.length > 0) {
+        return {
+          ...prev,
+          selectedIndex: Math.max(0, filteredNotes.length - 1),
+        };
+      }
+      return prev;
+    });
+  }, [filteredNotes.length]);
 
   return (
     <>
