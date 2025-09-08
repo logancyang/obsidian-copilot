@@ -1,44 +1,33 @@
-import { Notice, TFile } from "obsidian";
+import { TFile } from "obsidian";
 import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
 import { diffTrimmedLines } from "diff";
 import { ApplyViewResult } from "@/types";
 import { z } from "zod";
 import { createTool } from "./SimpleTool";
-import { logError } from "@/logger";
 
-async function show_preview(file_path: string, content: string): Promise<ApplyViewResult> {
-  let file = app.vault.getAbstractFileByPath(file_path);
-
-  // Check if the current active note is the same as the target note
-  const activeFile = app.workspace.getActiveFile();
-  // Create the file with empty content if it doesn't exist
-  if (!file) {
-    try {
-      await app.vault.create(file_path, "");
-    } catch (error) {
-      // If creation failed due to a race, re-check if the file now exists
-      const maybeNowExists = app.vault.getAbstractFileByPath(file_path);
-      if (maybeNowExists && maybeNowExists instanceof TFile) {
-        file = maybeNowExists;
-      } else {
-        logError(`Failed to create file: ${file_path}`, error);
-        new Notice(`Failed to create file: ${file_path}`);
-        return "failed";
-      }
-    }
-    if (!file) {
-      file = app.vault.getAbstractFileByPath(file_path);
-      if (!file) {
-        new Notice(`File not found after creation: ${file_path}`);
-        return "failed";
-      }
+async function getFile(file_path: string): Promise<TFile> {
+  const file = app.vault.getAbstractFileByPath(file_path);
+  if (file) {
+    return file as TFile;
+  }
+  // Create the folder if it doesn't exist
+  if (file_path.includes("/")) {
+    const folderPath = file_path.split("/").slice(0, -1).join("/");
+    const folder = app.vault.getAbstractFileByPath(folderPath);
+    if (!folder) {
+      await app.vault.createFolder(folderPath);
     }
   }
+  return await app.vault.create(file_path, "");
+}
+
+async function show_preview(file_path: string, content: string): Promise<ApplyViewResult> {
+  const file = await getFile(file_path);
+  const activeFile = app.workspace.getActiveFile();
 
   if (file && (!activeFile || activeFile.path !== file_path)) {
-    // If not, open the target file in the current leaf
+    // If target file is not the active file, open the target file in the current leaf
     await app.workspace.getLeaf().openFile(file as TFile);
-    new Notice(`Switched to ${file.name}`);
   }
 
   let originalContent = "";
