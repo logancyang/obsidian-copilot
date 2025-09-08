@@ -1,9 +1,6 @@
 import React from "react";
-import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
   $getRoot,
-  $getSelection,
-  $isRangeSelection,
   DecoratorNode,
   DOMConversionMap,
   DOMConversionOutput,
@@ -12,11 +9,10 @@ import {
   LexicalNode,
   NodeKey,
   SerializedLexicalNode,
-  DELETE_CHARACTER_COMMAND,
-  COMMAND_PRIORITY_HIGH,
 } from "lexical";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { IPillNode } from "./PillDeletionPlugin";
 
 export interface SerializedNotePillNode extends SerializedLexicalNode {
   noteTitle: string;
@@ -24,7 +20,7 @@ export interface SerializedNotePillNode extends SerializedLexicalNode {
   isActive?: boolean;
 }
 
-export class NotePillNode extends DecoratorNode<JSX.Element> {
+export class NotePillNode extends DecoratorNode<JSX.Element> implements IPillNode {
   __noteTitle: string;
   __notePath: string;
   __isActive: boolean;
@@ -140,6 +136,10 @@ export class NotePillNode extends DecoratorNode<JSX.Element> {
   isIsolated(): boolean {
     return true;
   }
+
+  isPill(): boolean {
+    return true;
+  }
 }
 
 function convertNotePillElement(domNode: HTMLElement): DOMConversionOutput | null {
@@ -175,87 +175,23 @@ function NotePillComponent({ node }: NotePillComponentProps): JSX.Element {
   return (
     <Badge
       variant="secondary"
-      className={cn(
-        "tw-mx-0.5 tw-items-center tw-px-2 tw-py-0 tw-text-xs",
-        isActive && "tw-bg-accent"
-      )}
+      className={cn("tw-mx-0.5 tw-items-center tw-px-2 tw-py-0 tw-text-xs")}
     >
       <div className="tw-flex tw-items-center tw-gap-1">
-        <span>[[{noteTitle}]]</span>
+        <span className="tw-max-w-40 tw-truncate">[[{noteTitle}]]</span>
         {isActive && <span className="tw-text-xs tw-text-faint">Current</span>}
       </div>
     </Badge>
   );
 }
 
+/**
+ * Plugin to register NotePillNode with the editor.
+ * Deletion logic has been moved to PillDeletionPlugin for better scalability.
+ */
 export function NotePillPlugin(): null {
-  const [editor] = useLexicalComposerContext();
-
-  React.useEffect(() => {
-    const removeDeleteCommand = editor.registerCommand(
-      DELETE_CHARACTER_COMMAND,
-      (isBackward: boolean): boolean => {
-        let handled = false;
-        editor.update(() => {
-          const selection = $getSelection();
-          if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
-            handled = false;
-            return;
-          }
-
-          const anchor = selection.anchor;
-          const anchorNode = anchor.getNode();
-
-          // If cursor is directly on a pill node
-          if ($isNotePillNode(anchorNode)) {
-            // Backspace when cursor is after the pill (offset 1)
-            if (isBackward && anchor.offset === 1) {
-              anchorNode.remove();
-              handled = true;
-              return;
-            }
-            // Delete when cursor is before the pill (offset 0)
-            if (!isBackward && anchor.offset === 0) {
-              anchorNode.remove();
-              handled = true;
-              return;
-            }
-            handled = false;
-            return;
-          }
-
-          // Handle backspace at start of text node - check previous sibling
-          if (isBackward && anchor.offset === 0) {
-            const previousSibling = anchorNode.getPreviousSibling();
-            if ($isNotePillNode(previousSibling)) {
-              previousSibling.remove();
-              handled = true;
-              return;
-            }
-          }
-
-          // Handle delete at end of text node - check next sibling
-          if (!isBackward && anchor.offset === anchorNode.getTextContent().length) {
-            const nextSibling = anchorNode.getNextSibling();
-            if ($isNotePillNode(nextSibling)) {
-              nextSibling.remove();
-              handled = true;
-              return;
-            }
-          }
-
-          handled = false;
-        });
-        return handled;
-      },
-      COMMAND_PRIORITY_HIGH
-    );
-
-    return () => {
-      removeDeleteCommand();
-    };
-  }, [editor]);
-
+  // This plugin now only handles node registration
+  // All deletion logic is handled by the centralized PillDeletionPlugin
   return null;
 }
 
