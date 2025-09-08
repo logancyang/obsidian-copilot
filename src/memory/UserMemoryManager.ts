@@ -7,7 +7,7 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 
 const MAX_MEMORY_LINES = 40;
-const INSIGHT_UPDATE_THRESHOLD = 10; // Update insights every 10 new conversations
+const INSIGHT_UPDATE_THRESHOLD = 1; // Update insights every 10 new conversations
 
 /**
  * User Memory Management Class
@@ -162,8 +162,13 @@ export class UserMemoryManager {
           try {
             console.log("[UserMemoryManager] Saving user insights:", userInsights);
             const timestamp = new Date().toISOString().split(".")[0] + "Z";
-            const timestampedInsight = `${timestamp} ${userInsights}`;
-            await this.addToMemoryFile(this.getUserInsightsFilePath(), timestampedInsight);
+
+            // Split insights by line and save each separately
+            const insights = userInsights.split("\n").filter((line) => line.trim().length > 0);
+            for (const insight of insights) {
+              const timestampedInsight = `${timestamp} ${insight.trim()}`;
+              await this.addToMemoryFile(this.getUserInsightsFilePath(), timestampedInsight);
+            }
           } catch (error) {
             logError("[UserMemoryManager] Error saving user insights:", error);
           }
@@ -328,23 +333,42 @@ ${conversationText}`;
 
     const systemPrompt = `You are an AI assistant that analyzes past conversations and extracts user insights.
 
-USER INSIGHTS: NEW factual information or preferences written in a short sentence.
+USER INSIGHTS: PERSISTENT factual information or preferences about the user written in a short sentence.
 
-The insights should have long-term impact on the user's behavior or preferences. Like their name, profession, learning goals, etc.
+CRITICAL RULES:
+1. Only extract PERMANENT, LONG-TERM characteristics about the user
+2. DO NOT extract temporary activities, events, or situational information  
+3. DO NOT make inferences or assumptions - only extract what the user EXPLICITLY states about themselves
 
-Examples: "User's name is John", "User is studying software engineering"
+✅ EXTRACT (Persistent traits - ONLY when explicitly stated by user):
+- Their name, role, profession, or company 
+- Technologies they regularly work with 
+- Long-term projects or areas of focus 
+- Skills, expertise areas, or certifications 
+- Learning goals or career interests 
+- Communication preferences 
+- Preferred explanation depth 
+- Format preferences 
 
-  The insights can be about the user such as:
-   - Their role/profession
-   - Technologies they work with  
-   - Projects they're working on
-   - Skills and expertise areas
-   - Learning goals or interests
-   - Preferred level of detail (brief vs detailed explanations)
-   - Communication style (formal vs casual)
-   - Explanation depth (beginner vs advanced)
-   - Format preferences (step-by-step vs narrative)
-   - Specific requests about how to present information
+❌ DO NOT EXTRACT (Temporary information OR inferences):
+- Travel plans, vacation destinations, or weekend activities
+- Current weather, temporary locations, or daily schedules
+- One-time events, meetings, or appointments
+- Temporary projects with specific deadlines
+- Current mood, health status, or temporary circumstances
+- Time-sensitive information or situational context
+- LOCATION INFERENCES: Do not assume where user lives based on questions about places
+- ASSUMPTIONS: Do not infer user characteristics from indirect context
+- INTERESTS: Do not assume interests just because user asks about a topic
+
+Examples of GOOD insights: "User's name is John" (when user says "My name is John"), "User is a senior software engineer" (when user says "I'm a senior engineer"), "User prefers TypeScript over JavaScript" (when user explicitly states preference), "User works in fintech industry" (when user mentions their industry)
+
+Examples of BAD insights: 
+- "User is traveling to Hakone this weekend" (temporary activity)
+- "User has a meeting tomorrow" (temporary event) 
+- "User lives in Tokyo" (inferred from asking about Chiba - WRONG!)
+- "User is interested in Japanese culture" (inferred from location questions - WRONG!)
+- "User is feeling stressed about deadlines" (temporary mood)
 
 IMPORTANT: Only extract NEW information that is NOT already captured in the existing memory below.
 
@@ -353,11 +377,22 @@ ${this.userInsightsContent || "None"}
 </existing_insights>
 
 # OUTPUT FORMAT
-Return only the new user insight as plain text, or return "NONE" if no new insights are found.`;
+Return new user insights, one per line. If multiple insights are found, list them like this:
+User's name is John
+User is a senior software engineer
+User prefers detailed explanations
 
-    const humanPrompt = `Analyze these recent conversations and extract any NEW user insights not already captured.
+If no new insights are found, return "NONE".`;
 
-  Each line is a separate conversation in the format: "<timestamp> <conversation summary>||||<user messages>".
+    const humanPrompt = `Analyze these recent conversations and extract any NEW PERSISTENT user insights not already captured.
+
+STRICT REQUIREMENTS:
+- Focus only on LONG-TERM characteristics that the user EXPLICITLY states about themselves
+- DO NOT make inferences from questions they ask or topics they discuss
+- DO NOT assume location, interests, or characteristics from conversation context
+- Look for multiple insights if present - return each on a separate line
+
+Each line is a separate conversation in the format: "<timestamp> <conversation summary>||||<user messages>".
 
 ${this.recentConversationsContent}`;
 
