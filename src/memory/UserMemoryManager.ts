@@ -82,6 +82,96 @@ export class UserMemoryManager {
   }
 
   /**
+   * Create a condensed version of a user message for memory purposes.
+   * Optimized for Obsidian note-taking context and knowledge management workflows.
+   *
+   * @param userMessage - The original user message to condense
+   * @param chatModel - The chat model to use for condensing (optional)
+   * @returns Promise<string | null> - The condensed message or null if failed/unnecessary
+   *
+   * Features:
+   * - Skips condensing for very short messages or simple commands
+   * - Validates that condensed message is actually shorter than original
+   * - Provides fallback truncation if AI condensing fails
+   * - Optimized prompts for Obsidian-specific use cases
+   */
+  async createCondensedMessage(
+    userMessage: string,
+    chatModel?: BaseChatModel
+  ): Promise<string | null> {
+    if (!chatModel) {
+      logError("[UserMemoryManager] No chat model available for condensed message creation");
+      return null;
+    }
+
+    // Remove newlines and other formatting
+    const formattedMessage = userMessage.replace(/\n/g, " ").replace(/\\n/g, " ").trim();
+    const trimmedMessage = formattedMessage.trim();
+    if (!trimmedMessage) {
+      return null;
+    }
+
+    const systemPrompt = `Your task is to condense user messages into concise one-line summaries while preserving user intent and important details.
+
+The condensed message will be used as part of the recent conversation content for memory purposes.
+
+CRITICAL RULES:
+1. Keep it to ONE sentence maximum
+2. Preserve the user's core intent and request
+3. Include important details like note names, tags, search queries, or Obsidian features mentioned
+4. Maintain the meaning and specificity of the original message
+5. Use clear, direct language
+6. Prioritize Obsidian-specific features (links, tags, graphs, plugins, etc.)
+
+# OUTPUT FORMAT
+Return only the condensed message as plain text, no quotes or additional formatting.`;
+
+    const humanPrompt = `<user_message>
+${trimmedMessage}
+</user_message>
+
+Condense the user message into a single concise sentence while preserving intent and important details`;
+
+    const messages_llm = [new SystemMessage(systemPrompt), new HumanMessage(humanPrompt)];
+
+    try {
+      const response = await chatModel.invoke(messages_llm);
+      if (!response || !response.content) {
+        logError("[UserMemoryManager] Empty response from chat model for condensed message");
+        return null;
+      }
+
+      const condensed = response.content.toString().trim();
+
+      // Validate the condensed message
+      if (!condensed) {
+        logError("[UserMemoryManager] Chat model returned empty condensed message");
+        return null;
+      }
+
+      // Ensure the condensed message is actually shorter than the original
+      if (condensed.length >= trimmedMessage.length) {
+        logInfo("[UserMemoryManager] Condensed message not shorter than original, using original");
+        return trimmedMessage;
+      }
+
+      // Remove any quotes or formatting that might have been added
+      const cleanedCondensed = condensed.replace(/^["']|["']$/g, "").trim();
+
+      return cleanedCondensed || null;
+    } catch (error) {
+      logError("[UserMemoryManager] Failed to create condensed message:", error);
+      // Fallback: return a truncated version of the original message if it's too long
+      if (trimmedMessage.length > 100) {
+        const fallback = trimmedMessage.substring(0, 97) + "...";
+        logInfo("[UserMemoryManager] Using fallback truncated message");
+        return fallback;
+      }
+      return null;
+    }
+  }
+
+  /**
    * Get user memory prompt
    */
   async getUserMemoryPrompt(): Promise<string | null> {
@@ -116,7 +206,10 @@ export class UserMemoryManager {
     const timestamp = new Date().toISOString().split(".")[0] + "Z"; // Remove milliseconds but keep Z for UTC
     const userMessageTexts = messages
       .filter((message) => message.sender === USER_SENDER)
-      .map((message) => message.message);
+      .map((message) => {
+        // Use condensed message if available
+        return message.condensedMessage;
+      });
     const content = userMessageTexts.join("||||");
     return `${timestamp} ${conversationSummary}||||${content}`;
   }

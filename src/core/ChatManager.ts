@@ -140,6 +140,37 @@ export class ChatManager {
       // Update the processed content
       currentRepo.updateProcessedText(messageId, processedContent);
 
+      // Create condensed message for user messages
+      if (message.sender === USER_SENDER && this.plugin.userMemoryManager) {
+        try {
+          const settings = getSettings();
+          if (settings.enableMemory) {
+            const chainManager = this.plugin.projectManager.getCurrentChainManager();
+            const chatModel = chainManager.chatModelManager.getChatModel();
+
+            // Create condensed message asynchronously (fire and forget)
+            this.plugin.userMemoryManager
+              .createCondensedMessage(displayText, chatModel)
+              .then((condensedMessage) => {
+                if (condensedMessage) {
+                  currentRepo.updateCondensedMessage(messageId, condensedMessage);
+                  logInfo(
+                    `[ChatManager] Created condensed message for ${messageId}: "${condensedMessage}"`
+                  );
+                }
+              })
+              .catch((error) => {
+                logInfo(
+                  `[ChatManager] Failed to create condensed message for ${messageId}:`,
+                  error
+                );
+              });
+          }
+        } catch (error) {
+          logInfo(`[ChatManager] Error setting up condensed message creation:`, error);
+        }
+      }
+
       logInfo(`[ChatManager] Successfully sent message ${messageId}`);
       return messageId;
     } catch (error) {
