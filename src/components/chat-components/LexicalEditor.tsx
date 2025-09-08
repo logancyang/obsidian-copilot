@@ -1,17 +1,19 @@
-import React, { forwardRef, useImperativeHandle } from "react";
-import { $getRoot, EditorState, $createParagraphNode, $createTextNode } from "lexical";
+import React, { forwardRef, useCallback, useImperativeHandle } from "react";
+import { $getRoot, EditorState } from "lexical";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { PlainTextPlugin } from "@lexical/react/LexicalPlainTextPlugin";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
-import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { KEY_ENTER_COMMAND } from "lexical";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { SlashCommandPlugin } from "./SlashCommandPlugin";
 import { NoteCommandPlugin } from "./NoteCommandPlugin";
-import { NotePillPlugin, NotePillNode, $isNotePillNode } from "./NotePillPlugin";
+import { NotePillPlugin, NotePillNode } from "./NotePillPlugin";
 import { PillDeletionPlugin } from "./PillDeletionPlugin";
+import { KeyboardPlugin } from "./plugins/KeyboardPlugin";
+import { ValueSyncPlugin } from "./plugins/ValueSyncPlugin";
+import { FocusPlugin } from "./plugins/FocusPlugin";
+import { NotePillSyncPlugin } from "./plugins/NotePillSyncPlugin";
 import { cn } from "@/lib/utils";
 
 interface LexicalEditorProps {
@@ -24,144 +26,6 @@ interface LexicalEditorProps {
   onNotesChange?: (notes: { path: string; basename: string }[]) => void;
   onNotesRemoved?: (removedNotes: { path: string; basename: string }[]) => void;
   onEditorReady?: (editor: any) => void;
-}
-
-// Custom plugin to handle keyboard events
-function KeyboardPlugin({ onSubmit }: { onSubmit: () => void }) {
-  const [editor] = useLexicalComposerContext();
-
-  React.useEffect(() => {
-    return editor.registerCommand(
-      KEY_ENTER_COMMAND,
-      (event: KeyboardEvent) => {
-        if (event.shiftKey) {
-          // Allow line break on Shift+Enter
-          return false;
-        }
-
-        event.preventDefault();
-        onSubmit();
-        return true;
-      },
-      1 // High priority
-    );
-  }, [editor, onSubmit]);
-
-  return null;
-}
-
-// Plugin to sync external value changes with editor
-function ValueSyncPlugin({ value }: { value: string }) {
-  const [editor] = useLexicalComposerContext();
-
-  React.useEffect(() => {
-    editor.update(() => {
-      const root = $getRoot();
-      const currentText = root.getTextContent();
-
-      if (currentText !== value) {
-        root.clear();
-        if (value) {
-          root.append($createParagraphNode().append($createTextNode(value)));
-        }
-      }
-    });
-  }, [editor, value]);
-
-  return null;
-}
-
-// Plugin to provide focus method and editor instance
-function FocusPlugin({
-  onFocus,
-  onEditorReady,
-}: {
-  onFocus: (focusFn: () => void) => void;
-  onEditorReady?: (editor: any) => void;
-}) {
-  const [editor] = useLexicalComposerContext();
-
-  React.useEffect(() => {
-    const focusEditor = () => {
-      editor.focus();
-    };
-    onFocus(focusEditor);
-
-    // Also provide the editor instance
-    if (onEditorReady) {
-      onEditorReady(editor);
-    }
-  }, [editor, onFocus, onEditorReady]);
-
-  return null;
-}
-
-// Plugin to track pill changes and notify parent
-function NotePillSyncPlugin({
-  onNotesChange,
-  onNotesRemoved,
-}: {
-  onNotesChange?: (notes: { path: string; basename: string }[]) => void;
-  onNotesRemoved?: (removedNotes: { path: string; basename: string }[]) => void;
-}) {
-  const [editor] = useLexicalComposerContext();
-  const prevNotesRef = React.useRef<{ path: string; basename: string }[]>([]);
-
-  // Track pill changes and notify parent
-  React.useEffect(() => {
-    if (!onNotesChange && !onNotesRemoved) return;
-
-    return editor.registerUpdateListener(({ editorState }) => {
-      editorState.read(() => {
-        const notes: { path: string; basename: string }[] = [];
-        const root = $getRoot();
-
-        function traverse(node: any) {
-          if ($isNotePillNode(node)) {
-            notes.push({
-              path: node.getNotePath(),
-              basename: node.getNoteTitle(),
-            });
-          }
-
-          // Only traverse children if the node has the getChildren method
-          if (typeof node.getChildren === "function") {
-            const children = node.getChildren();
-            for (const child of children) {
-              traverse(child);
-            }
-          }
-        }
-
-        traverse(root);
-
-        // Check for changes
-        const prevNotes = prevNotesRef.current;
-        const currentPaths = notes.map((note) => note.path).sort();
-        const prevPaths = prevNotes.map((note) => note.path).sort();
-
-        if (JSON.stringify(prevPaths) !== JSON.stringify(currentPaths)) {
-          // Detect removed notes
-          if (onNotesRemoved) {
-            const currentPathSet = new Set(currentPaths);
-            const removedNotes = prevNotes.filter((note) => !currentPathSet.has(note.path));
-
-            if (removedNotes.length > 0) {
-              onNotesRemoved(removedNotes);
-            }
-          }
-
-          // Update current notes
-          prevNotesRef.current = notes;
-          if (onNotesChange) {
-            onNotesChange(notes);
-          }
-        }
-      });
-    });
-  }, [editor, onNotesChange, onNotesRemoved]);
-
-  return null;
 }
 
 const LexicalEditor = forwardRef<{ focus: () => void }, LexicalEditorProps>(
@@ -200,13 +64,16 @@ const LexicalEditor = forwardRef<{ focus: () => void }, LexicalEditorProps>(
       editable: !disabled,
     };
 
-    const handleEditorChange = (editorState: EditorState) => {
-      editorState.read(() => {
-        const root = $getRoot();
-        const textContent = root.getTextContent();
-        onChange(textContent);
-      });
-    };
+    const handleEditorChange = useCallback(
+      (editorState: EditorState) => {
+        editorState.read(() => {
+          const root = $getRoot();
+          const textContent = root.getTextContent();
+          onChange(textContent);
+        });
+      },
+      [onChange]
+    );
 
     return (
       <LexicalComposer initialConfig={initialConfig}>
