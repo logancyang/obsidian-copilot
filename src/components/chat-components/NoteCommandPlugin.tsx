@@ -183,21 +183,21 @@ export function NoteCommandPlugin(): JSX.Element {
             // Create the pill node
             const pillNode = $createNotePillNode(option.title, option.file.path, isActive);
 
-            // Replace the text with before + pill + after
+            // Replace the text with before + pill + space + after
             if (beforeBracket) {
               anchorNode.setTextContent(beforeBracket);
               anchorNode.insertAfter(pillNode);
-              if (afterQuery) {
-                pillNode.insertAfter($createTextNode(afterQuery));
-              }
+              // Add space after the pill
+              const spaceAndAfter = afterQuery ? " " + afterQuery : " ";
+              pillNode.insertAfter($createTextNode(spaceAndAfter));
             } else {
               anchorNode.replace(pillNode);
-              if (afterQuery) {
-                pillNode.insertAfter($createTextNode(afterQuery));
-              }
+              // Add space after the pill
+              const spaceAndAfter = afterQuery ? " " + afterQuery : " ";
+              pillNode.insertAfter($createTextNode(spaceAndAfter));
             }
 
-            // Set cursor after the pill
+            // Set cursor after the pill and space
             pillNode.selectNext();
           }
         }

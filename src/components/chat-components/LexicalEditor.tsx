@@ -11,6 +11,7 @@ import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { SlashCommandPlugin } from "./SlashCommandPlugin";
 import { NoteCommandPlugin } from "./NoteCommandPlugin";
 import { NotePillPlugin, NotePillNode, $isNotePillNode } from "./NotePillPlugin";
+import { PillDeletionPlugin } from "./PillDeletionPlugin";
 import { cn } from "@/lib/utils";
 
 interface LexicalEditorProps {
@@ -231,6 +232,7 @@ const LexicalEditor = forwardRef<{ focus: () => void }, LexicalEditorProps>(
           <ValueSyncPlugin value={value} />
           <FocusPlugin onFocus={setFocusFn} onEditorReady={onEditorReady} />
           <NotePillSyncPlugin onNotesChange={onNotesChange} onNotesRemoved={onNotesRemoved} />
+          <PillDeletionPlugin />
           <SlashCommandPlugin />
           <NoteCommandPlugin />
           <NotePillPlugin />
