@@ -99,11 +99,14 @@ export class ChatManager {
 
       // If includeActiveNote is true and there's an active note, add it to context
       const updatedContext = { ...context };
+
       if (includeActiveNote && activeNote) {
         const existingNotes = context.notes || [];
         // Only add activeNote if it's not already in the context
-        const hasActiveNote = existingNotes.some((note) => note.path === activeNote.path);
-        updatedContext.notes = hasActiveNote ? existingNotes : [...existingNotes, activeNote];
+        const hasActiveNote = existingNotes.some((note) => note.file.path === activeNote.path);
+        updatedContext.notes = hasActiveNote
+          ? existingNotes
+          : [...existingNotes, { file: activeNote }];
       }
 
       // Create the message with initial content

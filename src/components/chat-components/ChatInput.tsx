@@ -41,6 +41,7 @@ import React, {
 } from "react";
 import { useDropzone } from "react-dropzone";
 import ContextControl from "./ContextControl";
+import { NoteReference } from "@/types/note";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -48,13 +49,13 @@ interface ChatInputProps {
   handleSendMessage: (metadata?: {
     toolCalls?: string[];
     urls?: string[];
-    contextNotes?: TFile[];
+    contextNotes?: NoteReference[];
   }) => void;
   isGenerating: boolean;
   onStopGenerating: () => void;
   app: App;
-  contextNotes: TFile[];
-  setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
+  contextNotes: NoteReference[];
+  setContextNotes: React.Dispatch<React.SetStateAction<NoteReference[]>>;
   includeActiveNote: boolean;
   setIncludeActiveNote: (include: boolean) => void;
   mention: Mention;
@@ -265,8 +266,8 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
             const activeNote = app.workspace.getActiveFile();
             if (note) {
               await contextProcessor.addNoteToContext(
-                note,
-                app.vault,
+                { file: note },
+                app,
                 contextNotes,
                 activeNote,
                 setContextNotes,
@@ -414,11 +415,11 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           const wasAddedViaReference = (note as any).wasAddedViaReference === true;
 
           // Special handling for the active note
-          if (note.path === currentActiveNote?.path) {
+          if (note.file.path === currentActiveNote?.path) {
             if (wasAddedViaReference) {
               // Case 1: Active note was added by typing [[note]]
               // Keep it only if its file is still in the input
-              return currentFiles.has(note);
+              return currentFiles.has(note.file);
             } else {
               // Case 2: Active note was NOT added by [[note]], but by the includeActiveNote toggle
               // Keep it only if includeActiveNote is true
@@ -429,7 +430,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
             if (wasAddedViaReference) {
               // Case 3: Other note was added by typing [[note]]
               // Keep it only if its file is still in the input
-              return currentFiles.has(note);
+              return currentFiles.has(note.file);
             } else {
               // Case 4: Other note was added via "Add Note to Context" button
               // Always keep these notes as they were manually added
@@ -495,7 +496,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     const excludeNotePaths = useMemo(
       () =>
         [
-          ...contextNotes.map((note) => note.path),
+          ...contextNotes.map((note) => note.file.path),
           ...(includeActiveNote && currentActiveNote ? [currentActiveNote.path] : []),
         ].filter((note) => note != null),
       [contextNotes, includeActiveNote, currentActiveNote]

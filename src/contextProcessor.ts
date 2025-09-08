@@ -3,8 +3,10 @@ import { ChainType } from "@/chainFactory";
 import { RESTRICTION_MESSAGES } from "@/constants";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { isPlusChain } from "@/utils";
-import { TFile, Vault, Notice } from "obsidian";
+import { TFile, Vault, Notice, App } from "obsidian";
 import { NOTE_CONTEXT_PROMPT_TAG, EMBEDDED_PDF_TAG, SELECTED_TEXT_TAG } from "./constants";
+import { NoteReference } from "./types/note";
+import { getRelevantNoteReferenceContent } from "./utils/noteUtils";
 
 export class ContextProcessor {
   private static instance: ContextProcessor;
@@ -151,29 +153,31 @@ export class ContextProcessor {
   }
 
   async addNoteToContext(
-    note: TFile,
-    vault: Vault,
-    contextNotes: TFile[],
+    note: NoteReference,
+    app: App,
+    contextNotes: NoteReference[],
     activeNote: TFile | null,
-    setContextNotes: (notes: TFile[] | ((prev: TFile[]) => TFile[])) => void,
+    setContextNotes: (
+      notes: NoteReference[] | ((prev: NoteReference[]) => NoteReference[])
+    ) => void,
     setIncludeActiveNote: (include: boolean) => void
   ): Promise<void> {
     // Only check if the note exists in contextNotes
-    if (contextNotes.some((existing) => existing.path === note.path)) {
+    if (contextNotes.some((existing) => existing.file.path === note.file.path)) {
       return; // Note already exists in context
     }
 
-    // Read the note content
-    const content = await vault.read(note);
-    const hasEmbeddedPDFs = await this.hasEmbeddedPDFs(content);
+    // Read the relevant note content
+    const relevantContent = await getRelevantNoteReferenceContent(app, note);
+    const hasEmbeddedPDFs = await this.hasEmbeddedPDFs(relevantContent);
 
     // Set includeActiveNote if it's the active note
-    if (activeNote && note.path === activeNote.path) {
+    if (activeNote && note.file.path === activeNote.path) {
       setIncludeActiveNote(true);
     }
 
     // Add to contextNotes with wasAddedViaReference flag
-    setContextNotes((prev: TFile[]) => [
+    setContextNotes((prev: NoteReference[]) => [
       ...prev,
       Object.assign(note, {
         wasAddedViaReference: true,

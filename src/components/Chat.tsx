@@ -37,8 +37,9 @@ import { ChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { err2String, isPlusChain } from "@/utils";
 import { Buffer } from "buffer";
-import { Notice, TFile } from "obsidian";
+import { Notice } from "obsidian";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { NoteReference } from "@/types/note";
 
 type ChatMode = "default" | "project";
 
@@ -77,7 +78,7 @@ const Chat: React.FC<ChatProps> = ({
 
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES.DEFAULT);
-  const [contextNotes, setContextNotes] = useState<TFile[]>([]);
+  const [contextNotes, setContextNotes] = useState<NoteReference[]>([]);
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [showChatUI, setShowChatUI] = useState(false);
@@ -154,7 +155,7 @@ const Chat: React.FC<ChatProps> = ({
   }: {
     toolCalls?: string[];
     urls?: string[];
-    contextNotes?: TFile[];
+    contextNotes?: NoteReference[];
   } = {}) => {
     if (!inputMessage && selectedImages.length === 0) return;
 
@@ -194,7 +195,7 @@ const Chat: React.FC<ChatProps> = ({
       // Prepare context notes and deduplicate by path
       const allNotes = [...(passedContextNotes || []), ...contextNotes];
       const notes = allNotes.filter(
-        (note, index, array) => array.findIndex((n) => n.path === note.path) === index
+        (note, index, array) => array.findIndex((n) => n.file.path === note.file.path) === index
       );
 
       // Handle composer prompt

@@ -1,4 +1,4 @@
-import { TFile } from "obsidian";
+import { NoteReference } from "./note";
 
 /**
  * Formatted timestamp with multiple representations
@@ -25,7 +25,7 @@ export interface SelectedTextContext {
  * Context information attached to messages
  */
 export interface MessageContext {
-  notes: TFile[];
+  notes: NoteReference[];
   urls: string[];
   selectedTextContexts?: SelectedTextContext[];
 }

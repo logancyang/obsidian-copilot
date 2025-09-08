@@ -1,6 +1,6 @@
 import { AlertCircle, CheckCircle, CircleDashed, Loader2, Plus, X } from "lucide-react";
 import { TFile } from "obsidian";
-import React from "react";
+import React, { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SelectedTextContext } from "@/types/message";
@@ -8,10 +8,12 @@ import { ChainType } from "@/chainFactory";
 import { Separator } from "@/components/ui/separator";
 import { useChainType } from "@/aiParams";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
+import { NoteReference } from "@/types/note";
+import { getNoteReferenceKey } from "@/utils/noteUtils";
 
 interface ChatContextMenuProps {
   activeNote: TFile | null;
-  contextNotes: TFile[];
+  contextNotes: NoteReference[];
   contextUrls: string[];
   selectedTextContexts?: SelectedTextContext[];
   onAddContext: () => void;
@@ -26,21 +28,21 @@ function ContextNote({
   isActive = false,
   onRemoveContext,
 }: {
-  note: TFile;
+  note: NoteReference;
   isActive: boolean;
   onRemoveContext: (path: string) => void;
 }) {
   return (
     <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
       <div className="tw-flex tw-items-center tw-gap-1">
-        <span className="tw-max-w-40 tw-truncate">{note.basename}</span>
+        <span className="tw-max-w-40 tw-truncate">{note.file.name}</span>
         {isActive && <span className="tw-text-xs tw-text-faint">Current</span>}
-        {note.extension === "pdf" && <span className="tw-text-xs tw-text-faint">pdf</span>}
+        {note.file.extension === "pdf" && <span className="tw-text-xs tw-text-faint">pdf</span>}
       </div>
       <Button
         variant="ghost2"
         size="fit"
-        onClick={() => onRemoveContext(note.path)}
+        onClick={() => onRemoveContext(note.file.path)}
         aria-label="Remove from context"
         className="tw-text-muted"
       >
@@ -112,11 +114,17 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   onRemoveSelectedText,
   showProgressCard,
 }) => {
+  const activeNoteReference = useMemo(() => {
+    return {
+      file: activeNote,
+    } as NoteReference;
+  }, [activeNote]);
+
   const [currentChain] = useChainType();
   const contextStatus = useProjectContextStatus();
 
   const uniqueNotes = React.useMemo(() => {
-    const notesMap = new Map(contextNotes.map((note) => [note.path, note]));
+    const notesMap = new Map(contextNotes.map((note) => [note.file.path, note]));
 
     return Array.from(notesMap.values()).filter((note) => {
       // If the note was added manually, always show it in the list
@@ -125,7 +133,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
       }
 
       // For non-manually added notes, show them if they're not the active note
-      return !(activeNote && note.path === activeNote.path);
+      return !(activeNote && note.file.path === activeNote.path);
     });
   }, [contextNotes, activeNote]);
 
@@ -167,15 +175,15 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
       <div className="tw-flex tw-flex-1 tw-flex-wrap tw-gap-1">
         {activeNote && (
           <ContextNote
-            key={activeNote.path}
-            note={activeNote}
+            key={getNoteReferenceKey(activeNoteReference)}
+            note={activeNoteReference}
             isActive={true}
             onRemoveContext={onRemoveContext}
           />
         )}
         {uniqueNotes.map((note) => (
           <ContextNote
-            key={note.path}
+            key={getNoteReferenceKey(note)}
             note={note}
             isActive={false}
             onRemoveContext={onRemoveContext}

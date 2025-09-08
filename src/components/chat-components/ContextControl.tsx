@@ -6,12 +6,13 @@ import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
 import { SelectedTextContext } from "@/types/message";
 import { TFile } from "obsidian";
 import { ChatContextMenu } from "./ChatContextMenu";
+import { NoteReference } from "@/types/note";
 
 interface ChatControlsProps {
   app: App;
   excludeNotePaths: string[];
-  contextNotes: TFile[];
-  setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
+  contextNotes: NoteReference[];
+  setContextNotes: React.Dispatch<React.SetStateAction<NoteReference[]>>;
   includeActiveNote: boolean;
   setIncludeActiveNote: React.Dispatch<React.SetStateAction<boolean>>;
   activeNote: TFile | null;
@@ -37,17 +38,21 @@ const ContextControl: React.FC<ChatControlsProps> = ({
   showProgressCard,
 }) => {
   const [selectedChain] = useChainType();
+
   const handleAddContext = () => {
     new AddContextNoteModal({
       app,
-      onNoteSelect: (note) => {
+      onNoteSelect: (note: TFile) => {
         if (activeNote && note.path === activeNote.path) {
           setIncludeActiveNote(true);
           // Remove the note from contextNotes if it exists there
-          setContextNotes((prev) => prev.filter((n) => n.path !== note.path));
+          setContextNotes((prev) => prev.filter((n) => n.file.path !== note.path));
         } else {
           // Add wasAddedManually flag to distinguish from reference-added notes
-          setContextNotes((prev) => [...prev, Object.assign(note, { wasAddedManually: true })]);
+          setContextNotes((prev) => [
+            ...prev,
+            Object.assign(note, { wasAddedManually: true, file: note }),
+          ]);
         }
       },
       excludeNotePaths,
@@ -57,19 +62,19 @@ const ContextControl: React.FC<ChatControlsProps> = ({
 
   const handleRemoveContext = (path: string) => {
     // First check if this note was added manually
-    const noteToRemove = contextNotes.find((note) => note.path === path);
+    const noteToRemove = contextNotes.find((note) => note.file.path === path);
     const wasAddedManually = noteToRemove && (noteToRemove as any).wasAddedManually;
 
     if (wasAddedManually) {
       // If it was added manually, just remove it from contextNotes
-      setContextNotes((prev) => prev.filter((note) => note.path !== path));
+      setContextNotes((prev) => prev.filter((note) => note.file.path !== path));
     } else {
       // If it wasn't added manually, it could be either:
       // 1. The active note (controlled by includeActiveNote)
       // 2. A note added via [[reference]]
       // In either case, we should:
       setIncludeActiveNote(false); // Turn off includeActiveNote if this was the active note
-      setContextNotes((prev) => prev.filter((note) => note.path !== path)); // Remove from contextNotes if it was there
+      setContextNotes((prev) => prev.filter((note) => note.file.path !== path)); // Remove from contextNotes if it was there
     }
   };
 
