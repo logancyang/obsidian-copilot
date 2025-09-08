@@ -14,7 +14,6 @@ import {
 } from "lexical";
 import fuzzysort from "fuzzysort";
 import { TFile, App } from "obsidian";
-import { logInfo } from "@/logger";
 import { TypeaheadMenu, tryToPositionRange, TypeaheadOption } from "./TypeaheadMenu";
 import { $createNotePillNode } from "./NotePillPlugin";
 
@@ -95,7 +94,6 @@ export function NoteCommandPlugin(): JSX.Element {
     }
 
     const markdownFiles = app.vault.getMarkdownFiles() as TFile[];
-    logInfo("NoteMenu All files:", markdownFiles.length);
 
     return markdownFiles.map((file, index) => ({
       key: `${file.basename}-${index}`,
@@ -334,12 +332,6 @@ export function NoteCommandPlugin(): JSX.Element {
 
         const textContent = anchorNode.getTextContent();
         const cursorOffset = anchor.offset;
-        logInfo(
-          "NoteMenu text content:",
-          JSON.stringify(textContent),
-          "cursor offset:",
-          cursorOffset
-        );
 
         // Look for [[ before cursor
         let bracketIndex = -1;
@@ -351,7 +343,6 @@ export function NoteCommandPlugin(): JSX.Element {
             // Check if [[ is at start or preceded by whitespace
             if (i === 1 || /\s/.test(textContent[i - 2])) {
               bracketIndex = i - 1; // Start from the first [
-              logInfo("NoteMenu found [[ at index:", bracketIndex);
               break;
             }
           } else if (/\s/.test(char)) {
@@ -363,7 +354,6 @@ export function NoteCommandPlugin(): JSX.Element {
         if (bracketIndex !== -1) {
           // Extract query after [[
           const query = textContent.slice(bracketIndex + 2, cursorOffset);
-          logInfo("NoteMenu opening with query:", JSON.stringify(query));
 
           // Use Range for accurate positioning
           const editorWindow = editor._window ?? window;
@@ -372,8 +362,6 @@ export function NoteCommandPlugin(): JSX.Element {
           const range = tryToPositionRange(bracketIndex, editorWindow);
 
           if (range) {
-            logInfo("NoteMenu positioned range rect:", range.getBoundingClientRect());
-
             setNoteCommandState({
               isOpen: true,
               query,
@@ -382,11 +370,8 @@ export function NoteCommandPlugin(): JSX.Element {
               startOffset: bracketIndex,
               range: range,
             });
-          } else {
-            logInfo("NoteMenu failed to position range");
           }
         } else if (noteCommandState.isOpen) {
-          logInfo("NoteMenu closing");
           closeNoteCommand();
         }
       });
