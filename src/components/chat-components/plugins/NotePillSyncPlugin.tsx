@@ -3,11 +3,21 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { $getRoot } from "lexical";
 import { $isNotePillNode } from "../NotePillPlugin";
 
+/**
+ * Props for the NotePillSyncPlugin component
+ */
 interface NotePillSyncPluginProps {
+  /** Callback triggered when the list of note pills changes */
   onNotesChange?: (notes: { path: string; basename: string }[]) => void;
+  /** Callback triggered when note pills are removed from the editor */
   onNotesRemoved?: (removedNotes: { path: string; basename: string }[]) => void;
 }
 
+/**
+ * Lexical plugin that monitors note pill nodes in the editor and syncs
+ * their state with parent components. Tracks additions, removals, and
+ * changes to note pills to keep external state in sync with editor content.
+ */
 export function NotePillSyncPlugin({ onNotesChange, onNotesRemoved }: NotePillSyncPluginProps) {
   const [editor] = useLexicalComposerContext();
   const prevNotesRef = React.useRef<{ path: string; basename: string }[]>([]);

@@ -2,10 +2,19 @@ import React from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { KEY_ENTER_COMMAND } from "lexical";
 
+/**
+ * Props for the KeyboardPlugin component
+ */
 interface KeyboardPluginProps {
+  /** Callback triggered when Enter is pressed (without Shift) */
   onSubmit: () => void;
 }
 
+/**
+ * Lexical plugin that handles keyboard shortcuts for the chat input.
+ * - Enter: Submits the message
+ * - Shift+Enter: Creates a new line (default behavior)
+ */
 export function KeyboardPlugin({ onSubmit }: KeyboardPluginProps) {
   const [editor] = useLexicalComposerContext();
 
