@@ -10,6 +10,7 @@ import { ContextManager } from "./ContextManager";
 import { MessageRepository } from "./MessageRepository";
 import { ChatPersistenceManager } from "./ChatPersistenceManager";
 import { USER_SENDER } from "@/constants";
+import { getNoteReferenceKey } from "@/utils/noteUtils";
 
 /**
  * ChatManager - Central business logic coordinator
@@ -97,16 +98,20 @@ export class ChatManager {
       // Get active note
       const activeNote = this.plugin.app.workspace.getActiveFile();
 
+      const activeNoteReference = activeNote ? { file: activeNote } : null;
+
       // If includeActiveNote is true and there's an active note, add it to context
       const updatedContext = { ...context };
 
-      if (includeActiveNote && activeNote) {
+      if (includeActiveNote && activeNote && activeNoteReference) {
         const existingNotes = context.notes || [];
         // Only add activeNote if it's not already in the context
-        const hasActiveNote = existingNotes.some((note) => note.file.path === activeNote.path);
+        const hasActiveNote = existingNotes.some(
+          (note) => getNoteReferenceKey(note) === getNoteReferenceKey(activeNoteReference)
+        );
         updatedContext.notes = hasActiveNote
           ? existingNotes
-          : [...existingNotes, { file: activeNote }];
+          : [...existingNotes, activeNoteReference];
       }
 
       // Create the message with initial content
@@ -134,10 +139,10 @@ export class ChatManager {
       const processedContent = await this.contextManager.processMessageContext(
         message,
         this.fileParserManager,
-        this.plugin.app.vault,
+        this.plugin.app,
         chainType,
         includeActiveNote,
-        activeNote
+        activeNoteReference
       );
 
       // Update the processed content
@@ -172,14 +177,17 @@ export class ChatManager {
 
       // Reprocess context for the edited message
       const activeNote = this.plugin.app.workspace.getActiveFile();
+
+      const activeNoteReference = activeNote ? { file: activeNote } : null;
+
       await this.contextManager.reprocessMessageContext(
         messageId,
         currentRepo,
         this.fileParserManager,
-        this.plugin.app.vault,
+        this.plugin.app,
         chainType,
         includeActiveNote,
-        activeNote
+        activeNoteReference
       );
 
       // Update chain memory with fresh LLM messages

@@ -2,6 +2,7 @@ import { AI_SENDER, USER_SENDER } from "@/constants";
 import { MessageContext } from "@/types/message";
 import { TFile } from "obsidian";
 import { MessageRepository } from "./MessageRepository";
+import { NoteReference } from "@/types/note";
 
 // Mock the settings module
 jest.mock("@/settings/model", () => ({
@@ -29,8 +30,12 @@ describe("Message Lifecycle with Context Notes - Complete Example", () => {
       extension: "md",
     } as TFile;
 
+    const attachedNoteReference = {
+      file: attachedNote,
+    } as NoteReference;
+
     const context: MessageContext = {
-      notes: [attachedNote],
+      notes: [attachedNoteReference],
       urls: [],
       selectedTextContexts: [],
     };
@@ -164,8 +169,12 @@ The team appears to be taking a pragmatic approach with a focused MVP scope and 
       extension: "md",
     } as TFile;
 
+    const noteReference = {
+      file: note,
+    } as NoteReference;
+
     const context: MessageContext = {
-      notes: [note],
+      notes: [noteReference],
       urls: [],
       selectedTextContexts: [],
     };
@@ -220,11 +229,13 @@ Attendees: Alice (PM), Bob (Dev), Charlie (QA)
     const context: MessageContext = {
       notes: [
         {
-          path: "budget.md",
-          name: "budget.md",
-          basename: "budget",
-          extension: "md",
-        } as TFile,
+          file: {
+            path: "budget.md",
+            name: "budget.md",
+            basename: "budget",
+            extension: "md",
+          } as TFile,
+        },
       ],
       urls: [],
       selectedTextContexts: [],

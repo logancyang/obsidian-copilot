@@ -2,6 +2,8 @@ import React from "react";
 import { render } from "@testing-library/react";
 import { ChatMessage } from "@/types/message";
 import { TFile } from "obsidian";
+import { getNoteReferenceDisplayText, getNoteReferenceKey } from "@/utils/noteUtils";
+import { NoteReference } from "@/types/note";
 
 // Mock Tooltip components
 jest.mock("@radix-ui/react-tooltip", () => ({
@@ -29,9 +31,9 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
 
   return (
     <div className="tw-flex tw-flex-wrap tw-gap-2">
-      {context.notes.map((note, index) => (
-        <div key={`${index}-${note.path}`} data-testid="note-badge">
-          <span>{note.basename}</span>
+      {context.notes.map((note: NoteReference, index) => (
+        <div key={`${index}-${getNoteReferenceKey(note)}`} data-testid="note-badge">
+          <span>{getNoteReferenceDisplayText(note, false, "name")}</span>
         </div>
       ))}
       {context.urls.map((url, index) => (
@@ -51,14 +53,19 @@ describe("MessageContext", () => {
       // Add other required TFile properties as needed
     }) as TFile;
 
+  const createMockNoteReference = (path: string, basename: string): NoteReference =>
+    ({
+      file: createMockFile(path, basename),
+    }) as NoteReference;
+
   describe("Duplicate Notes Bug Prevention", () => {
     it("should render duplicate notes without React key conflicts", () => {
       const context: ChatMessage["context"] = {
         notes: [
-          createMockFile("Piano Lessons/Lesson 4.md", "Lesson 4"),
-          createMockFile("Piano Lessons/Lesson 4.md", "Lesson 4"), // Duplicate
-          createMockFile("Piano Lessons/Lesson 1.md", "Lesson 1"),
-          createMockFile("Piano Lessons/Lesson 1.md", "Lesson 1"), // Duplicate
+          createMockNoteReference("Piano Lessons/Lesson 4.md", "Lesson 4"),
+          createMockNoteReference("Piano Lessons/Lesson 4.md", "Lesson 4"), // Duplicate
+          createMockNoteReference("Piano Lessons/Lesson 1.md", "Lesson 1"),
+          createMockNoteReference("Piano Lessons/Lesson 1.md", "Lesson 1"), // Duplicate
         ],
         urls: [
           "https://example.com",
@@ -95,8 +102,8 @@ describe("MessageContext", () => {
     it("should render unique keys for duplicate paths", () => {
       const context: ChatMessage["context"] = {
         notes: [
-          createMockFile("Piano Lessons/Lesson 4.md", "Lesson 4"),
-          createMockFile("Piano Lessons/Lesson 4.md", "Lesson 4"), // Same path
+          createMockNoteReference("Piano Lessons/Lesson 4.md", "Lesson 4"),
+          createMockNoteReference("Piano Lessons/Lesson 4.md", "Lesson 4"), // Same path
         ],
         urls: [],
         selectedTextContexts: [],

@@ -760,7 +760,7 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
                 `[loadProjectContext] Project ${project.name}: Parsing/caching new/updated file: ${filePath}`
               );
 
-              await this.fileParserManager.parseFile(file, this.app.vault);
+              await this.fileParserManager.parseFile(this.app, { file });
               processedNonMdCount++;
             }
           });
@@ -894,7 +894,7 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
 
     try {
       await this.loadTracker.executeWithProcessTracking(filePath, "nonMd", async () => {
-        return this.fileParserManager.parseFile(file, this.app.vault);
+        return this.fileParserManager.parseFile(this.app, { file });
       });
 
       logInfo(`[retryNonMarkdownFile] Successfully reprocessed non-markdown file: ${filePath}`);

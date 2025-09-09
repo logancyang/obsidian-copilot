@@ -2,6 +2,7 @@ import { MessageRepository } from "./MessageRepository";
 import { USER_SENDER, SELECTED_TEXT_TAG } from "@/constants";
 import { MessageContext } from "@/types/message";
 import { TFile } from "obsidian";
+import { NoteReference } from "@/types/note";
 
 /**
  * Tests specifically for proper XML tag formatting in context processing
@@ -22,8 +23,12 @@ describe("Message Context XML Tag Formatting", () => {
       extension: "md",
     } as TFile;
 
+    const noteReference = {
+      file: note,
+    } as NoteReference;
+
     const context: MessageContext = {
-      notes: [note],
+      notes: [noteReference],
       urls: [],
       selectedTextContexts: [],
     };
@@ -165,8 +170,12 @@ function fibonacci(n) {
       extension: "md",
     } as TFile;
 
+    const noteReference = {
+      file: note,
+    } as NoteReference;
+
     const context: MessageContext = {
-      notes: [note],
+      notes: [noteReference],
       urls: ["https://patterns.dev/solid-principles"],
       selectedTextContexts: [
         {
@@ -242,8 +251,12 @@ The Single Responsibility Principle states that a class should have only one rea
       extension: "pdf",
     } as TFile;
 
+    const corruptedNoteReference = {
+      file: corruptedNote,
+    } as NoteReference;
+
     const context: MessageContext = {
-      notes: [corruptedNote],
+      notes: [corruptedNoteReference],
       urls: [],
       selectedTextContexts: [],
     };

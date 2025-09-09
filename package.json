@@ -10,6 +10,7 @@
     "build": "npm run build:tailwind && npm run build:esbuild || exit 1",
     "build:tailwind": "npx tailwindcss -i src/styles/tailwind.css -o styles.css --minify",
     "build:esbuild": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "build:esbuild:watch": "tsc -noEmit -skipLibCheck --watch & nodemon --watch src --ext ts,tsx,js,jsx --exec \"node esbuild.config.mjs\"",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "lint:fix": "eslint . --ext .js,.jsx,.ts,.tsx --fix",
     "format": "prettier --write 'src/**/*.{js,ts,tsx,md}'",

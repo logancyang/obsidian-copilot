@@ -205,7 +205,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       // First, check if we have context notes
       if (userMessage.context?.notes && userMessage.context.notes.length > 0) {
         // Use the first note in context as the source path
-        sourcePath = userMessage.context.notes[0].path;
+        sourcePath = userMessage.context.notes[0].file.path;
       } else {
         // Fallback to active file if no context notes
         const activeFile = this.chainManager.app?.workspace.getActiveFile();

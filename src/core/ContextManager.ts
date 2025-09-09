@@ -7,8 +7,10 @@ import { Mention } from "@/mentions/Mention";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { ChatMessage, MessageContext } from "@/types/message";
 import { extractNoteFiles } from "@/utils";
-import { TFile, Vault } from "obsidian";
+import { App, TFile, Vault } from "obsidian";
 import { MessageRepository } from "./MessageRepository";
+import { getNoteReferenceKey } from "@/utils/noteUtils";
+import { NoteReference } from "@/types/note";
 
 /**
  * ContextManager - Handles all context processing business logic
@@ -43,10 +45,10 @@ export class ContextManager {
   async processMessageContext(
     message: ChatMessage,
     fileParserManager: FileParserManager,
-    vault: Vault,
+    app: App,
     chainType: ChainType,
     includeActiveNote: boolean,
-    activeNote: TFile | null
+    activeNote: NoteReference | null
   ): Promise<string> {
     try {
       logInfo(`[ContextManager] Processing context for message ${message.id}`);
@@ -57,8 +59,8 @@ export class ContextManager {
       const { processedPrompt: processedUserMessage, includedFiles } = await processPrompt(
         processedMessage,
         "",
-        vault,
-        activeNote
+        app.vault,
+        activeNote?.file
       );
 
       // 2. Extract URLs and process them (for Copilot Plus chain)
@@ -77,11 +79,12 @@ export class ContextManager {
 
       // Add active note if requested and not already included
       const notes = [...contextNotes];
+
       if (
         includeActiveNote &&
         chainType !== ChainType.PROJECT_CHAIN &&
         activeNote &&
-        !notes.some((note) => note.path === activeNote.path)
+        !notes.some((note) => getNoteReferenceKey(note) === getNoteReferenceKey(activeNote))
       ) {
         notes.push(activeNote);
       }
@@ -89,7 +92,7 @@ export class ContextManager {
       const noteContextAddition = await this.contextProcessor.processContextNotes(
         excludedNotePaths,
         fileParserManager,
-        vault,
+        app,
         notes,
         includeActiveNote,
         activeNote,
@@ -122,10 +125,10 @@ export class ContextManager {
     messageId: string,
     messageRepo: MessageRepository,
     fileParserManager: FileParserManager,
-    vault: Vault,
+    app: App,
     chainType: ChainType,
     includeActiveNote: boolean,
-    activeNote: TFile | null
+    activeNote: NoteReference | null
   ): Promise<void> {
     const message = messageRepo.getMessage(messageId);
 
@@ -138,7 +141,7 @@ export class ContextManager {
     const processedContent = await this.processMessageContext(
       message,
       fileParserManager,
-      vault,
+      app,
       chainType,
       includeActiveNote,
       activeNote
@@ -152,7 +155,7 @@ export class ContextManager {
    * Create message context from various sources
    */
   createMessageContext(
-    contextNotes: TFile[],
+    contextNotes: NoteReference[],
     contextUrls: string[],
     selectedTextContexts = getSelectedTextContexts()
   ): MessageContext {
@@ -171,7 +174,7 @@ export class ContextManager {
     vault: Vault,
     additionalNotes: TFile[] = []
   ): Promise<TFile[]> {
-    const extractedNotes = await extractNoteFiles(content, vault);
+    const extractedNotes = extractNoteFiles(content, vault);
 
     // Combine and deduplicate
     const allNotes = [...extractedNotes, ...additionalNotes];

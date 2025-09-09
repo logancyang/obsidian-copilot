@@ -1,5 +1,6 @@
 import { MessageRepository } from "./MessageRepository";
 import { ChatMessage, MessageContext, StoredMessage } from "@/types/message";
+import { NoteReference } from "@/types/note";
 import { formatDateTime } from "@/utils";
 import { TFile } from "obsidian";
 
@@ -53,8 +54,11 @@ describe("MessageRepository", () => {
 
     it("should add a message with context", () => {
       const mockFile = { path: "test.md", basename: "test" } as TFile;
+      const mockNoteReference = {
+        file: mockFile,
+      } as NoteReference;
       const context: MessageContext = {
-        notes: [mockFile],
+        notes: [mockNoteReference],
         urls: ["https://example.com"],
         selectedTextContexts: [],
       };
@@ -295,8 +299,11 @@ describe("MessageRepository", () => {
     describe("Context Badge Bug Prevention", () => {
       it("should preserve context when creating display messages", () => {
         const mockFile = { path: "test.md", basename: "test" } as TFile;
+        const mockNoteReference = {
+          file: mockFile,
+        } as NoteReference;
         const context: MessageContext = {
-          notes: [mockFile],
+          notes: [mockNoteReference],
           urls: ["https://example.com"],
           selectedTextContexts: [],
         };

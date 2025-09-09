@@ -4,19 +4,21 @@ import { PDFCache } from "@/cache/pdfCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { logError, logInfo } from "@/logger";
 import { extractRetryTime, isRateLimitError } from "@/utils/rateLimitUtils";
-import { Notice, TFile, Vault } from "obsidian";
+import { App, Notice, Vault } from "obsidian";
 import { CanvasLoader } from "./CanvasLoader";
+import { NoteReference } from "@/types/note";
+import { getRelevantNoteReferenceContent } from "@/utils/noteUtils";
 
 interface FileParser {
   supportedExtensions: string[];
-  parseFile: (file: TFile, vault: Vault) => Promise<string>;
+  parseFile: (app: App, noteRef: NoteReference) => Promise<string>;
 }
 
 export class MarkdownParser implements FileParser {
   supportedExtensions = ["md"];
 
-  async parseFile(file: TFile, vault: Vault): Promise<string> {
-    return await vault.read(file);
+  async parseFile(app: App, noteRef: NoteReference): Promise<string> {
+    return await getRelevantNoteReferenceContent(app, noteRef);
   }
 }
 
@@ -30,26 +32,26 @@ export class PDFParser implements FileParser {
     this.pdfCache = PDFCache.getInstance();
   }
 
-  async parseFile(file: TFile, vault: Vault): Promise<string> {
+  async parseFile(app: App, noteRef: NoteReference): Promise<string> {
     try {
-      logInfo("Parsing PDF file:", file.path);
+      logInfo("Parsing PDF file:", noteRef.file.path);
 
       // Try to get from cache first
-      const cachedResponse = await this.pdfCache.get(file);
+      const cachedResponse = await this.pdfCache.get(noteRef.file);
       if (cachedResponse) {
-        logInfo("Using cached PDF content for:", file.path);
+        logInfo("Using cached PDF content for:", noteRef.file.path);
         return cachedResponse.response;
       }
 
       // If not in cache, read the file and call the API
-      const binaryContent = await vault.readBinary(file);
-      logInfo("Calling pdf4llm API for:", file.path);
+      const binaryContent = await app.vault.readBinary(noteRef.file);
+      logInfo("Calling pdf4llm API for:", noteRef.file.path);
       const pdf4llmResponse = await this.brevilabsClient.pdf4llm(binaryContent);
-      await this.pdfCache.set(file, pdf4llmResponse);
+      await this.pdfCache.set(noteRef.file, pdf4llmResponse);
       return pdf4llmResponse.response;
     } catch (error) {
-      logError(`Error extracting content from PDF ${file.path}:`, error);
-      return `[Error: Could not extract content from PDF ${file.basename}]`;
+      logError(`Error extracting content from PDF ${noteRef.file.path}:`, error);
+      return `[Error: Could not extract content from PDF ${noteRef.file.basename}]`;
     }
   }
 
@@ -62,17 +64,17 @@ export class PDFParser implements FileParser {
 export class CanvasParser implements FileParser {
   supportedExtensions = ["canvas"];
 
-  async parseFile(file: TFile, vault: Vault): Promise<string> {
+  async parseFile(app: App, noteRef: NoteReference): Promise<string> {
     try {
-      logInfo("Parsing Canvas file:", file.path);
-      const canvasLoader = new CanvasLoader(vault);
-      const canvasData = await canvasLoader.load(file);
+      logInfo("Parsing Canvas file:", noteRef.file.path);
+      const canvasLoader = new CanvasLoader(app.vault);
+      const canvasData = await canvasLoader.load(noteRef.file);
 
       // Use the specialized buildPrompt method to create LLM-friendly format
       return canvasLoader.buildPrompt(canvasData);
     } catch (error) {
-      logError(`Error parsing Canvas file ${file.path}:`, error);
-      return `[Error: Could not parse Canvas file ${file.basename}]`;
+      logError(`Error parsing Canvas file ${noteRef.file.path}:`, error);
+      return `[Error: Could not parse Canvas file ${noteRef.file.basename}]`;
     }
   }
 }
@@ -184,6 +186,7 @@ export class Docs4LLMParser implements FileParser {
     "wav",
     "webm",
   ];
+
   private brevilabsClient: BrevilabsClient;
   private projectContextCache: ProjectContextCache;
   private currentProject: ProjectConfig | null;
@@ -199,37 +202,40 @@ export class Docs4LLMParser implements FileParser {
     this.currentProject = project;
   }
 
-  async parseFile(file: TFile, vault: Vault): Promise<string> {
+  async parseFile(app: App, noteRef: NoteReference): Promise<string> {
     try {
       logInfo(
-        `[Docs4LLMParser] Project ${this.currentProject?.name}: Parsing ${file.extension} file: ${file.path}`
+        `[Docs4LLMParser] Project ${this.currentProject?.name}: Parsing ${noteRef.file.extension} file: ${noteRef.file.path}`
       );
 
       if (!this.currentProject) {
-        logError("[Docs4LLMParser] No project context for parsing file: ", file.path);
+        logError("[Docs4LLMParser] No project context for parsing file: ", noteRef.file.path);
         throw new Error("No project context provided for file parsing");
       }
 
       const cachedContent = await this.projectContextCache.getOrReuseFileContext(
         this.currentProject,
-        file.path
+        noteRef.file.path
       );
       if (cachedContent) {
         logInfo(
-          `[Docs4LLMParser] Project ${this.currentProject.name}: Using cached content for: ${file.path}`
+          `[Docs4LLMParser] Project ${this.currentProject.name}: Using cached content for: ${noteRef.file.path}`
         );
         return cachedContent;
       }
       logInfo(
-        `[Docs4LLMParser] Project ${this.currentProject.name}: Cache miss for: ${file.path}. Proceeding to API call.`
+        `[Docs4LLMParser] Project ${this.currentProject.name}: Cache miss for: ${noteRef.file.path}. Proceeding to API call.`
       );
 
-      const binaryContent = await vault.readBinary(file);
+      const binaryContent = await app.vault.readBinary(noteRef.file);
 
       logInfo(
-        `[Docs4LLMParser] Project ${this.currentProject.name}: Calling docs4llm API for: ${file.path}`
+        `[Docs4LLMParser] Project ${this.currentProject.name}: Calling docs4llm API for: ${noteRef.file.path}`
       );
-      const docs4llmResponse = await this.brevilabsClient.docs4llm(binaryContent, file.extension);
+      const docs4llmResponse = await this.brevilabsClient.docs4llm(
+        binaryContent,
+        noteRef.file.extension
+      );
 
       if (!docs4llmResponse || !docs4llmResponse.response) {
         throw new Error("Empty response from docs4llm API");
@@ -237,6 +243,7 @@ export class Docs4LLMParser implements FileParser {
 
       // Extract markdown content from response
       let content = "";
+
       if (typeof docs4llmResponse.response === "string") {
         content = docs4llmResponse.response;
       } else if (Array.isArray(docs4llmResponse.response)) {
@@ -270,15 +277,19 @@ export class Docs4LLMParser implements FileParser {
       }
 
       // Cache the converted content
-      await this.projectContextCache.setFileContext(this.currentProject, file.path, content);
+      await this.projectContextCache.setFileContext(
+        this.currentProject,
+        noteRef.file.path,
+        content
+      );
 
       logInfo(
-        `[Docs4LLMParser] Project ${this.currentProject.name}: Successfully processed and cached: ${file.path}`
+        `[Docs4LLMParser] Project ${this.currentProject.name}: Successfully processed and cached: ${noteRef.file.path}`
       );
       return content;
     } catch (error) {
       logError(
-        `[Docs4LLMParser] Project ${this.currentProject?.name}: Error processing file ${file.path}:`,
+        `[Docs4LLMParser] Project ${this.currentProject?.name}: Error processing file ${noteRef.file.path}:`,
         error
       );
 
@@ -360,12 +371,12 @@ export class FileParserManager {
     }
   }
 
-  async parseFile(file: TFile, vault: Vault): Promise<string> {
-    const parser = this.parsers.get(file.extension);
+  async parseFile(app: App, noteRef: NoteReference): Promise<string> {
+    const parser = this.parsers.get(noteRef.file.extension);
     if (!parser) {
-      throw new Error(`No parser found for file type: ${file.extension}`);
+      throw new Error(`No parser found for file type: ${noteRef.file.extension}`);
     }
-    return await parser.parseFile(file, vault);
+    return await parser.parseFile(app, noteRef);
   }
 
   supportsExtension(extension: string): boolean {

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
 import { ChatMessage } from "@/types/message";
 import { cleanMessageForCopy, insertIntoEditor } from "@/utils";
+import { getNoteReferenceDisplayText, getNoteReferenceKey } from "@/utils/noteUtils";
 import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -27,13 +28,15 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
   return (
     <div className="tw-flex tw-flex-wrap tw-gap-2">
       {context.notes.map((note, index) => (
-        <Tooltip key={`${index}-${note.path}`}>
+        <Tooltip key={`${index}-${getNoteReferenceKey(note)}`}>
           <TooltipTrigger asChild>
             <Badge variant="secondary">
-              <span className="tw-max-w-40 tw-truncate">{note.basename}</span>
+              <span className="tw-max-w-40 tw-truncate">
+                {getNoteReferenceDisplayText(note, false, "name")}
+              </span>
             </Badge>
           </TooltipTrigger>
-          <TooltipContent>{note.path}</TooltipContent>
+          <TooltipContent>{getNoteReferenceDisplayText(note, false, "path")}</TooltipContent>
         </Tooltip>
       ))}
       {context.urls.map((url, index) => (

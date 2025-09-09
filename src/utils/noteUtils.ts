@@ -6,7 +6,7 @@ import { App, Pos } from "obsidian";
  * The key is a string that uniquely identifies a note reference.
  * It is used to cache the note reference content.
  * @param note The note reference to get the key for.
- * @returns
+ * @returns The key for the note reference, e.g. `Folder A/Note Path`, `Folder A/Note Path#Heading`, `Folder A/Note Path^Block`
  */
 export function getNoteReferenceKey(note: NoteReference): string {
   if (note.headingRef) {
@@ -26,16 +26,19 @@ export function getNoteReferenceKey(note: NoteReference): string {
  * It is used to display the note reference in the UI.
  * @param note The note reference to get the display text for.
  * @param includeWikilinkBrackets Whether to include wikilink brackets around the note reference.
- * @returns The display text for the note reference.
+ * @param mainNoteIdentifier Whether to use the note name or the note path as the main note identifier.
+ * @default "name"
+ * @returns The display text for the note reference, e.g. `[[Note Name]]`, `[[Folder A/Note Path]]`, `[[Note Name#Heading]]`, `[[Folder A/Note Path^Block]]`
  */
 export function getNoteReferenceDisplayText(
   note: NoteReference,
-  includeWikilinkBrackets: boolean = true
+  includeWikilinkBrackets: boolean = true,
+  mainNoteIdentifier: "name" | "path" = "name"
 ): string {
   const openingBrackets = includeWikilinkBrackets ? "[[" : "";
   const closingBrackets = includeWikilinkBrackets ? "]]" : "";
 
-  const noteName = note.file.name;
+  const noteName = mainNoteIdentifier === "name" ? note.file.name : note.file.path;
 
   if (note.headingRef) {
     return `${openingBrackets}${noteName}#${note.headingRef}${closingBrackets}`;
