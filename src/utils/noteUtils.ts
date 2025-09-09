@@ -28,7 +28,7 @@ export function getNoteReferenceKey(note: NoteReference): string {
  * @param includeWikilinkBrackets Whether to include wikilink brackets around the note reference.
  * @param mainNoteIdentifier Whether to use the note name or the note path as the main note identifier.
  * @default "name"
- * @returns The display text for the note reference, e.g. `[[Note Name]]`, `[[Folder A/Note Path]]`, `[[Note Name#Heading]]`, `[[Folder A/Note Path^Block]]`
+ * @returns The display text for the note reference, e.g. `[[Note Name]]`, `[[Folder A/Note Path]]`, `[[Note Name#Heading]]`, `[[Folder A/Note Path#^Block]]`
  */
 export function getNoteReferenceDisplayText(
   note: NoteReference,
@@ -45,7 +45,7 @@ export function getNoteReferenceDisplayText(
   }
 
   if (note.blockRef) {
-    return `${openingBrackets}${noteName}^${note.blockRef}${closingBrackets}`;
+    return `${openingBrackets}${noteName}#^${note.blockRef}${closingBrackets}`;
   }
 
   return `${openingBrackets}${noteName}${closingBrackets}`;
