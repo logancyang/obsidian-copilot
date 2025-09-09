@@ -406,13 +406,13 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       setContextNotes((prev) =>
         prev.filter((note) => {
           // Check if this note was added manually via the "+" button
-          const wasAddedManually = (note as any).wasAddedManually === true;
+          const wasAddedManually = note.addedVia === "user-action";
           // If it was added manually, always keep it
           if (wasAddedManually) return true;
 
           // Check if this note was added by typing [[note]] in the input
           // as opposed to being added via the "Add Note to Context" button
-          const wasAddedViaReference = (note as any).wasAddedViaReference === true;
+          const wasAddedViaReference = note.addedVia === "reference";
 
           // Special handling for the active note
           if (note.file.path === currentActiveNote?.path) {

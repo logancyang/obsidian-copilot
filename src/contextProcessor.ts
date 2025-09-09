@@ -177,13 +177,10 @@ export class ContextProcessor {
     }
 
     // Add to contextNotes with wasAddedViaReference flag
-    setContextNotes((prev: NoteReference[]) => [
-      ...prev,
-      Object.assign(note, {
-        wasAddedViaReference: true,
-        hasEmbeddedPDFs,
-      }),
-    ]);
+    note.addedVia = "reference";
+    note.hasEmbeddedPDFs = hasEmbeddedPDFs;
+
+    setContextNotes((prev: NoteReference[]) => [...prev, note]);
   }
 
   processSelectedTextContexts(): string {

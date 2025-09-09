@@ -128,7 +128,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
 
     return Array.from(notesMap.values()).filter((note) => {
       // If the note was added manually, always show it in the list
-      if ((note as any).wasAddedManually) {
+      if (note.addedVia === "user-action") {
         return true;
       }
 

@@ -49,10 +49,11 @@ const ContextControl: React.FC<ChatControlsProps> = ({
           setContextNotes((prev) => prev.filter((n) => n.file.path !== note.path));
         } else {
           // Add wasAddedManually flag to distinguish from reference-added notes
-          setContextNotes((prev) => [
-            ...prev,
-            Object.assign(note, { wasAddedManually: true, file: note }),
-          ]);
+          const noteReference = {
+            file: note,
+            addedVia: "user-action",
+          } as NoteReference;
+          setContextNotes((prev) => [...prev, noteReference]);
         }
       },
       excludeNotePaths,
@@ -63,7 +64,7 @@ const ContextControl: React.FC<ChatControlsProps> = ({
   const handleRemoveContext = (path: string) => {
     // First check if this note was added manually
     const noteToRemove = contextNotes.find((note) => note.file.path === path);
-    const wasAddedManually = noteToRemove && (noteToRemove as any).wasAddedManually;
+    const wasAddedManually = noteToRemove?.addedVia === "user-action";
 
     if (wasAddedManually) {
       // If it was added manually, just remove it from contextNotes
