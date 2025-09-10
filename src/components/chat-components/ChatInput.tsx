@@ -27,7 +27,7 @@ import { isPlusChain } from "@/utils";
 import { useSettingsValue } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
 import { getToolDescription } from "@/tools/toolManager";
-import { extractNoteFiles, isAllowedFileForContext, isNoteTitleUnique } from "@/utils";
+import { isAllowedFileForContext, isNoteTitleUnique } from "@/utils";
 import { CornerDownLeft, Image, Loader2, StopCircle, X } from "lucide-react";
 import { App, Platform, TFile } from "obsidian";
 import React, {
@@ -42,6 +42,7 @@ import React, {
 import { useDropzone } from "react-dropzone";
 import ContextControl from "./ContextControl";
 import { NoteReference } from "@/types/note";
+import { useSynchronizeInputWithNoteReferences } from "@/utils/chatUtils";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -119,6 +120,14 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       "Processing context files...",
       "If you have many files in context, this can take a while...",
     ];
+
+    const { synchronizeInputWithNoteReferences } = useSynchronizeInputWithNoteReferences(
+      currentActiveNote,
+      contextNotes,
+      setContextNotes,
+      inputMessage,
+      app
+    );
 
     useImperativeHandle(ref, () => ({
       focus: () => {
@@ -233,6 +242,8 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       } else if (inputValue.slice(-1) === "@" && isCopilotPlus) {
         showCopilotPlusOptionsModal();
       }
+
+      synchronizeInputWithNoteReferences(inputValue);
     };
 
     const adjustTextareaHeight = () => {
@@ -399,12 +410,12 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
     useEffect(() => {
       // Get all note titles that are referenced using [[note]] syntax in the input
-      const currentFiles = new Set(extractNoteFiles(inputMessage, app.vault));
+      const currentFiles = new Set(contextNotes.map((noteReference) => noteReference.file));
       // Get all URLs mentioned in the input
       const currentUrls = mention.extractAllUrls(inputMessage);
 
-      setContextNotes((prev) =>
-        prev.filter((note) => {
+      setContextNotes((prev) => {
+        const previousFiltered = prev.filter((note) => {
           // Check if this note was added manually via the "+" button
           const wasAddedManually = note.addedVia === "user-action";
           // If it was added manually, always keep it
@@ -437,8 +448,12 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
               return true;
             }
           }
-        })
-      );
+        });
+
+        console.log("previousFiltered", previousFiltered);
+
+        return previousFiltered;
+      });
 
       // Remove any URLs that are no longer present in the input
       // Only keep URLs if URL processing is supported for the current chain
@@ -453,6 +468,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       includeActiveNote,
       currentActiveNote,
       mention,
+      contextNotes,
       setContextNotes,
       app.vault,
       currentChain,

@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { App, TFile, parseLinktext } from "obsidian";
 import { NoteReference } from "@/types/note";
 import { getNoteReferenceDisplayText, getNoteReferenceKey } from "./noteUtils";
@@ -67,6 +67,7 @@ export function extractNoteReferencesFromText(
       file,
       headingRef,
       blockRef,
+      addedVia: "reference",
     } as NoteReference;
 
     const key = getNoteReferenceKey(noteReference);
@@ -80,8 +81,40 @@ export function extractNoteReferencesFromText(
 }
 
 /**
- * Hook that returns a synchronizer function for aligning input text with extracted note references.
- * For now, it only parses and returns the extracted NoteReference list from the given nextInputValue.
+ * React hook that keeps a list of `NoteReference`s in sync with the content of a text input.
+ *
+ * Behavior:
+ * - Parses wiki-links from a provided input string (e.g. `[[Note]]`, `[[Note#Heading]]`, `[[Note#^block]]`).
+ * - Resolves each link to a `TFile` using Obsidian's metadata cache.
+ * - Builds `NoteReference` objects (with optional `headingRef` or `blockRef`).
+ * - Deduplicates by unique key via {@link getNoteReferenceKey}.
+ * - Applies a stable sort using {@link getNoteReferenceDisplayText} with `mainNoteIdentifier = "path"`.
+ * - Updates the provided `setNoteReferences` only if the ordered keys differ from the current state.
+ *
+ * Notes:
+ * - `currentActiveNote` is used to compute the `sourcePath` for resolving relative links.
+ * - `noteReferences` and `inputMessage` are accepted for API symmetry with React usage, but are not
+ *   directly read by the synchronizer; callers typically keep them in the dependency list when needed.
+ *
+ * @param currentActiveNote The currently active note used to derive the `sourcePath` for link resolution.
+ * @param noteReferences The current list of note references (state value) managed by the caller.
+ * @param setNoteReferences State setter to update the list of note references.
+ * @param inputMessage The current input message content; present for API symmetry.
+ * @param app The Obsidian `App` instance used to resolve links.
+ * @returns An object with a function `synchronizeInputWithNoteReferences(nextInputValue)` that extracts, sorts, and
+ *          synchronizes note references from the provided string, returning the computed list.
+ *
+ * @example
+ * const { synchronizeInputWithNoteReferences } = useSynchronizeInputWithNoteReferences(
+ *   activeFile,
+ *   contextNotes,
+ *   setContextNotes,
+ *   inputMessage,
+ *   app
+ * );
+ *
+ * // Inside onChange handler
+ * synchronizeInputWithNoteReferences(event.target.value);
  */
 export function useSynchronizeInputWithNoteReferences(
   currentActiveNote: TFile | null,
@@ -91,7 +124,9 @@ export function useSynchronizeInputWithNoteReferences(
   ) => void,
   inputMessage: string,
   app: App
-) {
+): {
+  synchronizeInputWithNoteReferences: (nextInputValue: string) => NoteReference[];
+} {
   const synchronizeInputWithNoteReferences = useCallback(
     (nextInputValue: string): NoteReference[] => {
       const sourcePath = currentActiveNote?.path ?? "";
@@ -110,13 +145,37 @@ export function useSynchronizeInputWithNoteReferences(
         return 0;
       };
 
+      // Sort first to ensure stable order for diffing and for final state
       const sorted = extracted.slice().sort(compareByDisplay);
 
+      // Preserve flags (e.g., hasEmbeddedPDFs, addedVia) from previous state when keys match
       setNoteReferences((prev) => {
+        const prevByKey = new Map<string, NoteReference>();
+
+        for (const p of prev) {
+          prevByKey.set(getNoteReferenceKey(p), p);
+        }
+
+        const merged = sorted.map((curr) => {
+          const key = getNoteReferenceKey(curr);
+          const existing = prevByKey.get(key);
+          if (!existing) {
+            return curr;
+          }
+
+          // Merge preserving extra flags on the existing reference
+          return {
+            ...curr,
+            hasEmbeddedPDFs: existing.hasEmbeddedPDFs ?? curr.hasEmbeddedPDFs,
+            addedVia: existing.addedVia ?? curr.addedVia,
+          } as NoteReference;
+        });
+
+        // Avoid unnecessary state updates if keys and preserved ordering are identical
         const prevKeys = prev.map(getNoteReferenceKey);
-        const nextKeys = sorted.map(getNoteReferenceKey);
-        const isSame = prev.length === sorted.length && prevKeys.every((k, i) => k === nextKeys[i]);
-        return isSame ? prev : sorted;
+        const nextKeys = merged.map(getNoteReferenceKey);
+        const isSame = prev.length === merged.length && prevKeys.every((k, i) => k === nextKeys[i]);
+        return isSame ? prev : merged;
       });
 
       return sorted;
@@ -124,5 +183,8 @@ export function useSynchronizeInputWithNoteReferences(
     [app, currentActiveNote, setNoteReferences]
   );
 
-  return synchronizeInputWithNoteReferences;
+  return useMemo(
+    () => ({ synchronizeInputWithNoteReferences }),
+    [synchronizeInputWithNoteReferences]
+  );
 }
