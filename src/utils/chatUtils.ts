@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { App, TFile, parseLinktext } from "obsidian";
 import { NoteReference } from "@/types/note";
-import { getNoteReferenceKey } from "./noteUtils";
+import { getNoteReferenceDisplayText, getNoteReferenceKey } from "./noteUtils";
 
 /**
  * Extract all Obsidian wiki links (including headings and block refs) from a text string
@@ -33,9 +33,13 @@ export function extractNoteReferencesFromText(
       continue;
     }
 
-    // Be robust: parseLinktext can accept with or without brackets in some versions.
-    // We'll ensure it receives a bracketed string.
-    const { path, subpath } = parseLinktext(inner.startsWith("[[") ? inner : `[[${inner}]]`);
+    // If inner is already bracketed, remove the brackets before passing to parseLinktext.
+    let toParse = inner;
+    if (inner.startsWith("[[") && inner.endsWith("]]")) {
+      toParse = inner.slice(2, -2);
+    }
+
+    const { path, subpath } = parseLinktext(toParse);
     if (!path) {
       continue;
     }
@@ -81,21 +85,43 @@ export function extractNoteReferencesFromText(
  */
 export function useSynchronizeInputWithNoteReferences(
   currentActiveNote: TFile | null,
-  _noteReferences: NoteReference[],
-  _setNoteReferences: (
+  noteReferences: NoteReference[],
+  setNoteReferences: (
     updater: NoteReference[] | ((prev: NoteReference[]) => NoteReference[])
   ) => void,
-  _inputMessage: string,
+  inputMessage: string,
   app: App
 ) {
   const synchronizeInputWithNoteReferences = useCallback(
     (nextInputValue: string): NoteReference[] => {
       const sourcePath = currentActiveNote?.path ?? "";
-      return extractNoteReferencesFromText(nextInputValue, sourcePath, (path, sourcePath) => {
-        return app.metadataCache.getFirstLinkpathDest(path, sourcePath);
+      const extracted = extractNoteReferencesFromText(
+        nextInputValue,
+        sourcePath,
+        (path, sourcePath) => app.metadataCache.getFirstLinkpathDest(path, sourcePath)
+      );
+
+      // Stable ordering by display text using path as the identifier and no brackets
+      const compareByDisplay = (a: NoteReference, b: NoteReference) => {
+        const aText = getNoteReferenceDisplayText(a, false, "path").toLowerCase();
+        const bText = getNoteReferenceDisplayText(b, false, "path").toLowerCase();
+        if (aText < bText) return -1;
+        if (aText > bText) return 1;
+        return 0;
+      };
+
+      const sorted = extracted.slice().sort(compareByDisplay);
+
+      setNoteReferences((prev) => {
+        const prevKeys = prev.map(getNoteReferenceKey);
+        const nextKeys = sorted.map(getNoteReferenceKey);
+        const isSame = prev.length === sorted.length && prevKeys.every((k, i) => k === nextKeys[i]);
+        return isSame ? prev : sorted;
       });
+
+      return sorted;
     },
-    [app, currentActiveNote]
+    [app, currentActiveNote, setNoteReferences]
   );
 
   return synchronizeInputWithNoteReferences;
