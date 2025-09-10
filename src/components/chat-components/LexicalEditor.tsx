@@ -9,11 +9,13 @@ import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { SlashCommandPlugin } from "./SlashCommandPlugin";
 import { NoteCommandPlugin } from "./NoteCommandPlugin";
 import { NotePillPlugin, NotePillNode } from "./NotePillPlugin";
+import { URLPillPlugin, URLPillNode } from "./URLPillNode";
 import { PillDeletionPlugin } from "./PillDeletionPlugin";
 import { KeyboardPlugin } from "./plugins/KeyboardPlugin";
 import { ValueSyncPlugin } from "./plugins/ValueSyncPlugin";
 import { FocusPlugin } from "./plugins/FocusPlugin";
 import { NotePillSyncPlugin } from "./plugins/NotePillSyncPlugin";
+import { URLPillSyncPlugin } from "./plugins/URLPillSyncPlugin";
 import { PastePlugin } from "./plugins/PastePlugin";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +28,8 @@ interface LexicalEditorProps {
   className?: string;
   onNotesChange?: (notes: { path: string; basename: string }[]) => void;
   onNotesRemoved?: (removedNotes: { path: string; basename: string }[]) => void;
+  onURLsChange?: (urls: string[]) => void;
+  onURLsRemoved?: (removedUrls: string[]) => void;
   onEditorReady?: (editor: any) => void;
 }
 
@@ -40,6 +44,8 @@ const LexicalEditor = forwardRef<{ focus: () => void }, LexicalEditorProps>(
       className = "",
       onNotesChange,
       onNotesRemoved,
+      onURLsChange,
+      onURLsRemoved,
       onEditorReady,
     },
     ref
@@ -58,7 +64,7 @@ const LexicalEditor = forwardRef<{ focus: () => void }, LexicalEditorProps>(
         root: "tw-outline-none",
         paragraph: "tw-m-0",
       },
-      nodes: [NotePillNode],
+      nodes: [NotePillNode, ...(onURLsChange ? [URLPillNode] : [])],
       onError: (error: Error) => {
         console.error("Lexical error:", error);
       },
@@ -99,11 +105,15 @@ const LexicalEditor = forwardRef<{ focus: () => void }, LexicalEditorProps>(
           <ValueSyncPlugin value={value} />
           <FocusPlugin onFocus={setFocusFn} onEditorReady={onEditorReady} />
           <NotePillSyncPlugin onNotesChange={onNotesChange} onNotesRemoved={onNotesRemoved} />
+          {onURLsChange && (
+            <URLPillSyncPlugin onURLsChange={onURLsChange} onURLsRemoved={onURLsRemoved} />
+          )}
           <PillDeletionPlugin />
-          <PastePlugin />
+          <PastePlugin enableURLPills={!!onURLsChange} />
           <SlashCommandPlugin />
           <NoteCommandPlugin />
           <NotePillPlugin />
+          {onURLsChange && <URLPillPlugin />}
         </div>
       </LexicalComposer>
     );

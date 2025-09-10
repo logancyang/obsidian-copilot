@@ -33,6 +33,7 @@ import React, {
 import { useDropzone } from "react-dropzone";
 import ContextControl from "./ContextControl";
 import { $removePillsByPath } from "./NotePillPlugin";
+import { $removePillsByURL } from "./URLPillNode";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -97,6 +98,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
     });
     const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
     const [notesFromPills, setNotesFromPills] = useState<{ path: string; basename: string }[]>([]);
+    const [urlsFromPills, setUrlsFromPills] = useState<string[]>([]);
     const isCopilotPlus = isPlusChain(currentChain);
 
     // Toggle states for vault, web search, composer, and autonomous agent
@@ -422,6 +424,20 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       });
     };
 
+    // Handle when URLs are removed from pills (when pills are deleted in editor)
+    const handleURLPillsRemoved = (removedUrls: string[]) => {
+      const removedUrlSet = new Set(removedUrls);
+
+      setContextUrls((prev) => {
+        return prev.filter((url) => {
+          if (removedUrlSet.has(url)) {
+            return false;
+          }
+          return true;
+        });
+      });
+    };
+
     // Handle when context notes are removed from the context menu
     // This should remove all corresponding pills from the editor
     const handleContextRemoved = (notePath: string) => {
@@ -433,6 +449,19 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 
       // Also immediately update notesFromPills to prevent stale data from re-adding the note
       setNotesFromPills((prev) => prev.filter((note) => note.path !== notePath));
+    };
+
+    // Handle when context URLs are removed from the context menu
+    // This should remove all corresponding URL pills from the editor
+    const handleURLContextRemoved = (url: string) => {
+      if (editorRef.current) {
+        editorRef.current.update(() => {
+          $removePillsByURL(url);
+        });
+      }
+
+      // Also immediately update urlsFromPills to prevent stale data from re-adding the URL
+      setUrlsFromPills((prev) => prev.filter((pillUrl) => pillUrl !== url));
     };
 
     // Pill-to-context synchronization (when pills are added)
@@ -478,27 +507,30 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       });
     }, [notesFromPills, currentActiveNote, includeActiveNote, app.vault, setContextNotes]);
 
-    // Handle URL extraction and context updates
+    // URL pill-to-context synchronization (when URL pills are added) - only for Plus chains
     useEffect(() => {
-      // Get all URLs mentioned in the input
-      const currentUrls = mention.extractAllUrls(inputMessage);
-
-      // Only keep URLs if URL processing is supported for the current chain
       if (isPlusChain(currentChain)) {
         setContextUrls((prev) => {
-          // Only add new URLs that aren't already in context
-          const newUrls = currentUrls.filter((url) => !prev.includes(url));
-          if (newUrls.length > 0) {
-            return Array.from(new Set([...prev, ...newUrls]));
+          const contextUrlSet = new Set(prev);
+
+          // Find URLs that need to be added
+          const newUrlsFromPills = urlsFromPills.filter((pillUrl) => {
+            // Only add if not already in context
+            return !contextUrlSet.has(pillUrl);
+          });
+
+          // Add completely new URLs from pills
+          if (newUrlsFromPills.length > 0) {
+            return Array.from(new Set([...prev, ...newUrlsFromPills]));
           }
-          // Remove URLs that are no longer in the input
-          return prev.filter((url) => currentUrls.includes(url));
+
+          return prev;
         });
       } else {
-        // Clear all URLs for non-Plus chains
+        // Clear URLs for non-Plus chains
         setContextUrls([]);
       }
-    }, [inputMessage, mention, currentChain]);
+    }, [urlsFromPills, currentChain]);
 
     // Update the current active note whenever it changes
     useEffect(() => {
@@ -562,7 +594,10 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           setIncludeActiveNote={setIncludeActiveNote}
           activeNote={currentActiveNote}
           contextUrls={contextUrls}
-          onRemoveUrl={(url: string) => setContextUrls((prev) => prev.filter((u) => u !== url))}
+          onRemoveUrl={(url: string) => {
+            setContextUrls((prev) => prev.filter((u) => u !== url));
+            handleURLContextRemoved(url);
+          }}
           selectedTextContexts={selectedTextContexts}
           onRemoveSelectedText={onRemoveSelectedText}
           showProgressCard={showProgressCard}
@@ -606,6 +641,8 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
             onSubmit={onSendMessage}
             onNotesChange={setNotesFromPills}
             onNotesRemoved={handlePillsRemoved}
+            onURLsChange={isCopilotPlus ? setUrlsFromPills : undefined}
+            onURLsRemoved={isCopilotPlus ? handleURLPillsRemoved : undefined}
             onEditorReady={onEditorReady}
             placeholder={
               "Ask anything. [[ for notes. / for custom prompts. " +

@@ -10,68 +10,136 @@ import {
 } from "lexical";
 import { TFile, App } from "obsidian";
 import { $createNotePillNode } from "../NotePillPlugin";
+import { $createURLPillNode } from "../URLPillNode";
 import { logInfo } from "@/logger";
 
 declare const app: App;
 
 interface ParsedContent {
-  type: "text" | "note-pill";
+  type: "text" | "note-pill" | "url-pill";
   content: string;
   file?: TFile;
+  url?: string;
   isActive?: boolean;
 }
 
 /**
- * Parses text content to extract [[note name]] patterns and resolve them to actual notes
+ * Validates if a string is a valid URL
+ * @param string The string to validate
+ * @returns True if the string is a valid URL
+ */
+function isValidURL(string: string): boolean {
+  try {
+    const url = new URL(string);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Parses text content to extract [[note name]] patterns and optionally URLs, converting them to appropriate pills
  * @param text The text content to parse
+ * @param includeURLs Whether to process URLs in addition to note links
  * @returns Array of parsed content segments with type information
  */
-function parseTextForNoteLinks(text: string): ParsedContent[] {
+function parseTextForNotesAndURLs(text: string, includeURLs = false): ParsedContent[] {
   const segments: ParsedContent[] = [];
-  const noteLinkRegex = /\[\[([^\]]+)\]\]/g;
+  // Use different regex based on whether URLs should be processed
+  const regex = includeURLs
+    ? /(\[\[([^\]]+)\]\])|(https?:\/\/[^\s"'<>]+)/g // Notes and URLs
+    : /\[\[([^\]]+)\]\]/g; // Notes only
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
-  while ((match = noteLinkRegex.exec(text)) !== null) {
+  while ((match = regex.exec(text)) !== null) {
     // Add any text before the match
     if (match.index > lastIndex) {
-      segments.push({
-        type: "text",
-        content: text.slice(lastIndex, match.index),
-      });
+      const textContent = text.slice(lastIndex, match.index);
+      if (textContent) {
+        segments.push({
+          type: "text",
+          content: textContent,
+        });
+      }
     }
 
-    const noteName = match[1].trim();
-    const file = resolveNoteReference(noteName);
+    if (includeURLs && match[1]) {
+      // This is a note link [[note name]] (when using combined regex)
+      const noteName = match[2].trim();
+      const file = resolveNoteReference(noteName);
 
-    if (file && file instanceof TFile) {
-      // Valid note reference - create pill
-      const activeNote = app?.workspace.getActiveFile();
-      const isActive = activeNote?.path === file.path;
+      if (file && file instanceof TFile) {
+        // Valid note reference - create pill
+        const activeNote = app?.workspace.getActiveFile();
+        const isActive = activeNote?.path === file.path;
 
-      segments.push({
-        type: "note-pill",
-        content: file.basename,
-        file: file,
-        isActive: isActive,
-      });
-    } else {
-      // Invalid note reference - keep as plain text
-      segments.push({
-        type: "text",
-        content: match[0], // Keep the full [[note name]] syntax
-      });
+        segments.push({
+          type: "note-pill",
+          content: file.basename,
+          file: file,
+          isActive: isActive,
+        });
+      } else {
+        // Invalid note reference - keep as plain text
+        segments.push({
+          type: "text",
+          content: match[0], // Keep the full [[note name]] syntax
+        });
+      }
+    } else if (includeURLs && match[3]) {
+      // This is a URL (when using combined regex)
+      const url = match[3].replace(/,+$/, ""); // Remove trailing commas
+      if (isValidURL(url)) {
+        segments.push({
+          type: "url-pill",
+          content: url,
+          url: url,
+        });
+      } else {
+        // Invalid URL - keep as plain text
+        segments.push({
+          type: "text",
+          content: match[0],
+        });
+      }
+    } else if (!includeURLs && match[1]) {
+      // This is a note link [[note name]] (when using notes-only regex)
+      const noteName = match[1].trim();
+      const file = resolveNoteReference(noteName);
+
+      if (file && file instanceof TFile) {
+        // Valid note reference - create pill
+        const activeNote = app?.workspace.getActiveFile();
+        const isActive = activeNote?.path === file.path;
+
+        segments.push({
+          type: "note-pill",
+          content: file.basename,
+          file: file,
+          isActive: isActive,
+        });
+      } else {
+        // Invalid note reference - keep as plain text
+        segments.push({
+          type: "text",
+          content: match[0], // Keep the full [[note name]] syntax
+        });
+      }
     }
 
-    lastIndex = noteLinkRegex.lastIndex;
+    lastIndex = regex.lastIndex;
   }
 
   // Add any remaining text
   if (lastIndex < text.length) {
-    segments.push({
-      type: "text",
-      content: text.slice(lastIndex),
-    });
+    const remainingText = text.slice(lastIndex);
+    if (remainingText) {
+      segments.push({
+        type: "text",
+        content: remainingText,
+      });
+    }
   }
 
   return segments;
@@ -133,18 +201,24 @@ function createNodesFromSegments(segments: ParsedContent[]): LexicalNode[] {
       nodes.push(
         $createNotePillNode(segment.content, segment.file.path, segment.isActive || false)
       );
+    } else if (segment.type === "url-pill" && segment.url) {
+      nodes.push($createURLPillNode(segment.url));
     }
   }
 
   return nodes;
 }
 
+interface PastePluginProps {
+  enableURLPills?: boolean;
+}
+
 /**
- * Lexical plugin that processes pasted text to convert [[note name]] patterns into note pills.
- * Only converts patterns that resolve to actual notes in the vault - invalid references
+ * Lexical plugin that processes pasted text to convert [[note name]] patterns and URLs into pills.
+ * Only converts patterns that resolve to actual notes in the vault and valid URLs - invalid references
  * are left as plain text.
  */
-export function PastePlugin(): null {
+export function PastePlugin({ enableURLPills = false }: PastePluginProps): null {
   const [editor] = useLexicalComposerContext();
 
   React.useEffect(() => {
@@ -157,21 +231,25 @@ export function PastePlugin(): null {
         }
 
         const plainText = clipboardData.getData("text/plain");
-        if (!plainText || !plainText.includes("[[")) {
-          // No note links detected, let default paste behavior handle it
+        const hasNoteLinks = plainText.includes("[[");
+        const hasURLs = enableURLPills && plainText.includes("http");
+
+        if (!plainText || (!hasNoteLinks && !hasURLs)) {
+          // No note links or URLs detected, let default paste behavior handle it
           return false;
         }
 
-        logInfo("PastePlugin processing text with note links:", plainText);
+        // Parse the text for note links and conditionally URLs
+        const segments = parseTextForNotesAndURLs(plainText, enableURLPills);
 
-        // Parse the text for note links
-        const segments = parseTextForNoteLinks(plainText);
+        // Check if we found any valid pills
+        const hasValidPills = segments.some(
+          (segment) =>
+            segment.type === "note-pill" || (enableURLPills && segment.type === "url-pill")
+        );
 
-        // Check if we found any valid note pills
-        const hasValidNotes = segments.some((segment) => segment.type === "note-pill");
-
-        if (!hasValidNotes) {
-          // No valid note references found, let default paste behavior handle it
+        if (!hasValidPills) {
+          // No valid references found, let default paste behavior handle it
           return false;
         }
 
@@ -195,7 +273,7 @@ export function PastePlugin(): null {
       },
       COMMAND_PRIORITY_HIGH
     );
-  }, [editor]);
+  }, [editor, enableURLPills]);
 
   return null;
 }
