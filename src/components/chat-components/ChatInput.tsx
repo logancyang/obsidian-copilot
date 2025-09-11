@@ -183,7 +183,7 @@ export const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       return currentModelKey;
     };
 
-    const onSendMessage = () => {
+    const onSendMessage = useCallback(() => {
       if (!isCopilotPlus) {
         handleSendMessage();
         return;
@@ -204,7 +204,16 @@ export const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         contextNotes,
         urls: contextUrls,
       });
-    };
+    }, [
+      isCopilotPlus,
+      autonomousAgentToggle,
+      handleSendMessage,
+      contextNotes,
+      contextUrls,
+      vaultToggle,
+      webToggle,
+      composerToggle,
+    ]);
 
     const handleInputChange = async (event: React.ChangeEvent<HTMLTextAreaElement>) => {
       const inputValue = event.target.value;
@@ -658,7 +667,7 @@ export const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
                   variant="ghost2"
                   size="fit"
                   className="tw-text-muted"
-                  onClick={() => onSendMessage()}
+                  onClick={onSendMessage}
                 >
                   <CornerDownLeft className="!tw-size-3" />
                   <span>chat</span>

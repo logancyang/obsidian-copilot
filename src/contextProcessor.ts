@@ -6,7 +6,7 @@ import { isPlusChain } from "@/utils";
 import { TFile, Notice, App } from "obsidian";
 import { NOTE_CONTEXT_PROMPT_TAG, EMBEDDED_PDF_TAG, SELECTED_TEXT_TAG } from "./constants";
 import { NoteReference } from "./types/note";
-import { getRelevantNoteReferenceContent } from "./utils/noteUtils";
+import { getNoteReferenceKey, getRelevantNoteReferenceContent } from "./utils/noteUtils";
 
 export class ContextProcessor {
   private static instance: ContextProcessor;
@@ -84,13 +84,14 @@ export class ContextProcessor {
     ) => {
       try {
         // Check if this note was already processed (via custom prompt)
+        // Checking this via paths instead of full reference key
         if (excludedNotePaths.has(note.file.path)) {
           console.log(`Skipping note ${note.file.path} as it was included via custom prompt.`);
           return;
         }
 
         console.log(
-          `Processing note: ${note.file.path}, extension: ${note.file.extension}, chain: ${currentChain}`
+          `Processing note: ${note.file.path}, blockRef: ${note.blockRef}, headingRef: ${note.headingRef}, extension: ${note.file.extension}, chain: ${currentChain}`
         );
 
         // 1. Check if the file extension is supported by any parser
@@ -134,21 +135,21 @@ export class ContextProcessor {
       }
     };
 
-    const includedFilePaths = new Set<string>();
+    const includedNoteReferenceKeys = new Set<string>();
 
     // Process active note if included
     if (includeActiveNote && activeNote) {
       await processNote(activeNote, "active_note");
-      includedFilePaths.add(activeNote.file.path);
+      includedNoteReferenceKeys.add(getNoteReferenceKey(activeNote));
     }
 
     // Process context notes
     for (const note of contextNotes) {
-      if (includedFilePaths.has(note.file.path)) {
+      if (includedNoteReferenceKeys.has(getNoteReferenceKey(note))) {
         continue;
       }
       await processNote(note);
-      includedFilePaths.add(note.file.path);
+      includedNoteReferenceKeys.add(getNoteReferenceKey(note));
     }
 
     return additionalContext;

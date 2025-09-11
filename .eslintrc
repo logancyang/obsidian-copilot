@@ -1,8 +1,13 @@
 {
   "root": true,
   "parser": "@typescript-eslint/parser",
-  "env": { "node": true },
-  "plugins": ["@typescript-eslint", "tailwindcss"],
+  "env": {
+    "node": true
+  },
+  "plugins": [
+    "@typescript-eslint",
+    "tailwindcss",
+  ],
   "extends": [
     "eslint:recommended",
     "plugin:@typescript-eslint/recommended",
@@ -15,7 +20,12 @@
   },
   "rules": {
     "no-unused-vars": "off",
-    "@typescript-eslint/no-unused-vars": ["error", { "args": "none" }],
+    "@typescript-eslint/no-unused-vars": [
+      "error",
+      {
+        "args": "none"
+      }
+    ],
     "@typescript-eslint/ban-ts-comment": "off",
     "no-prototype-builtins": "off",
     "@typescript-eslint/no-empty-function": "off",
@@ -27,12 +37,18 @@
     "tailwindcss/enforces-shorthand": "error",
     "tailwindcss/migration-from-tailwind-2": "error",
     "tailwindcss/no-arbitrary-value": "off",
-    "tailwindcss/no-custom-classname": ["error"],
+    "tailwindcss/no-custom-classname": [
+      "error"
+    ],
     "tailwindcss/no-contradicting-classname": "error",
   },
   "overrides": [
     {
-      "files": ["*.json", "*.jsonc", ".eslintrc"],
+      "files": [
+        "*.json",
+        "*.jsonc",
+        ".eslintrc"
+      ],
       "parser": "jsonc-eslint-parser",
       "rules": {
         "jsonc/auto": "error",
@@ -44,9 +60,21 @@
       "version": "detect",
     },
     "tailwindcss": {
-      "callees": ["classnames", "clsx", "ctl", "cn", "cva"],
+      "callees": [
+        "classnames",
+        "clsx",
+        "ctl",
+        "cn",
+        "cva"
+      ],
       "config": "./tailwind.config.js",
-      "cssFiles": ["**/*.css", "!**/node_modules", "!**/.*", "!**/dist", "!**/build"],
+      "cssFiles": [
+        "**/*.css",
+        "!**/node_modules",
+        "!**/.*",
+        "!**/dist",
+        "!**/build"
+      ],
     },
   },
 }

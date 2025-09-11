@@ -110,15 +110,38 @@ export async function getRelevantNoteReferenceContent(
       return fullContents;
     }
 
-    const heading = headings.find((h) => h.heading.toLowerCase() === headingRef.toLowerCase());
+    const currentIndex = headings.findIndex(
+      (h) => h.heading.toLowerCase() === headingRef.toLowerCase()
+    );
 
-    if (!heading) {
+    if (currentIndex === -1) {
       return fullContents;
     }
 
-    const sliced = sliceByPosition(heading.position);
+    const currentHeading = headings[currentIndex];
+    const startOffset = currentHeading?.position?.start?.offset;
 
-    return sliced ?? fullContents;
+    if (typeof startOffset !== "number" || startOffset < 0) {
+      return fullContents;
+    }
+
+    let endOffset = fullContents.length;
+    for (let i = currentIndex + 1; i < headings.length; i++) {
+      const next = headings[i];
+      if (next.level === currentHeading.level) {
+        const nextStart = next?.position?.start?.offset;
+        if (typeof nextStart === "number" && nextStart > startOffset) {
+          endOffset = nextStart;
+        }
+        break;
+      }
+    }
+
+    if (endOffset <= startOffset || endOffset > fullContents.length) {
+      endOffset = fullContents.length;
+    }
+
+    return fullContents.slice(startOffset, endOffset);
   }
 
   if (blockRef) {

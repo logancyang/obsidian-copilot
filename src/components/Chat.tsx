@@ -40,6 +40,7 @@ import { Buffer } from "buffer";
 import { Notice } from "obsidian";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { NoteReference } from "@/types/note";
+import { getNoteReferenceKey } from "@/utils/noteUtils";
 
 type ChatMode = "default" | "project";
 
@@ -148,122 +149,6 @@ const Chat: React.FC<ChatProps> = ({
   const appContext = useContext(AppContext);
   const app = plugin.app || appContext;
 
-  const handleSendMessage = async ({
-    toolCalls,
-    urls,
-    contextNotes: passedContextNotes,
-  }: {
-    toolCalls?: string[];
-    urls?: string[];
-    contextNotes?: NoteReference[];
-  } = {}) => {
-    if (!inputMessage && selectedImages.length === 0) return;
-
-    // Check for URL restrictions in non-Plus chains and show notice, but continue processing
-    const hasUrlsInContext = urls && urls.length > 0;
-    const hasUrlsInMessage = inputMessage && mention.extractAllUrls(inputMessage).length > 0;
-
-    if ((hasUrlsInContext || hasUrlsInMessage) && !isPlusChain(currentChain)) {
-      // Show notice but continue processing the message without URL context
-      new Notice(RESTRICTION_MESSAGES.URL_PROCESSING_RESTRICTED);
-    }
-
-    try {
-      // Create message content array
-      const content: any[] = [];
-
-      // Add text content if present
-      if (inputMessage) {
-        content.push({
-          type: "text",
-          text: inputMessage,
-        });
-      }
-
-      // Add images if present
-      for (const image of selectedImages) {
-        const imageData = await image.arrayBuffer();
-        const base64Image = Buffer.from(imageData).toString("base64");
-        content.push({
-          type: "image_url",
-          image_url: {
-            url: `data:${image.type};base64,${base64Image}`,
-          },
-        });
-      }
-
-      // Prepare context notes and deduplicate by path
-      const allNotes = [...(passedContextNotes || []), ...contextNotes];
-      const notes = allNotes.filter(
-        (note, index, array) => array.findIndex((n) => n.file.path === note.file.path) === index
-      );
-
-      // Handle composer prompt
-      let displayText = inputMessage;
-
-      // Add tool calls if present
-      if (toolCalls) {
-        displayText += " " + toolCalls.join("\n");
-      }
-
-      // Create message context - filter out URLs for non-Plus chains
-      const context = {
-        notes,
-        urls: isPlusChain(currentChain) ? urls || [] : [],
-        selectedTextContexts,
-      };
-
-      // Clear input and images
-      setInputMessage("");
-      setSelectedImages([]);
-      safeSet.setLoading(true);
-      safeSet.setLoadingMessage(LOADING_MESSAGES.DEFAULT);
-
-      // Send message through ChatManager (this handles all the complex context processing)
-      const messageId = await chatUIState.sendMessage(
-        displayText,
-        context,
-        currentChain,
-        includeActiveNote,
-        content.length > 0 ? content : undefined
-      );
-
-      // Add to user message history
-      if (inputMessage) {
-        updateUserMessageHistory(inputMessage);
-      }
-
-      // Autosave if enabled
-      if (settings.autosaveChat) {
-        handleSaveAsNote();
-      }
-
-      // Get the LLM message for AI processing
-      const llmMessage = chatUIState.getLLMMessage(messageId);
-      if (llmMessage) {
-        await getAIResponse(
-          llmMessage,
-          chainManager,
-          addMessage,
-          safeSet.setCurrentAiMessage,
-          setAbortController,
-          { debug: settings.debug, updateLoadingMessage: safeSet.setLoadingMessage }
-        );
-      }
-
-      // Autosave again after AI response
-      if (settings.autosaveChat) {
-        handleSaveAsNote();
-      }
-    } catch (error) {
-      console.error("Error sending message:", error);
-      new Notice("Failed to send message. Please try again.");
-    } finally {
-      safeSet.setLoading(false);
-      safeSet.setLoadingMessage(LOADING_MESSAGES.DEFAULT);
-    }
-  };
-
   const handleSaveAsNote = useCallback(async () => {
     if (!app) {
       console.error("App instance is not available.");
@@ -278,6 +163,143 @@ const Chat: React.FC<ChatProps> = ({
       new Notice("Failed to save chat as note. Check console for details.");
     }
   }, [app, chatUIState, currentModelKey]);
+
+  const handleSendMessage = useCallback(
+    async ({
+      toolCalls,
+      urls,
+      contextNotes: passedContextNotes,
+    }: {
+      toolCalls?: string[];
+      urls?: string[];
+      contextNotes?: NoteReference[];
+    } = {}) => {
+      if (!inputMessage && selectedImages.length === 0) return;
+
+      // Check for URL restrictions in non-Plus chains and show notice, but continue processing
+      const hasUrlsInContext = urls && urls.length > 0;
+      const hasUrlsInMessage = inputMessage && mention.extractAllUrls(inputMessage).length > 0;
+
+      if ((hasUrlsInContext || hasUrlsInMessage) && !isPlusChain(currentChain)) {
+        // Show notice but continue processing the message without URL context
+        new Notice(RESTRICTION_MESSAGES.URL_PROCESSING_RESTRICTED);
+      }
+
+      try {
+        // Create message content array
+        const content: any[] = [];
+
+        // Add text content if present
+        if (inputMessage) {
+          content.push({
+            type: "text",
+            text: inputMessage,
+          });
+        }
+
+        // Add images if present
+        for (const image of selectedImages) {
+          const imageData = await image.arrayBuffer();
+          const base64Image = Buffer.from(imageData).toString("base64");
+          content.push({
+            type: "image_url",
+            image_url: {
+              url: `data:${image.type};base64,${base64Image}`,
+            },
+          });
+        }
+
+        // Prepare context notes and deduplicate by full key
+        const allNotes = [...(passedContextNotes || []), ...contextNotes];
+        const notes = allNotes.filter(
+          (note, index, array) =>
+            array.findIndex((n) => getNoteReferenceKey(n) === getNoteReferenceKey(note)) === index
+        );
+
+        // Handle composer prompt
+        let displayText = inputMessage;
+
+        // Add tool calls if present
+        if (toolCalls) {
+          displayText += " " + toolCalls.join("\n");
+        }
+
+        // Create message context - filter out URLs for non-Plus chains
+        const context = {
+          notes,
+          urls: isPlusChain(currentChain) ? urls || [] : [],
+          selectedTextContexts,
+        };
+
+        // Clear input and images
+        setInputMessage("");
+        setSelectedImages([]);
+        safeSet.setLoading(true);
+        safeSet.setLoadingMessage(LOADING_MESSAGES.DEFAULT);
+
+        // Send message through ChatManager (this handles all the complex context processing)
+        const messageId = await chatUIState.sendMessage(
+          displayText,
+          context,
+          currentChain,
+          includeActiveNote,
+          content.length > 0 ? content : undefined
+        );
+
+        // Add to user message history
+        if (inputMessage) {
+          updateUserMessageHistory(inputMessage);
+        }
+
+        // Autosave if enabled
+        if (settings.autosaveChat) {
+          handleSaveAsNote();
+        }
+
+        // Get the LLM message for AI processing
+        const llmMessage = chatUIState.getLLMMessage(messageId);
+        if (llmMessage) {
+          await getAIResponse(
+            llmMessage,
+            chainManager,
+            addMessage,
+            safeSet.setCurrentAiMessage,
+            setAbortController,
+            { debug: settings.debug, updateLoadingMessage: safeSet.setLoadingMessage }
+          );
+        }
+
+        // Autosave again after AI response
+        if (settings.autosaveChat) {
+          handleSaveAsNote();
+        }
+      } catch (error) {
+        console.error("Error sending message:", error);
+        new Notice("Failed to send message. Please try again.");
+      } finally {
+        safeSet.setLoading(false);
+        safeSet.setLoadingMessage(LOADING_MESSAGES.DEFAULT);
+      }
+    },
+    [
+      addMessage,
+      chainManager,
+      chatUIState,
+      contextNotes,
+      currentChain,
+      handleSaveAsNote,
+      includeActiveNote,
+      inputMessage,
+      mention,
+      safeSet,
+      selectedImages,
+      selectedTextContexts,
+      setAbortController,
+      settings.autosaveChat,
+      settings.debug,
+      updateUserMessageHistory,
+    ]
+  );
 
   const handleStopGenerating = useCallback(
     (reason?: ABORT_REASON) => {
