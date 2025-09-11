@@ -38,6 +38,7 @@ import {
   extractSourcesFromSearchResults,
   formatSearchResultsForLLM,
   formatSearchResultStringForLLM,
+  logSearchResultsDebugTable,
 } from "./utils/searchResultUtils";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { deduplicateSources } from "./utils/toolExecution";
@@ -760,6 +761,9 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         formattedForLLM = "<localSearch>\nInvalid search results format.\n</localSearch>";
         return { formattedForLLM, sources };
       }
+
+      // Log a concise debug table of results with explanations (title, ctime, mtime)
+      logSearchResultsDebugTable(searchResults);
 
       // Extract sources with explanation for UI display
       sources = extractSourcesFromSearchResults(searchResults);

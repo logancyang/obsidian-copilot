@@ -113,6 +113,27 @@ class LogFileManager {
     this.scheduleFlush();
   }
 
+  /**
+   * Append a raw Markdown block as multiple physical lines without timestamps or sanitization.
+   * Useful for structures that rely on line starts (e.g., tables, code fences).
+   */
+  async appendMarkdownBlock(lines: string[]): Promise<void> {
+    await this.ensureInitialized();
+
+    if (!Array.isArray(lines) || lines.length === 0) return;
+
+    // Add each line as-is to preserve Markdown semantics
+    for (const line of lines) {
+      const s = typeof line === "string" ? line : String(line ?? "");
+      this.buffer.push(s);
+      if (this.buffer.length > this.maxLines) {
+        this.buffer.splice(0, this.buffer.length - this.maxLines);
+      }
+    }
+
+    this.scheduleFlush();
+  }
+
   private scheduleFlush() {
     if (!this.hasVault()) return; // no-op in tests or non-Obsidian env
     if (this.flushTimer !== null) {
