@@ -1,4 +1,6 @@
 import { SettingItem } from "@/components/ui/setting-item";
+import { Button } from "@/components/ui/button";
+import { logFileManager } from "@/logFileManager";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import React from "react";
 
@@ -38,6 +40,23 @@ export const AdvancedSettings: React.FC = () => {
               updateSetting("debug", checked);
             }}
           />
+
+          <SettingItem
+            type="custom"
+            title="Share Log"
+            description="Open the Copilot log file (copilot-log.md) for easy sharing."
+          >
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={async () => {
+                await logFileManager.flush();
+                await logFileManager.openLogFile();
+              }}
+            >
+              Open Log File
+            </Button>
+          </SettingItem>
         </div>
       </section>
     </div>
