@@ -11,13 +11,13 @@ import {
 } from "@/components/ui/select";
 import { SettingItem } from "@/components/ui/setting-item";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ToolSettingsSection } from "./ToolSettingsSection";
 import { AUTOCOMPLETE_CONFIG } from "@/constants";
 import { cn } from "@/lib/utils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { HelpCircle, RefreshCw } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useState } from "react";
+import { ToolSettingsSection } from "./ToolSettingsSection";
 
 export const CopilotPlusSettings: React.FC = () => {
   const settings = useSettingsValue();
@@ -78,26 +78,6 @@ export const CopilotPlusSettings: React.FC = () => {
           </Badge>
         </div>
         <div className="tw-flex tw-flex-col tw-gap-4">
-          <SettingItem
-            type="switch"
-            title="Include Current Note in Context Menu"
-            description="Automatically include the current note in the chat context menu by default when sending messages to the AI."
-            checked={settings.includeActiveNoteAsContext}
-            onCheckedChange={(checked) => {
-              updateSetting("includeActiveNoteAsContext", checked);
-            }}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Images in Markdown"
-            description="Pass embedded images in markdown to the AI along with the text. Only works with multimodal models."
-            checked={settings.passMarkdownImages}
-            onCheckedChange={(checked) => {
-              updateSetting("passMarkdownImages", checked);
-            }}
-          />
-
           <div className="tw-pt-4 tw-text-xl tw-font-semibold">Autonomous Agent</div>
 
           <SettingItem

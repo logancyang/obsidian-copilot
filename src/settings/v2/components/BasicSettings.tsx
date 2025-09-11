@@ -345,6 +345,26 @@ export const BasicSettings: React.FC = () => {
 
           <SettingItem
             type="switch"
+            title="Include Current Note in Context Menu"
+            description="Automatically include the current note in the chat context menu by default when sending messages to the AI."
+            checked={settings.includeActiveNoteAsContext}
+            onCheckedChange={(checked) => {
+              updateSetting("includeActiveNoteAsContext", checked);
+            }}
+          />
+
+          <SettingItem
+            type="switch"
+            title="Images in Markdown"
+            description="Pass embedded images in markdown to the AI along with the text. Only works with multimodal models."
+            checked={settings.passMarkdownImages}
+            onCheckedChange={(checked) => {
+              updateSetting("passMarkdownImages", checked);
+            }}
+          />
+
+          <SettingItem
+            type="switch"
             title="Suggested Prompts"
             description="Show suggested prompts in the chat view"
             checked={settings.showSuggestedPrompts}
