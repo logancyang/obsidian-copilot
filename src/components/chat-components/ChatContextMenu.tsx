@@ -9,7 +9,8 @@ import { Separator } from "@/components/ui/separator";
 import { useChainType } from "@/aiParams";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
 import { NoteReference } from "@/types/note";
-import { getNoteReferenceKey } from "@/utils/noteUtils";
+import { getNoteReferenceDisplayText, getNoteReferenceKey } from "@/utils/noteUtils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ChatContextMenuProps {
   activeNote: TFile | null;
@@ -17,7 +18,7 @@ interface ChatContextMenuProps {
   contextUrls: string[];
   selectedTextContexts?: SelectedTextContext[];
   onAddContext: () => void;
-  onRemoveContext: (path: string) => void;
+  onRemoveContext: (noteReference: NoteReference) => void;
   onRemoveUrl: (url: string) => void;
   onRemoveSelectedText?: (id: string) => void;
   showProgressCard: () => void;
@@ -30,19 +31,26 @@ function ContextNote({
 }: {
   note: NoteReference;
   isActive: boolean;
-  onRemoveContext: (path: string) => void;
+  onRemoveContext: (noteReference: NoteReference) => void;
 }) {
   return (
     <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
-      <div className="tw-flex tw-items-center tw-gap-1">
-        <span className="tw-max-w-40 tw-truncate">{note.file.name}</span>
-        {isActive && <span className="tw-text-xs tw-text-faint">Current</span>}
-        {note.file.extension === "pdf" && <span className="tw-text-xs tw-text-faint">pdf</span>}
-      </div>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="tw-flex tw-items-center tw-gap-1">
+            <span className="tw-max-w-40 tw-truncate">
+              {getNoteReferenceDisplayText(note, false, "name")}
+            </span>
+            {isActive && <span className="tw-text-xs tw-text-faint">Current</span>}
+            {note.file.extension === "pdf" && <span className="tw-text-xs tw-text-faint">pdf</span>}
+          </div>
+        </TooltipTrigger>
+        <TooltipContent>{getNoteReferenceDisplayText(note, false, "path")}</TooltipContent>
+      </Tooltip>
       <Button
         variant="ghost2"
         size="fit"
-        onClick={() => onRemoveContext(note.file.path)}
+        onClick={() => onRemoveContext(note)}
         aria-label="Remove from context"
         className="tw-text-muted"
       >
@@ -123,6 +131,9 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   const [currentChain] = useChainType();
   const contextStatus = useProjectContextStatus();
 
+  /**
+   * We want unique notes here so it is fine NOT to use getNoteReferenceKey here.
+   */
   const uniqueNotes = React.useMemo(() => {
     const notesMap = new Map(contextNotes.map((note) => [note.file.path, note]));
 
@@ -209,7 +220,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
               variant="ghost2"
               size="fit"
               className="tw-text-muted"
-              onClick={() => showProgressCard()}
+              onClick={showProgressCard}
             >
               {getContextStatusIcon()}
             </Button>

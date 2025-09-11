@@ -7,6 +7,7 @@ import { SelectedTextContext } from "@/types/message";
 import { TFile } from "obsidian";
 import { ChatContextMenu } from "./ChatContextMenu";
 import { NoteReference } from "@/types/note";
+import { getNoteReferenceKey } from "@/utils/noteUtils";
 
 interface ChatControlsProps {
   app: App;
@@ -23,7 +24,7 @@ interface ChatControlsProps {
   showProgressCard: () => void;
 }
 
-const ContextControl: React.FC<ChatControlsProps> = ({
+export const ContextControl: React.FC<ChatControlsProps> = ({
   app,
   excludeNotePaths,
   contextNotes,
@@ -61,21 +62,27 @@ const ContextControl: React.FC<ChatControlsProps> = ({
     }).open();
   };
 
-  const handleRemoveContext = (path: string) => {
+  const handleRemoveContext = (noteReference: NoteReference) => {
     // First check if this note was added manually
-    const noteToRemove = contextNotes.find((note) => note.file.path === path);
+    const noteToRemove = contextNotes.find(
+      (note) => getNoteReferenceKey(note) === getNoteReferenceKey(noteReference)
+    );
     const wasAddedManually = noteToRemove?.addedVia === "user-action";
 
     if (wasAddedManually) {
       // If it was added manually, just remove it from contextNotes
-      setContextNotes((prev) => prev.filter((note) => note.file.path !== path));
+      setContextNotes((prev) =>
+        prev.filter((note) => getNoteReferenceKey(note) !== getNoteReferenceKey(noteReference))
+      );
     } else {
       // If it wasn't added manually, it could be either:
       // 1. The active note (controlled by includeActiveNote)
       // 2. A note added via [[reference]]
       // In either case, we should:
       setIncludeActiveNote(false); // Turn off includeActiveNote if this was the active note
-      setContextNotes((prev) => prev.filter((note) => note.file.path !== path)); // Remove from contextNotes if it was there
+      setContextNotes((prev) =>
+        prev.filter((note) => getNoteReferenceKey(note) !== getNoteReferenceKey(noteReference))
+      ); // Remove from contextNotes if it was there
     }
   };
 
@@ -95,5 +102,3 @@ const ContextControl: React.FC<ChatControlsProps> = ({
     />
   );
 };
-
-export default ContextControl;

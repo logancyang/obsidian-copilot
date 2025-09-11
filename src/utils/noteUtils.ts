@@ -38,7 +38,13 @@ export function getNoteReferenceDisplayText(
   const openingBrackets = includeWikilinkBrackets ? "[[" : "";
   const closingBrackets = includeWikilinkBrackets ? "]]" : "";
 
-  const noteName = mainNoteIdentifier === "name" ? note.file.name : note.file.path;
+  /**
+   * For a note found at `A/B.md`
+   * - `name` will return `B.md`
+   * - `basename` will return `B`
+   * - `path` will return `A/B.md`
+   */
+  const noteName = mainNoteIdentifier === "name" ? note.file.basename : note.file.path;
 
   if (note.headingRef) {
     return `${openingBrackets}${noteName}#${note.headingRef}${closingBrackets}`;

@@ -13,7 +13,7 @@ import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
 import { logInfo } from "@/logger";
 
 import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
-import ChatInput from "@/components/chat-components/ChatInput";
+import { ChatInput } from "@/components/chat-components/ChatInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
 import { NewVersionBanner } from "@/components/chat-components/NewVersionBanner";
 import { ProjectList } from "@/components/chat-components/ProjectList";

@@ -40,7 +40,7 @@ import React, {
   useState,
 } from "react";
 import { useDropzone } from "react-dropzone";
-import ContextControl from "./ContextControl";
+import { ContextControl } from "./ContextControl";
 import { NoteReference } from "@/types/note";
 import { useSynchronizeInputWithNoteReferences } from "@/utils/chatUtils";
 
@@ -69,7 +69,7 @@ interface ChatInputProps {
   showProgressCard: () => void;
 }
 
-const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
+export const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
   (
     {
       inputMessage,
@@ -450,8 +450,6 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
           }
         });
 
-        console.log("previousFiltered", previousFiltered);
-
         return previousFiltered;
       });
 
@@ -675,5 +673,3 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
 );
 
 ChatInput.displayName = "ChatInput";
-
-export default ChatInput;
