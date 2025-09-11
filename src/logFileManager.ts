@@ -173,7 +173,8 @@ class LogFileManager {
     try {
       const path = this.getLogPath();
       if (await app.vault.adapter.exists(path)) {
-        await app.vault.adapter.write(path, "");
+        // Delete the file for a clean slate; openLogFile() will recreate on demand
+        await app.vault.adapter.remove(path);
       }
     } catch {
       // ignore
