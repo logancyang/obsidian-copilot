@@ -161,7 +161,7 @@ export class BrevilabsClient {
         return { data: null, error: new Error("Unknown error") };
       }
     }
-    logInfo(`==== ${endpoint} request ====:`, data);
+    logInfo(`[API ${endpoint} request]:`, data);
 
     return { data };
   }
@@ -202,7 +202,7 @@ export class BrevilabsClient {
           return { data: null, error: new Error(`HTTP error: ${response.status}`) };
         }
       }
-      logInfo(`==== ${endpoint} FormData request ====:`, data);
+      logInfo(`[API ${endpoint} form-data request]:`, data);
       return { data };
     } catch (error) {
       return { data: null, error: error instanceof Error ? error : new Error(String(error)) };

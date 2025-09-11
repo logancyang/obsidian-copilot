@@ -72,19 +72,19 @@ class LogFileManager {
     // Error handling: include stack traces by default as requested, collapsed to one line
     if (value instanceof Error) {
       const withStack = err2String(value, true);
-      return this.collapseToSingleLine(withStack);
+      return this.escapeAngleBrackets(this.collapseToSingleLine(withStack));
     }
 
     if (typeof value === "string") {
-      return this.collapseToSingleLine(value);
+      return this.escapeAngleBrackets(this.collapseToSingleLine(value));
     }
 
     // JSON stringify without spacing; fall back to String()
     try {
       const json = JSON.stringify(value);
-      return this.collapseToSingleLine(json ?? String(value));
+      return this.escapeAngleBrackets(this.collapseToSingleLine(json ?? String(value)));
     } catch {
-      return this.collapseToSingleLine(String(value));
+      return this.escapeAngleBrackets(this.collapseToSingleLine(String(value)));
     }
   }
 
@@ -111,6 +111,13 @@ class LogFileManager {
     }
 
     this.scheduleFlush();
+  }
+
+  /**
+   * Escape angle brackets to prevent Markdown/HTML rendering from interfering with the log note.
+   */
+  private escapeAngleBrackets(s: string): string {
+    return s.replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
   /**

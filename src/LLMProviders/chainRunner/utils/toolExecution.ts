@@ -223,17 +223,33 @@ export function logToolResult(toolName: string, result: ToolExecutionResult): vo
 
   logInfo(`${emoji} ${displayName.toUpperCase()} RESULT: ${status}`);
 
-  // Log abbreviated result for readability
-  // Reduce limit to 300 chars for cleaner logs
-  const maxLogLength = 300;
-  if (result.result.length > maxLogLength) {
-    logInfo(
-      `Result: ${result.result.substring(0, maxLogLength)}... (truncated, ${result.result.length} chars total)`
-    );
-  } else {
-    logInfo(`Result:`, result.result);
+  // Special-case localSearch: avoid dumping bulky content; we already log a rich table elsewhere
+  if (toolName === "localSearch") {
+    let docs = 0;
+    const raw = result.result || "";
+    // Try to parse JSON array and count documents
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) docs = parsed.length;
+    } catch {
+      // Fallback: count <document> tags if XML-like was returned
+      const m = raw.match(/<document>/g);
+      docs = m ? m.length : 0;
+    }
+    logInfo(`Summary: ${docs} documents`);
+    return;
   }
-  logInfo("---");
+
+  // Default: log abbreviated result for readability (cap at 300 chars)
+  const maxLogLength = 300;
+  const text = String(result.result ?? "");
+  if (text.length > maxLogLength) {
+    logInfo(
+      `Result: ${text.substring(0, maxLogLength)}... (truncated, ${text.length} chars total)`
+    );
+  } else if (text.length > 0) {
+    logInfo(`Result:`, text);
+  }
 }
 
 /**

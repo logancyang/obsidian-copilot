@@ -1,10 +1,10 @@
 // DEPRECATED: Legacy hybrid retriever backed by Orama. Replaced by v3 TieredLexicalRetriever + MemoryIndexManager.
+import { LLM_TIMEOUT_MS } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
 import ProjectManager from "@/LLMProviders/projectManager";
 import { logInfo } from "@/logger";
 import VectorStoreManager from "@/search/vectorStoreManager";
-import { LLM_TIMEOUT_MS } from "@/constants";
 import { getSettings } from "@/settings/model";
 import {
   extractNoteFiles,
@@ -275,7 +275,7 @@ export class HybridRetriever extends BaseRetriever {
 
       const dailyNotes = this.generateDailyNoteDateRange(startTime, endTime);
 
-      logInfo("==== Daily note date range: ====", dailyNotes[0], dailyNotes[dailyNotes.length - 1]);
+      logInfo("Daily note date range:", dailyNotes[0], dailyNotes[dailyNotes.length - 1]);
 
       // Perform the first search with title filter
       const dailyNoteFiles = extractNoteFiles(dailyNotes.join(", "), app.vault);
@@ -290,7 +290,7 @@ export class HybridRetriever extends BaseRetriever {
         },
       }));
 
-      logInfo("==== Modified time range: ====", startTime, endTime);
+      logInfo("Modified time range:", startTime, endTime);
 
       // Perform a second search with time range filters
       searchParams.where = {
@@ -330,9 +330,8 @@ export class HybridRetriever extends BaseRetriever {
       return uniqueResults.filter((doc): doc is Document => doc !== undefined);
     }
 
-    if (getSettings().debug) {
-      console.log("==== Orama Search Params: ====\n", searchParams);
-    }
+    logInfo("Orama search params:\n", searchParams);
+
     const searchResults = await search(db, searchParams);
 
     // Add null check and validation for search results

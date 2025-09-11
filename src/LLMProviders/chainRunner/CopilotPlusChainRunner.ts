@@ -338,7 +338,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
 
     const enhancedUserMessage = content instanceof Array ? (content[0] as any).text : content;
     logInfo("Enhanced user message: ", enhancedUserMessage);
-    logInfo("==== Final Request to AI ====\n", messages);
+    logInfo("Final request to AI", { messages: messages.length });
     const actionStreamer = new ActionBlockStreamer(ToolManager, writeToFileTool);
     const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage);
 
@@ -431,7 +431,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         }
       }
 
-      logInfo("==== Step 1: Analyzing intent ====");
+      logInfo("Step 1: Analyzing intent");
       let toolCalls;
       // Use the original message for intent analysis
       const messageForAnalysis = userMessage.originalMessage || userMessage.message;
@@ -480,7 +480,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       // Get standalone question if we have chat history
       let questionForEnhancement = cleanedUserMessage;
       if (chatHistory.length > 0) {
-        logInfo("==== Condensing Question ====");
+        logInfo("Condensing question");
         questionForEnhancement = await getStandaloneQuestion(cleanedUserMessage, chatHistory);
         logInfo("Condensed standalone question: ", questionForEnhancement);
       }
@@ -507,7 +507,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         userMessage
       );
 
-      logInfo("==== Invoking LLM with all tool results ====");
+      logInfo("Invoking LLM with all tool results");
       fullAIResponse = await this.streamMultimodalResponse(
         enhancedUserMessage,
         userMessage,
@@ -601,7 +601,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     const allSources: { title: string; path: string; score: number; explanation?: any }[] = [];
 
     for (const toolCall of toolCalls) {
-      logInfo(`==== Step 2: Calling tool: ${toolCall.tool.name} ====`);
+      logInfo(`Step 2: Calling tool: ${toolCall.tool.name}`);
       if (toolCall.tool.name === "localSearch") {
         updateLoadingMessage?.(LOADING_MESSAGES.READING_FILES);
       } else if (toolCall.tool.name === "webSearch") {
