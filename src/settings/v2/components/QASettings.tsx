@@ -8,19 +8,28 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
 import { HelpCircle } from "lucide-react";
+import { Notice } from "obsidian";
 import React from "react";
 
 export const QASettings: React.FC = () => {
   const settings = useSettingsValue();
 
   const handleSetDefaultEmbeddingModel = async (modelKey: string) => {
-    if (modelKey !== settings.embeddingModelKey) {
+    if (modelKey === settings.embeddingModelKey) return;
+
+    if (settings.enableSemanticSearchV3) {
+      // Persist only after user confirms rebuild
       new RebuildIndexConfirmModal(app, async () => {
         updateSetting("embeddingModelKey", modelKey);
         const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-        await VectorStoreManager.getInstance().indexVaultToVectorStore();
+        await VectorStoreManager.getInstance().indexVaultToVectorStore(false);
       }).open();
+      return;
     }
+
+    // Persist without rebuild when semantic search is disabled
+    updateSetting("embeddingModelKey", modelKey);
+    new Notice("Embedding model saved. Enable Semantic Search to build the index.");
   };
 
   // Partitions are automatically managed in v3 (150MB per JSONL partition).
@@ -41,54 +50,59 @@ export const QASettings: React.FC = () => {
               // Show confirmation modal with appropriate message
               new SemanticSearchToggleModal(
                 app,
-                () => updateSetting("enableSemanticSearchV3", checked),
+                async () => {
+                  updateSetting("enableSemanticSearchV3", checked);
+                  if (checked) {
+                    const VectorStoreManager = (await import("@/search/vectorStoreManager"))
+                      .default;
+                    await VectorStoreManager.getInstance().indexVaultToVectorStore(false);
+                  }
+                },
                 checked // true = enabling, false = disabling
               ).open();
             }}
           />
 
-          {/* Embedding Model - Only shown when semantic search is enabled */}
-          {settings.enableSemanticSearchV3 && (
-            <SettingItem
-              type="select"
-              title="Embedding Model"
-              description={
-                <div className="tw-space-y-2">
-                  <div className="tw-flex tw-items-center tw-gap-1.5">
-                    <span className="tw-font-medium tw-leading-none tw-text-accent">
-                      Powers Semantic Local Vault Search
-                    </span>
-                    <TooltipProvider delayDuration={0}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <HelpCircle className="tw-size-4" />
-                        </TooltipTrigger>
-                        <TooltipContent className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
-                          <div className="tw-pt-2 tw-text-sm tw-text-muted">
-                            This model converts text into vector representations, essential for
-                            semantic search and Question Answering (QA) functionality. Changing the
-                            embedding model will:
-                          </div>
-                          <ul className="tw-pl-4 tw-text-sm tw-text-muted">
-                            <li>Require rebuilding your vault&#39;s vector index</li>
-                            <li>Affect semantic search quality</li>
-                            <li>Impact Question Answering feature performance</li>
-                          </ul>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
+          {/* Embedding Model - Always shown to reduce ambiguity */}
+          <SettingItem
+            type="select"
+            title="Embedding Model"
+            description={
+              <div className="tw-space-y-2">
+                <div className="tw-flex tw-items-center tw-gap-1.5">
+                  <span className="tw-font-medium tw-leading-none tw-text-accent">
+                    Enable Semantic Search to use it.
+                  </span>
+                  <TooltipProvider delayDuration={0}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="tw-size-4" />
+                      </TooltipTrigger>
+                      <TooltipContent className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
+                        <div className="tw-pt-2 tw-text-sm tw-text-muted">
+                          This model converts text into vector representations, essential for
+                          semantic search and Question Answering (QA) functionality. Changing the
+                          embedding model will:
+                        </div>
+                        <ul className="tw-pl-4 tw-text-sm tw-text-muted">
+                          <li>Require rebuilding your vault&#39;s vector index</li>
+                          <li>Affect semantic search quality</li>
+                          <li>Impact Question Answering feature performance</li>
+                        </ul>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
-              }
-              value={settings.embeddingModelKey}
-              onChange={handleSetDefaultEmbeddingModel}
-              options={settings.activeEmbeddingModels.map((model) => ({
-                label: getModelDisplayWithIcons(model),
-                value: getModelKeyFromModel(model),
-              }))}
-              placeholder="Model"
-            />
-          )}
+              </div>
+            }
+            value={settings.embeddingModelKey}
+            onChange={handleSetDefaultEmbeddingModel}
+            options={settings.activeEmbeddingModels.map((model) => ({
+              label: getModelDisplayWithIcons(model),
+              value: getModelKeyFromModel(model),
+            }))}
+            placeholder="Model"
+          />
 
           {/* Auto-Index Strategy */}
           <SettingItem
