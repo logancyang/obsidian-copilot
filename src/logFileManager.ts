@@ -72,19 +72,19 @@ class LogFileManager {
     // Error handling: include stack traces by default as requested, collapsed to one line
     if (value instanceof Error) {
       const withStack = err2String(value, true);
-      return this.collapseToSingleLine(withStack);
+      return this.escapeAngleBrackets(this.collapseToSingleLine(withStack));
     }
 
     if (typeof value === "string") {
-      return this.collapseToSingleLine(value);
+      return this.escapeAngleBrackets(this.collapseToSingleLine(value));
     }
 
     // JSON stringify without spacing; fall back to String()
     try {
       const json = JSON.stringify(value);
-      return this.collapseToSingleLine(json ?? String(value));
+      return this.escapeAngleBrackets(this.collapseToSingleLine(json ?? String(value)));
     } catch {
-      return this.collapseToSingleLine(String(value));
+      return this.escapeAngleBrackets(this.collapseToSingleLine(String(value)));
     }
   }
 
@@ -108,6 +108,34 @@ class LogFileManager {
     this.buffer.push(line);
     if (this.buffer.length > this.maxLines) {
       this.buffer.splice(0, this.buffer.length - this.maxLines);
+    }
+
+    this.scheduleFlush();
+  }
+
+  /**
+   * Escape angle brackets to prevent Markdown/HTML rendering from interfering with the log note.
+   */
+  private escapeAngleBrackets(s: string): string {
+    return s.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  /**
+   * Append a raw Markdown block as multiple physical lines without timestamps or sanitization.
+   * Useful for structures that rely on line starts (e.g., tables, code fences).
+   */
+  async appendMarkdownBlock(lines: string[]): Promise<void> {
+    await this.ensureInitialized();
+
+    if (!Array.isArray(lines) || lines.length === 0) return;
+
+    // Add each line as-is to preserve Markdown semantics
+    for (const line of lines) {
+      const s = typeof line === "string" ? line : String(line ?? "");
+      this.buffer.push(s);
+      if (this.buffer.length > this.maxLines) {
+        this.buffer.splice(0, this.buffer.length - this.maxLines);
+      }
     }
 
     this.scheduleFlush();
@@ -145,7 +173,8 @@ class LogFileManager {
     try {
       const path = this.getLogPath();
       if (await app.vault.adapter.exists(path)) {
-        await app.vault.adapter.write(path, "");
+        // Delete the file for a clean slate; openLogFile() will recreate on demand
+        await app.vault.adapter.remove(path);
       }
     } catch {
       // ignore

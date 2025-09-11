@@ -1,4 +1,5 @@
 import { addSelectedTextContext, getChainType } from "@/aiParams";
+import { logFileManager } from "@/logFileManager";
 import { FileCache } from "@/cache/fileCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { ChainType } from "@/chainFactory";
@@ -322,6 +323,27 @@ export function registerCommands(
     } catch (error) {
       logError("Error clearing Copilot caches:", error);
       new Notice("Failed to clear Copilot caches");
+    }
+  });
+
+  // Open Copilot log file
+  addCommand(plugin, COMMAND_IDS.OPEN_LOG_FILE, async () => {
+    try {
+      await logFileManager.openLogFile();
+    } catch (error) {
+      logError("Error opening Copilot log file:", error);
+      new Notice("Failed to open Copilot log file.");
+    }
+  });
+
+  // Clear Copilot log file (delete on disk and clear in-memory buffer)
+  addCommand(plugin, COMMAND_IDS.CLEAR_LOG_FILE, async () => {
+    try {
+      await logFileManager.clear();
+      new Notice("Copilot log cleared.");
+    } catch (error) {
+      logError("Error clearing Copilot log file:", error);
+      new Notice("Failed to clear Copilot log file.");
     }
   });
 
