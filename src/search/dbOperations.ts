@@ -11,7 +11,7 @@ import { Mutex } from "async-mutex";
 import { MD5 } from "crypto-js";
 import { App, Notice, Platform } from "obsidian";
 import { ChunkedStorage } from "./chunkedStorage";
-import { getVectorLength } from "./searchUtils";
+import { getMatchingPatterns, getVectorLength, shouldIndexFile } from "./searchUtils";
 
 export interface OramaDocument {
   id: string;
@@ -533,11 +533,23 @@ export class DBOperations {
     try {
       const files = this.app.vault.getMarkdownFiles();
       const filePaths = new Set(files.map((file) => file.path));
+
+      // Determine which files are currently eligible for indexing based on settings
+      const { inclusions, exclusions } = getMatchingPatterns();
+      const allowedPaths = new Set(
+        files
+          .filter((file) => shouldIndexFile(file, inclusions, exclusions))
+          .map((file) => file.path)
+      );
       // Get all documents in the database
       const docs = await DBOperations.getAllDocuments(this.oramaDb);
 
-      // Identify docs to remove
-      const docsToRemove = docs.filter((doc) => !filePaths.has(doc.path));
+      // Identify docs to remove:
+      // 1) Files that no longer exist
+      // 2) Files that exist but are excluded by current settings (or internal exclusions)
+      const docsToRemove = docs.filter(
+        (doc) => !filePaths.has(doc.path) || !allowedPaths.has(doc.path)
+      );
 
       if (docsToRemove.length === 0) {
         return 0;
