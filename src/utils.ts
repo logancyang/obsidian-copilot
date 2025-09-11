@@ -20,6 +20,7 @@ import { BaseChain, RetrievalQAChain } from "langchain/chains";
 import moment from "moment";
 import { MarkdownView, Notice, TFile, Vault, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
+export { err2String } from "@/errorFormat";
 
 // Add custom error type at the top of the file
 interface APIError extends Error {
@@ -654,16 +655,7 @@ function createReadableStreamFromString(input: string) {
   });
 }
 
-export function err2String(err: any, stack = false) {
-  // maybe to be improved
-  return err instanceof Error
-    ? err.message +
-        "\n" +
-        `${err?.cause ? "more message: " + (err.cause as Error).message : ""}` +
-        "\n" +
-        `${stack ? err.stack : ""}`
-    : JSON.stringify(err);
-}
+// err2String is now exported from '@/errorFormat' to avoid circular dependencies and duplication.
 
 export function omit<T extends Record<string, any>, K extends keyof T>(
   obj: T,
