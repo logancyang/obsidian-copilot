@@ -876,3 +876,8 @@ If your plugin does not need CSS, delete this file.
 .is-phone .modal .modal-close-button {
   z-index: var(--layer-modal);
 }
+
+/* use 'important' to prevent ob default css style from being third-party theme overridden */
+.workspace-leaf-content[data-type="copilot-chat-view"] .view-content {
+  padding-bottom: max(var(--safe-area-inset-bottom), var(--size-4-8)) !important;
+}
