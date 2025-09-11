@@ -8,19 +8,28 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
 import { HelpCircle } from "lucide-react";
+import { Notice } from "obsidian";
 import React from "react";
 
 export const QASettings: React.FC = () => {
   const settings = useSettingsValue();
 
   const handleSetDefaultEmbeddingModel = async (modelKey: string) => {
-    if (modelKey !== settings.embeddingModelKey) {
+    if (modelKey === settings.embeddingModelKey) return;
+
+    if (settings.enableSemanticSearchV3) {
+      // Persist only after user confirms rebuild
       new RebuildIndexConfirmModal(app, async () => {
         updateSetting("embeddingModelKey", modelKey);
         const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-        await VectorStoreManager.getInstance().indexVaultToVectorStore();
+        await VectorStoreManager.getInstance().indexVaultToVectorStore(false);
       }).open();
+      return;
     }
+
+    // Persist without rebuild when semantic search is disabled
+    updateSetting("embeddingModelKey", modelKey);
+    new Notice("Embedding model saved. Enable Semantic Search to build the index.");
   };
 
   // Partitions are automatically managed in v3 (150MB per JSONL partition).
@@ -41,7 +50,14 @@ export const QASettings: React.FC = () => {
               // Show confirmation modal with appropriate message
               new SemanticSearchToggleModal(
                 app,
-                () => updateSetting("enableSemanticSearchV3", checked),
+                async () => {
+                  updateSetting("enableSemanticSearchV3", checked);
+                  if (checked) {
+                    const VectorStoreManager = (await import("@/search/vectorStoreManager"))
+                      .default;
+                    await VectorStoreManager.getInstance().indexVaultToVectorStore(false);
+                  }
+                },
                 checked // true = enabling, false = disabling
               ).open();
             }}
@@ -55,7 +71,7 @@ export const QASettings: React.FC = () => {
               <div className="tw-space-y-2">
                 <div className="tw-flex tw-items-center tw-gap-1.5">
                   <span className="tw-font-medium tw-leading-none tw-text-accent">
-                    Powers Semantic Local Vault Search
+                    Enable Semantic Search to use it.
                   </span>
                   <TooltipProvider delayDuration={0}>
                     <Tooltip>
