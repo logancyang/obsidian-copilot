@@ -47,48 +47,46 @@ export const QASettings: React.FC = () => {
             }}
           />
 
-          {/* Embedding Model - Only shown when semantic search is enabled */}
-          {settings.enableSemanticSearchV3 && (
-            <SettingItem
-              type="select"
-              title="Embedding Model"
-              description={
-                <div className="tw-space-y-2">
-                  <div className="tw-flex tw-items-center tw-gap-1.5">
-                    <span className="tw-font-medium tw-leading-none tw-text-accent">
-                      Powers Semantic Local Vault Search
-                    </span>
-                    <TooltipProvider delayDuration={0}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <HelpCircle className="tw-size-4" />
-                        </TooltipTrigger>
-                        <TooltipContent className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
-                          <div className="tw-pt-2 tw-text-sm tw-text-muted">
-                            This model converts text into vector representations, essential for
-                            semantic search and Question Answering (QA) functionality. Changing the
-                            embedding model will:
-                          </div>
-                          <ul className="tw-pl-4 tw-text-sm tw-text-muted">
-                            <li>Require rebuilding your vault&#39;s vector index</li>
-                            <li>Affect semantic search quality</li>
-                            <li>Impact Question Answering feature performance</li>
-                          </ul>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
+          {/* Embedding Model - Always shown to reduce ambiguity */}
+          <SettingItem
+            type="select"
+            title="Embedding Model"
+            description={
+              <div className="tw-space-y-2">
+                <div className="tw-flex tw-items-center tw-gap-1.5">
+                  <span className="tw-font-medium tw-leading-none tw-text-accent">
+                    Powers Semantic Local Vault Search
+                  </span>
+                  <TooltipProvider delayDuration={0}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="tw-size-4" />
+                      </TooltipTrigger>
+                      <TooltipContent className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
+                        <div className="tw-pt-2 tw-text-sm tw-text-muted">
+                          This model converts text into vector representations, essential for
+                          semantic search and Question Answering (QA) functionality. Changing the
+                          embedding model will:
+                        </div>
+                        <ul className="tw-pl-4 tw-text-sm tw-text-muted">
+                          <li>Require rebuilding your vault&#39;s vector index</li>
+                          <li>Affect semantic search quality</li>
+                          <li>Impact Question Answering feature performance</li>
+                        </ul>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
-              }
-              value={settings.embeddingModelKey}
-              onChange={handleSetDefaultEmbeddingModel}
-              options={settings.activeEmbeddingModels.map((model) => ({
-                label: getModelDisplayWithIcons(model),
-                value: getModelKeyFromModel(model),
-              }))}
-              placeholder="Model"
-            />
-          )}
+              </div>
+            }
+            value={settings.embeddingModelKey}
+            onChange={handleSetDefaultEmbeddingModel}
+            options={settings.activeEmbeddingModels.map((model) => ({
+              label: getModelDisplayWithIcons(model),
+              value: getModelKeyFromModel(model),
+            }))}
+            placeholder="Model"
+          />
 
           {/* Auto-Index Strategy */}
           <SettingItem
