@@ -1,5 +1,6 @@
 import { logError } from "@/logger";
 import { safeFetch } from "@/utils";
+import { arrayBufferToBase64 } from "@/utils/base64";
 import { Notice, TFile, Vault } from "obsidian";
 
 export interface ImageContent {
@@ -196,8 +197,7 @@ export class ImageProcessor {
         return null;
       }
 
-      const buffer = Buffer.from(arrayBuffer);
-      const base64 = buffer.toString("base64");
+      const base64 = arrayBufferToBase64(arrayBuffer);
 
       const result = `data:${mimeType};base64,${base64}`;
       return result;
@@ -234,8 +234,7 @@ export class ImageProcessor {
         return null;
       }
 
-      const buffer = Buffer.from(arrayBuffer);
-      const base64 = buffer.toString("base64");
+      const base64 = arrayBufferToBase64(arrayBuffer);
       return `data:${contentType};base64,${base64}`;
     } catch (error) {
       logError("Error converting web image to base64:", error);
@@ -268,8 +267,7 @@ export class ImageProcessor {
         return null;
       }
 
-      const buffer = Buffer.from(arrayBuffer);
-      const base64 = buffer.toString("base64");
+      const base64 = arrayBufferToBase64(arrayBuffer);
 
       const result = `data:${mimeType};base64,${base64}`;
       return result;
