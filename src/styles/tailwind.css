@@ -871,3 +871,13 @@ If your plugin does not need CSS, delete this file.
   color: var(--text-error);
   opacity: 1;
 }
+
+/* Maybe ob's error removed the hierarchy, so add hierarchy to the modal box on mobile for now */
+.is-phone .modal .modal-close-button {
+  z-index: var(--layer-modal);
+}
+
+/* use 'important' to prevent ob default css style from being third-party theme overridden */
+.workspace-leaf-content[data-type="copilot-chat-view"] .view-content {
+  padding-bottom: max(var(--safe-area-inset-bottom), var(--size-4-8)) !important;
+}

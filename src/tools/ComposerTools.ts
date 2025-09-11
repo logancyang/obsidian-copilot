@@ -4,6 +4,7 @@ import { diffTrimmedLines } from "diff";
 import { ApplyViewResult } from "@/types";
 import { z } from "zod";
 import { createTool } from "./SimpleTool";
+import { logError } from "@/logger";
 
 async function show_preview(file_path: string, content: string): Promise<ApplyViewResult> {
   let file = app.vault.getAbstractFileByPath(file_path);
@@ -20,7 +21,7 @@ async function show_preview(file_path: string, content: string): Promise<ApplyVi
       if (maybeNowExists && maybeNowExists instanceof TFile) {
         file = maybeNowExists;
       } else {
-        console.error(`Failed to create file at ${file_path}`, error);
+        logError(`Failed to create file: ${file_path}`, error);
         new Notice(`Failed to create file: ${file_path}`);
         return "failed";
       }
