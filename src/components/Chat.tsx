@@ -36,9 +36,8 @@ import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { err2String, isPlusChain } from "@/utils";
-import { Buffer } from "buffer";
 import { arrayBufferToBase64 } from "@/utils/base64";
-import { Notice, TFile } from "obsidian";
+import { Notice } from "obsidian";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { NoteReference } from "@/types/note";
 import { getNoteReferenceKey } from "@/utils/noteUtils";
@@ -198,16 +197,17 @@ const Chat: React.FC<ChatProps> = ({
           });
         }
 
-         // Add images if present
-      for (const image of selectedImages) {
-        const imageData = await image.arrayBuffer();
-        const base64Image = arrayBufferToBase64(imageData);
-        content.push({
-          type: "image_url",
-          image_url: {
-            url: `data:${image.type};base64,${base64Image}`,
-          },
-        });
+        // Add images if present
+        for (const image of selectedImages) {
+          const imageData = await image.arrayBuffer();
+          const base64Image = arrayBufferToBase64(imageData);
+          content.push({
+            type: "image_url",
+            image_url: {
+              url: `data:${image.type};base64,${base64Image}`,
+            },
+          });
+        }
 
         // Prepare context notes and deduplicate by full key
         const allNotes = [...(passedContextNotes || []), ...contextNotes];
