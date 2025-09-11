@@ -201,20 +201,25 @@ export function logSearchResultsDebugTable(searchResults: any[]): void {
 
   type Row = {
     idx: string;
+    in: string;
     path: string;
     mtime: string;
     score: string;
     explanation: string;
   };
 
+  let includedCount = 0;
   const rows: Row[] = searchResults.map((doc: any, i: number) => {
     const mtime = toIsoString(doc.mtime);
     const scoreNum = typeof doc.rerank_score === "number" ? doc.rerank_score : doc.score || 0;
     const score = (Number.isFinite(scoreNum) ? scoreNum : 0).toFixed(4);
     const path = doc.chunkId || doc.path || "";
     const explanation = summarizeExplanation(doc.explanation);
+    const included = doc.includeInContext !== false;
+    if (included) includedCount++;
     return {
       idx: String(i + 1),
+      in: included ? "Y" : "",
       path,
       mtime,
       score,
@@ -224,20 +229,30 @@ export function logSearchResultsDebugTable(searchResults: any[]): void {
 
   // No ASCII table in logs; we output console.table and Markdown below
 
+  const total = rows.length;
   // Log as a proper dev console table first (best visual fidelity in DevTools)
-  logInfo(`Search Results (debug table): ${rows.length} rows`);
-  logTable(rows, ["idx", "path", "mtime", "score", "explanation"]);
+  logInfo(`Search Results (debug table): ${total} rows; in-context ${includedCount}/${total}`);
+  logTable(rows, ["idx", "in", "path", "mtime", "score", "explanation"]);
 
   // Intentionally avoid dumping ASCII multi-line into the log file (it would be sanitized to \n)
 
   // Also write a Markdown table to the rolling log file so it renders in Obsidian
   // Escape pipe characters in explanation/path to prevent column breaks
   const esc = (s: string) => String(s || "").replace(/\|/g, "\\|");
-  const mdHeader = `| # | PATH | MTIME | SCORE | EXPLANATION |`;
-  const mdSep = `| ---: | --- | --- | ---: | --- |`;
+  const mdHeader = `| # | IN | PATH | MTIME | SCORE | EXPLANATION |`;
+  const mdSep = `| ---: | :-: | --- | --- | ---: | --- |`;
   const mdRows = rows.map(
-    (r) => `| ${r.idx} | ${esc(r.path)} | ${r.mtime || ""} | ${r.score} | ${esc(r.explanation)} |`
+    (r) =>
+      `| ${r.idx} | ${r.in} | ${esc(r.path)} | ${r.mtime || ""} | ${r.score} | ${esc(r.explanation)} |`
   );
   // Surround with blank lines to ensure proper table block rendering
-  logMarkdownBlock(["", mdHeader, mdSep, ...mdRows, ""]);
+  logMarkdownBlock([
+    "",
+    `Results: ${total} rows; in-context ${includedCount}/${total}`,
+    "",
+    mdHeader,
+    mdSep,
+    ...mdRows,
+    "",
+  ]);
 }

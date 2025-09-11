@@ -217,28 +217,16 @@ export function logToolCall(toolCall: ToolCall, iteration: number): void {
  * Log tool execution result
  */
 export function logToolResult(toolName: string, result: ToolExecutionResult): void {
+  // For localSearch we already emit a structured table elsewhere; avoid redundant logs entirely
+  if (toolName === "localSearch") {
+    return;
+  }
+
   const displayName = getToolDisplayName(toolName);
   const emoji = getToolEmoji(toolName);
   const status = result.success ? "✅ SUCCESS" : "❌ FAILED";
 
   logInfo(`${emoji} ${displayName.toUpperCase()} RESULT: ${status}`);
-
-  // Special-case localSearch: avoid dumping bulky content; we already log a rich table elsewhere
-  if (toolName === "localSearch") {
-    let docs = 0;
-    const raw = result.result || "";
-    // Try to parse JSON array and count documents
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) docs = parsed.length;
-    } catch {
-      // Fallback: count <document> tags if XML-like was returned
-      const m = raw.match(/<document>/g);
-      docs = m ? m.length : 0;
-    }
-    logInfo(`Summary: ${docs} documents`);
-    return;
-  }
 
   // Default: log abbreviated result for readability (cap at 300 chars)
   const maxLogLength = 300;
