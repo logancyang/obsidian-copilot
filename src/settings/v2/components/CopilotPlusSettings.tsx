@@ -119,16 +119,6 @@ export const CopilotPlusSettings: React.FC = () => {
           <div className="tw-pt-4 tw-text-xl tw-font-semibold">Memory</div>
 
           <SettingItem
-            type="switch"
-            title="Enable Memory"
-            description="When enabled, Copilot builds a memory profile based on your conversation history. This includes factual data about you, your response preferences, and recent conversation context. All memory data is stored locally in your vault."
-            checked={settings.enableMemory}
-            onCheckedChange={(checked) => {
-              updateSetting("enableMemory", checked);
-            }}
-          />
-
-          <SettingItem
             type="text"
             title="Memory Folder Name"
             description="Specify the folder where memory data is stored."
@@ -136,8 +126,31 @@ export const CopilotPlusSettings: React.FC = () => {
             onChange={(value) => {
               updateSetting("memoryFolderName", value);
             }}
-            placeholder="copilot-memory"
+            placeholder="copilot/memory"
           />
+
+          <SettingItem
+            type="switch"
+            title="Reference Recent Conversation"
+            description="When enabled, Copilot references your recent conversation history to provide more contextually relevant responses. All history data is stored locally in your vault."
+            checked={settings.enableMemory}
+            onCheckedChange={(checked) => {
+              updateSetting("enableMemory", checked);
+            }}
+          />
+
+          {settings.enableMemory && (
+            <SettingItem
+              type="slider"
+              title="Max Recent Conversations"
+              description="Number of recent conversations to remember for context. Higher values provide more context but may slow down responses."
+              min={10}
+              max={50}
+              step={1}
+              value={settings.maxRecentConversations}
+              onChange={(value) => updateSetting("maxRecentConversations", value)}
+            />
+          )}
 
           <div className="tw-pt-4 tw-text-xl tw-font-semibold">Autocomplete</div>
 

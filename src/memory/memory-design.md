@@ -11,12 +11,12 @@ graph TD
     %% Triggers for Memory Updates
     A[Chat Conversation Ends] --> B[updateUserMemory called]
     B --> C{Memory Enabled?}
-    C -->|Yes| D[Extract conversation summary and condensed user messages<br/>Format: timestamp summary||||condensed_user_msg1,condensed_user_msg2,...]
+    C -->|Yes| D[Extract conversation summary, condensed user messages,<br/>and optional key conclusion for Markdown format]
     C -->|No| Z[Skip Memory Update]
 
     %% Recent Memory Only (Simplified)
     D --> E[Rolling Buffer Policy - Count Based]
-    E --> F[Keep last 40 conversations max]
+    E --> F[Keep last 20 conversations max]
     F --> G[Save to recent_conversation_content.md]
     G --> H[Memory Update Complete]
 ```
@@ -26,19 +26,19 @@ graph TD
 ### Memory Update Triggers:
 
 - **Trigger**: When a chat conversation ends and `updateUserMemory()` is called
-- **Guard**: Only if `enableMemory` setting is on
+- **Guard**: Only if `enableMemory` setting (Reference Recent History) is on
 
 ### Recent Conversations (Current Implementation):
 
 - **When**: Updated after every conversation
-- **Retention policy**: Fixed rolling buffer - keeps last 40 conversations maximum
-- **Content**: Timestamp + brief conversation summary + condensed user message excerpts
-- **Format**: `- {timestamp} {summary}||||{condensed_user_msg1},{condensed_user_msg2},...`
+- **Retention policy**: Fixed rolling buffer - keeps last 20 conversations maximum
+- **Content**: Timestamp + brief conversation summary + condensed user message excerpts + optional key conclusion
+- **Format**: Markdown format with `# Recent Conversations` header and `## conversation title` sections containing time, user messages, and optional key conclusions
 - **Storage**: `recent_conversation_content.md` in the configured memory folder
 
 ### Configuration (Current):
 
-- **`enableMemory`**: Master switch for all memory functionality
+- **`enableMemory`**: Master switch for all recent history referencing functionality
 - **`memoryFolderName`**: Folder where memory files are stored
 
 ### Removed Features:

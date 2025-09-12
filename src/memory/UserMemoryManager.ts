@@ -6,8 +6,6 @@ import { getSettings } from "@/settings/model";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 
-const MAX_MEMORY_LINES = 40;
-
 /**
  * User Memory Management Class
  *
@@ -50,7 +48,7 @@ export class UserMemoryManager {
 
     // Only proceed if memory is enabled
     if (!settings.enableMemory) {
-      logInfo("[UserMemoryManager] User memory tracking is disabled, skipping analysis");
+      logInfo("[UserMemoryManager] Recent history referencing is disabled, skipping analysis");
       return;
     }
 
@@ -108,7 +106,8 @@ CRITICAL RULES:
 6. Prioritize Obsidian-specific features (links, tags, graphs, plugins, etc.)
 
 # OUTPUT FORMAT
-Return only the condensed message as plain text, no quotes or additional formatting.`;
+* Return only the condensed message as plain text, no quotes or additional formatting.
+* Use the same language as the original message.`;
 
     const humanPrompt = `<user_message>
 ${trimmedMessage}
@@ -165,7 +164,7 @@ Condense the user message into a single concise sentence while preserving intent
       let memoryPrompt = "";
 
       if (this.recentConversationsContent) {
-        memoryPrompt += `\n# Recent Conversation Content\n${this.recentConversationsContent}\n`;
+        memoryPrompt += `\n${this.recentConversationsContent}\n`;
       }
 
       return memoryPrompt.length > 0 ? memoryPrompt : null;
@@ -176,9 +175,9 @@ Condense the user message into a single concise sentence while preserving intent
   }
 
   /**
-   * Create a conversation line from messages and return it
+   * Create a conversation section from messages and return it in Markdown format
    */
-  private async createConversationLine(
+  private async createConversationSection(
     messages: ChatMessage[],
     chatModel: BaseChatModel
   ): Promise<string> {
@@ -188,10 +187,21 @@ Condense the user message into a single concise sentence while preserving intent
       .filter((message) => message.sender === USER_SENDER)
       .map((message) => {
         // Use condensed message if available
-        return message.condensedMessage;
+        return `- ${message.condensedMessage}`;
       });
-    const content = userMessageTexts.join("||||");
-    return `${timestamp} ${conversationSummary}||||${content}`;
+
+    // Generate key conclusion if conversation is substantial enough
+    const keyConclusion = await this.extractKeyConclusion(messages, chatModel);
+
+    let section = `## ${conversationSummary}\n`;
+    section += `**Time:** ${timestamp}\n`;
+    section += `**User Messages:**\n${userMessageTexts.join("\n")}\n`;
+
+    if (keyConclusion) {
+      section += `**Key Conclusion:** ${keyConclusion}\n`;
+    }
+
+    return section;
   }
 
   /**
@@ -220,8 +230,8 @@ Condense the user message into a single concise sentence while preserving intent
       }
 
       // 1. Always extract and save conversation summary to recent conversations
-      const conversationLine = await this.createConversationLine(messages, chatModel);
-      await this.addToMemoryFile(this.getRecentConversationFilePath(), conversationLine);
+      const conversationSection = await this.createConversationSection(messages, chatModel);
+      await this.addToMemoryFile(this.getRecentConversationFilePath(), conversationSection);
 
       // User insights functionality removed - only maintain recent conversations
     } catch (error) {
@@ -240,49 +250,163 @@ Condense the user message into a single concise sentence while preserving intent
 
     const folder = this.app.vault.getAbstractFileByPath(memoryFolderPath);
     if (!folder) {
-      await this.app.vault.createFolder(memoryFolderPath);
+      await this.createFolderRecursively(memoryFolderPath);
       logInfo(`[UserMemoryManager] Created user memory folder: ${memoryFolderPath}`);
+    }
+  }
+
+  /**
+   * Recursively create folders for the given path
+   */
+  private async createFolderRecursively(folderPath: string): Promise<void> {
+    const pathParts = folderPath.split("/").filter((part) => part.length > 0);
+    let currentPath = "";
+
+    for (const part of pathParts) {
+      currentPath = currentPath ? `${currentPath}/${part}` : part;
+
+      const exists = this.app.vault.getAbstractFileByPath(currentPath);
+      if (!exists) {
+        await this.app.vault.createFolder(currentPath);
+      }
     }
   }
 
   private getRecentConversationFilePath(): string {
     const settings = getSettings();
-    return `${settings.memoryFolderName}/recent_conversation_content.md`;
+    return `${settings.memoryFolderName}/Recent Conversations Content.md`;
   }
 
   // getUserInsightsFilePath removed - user insights functionality removed
 
   /**
-   * Save content to the user memory file by appending new conversation
+   * Save content to the user memory file by appending new conversation section
    * Maintains a rolling buffer of conversations by removing the oldest when limit is exceeded
    */
-  private async addToMemoryFile(filePath: string, newContent: string): Promise<void> {
-    const newConversationLine = `- ${newContent}`;
-
+  private async addToMemoryFile(filePath: string, newConversationSection: string): Promise<void> {
     const existingFile = this.app.vault.getAbstractFileByPath(filePath);
 
     if (existingFile instanceof TFile) {
-      // Read existing conversation lines, append the new line.
-      // Make sure the content lines do not exceed 40 lines. If it does, remove the first line.
+      // Read existing content and parse conversations
       const fileContent = await this.app.vault.read(existingFile);
-      const lines = fileContent.split("\n");
-      lines.push(newConversationLine);
 
-      if (lines.length > MAX_MEMORY_LINES) {
-        // Remove the first line to keep within the limit
-        lines.shift();
+      let updatedContent: string;
+
+      if (fileContent.trim() === "") {
+        // Create new file without header
+        updatedContent = `${newConversationSection}\n`;
+      } else {
+        // Parse existing conversations and add new one
+        const conversations = this.parseExistingConversations(fileContent);
+        conversations.push(newConversationSection);
+
+        // Keep only the most recent conversations
+        const settings = getSettings();
+        const maxConversations = settings.maxRecentConversations;
+        if (conversations.length > maxConversations) {
+          conversations.splice(0, conversations.length - maxConversations);
+        }
+
+        updatedContent = `${conversations.join("\n")}\n`;
       }
 
-      const updatedContent = lines.join("\n");
       await this.app.vault.modify(existingFile, updatedContent);
     } else {
-      await this.app.vault.create(filePath, newConversationLine);
+      // Create new file
+      const initialContent = `${newConversationSection}\n`;
+      await this.app.vault.create(filePath, initialContent);
     }
+  }
+
+  /**
+   * Parse existing conversations from file content
+   */
+  private parseExistingConversations(content: string): string[] {
+    const conversations: string[] = [];
+
+    // Remove any old header if it exists
+    const cleanContent = content.replace(/^# Recent Conversations\s*\n\n?/m, "").trim();
+
+    // Split by ## headings to get individual conversations
+    const sections = cleanContent.split(/^## /m);
+
+    if (sections.length === 1 && sections[0].trim()) {
+      // Content doesn't start with ##, but has content
+      if (sections[0].trim().startsWith("##")) {
+        conversations.push(sections[0].trim());
+      } else {
+        // Find any ## sections in the content
+        const matches = cleanContent.match(/^## [\s\S]+?(?=^## |$)/gm);
+        if (matches) {
+          conversations.push(...matches.map((match) => match.trim()));
+        }
+      }
+    } else {
+      for (let i = 1; i < sections.length; i++) {
+        // Skip the first section (before first ##)
+        const section = `## ${sections[i]}`.trim();
+        if (section.length > 0) {
+          conversations.push(section);
+        }
+      }
+    }
+
+    return conversations;
   }
 
   // shouldUpdateUserInsights removed - user insights functionality removed
 
   // extractTimestampFromLine removed - no longer needed without user insights functionality
+
+  /**
+   * Extract key conclusion from conversation if it contains important insights
+   */
+  private async extractKeyConclusion(
+    messages: ChatMessage[],
+    chatModel: BaseChatModel
+  ): Promise<string | null> {
+    // Only generate key conclusions for conversations with substantial content
+    const conversationText = messages.map((msg) => `${msg.sender}: ${msg.message}`).join("\n\n");
+
+    // Skip if conversation is too short or simple
+    if (conversationText.length < 300) {
+      return null;
+    }
+
+    const systemPrompt = `You are an AI assistant that analyzes conversations and determines if they contain important conclusions worth remembering.
+
+TASK: Analyze the conversation and extract a key conclusion ONLY if the conversation contains:
+- Important insights, decisions, or learnings
+- Technical solutions or discoveries
+- Significant planning or strategy discussions
+- Important facts or knowledge gained
+
+If the conversation is just casual chat, simple questions, or routine tasks, return "NONE".
+
+# OUTPUT FORMAT
+If there's a key conclusion: Return a concise 1-2 sentence summary of the key insight/conclusion. Use the same language as the conversation.
+If no important conclusion: Return exactly "NONE"`;
+
+    const humanPrompt = `Analyze this conversation and determine if there's a key conclusion worth remembering:
+
+${conversationText}`;
+
+    const messages_llm = [new SystemMessage(systemPrompt), new HumanMessage(humanPrompt)];
+
+    try {
+      const response = await chatModel.invoke(messages_llm);
+      const conclusion = response.content.toString().trim();
+
+      if (conclusion === "NONE" || !conclusion) {
+        return null;
+      }
+
+      return conclusion;
+    } catch (error) {
+      logError("[UserMemoryManager] Failed to extract key conclusion:", error);
+      return null;
+    }
+  }
 
   /**
    * Extract conversation summary using LLM
@@ -300,7 +424,8 @@ CONVERSATION SUMMARY: A very brief summary in 2-5 words maximum
 Examples: "Travel Plan", "Tokyo Weather"
 
 # OUTPUT FORMAT
-Return only the brief 2-5 word summary as plain text, no JSON format needed.`;
+* Return only the brief 2-5 word summary as plain text, no JSON format needed.
+* Use the same language as the conversation.`;
 
     const humanPrompt = `Analyze this conversation and extract a brief summary:
 

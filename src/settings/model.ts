@@ -133,8 +133,10 @@ export interface CopilotSettings {
   verbosity: "low" | "medium" | "high";
   /** Folder where memory data is stored */
   memoryFolderName: string;
-  /** Enable memory feature to build user memory from conversation history */
+  /** Reference recent conversation history to provide more contextually relevant responses */
   enableMemory: boolean;
+  /** Maximum number of recent conversations to remember (10-50) */
+  maxRecentConversations: number;
 }
 
 export const settingsStore = createStore();
@@ -315,6 +317,14 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure enableMemory has a default value
   if (typeof sanitizedSettings.enableMemory !== "boolean") {
     sanitizedSettings.enableMemory = DEFAULT_SETTINGS.enableMemory;
+  }
+
+  // Ensure maxRecentConversations has a valid value (10-50 range)
+  const maxRecentConversations = Number(settingsToSanitize.maxRecentConversations);
+  if (isNaN(maxRecentConversations) || maxRecentConversations < 10 || maxRecentConversations > 50) {
+    sanitizedSettings.maxRecentConversations = DEFAULT_SETTINGS.maxRecentConversations;
+  } else {
+    sanitizedSettings.maxRecentConversations = maxRecentConversations;
   }
 
   return sanitizedSettings;

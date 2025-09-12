@@ -751,6 +751,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   verbosity: DEFAULT_MODEL_SETTING.VERBOSITY,
   memoryFolderName: "copilot-memory",
   enableMemory: false,
+  maxRecentConversations: 30,
 };
 
 export const EVENT_NAMES = {
