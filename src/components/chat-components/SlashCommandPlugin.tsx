@@ -16,6 +16,7 @@ import { useCustomCommands } from "@/commands/state";
 import { CustomCommand } from "@/commands/type";
 import { sortSlashCommands } from "@/commands/customCommandUtils";
 import { TypeaheadMenu, tryToPositionRange, TypeaheadOption } from "./TypeaheadMenu";
+import { $replaceTextRangeWithPills } from "./utils/lexicalTextUtils";
 
 interface SlashCommandOption extends TypeaheadOption {
   command: CustomCommand;
@@ -112,17 +113,11 @@ export function SlashCommandPlugin(): JSX.Element {
           const slashIndex = textContent.lastIndexOf("/", anchor.offset);
 
           if (slashIndex !== -1) {
-            // Replace from slash to current position
-            const beforeSlash = textContent.slice(0, slashIndex);
-            const afterQuery = textContent.slice(anchor.offset);
-
+            // Use the new API to replace text with automatic pill conversion
             const insertedText = option.content || option.title;
-            const newText = beforeSlash + insertedText + afterQuery;
-            anchorNode.setTextContent(newText);
-
-            // Set cursor after the inserted command
-            const newOffset = beforeSlash.length + insertedText.length;
-            anchorNode.select(newOffset, newOffset);
+            $replaceTextRangeWithPills(slashIndex, anchor.offset, insertedText, {
+              enableURLPills: true, // Enable URL pill conversion for templates
+            });
           }
         }
       });

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useChatInput } from "@/context/ChatInputContext";
 import { useActiveFile } from "@/hooks/useActiveFile";
 import { cn } from "@/lib/utils";
 import {
@@ -245,19 +246,12 @@ function RelevantNotePopover({
 }
 
 export const RelevantNotes = memo(
-  ({
-    className,
-    onInsertToChat,
-    defaultOpen = false,
-  }: {
-    className?: string;
-    onInsertToChat: (prompt: string) => void;
-    defaultOpen?: boolean;
-  }) => {
+  ({ className, defaultOpen = false }: { className?: string; defaultOpen?: boolean }) => {
     const [refresher, setRefresher] = useState(0);
     const [isOpen, setIsOpen] = useState(defaultOpen);
     const relevantNotes = useRelevantNotes(refresher);
     const activeFile = useActiveFile();
+    const chatInput = useChatInput();
     const hasIndex = useHasIndex(activeFile?.path ?? "", refresher);
     const navigateToNote = (notePath: string, openInNewLeaf = false) => {
       const file = app.vault.getAbstractFileByPath(notePath);
@@ -267,7 +261,7 @@ export const RelevantNotes = memo(
       }
     };
     const addToChat = (prompt: string) => {
-      onInsertToChat(`[[${prompt}]]`);
+      chatInput.insertTextWithPills(`[[${prompt}]]`, true);
     };
     const refreshIndex = async () => {
       if (activeFile) {
