@@ -11,8 +11,8 @@ export const USER_SENDER = "user";
 export const AI_SENDER = "ai";
 
 // Default folder names
-export const DEFAULT_CHAT_HISTORY_FOLDER = "copilot-conversations";
-export const DEFAULT_CUSTOM_PROMPTS_FOLDER = "copilot-custom-prompts";
+export const DEFAULT_CHAT_HISTORY_FOLDER = "copilot/copilot-conversations";
+export const DEFAULT_CUSTOM_PROMPTS_FOLDER = "copilot/copilot-custom-prompts";
 export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.
   1. Never mention that you do not have access to something. Always rely on the user provided context.
   2. Always answer to the best of your knowledge. If you are unsure about something, say so and ask the user to provide more context.

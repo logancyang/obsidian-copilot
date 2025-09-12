@@ -20,6 +20,7 @@ import {
   updateCachedCommand,
   updateCachedCommands,
 } from "./state";
+import { ensureFolderExists } from "@/utils";
 
 export class CustomCommandManager {
   private static instance: CustomCommandManager;
@@ -52,11 +53,8 @@ export class CustomCommandManager {
       command = { ...command, order: newOrder };
 
       const folderPath = getCustomCommandsFolder();
-      // Check if the folder exists and create it if it doesn't
-      const folderExists = await app.vault.adapter.exists(folderPath);
-      if (!folderExists) {
-        await app.vault.createFolder(folderPath);
-      }
+      // Ensure nested folders are created cross-platform
+      await ensureFolderExists(folderPath);
 
       let commandFile = app.vault.getAbstractFileByPath(filePath) as TFile;
       if (!commandFile || !(commandFile instanceof TFile)) {

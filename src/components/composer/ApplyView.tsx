@@ -9,6 +9,7 @@ import { Button } from "../ui/button";
 import { useState } from "react";
 import { getChangeBlocks } from "@/composerUtils";
 import { ApplyViewResult } from "@/types";
+import { ensureFolderExists } from "@/utils";
 
 export const APPLY_VIEW_TYPE = "obsidian-copilot-apply-view";
 
@@ -185,13 +186,10 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     if (file) {
       return file;
     }
-    // Create the folder if it doesn't exist
+    // Create the folder if it doesn't exist (supports nested paths)
     if (file_path.includes("/")) {
       const folderPath = file_path.split("/").slice(0, -1).join("/");
-      const folder = app.vault.getAbstractFileByPath(folderPath);
-      if (!folder) {
-        await app.vault.createFolder(folderPath);
-      }
+      await ensureFolderExists(folderPath);
     }
     return await app.vault.create(file_path, "");
   };
