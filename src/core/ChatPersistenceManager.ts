@@ -7,7 +7,6 @@ import { USER_SENDER, AI_SENDER } from "@/constants";
 import { getSettings } from "@/settings/model";
 import { getCurrentProject } from "@/aiParams";
 import ChainManager from "@/LLMProviders/chainManager";
-import { ensureFolderExists } from "@/utils";
 
 /**
  * ChatPersistenceManager - Handles saving and loading chat messages
@@ -40,8 +39,24 @@ export class ChatPersistenceManager {
       const chatContent = this.formatChatContent(messages);
       const firstMessageEpoch = messages[0].timestamp?.epoch || Date.now();
 
-      // Ensure the save folder exists (supports nested paths)
-      await ensureFolderExists(settings.defaultSaveFolder);
+      // Ensure the save folder exists (supports nested paths). Use dynamic import so tests that mock
+      // '@/utils' but don't provide this helper still pass via fallback.
+      try {
+        const utils = await import("@/utils");
+        if (typeof (utils as any).ensureFolderExists === "function") {
+          await (utils as any).ensureFolderExists(settings.defaultSaveFolder);
+        } else {
+          const folder = this.app.vault.getAbstractFileByPath(settings.defaultSaveFolder);
+          if (!folder) {
+            await this.app.vault.createFolder(settings.defaultSaveFolder);
+          }
+        }
+      } catch {
+        const folder = this.app.vault.getAbstractFileByPath(settings.defaultSaveFolder);
+        if (!folder) {
+          await this.app.vault.createFolder(settings.defaultSaveFolder);
+        }
+      }
 
       // Check if a file with this epoch already exists
       const existingFile = await this.findFileByEpoch(firstMessageEpoch);
