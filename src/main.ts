@@ -83,7 +83,7 @@ export default class CopilotPlugin extends Plugin {
     // Initialize ProjectManager
     this.projectManager = ProjectManager.getInstance(this.app, this);
 
-    // Initialize VectorStoreManager
+    // Always construct VectorStoreManager; it internally no-ops when semantic search is disabled
     this.vectorStoreManager = VectorStoreManager.getInstance();
 
     // Initialize FileParserManager early with other core services
