@@ -7,6 +7,7 @@ import { USER_SENDER, AI_SENDER } from "@/constants";
 import { getSettings } from "@/settings/model";
 import { getCurrentProject } from "@/aiParams";
 import ChainManager from "@/LLMProviders/chainManager";
+import { ensureFolderExists } from "@/utils";
 
 /**
  * ChatPersistenceManager - Handles saving and loading chat messages
@@ -39,11 +40,8 @@ export class ChatPersistenceManager {
       const chatContent = this.formatChatContent(messages);
       const firstMessageEpoch = messages[0].timestamp?.epoch || Date.now();
 
-      // Ensure the save folder exists
-      const folder = this.app.vault.getAbstractFileByPath(settings.defaultSaveFolder);
-      if (!folder) {
-        await this.app.vault.createFolder(settings.defaultSaveFolder);
-      }
+      // Ensure the save folder exists (supports nested paths) using utility helper.
+      await ensureFolderExists(settings.defaultSaveFolder);
 
       // Check if a file with this epoch already exists
       const existingFile = await this.findFileByEpoch(firstMessageEpoch);

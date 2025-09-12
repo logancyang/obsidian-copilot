@@ -2,6 +2,7 @@ import { CustomCommandManager } from "@/commands/customCommandManager";
 import { getCustomCommandsFolder, validateCommandName } from "@/commands/customCommandUtils";
 import { CustomCommand } from "@/commands/type";
 import { getSettings, updateSetting } from "@/settings/model";
+import { ensureFolderExists } from "@/utils";
 import {
   COPILOT_COMMAND_CONTEXT_MENU_ORDER,
   COPILOT_COMMAND_LAST_USED,
@@ -13,13 +14,11 @@ import { COPILOT_COMMAND_CONTEXT_MENU_ENABLED } from "@/commands/constants";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { getCachedCustomCommands } from "@/commands/state";
 
-function saveUnsupportedCommands(commands: CustomCommand[]) {
+async function saveUnsupportedCommands(commands: CustomCommand[]) {
   const folderPath = getCustomCommandsFolder();
   const unsupportedFolderPath = `${folderPath}/unsupported`;
-  const unsupportedFolder = app.vault.getAbstractFileByPath(unsupportedFolderPath);
-  if (!unsupportedFolder) {
-    app.vault.createFolder(unsupportedFolderPath);
-  }
+  // Ensure nested structure exists regardless of platform
+  await ensureFolderExists(unsupportedFolderPath);
   return Promise.all(
     commands.map(async (command) => {
       const filePath = `${unsupportedFolderPath}/${command.title}.md`;

@@ -18,7 +18,7 @@ import { MemoryVariables } from "@langchain/core/memory";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { BaseChain, RetrievalQAChain } from "langchain/chains";
 import moment from "moment";
-import { MarkdownView, Notice, TFile, Vault, requestUrl } from "obsidian";
+import { MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
 export { err2String } from "@/errorFormat";
 
@@ -258,6 +258,40 @@ export const formatDateTime = (
     epoch: formattedDateTime.valueOf(),
   };
 };
+
+/**
+ * Ensure a folder path exists by creating any missing parent directories.
+ * Works across desktop and mobile. Safe to call repeatedly.
+ *
+ * Examples:
+ * - ensureFolderExists("copilot/copilot-conversations")
+ * - ensureFolderExists("some/deep/nested/path")
+ *
+ * Throws if any segment conflicts with an existing file.
+ */
+export async function ensureFolderExists(folderPath: string): Promise<void> {
+  const path = normalizePath(folderPath).replace(/^\/+/, "").replace(/\/+$/, "");
+  if (!path) return; // nothing to ensure
+
+  const parts = path.split("/").filter(Boolean);
+  let current = "";
+
+  for (const part of parts) {
+    current = current ? `${current}/${part}` : part;
+
+    const existing = app.vault.getAbstractFileByPath(current);
+    if (existing) {
+      if (existing instanceof TFile) {
+        throw new Error(`Path conflict: "${current}" exists as a file, expected folder.`);
+      }
+      // If it's a folder, continue to check/create the next segment
+      continue;
+    }
+
+    // Create this level; parents are guaranteed to exist from previous iterations
+    await app.vault.adapter.mkdir(current);
+  }
+}
 
 export function stringToFormattedDateTime(timestamp: string): FormattedDateTime {
   const date = moment(timestamp, "YYYY/MM/DD HH:mm:ss");

@@ -1,11 +1,12 @@
 import { err2String } from "@/errorFormat";
 import { TFile } from "obsidian";
+import { ensureFolderExists } from "@/utils";
 
 type LogLevel = "INFO" | "WARN" | "ERROR";
 
 /**
  * Manages a rolling log file that keeps the last N entries and works on desktop and mobile.
- * - Writes to <vault>/copilot-log.md
+ * - Writes to <vault>/copilot/copilot-log.md
  * - Maintains an in-memory ring buffer of the last 1000 entries
  * - Debounced flush to reduce I/O; single-line entries to preserve accurate line limits
  */
@@ -13,12 +14,10 @@ class LogFileManager {
   private static instance: LogFileManager;
 
   private readonly maxLines = 1000;
-  private readonly debounceMs = 1500; // per user preference
   private readonly maxLineChars = 8000; // guard against extremely large entries
   private buffer: string[] = [];
   private initialized = false;
   private flushing = false;
-  private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
   static getInstance(): LogFileManager {
     if (!LogFileManager.instance) {
@@ -28,7 +27,7 @@ class LogFileManager {
   }
 
   getLogPath(): string {
-    return "copilot-log.md"; // vault root
+    return "copilot/copilot-log.md"; // under copilot/
   }
 
   /** Ensure buffer is loaded with up to last 1000 lines from existing file. */
@@ -109,8 +108,8 @@ class LogFileManager {
     if (this.buffer.length > this.maxLines) {
       this.buffer.splice(0, this.buffer.length - this.maxLines);
     }
-
-    this.scheduleFlush();
+    // Intentionally do not flush automatically. We only write to disk when
+    // the user explicitly opens the log file.
   }
 
   /**
@@ -137,19 +136,7 @@ class LogFileManager {
         this.buffer.splice(0, this.buffer.length - this.maxLines);
       }
     }
-
-    this.scheduleFlush();
-  }
-
-  private scheduleFlush() {
-    if (!this.hasVault()) return; // no-op in tests or non-Obsidian env
-    if (this.flushTimer !== null) {
-      clearTimeout(this.flushTimer);
-    }
-    this.flushTimer = setTimeout(() => {
-      this.flushTimer = null;
-      void this.flush();
-    }, this.debounceMs);
+    // Intentionally do not flush automatically.
   }
 
   async flush(): Promise<void> {
@@ -158,8 +145,12 @@ class LogFileManager {
     this.flushing = true;
     try {
       const path = this.getLogPath();
-      const content = this.buffer.join("\n") + (this.buffer.length ? "\n" : "");
-      await app.vault.adapter.write(path, content);
+      // Only write if a log file already exists.
+      // Do not create files or folders implicitly; creation happens in openLogFile().
+      if (await app.vault.adapter.exists(path)) {
+        const content = this.buffer.join("\n") + (this.buffer.length ? "\n" : "");
+        await app.vault.adapter.write(path, content);
+      }
     } catch {
       // swallow write errors; logging should never crash the app
     } finally {
@@ -189,6 +180,10 @@ class LogFileManager {
     try {
       if (!file) {
         // Create file if missing so it can be opened
+        const folder = path.includes("/") ? path.split("/").slice(0, -1).join("/") : "";
+        if (folder) {
+          await ensureFolderExists(folder);
+        }
         file = await app.vault.create(
           path,
           this.buffer.join("\n") + (this.buffer.length ? "\n" : "")

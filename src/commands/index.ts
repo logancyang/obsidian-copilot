@@ -16,7 +16,7 @@ import CopilotPlugin from "@/main";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { CopilotSettings, getSettings, updateSetting } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
-import { isSourceModeOn } from "@/utils";
+import { ensureFolderExists, isSourceModeOn } from "@/utils";
 import { Editor, MarkdownView, Notice, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";
@@ -280,7 +280,11 @@ export function registerCommands(
 
       // Create or update the file in the vault
       const fileName = `Copilot-Indexed-Files-${new Date().toLocaleDateString().replace(/\//g, "-")}.md`;
-      const filePath = `${fileName}`;
+      const folderPath = "copilot";
+      const filePath = `${folderPath}/${fileName}`;
+
+      // Ensure destination folder exists (supports mobile and nested)
+      await ensureFolderExists(folderPath);
 
       const existingFile = plugin.app.vault.getAbstractFileByPath(filePath);
       if (existingFile) {
@@ -326,13 +330,13 @@ export function registerCommands(
     }
   });
 
-  // Open Copilot log file
+  // Create Copilot log file
   addCommand(plugin, COMMAND_IDS.OPEN_LOG_FILE, async () => {
     try {
       await logFileManager.openLogFile();
     } catch (error) {
-      logError("Error opening Copilot log file:", error);
-      new Notice("Failed to open Copilot log file.");
+      logError("Error creating Copilot log file:", error);
+      new Notice("Failed to create Copilot log file.");
     }
   });
 
