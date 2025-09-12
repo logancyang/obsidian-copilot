@@ -26,11 +26,11 @@ import {
   USER_SENDER,
 } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
+import { ChatInputProvider, useChatInput } from "@/context/ChatInputContext";
 import { useChatManager } from "@/hooks/useChatManager";
 import { getAIResponse } from "@/langchainStream";
 import ChainManager from "@/LLMProviders/chainManager";
 import CopilotPlugin from "@/main";
-import { Mention } from "@/mentions/Mention";
 import { useIsPlusUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ChatUIState } from "@/state/ChatUIState";
@@ -52,13 +52,15 @@ interface ChatProps {
   chatUIState: ChatUIState;
 }
 
-const Chat: React.FC<ChatProps> = ({
+// Internal component that has access to the ChatInput context
+const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatInput> }> = ({
   chainManager,
   onSaveChat,
   updateUserMessageHistory,
   fileParserManager,
   plugin,
   chatUIState,
+  chatInput,
 }) => {
   const settings = useSettingsValue();
   const eventTarget = useContext(EventTargetContext);
@@ -126,24 +128,6 @@ const Chat: React.FC<ChatProps> = ({
   const [selectedChain, setSelectedChain] = useChainType();
   const isPlusUser = useIsPlusUser();
 
-  const mention = Mention.getInstance();
-
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    const handleChatVisibility = () => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-      }
-    };
-    eventTarget?.addEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
-
-    // Cleanup function
-    return () => {
-      eventTarget?.removeEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
-    };
-  }, [eventTarget]);
-
   const appContext = useContext(AppContext);
   const app = plugin.app || appContext;
 
@@ -160,9 +144,8 @@ const Chat: React.FC<ChatProps> = ({
 
     // Check for URL restrictions in non-Plus chains and show notice, but continue processing
     const hasUrlsInContext = urls && urls.length > 0;
-    const hasUrlsInMessage = inputMessage && mention.extractAllUrls(inputMessage).length > 0;
 
-    if ((hasUrlsInContext || hasUrlsInMessage) && !isPlusChain(currentChain)) {
+    if (hasUrlsInContext && !isPlusChain(currentChain)) {
       // Show notice but continue processing the message without URL context
       new Notice(RESTRICTION_MESSAGES.URL_PROCESSING_RESTRICTED);
     }
@@ -506,13 +489,21 @@ const Chat: React.FC<ChatProps> = ({
     [settings.projectList]
   );
 
-  const handleInsertToChat = useCallback((prompt: string) => {
-    setInputMessage((prev) => `${prev} ${prompt} `);
-  }, []);
-
   const handleRemoveSelectedText = useCallback((id: string) => {
     removeSelectedTextContext(id);
   }, []);
+
+  useEffect(() => {
+    const handleChatVisibility = () => {
+      chatInput.focusInput();
+    };
+    eventTarget?.addEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
+
+    // Cleanup function
+    return () => {
+      eventTarget?.removeEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
+    };
+  }, [eventTarget, chatInput]);
 
   const handleDelete = useCallback(
     async (messageIndex: number) => {
@@ -627,7 +618,6 @@ const Chat: React.FC<ChatProps> = ({
           onRegenerate={handleRegenerate}
           onEdit={handleEdit}
           onDelete={handleDelete}
-          onInsertToChat={handleInsertToChat}
           onReplaceChat={setInputMessage}
           showHelperComponents={selectedChain !== ChainType.PROJECT_CHAIN}
         />
@@ -655,7 +645,6 @@ const Chat: React.FC<ChatProps> = ({
               }}
             />
             <ChatInput
-              ref={inputRef}
               inputMessage={inputMessage}
               setInputMessage={setInputMessage}
               handleSendMessage={handleSendMessage}
@@ -666,7 +655,6 @@ const Chat: React.FC<ChatProps> = ({
               setContextNotes={setContextNotes}
               includeActiveNote={includeActiveNote}
               setIncludeActiveNote={setIncludeActiveNote}
-              mention={mention}
               selectedImages={selectedImages}
               onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
               setSelectedImages={setSelectedImages}
@@ -696,7 +684,6 @@ const Chat: React.FC<ChatProps> = ({
                 hasMessages={false}
                 onProjectAdded={handleAddProject}
                 onEditProject={handleEditProject}
-                inputRef={inputRef}
                 onClose={() => {
                   if (previousMode) {
                     setSelectedChain(previousMode);
@@ -722,6 +709,21 @@ const Chat: React.FC<ChatProps> = ({
       </div>
     </div>
   );
+};
+
+// Main Chat component with context provider
+const Chat: React.FC<ChatProps> = (props) => {
+  return (
+    <ChatInputProvider>
+      <ChatWithContext {...props} />
+    </ChatInputProvider>
+  );
+};
+
+// Chat component that uses context
+const ChatWithContext: React.FC<ChatProps> = (props) => {
+  const chatInput = useChatInput();
+  return <ChatInternal {...props} chatInput={chatInput} />;
 };
 
 export default Chat;

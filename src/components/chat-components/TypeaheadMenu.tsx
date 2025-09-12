@@ -43,7 +43,8 @@ function tryToPositionRange(leadOffset: number, editorWindow: Window): Range | n
   return range;
 }
 
-const MENU_WIDTH = 384;
+const MENU_MIN_WIDTH = 320;
+const MENU_MAX_WIDTH = 320;
 const PREVIEW_MIN_HEIGHT = 120;
 const PREVIEW_MAX_HEIGHT = 240;
 
@@ -77,37 +78,50 @@ export const TypeaheadMenu: React.FC<TypeaheadMenuProps> = ({
   showPreview = false,
   menuLabel = "Options",
 }) => {
-  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+  const [position, setPosition] = useState<{ top: number; left: number; width: number } | null>(
+    null
+  );
   const containerRef = useRef<HTMLDivElement | null>(null);
   const selectedItemRef = useRef<HTMLDivElement | null>(null);
 
-  // Calculate position so menu stays in same spot regardless of preview visibility
+  // Calculate dynamic width based on content
+  const calculateWidth = useCallback(() => {
+    if (options.length === 0) return MENU_MIN_WIDTH;
+
+    // Estimate width based on content length
+    const maxTitleLength = Math.max(...options.map((opt) => opt.title.length));
+    const maxSubtitleLength = Math.max(...options.map((opt) => opt.subtitle?.length || 0));
+
+    // Base width calculation (rough estimate: 8px per character + padding)
+    const estimatedWidth = Math.max(
+      maxTitleLength * 8 + 32, // title + padding
+      maxSubtitleLength * 6 + 32 // subtitle (smaller font) + padding
+    );
+
+    return Math.min(Math.max(estimatedWidth, MENU_MIN_WIDTH), MENU_MAX_WIDTH);
+  }, [options]);
+
+  // Simple positioning: place container bottom right above text range
   const recalcPosition = useCallback(() => {
     if (!range) return;
     const rect = range.getBoundingClientRect();
 
-    const containerWidth = MENU_WIDTH;
-    const menuHeight = 240; // max height estimate
-    const previewHeight = PREVIEW_MAX_HEIGHT + 8; // preview + margin
+    const containerWidth = calculateWidth();
 
-    // Always position container as if preview is shown, so menu stays stable
-    // This puts the menu in a consistent position regardless of preview visibility
-    const desiredMenuTop = rect.top - 4 - menuHeight;
-    const desiredContainerTop = desiredMenuTop - previewHeight;
-    const desiredLeft = rect.left;
+    // Simple positioning: container bottom aligns with range top
+    const top = rect.top - 4; // Small gap above range
 
-    // Clamp within viewport
-    const totalHeight = previewHeight + menuHeight;
-    const minTop = 8;
-    const maxTop = window.innerHeight - totalHeight - 8;
+    // Clamp horizontal position
     const minLeft = 8;
     const maxLeft = window.innerWidth - containerWidth - 8;
+    const left = Math.min(Math.max(rect.left, minLeft), maxLeft);
 
-    const top = Math.min(Math.max(desiredContainerTop, minTop), maxTop);
-    const left = Math.min(Math.max(desiredLeft, minLeft), maxLeft);
-
-    setPosition({ top, left });
-  }, [range]);
+    setPosition({
+      top,
+      left,
+      width: containerWidth,
+    });
+  }, [range, calculateWidth]);
 
   useEffect(() => {
     recalcPosition();
@@ -144,46 +158,43 @@ export const TypeaheadMenu: React.FC<TypeaheadMenuProps> = ({
     return null;
   }
 
+  const hasPreview = showPreview && options[selectedIndex]?.content;
+
   const container = (
     <div
-      className="tw-absolute tw-z-[9999] tw-flex tw-flex-col"
+      className="tw-absolute tw-z-[9999] tw-flex tw-flex-col tw-items-end"
       style={{
-        top: position.top,
+        bottom: `calc(100vh - ${position.top}px)`,
         left: position.left,
-        width: MENU_WIDTH,
+        width: position.width,
       }}
       ref={containerRef}
     >
-      {/* Preview area - always takes same total space */}
-      <div
-        className="tw-mb-2 tw-flex tw-shrink-0 tw-flex-col"
-        style={{ height: PREVIEW_MAX_HEIGHT }}
-      >
-        {/* Flexible spacer to fill remaining space */}
-        <div className="tw-flex-1" />
-        {showPreview && options[selectedIndex]?.content && (
-          <div
-            className={cn(
-              "tw-shrink-0 tw-overflow-hidden tw-rounded-md tw-bg-primary tw-p-3 tw-text-sm tw-shadow-xl"
-            )}
-            style={{
-              minHeight: PREVIEW_MIN_HEIGHT,
-              maxHeight: PREVIEW_MAX_HEIGHT,
-            }}
-          >
-            <div className="tw-mb-1 tw-text-xs tw-text-muted">Preview</div>
-            <div className="tw-whitespace-pre-wrap tw-text-normal">
-              {options[selectedIndex].content}
-            </div>
+      {/* Preview */}
+      {hasPreview && (
+        <div
+          className="tw-mb-2 tw-overflow-hidden tw-rounded-md tw-bg-primary tw-p-3 tw-text-sm tw-shadow-xl"
+          style={{
+            width: position.width,
+            minHeight: PREVIEW_MIN_HEIGHT,
+            maxHeight: PREVIEW_MAX_HEIGHT,
+          }}
+        >
+          <div className="tw-mb-1 tw-text-xs tw-text-muted">Preview</div>
+          <div className="tw-whitespace-pre-wrap tw-text-normal">
+            {options[selectedIndex].content}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Menu */}
       <div
-        className={cn(
-          "tw-max-h-60 tw-shrink-0 tw-overflow-y-auto tw-rounded-lg tw-border tw-border-solid tw-border-border tw-bg-primary tw-shadow-lg"
-        )}
+        className="tw-overflow-y-auto tw-rounded-lg tw-border tw-border-solid tw-border-border tw-bg-primary tw-shadow-lg"
+        style={{
+          width: position.width,
+          minHeight: Math.min(options.length * 44 + 16, 100), // At least show content
+          maxHeight: 240,
+        }}
       >
         <div className="tw-p-2 tw-text-normal">
           {options.map((option, index) => {
