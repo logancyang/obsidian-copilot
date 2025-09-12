@@ -326,13 +326,13 @@ export function registerCommands(
     }
   });
 
-  // Open Copilot log file
+  // Create Copilot log file
   addCommand(plugin, COMMAND_IDS.OPEN_LOG_FILE, async () => {
     try {
       await logFileManager.openLogFile();
     } catch (error) {
-      logError("Error opening Copilot log file:", error);
-      new Notice("Failed to open Copilot log file.");
+      logError("Error creating Copilot log file:", error);
+      new Notice("Failed to create Copilot log file.");
     }
   });
 

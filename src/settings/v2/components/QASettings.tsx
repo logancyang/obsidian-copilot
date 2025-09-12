@@ -71,7 +71,8 @@ export const QASettings: React.FC = () => {
               <div className="tw-space-y-2">
                 <div className="tw-flex tw-items-center tw-gap-1.5">
                   <span className="tw-font-medium tw-leading-none tw-text-accent">
-                    Enable Semantic Search to use it.
+                    Powers Semantic Vault Search and Relevant Notes. Enable Semantic Search to use
+                    it.
                   </span>
                   <TooltipProvider delayDuration={0}>
                     <Tooltip>

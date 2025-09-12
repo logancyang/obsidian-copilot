@@ -14,12 +14,10 @@ class LogFileManager {
   private static instance: LogFileManager;
 
   private readonly maxLines = 1000;
-  private readonly debounceMs = 1500; // per user preference
   private readonly maxLineChars = 8000; // guard against extremely large entries
   private buffer: string[] = [];
   private initialized = false;
   private flushing = false;
-  private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
   static getInstance(): LogFileManager {
     if (!LogFileManager.instance) {
@@ -110,8 +108,8 @@ class LogFileManager {
     if (this.buffer.length > this.maxLines) {
       this.buffer.splice(0, this.buffer.length - this.maxLines);
     }
-
-    this.scheduleFlush();
+    // Intentionally do not flush automatically. We only write to disk when
+    // the user explicitly opens the log file.
   }
 
   /**
@@ -138,19 +136,7 @@ class LogFileManager {
         this.buffer.splice(0, this.buffer.length - this.maxLines);
       }
     }
-
-    this.scheduleFlush();
-  }
-
-  private scheduleFlush() {
-    if (!this.hasVault()) return; // no-op in tests or non-Obsidian env
-    if (this.flushTimer !== null) {
-      clearTimeout(this.flushTimer);
-    }
-    this.flushTimer = setTimeout(() => {
-      this.flushTimer = null;
-      void this.flush();
-    }, this.debounceMs);
+    // Intentionally do not flush automatically.
   }
 
   async flush(): Promise<void> {
@@ -159,13 +145,12 @@ class LogFileManager {
     this.flushing = true;
     try {
       const path = this.getLogPath();
-      // Ensure parent folder exists for nested log path
-      const folder = path.includes("/") ? path.split("/").slice(0, -1).join("/") : "";
-      if (folder) {
-        await ensureFolderExists(folder);
+      // Only write if a log file already exists.
+      // Do not create files or folders implicitly; creation happens in openLogFile().
+      if (await app.vault.adapter.exists(path)) {
+        const content = this.buffer.join("\n") + (this.buffer.length ? "\n" : "");
+        await app.vault.adapter.write(path, content);
       }
-      const content = this.buffer.join("\n") + (this.buffer.length ? "\n" : "");
-      await app.vault.adapter.write(path, content);
     } catch {
       // swallow write errors; logging should never crash the app
     } finally {

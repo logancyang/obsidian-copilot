@@ -1,5 +1,5 @@
-import { SettingItem } from "@/components/ui/setting-item";
 import { Button } from "@/components/ui/button";
+import { SettingItem } from "@/components/ui/setting-item";
 import { logFileManager } from "@/logFileManager";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import React from "react";
@@ -43,8 +43,8 @@ export const AdvancedSettings: React.FC = () => {
 
           <SettingItem
             type="custom"
-            title="Share Log"
-            description={`Open the Copilot log file (${logFileManager.getLogPath()}) for easy sharing.`}
+            title="Create Log File"
+            description={`Open the Copilot log file (${logFileManager.getLogPath()}) for easy sharing when reporting issues.`}
           >
             <Button
               variant="secondary"
@@ -54,7 +54,7 @@ export const AdvancedSettings: React.FC = () => {
                 await logFileManager.openLogFile();
               }}
             >
-              Open Log File
+              Create Log File
             </Button>
           </SettingItem>
         </div>

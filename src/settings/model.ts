@@ -308,6 +308,15 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
       DEFAULT_SETTINGS.autonomousAgentEnabledToolIds;
   }
 
+  // Ensure folder settings fall back to defaults when empty/whitespace
+  const saveFolder = (settingsToSanitize.defaultSaveFolder || "").trim();
+  sanitizedSettings.defaultSaveFolder =
+    saveFolder.length > 0 ? saveFolder : DEFAULT_SETTINGS.defaultSaveFolder;
+
+  const promptsFolder = (settingsToSanitize.customPromptsFolder || "").trim();
+  sanitizedSettings.customPromptsFolder =
+    promptsFolder.length > 0 ? promptsFolder : DEFAULT_SETTINGS.customPromptsFolder;
+
   return sanitizedSettings;
 }
 
