@@ -19,7 +19,7 @@ export interface MobileCardDropdownAction<T = any> {
   variant?: "default" | "destructive";
 }
 
-export interface MobileCardProps<T = any> {
+export interface MobileCardProps<T extends object> {
   id: string;
   item: T;
   title: string;
@@ -41,7 +41,7 @@ export interface MobileCardProps<T = any> {
   onExpandToggle?: (expanded: boolean) => void;
 }
 
-export function MobileCard<T = any>({
+export function MobileCard<T extends object>({
   id,
   item,
   title,
