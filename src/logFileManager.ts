@@ -1,11 +1,12 @@
 import { err2String } from "@/errorFormat";
 import { TFile } from "obsidian";
+import { ensureFolderExists } from "@/utils";
 
 type LogLevel = "INFO" | "WARN" | "ERROR";
 
 /**
  * Manages a rolling log file that keeps the last N entries and works on desktop and mobile.
- * - Writes to <vault>/copilot-log.md
+ * - Writes to <vault>/copilot/copilot-log.md
  * - Maintains an in-memory ring buffer of the last 1000 entries
  * - Debounced flush to reduce I/O; single-line entries to preserve accurate line limits
  */
@@ -28,7 +29,7 @@ class LogFileManager {
   }
 
   getLogPath(): string {
-    return "copilot-log.md"; // vault root
+    return "copilot/copilot-log.md"; // under copilot/
   }
 
   /** Ensure buffer is loaded with up to last 1000 lines from existing file. */
@@ -158,6 +159,11 @@ class LogFileManager {
     this.flushing = true;
     try {
       const path = this.getLogPath();
+      // Ensure parent folder exists for nested log path
+      const folder = path.includes("/") ? path.split("/").slice(0, -1).join("/") : "";
+      if (folder) {
+        await ensureFolderExists(folder);
+      }
       const content = this.buffer.join("\n") + (this.buffer.length ? "\n" : "");
       await app.vault.adapter.write(path, content);
     } catch {
@@ -189,6 +195,10 @@ class LogFileManager {
     try {
       if (!file) {
         // Create file if missing so it can be opened
+        const folder = path.includes("/") ? path.split("/").slice(0, -1).join("/") : "";
+        if (folder) {
+          await ensureFolderExists(folder);
+        }
         file = await app.vault.create(
           path,
           this.buffer.join("\n") + (this.buffer.length ? "\n" : "")

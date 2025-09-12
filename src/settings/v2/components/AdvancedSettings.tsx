@@ -44,7 +44,7 @@ export const AdvancedSettings: React.FC = () => {
           <SettingItem
             type="custom"
             title="Share Log"
-            description="Open the Copilot log file (copilot-log.md) for easy sharing."
+            description={`Open the Copilot log file (${logFileManager.getLogPath()}) for easy sharing.`}
           >
             <Button
               variant="secondary"

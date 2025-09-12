@@ -246,10 +246,10 @@ export const BasicSettings: React.FC = () => {
           <SettingItem
             type="text"
             title="Default Conversation Folder Name"
-            description="The default folder name where chat conversations will be saved. Default is 'copilot-conversations'"
+            description="The default folder name where chat conversations will be saved. Default is 'copilot/copilot-conversations'"
             value={settings.defaultSaveFolder}
             onChange={(value) => updateSetting("defaultSaveFolder", value)}
-            placeholder="copilot-conversations"
+            placeholder="copilot/copilot-conversations"
           />
 
           <SettingItem

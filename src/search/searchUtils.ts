@@ -365,7 +365,7 @@ export function getExtensionPattern(extension: string): string {
 
 /**
  * Get a list of internal Copilot file paths that must be excluded from searches.
- * Currently includes the rolling log file path (e.g., "copilot-log.md" at vault root).
+ * Currently includes the rolling log file path (e.g., "copilot/copilot-log.md").
  */
 export function getInternalExcludePaths(): string[] {
   return [logFileManager.getLogPath()];
