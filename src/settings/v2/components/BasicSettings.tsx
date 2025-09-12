@@ -345,6 +345,14 @@ export const BasicSettings: React.FC = () => {
 
           <SettingItem
             type="switch"
+            title="Generate AI Chat Title on Save"
+            description="When enabled, uses an AI model to generate a concise title for saved chat notes. When disabled, uses the first 10 words of the first user message."
+            checked={settings.generateAIChatTitleOnSave}
+            onCheckedChange={(checked) => updateSetting("generateAIChatTitleOnSave", checked)}
+          />
+
+          <SettingItem
+            type="switch"
             title="Include Current Note in Context Menu"
             description="Automatically include the current note in the chat context menu by default when sending messages to the AI."
             checked={settings.includeActiveNoteAsContext}
