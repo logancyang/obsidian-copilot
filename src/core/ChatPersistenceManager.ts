@@ -54,8 +54,12 @@ export class ChatPersistenceManager {
         const frontmatter = this.app.metadataCache.getFileCache(existingFile)?.frontmatter;
         topic = frontmatter?.topic;
       } else {
-        // If new file, generate AI topic
-        topic = await this.generateAITopic(messages);
+        // If new file, generate AI topic only if enabled in settings
+        if (settings.generateAIChatTitleOnSave) {
+          topic = await this.generateAITopic(messages);
+        } else {
+          topic = undefined; // fallback to first 10 words will be used in filename
+        }
       }
 
       const fileName = this.generateFileName(messages, firstMessageEpoch, topic);

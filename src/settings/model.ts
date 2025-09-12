@@ -75,6 +75,11 @@ export interface CopilotSettings {
   defaultSaveFolder: string;
   defaultConversationTag: string;
   autosaveChat: boolean;
+  /**
+   * When enabled, generate a short AI title for chat notes on save.
+   * When disabled (default), use the first 10 words of the first user message.
+   */
+  generateAIChatTitleOnSave: boolean;
   includeActiveNoteAsContext: boolean;
   customPromptsFolder: string;
   indexVaultToVectorStore: string;
@@ -258,6 +263,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure includeActiveNoteAsContext has a default value
   if (typeof sanitizedSettings.includeActiveNoteAsContext !== "boolean") {
     sanitizedSettings.includeActiveNoteAsContext = DEFAULT_SETTINGS.includeActiveNoteAsContext;
+  }
+
+  // Ensure generateAIChatTitleOnSave has a default value
+  if (typeof sanitizedSettings.generateAIChatTitleOnSave !== "boolean") {
+    sanitizedSettings.generateAIChatTitleOnSave = DEFAULT_SETTINGS.generateAIChatTitleOnSave;
   }
 
   // Ensure passMarkdownImages has a default value
