@@ -1,6 +1,6 @@
 import { getSettings } from "@/settings/model";
 import { ChainType } from "@/chainFactory";
-import { logInfo } from "@/logger";
+import { logError, logInfo } from "@/logger";
 import { ChatMessage, MessageContext } from "@/types/message";
 import { FileParserManager } from "@/tools/FileParserManager";
 import ChainManager from "@/LLMProviders/chainManager";
@@ -395,11 +395,11 @@ export class ChatManager {
               }
             })
             .catch((error) => {
-              logInfo(`[ChatManager] Failed to create condensed message for ${messageId}:`, error);
+              logError(`[ChatManager] Failed to create condensed message for ${messageId}:`, error);
             });
         }
       } catch (error) {
-        logInfo(`[ChatManager] Error setting up condensed message creation:`, error);
+        logError(`[ChatManager] Error setting up condensed message creation:`, error);
       }
     }
   }
