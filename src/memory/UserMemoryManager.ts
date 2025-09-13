@@ -3,6 +3,7 @@ import { ChatMessage } from "@/types/message";
 import { logInfo, logError } from "@/logger";
 import { USER_SENDER } from "@/constants";
 import { getSettings } from "@/settings/model";
+import { ensureFolderExists } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 
@@ -260,36 +261,13 @@ Condense the user message into a single concise sentence while preserving intent
     const settings = getSettings();
     const memoryFolderPath = settings.memoryFolderName;
 
-    const folder = this.app.vault.getAbstractFileByPath(memoryFolderPath);
-    if (!folder) {
-      await this.createFolderRecursively(memoryFolderPath);
-      logInfo(`[UserMemoryManager] Created user memory folder: ${memoryFolderPath}`);
-    }
-  }
-
-  /**
-   * Recursively create folders for the given path
-   */
-  private async createFolderRecursively(folderPath: string): Promise<void> {
-    const pathParts = folderPath.split("/").filter((part) => part.length > 0);
-    let currentPath = "";
-
-    for (const part of pathParts) {
-      currentPath = currentPath ? `${currentPath}/${part}` : part;
-
-      const exists = this.app.vault.getAbstractFileByPath(currentPath);
-      if (!exists) {
-        await this.app.vault.createFolder(currentPath);
-      }
-    }
+    await ensureFolderExists(memoryFolderPath);
   }
 
   private getRecentConversationFilePath(): string {
     const settings = getSettings();
     return `${settings.memoryFolderName}/Recent Conversations.md`;
   }
-
-  // getUserInsightsFilePath removed - user insights functionality removed
 
   /**
    * Save content to the user memory file by appending new conversation section
