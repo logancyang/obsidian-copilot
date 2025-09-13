@@ -207,23 +207,60 @@ describe("UserMemoryManager", () => {
       const modifyCall = mockVault.modify.mock.calls[0];
       const actualContent = modifyCall[1];
 
-      // Verify that the content includes all previous conversations plus the new one
-      expect(actualContent).toContain("## Previous Conversation");
-      expect(actualContent).toContain("## Another Conversation");
-      expect(actualContent).toContain("## Daily Note Template Setup");
+      // Check the full memory content structure as a whole - exact line-by-line verification
+      const expectedContentStructure = [
+        // Previous conversations should be preserved (no empty lines between conversations)
+        "## Previous Conversation",
+        "**Time:** 2024-01-01T09:00:00Z",
+        "**User Messages:**",
+        "- Asked about plugin installation",
+        "**Key Conclusions:**",
+        "- Plugins enhance Obsidian functionality",
+        "## Another Conversation",
+        "**Time:** 2024-01-01T10:00:00Z",
+        "**User Messages:**",
+        "- Inquired about linking notes",
+        "**Key Conclusions:**",
+        "- Backlinks create knowledge connections",
+        // New conversation should be added
+        "## Daily Note Template Setup",
+        // Dynamic timestamp pattern
+        /\*\*Time:\*\* \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/,
+        "**User Messages:**",
+        "- Condensed: How do I create a daily note template in Obsidian with automatic date formatting? I want to have a template that automatically inserts today's date and creates sections for tasks, notes, and reflections.",
+        "- Condensed: That's perfect! Can you also show me how to add tags automatically to these daily notes? I'd like them to be tagged with #daily-note and maybe the current month.",
+        "**Key Conclusions:**",
+        "- Templates can automatically insert dates and metadata",
+        "- Tags can be added through template variables",
+        "", // Empty line at end
+        "", // Second empty line at end
+      ];
 
-      // Verify the new conversation structure
-      expect(actualContent).toMatch(/\*\*Time:\*\* \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/);
-      expect(actualContent).toContain("**User Messages:**");
-      expect(actualContent).toContain("- Condensed: How do I create a daily note template");
-      expect(actualContent).toContain(
-        "- Condensed: That's perfect! Can you also show me how to add tags"
-      );
+      // Verify the complete content structure line by line
+      const contentLines = actualContent.split("\n");
 
-      // Since we provided a detailed conversation, key conclusions should be included
-      expect(actualContent).toContain("**Key Conclusions:**");
-      expect(actualContent).toContain("- Templates can automatically insert dates and metadata");
-      expect(actualContent).toContain("- Tags can be added through template variables");
+      // Verify we have the expected number of lines
+      expect(contentLines).toHaveLength(expectedContentStructure.length);
+
+      // Verify each line matches the expected structure
+      for (let i = 0; i < expectedContentStructure.length; i++) {
+        const expectedItem = expectedContentStructure[i];
+        const actualLine = contentLines[i];
+
+        if (expectedItem instanceof RegExp) {
+          // Handle regex patterns for dynamic content like timestamps
+          expect(actualLine).toMatch(expectedItem);
+        } else {
+          // Handle exact string matches
+          expect(actualLine).toBe(expectedItem);
+        }
+      }
+
+      // Verify all conversations have the required sections using pattern matching
+      expect(actualContent.match(/## [^#\n]+/g)).toHaveLength(3); // 3 conversations
+      expect(actualContent.match(/\*\*Time:\*\*/g)).toHaveLength(3); // Each has a timestamp
+      expect(actualContent.match(/\*\*User Messages:\*\*/g)).toHaveLength(3); // Each has user messages
+      expect(actualContent.match(/\*\*Key Conclusions:\*\*/g)).toHaveLength(3); // Each has key conclusions
 
       // Verify that the conversation title and key conclusions were extracted via LLM
       expect(mockChatModel.invoke).toHaveBeenCalledTimes(2);

@@ -191,14 +191,14 @@ Condense the user message into a single concise sentence while preserving intent
       });
 
     // Generate key conclusions if conversation is substantial enough
-    const keyConclusions = await this.extractKeyConclusion(messages, chatModel);
+    const keyConclusionsText = await this.extractKeyConclusion(messages, chatModel);
 
     let section = `## ${conversationTitle}\n`;
     section += `**Time:** ${timestamp}\n`;
-    section += `**User Messages:**\n${userMessageTexts.join("\n - ")}\n`;
+    section += `**User Messages:**\n${userMessageTexts.join("\n")}\n`;
 
-    if (keyConclusions) {
-      section += `**Key Conclusions:**\n${keyConclusions}\n`;
+    if (keyConclusionsText) {
+      section += `**Key Conclusions:**\n${keyConclusionsText}\n`;
     }
 
     return section;
