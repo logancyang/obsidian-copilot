@@ -4,21 +4,40 @@ import { diffTrimmedLines } from "diff";
 import { ApplyViewResult } from "@/types";
 import { z } from "zod";
 import { createTool } from "./SimpleTool";
+import { ensureFolderExists } from "@/utils";
 
 async function getFile(file_path: string): Promise<TFile> {
-  const file = app.vault.getAbstractFileByPath(file_path);
-  if (file) {
-    return file as TFile;
+  let file = app.vault.getAbstractFileByPath(file_path);
+  if (file && file instanceof TFile) {
+    return file;
   }
-  // Create the folder if it doesn't exist
-  if (file_path.includes("/")) {
-    const folderPath = file_path.split("/").slice(0, -1).join("/");
-    const folder = app.vault.getAbstractFileByPath(folderPath);
-    if (!folder) {
-      await app.vault.createFolder(folderPath);
+
+  // Handle case where path exists but is not a file (e.g., it's a folder)
+  if (file && !(file instanceof TFile)) {
+    throw new Error(`Path "${file_path}" exists but is not a file`);
+  }
+
+  try {
+    const folder = file_path.includes("/") ? file_path.split("/").slice(0, -1).join("/") : "";
+    if (folder) {
+      await ensureFolderExists(folder);
     }
+
+    // Double-check if file was created by another process
+    file = app.vault.getAbstractFileByPath(file_path);
+    if (file && file instanceof TFile) {
+      return file;
+    }
+
+    file = await app.vault.create(file_path, "");
+    if (!(file instanceof TFile)) {
+      throw new Error(`Failed to create file: unexpected type returned for "${file_path}"`);
+    }
+
+    return file;
+  } catch (error) {
+    throw new Error(`Failed to get or create file "${file_path}": ${error.message}`);
   }
-  return await app.vault.create(file_path, "");
 }
 
 async function show_preview(file_path: string, content: string): Promise<ApplyViewResult> {
