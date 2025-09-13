@@ -25,19 +25,19 @@ export class UserMemoryManager {
   /**
    * Load memory data from files into class fields
    */
-  async loadMemory(): Promise<void> {
+  private async loadMemory(): Promise<void> {
     try {
       const recentConversationsFile = this.app.vault.getAbstractFileByPath(
         this.getRecentConversationFilePath()
       );
       if (recentConversationsFile instanceof TFile) {
         this.recentConversationsContent = await this.app.vault.read(recentConversationsFile);
+      } else {
+        logInfo("[UserMemoryManager] Recent Conversations file not found, skipping memory load");
       }
     } catch (error) {
       logError("[UserMemoryManager] Error reading recent conversations file:", error);
     }
-
-    // User insights functionality removed - focusing only on recent memory
   }
 
   /**
@@ -181,7 +181,7 @@ Condense the user message into a single concise sentence while preserving intent
     messages: ChatMessage[],
     chatModel: BaseChatModel
   ): Promise<string> {
-    const conversationSummary = await this.extractConversationSummary(messages, chatModel);
+    const conversationTitle = await this.extractConversationTitle(messages, chatModel);
     const timestamp = new Date().toISOString().split(".")[0] + "Z"; // Remove milliseconds but keep Z for UTC
     const userMessageTexts = messages
       .filter((message) => message.sender === USER_SENDER)
@@ -190,15 +190,15 @@ Condense the user message into a single concise sentence while preserving intent
         return `- ${message.condensedMessage}`;
       });
 
-    // Generate key conclusion if conversation is substantial enough
-    const keyConclusion = await this.extractKeyConclusion(messages, chatModel);
+    // Generate key conclusions if conversation is substantial enough
+    const keyConclusions = await this.extractKeyConclusion(messages, chatModel);
 
-    let section = `## ${conversationSummary}\n`;
+    let section = `## ${conversationTitle}\n`;
     section += `**Time:** ${timestamp}\n`;
-    section += `**User Messages:**\n${userMessageTexts.join("\n")}\n`;
+    section += `**User Messages:**\n${userMessageTexts.join("\n - ")}\n`;
 
-    if (keyConclusion) {
-      section += `**Key Conclusion:** ${keyConclusion}\n`;
+    if (keyConclusions) {
+      section += `**Key Conclusions:**\n${keyConclusions}\n`;
     }
 
     return section;
@@ -274,7 +274,7 @@ Condense the user message into a single concise sentence while preserving intent
 
   private getRecentConversationFilePath(): string {
     const settings = getSettings();
-    return `${settings.memoryFolderName}/Recent Conversations Content.md`;
+    return `${settings.memoryFolderName}/Recent Conversations.md`;
   }
 
   // getUserInsightsFilePath removed - user insights functionality removed
@@ -354,12 +354,8 @@ Condense the user message into a single concise sentence while preserving intent
     return conversations;
   }
 
-  // shouldUpdateUserInsights removed - user insights functionality removed
-
-  // extractTimestampFromLine removed - no longer needed without user insights functionality
-
   /**
-   * Extract key conclusion from conversation if it contains important insights
+   * Extract key conclusions from conversation if it contains important insights
    */
   private async extractKeyConclusion(
     messages: ChatMessage[],
@@ -375,7 +371,7 @@ Condense the user message into a single concise sentence while preserving intent
 
     const systemPrompt = `You are an AI assistant that analyzes conversations and determines if they contain important conclusions worth remembering.
 
-TASK: Analyze the conversation and extract a key conclusion ONLY if the conversation contains:
+TASK: Analyze the conversation and extract key conclusions ONLY if the conversation contains:
 - Important insights, decisions, or learnings
 - Technical solutions or discoveries
 - Significant planning or strategy discussions
@@ -384,10 +380,15 @@ TASK: Analyze the conversation and extract a key conclusion ONLY if the conversa
 If the conversation is just casual chat, simple questions, or routine tasks, return "NONE".
 
 # OUTPUT FORMAT
-If there's a key conclusion: Return a concise 1-2 sentence summary of the key insight/conclusion. Use the same language as the conversation.
-If no important conclusion: Return exactly "NONE"`;
+If there are key conclusions: Return each conclusion as a bullet point (use - for each point). Each conclusion should be concise (1-2 sentences). Use the same language as the conversation.
+Example:
+- First important insight or decision
+- Second key learning or solution
+- Third significant conclusion
 
-    const humanPrompt = `Analyze this conversation and determine if there's a key conclusion worth remembering:
+If no important conclusions: Return exactly "NONE"`;
+
+    const humanPrompt = `Analyze this conversation and determine if there are key conclusions worth remembering:
 
 ${conversationText}`;
 
@@ -409,27 +410,29 @@ ${conversationText}`;
   }
 
   /**
-   * Extract conversation summary using LLM
+   * Extract conversation title using LLM
    */
-  private async extractConversationSummary(
+  private async extractConversationTitle(
     messages: ChatMessage[],
     chatModel: BaseChatModel
   ): Promise<string> {
     const conversationText = messages.map((msg) => `${msg.sender}: ${msg.message}`).join("\n\n");
 
-    const systemPrompt = `You are an AI assistant that analyzes conversations and extracts a brief summary.
-
-CONVERSATION SUMMARY: A very brief summary in 2-5 words maximum 
+    const systemPrompt = `Your task is to generate a title for a conversation based on its content.
 
 Examples: "Travel Plan", "Tokyo Weather"
 
-# OUTPUT FORMAT
-* Return only the brief 2-5 word summary as plain text, no JSON format needed.
+# OUTPUT RULES
+* Look at the conversation content and generate a title that captures the main *user intent* of the conversation.
+* Return only the brief 2-8 word title as plain text, no JSON format needed.
 * Use the same language as the conversation.`;
 
-    const humanPrompt = `Analyze this conversation and extract a brief summary:
+    const humanPrompt = `
+<conversation_text>
+${conversationText}
+</conversation_text>
 
-${conversationText}`;
+Generate a title for the conversation:`;
 
     const messages_llm = [new SystemMessage(systemPrompt), new HumanMessage(humanPrompt)];
 
