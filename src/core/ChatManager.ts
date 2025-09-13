@@ -141,35 +141,7 @@ export class ChatManager {
       currentRepo.updateProcessedText(messageId, processedContent);
 
       // Create condensed message for user messages
-      if (message.sender === USER_SENDER && this.plugin.userMemoryManager) {
-        try {
-          const settings = getSettings();
-          if (settings.enableMemory) {
-            const chainManager = this.plugin.projectManager.getCurrentChainManager();
-            const chatModel = chainManager.chatModelManager.getChatModel();
-
-            // Create condensed message asynchronously (fire and forget)
-            this.plugin.userMemoryManager
-              .createCondensedMessage(displayText, chatModel)
-              .then((condensedMessage) => {
-                if (condensedMessage) {
-                  currentRepo.updateCondensedMessage(messageId, condensedMessage);
-                  logInfo(
-                    `[ChatManager] Created condensed message for ${messageId}: "${condensedMessage}"`
-                  );
-                }
-              })
-              .catch((error) => {
-                logInfo(
-                  `[ChatManager] Failed to create condensed message for ${messageId}:`,
-                  error
-                );
-              });
-          }
-        } catch (error) {
-          logInfo(`[ChatManager] Error setting up condensed message creation:`, error);
-        }
-      }
+      this.createCondensedMessageAsync(message, messageId, displayText, currentRepo);
 
       logInfo(`[ChatManager] Successfully sent message ${messageId}`);
       return messageId;
@@ -393,6 +365,43 @@ export class ChatManager {
   getLLMMessage(id: string): ChatMessage | undefined {
     const currentRepo = this.getCurrentMessageRepo();
     return currentRepo.getLLMMessage(id);
+  }
+
+  /**
+   * Create condensed message asynchronously for user messages (fire and forget)
+   */
+  private createCondensedMessageAsync(
+    message: ChatMessage,
+    messageId: string,
+    displayText: string,
+    currentRepo: MessageRepository
+  ): void {
+    if (message.sender === USER_SENDER && this.plugin.userMemoryManager) {
+      try {
+        const settings = getSettings();
+        if (settings.enableMemory) {
+          const chainManager = this.plugin.projectManager.getCurrentChainManager();
+          const chatModel = chainManager.chatModelManager.getChatModel();
+
+          // Create condensed message asynchronously (fire and forget)
+          this.plugin.userMemoryManager
+            .createCondensedMessage(displayText, chatModel)
+            .then((condensedMessage) => {
+              if (condensedMessage) {
+                currentRepo.updateCondensedMessage(messageId, condensedMessage);
+                logInfo(
+                  `[ChatManager] Created condensed message for ${messageId}: "${condensedMessage}"`
+                );
+              }
+            })
+            .catch((error) => {
+              logInfo(`[ChatManager] Failed to create condensed message for ${messageId}:`, error);
+            });
+        }
+      } catch (error) {
+        logInfo(`[ChatManager] Error setting up condensed message creation:`, error);
+      }
+    }
   }
 
   /**

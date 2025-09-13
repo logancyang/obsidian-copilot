@@ -371,6 +371,12 @@ export async function getSystemPromptWithMemory(
     return getSystemPrompt();
   }
   const memoryPrompt = await userMemoryManager.getUserMemoryPrompt();
+
+  // Only include user_memory section if there's actual memory content
+  if (!memoryPrompt) {
+    return systemPrompt;
+  }
+
   return `${systemPrompt}
   <user_memory>
   ${memoryPrompt}

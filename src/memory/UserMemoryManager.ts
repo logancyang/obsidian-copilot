@@ -23,6 +23,18 @@ export class UserMemoryManager {
   }
 
   /**
+   * Check if a message is a user message with valid condensed content
+   */
+  private hasValidCondensedUserMessage(message: ChatMessage): boolean {
+    return (
+      message.sender === USER_SENDER &&
+      !!message.condensedMessage &&
+      typeof message.condensedMessage === "string" &&
+      message.condensedMessage.trim().length > 0
+    );
+  }
+
+  /**
    * Load memory data from files into class fields
    */
   private async loadMemory(): Promise<void> {
@@ -184,7 +196,7 @@ Condense the user message into a single concise sentence while preserving intent
     const conversationTitle = await this.extractConversationTitle(messages, chatModel);
     const timestamp = new Date().toISOString().split(".")[0] + "Z"; // Remove milliseconds but keep Z for UTC
     const userMessageTexts = messages
-      .filter((message) => message.sender === USER_SENDER)
+      .filter(this.hasValidCondensedUserMessage.bind(this))
       .map((message) => {
         // Use condensed message if available
         return `- ${message.condensedMessage}`;
