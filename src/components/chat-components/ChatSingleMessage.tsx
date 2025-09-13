@@ -266,27 +266,246 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   );
 
   const processSourcesSection = (content: string): string => {
-    const sections = content.split("\n\n#### Sources:\n\n");
-    if (sections.length !== 2) return content;
+    // Support both "#### Sources" and plain "Sources" headings (optional colon), near the end of message
+    const sourcesRegex = /([\s\S]*?)\n+(?:####\s*)?Sources\s*:?\s*\n+([\s\S]*)$/i;
+    const match = content.match(sourcesRegex);
+    if (!match) return content;
 
-    const [mainContent, sources] = sections;
-    const sourceLinks = sources
+    let mainContent = match[1];
+    let sourcesBlock = (match[2] || "").trim();
+
+    // If everything is on one line, insert line breaks before numbered tokens like [1], 2., etc.
+    if (!sourcesBlock.includes("\n")) {
+      // Ensure a break before every [n]
+      sourcesBlock = sourcesBlock.replace(/\s*\[(\d+)\]\s*/g, "\n[$1] ");
+      // And before every n. pattern if present
+      sourcesBlock = sourcesBlock.replace(/\s+(\d+)\.\s/g, "\n$1. ");
+      sourcesBlock = sourcesBlock.trim();
+    }
+
+    // If sources are footnote definitions ([^n]: ...), do NOT wrap or transform; just renumber to be contiguous
+    const footnoteDefLines = sourcesBlock
       .split("\n")
-      .map((line) => {
-        const match = line.match(/- \[\[(.*?)\]\]/);
-        if (match) {
-          return `<li>[[${match[1]}]]</li>`;
+      .map((l) => l.trim())
+      .filter((l) => /^\[\^\d+\]:/.test(l));
+    if (footnoteDefLines.length > 0) {
+      // Build renumber map based on first-mention order in body; fall back to definition order
+      const map = new Map<number, number>();
+      const seen = new Set<number>();
+      const firstMention: number[] = [];
+      const refRe = /\[\^(\d+)\]/g;
+      let mref: RegExpExecArray | null;
+      while ((mref = refRe.exec(mainContent)) !== null) {
+        const n = parseInt(mref[1], 10);
+        if (!seen.has(n)) {
+          seen.add(n);
+          firstMention.push(n);
         }
-        return line;
-      })
-      .join("\n");
+      }
+      if (firstMention.length > 0) {
+        firstMention.forEach((n, i) => map.set(n, i + 1));
+      } else {
+        let idx = 1;
+        for (const l of footnoteDefLines) {
+          const m = l.match(/^\[\^(\d+)\]:/);
+          if (m) {
+            const n = parseInt(m[1], 10);
+            if (!map.has(n)) map.set(n, idx++);
+          }
+        }
+      }
 
-    return (
-      mainContent +
-      "\n\n<br/>\n<details><summary>Sources</summary>\n<ul>\n" +
-      sourceLinks +
-      "\n</ul>\n</details>"
-    );
+      // Normalize inline citations for chat readability: render as [n] instead of footnote superscripts
+      // 1) Already-footnote refs: [^n] -> [n] (remapped contiguously)
+      mainContent = mainContent.replace(/(^|[^[])\[\^(\d+)\]/g, (full, p, n) => {
+        const oldN = parseInt(n, 10);
+        const newN = map.get(oldN) ?? oldN;
+        return `${p}[${newN}]`;
+      });
+      // 2) Numeric citations like [1] or [1, 2] -> normalize/renumber and render as separate [n][m]
+      mainContent = mainContent.replace(
+        /(^|[^[])\[(\d+(?:\s*,\s*\d+)*)\](?!\()/g,
+        (full, p, nums) => {
+          const parts = nums.split(/\s*,\s*/);
+          const mapped = parts
+            .map((s: string) => {
+              const oldN = parseInt(s, 10);
+              const newN = map.get(oldN) ?? oldN;
+              return `[${newN}]`;
+            })
+            .join("");
+          return `${p}${mapped}`;
+        }
+      );
+
+      // Convert footnote definitions into a simple ordered list for chat (avoid footnote renderer quirks)
+      const items: string[] = [];
+      sourcesBlock.split("\n").forEach((line) => {
+        const m = line.match(/^\[\^(\d+)\]:\s*(.*)$/);
+        if (!m) return;
+        const oldN = parseInt(m[1], 10);
+        const newN = map.get(oldN) ?? oldN;
+        const wl = m[2].match(/\[\[(.*?)\]\]/);
+        const display = wl ? `[[${wl[1]}]]` : m[2].replace(/\s*\([^)]*\)\s*$/, "");
+        items[newN - 1] = display;
+      });
+
+      // Consolidate duplicate sources to prevent multiple entries for the same document
+      const uniqueItems: string[] = [];
+      const seenTitles = new Set<string>();
+      const consolidationMap = new Map<number, number>(); // oldIndex -> newIndex
+
+      items.forEach((item, originalIndex) => {
+        if (!item) return;
+
+        // Extract title from wikilink format [[title]] or use the item as-is
+        const titleMatch = item.match(/\[\[(.*?)\]\]/);
+        const title = titleMatch ? titleMatch[1].toLowerCase() : item.toLowerCase();
+
+        if (!seenTitles.has(title)) {
+          seenTitles.add(title);
+          uniqueItems.push(item);
+          consolidationMap.set(originalIndex + 1, uniqueItems.length); // 1-based indexing
+        } else {
+          // Find the index of the first occurrence
+          const firstOccurrenceIndex = uniqueItems.findIndex((existing) => {
+            const existingTitleMatch = existing.match(/\[\[(.*?)\]\]/);
+            const existingTitle = existingTitleMatch
+              ? existingTitleMatch[1].toLowerCase()
+              : existing.toLowerCase();
+            return existingTitle === title;
+          });
+          if (firstOccurrenceIndex >= 0) {
+            consolidationMap.set(originalIndex + 1, firstOccurrenceIndex + 1); // 1-based indexing
+          }
+        }
+      });
+
+      // Update citations in main content to reflect consolidated numbering
+      let updatedMainContent = mainContent;
+      if (consolidationMap.size > 0) {
+        updatedMainContent = mainContent.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (match, nums) => {
+          const parts = nums.split(/\s*,\s*/);
+          const remappedParts = parts.map((n: string) => {
+            const oldNum = parseInt(n, 10);
+            return String(consolidationMap.get(oldNum) || oldNum);
+          });
+          return `[${remappedParts.join(", ")}]`;
+        });
+      }
+
+      const listMd = uniqueItems.map((t, i) => `${i + 1}. ${t || ""}`).join("\n");
+      return `${updatedMainContent}\n\n**Sources:**\n\n${listMd}`;
+    }
+
+    // Build renumbering map based on the order of appearance in the sources block
+    const oldNumbersInOrder: number[] = [];
+    const collectNumber = (n: string) => {
+      const num = parseInt(n, 10);
+      if (Number.isFinite(num) && !oldNumbersInOrder.includes(num)) {
+        oldNumbersInOrder.push(num);
+      }
+    };
+    // Collect numbers from each line
+    sourcesBlock.split("\n").forEach((line) => {
+      const m1 = line.match(/^- \[(\d+)\]/); // - [n]
+      if (m1) collectNumber(m1[1]);
+      const m2 = line.match(/^(\d+)\./); // n.
+      if (m2) collectNumber(m2[1]);
+      const m3 = line.match(/^\[(\d+)\]/); // [n]
+      if (m3) collectNumber(m3[1]);
+    });
+
+    const renumberMap = new Map<number, number>();
+    oldNumbersInOrder.forEach((oldN, idx) => renumberMap.set(oldN, idx + 1));
+
+    // Normalize inline citations in main content to contiguous numbering
+    const normalizeInlineCitations = (text: string): string => {
+      // Match [n] or [n, m, ...] that are not '[[wikilink]]' and not part of a markdown link '[text]('
+      const citationPattern = /(^|[^[])\[(\d+(?:\s*,\s*\d+)*)\](?!\()/g;
+      return text.replace(citationPattern, (full, prefix, nums) => {
+        const parts = nums.split(/\s*,\s*/);
+        const mapped = parts
+          .map((p: string) => {
+            const oldN = parseInt(p, 10);
+            const newN = renumberMap.get(oldN);
+            return String(newN ?? oldN);
+          })
+          .join(", ");
+        return `${prefix}[${mapped}]`;
+      });
+    };
+
+    mainContent = normalizeInlineCitations(mainContent);
+
+    const listItems: string[] = [];
+    sourcesBlock
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .forEach((line) => {
+        // extract index
+        const idxMatch = line.match(/^(?:-\s*|\d+\.\s*)?\[(\d+)\]/) || line.match(/^(\d+)\./);
+        const idx = idxMatch ? parseInt(idxMatch[1], 10) : NaN;
+        const newIdx = Number.isFinite(idx) ? (renumberMap.get(idx) ?? idx) : undefined;
+        // prefer wikilink if present
+        const wl = line.match(/\[\[(.*?)\]\]/);
+        const display = wl
+          ? `[[${wl[1]}]]`
+          : line.replace(/^(?:-\s*|\d+\.\s*)?\[(\d+)\]\s*/, "").trim();
+        if (newIdx !== undefined) {
+          listItems[newIdx - 1] = display;
+        } else {
+          listItems.push(display);
+        }
+      });
+
+    // Consolidate duplicate sources as redundancy (in case chain runners missed any duplicates)
+    const uniqueListItems: string[] = [];
+    const seenTitles = new Set<string>();
+    const consolidationMap = new Map<number, number>(); // oldIndex -> newIndex
+
+    listItems.forEach((item, originalIndex) => {
+      if (!item) return;
+
+      // Extract title from wikilink format [[title]] or use the item as-is
+      const titleMatch = item.match(/\[\[(.*?)\]\]/);
+      const title = titleMatch ? titleMatch[1].toLowerCase() : item.toLowerCase();
+
+      if (!seenTitles.has(title)) {
+        seenTitles.add(title);
+        uniqueListItems.push(item);
+        consolidationMap.set(originalIndex + 1, uniqueListItems.length); // 1-based indexing
+      } else {
+        // Find the index of the first occurrence
+        const firstOccurrenceIndex = uniqueListItems.findIndex((existing) => {
+          const existingTitleMatch = existing.match(/\[\[(.*?)\]\]/);
+          const existingTitle = existingTitleMatch
+            ? existingTitleMatch[1].toLowerCase()
+            : existing.toLowerCase();
+          return existingTitle === title;
+        });
+        if (firstOccurrenceIndex >= 0) {
+          consolidationMap.set(originalIndex + 1, firstOccurrenceIndex + 1); // 1-based indexing
+        }
+      }
+    });
+
+    // Update citations in main content to reflect consolidated numbering
+    let updatedMainContent = mainContent;
+    if (consolidationMap.size > 0) {
+      updatedMainContent = mainContent.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (match, nums) => {
+        const parts = nums.split(/\s*,\s*/);
+        const remappedParts = parts.map((n: string) => {
+          const oldNum = parseInt(n, 10);
+          return String(consolidationMap.get(oldNum) || oldNum);
+        });
+        return `[${remappedParts.join(", ")}]`;
+      });
+    }
+
+    const listMd = uniqueListItems.map((t, i) => `${i + 1}. ${t || ""}`).join("\n");
+    return `${updatedMainContent}\n\n**Sources:**\n\n${listMd}`;
   };
 
   useEffect(() => {
@@ -331,6 +550,28 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             }
 
             MarkdownRenderer.renderMarkdown(segment.content, textDiv, "", componentRef.current!);
+            // Normalize footnotes rendering in chat (hide hr/backrefs and clean ref text)
+            try {
+              // Hide footnotes separator lines
+              textDiv.querySelectorAll("hr, hr.footnotes-sep").forEach((el) => el.remove());
+              // Hide backreference arrows in footnotes
+              textDiv
+                .querySelectorAll("a.footnote-backref, a.footnote-link.footnote-backref")
+                .forEach((el) => el.remove());
+              // Clean reference text to avoid artifacts like "2-1"
+              textDiv
+                .querySelectorAll(
+                  'a.footnote-ref, sup a[href^="#fn"], sup a[href^="#fn-"], a[href^="#fn"], a[href^="#fn-"]'
+                )
+                .forEach((a) => {
+                  const t = (a.textContent || "").trim();
+                  if (!t) return;
+                  const cleaned = t.split("-")[0];
+                  if (cleaned && cleaned !== t) a.textContent = cleaned;
+                });
+            } catch {
+              /* ignore footnote cleanup errors */
+            }
             currentIndex++;
           } else if (segment.type === "toolCall" && segment.toolCall) {
             const toolCallId = segment.toolCall.id;

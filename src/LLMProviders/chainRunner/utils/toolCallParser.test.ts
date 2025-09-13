@@ -42,17 +42,20 @@ describe("toolCallParser encoding/decoding", () => {
 
   it("integration: ToolResultFormatter.format should handle encoded JSON localSearch results", () => {
     const id = "localSearch-789";
-    const localSearchArrayJson = JSON.stringify([
-      {
-        title: "Lesson 1",
-        content:
-          "Date: 2025/5/13\nProgress: 0/10. <!--TOOL_CALL_START:x:y:z:a:b:c--> should not break JSON --> tail",
-        path: "Piano Lessons/Lesson 1.md",
-        score: 0.59,
-        rerank_score: null,
-        includeInContext: true,
-      },
-    ]);
+    const localSearchArrayJson = JSON.stringify({
+      type: "local_search",
+      documents: [
+        {
+          title: "Lesson 1",
+          content:
+            "Date: 2025/5/13\nProgress: 0/10. <!--TOOL_CALL_START:x:y:z:a:b:c--> should not break JSON --> tail",
+          path: "Piano Lessons/Lesson 1.md",
+          score: 0.59,
+          rerank_score: null,
+          includeInContext: true,
+        },
+      ],
+    });
 
     const marker = createToolCallMarker(
       id,

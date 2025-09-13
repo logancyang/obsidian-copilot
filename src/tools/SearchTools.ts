@@ -4,7 +4,9 @@ import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logInfo } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { z } from "zod";
+import { deduplicateSources } from "@/LLMProviders/chainRunner/utils/toolExecution";
 import { createTool, SimpleTool } from "./SimpleTool";
+import { getWebSearchCitationInstructions } from "@/LLMProviders/chainRunner/utils/citationUtils";
 
 // Define Zod schema for localSearch
 const localSearchSchema = z.object({
@@ -78,8 +80,28 @@ const lexicalSearchTool = createTool({
         explanation: doc.metadata.explanation ?? null,
       };
     });
+    // Reuse the same dedupe logic used by Show Sources (path fallback to title, keep highest score)
+    const sourcesLike = formattedResults.map((d) => ({
+      title: d.title || d.path || "Untitled",
+      path: d.path || d.title || "",
+      score: d.rerank_score || d.score || 0,
+    }));
+    const dedupedSources = deduplicateSources(sourcesLike);
 
-    return JSON.stringify(formattedResults);
+    // Map back to document objects in the same deduped order
+    const bestByKey = new Map<string, any>();
+    for (const d of formattedResults) {
+      const key = (d.path || d.title).toLowerCase();
+      const existing = bestByKey.get(key);
+      if (!existing || (d.rerank_score || 0) > (existing.rerank_score || 0)) {
+        bestByKey.set(key, d);
+      }
+    }
+    const dedupedDocs = dedupedSources
+      .map((s) => bestByKey.get((s.path || s.title).toLowerCase()))
+      .filter(Boolean);
+
+    return JSON.stringify({ type: "local_search", documents: dedupedDocs });
   },
 });
 
@@ -140,8 +162,27 @@ const semanticSearchTool = createTool({
         explanation: doc.metadata.explanation ?? null,
       };
     });
+    // Reuse the same dedupe logic used by Show Sources
+    const sourcesLike = formattedResults.map((d) => ({
+      title: d.title || d.path || "Untitled",
+      path: d.path || d.title || "",
+      score: d.rerank_score || d.score || 0,
+    }));
+    const dedupedSources = deduplicateSources(sourcesLike);
 
-    return JSON.stringify(formattedResults);
+    const bestByKey = new Map<string, any>();
+    for (const d of formattedResults) {
+      const key = (d.path || d.title).toLowerCase();
+      const existing = bestByKey.get(key);
+      if (!existing || (d.rerank_score || 0) > (existing.rerank_score || 0)) {
+        bestByKey.set(key, d);
+      }
+    }
+    const dedupedDocs = dedupedSources
+      .map((s) => bestByKey.get((s.path || s.title).toLowerCase()))
+      .filter(Boolean);
+
+    return JSON.stringify({ type: "local_search", documents: dedupedDocs });
   },
 });
 
@@ -241,8 +282,10 @@ const webSearchTool = createTool({
           type: "web_search",
           content: webContent,
           citations: citations,
-          instruction:
-            "Provide a response based on this information. Include source citations at the end under '#### Sources' as markdown links.",
+          // Instruct the model to use footnote-style citations and definitions.
+          // Chat UI will render [^n] as [n] for readability and show a simple numbered Sources list.
+          // When inserted into a note, the original [^n] footnotes will remain valid Markdown footnotes.
+          instruction: getWebSearchCitationInstructions(),
         },
       ];
 

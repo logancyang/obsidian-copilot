@@ -11,6 +11,13 @@ import {
   withSuppressedTokenWarnings,
 } from "@/utils";
 import { BaseChainRunner } from "./BaseChainRunner";
+import {
+  formatSourceCatalog,
+  getQACitationInstructions,
+  sanitizeContentForCitations,
+  hasExistingCitations,
+  type SourceCatalogEntry,
+} from "./utils/citationUtils";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 
 export class VaultQAChainRunner extends BaseChainRunner {
@@ -69,11 +76,14 @@ export class VaultQAChainRunner extends BaseChainRunner {
       this.chainManager.storeRetrieverDocuments(retrievedDocs);
 
       // Format documents as context with XML tags
+      // Sanitize content to remove pre-existing citation markers
+
       const context = retrievedDocs
-        .map(
-          (doc: any) =>
-            `<${RETRIEVED_DOCUMENT_TAG}>\n${doc.pageContent}\n</${RETRIEVED_DOCUMENT_TAG}>`
-        )
+        .map((doc: any) => {
+          const title = doc.metadata?.title || "Untitled";
+          const path = doc.metadata?.path || title;
+          return `<${RETRIEVED_DOCUMENT_TAG}>\n<title>${title}</title>\n<path>${path}</path>\n<content>\n${sanitizeContentForCitations(doc.pageContent)}\n</content>\n</${RETRIEVED_DOCUMENT_TAG}>`;
+        })
         .join("\n\n");
 
       // Create messages array
@@ -81,9 +91,22 @@ export class VaultQAChainRunner extends BaseChainRunner {
 
       // Add system message with QA instruction
       const systemPrompt = getSystemPrompt();
+      // Prepare citation mapping so the model can produce inline [#] and a Sources footer
+      // Build an unnumbered source catalog to avoid biasing the model with arbitrary numbers
+      // The model is instructed to assign [1..N] as it cites sources in the answer.
+      const sourceEntries: SourceCatalogEntry[] = retrievedDocs
+        .slice(0, Math.max(5, Math.min(20, retrievedDocs.length)))
+        .map((d: any) => ({
+          title: d.metadata?.title || d.metadata?.path || "Untitled",
+          path: d.metadata?.path || d.metadata?.title || "",
+        }));
+      const sourceCatalog = formatSourceCatalog(sourceEntries).join("\n");
+
       const qaInstructions =
         "\n\nAnswer the question with as detailed as possible based only on the following context:\n" +
-        context;
+        context +
+        getQACitationInstructions(sourceCatalog) +
+        sourceCatalog;
       const fullSystemMessage = systemPrompt + qaInstructions;
 
       const chatModel = this.chainManager.chatModelManager.getChatModel();
@@ -168,10 +191,14 @@ export class VaultQAChainRunner extends BaseChainRunner {
   }
 
   private addSourcestoResponse(response: string): string {
+    // If the model already included sources, don't add another
+    if (hasExistingCitations(response)) {
+      return response;
+    }
     const docTitles = extractUniqueTitlesFromDocs(this.chainManager.getRetrievedDocuments());
     if (docTitles.length > 0) {
-      const links = docTitles.map((title) => `- [[${title}]]`).join("\n");
-      response += "\n\n#### Sources:\n\n" + links;
+      const notes = docTitles.map((title, i) => `[^${i + 1}]: [[${title}]]`).join("\n");
+      response += "\n\n#### Sources:\n\n" + notes;
     }
     return response;
   }
