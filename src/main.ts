@@ -18,6 +18,7 @@ import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
 import { encryptAllKeys } from "@/encryptionService";
 import { logInfo } from "@/logger";
+import { logFileManager } from "@/logFileManager";
 import { checkIsPlusUser } from "@/plusUtils";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
@@ -82,7 +83,7 @@ export default class CopilotPlugin extends Plugin {
     // Initialize ProjectManager
     this.projectManager = ProjectManager.getInstance(this.app, this);
 
-    // Initialize VectorStoreManager
+    // Always construct VectorStoreManager; it internally no-ops when semantic search is disabled
     this.vectorStoreManager = VectorStoreManager.getInstance();
 
     // Initialize FileParserManager early with other core services
@@ -162,6 +163,8 @@ export default class CopilotPlugin extends Plugin {
     this.settingsUnsubscriber?.();
     this.autocompleteService?.destroy();
 
+    // Best-effort flush of log file
+    await logFileManager.flush();
     logInfo("Copilot plugin unloaded");
   }
 

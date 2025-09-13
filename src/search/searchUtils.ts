@@ -1,6 +1,7 @@
 import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { getSettings } from "@/settings/model";
+import { logFileManager } from "@/logFileManager";
 import { getTagsFromNote, stripHash } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
 import { App, TFile } from "obsidian";
@@ -140,6 +141,10 @@ export function shouldIndexFile(
   exclusions: PatternCategory | null,
   isProject?: boolean
 ): boolean {
+  // Always exclude Copilot's own log file from Copilot searches/indexing
+  if (isInternalExcludedFile(file)) {
+    return false;
+  }
   if (exclusions && matchFilePathWithPatterns(file.path, exclusions)) {
     return false;
   }
@@ -356,4 +361,29 @@ export function getFilePattern(file: TFile): string {
 
 export function getExtensionPattern(extension: string): string {
   return `*.${extension}`;
+}
+
+/**
+ * Get a list of internal Copilot file paths that must be excluded from searches.
+ * Currently includes the rolling log file path (e.g., "copilot/copilot-log.md").
+ */
+export function getInternalExcludePaths(): string[] {
+  return [logFileManager.getLogPath()];
+}
+
+/**
+ * Check whether a file path is an internal Copilot file that should be excluded from searches.
+ * @param filePath - Full path to the file in the vault
+ */
+export function isInternalExcludedPath(filePath: string): boolean {
+  const excludes = new Set(getInternalExcludePaths());
+  return excludes.has(filePath);
+}
+
+/**
+ * Check whether a TFile is an internal Copilot file that should be excluded from searches.
+ * @param file - Obsidian file object
+ */
+export function isInternalExcludedFile(file: TFile): boolean {
+  return isInternalExcludedPath(file.path);
 }

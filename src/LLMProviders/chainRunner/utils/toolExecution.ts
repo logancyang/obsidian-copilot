@@ -217,23 +217,27 @@ export function logToolCall(toolCall: ToolCall, iteration: number): void {
  * Log tool execution result
  */
 export function logToolResult(toolName: string, result: ToolExecutionResult): void {
+  // For localSearch we already emit a structured table elsewhere; avoid redundant logs entirely
+  if (toolName === "localSearch") {
+    return;
+  }
+
   const displayName = getToolDisplayName(toolName);
   const emoji = getToolEmoji(toolName);
   const status = result.success ? "✅ SUCCESS" : "❌ FAILED";
 
   logInfo(`${emoji} ${displayName.toUpperCase()} RESULT: ${status}`);
 
-  // Log abbreviated result for readability
-  // Reduce limit to 300 chars for cleaner logs
+  // Default: log abbreviated result for readability (cap at 300 chars)
   const maxLogLength = 300;
-  if (result.result.length > maxLogLength) {
+  const text = String(result.result ?? "");
+  if (text.length > maxLogLength) {
     logInfo(
-      `Result: ${result.result.substring(0, maxLogLength)}... (truncated, ${result.result.length} chars total)`
+      `Result: ${text.substring(0, maxLogLength)}... (truncated, ${text.length} chars total)`
     );
-  } else {
-    logInfo(`Result:`, result.result);
+  } else if (text.length > 0) {
+    logInfo(`Result:`, text);
   }
-  logInfo("---");
 }
 
 /**

@@ -1,4 +1,5 @@
 import { addSelectedTextContext, getChainType } from "@/aiParams";
+import { logFileManager } from "@/logFileManager";
 import { FileCache } from "@/cache/fileCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { ChainType } from "@/chainFactory";
@@ -15,7 +16,7 @@ import CopilotPlugin from "@/main";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { CopilotSettings, getSettings, updateSetting } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
-import { isSourceModeOn } from "@/utils";
+import { ensureFolderExists, isSourceModeOn } from "@/utils";
 import { Editor, MarkdownView, Notice, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";
@@ -279,7 +280,11 @@ export function registerCommands(
 
       // Create or update the file in the vault
       const fileName = `Copilot-Indexed-Files-${new Date().toLocaleDateString().replace(/\//g, "-")}.md`;
-      const filePath = `${fileName}`;
+      const folderPath = "copilot";
+      const filePath = `${folderPath}/${fileName}`;
+
+      // Ensure destination folder exists (supports mobile and nested)
+      await ensureFolderExists(folderPath);
 
       const existingFile = plugin.app.vault.getAbstractFileByPath(filePath);
       if (existingFile) {
@@ -322,6 +327,27 @@ export function registerCommands(
     } catch (error) {
       logError("Error clearing Copilot caches:", error);
       new Notice("Failed to clear Copilot caches");
+    }
+  });
+
+  // Create Copilot log file
+  addCommand(plugin, COMMAND_IDS.OPEN_LOG_FILE, async () => {
+    try {
+      await logFileManager.openLogFile();
+    } catch (error) {
+      logError("Error creating Copilot log file:", error);
+      new Notice("Failed to create Copilot log file.");
+    }
+  });
+
+  // Clear Copilot log file (delete on disk and clear in-memory buffer)
+  addCommand(plugin, COMMAND_IDS.CLEAR_LOG_FILE, async () => {
+    try {
+      await logFileManager.clear();
+      new Notice("Copilot log cleared.");
+    } catch (error) {
+      logError("Error clearing Copilot log file:", error);
+      new Notice("Failed to clear Copilot log file.");
     }
   });
 

@@ -321,9 +321,9 @@ export default class ChainManager {
       updateLoading?: (loading: boolean) => void;
     } = {}
   ) {
-    const { debug = false, ignoreSystemMessage = false } = options;
+    const { ignoreSystemMessage = false } = options;
 
-    if (debug) console.log("==== Step 0: Initial user message ====\n", userMessage);
+    logInfo("Step 0: Initial user message:\n", userMessage);
 
     this.validateChatModel();
     this.validateChainInitialization();

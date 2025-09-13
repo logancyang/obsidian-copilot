@@ -75,6 +75,11 @@ export interface CopilotSettings {
   defaultSaveFolder: string;
   defaultConversationTag: string;
   autosaveChat: boolean;
+  /**
+   * When enabled, generate a short AI title for chat notes on save.
+   * When disabled (default), use the first 10 words of the first user message.
+   */
+  generateAIChatTitleOnSave: boolean;
   includeActiveNoteAsContext: boolean;
   customPromptsFolder: string;
   indexVaultToVectorStore: string;
@@ -260,6 +265,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.includeActiveNoteAsContext = DEFAULT_SETTINGS.includeActiveNoteAsContext;
   }
 
+  // Ensure generateAIChatTitleOnSave has a default value
+  if (typeof sanitizedSettings.generateAIChatTitleOnSave !== "boolean") {
+    sanitizedSettings.generateAIChatTitleOnSave = DEFAULT_SETTINGS.generateAIChatTitleOnSave;
+  }
+
   // Ensure passMarkdownImages has a default value
   if (typeof sanitizedSettings.passMarkdownImages !== "boolean") {
     sanitizedSettings.passMarkdownImages = DEFAULT_SETTINGS.passMarkdownImages;
@@ -297,6 +307,15 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.autonomousAgentEnabledToolIds =
       DEFAULT_SETTINGS.autonomousAgentEnabledToolIds;
   }
+
+  // Ensure folder settings fall back to defaults when empty/whitespace
+  const saveFolder = (settingsToSanitize.defaultSaveFolder || "").trim();
+  sanitizedSettings.defaultSaveFolder =
+    saveFolder.length > 0 ? saveFolder : DEFAULT_SETTINGS.defaultSaveFolder;
+
+  const promptsFolder = (settingsToSanitize.customPromptsFolder || "").trim();
+  sanitizedSettings.customPromptsFolder =
+    promptsFolder.length > 0 ? promptsFolder : DEFAULT_SETTINGS.customPromptsFolder;
 
   return sanitizedSettings;
 }

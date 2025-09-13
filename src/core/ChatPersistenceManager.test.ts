@@ -27,6 +27,7 @@ jest.mock("@/utils", () => ({
     fileName: "20240923_221800",
     display: "2024/09/23 22:18:00",
   })),
+  ensureFolderExists: jest.fn(async () => {}),
 }));
 
 describe("ChatPersistenceManager", () => {

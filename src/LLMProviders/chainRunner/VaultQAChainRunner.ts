@@ -120,7 +120,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
         });
       }
 
-      logInfo("==== Final Request to AI ====\n", messages);
+      logInfo("Final Request to AI:\n", messages);
 
       // Stream with abort signal
       const chatStream = await withSuppressedTokenWarnings(() =>
