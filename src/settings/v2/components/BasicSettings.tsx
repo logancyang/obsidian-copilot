@@ -246,10 +246,10 @@ export const BasicSettings: React.FC = () => {
           <SettingItem
             type="text"
             title="Default Conversation Folder Name"
-            description="The default folder name where chat conversations will be saved. Default is 'copilot-conversations'"
+            description="The default folder name where chat conversations will be saved. Default is 'copilot/copilot-conversations'"
             value={settings.defaultSaveFolder}
             onChange={(value) => updateSetting("defaultSaveFolder", value)}
-            placeholder="copilot-conversations"
+            placeholder="copilot/copilot-conversations"
           />
 
           <SettingItem
@@ -341,6 +341,34 @@ export const BasicSettings: React.FC = () => {
             description="Automatically saves the chat after every user message and AI response."
             checked={settings.autosaveChat}
             onCheckedChange={(checked) => updateSetting("autosaveChat", checked)}
+          />
+
+          <SettingItem
+            type="switch"
+            title="Generate AI Chat Title on Save"
+            description="When enabled, uses an AI model to generate a concise title for saved chat notes. When disabled, uses the first 10 words of the first user message."
+            checked={settings.generateAIChatTitleOnSave}
+            onCheckedChange={(checked) => updateSetting("generateAIChatTitleOnSave", checked)}
+          />
+
+          <SettingItem
+            type="switch"
+            title="Include Current Note in Context Menu"
+            description="Automatically include the current note in the chat context menu by default when sending messages to the AI."
+            checked={settings.includeActiveNoteAsContext}
+            onCheckedChange={(checked) => {
+              updateSetting("includeActiveNoteAsContext", checked);
+            }}
+          />
+
+          <SettingItem
+            type="switch"
+            title="Images in Markdown"
+            description="Pass embedded images in markdown to the AI along with the text. Only works with multimodal models."
+            checked={settings.passMarkdownImages}
+            onCheckedChange={(checked) => {
+              updateSetting("passMarkdownImages", checked);
+            }}
           />
 
           <SettingItem

@@ -18,6 +18,7 @@ import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
 import { encryptAllKeys } from "@/encryptionService";
 import { logInfo } from "@/logger";
+import { logFileManager } from "@/logFileManager";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { checkIsPlusUser } from "@/plusUtils";
 import VectorStoreManager from "@/search/vectorStoreManager";
@@ -167,6 +168,8 @@ export default class CopilotPlugin extends Plugin {
     this.settingsUnsubscriber?.();
     this.autocompleteService?.destroy();
 
+    // Best-effort flush of log file
+    await logFileManager.flush();
     logInfo("Copilot plugin unloaded");
   }
 

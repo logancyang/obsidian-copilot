@@ -22,8 +22,8 @@ import {
   ABORT_REASON,
   EVENT_NAMES,
   LOADING_MESSAGES,
-  USER_SENDER,
   RESTRICTION_MESSAGES,
+  USER_SENDER,
 } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
 import { useChatManager } from "@/hooks/useChatManager";
@@ -36,7 +36,7 @@ import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { err2String, isPlusChain } from "@/utils";
-import { Buffer } from "buffer";
+import { arrayBufferToBase64 } from "@/utils/base64";
 import { Notice, TFile } from "obsidian";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
@@ -182,7 +182,7 @@ const Chat: React.FC<ChatProps> = ({
       // Add images if present
       for (const image of selectedImages) {
         const imageData = await image.arrayBuffer();
-        const base64Image = Buffer.from(imageData).toString("base64");
+        const base64Image = arrayBufferToBase64(imageData);
         content.push({
           type: "image_url",
           image_url: {

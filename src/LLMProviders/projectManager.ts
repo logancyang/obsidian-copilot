@@ -98,7 +98,7 @@ export default class ProjectManager {
             // If this is the current project, reload its context and recreate chain
             if (this.currentProjectId === nextProject.id) {
               await Promise.all([
-                this.loadProjectContext(nextProject),
+                this.loadProjectContext(nextProject, true),
                 // Recreate chain to pick up new system prompt
                 this.getCurrentChainManager().createChainWithNewModel(),
               ]);
@@ -190,10 +190,15 @@ export default class ProjectManager {
     await this.plugin.chatUIState.handleProjectSwitch();
   }
 
-  private async loadProjectContext(project: ProjectConfig): Promise<ContextCache | null> {
+  private async loadProjectContext(
+    project: ProjectConfig,
+    forUpdate: boolean = false
+  ): Promise<ContextCache | null> {
     // for update context condition
-    this.loadTracker.clearAllLoadStates();
-    setProjectLoading(true);
+    if (forUpdate) {
+      this.loadTracker.clearAllLoadStates();
+      setProjectLoading(true);
+    }
 
     try {
       if (!project.contextSource) {
@@ -201,10 +206,6 @@ export default class ProjectManager {
         return null;
       }
       logInfo(`[loadProjectContext] Starting for project: ${project.name}`);
-
-      logInfo(
-        `[loadProjectContext] Project ${project.name}: Cleared all project context load states`
-      );
 
       const contextCache = await this.projectContextCache.getOrInitializeCache(project);
 
@@ -232,6 +233,10 @@ export default class ProjectManager {
     } catch (error) {
       logError(`[loadProjectContext] Failed for project ${project.name}:`, error);
       throw error;
+    } finally {
+      if (forUpdate) {
+        setProjectLoading(false);
+      }
     }
   }
 
@@ -323,7 +328,7 @@ export default class ProjectManager {
         );
       }
 
-      const updatedCache = await this.loadProjectContext(project);
+      const updatedCache = await this.loadProjectContext(project, true);
       if (!updatedCache) {
         logError(`[getProjectContext] Project ${project.name}: loadProjectContext returned null.`);
         return null;

@@ -481,12 +481,8 @@ ${params}
           content: toolResultsForConversation,
         });
 
-        // Truncate long tool results for logging to avoid console spam
-        const truncatedForLog =
-          toolResultsForConversation.length > 500
-            ? toolResultsForConversation.substring(0, 500) + "... (truncated)"
-            : toolResultsForConversation;
-        logInfo("Tool results added to conversation:", truncatedForLog);
+        // Keep logs concise: avoid dumping full tool results
+        logInfo("Tool results added to conversation");
       }
 
       // If we hit max iterations, add a message explaining the limit was reached

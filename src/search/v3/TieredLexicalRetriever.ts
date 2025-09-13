@@ -1,5 +1,6 @@
 import { logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
+import { isInternalExcludedFile } from "@/search/searchUtils";
 import { extractNoteFiles } from "@/utils";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
@@ -153,7 +154,9 @@ export class TieredLexicalRetriever extends BaseRetriever {
 
     // Extract daily note files by exact title match
     const dailyNoteQuery = dailyNoteTitles.join(", ");
-    const dailyNoteFiles = extractNoteFiles(dailyNoteQuery, this.app.vault);
+    const dailyNoteFiles = extractNoteFiles(dailyNoteQuery, this.app.vault).filter(
+      (f) => !isInternalExcludedFile(f)
+    );
 
     // Get documents for daily notes
     const dailyNoteDocuments = await this.getTitleMatches(dailyNoteFiles);
@@ -166,7 +169,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
 
     // For time-based queries, we DON'T run regular search
     // Instead, find all documents modified within the time range
-    const allFiles = this.app.vault.getMarkdownFiles();
+    const allFiles = this.app.vault.getMarkdownFiles().filter((f) => !isInternalExcludedFile(f));
     const timeFilteredDocuments: Document[] = [];
 
     // Limit the number of time-filtered documents to avoid overwhelming results
@@ -293,6 +296,9 @@ export class TieredLexicalRetriever extends BaseRetriever {
     const chunks: Document[] = [];
 
     for (const file of noteFiles) {
+      if (isInternalExcludedFile(file)) {
+        continue;
+      }
       try {
         const content = await this.app.vault.cachedRead(file);
         const cache = this.app.metadataCache.getFileCache(file);

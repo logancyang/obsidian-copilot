@@ -136,10 +136,15 @@ export const useChatScrolling = ({
     scrollToBottom("instant");
   }, [scrollToBottom]);
 
-  // Scroll to bottom when new messages are added
+  // Scroll to bottom only when user messages are added (not AI messages)
   useEffect(() => {
-    scrollToBottom();
-  }, [chatHistory.length, scrollToBottom]);
+    if (chatHistory.length > 0) {
+      const lastMessage = chatHistory[chatHistory.length - 1];
+      if (lastMessage && lastMessage.sender === USER_SENDER) {
+        scrollToBottom();
+      }
+    }
+  }, [chatHistory.length, chatHistory, scrollToBottom]);
 
   return {
     containerMinHeight,

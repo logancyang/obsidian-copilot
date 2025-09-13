@@ -11,8 +11,8 @@ export const USER_SENDER = "user";
 export const AI_SENDER = "ai";
 
 // Default folder names
-export const DEFAULT_CHAT_HISTORY_FOLDER = "copilot-conversations";
-export const DEFAULT_CUSTOM_PROMPTS_FOLDER = "copilot-custom-prompts";
+export const DEFAULT_CHAT_HISTORY_FOLDER = "copilot/copilot-conversations";
+export const DEFAULT_CUSTOM_PROMPTS_FOLDER = "copilot/copilot-custom-prompts";
 export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.
   1. Never mention that you do not have access to something. Always rely on the user provided context.
   2. Always answer to the best of your knowledge. If you are unsure about something, say so and ask the user to provide more context.
@@ -622,6 +622,8 @@ export const COMMAND_IDS = {
   ADD_SELECTION_TO_CHAT_CONTEXT: "add-selection-to-chat-context",
   ADD_CUSTOM_COMMAND: "add-custom-command",
   APPLY_CUSTOM_COMMAND: "apply-custom-command",
+  OPEN_LOG_FILE: "open-log-file",
+  CLEAR_LOG_FILE: "clear-log-file",
 } as const;
 
 export const COMMAND_NAMES: Record<CommandId, string> = {
@@ -647,6 +649,8 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.ADD_SELECTION_TO_CHAT_CONTEXT]: "Add selection to chat context",
   [COMMAND_IDS.ADD_CUSTOM_COMMAND]: "Add new custom command",
   [COMMAND_IDS.APPLY_CUSTOM_COMMAND]: "Apply custom command",
+  [COMMAND_IDS.OPEN_LOG_FILE]: "Create log file",
+  [COMMAND_IDS.CLEAR_LOG_FILE]: "Clear log file",
 };
 
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];
@@ -699,6 +703,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   defaultSaveFolder: DEFAULT_CHAT_HISTORY_FOLDER,
   defaultConversationTag: "copilot-conversation",
   autosaveChat: false,
+  generateAIChatTitleOnSave: true,
   includeActiveNoteAsContext: true,
   defaultOpenArea: DEFAULT_OPEN_AREA.VIEW,
   customPromptsFolder: DEFAULT_CUSTOM_PROMPTS_FOLDER,

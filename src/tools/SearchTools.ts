@@ -72,6 +72,9 @@ const lexicalSearchTool = createTool({
         includeInContext: doc.metadata.includeInContext ?? true,
         source: doc.metadata.source,
         mtime: doc.metadata.mtime ?? null,
+        ctime: doc.metadata.ctime ?? null,
+        chunkId: (doc.metadata as any).chunkId ?? null,
+        isChunk: (doc.metadata as any).isChunk ?? false,
         explanation: doc.metadata.explanation ?? null,
       };
     });
@@ -131,6 +134,9 @@ const semanticSearchTool = createTool({
         includeInContext: doc.metadata.includeInContext ?? true,
         source: doc.metadata.source,
         mtime: doc.metadata.mtime ?? null,
+        ctime: doc.metadata.ctime ?? null,
+        chunkId: (doc.metadata as any).chunkId ?? null,
+        isChunk: (doc.metadata as any).isChunk ?? false,
         explanation: doc.metadata.explanation ?? null,
       };
     });

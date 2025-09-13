@@ -1,8 +1,9 @@
-import React, { useMemo } from "react";
-import { Button } from "@/components/ui/button";
 import { useCustomCommands } from "@/commands/state";
-import { Lightbulb, GripVertical, Trash2, Plus, Info, PenLine, Copy } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Copy, GripVertical, Info, Lightbulb, PenLine, Plus, Trash2 } from "lucide-react";
+import React, { useMemo } from "react";
 
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -11,15 +12,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
+import { updateSetting, useSettingsValue } from "@/settings/model";
+import { PromptSortStrategy } from "@/types";
 import {
-  DndContext,
   closestCenter,
+  DndContext,
+  DragEndEvent,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
-  DragEndEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -28,25 +31,21 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { cn } from "@/lib/utils";
-import { useSettingsValue } from "@/settings/model";
-import { updateSetting } from "@/settings/model";
-import { PromptSortStrategy } from "@/types";
 
-import { Notice } from "obsidian";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { CustomCommand } from "@/commands/type";
+import { EMPTY_COMMAND } from "@/commands/constants";
+import { CustomCommandManager } from "@/commands/customCommandManager";
+import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
 import {
+  generateCopyCommandName,
   loadAllCustomCommands,
   sortCommandsByOrder,
-  generateCopyCommandName,
 } from "@/commands/customCommandUtils";
-import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
-import { SettingItem } from "@/components/ui/setting-item";
-import { CustomCommandManager } from "@/commands/customCommandManager";
-import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { generateDefaultCommands } from "@/commands/migrator";
-import { EMPTY_COMMAND } from "@/commands/constants";
+import { CustomCommand } from "@/commands/type";
+import { ConfirmModal } from "@/components/modals/ConfirmModal";
+import { SettingItem } from "@/components/ui/setting-item";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Notice } from "obsidian";
 
 const SortableTableRow: React.FC<{
   command: CustomCommand;
@@ -262,7 +261,7 @@ export const CommandSettings: React.FC = () => {
             updateSetting("customPromptsFolder", value);
             loadAllCustomCommands();
           }}
-          placeholder="copilot-custom-prompts"
+          placeholder="copilot/copilot-custom-prompts"
         />
         <SettingItem
           type="switch"

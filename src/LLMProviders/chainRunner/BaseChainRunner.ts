@@ -76,19 +76,30 @@ export abstract class BaseChainRunner implements ChainRunner {
       // Also clear if it's a new chat
       updateCurrentAiMessage("");
     }
-    logInfo(
-      "==== Chat Memory ====\n",
-      (this.chainManager.memoryManager.getMemory().chatHistory as any).messages.map(
-        (m: any) => m.content
-      )
-    );
-    // Decode tool marker results for logging readability only (storage remains encoded)
+    // Log compact memory summary and a truncated final response (~300 chars)
+    const historyMessages = (this.chainManager.memoryManager.getMemory().chatHistory as any)
+      .messages;
+    logInfo("Chat memory updated:\n", {
+      turns: Array.isArray(historyMessages) ? historyMessages.length : 0,
+    });
+
     try {
-      const { decodeToolCallMarkerResults } = await import("./utils/toolCallParser");
-      const readable = decodeToolCallMarkerResults(fullAIResponse);
-      logInfo("==== Final AI Response ====\n", readable);
+      const MAX = 300;
+      const { parseToolCallMarkers } = await import("./utils/toolCallParser");
+      const parsed = parseToolCallMarkers(fullAIResponse);
+      let textOnly = parsed.segments
+        .map((seg: any) => (seg.type === "text" ? seg.content : ""))
+        .join("")
+        .trim();
+      if (!textOnly) textOnly = fullAIResponse || "";
+      const snippet = textOnly.length > MAX ? textOnly.slice(0, MAX) + "... (truncated)" : textOnly;
+      logInfo("Final AI response (truncated):\n", snippet);
     } catch {
-      logInfo("==== Final AI Response ====\n", fullAIResponse);
+      // Fallback: truncate raw response without parsing
+      const MAX = 300;
+      const s = typeof fullAIResponse === "string" ? fullAIResponse : String(fullAIResponse ?? "");
+      const clipped = s.length > MAX ? s.slice(0, MAX) + "... (truncated)" : s;
+      logInfo("Final AI response (truncated):\n", clipped);
     }
     return fullAIResponse;
   }

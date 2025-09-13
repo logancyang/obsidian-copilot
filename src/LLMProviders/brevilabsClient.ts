@@ -3,7 +3,7 @@ import { getDecryptedKey } from "@/encryptionService";
 import { logInfo } from "@/logger";
 import { turnOffPlus, turnOnPlus } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
-import { Buffer } from "buffer";
+import { arrayBufferToBase64 } from "@/utils/base64";
 import { Notice } from "obsidian";
 
 export interface BrocaResponse {
@@ -161,7 +161,7 @@ export class BrevilabsClient {
         return { data: null, error: new Error("Unknown error") };
       }
     }
-    logInfo(`==== ${endpoint} request ====:`, data);
+    logInfo(`[API ${endpoint} request]:`, data);
 
     return { data };
   }
@@ -202,7 +202,7 @@ export class BrevilabsClient {
           return { data: null, error: new Error(`HTTP error: ${response.status}`) };
         }
       }
-      logInfo(`==== ${endpoint} FormData request ====:`, data);
+      logInfo(`[API ${endpoint} form-data request]:`, data);
       return { data };
     } catch (error) {
       return { data: null, error: error instanceof Error ? error : new Error(String(error)) };
@@ -307,7 +307,7 @@ export class BrevilabsClient {
 
   async pdf4llm(binaryContent: ArrayBuffer): Promise<Pdf4llmResponse> {
     // Convert ArrayBuffer to base64 string
-    const base64Content = Buffer.from(binaryContent).toString("base64");
+    const base64Content = arrayBufferToBase64(binaryContent);
 
     const { data, error } = await this.makeRequest<Pdf4llmResponse>("/pdf4llm", {
       pdf: base64Content,
