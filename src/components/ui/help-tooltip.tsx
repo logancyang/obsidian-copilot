@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { HelpCircle } from "lucide-react";
 import React, { useState } from "react";
+import { Platform } from "obsidian";
 
 interface TooltipProps {
   content: React.ReactNode;
@@ -28,17 +29,43 @@ export const HelpTooltip: React.FC<TooltipProps> = ({
   contentClassName,
   buttonClassName,
 }) => {
+  const isMobile = Platform.isMobile;
   const [showTooltip, setShowTooltip] = useState(false);
+  const isClickingRef = React.useRef(false);
+
+  const handleTouchStart = () => {
+    if (isMobile) {
+      isClickingRef.current = true;
+    }
+  };
+
+  const handleClick = () => {
+    if (isMobile) {
+      setShowTooltip(!showTooltip);
+      // Reset the flag after a brief delay
+      setTimeout(() => {
+        isClickingRef.current = false;
+      }, 100);
+    }
+  };
 
   return (
     <TooltipProvider delayDuration={delayDuration}>
-      <Tooltip open={showTooltip}>
+      <Tooltip
+        open={showTooltip}
+        onOpenChange={(open) => {
+          // Ignore onOpenChange events on mobile when we're handling a click
+          if (isMobile && isClickingRef.current) {
+            return;
+          }
+          setShowTooltip(open);
+        }}
+      >
         <TooltipTrigger asChild>
           {children ? (
             <div
-              onClick={() => setShowTooltip(!showTooltip)}
-              onMouseEnter={() => setShowTooltip(true)}
-              onMouseLeave={() => setShowTooltip(false)}
+              onClick={handleClick}
+              onTouchStart={handleTouchStart}
               className="tw-cursor-pointer"
             >
               {children}
@@ -47,9 +74,8 @@ export const HelpTooltip: React.FC<TooltipProps> = ({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setShowTooltip(!showTooltip)}
-              onMouseEnter={() => setShowTooltip(true)}
-              onMouseLeave={() => setShowTooltip(false)}
+              onClick={handleClick}
+              onTouchStart={handleTouchStart}
               className={`tw-inline-flex tw-size-6 tw-items-center tw-justify-center tw-p-0 hover:tw-bg-transparent hover:tw-text-normal ${buttonClassName || ""}`}
             >
               <HelpCircle className="tw-size-4" />
