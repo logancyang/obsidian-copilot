@@ -227,25 +227,15 @@ export function buildCitationMap(
  * Normalizes citations in content using the provided mapping.
  */
 export function normalizeCitations(content: string, map: Map<number, number>): string {
-  // 1) Already-footnote refs: [^n] -> [n] (remapped contiguously)
+  // Already-footnote refs: [^n] -> [n] (remapped contiguously)
   content = content.replace(/(^|[^[])\[\^(\d+)\]/g, (full, p, n) => {
     const oldN = parseInt(n, 10);
     const newN = map.get(oldN) ?? oldN;
     return `${p}[${newN}]`;
   });
 
-  // 2) Numeric citations like [1] or [1, 2] -> normalize/renumber and render as separate [n][m]
-  content = content.replace(/(^|[^[])\[(\d+(?:\s*,\s*\d+)*)\](?!\()/g, (full, p, nums) => {
-    const parts = nums.split(/\s*,\s*/);
-    const mapped = parts
-      .map((s: string) => {
-        const oldN = parseInt(s, 10);
-        const newN = map.get(oldN) ?? oldN;
-        return `[${newN}]`;
-      })
-      .join("");
-    return `${p}${mapped}`;
-  });
+  // Fix periods after citations that cause markdown list interpretation: [1]. -> [1]
+  content = content.replace(/\[(\d+)\]\./g, "[$1]");
 
   return content;
 }
@@ -397,16 +387,29 @@ export function processInlineCitations(content: string, useInlineCitations: bool
     items = uniqueItems;
   }
 
-  // Format as simple numbered list for chat display
-  const sourcesList = items
-    .filter((item) => item) // Remove empty items
-    .map((item, index) => `<li><strong>[${index + 1}]</strong> ${item}</li>`)
-    .join("\n");
+  // Build sources list maintaining proper citation mapping
+  // The old code used .filter().map() which destroyed the mapping by renumbering
+  // Now we build the list respecting the citation numbers used in the text
+  const maxCitationNum = Math.max(
+    ...Array.from(citationMap.values()).concat(
+      consolidationMap.size > 0 ? Array.from(consolidationMap.values()) : []
+    )
+  );
+
+  const sourcesList: string[] = [];
+  for (let i = 1; i <= maxCitationNum; i++) {
+    const item = items[i - 1];
+    if (item) {
+      sourcesList.push(`<li><strong>[${i}]</strong> ${item}</li>`);
+    }
+  }
+
+  const formattedSourcesList = sourcesList.join("\n");
 
   return (
     mainContent +
     "\n\n<br/>\n<details><summary>Sources</summary>\n<ul>\n" +
-    sourcesList +
+    formattedSourcesList +
     "\n</ul>\n</details>"
   );
 }

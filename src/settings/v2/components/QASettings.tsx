@@ -44,7 +44,7 @@ export const QASettings: React.FC = () => {
           <SettingItem
             type="switch"
             title="Enable Inline Citations (experimental)"
-            description="When enabled, AI responses will include footnote-style citations within the text and numbered sources at the end. When disabled. (This is an experimental feature and may not work as expected for all models.)"
+            description="When enabled, AI responses will include footnote-style citations within the text and numbered sources at the end (This is an experimental feature and may not work as expected for all models.)"
             checked={settings.enableInlineCitations}
             onCheckedChange={(checked) => updateSetting("enableInlineCitations", checked)}
           />
