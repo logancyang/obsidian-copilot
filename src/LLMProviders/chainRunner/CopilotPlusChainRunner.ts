@@ -30,8 +30,9 @@ import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "../intentAnalyzer";
 import { BaseChainRunner } from "./BaseChainRunner";
 import {
   formatSourceCatalog,
-  getVaultCitationGuidance,
+  getCitationInstructions,
   sanitizeContentForCitations,
+  addFallbackSources,
   type SourceCatalogEntry,
 } from "./utils/citationUtils";
 import { ActionBlockStreamer } from "./utils/ActionBlockStreamer";
@@ -545,29 +546,18 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       fullAIResponse = currentPartialResponse;
     }
 
-    // If the model used footnote citations but omitted the Sources block, append footnote definitions
-    {
-      const hasSourcesSection = /(^|\n)\s*(?:####\s*)?Sources\s*:?\s*\n/i.test(
-        fullAIResponse || ""
-      );
-      const hasFootnoteDefinitions = /\[\^\d+\]:\s*\[\[.*?\]\]/.test(fullAIResponse || "");
-      const hasInlineFootnotes = /(^|[^[])\[\^\d+\]/g.test(fullAIResponse || "");
-      const hasCitationLines = this.lastCitationLines && this.lastCitationLines.length > 0;
-      const hasSourcesArray = Array.isArray(sources) && sources.length > 0;
-      if (
-        !hasSourcesSection &&
-        !hasFootnoteDefinitions &&
-        hasInlineFootnotes &&
-        (hasCitationLines || hasSourcesArray)
-      ) {
-        const lines = hasCitationLines
-          ? (this.lastCitationLines as string[]).map((l) => l.replace(/^\[(\d+)\]\s*/, "[^$1]: "))
-          : (sources as any[])
-              .slice(0, 20)
-              .map((s, i) => `[^${i + 1}]: [[${s.title || s.path || "Untitled"}]]`);
-        fullAIResponse = `${fullAIResponse}\n\n#### Sources:\n\n${lines.join("\n")}`;
-      }
-    }
+    // Add fallback sources if citations are enabled and missing
+    const settings = getSettings();
+    const fallbackSources =
+      this.lastCitationLines && this.lastCitationLines.length > 0
+        ? this.lastCitationLines.map((l) => ({ title: l.replace(/^\[(\d+)\]\s*/, "") }))
+        : (sources as any[]) || [];
+
+    fullAIResponse = addFallbackSources(
+      fullAIResponse,
+      fallbackSources,
+      settings.enableInlineCitations
+    );
 
     return this.handleResponse(
       fullAIResponse,
@@ -789,7 +779,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         return `[${i + 1}] [[${title}]]`;
       });
 
-    const guidance = getVaultCitationGuidance(catalogLines);
+    const settings = getSettings();
+    const guidance = getCitationInstructions(settings.enableInlineCitations, catalogLines);
 
     // Wrap in XML-like tags for better LLM understanding
     return timeExpression

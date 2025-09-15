@@ -4,6 +4,9 @@ import {
   hasExistingCitations,
   getVaultCitationGuidance,
   getQACitationInstructions,
+  processInlineCitations,
+  getCitationInstructions,
+  addFallbackSources,
   type SourceCatalogEntry,
 } from "./citationUtils";
 
@@ -161,6 +164,100 @@ More content
       expect(result).toContain("Source Catalog (for reference only):");
       expect(result).toContain("- [[Doc 1]]");
       expect(result).toContain("- [[Doc 2]]");
+    });
+  });
+
+  describe("processInlineCitations", () => {
+    it("should process inline citations when enabled", () => {
+      const content = `Some content here
+
+#### Sources:
+[^1]: [[Document 1]]
+[^2]: [[Document 2]]`;
+
+      const result = processInlineCitations(content, true);
+      expect(result).toContain("Sources</summary>");
+      expect(result).toContain("Document 1");
+      expect(result).toContain("Document 2");
+    });
+
+    it("should use simple expandable list when disabled", () => {
+      const content = `Some content here
+
+#### Sources:
+- [[Document 1]]
+- [[Document 2]]`;
+
+      const result = processInlineCitations(content, false);
+      expect(result).toContain("Sources</summary>");
+      expect(result).toContain("Document 1");
+      expect(result).toContain("Document 2");
+    });
+
+    it("should return unchanged content when no sources section", () => {
+      const content = "Just regular content without sources";
+      const result = processInlineCitations(content, true);
+      expect(result).toBe(content);
+    });
+  });
+
+  describe("getCitationInstructions", () => {
+    it("should return citation instructions when enabled", () => {
+      const sourceCatalog = ["- [[Doc 1]] (path1.md)"];
+      const result = getCitationInstructions(true, sourceCatalog);
+
+      expect(result).toContain("CITATION RULES:");
+      expect(result).toContain("<guidance>");
+      expect(result).toContain("Doc 1");
+    });
+
+    it("should return empty string when disabled", () => {
+      const sourceCatalog = ["- [[Doc 1]] (path1.md)"];
+      const result = getCitationInstructions(false, sourceCatalog);
+
+      expect(result).toBe("");
+    });
+  });
+
+  describe("addFallbackSources", () => {
+    it("should add sources when citations enabled and missing", () => {
+      const response = "Some content without sources";
+      const sources = [{ title: "Document 1" }, { title: "Document 2" }];
+
+      const result = addFallbackSources(response, sources, true);
+      expect(result).toContain("#### Sources:");
+      expect(result).toContain("[^1]: [[Document 1]]");
+      expect(result).toContain("[^2]: [[Document 2]]");
+    });
+
+    it("should not add sources when citations disabled", () => {
+      const response = "Some content without sources";
+      const sources = [{ title: "Document 1" }];
+
+      const result = addFallbackSources(response, sources, false);
+      expect(result).toBe(response);
+    });
+
+    it("should not add sources when already present", () => {
+      const response = "Some content\n#### Sources:\n[^1]: [[Existing]]";
+      const sources = [{ title: "Document 1" }];
+
+      const result = addFallbackSources(response, sources, true);
+      expect(result).toBe(response);
+    });
+
+    it("should handle empty sources array", () => {
+      const response = "Some content";
+      const sources: any[] = [];
+
+      const result = addFallbackSources(response, sources, true);
+      expect(result).toBe(response);
+    });
+
+    it("should handle invalid inputs gracefully", () => {
+      expect(addFallbackSources("", [{ title: "Doc" }], true)).toBe("");
+      expect(addFallbackSources(null as any, [{ title: "Doc" }], true)).toBe("");
+      expect(addFallbackSources(undefined as any, [{ title: "Doc" }], true)).toBe("");
     });
   });
 });

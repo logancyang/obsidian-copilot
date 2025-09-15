@@ -13,9 +13,9 @@ import {
 import { BaseChainRunner } from "./BaseChainRunner";
 import {
   formatSourceCatalog,
-  getQACitationInstructions,
+  getQACitationInstructionsConditional,
   sanitizeContentForCitations,
-  hasExistingCitations,
+  addFallbackSources,
   type SourceCatalogEntry,
 } from "./utils/citationUtils";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
@@ -103,10 +103,10 @@ export class VaultQAChainRunner extends BaseChainRunner {
       const sourceCatalog = formatSourceCatalog(sourceEntries).join("\n");
 
       const qaInstructions =
-        "\n\nAnswer the question with as detailed as possible based only on the following context:\n" +
+        "\n\nAnswer the question based only on the following context:\n" +
         context +
-        getQACitationInstructions(sourceCatalog) +
-        sourceCatalog;
+        getQACitationInstructionsConditional(settings.enableInlineCitations, sourceCatalog) +
+        (settings.enableInlineCitations ? sourceCatalog : "");
       const fullSystemMessage = systemPrompt + qaInstructions;
 
       const chatModel = this.chainManager.chatModelManager.getChatModel();
@@ -191,15 +191,10 @@ export class VaultQAChainRunner extends BaseChainRunner {
   }
 
   private addSourcestoResponse(response: string): string {
-    // If the model already included sources, don't add another
-    if (hasExistingCitations(response)) {
-      return response;
-    }
-    const docTitles = extractUniqueTitlesFromDocs(this.chainManager.getRetrievedDocuments());
-    if (docTitles.length > 0) {
-      const notes = docTitles.map((title, i) => `[^${i + 1}]: [[${title}]]`).join("\n");
-      response += "\n\n#### Sources:\n\n" + notes;
-    }
-    return response;
+    const settings = getSettings();
+    const retrievedDocs = this.chainManager.getRetrievedDocuments();
+    const sources = extractUniqueTitlesFromDocs(retrievedDocs).map((title) => ({ title }));
+
+    return addFallbackSources(response, sources, settings.enableInlineCitations);
   }
 }
