@@ -108,7 +108,7 @@ ${params}
     return AutonomousAgentChainRunner.generateSystemPrompt(
       availableTools,
       adapter,
-      this.chainManager.plugin?.userMemoryManager
+      this.chainManager.userMemoryManager
     );
   }
 

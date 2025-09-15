@@ -366,6 +366,13 @@ export async function getSystemPromptWithMemory(
   userMemoryManager: UserMemoryManager | undefined
 ): Promise<string> {
   const systemPrompt = getSystemPrompt();
+
+  // Check if memory is enabled in settings
+  const settings = getSettings();
+  if (!settings.enableMemory) {
+    return systemPrompt;
+  }
+
   if (!userMemoryManager) {
     logInfo("No UserMemoryManager provided to getSystemPromptWithMemory");
     return systemPrompt;

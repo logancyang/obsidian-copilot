@@ -13,6 +13,7 @@ import { SettingItem } from "@/components/ui/setting-item";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AUTOCOMPLETE_CONFIG } from "@/constants";
 import { cn } from "@/lib/utils";
+import { logError } from "@/logger";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { HelpCircle, RefreshCw } from "lucide-react";
 import { Notice } from "obsidian";
@@ -62,7 +63,7 @@ export const CopilotPlusSettings: React.FC = () => {
 
       new Notice(`Word index rebuilt successfully! ${result.wordCount} unique words indexed.`);
     } catch (error) {
-      console.error("Failed to refresh word index:", error);
+      logError("Failed to refresh word index:", error);
       new Notice("Failed to refresh word index. Check console for details.");
     } finally {
       setIsRefreshing(false);

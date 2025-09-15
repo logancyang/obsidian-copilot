@@ -2,7 +2,7 @@ import CopilotView from "@/components/CopilotView";
 import { CHAT_VIEWTYPE } from "@/constants";
 import CopilotPlugin from "@/main";
 import { getSettings } from "@/settings/model";
-import { logInfo } from "@/logger";
+import { logInfo, logError } from "@/logger";
 import { App, Notice, PluginSettingTab } from "obsidian";
 import React from "react";
 import { createRoot } from "react-dom/client";
@@ -51,7 +51,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       new Notice("Plugin reloaded successfully.");
     } catch (error) {
       new Notice("Failed to reload the plugin. Please reload manually.");
-      console.error("Error reloading plugin:", error);
+      logError("Error reloading plugin:", error);
     }
   }
 

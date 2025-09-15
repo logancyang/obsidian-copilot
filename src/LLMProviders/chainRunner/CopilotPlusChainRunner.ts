@@ -783,6 +783,6 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
   }
 
   protected async getSystemPrompt(): Promise<string> {
-    return getSystemPromptWithMemory(this.chainManager.plugin?.userMemoryManager);
+    return getSystemPromptWithMemory(this.chainManager.userMemoryManager);
   }
 }
