@@ -1,6 +1,6 @@
 import { App, TFile } from "obsidian";
 import { ChatMessage } from "@/types/message";
-import { logInfo, logError } from "@/logger";
+import { logInfo, logError, logWarn } from "@/logger";
 import { USER_SENDER } from "@/constants";
 import { getSettings } from "@/settings/model";
 import { ensureFolderExists } from "@/utils";
@@ -196,12 +196,42 @@ Condense the user message into a single concise sentence while preserving intent
   ): Promise<string> {
     const conversationTitle = await this.extractConversationTitle(messages, chatModel);
     const timestamp = new Date().toISOString().split(".")[0] + "Z"; // Remove milliseconds but keep Z for UTC
-    const userMessageTexts = messages
-      .filter(this.hasValidCondensedUserMessage.bind(this))
-      .map((message) => {
-        // Use condensed message if available
-        return `- ${message.condensedUserMessage}`;
-      });
+
+    // Process user messages and ensure condensed messages are available
+    const userMessages = messages.filter((message) => message.sender === USER_SENDER);
+    const userMessageTexts: string[] = [];
+
+    for (const message of userMessages) {
+      let condensedText = message.condensedUserMessage;
+
+      // If condensed message is missing or invalid, create it inline to handle race condition
+      if (
+        !condensedText ||
+        typeof condensedText !== "string" ||
+        condensedText.trim().length === 0
+      ) {
+        try {
+          const newCondensedText = await this.createCondensedMessage(message.message, chatModel);
+          if (newCondensedText) {
+            condensedText = newCondensedText;
+            logWarn(
+              `[UserMemoryManager] Created inline condensed message for missing entry: "${condensedText}"`
+            );
+          }
+        } catch (error) {
+          logError(
+            `[UserMemoryManager] Failed to create inline condensed message for "${message.message}":`,
+            error
+          );
+          // Continue processing other messages even if one fails
+        }
+      }
+
+      // Only include if we have valid condensed text
+      if (condensedText && condensedText.trim().length > 0) {
+        userMessageTexts.push(`- ${condensedText}`);
+      }
+    }
 
     // Generate key conclusions if conversation is substantial enough
     const keyConclusionsText = await this.extractKeyConclusion(messages, chatModel);
@@ -429,10 +459,10 @@ Generate a title for the conversation:`;
     try {
       const response = await chatModel.invoke(messages_llm);
       const summary = response.content.toString().trim();
-      return summary || "No summary";
+      return summary || "Untitled Conversation";
     } catch (error) {
       logError("[UserMemoryManager] Failed to extract conversation summary:", error);
-      return "No summary";
+      return "Untitled Conversation";
     }
   }
 

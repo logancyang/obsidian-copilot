@@ -12,12 +12,17 @@ jest.mock("@/constants", () => ({
   USER_SENDER: "user",
 }));
 
+jest.mock("@/utils", () => ({
+  ensureFolderExists: jest.fn(),
+}));
+
 import { UserMemoryManager } from "./UserMemoryManager";
 import { App, TFile, Vault } from "obsidian";
 import { ChatMessage } from "@/types/message";
 import { logInfo, logError } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { USER_SENDER } from "@/constants";
+import { ensureFolderExists } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { AIMessageChunk } from "@langchain/core/messages";
 
@@ -63,6 +68,9 @@ describe("UserMemoryManager", () => {
       vault: mockVault,
     } as any;
 
+    // Reset ensureFolderExists mock
+    (ensureFolderExists as jest.Mock).mockClear();
+
     // Mock chat model
     mockChatModel = {
       invoke: jest.fn(),
@@ -101,39 +109,6 @@ describe("UserMemoryManager", () => {
 
       expect(logInfo).toHaveBeenCalledWith(
         "[UserMemoryManager] No messages to analyze for user memory"
-      );
-    });
-
-    it("should create nested memory folders recursively", async () => {
-      const messages = [createMockMessage("1", "test user message")];
-
-      // Set nested folder path in settings
-      mockSettings.memoryFolderName = "deep/nested/memory/folder";
-
-      // Mock folders don't exist
-      mockVault.getAbstractFileByPath.mockReturnValue(null);
-
-      // Mock LLM responses
-      const mockResponse1 = new AIMessageChunk({ content: "Test Conversation Title" });
-      const mockResponse2 = new AIMessageChunk({ content: "NONE" });
-      mockChatModel.invoke.mockResolvedValueOnce(mockResponse1);
-      mockChatModel.invoke.mockResolvedValueOnce(mockResponse2);
-
-      userMemoryManager.updateUserMemory(messages, mockChatModel);
-
-      // Wait for async operation to complete
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      // Verify all nested folders were created
-      expect(mockVault.createFolder).toHaveBeenCalledWith("deep");
-      expect(mockVault.createFolder).toHaveBeenCalledWith("deep/nested");
-      expect(mockVault.createFolder).toHaveBeenCalledWith("deep/nested/memory");
-      expect(mockVault.createFolder).toHaveBeenCalledWith("deep/nested/memory/folder");
-
-      // Verify file creation in nested path
-      expect(mockVault.create).toHaveBeenCalledWith(
-        "deep/nested/memory/folder/Recent Conversations.md",
-        expect.stringContaining("## Test Conversation Title")
       );
     });
 
@@ -178,11 +153,11 @@ describe("UserMemoryManager", () => {
 
       const mockMemoryFile = createMockTFile("copilot/memory/Recent Conversations.md");
 
-      // Mock vault responses for folder and file existence
-      const mockFolder = { path: "copilot/memory", name: "memory" } as any;
-      mockVault.getAbstractFileByPath
-        .mockReturnValueOnce(mockFolder) // Folder exists
-        .mockReturnValueOnce(mockMemoryFile); // File exists
+      // Mock ensureFolderExists to resolve successfully
+      (ensureFolderExists as jest.Mock).mockResolvedValue(undefined);
+
+      // Mock app instance for file operations
+      mockVault.getAbstractFileByPath.mockReturnValue(mockMemoryFile);
 
       // Mock reading existing file content
       mockVault.read.mockResolvedValue(existingMemoryContent);
@@ -197,11 +172,8 @@ describe("UserMemoryManager", () => {
         .mockResolvedValueOnce(mockTitleResponse)
         .mockResolvedValueOnce(mockConclusionResponse);
 
-      // Execute the updateUserMemory function
-      userMemoryManager.updateUserMemory(messages, mockChatModel);
-
-      // Wait for async operation to complete
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // Execute the updateMemory function directly to ensure proper awaiting
+      await (userMemoryManager as any).updateMemory(messages, mockChatModel);
 
       // Verify the end result: file was modified with new conversation
       const modifyCall = mockVault.modify.mock.calls[0];
@@ -290,6 +262,80 @@ describe("UserMemoryManager", () => {
 
       // Verify no new file creation was needed since file already exists
       expect(mockVault.create).not.toHaveBeenCalled();
+    });
+
+    it("should handle missing condensed messages by creating them inline (race condition fix)", async () => {
+      // Setup: Create messages without condensed messages to simulate race condition
+      const messages = [
+        createMockMessage("1", "How do I create daily notes?"),
+        createMockMessage("2", "AI response about daily notes", "ai"),
+        createMockMessage("3", "What about templates?"),
+      ];
+
+      // Remove condensed messages to simulate race condition
+      delete messages[0].condensedUserMessage;
+      delete messages[2].condensedUserMessage;
+
+      const mockMemoryFile = createMockTFile("copilot/memory/Recent Conversations.md");
+      const existingContent = "";
+
+      // Mock ensureFolderExists and file operations
+      (ensureFolderExists as jest.Mock).mockResolvedValue(undefined);
+      mockVault.getAbstractFileByPath.mockReturnValue(mockMemoryFile);
+      mockVault.read.mockResolvedValue(existingContent);
+
+      // Mock LLM responses
+      const mockTitleResponse = new AIMessageChunk({ content: "Daily Notes Help" });
+      const mockConclusionResponse = new AIMessageChunk({
+        content: "- Daily notes can be automated with templates",
+      });
+
+      // Setup condensed message creation (called inline for missing entries)
+      const condensedMessage1 = "Asked about creating daily notes";
+      const condensedMessage2 = "Inquired about template usage";
+
+      // Mock createCondensedMessage to return condensed versions
+      const createCondensedMessageSpy = jest.spyOn(
+        userMemoryManager as any,
+        "createCondensedMessage"
+      );
+
+      createCondensedMessageSpy.mockImplementation(async (message, model) => {
+        if (message === "How do I create daily notes?") {
+          return condensedMessage1;
+        }
+        if (message === "What about templates?") {
+          return condensedMessage2;
+        }
+        return null;
+      });
+
+      mockChatModel.invoke
+        .mockResolvedValueOnce(mockTitleResponse)
+        .mockResolvedValueOnce(mockConclusionResponse);
+
+      // Execute the updateMemory function
+      await (userMemoryManager as any).updateMemory(messages, mockChatModel);
+
+      // Verify condensed messages were created inline for missing entries
+      expect(createCondensedMessageSpy).toHaveBeenCalledTimes(2);
+      expect(createCondensedMessageSpy).toHaveBeenCalledWith(
+        "How do I create daily notes?",
+        mockChatModel
+      );
+      expect(createCondensedMessageSpy).toHaveBeenCalledWith(
+        "What about templates?",
+        mockChatModel
+      );
+
+      // Verify the final content includes the inline-created condensed messages
+      const modifyCall = mockVault.modify.mock.calls[0];
+      const actualContent = modifyCall[1];
+
+      expect(actualContent).toContain("Asked about creating daily notes");
+      expect(actualContent).toContain("Inquired about template usage");
+
+      createCondensedMessageSpy.mockRestore();
     });
   });
 
