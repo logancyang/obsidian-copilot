@@ -10,6 +10,8 @@ import {
 import { youtubeTranscriptionTool } from "./YoutubeTools";
 import { writeToFileTool, replaceInFileTool } from "./ComposerTools";
 import { createGetFileTreeTool } from "./FileTreeTools";
+import { memoryTool } from "./memoryTools";
+import { getSettings } from "@/settings/model";
 import { Vault } from "obsidian";
 
 /**
@@ -290,6 +292,33 @@ Example usage:
 }
 
 /**
+ * Register the memory tool separately as it depends on saved memory setting
+ */
+export function registerMemoryTool(): void {
+  const registry = ToolRegistry.getInstance();
+
+  registry.register({
+    tool: memoryTool,
+    metadata: {
+      id: "memoryTool",
+      displayName: "Save Memory",
+      description: "Save information to user memory when explicitly asked to remember something",
+      category: "memory",
+      customPromptInstructions: `For memoryTool:
+- Use ONLY when the user explicitly asks you to remember something (phrases like "remember that", "don't forget", etc.)
+- DO NOT use for general information - only for personal facts, preferences, or specific things the user wants stored
+- Extract the key information to remember from the user's message
+
+Example usage:
+<use_tool>
+<name>memoryTool</name>
+<memoryContent>User's favorite programming language is Python and they prefer functional programming style</memoryContent>
+</use_tool>`,
+    },
+  });
+}
+
+/**
  * Initialize all built-in tools in the registry.
  * This function registers tool definitions, not user preferences.
  * User-enabled tools are filtered dynamically when retrieved.
@@ -298,12 +327,19 @@ Example usage:
  */
 export function initializeBuiltinTools(vault?: Vault): void {
   const registry = ToolRegistry.getInstance();
+  const settings = getSettings();
 
-  // Only reinitialize if tools have changed or vault status has changed
+  // Only reinitialize if tools have changed or vault/memory status has changed
   const hasFileTree = registry.getToolMetadata("getFileTree") !== undefined;
   const shouldHaveFileTree = vault !== undefined;
+  const hasMemoryTool = registry.getToolMetadata("memoryTool") !== undefined;
+  const shouldHaveMemoryTool = settings.enableSavedMemory;
 
-  if (registry.getAllTools().length === 0 || hasFileTree !== shouldHaveFileTree) {
+  if (
+    registry.getAllTools().length === 0 ||
+    hasFileTree !== shouldHaveFileTree ||
+    hasMemoryTool !== shouldHaveMemoryTool
+  ) {
     // Clear any existing tools
     registry.clear();
 
@@ -313,6 +349,11 @@ export function initializeBuiltinTools(vault?: Vault): void {
     // Register vault-dependent tools if vault is available
     if (vault) {
       registerFileTreeTool(vault);
+    }
+
+    // Register memory tool if saved memory is enabled
+    if (settings.enableSavedMemory) {
+      registerMemoryTool();
     }
   }
 }

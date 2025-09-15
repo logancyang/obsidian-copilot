@@ -751,12 +751,14 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     "youtubeTranscription",
     "writeToFile",
     "replaceInFile",
+    "memoryTool",
   ],
   reasoningEffort: DEFAULT_MODEL_SETTING.REASONING_EFFORT,
   verbosity: DEFAULT_MODEL_SETTING.VERBOSITY,
   memoryFolderName: "copilot/memory",
-  enableMemory: false,
+  enableRecentConversations: false,
   maxRecentConversations: 30,
+  enableSavedMemory: false,
 };
 
 export const EVENT_NAMES = {

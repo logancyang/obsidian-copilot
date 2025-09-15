@@ -22,7 +22,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view as CopilotView;
 
       // Analyze chat messages for memory if enabled
-      if (chatView && getSettings().enableMemory) {
+      if (chatView && getSettings().enableRecentConversations) {
         try {
           // Get the current chat model from the chain manager
           const chainManager = this.plugin.projectManager.getCurrentChainManager();

@@ -114,13 +114,23 @@ export const CopilotPlusSettings: React.FC = () => {
             type="switch"
             title="Reference Recent Conversation"
             description="When enabled, Copilot references your recent conversation history to provide more contextually relevant responses. All history data is stored locally in your vault."
-            checked={settings.enableMemory}
+            checked={settings.enableRecentConversations}
             onCheckedChange={(checked) => {
-              updateSetting("enableMemory", checked);
+              updateSetting("enableRecentConversations", checked);
             }}
           />
 
-          {settings.enableMemory && (
+          <SettingItem
+            type="switch"
+            title="Reference Saved Memories"
+            description="When enabled, Copilot can access memories that you explicitly asked it to remember. Use this to store important facts, preferences, or context for future conversations."
+            checked={settings.enableSavedMemory}
+            onCheckedChange={(checked) => {
+              updateSetting("enableSavedMemory", checked);
+            }}
+          />
+
+          {settings.enableRecentConversations && (
             <SettingItem
               type="slider"
               title="Max Recent Conversations"

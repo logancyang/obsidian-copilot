@@ -33,7 +33,7 @@ graph TD
 ### Memory Update Triggers:
 
 - **Trigger**: When a chat conversation ends and `addRecentConversation()` is called
-- **Guard**: Only if `enableMemory` setting (Reference Recent History) is enabled
+- **Guard**: Only if `enableRecentConversations` setting (Reference Recent History) is enabled
 - **Fire-and-forget**: Runs asynchronously in background without blocking execution
 - **Race condition protection**: Prevents multiple simultaneous memory updates
 
@@ -60,7 +60,7 @@ graph TD
 
 ### Configuration (Current):
 
-- **`enableMemory`**: Master switch for all recent history referencing functionality
+- **`enableRecentConversations`**: Master switch for all recent history referencing functionality
 - **`memoryFolderName`**: Folder where memory files are stored (creates recursively if needed)
 - **`maxRecentConversations`**: Number of conversations to keep (10-50 range, default: 30)
 

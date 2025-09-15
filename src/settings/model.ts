@@ -139,9 +139,11 @@ export interface CopilotSettings {
   /** Folder where memory data is stored */
   memoryFolderName: string;
   /** Reference recent conversation history to provide more contextually relevant responses */
-  enableMemory: boolean;
+  enableRecentConversations: boolean;
   /** Maximum number of recent conversations to remember (10-50) */
   maxRecentConversations: number;
+  /** Reference saved memories that user explicitly asked to remember */
+  enableSavedMemory: boolean;
 }
 
 export const settingsStore = createStore();
@@ -324,9 +326,14 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.memoryFolderName = DEFAULT_SETTINGS.memoryFolderName;
   }
 
-  // Ensure enableMemory has a default value
-  if (typeof sanitizedSettings.enableMemory !== "boolean") {
-    sanitizedSettings.enableMemory = DEFAULT_SETTINGS.enableMemory;
+  // Ensure enableRecentConversations has a default value
+  if (typeof sanitizedSettings.enableRecentConversations !== "boolean") {
+    sanitizedSettings.enableRecentConversations = DEFAULT_SETTINGS.enableRecentConversations;
+  }
+
+  // Ensure enableSavedMemory has a default value
+  if (typeof sanitizedSettings.enableSavedMemory !== "boolean") {
+    sanitizedSettings.enableSavedMemory = DEFAULT_SETTINGS.enableSavedMemory;
   }
 
   // Ensure maxRecentConversations has a valid value (10-50 range)
@@ -369,7 +376,7 @@ export async function getSystemPromptWithMemory(
 
   // Check if memory is enabled in settings
   const settings = getSettings();
-  if (!settings.enableMemory) {
+  if (!settings.enableRecentConversations) {
     return systemPrompt;
   }
 

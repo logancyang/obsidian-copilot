@@ -387,7 +387,7 @@ export default class CopilotPlugin extends Plugin {
 
   async handleNewChat() {
     // Analyze chat messages for memory if enabled
-    if (getSettings().enableMemory) {
+    if (getSettings().enableRecentConversations) {
       try {
         // Get the current chat model from the chain manager
         const chainManager = this.projectManager.getCurrentChainManager();

@@ -539,7 +539,7 @@ const Chat: React.FC<ChatProps> = ({
     handleStopGenerating(ABORT_REASON.NEW_CHAT);
 
     // Analyze chat messages for memory if enabled
-    if (settings.enableMemory) {
+    if (settings.enableRecentConversations) {
       try {
         // Get the current chat model from the chain manager
         const chatModel = chainManager.chatModelManager.getChatModel();
@@ -573,7 +573,7 @@ const Chat: React.FC<ChatProps> = ({
     chainManager.chatModelManager,
     chatUIState,
     settings.autosaveChat,
-    settings.enableMemory,
+    settings.enableRecentConversations,
     settings.includeActiveNoteAsContext,
     selectedChain,
     handleSaveAsNote,

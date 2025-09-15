@@ -14,6 +14,7 @@ import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 export class UserMemoryManager {
   private app: App;
   private recentConversationsContent: string = "";
+  private savedMemoriesContent: string = "";
   private isUpdatingMemory: boolean = false;
 
   constructor(app: App) {
@@ -25,6 +26,7 @@ export class UserMemoryManager {
    */
   private async loadMemory(): Promise<void> {
     try {
+      // Load recent conversations
       const recentConversationsFile = this.app.vault.getAbstractFileByPath(
         this.getRecentConversationFilePath()
       );
@@ -33,8 +35,18 @@ export class UserMemoryManager {
       } else {
         logInfo("[UserMemoryManager] Recent Conversations file not found, skipping memory load");
       }
+
+      // Load saved memories
+      const savedMemoriesFile = this.app.vault.getAbstractFileByPath(
+        this.getSavedMemoriesFilePath()
+      );
+      if (savedMemoriesFile instanceof TFile) {
+        this.savedMemoriesContent = await this.app.vault.read(savedMemoriesFile);
+      } else {
+        logInfo("[UserMemoryManager] Saved Memories file not found, skipping saved memory load");
+      }
     } catch (error) {
-      logError("[UserMemoryManager] Error reading recent conversations file:", error);
+      logError("[UserMemoryManager] Error reading memory files:", error);
     }
   }
 
@@ -45,7 +57,7 @@ export class UserMemoryManager {
     const settings = getSettings();
 
     // Only proceed if memory is enabled
-    if (!settings.enableMemory) {
+    if (!settings.enableRecentConversations) {
       logInfo("[UserMemoryManager] Recent history referencing is disabled, skipping analysis");
       return;
     }
@@ -62,25 +74,72 @@ export class UserMemoryManager {
   }
 
   /**
+   * Adds a saved memory that the user explicitly asked to remember
+   */
+  async addSavedMemory(memoryContent: string): Promise<void> {
+    const settings = getSettings();
+
+    // Only proceed if saved memory is enabled
+    if (!settings.enableSavedMemory) {
+      logInfo("[UserMemoryManager] Saved memory is disabled, skipping save");
+      return;
+    }
+
+    if (!memoryContent || memoryContent.trim() === "") {
+      logInfo("[UserMemoryManager] No content provided for saved memory");
+      return;
+    }
+
+    try {
+      // Ensure user memory folder exists
+      await this.ensureMemoryFolderExists();
+
+      // Create memory entry as a bullet point
+      const memoryEntry = `- ${memoryContent.trim()}`;
+
+      // Add to saved memories file
+      await this.addToSavedMemoryFile(this.getSavedMemoriesFilePath(), memoryEntry);
+
+      logInfo("[UserMemoryManager] Saved memory added successfully");
+    } catch (error) {
+      logError("[UserMemoryManager] Error saving memory:", error);
+      throw error;
+    }
+  }
+
+  /**
    * Get user memory prompt
    */
   async getUserMemoryPrompt(): Promise<string | null> {
     await this.loadMemory();
 
     try {
+      const settings = getSettings();
       let memoryPrompt = "";
 
-      if (this.recentConversationsContent) {
+      // Add recent conversations if enabled
+      if (settings.enableRecentConversations && this.recentConversationsContent) {
         memoryPrompt += `
         <recent_conversations>
         ${this.recentConversationsContent}
         </recent_conversations>
 
-        Above is the recent conversations between you and the user. 
+        The current time is ${this.getTimestamp()}.
+        <recent_conversations> are the recent conversations between you and the user. 
         You can use it to provide more context for your responses. 
         Only use the recent conversations if they are relevant to the current conversation.
+        `;
+      }
 
-        The current time is ${this.getTimestamp()}.
+      // Add saved memories if enabled
+      if (settings.enableSavedMemory && this.savedMemoriesContent) {
+        memoryPrompt += `
+        <saved_memories>
+        ${this.savedMemoriesContent}
+        </saved_memories>
+
+        <saved_memories> are important memories that the user explicitly asked you to remember. 
+        Use these memories to provide more personalized and contextually relevant responses.
         `;
       }
 
@@ -139,7 +198,10 @@ export class UserMemoryManager {
 
       // Extract and save conversation summary to recent conversations
       const conversationSection = await this.createConversationSection(messages, chatModel);
-      await this.addToMemoryFile(this.getRecentConversationFilePath(), conversationSection);
+      await this.addToRecentConversationsFile(
+        this.getRecentConversationFilePath(),
+        conversationSection
+      );
     } catch (error) {
       logError("[UserMemoryManager] Error analyzing chat messages for user memory:", error);
     } finally {
@@ -162,11 +224,46 @@ export class UserMemoryManager {
     return `${settings.memoryFolderName}/Recent Conversations.md`;
   }
 
+  public getSavedMemoriesFilePath(): string {
+    const settings = getSettings();
+    return `${settings.memoryFolderName}/Saved Memories.md`;
+  }
+
+  /**
+   * Save content to saved memory file by appending new entry (no max limit)
+   */
+  private async addToSavedMemoryFile(filePath: string, newMemoryEntry: string): Promise<void> {
+    const existingFile = this.app.vault.getAbstractFileByPath(filePath);
+
+    if (existingFile instanceof TFile) {
+      // Read existing content and append new entry
+      const fileContent = await this.app.vault.read(existingFile);
+
+      let updatedContent: string;
+      if (fileContent.trim() === "") {
+        // Create new file with the entry
+        updatedContent = `${newMemoryEntry}\n`;
+      } else {
+        // Append to existing content
+        updatedContent = `${fileContent.trimEnd()}\n${newMemoryEntry}\n`;
+      }
+
+      await this.app.vault.modify(existingFile, updatedContent);
+    } else {
+      // Create new file
+      const initialContent = `${newMemoryEntry}\n`;
+      await this.app.vault.create(filePath, initialContent);
+    }
+  }
+
   /**
    * Save content to the user memory file by appending new conversation section
    * Maintains a rolling buffer of conversations by removing the oldest when limit is exceeded
    */
-  private async addToMemoryFile(filePath: string, newConversationSection: string): Promise<void> {
+  private async addToRecentConversationsFile(
+    filePath: string,
+    newConversationSection: string
+  ): Promise<void> {
     const existingFile = this.app.vault.getAbstractFileByPath(filePath);
 
     if (existingFile instanceof TFile) {

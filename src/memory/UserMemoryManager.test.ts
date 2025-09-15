@@ -43,7 +43,8 @@ describe("UserMemoryManager", () => {
 
     // Mock settings
     mockSettings = {
-      enableMemory: true,
+      enableRecentConversations: true,
+      enableSavedMemory: true,
       memoryFolderName: "copilot/memory",
       maxRecentConversations: 30,
     };
@@ -88,7 +89,7 @@ describe("UserMemoryManager", () => {
     });
 
     it("should skip memory update when memory is disabled", () => {
-      mockSettings.enableMemory = false;
+      mockSettings.enableRecentConversations = false;
       const messages = [createMockMessage("1", "test message")];
 
       userMemoryManager.addRecentConversation(messages, mockChatModel);
@@ -450,7 +451,103 @@ The conversation covered advanced features and included code examples.`,
 
       expect(result).toBeNull();
       expect(logError).toHaveBeenCalledWith(
-        "[UserMemoryManager] Error reading recent conversations file:",
+        "[UserMemoryManager] Error reading memory files:",
+        expect.any(Error)
+      );
+    });
+  });
+
+  describe("addSavedMemory", () => {
+    it("should skip saving when saved memory is disabled", async () => {
+      mockSettings.enableSavedMemory = false;
+
+      await userMemoryManager.addSavedMemory("Test memory content");
+
+      expect(logInfo).toHaveBeenCalledWith(
+        "[UserMemoryManager] Saved memory is disabled, skipping save"
+      );
+    });
+
+    it("should skip saving when no content provided", async () => {
+      mockSettings.enableSavedMemory = true;
+
+      await userMemoryManager.addSavedMemory("");
+
+      expect(logInfo).toHaveBeenCalledWith(
+        "[UserMemoryManager] No content provided for saved memory"
+      );
+    });
+
+    it("should save memory content to Saved Memories file", async () => {
+      mockSettings.enableSavedMemory = true;
+
+      // Mock ensureFolderExists to resolve successfully
+      (ensureFolderExists as jest.Mock).mockResolvedValue(undefined);
+
+      // Mock no existing file (new file creation)
+      mockVault.getAbstractFileByPath.mockReturnValue(null);
+
+      // Mock file creation
+      const mockNewFile = createMockTFile("copilot/memory/Saved Memories.md");
+      mockVault.create.mockResolvedValue(mockNewFile);
+
+      await userMemoryManager.addSavedMemory("Important user preference: I prefer dark mode");
+
+      // Verify folder creation was called
+      expect(ensureFolderExists).toHaveBeenCalledWith("copilot/memory");
+
+      // Verify file creation was called with proper content
+      expect(mockVault.create).toHaveBeenCalledWith(
+        "copilot/memory/Saved Memories.md",
+        expect.stringContaining("- Important user preference: I prefer dark mode")
+      );
+
+      expect(logInfo).toHaveBeenCalledWith("[UserMemoryManager] Saved memory added successfully");
+    });
+
+    it("should append to existing Saved Memories file", async () => {
+      mockSettings.enableSavedMemory = true;
+
+      const existingContent = `- Previous memory content
+- Another important fact
+`;
+
+      const mockMemoryFile = createMockTFile("copilot/memory/Saved Memories.md");
+
+      // Mock ensureFolderExists to resolve successfully
+      (ensureFolderExists as jest.Mock).mockResolvedValue(undefined);
+
+      // Mock existing file
+      mockVault.getAbstractFileByPath.mockReturnValue(mockMemoryFile);
+      mockVault.read.mockResolvedValue(existingContent);
+
+      await userMemoryManager.addSavedMemory("New important information");
+
+      // Verify file modification was called with appended content
+      expect(mockVault.modify).toHaveBeenCalledWith(
+        mockMemoryFile,
+        expect.stringContaining("- Previous memory content")
+      );
+      expect(mockVault.modify).toHaveBeenCalledWith(
+        mockMemoryFile,
+        expect.stringContaining("- New important information")
+      );
+
+      expect(logInfo).toHaveBeenCalledWith("[UserMemoryManager] Saved memory added successfully");
+    });
+
+    it("should handle errors during save operation", async () => {
+      mockSettings.enableSavedMemory = true;
+
+      // Mock ensureFolderExists to reject
+      (ensureFolderExists as jest.Mock).mockRejectedValue(new Error("Folder creation failed"));
+
+      await expect(userMemoryManager.addSavedMemory("Test content")).rejects.toThrow(
+        "Folder creation failed"
+      );
+
+      expect(logError).toHaveBeenCalledWith(
+        "[UserMemoryManager] Error saving memory:",
         expect.any(Error)
       );
     });
