@@ -88,7 +88,6 @@ export class MessageRepository {
       id,
       displayText: message.message,
       processedText: message.originalMessage || message.message,
-      condensedUserMessage: message.condensedUserMessage,
       sender: message.sender,
       timestamp,
       context: message.context,
@@ -150,21 +149,6 @@ export class MessageRepository {
   }
 
   /**
-   * Update condensed message for a message
-   */
-  updateCondensedMessage(id: string, condensedMessage: string): boolean {
-    const message = this.messages.find((msg) => msg.id === id);
-    if (!message) {
-      logInfo(`[MessageRepository] Message not found for condensed message update: ${id}`);
-      return false;
-    }
-
-    message.condensedUserMessage = condensedMessage;
-    logInfo(`[MessageRepository] Updated condensed message for message: ${id}`);
-    return true;
-  }
-
-  /**
    * Delete a message
    */
   deleteMessage(id: string): boolean {
@@ -217,7 +201,6 @@ export class MessageRepository {
         id: msg.id,
         message: msg.displayText,
         originalMessage: msg.displayText,
-        condensedMessage: msg.condensedUserMessage,
         sender: msg.sender,
         timestamp: msg.timestamp,
         isVisible: true,
@@ -240,7 +223,6 @@ export class MessageRepository {
       id: msg.id,
       message: msg.processedText,
       originalMessage: msg.displayText,
-      condensedUserMessage: msg.condensedUserMessage,
       sender: msg.sender,
       timestamp: msg.timestamp,
       isVisible: false, // LLM messages are not for display
@@ -260,7 +242,6 @@ export class MessageRepository {
       id: msg.id,
       message: msg.processedText,
       originalMessage: msg.displayText,
-      condensedMessage: msg.condensedUserMessage,
       sender: msg.sender,
       timestamp: msg.timestamp,
       isVisible: false,
@@ -282,7 +263,6 @@ export class MessageRepository {
       id: msg.id,
       message: msg.displayText,
       originalMessage: msg.displayText,
-      condensedUserMessage: msg.condensedUserMessage,
       sender: msg.sender,
       timestamp: msg.timestamp,
       isVisible: msg.isVisible,
@@ -303,7 +283,6 @@ export class MessageRepository {
         id: msg.id || this.generateId(),
         displayText: msg.message,
         processedText: msg.originalMessage || msg.message,
-        condensedUserMessage: msg.condensedUserMessage,
         sender: msg.sender,
         timestamp: msg.timestamp || formatDateTime(new Date()),
         context: msg.context,

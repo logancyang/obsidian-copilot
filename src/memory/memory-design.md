@@ -56,6 +56,7 @@ graph TD
 - **Conversation Titles**: LLM-extracted titles that capture main user intent
 - **Key Conclusions**: Only generated for conversations with substantial content (>300 chars) containing insights, decisions, or learnings
 - **Obsidian-optimized**: Special handling for note names, tags, links, and Obsidian-specific features
+- **Robust JSON Parsing**: Handles JSON responses wrapped in code blocks (common with Gemini and other LLMs) with fallback to plain JSON extraction
 
 ### Configuration (Current):
 
@@ -75,5 +76,6 @@ graph TD
 - Fallback mechanisms for AI processing failures
 - Graceful handling of missing files and folders
 - Validation of AI-generated content (e.g., ensures condensed messages are actually shorter)
+- Robust JSON extraction from LLM responses with multiple parsing strategies (code blocks, inline JSON, fallback to raw content)
 
 This simplified design focuses on providing recent conversation context without the complexity of long-term memory management, while maintaining robust AI-powered content processing and configurable retention policies.

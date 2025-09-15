@@ -8,10 +8,6 @@ jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(),
 }));
 
-jest.mock("@/constants", () => ({
-  USER_SENDER: "user",
-}));
-
 jest.mock("@/utils", () => ({
   ensureFolderExists: jest.fn(),
 }));
@@ -21,7 +17,6 @@ import { App, TFile, Vault } from "obsidian";
 import { ChatMessage } from "@/types/message";
 import { logInfo, logError } from "@/logger";
 import { getSettings } from "@/settings/model";
-import { USER_SENDER } from "@/constants";
 import { ensureFolderExists } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { AIMessageChunk } from "@langchain/core/messages";
@@ -83,14 +78,13 @@ describe("UserMemoryManager", () => {
     const createMockMessage = (
       id: string,
       message: string,
-      sender: string = USER_SENDER
+      sender: string = "user"
     ): ChatMessage => ({
       id,
       message,
       sender,
       timestamp: null,
       isVisible: true,
-      condensedUserMessage: `Condensed: ${message}`,
     });
 
     it("should skip memory update when memory is disabled", () => {
@@ -112,43 +106,33 @@ describe("UserMemoryManager", () => {
       );
     });
 
-    it("should complete end-to-end memory update with existing file", async () => {
-      // Setup: Create test messages simulating a real conversation with enough content for key conclusions
+    it("should complete end-to-end memory update with new simple format", async () => {
+      // Setup: Create test messages simulating a real conversation
       const messages = [
         createMockMessage(
           "1",
-          "How do I create a daily note template in Obsidian with automatic date formatting? I want to have a template that automatically inserts today's date and creates sections for tasks, notes, and reflections."
+          "How do I create a daily note template in Obsidian with automatic date formatting?"
         ),
         createMockMessage(
           "2",
-          "I can help you create a daily note template with automatic date formatting. Here's how you can set this up: First, create a template file in your templates folder with variables like {{date}} for automatic date insertion. You can use format strings to customize the date display. For the sections, you can create headers for Tasks, Notes, and Reflections that will be included every time you create a new daily note.",
+          "I can help you create a daily note template with automatic date formatting...",
           "ai"
         ),
         createMockMessage(
           "3",
-          "That's perfect! Can you also show me how to add tags automatically to these daily notes? I'd like them to be tagged with #daily-note and maybe the current month."
+          "That's perfect! Can you also show me how to add tags automatically?"
         ),
-        createMockMessage(
-          "4",
-          "Certainly! You can add automatic tags to your template by including tag syntax directly in the template file. Add #daily-note and #{{date:MMMM}} to automatically tag with the current month. This way every daily note will be consistently tagged and easy to find later.",
-          "ai"
-        ),
+        createMockMessage("4", "Certainly! You can add automatic tags to your template...", "ai"),
       ];
 
       // Mock existing memory file with previous conversations
       const existingMemoryContent = `## Previous Conversation
 **Time:** 2024-01-01T09:00:00Z
-**User Messages:**
-- Asked about plugin installation
-**Key Conclusions:**
-- Plugins enhance Obsidian functionality
+**Summary:** User asked about plugin installation and learned that plugins enhance Obsidian functionality.
 
 ## Another Conversation
 **Time:** 2024-01-01T10:00:00Z
-**User Messages:**
-- Inquired about linking notes
-**Key Conclusions:**
-- Backlinks create knowledge connections
+**Summary:** User inquired about linking notes and discovered that backlinks create knowledge connections.
 `;
 
       const mockMemoryFile = createMockTFile("copilot/memory/Recent Conversations.md");
@@ -162,15 +146,15 @@ describe("UserMemoryManager", () => {
       // Mock reading existing file content
       mockVault.read.mockResolvedValue(existingMemoryContent);
 
-      // Mock LLM responses for conversation processing
-      const mockTitleResponse = new AIMessageChunk({ content: "Daily Note Template Setup" });
-      const mockConclusionResponse = new AIMessageChunk({
-        content:
-          "- Templates can automatically insert dates and metadata\n- Tags can be added through template variables",
+      // Mock LLM response for title and summary
+      const mockResponse = new AIMessageChunk({
+        content: JSON.stringify({
+          title: "Daily Note Template Setup",
+          summary:
+            "User asked about creating daily note templates with automatic date formatting and tagging. Learned how to use template variables for dates and automatic tag insertion.",
+        }),
       });
-      mockChatModel.invoke
-        .mockResolvedValueOnce(mockTitleResponse)
-        .mockResolvedValueOnce(mockConclusionResponse);
+      mockChatModel.invoke.mockResolvedValueOnce(mockResponse);
 
       // Execute the updateMemory function directly to ensure proper awaiting
       await (userMemoryManager as any).updateMemory(messages, mockChatModel);
@@ -179,170 +163,183 @@ describe("UserMemoryManager", () => {
       const modifyCall = mockVault.modify.mock.calls[0];
       const actualContent = modifyCall[1];
 
-      // Check the full memory content structure as a whole - exact line-by-line verification
-      const expectedContentStructure = [
-        // Previous conversations should be preserved (no empty lines between conversations)
-        "## Previous Conversation",
-        "**Time:** 2024-01-01T09:00:00Z",
-        "**User Messages:**",
-        "- Asked about plugin installation",
-        "**Key Conclusions:**",
-        "- Plugins enhance Obsidian functionality",
-        "## Another Conversation",
-        "**Time:** 2024-01-01T10:00:00Z",
-        "**User Messages:**",
-        "- Inquired about linking notes",
-        "**Key Conclusions:**",
-        "- Backlinks create knowledge connections",
-        // New conversation should be added
-        "## Daily Note Template Setup",
-        // Dynamic timestamp pattern
-        /\*\*Time:\*\* \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/,
-        "**User Messages:**",
-        "- Condensed: How do I create a daily note template in Obsidian with automatic date formatting? I want to have a template that automatically inserts today's date and creates sections for tasks, notes, and reflections.",
-        "- Condensed: That's perfect! Can you also show me how to add tags automatically to these daily notes? I'd like them to be tagged with #daily-note and maybe the current month.",
-        "**Key Conclusions:**",
-        "- Templates can automatically insert dates and metadata",
-        "- Tags can be added through template variables",
-        "", // Empty line at end
-        "", // Second empty line at end
-      ];
+      // Check that the new format is used
+      expect(actualContent).toContain("## Daily Note Template Setup");
+      expect(actualContent).toMatch(/\*\*Time:\*\* \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/);
+      expect(actualContent).toContain(
+        "**Summary:** User asked about creating daily note templates"
+      );
 
-      // Verify the complete content structure line by line
-      const contentLines = actualContent.split("\n");
+      // Verify previous conversations are preserved
+      expect(actualContent).toContain("## Previous Conversation");
+      expect(actualContent).toContain("## Another Conversation");
 
-      // Verify we have the expected number of lines
-      expect(contentLines).toHaveLength(expectedContentStructure.length);
+      // Verify that the title and summary were extracted via single LLM call
+      expect(mockChatModel.invoke).toHaveBeenCalledTimes(1);
 
-      // Verify each line matches the expected structure
-      for (let i = 0; i < expectedContentStructure.length; i++) {
-        const expectedItem = expectedContentStructure[i];
-        const actualLine = contentLines[i];
-
-        if (expectedItem instanceof RegExp) {
-          // Handle regex patterns for dynamic content like timestamps
-          expect(actualLine).toMatch(expectedItem);
-        } else {
-          // Handle exact string matches
-          expect(actualLine).toBe(expectedItem);
-        }
-      }
-
-      // Verify all conversations have the required sections using pattern matching
-      expect(actualContent.match(/## [^#\n]+/g)).toHaveLength(3); // 3 conversations
-      expect(actualContent.match(/\*\*Time:\*\*/g)).toHaveLength(3); // Each has a timestamp
-      expect(actualContent.match(/\*\*User Messages:\*\*/g)).toHaveLength(3); // Each has user messages
-      expect(actualContent.match(/\*\*Key Conclusions:\*\*/g)).toHaveLength(3); // Each has key conclusions
-
-      // Verify that the conversation title and key conclusions were extracted via LLM
-      expect(mockChatModel.invoke).toHaveBeenCalledTimes(2);
-
-      // Verify title extraction call
-      expect(mockChatModel.invoke).toHaveBeenNthCalledWith(
-        1,
+      // Verify the LLM call format
+      expect(mockChatModel.invoke).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.objectContaining({
-            content: expect.stringContaining("Generate a title for the conversation"),
+            content: expect.stringContaining("generate both a title and a summary"),
           }),
         ])
       );
-
-      // Verify key conclusions extraction call
-      expect(mockChatModel.invoke).toHaveBeenNthCalledWith(
-        2,
-        expect.arrayContaining([
-          expect.objectContaining({
-            content: expect.stringContaining("extract key conclusions"),
-          }),
-        ])
-      );
-
-      // Verify no folder creation was needed since folder already exists
-      expect(mockVault.createFolder).not.toHaveBeenCalled();
-
-      // Verify no new file creation was needed since file already exists
-      expect(mockVault.create).not.toHaveBeenCalled();
     });
 
-    it("should handle missing condensed messages by creating them inline (race condition fix)", async () => {
-      // Setup: Create messages without condensed messages to simulate race condition
-      const messages = [
-        createMockMessage("1", "How do I create daily notes?"),
-        createMockMessage("2", "AI response about daily notes", "ai"),
-        createMockMessage("3", "What about templates?"),
-      ];
-
-      // Remove condensed messages to simulate race condition
-      delete messages[0].condensedUserMessage;
-      delete messages[2].condensedUserMessage;
-
+    it("should handle LLM JSON parsing errors gracefully", async () => {
+      const messages = [createMockMessage("1", "test message")];
       const mockMemoryFile = createMockTFile("copilot/memory/Recent Conversations.md");
-      const existingContent = "";
 
-      // Mock ensureFolderExists and file operations
       (ensureFolderExists as jest.Mock).mockResolvedValue(undefined);
       mockVault.getAbstractFileByPath.mockReturnValue(mockMemoryFile);
-      mockVault.read.mockResolvedValue(existingContent);
+      mockVault.read.mockResolvedValue("");
 
-      // Mock LLM responses
-      const mockTitleResponse = new AIMessageChunk({ content: "Daily Notes Help" });
-      const mockConclusionResponse = new AIMessageChunk({
-        content: "- Daily notes can be automated with templates",
-      });
+      // Mock LLM response with invalid JSON
+      const mockResponse = new AIMessageChunk({ content: "Invalid JSON response" });
+      mockChatModel.invoke.mockResolvedValueOnce(mockResponse);
 
-      // Setup condensed message creation (called inline for missing entries)
-      const condensedMessage1 = "Asked about creating daily notes";
-      const condensedMessage2 = "Inquired about template usage";
-
-      // Mock createCondensedMessage to return condensed versions
-      const createCondensedMessageSpy = jest.spyOn(
-        userMemoryManager as any,
-        "createCondensedMessage"
-      );
-
-      createCondensedMessageSpy.mockImplementation(async (message, model) => {
-        if (message === "How do I create daily notes?") {
-          return condensedMessage1;
-        }
-        if (message === "What about templates?") {
-          return condensedMessage2;
-        }
-        return null;
-      });
-
-      mockChatModel.invoke
-        .mockResolvedValueOnce(mockTitleResponse)
-        .mockResolvedValueOnce(mockConclusionResponse);
-
-      // Execute the updateMemory function
       await (userMemoryManager as any).updateMemory(messages, mockChatModel);
 
-      // Verify condensed messages were created inline for missing entries
-      expect(createCondensedMessageSpy).toHaveBeenCalledTimes(2);
-      expect(createCondensedMessageSpy).toHaveBeenCalledWith(
-        "How do I create daily notes?",
-        mockChatModel
-      );
-      expect(createCondensedMessageSpy).toHaveBeenCalledWith(
-        "What about templates?",
-        mockChatModel
-      );
-
-      // Verify the final content includes the inline-created condensed messages
+      // Should still create a conversation entry with fallback values
       const modifyCall = mockVault.modify.mock.calls[0];
       const actualContent = modifyCall[1];
 
-      expect(actualContent).toContain("Asked about creating daily notes");
-      expect(actualContent).toContain("Inquired about template usage");
+      expect(actualContent).toContain("## Untitled Conversation");
+      expect(actualContent).toContain("**Summary:** Summary generation failed");
+      expect(logError).toHaveBeenCalledWith(
+        "[UserMemoryManager] Failed to parse LLM response as JSON:",
+        expect.any(Error)
+      );
+    });
 
-      createCondensedMessageSpy.mockRestore();
+    it("should handle JSON wrapped in code blocks from Gemini", async () => {
+      const messages = [createMockMessage("1", "test message")];
+      const mockMemoryFile = createMockTFile("copilot/memory/Recent Conversations.md");
+
+      (ensureFolderExists as jest.Mock).mockResolvedValue(undefined);
+      mockVault.getAbstractFileByPath.mockReturnValue(mockMemoryFile);
+      mockVault.read.mockResolvedValue("");
+
+      // Mock LLM response with JSON wrapped in code blocks (typical Gemini behavior)
+      const mockResponse = new AIMessageChunk({
+        content: `Here's the title and summary for the conversation:
+
+\`\`\`json
+{
+  "title": "Code Block Test",
+  "summary": "This tests JSON extraction from code blocks."
+}
+\`\`\``,
+      });
+      mockChatModel.invoke.mockResolvedValueOnce(mockResponse);
+
+      await (userMemoryManager as any).updateMemory(messages, mockChatModel);
+
+      // Should successfully extract JSON from code block
+      const modifyCall = mockVault.modify.mock.calls[0];
+      const actualContent = modifyCall[1];
+
+      expect(actualContent).toContain("## Code Block Test");
+      expect(actualContent).toContain("**Summary:** This tests JSON extraction from code blocks.");
+    });
+
+    it("should handle JSON wrapped in unmarked code blocks", async () => {
+      const messages = [createMockMessage("1", "test message")];
+      const mockMemoryFile = createMockTFile("copilot/memory/Recent Conversations.md");
+
+      (ensureFolderExists as jest.Mock).mockResolvedValue(undefined);
+      mockVault.getAbstractFileByPath.mockReturnValue(mockMemoryFile);
+      mockVault.read.mockResolvedValue("");
+
+      // Mock LLM response with JSON in unmarked code blocks
+      const mockResponse = new AIMessageChunk({
+        content: `\`\`\`
+{
+  "title": "Unmarked Block Test",
+  "summary": "This tests JSON extraction from unmarked code blocks."
+}
+\`\`\``,
+      });
+      mockChatModel.invoke.mockResolvedValueOnce(mockResponse);
+
+      await (userMemoryManager as any).updateMemory(messages, mockChatModel);
+
+      // Should successfully extract JSON from unmarked code block
+      const modifyCall = mockVault.modify.mock.calls[0];
+      const actualContent = modifyCall[1];
+
+      expect(actualContent).toContain("## Unmarked Block Test");
+      expect(actualContent).toContain(
+        "**Summary:** This tests JSON extraction from unmarked code blocks."
+      );
+    });
+  });
+
+  describe("extractJsonFromResponse", () => {
+    it("should extract JSON from markdown code blocks with json language tag", () => {
+      const content = `Here's the response:
+
+\`\`\`json
+{
+  "title": "Test Title",
+  "summary": "Test Summary"
+}
+\`\`\`
+
+That's the JSON data.`;
+
+      const result = (userMemoryManager as any).extractJsonFromResponse(content);
+      expect(result).toBe('{\n  "title": "Test Title",\n  "summary": "Test Summary"\n}');
+    });
+
+    it("should extract JSON from unmarked code blocks", () => {
+      const content = `\`\`\`
+{
+  "title": "Unmarked Block",
+  "summary": "No language specified"
+}
+\`\`\``;
+
+      const result = (userMemoryManager as any).extractJsonFromResponse(content);
+      expect(result).toBe(
+        '{\n  "title": "Unmarked Block",\n  "summary": "No language specified"\n}'
+      );
+    });
+
+    it("should extract JSON object when no code blocks present", () => {
+      const content = `Some text before {"title": "Inline JSON", "summary": "Direct JSON"} and after`;
+
+      const result = (userMemoryManager as any).extractJsonFromResponse(content);
+      expect(result).toBe('{"title": "Inline JSON", "summary": "Direct JSON"}');
+    });
+
+    it("should return original content when no JSON patterns found", () => {
+      const content = "No JSON here, just plain text";
+
+      const result = (userMemoryManager as any).extractJsonFromResponse(content);
+      expect(result).toBe(content);
+    });
+
+    it("should handle multiline JSON in code blocks", () => {
+      const content = `\`\`\`json
+{
+  "title": "Multi-line Test",
+  "summary": "This is a test with\\nmultiple lines and special characters: äöü"
+}
+\`\`\``;
+
+      const result = (userMemoryManager as any).extractJsonFromResponse(content);
+      expect(result).toContain('"title": "Multi-line Test"');
+      expect(result).toContain("special characters: äöü");
     });
   });
 
   describe("getUserMemoryPrompt", () => {
     it("should return memory prompt when recent conversations exist", async () => {
       const mockFile = createMockTFile("copilot/memory/Recent Conversations.md");
-      const mockContent = "## Test Conversation\n**Time:** 2024-01-01T10:00:00Z\n";
+      const mockContent =
+        "## Test Conversation\n**Time:** 2024-01-01T10:00:00Z\n**Summary:** Test summary";
 
       mockVault.getAbstractFileByPath.mockReturnValue(mockFile);
       mockVault.read.mockResolvedValue(mockContent);
