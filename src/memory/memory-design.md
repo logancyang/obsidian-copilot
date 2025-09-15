@@ -2,72 +2,110 @@
 
 ## Overview
 
-Current design for how the user memory system works in Obsidian Copilot, focusing on recent conversation memory only. Long-term memory features like user insights have been removed to simplify the system.
+Current design for how the user memory system works in Obsidian Copilot, featuring two distinct memory types:
+
+1. **Recent Conversations**: Automatic background processing of chat history for context
+2. **Saved Memories**: Explicit user-initiated memory storage for important information
 
 ## Flow Diagram
 
 ```mermaid
 graph TD
-    %% Triggers for Memory Updates
+    %% Recent Conversations Flow
     A[Chat Conversation Ends] --> B[addRecentConversation called]
-    B --> C{Memory Enabled?}
+    B --> C{enableRecentConversations?}
     C -->|Yes| D[Process Messages for Memory Storage]
-    C -->|No| Z[Skip Memory Update]
+    C -->|No| Z1[Skip Recent Memory Update]
 
-    %% Message Processing
-    D --> E[Extract Conversation Title using LLM]
-    E --> F[Extract Key Conclusions if substantial content]
-    F --> G[Create Conversation Section in Markdown using existing condensed messages]
+    D --> E[Extract Conversation Title & Summary using LLM]
+    E --> F[Create Conversation Section in Markdown]
+    F --> G[Load Existing Conversations from File]
+    G --> H[Add New Conversation Section]
+    H --> I[Apply Rolling Buffer Policy]
+    I --> J[Keep last maxRecentConversations]
+    J --> K[Save to Recent Conversations.md]
+    K --> L[Recent Memory Update Complete]
 
-    %% Storage and Rolling Buffer
-    H --> I[Load Existing Conversations from File]
-    I --> J[Add New Conversation Section]
-    J --> K[Apply Rolling Buffer Policy]
-    K --> L[Keep last maxRecentConversations]
-    L --> M[Save to Recent Conversations.md]
-    M --> N[Memory Update Complete]
+    %% Saved Memory Flow
+    M[User Explicitly Asks to Remember] --> N[memoryTool called]
+    N --> O{enableSavedMemory?}
+    O -->|Yes| P[Extract Memory Content]
+    O -->|No| Z2[Skip Saved Memory]
+    P --> Q[Format as Bullet Point]
+    Q --> R[Append to Saved Memories.md]
+    R --> S[Saved Memory Complete]
+
+    %% Memory Retrieval
+    T[LLM Request] --> U[getUserMemoryPrompt called]
+    U --> V[Load Recent Conversations]
+    U --> W[Load Saved Memories]
+    V --> X[Combine Memory Sections]
+    W --> X
+    X --> Y[Return Memory Context for LLM]
 ```
 
 ## Key Points
 
 ### Memory Update Triggers:
 
+**Recent Conversations:**
+
 - **Trigger**: When a chat conversation ends and `addRecentConversation()` is called
-- **Guard**: Only if `enableRecentConversations` setting (Reference Recent History) is enabled
+- **Guard**: Only if `enableRecentConversations` setting is enabled
 - **Fire-and-forget**: Runs asynchronously in background without blocking execution
 - **Race condition protection**: Prevents multiple simultaneous memory updates
 
-### Recent Conversations (Current Implementation):
+**Saved Memories:**
+
+- **Trigger**: When user explicitly asks to remember something during chat and `memoryTool` is called
+- **Guard**: Only if `enableSavedMemory` setting is enabled
+- **Immediate**: Saves directly to file when invoked
+- **User notification**: Shows success/failure notice to user
+
+### Recent Conversations:
 
 - **When**: Updated after every conversation
 - **Retention policy**: Configurable rolling buffer - keeps last `maxRecentConversations` (default: 30, range: 10-50)
 - **Content**:
   - Timestamp (ISO format with UTC)
   - LLM-generated conversation title (2-8 words)
-  - Condensed user messages (AI-generated one-line summaries created during conversation)
-  - Optional key conclusions (only for substantial conversations >300 chars)
+  - LLM-generated summary (2-3 sentences with key details and conclusions)
 - **Format**: Markdown format with `## conversation title` sections containing structured data
 - **Storage**: `Recent Conversations.md` in the configured memory folder
 - **File handling**: Creates file if doesn't exist, parses existing conversations to maintain rolling buffer
 
+### Saved Memories:
+
+- **When**: User explicitly asks to remember something via `memoryTool`
+- **Retention policy**: No limit - memories persist until manually deleted
+- **Content**:
+  - Raw user-specified information to remember
+  - Personal facts, preferences, important decisions, or context
+- **Format**: Simple bullet-point list in markdown
+- **Storage**: `Saved Memories.md` in the configured memory folder
+- **File handling**: Appends new memories to existing file, creates if doesn't exist
+
 ### Message Processing Features:
 
-- **Condensed Messages**: AI-generated one-line summaries of user messages created during conversation (not during memory update) that preserve intent and important details
-- **Conversation Titles**: LLM-extracted titles that capture main user intent
-- **Key Conclusions**: Only generated for conversations with substantial content (>300 chars) containing insights, decisions, or learnings
-- **Obsidian-optimized**: Special handling for note names, tags, links, and Obsidian-specific features
+- **Conversation Titles**: LLM-extracted titles that capture main user intent (2-8 words)
+- **Conversation Summaries**: AI-generated 2-3 sentence summaries with key details and conclusions
+- **Memory Tool Integration**: Explicit memory saving via natural language commands
 - **Robust JSON Parsing**: Handles JSON responses wrapped in code blocks (common with Gemini and other LLMs) with fallback to plain JSON extraction
+- **Language-aware**: Uses the same language as the conversation for titles and summaries
 
-### Configuration (Current):
+### Configuration:
 
-- **`enableRecentConversations`**: Master switch for all recent history referencing functionality
+- **`enableRecentConversations`**: Master switch for recent conversation history functionality
+- **`enableSavedMemory`**: Master switch for saved memory functionality
 - **`memoryFolderName`**: Folder where memory files are stored (creates recursively if needed)
-- **`maxRecentConversations`**: Number of conversations to keep (10-50 range, default: 30)
+- **`maxRecentConversations`**: Number of recent conversations to keep (10-50 range, default: 30)
 
 ### Memory Retrieval:
 
-- **`getUserMemoryPrompt()`**: Loads and returns Recent Conversations for LLM context
-- **`loadMemory()`**: Loads memory data from files into class fields
+- **`getUserMemoryPrompt()`**: Loads and returns both Recent Conversations and Saved Memories for LLM context
+- **`loadMemory()`**: Loads memory data from both files into class fields
+- **System prompt integration**: Memory context automatically included via `getSystemPromptWithMemory()`
+- **Conditional loading**: Only includes enabled memory types based on settings
 - **Automatic folder creation**: Ensures memory folder exists before operations
 
 ### Error Handling:
@@ -75,7 +113,15 @@ graph TD
 - Comprehensive error logging for all operations
 - Fallback mechanisms for AI processing failures
 - Graceful handling of missing files and folders
-- Validation of AI-generated content (e.g., ensures condensed messages are actually shorter)
+- User notifications for saved memory operations (success/failure)
 - Robust JSON extraction from LLM responses with multiple parsing strategies (code blocks, inline JSON, fallback to raw content)
+- Race condition protection for concurrent memory updates
 
-This simplified design focuses on providing recent conversation context without the complexity of long-term memory management, while maintaining robust AI-powered content processing and configurable retention policies.
+### Tool Integration:
+
+- **Memory Tool**: Integrated into the tool registry when `enableSavedMemory` is enabled
+- **Automatic registration**: Tool is conditionally registered based on settings
+- **Natural language triggers**: Responds to phrases like "remember that", "don't forget", etc.
+- **Context-aware**: Only saves information when user explicitly requests memory storage
+
+This dual memory design provides both automatic conversation context (recent conversations) and explicit user-controlled memory storage (saved memories), offering flexible memory management while maintaining robust AI-powered content processing and configurable retention policies.
