@@ -228,16 +228,26 @@ export function buildCitationMap(
  */
 export function normalizeCitations(content: string, map: Map<number, number>): string {
   // Already-footnote refs: [^n] -> [n] (remapped contiguously)
-  content = content.replace(/(^|[^[])\[\^(\d+)\]/g, (full, p, n) => {
-    const oldN = parseInt(n, 10);
-    const newN = map.get(oldN) ?? oldN;
-    return `${p}[${newN}]`;
-  });
+  // Use global flag with multiple passes to handle consecutive citations like [^7][^8]
+  let result = content;
+  let changed;
+  do {
+    changed = false;
+    result = result.replace(/\[\^(\d+)\]/g, (match, n) => {
+      const oldN = parseInt(n, 10);
+      const newN = map.get(oldN) ?? oldN;
+      const replacement = `[${newN}]`;
+      if (replacement !== match) {
+        changed = true;
+      }
+      return replacement;
+    });
+  } while (changed);
 
   // Fix periods after citations that cause markdown list interpretation: [1]. -> [1]
-  content = content.replace(/\[(\d+)\]\./g, "[$1]");
+  result = result.replace(/\[(\d+)\]\./g, "[$1]");
 
-  return content;
+  return result;
 }
 
 /**

@@ -395,5 +395,30 @@ More content
       expect(result).toContain("cites [1] and [1]"); // [^14]->[1], [^22]->[1] (consolidated)
       expect(result).toContain("mentions [3] once more"); // [^3]->[3]
     });
+
+    it("should handle consecutive citations without spaces (CRITICAL BUG)", () => {
+      // This test replicates the exact user bug with [^7][^8]
+      const content = `Paul Graham's advice on wealth:
+
+- Mindset & long game: rewards in these domains are often superlinear — small advantages compound into huge returns — so follow curiosity, do great work, take multiple shots while you're young, and seek situations where effort compounds (learning, network effects, thresholds). [^7][^8]
+
+#### Sources:
+[^7]: [[Superlinear Returns]]
+[^8]: [[How to Do Great Work]]`;
+
+      const result = processInlineCitations(content, true);
+
+      // CRITICAL: Both consecutive citations must be processed correctly
+      // [^7] (first mention) -> [1] -> [[Superlinear Returns]]
+      // [^8] (second mention) -> [2] -> [[How to Do Great Work]]
+
+      expect(result).toContain("<strong>[1]</strong> [[Superlinear Returns]]"); // [^7] -> [1]
+      expect(result).toContain("<strong>[2]</strong> [[How to Do Great Work]]"); // [^8] -> [2]
+
+      // CRITICAL: Both citations in text must be converted (not partial like [4][^8])
+      expect(result).toContain("thresholds). [1][2]"); // [^7][^8] -> [1][2]
+      expect(result).not.toContain("[^8]"); // Should not contain any unconverted citations
+      expect(result).not.toContain("[^7]"); // Should not contain any unconverted citations
+    });
   });
 });
