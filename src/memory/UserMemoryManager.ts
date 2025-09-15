@@ -39,9 +39,9 @@ export class UserMemoryManager {
   }
 
   /**
-   * Runs the user memory operation in the background without blocking execution
+   * Adds a recent conversation to user memory storage in the background without blocking execution
    */
-  updateUserMemory(messages: ChatMessage[], chatModel?: BaseChatModel): void {
+  addRecentConversation(messages: ChatMessage[], chatModel?: BaseChatModel): void {
     const settings = getSettings();
 
     // Only proceed if memory is enabled

@@ -74,7 +74,7 @@ describe("UserMemoryManager", () => {
     userMemoryManager = new UserMemoryManager(mockApp);
   });
 
-  describe("updateUserMemory", () => {
+  describe("addRecentConversation", () => {
     const createMockMessage = (
       id: string,
       message: string,
@@ -91,7 +91,7 @@ describe("UserMemoryManager", () => {
       mockSettings.enableMemory = false;
       const messages = [createMockMessage("1", "test message")];
 
-      userMemoryManager.updateUserMemory(messages, mockChatModel);
+      userMemoryManager.addRecentConversation(messages, mockChatModel);
 
       expect(logInfo).toHaveBeenCalledWith(
         "[UserMemoryManager] Recent history referencing is disabled, skipping analysis"
@@ -99,7 +99,7 @@ describe("UserMemoryManager", () => {
     });
 
     it("should skip memory update when no messages provided", () => {
-      userMemoryManager.updateUserMemory([], mockChatModel);
+      userMemoryManager.addRecentConversation([], mockChatModel);
 
       expect(logInfo).toHaveBeenCalledWith(
         "[UserMemoryManager] No messages to analyze for user memory"

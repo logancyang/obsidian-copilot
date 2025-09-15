@@ -392,7 +392,7 @@ export default class CopilotPlugin extends Plugin {
         // Get the current chat model from the chain manager
         const chainManager = this.projectManager.getCurrentChainManager();
         const chatModel = chainManager.chatModelManager.getChatModel();
-        this.userMemoryManager.updateUserMemory(this.chatUIState.getMessages(), chatModel);
+        this.userMemoryManager.addRecentConversation(this.chatUIState.getMessages(), chatModel);
       } catch (error) {
         logInfo("Failed to analyze chat messages for memory:", error);
       }

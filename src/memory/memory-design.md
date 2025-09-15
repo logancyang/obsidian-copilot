@@ -9,7 +9,7 @@ Current design for how the user memory system works in Obsidian Copilot, focusin
 ```mermaid
 graph TD
     %% Triggers for Memory Updates
-    A[Chat Conversation Ends] --> B[updateUserMemory called]
+    A[Chat Conversation Ends] --> B[addRecentConversation called]
     B --> C{Memory Enabled?}
     C -->|Yes| D[Process Messages for Memory Storage]
     C -->|No| Z[Skip Memory Update]
@@ -32,7 +32,7 @@ graph TD
 
 ### Memory Update Triggers:
 
-- **Trigger**: When a chat conversation ends and `updateUserMemory()` is called
+- **Trigger**: When a chat conversation ends and `addRecentConversation()` is called
 - **Guard**: Only if `enableMemory` setting (Reference Recent History) is enabled
 - **Fire-and-forget**: Runs asynchronously in background without blocking execution
 - **Race condition protection**: Prevents multiple simultaneous memory updates
