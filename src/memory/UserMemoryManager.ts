@@ -29,9 +29,9 @@ export class UserMemoryManager {
   private hasValidCondensedUserMessage(message: ChatMessage): boolean {
     return (
       message.sender === USER_SENDER &&
-      !!message.condensedMessage &&
-      typeof message.condensedMessage === "string" &&
-      message.condensedMessage.trim().length > 0
+      !!message.condensedUserMessage &&
+      typeof message.condensedUserMessage === "string" &&
+      message.condensedUserMessage.trim().length > 0
     );
   }
 
@@ -200,7 +200,7 @@ Condense the user message into a single concise sentence while preserving intent
       .filter(this.hasValidCondensedUserMessage.bind(this))
       .map((message) => {
         // Use condensed message if available
-        return `- ${message.condensedMessage}`;
+        return `- ${message.condensedUserMessage}`;
       });
 
     // Generate key conclusions if conversation is substantial enough

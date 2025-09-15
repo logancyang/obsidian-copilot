@@ -13,7 +13,7 @@ import {
   DEFAULT_SYSTEM_PROMPT,
   EmbeddingModelProviders,
 } from "@/constants";
-import { logError } from "@/logger";
+import { logInfo } from "@/logger";
 
 /**
  * We used to store commands in the settings file with the following interface.
@@ -367,8 +367,8 @@ export async function getSystemPromptWithMemory(
 ): Promise<string> {
   const systemPrompt = getSystemPrompt();
   if (!userMemoryManager) {
-    logError("No UserMemoryManager provided to getSystemPromptWithMemory");
-    return getSystemPrompt();
+    logInfo("No UserMemoryManager provided to getSystemPromptWithMemory");
+    return systemPrompt;
   }
   const memoryPrompt = await userMemoryManager.getUserMemoryPrompt();
 

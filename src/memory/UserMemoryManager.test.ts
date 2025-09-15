@@ -82,7 +82,7 @@ describe("UserMemoryManager", () => {
       sender,
       timestamp: null,
       isVisible: true,
-      condensedMessage: `Condensed: ${message}`,
+      condensedUserMessage: `Condensed: ${message}`,
     });
 
     it("should skip memory update when memory is disabled", () => {

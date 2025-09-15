@@ -44,8 +44,14 @@ export interface ChatMessage {
   /** Original user input before processing (for LLM messages) */
   originalMessage?: string;
 
-  /** The condensed message content (for memory and only for user messages) */
-  condensedMessage?: string;
+  /**
+   * AI-generated one-sentence summary of user messages for memory storage.
+   * Created asynchronously after user messages to reduce memory footprint while preserving
+   * core intent and Obsidian-specific features (notes, tags, links).
+   * Used in constructing "Recent Conversations" for user memory.
+   * Only applies to user messages when memory is enabled.
+   */
+  condensedUserMessage?: string;
 
   /** Message sender ("user", "AI", etc.) */
   sender: string;
@@ -85,7 +91,7 @@ export interface StoredMessage {
   id: string;
   displayText: string; // What user typed/what AI responded
   processedText: string; // For user messages: with context added. For AI: same as display
-  condensedMessage?: string; // Condensed version for memory (user messages only)
+  condensedUserMessage?: string; // AI-generated condensed version for memory storage (user messages only) - see condensedUserMessage documentation above
   sender: string;
   timestamp: FormattedDateTime;
   context?: MessageContext;

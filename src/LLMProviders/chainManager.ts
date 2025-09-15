@@ -29,7 +29,6 @@ import { App, Notice } from "obsidian";
 import ChatModelManager from "./chatModelManager";
 import MemoryManager from "./memoryManager";
 import PromptManager from "./promptManager";
-import CopilotPlugin from "@/main";
 
 export default class ChainManager {
   // TODO: These chains are deprecated since we now use direct chat model calls in chain runners
@@ -46,12 +45,10 @@ export default class ChainManager {
   public chatModelManager: ChatModelManager;
   public memoryManager: MemoryManager;
   public promptManager: PromptManager;
-  public plugin?: CopilotPlugin;
 
-  constructor(app: App, plugin?: CopilotPlugin) {
+  constructor(app: App) {
     // Instantiate singletons
     this.app = app;
-    this.plugin = plugin;
     this.memoryManager = MemoryManager.getInstance();
     this.chatModelManager = ChatModelManager.getInstance();
     this.promptManager = PromptManager.getInstance();
@@ -324,9 +321,9 @@ export default class ChainManager {
       updateLoading?: (loading: boolean) => void;
     } = {}
   ) {
-    const { ignoreSystemMessage = false } = options;
+    const { debug = false, ignoreSystemMessage = false } = options;
 
-    logInfo("Step 0: Initial user message:\n", userMessage);
+    if (debug) console.log("==== Step 0: Initial user message ====\n", userMessage);
 
     this.validateChatModel();
     this.validateChainInitialization();
