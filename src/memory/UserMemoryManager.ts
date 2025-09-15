@@ -71,7 +71,17 @@ export class UserMemoryManager {
       let memoryPrompt = "";
 
       if (this.recentConversationsContent) {
-        memoryPrompt += `\n${this.recentConversationsContent}\n`;
+        memoryPrompt += `
+        <recent_conversations>
+        ${this.recentConversationsContent}
+        </recent_conversations>
+
+        Above is the recent conversations between you and the user. 
+        You can use it to provide more context for your responses. 
+        Only use the recent conversations if they are relevant to the current conversation.
+
+        The current time is ${this.getTimestamp()}.
+        `;
       }
 
       return memoryPrompt.length > 0 ? memoryPrompt : null;
@@ -79,6 +89,10 @@ export class UserMemoryManager {
       logError("[UserMemoryManager] Error reading user memory content:", error);
       return null;
     }
+  }
+
+  private getTimestamp(): string {
+    return new Date().toISOString().split(".")[0] + "Z"; // Remove milliseconds but keep Z for UTC
   }
 
   /**
@@ -89,7 +103,7 @@ export class UserMemoryManager {
     chatModel: BaseChatModel
   ): Promise<string> {
     const { title, summary } = await this.extractTitleAndSummary(messages, chatModel);
-    const timestamp = new Date().toISOString().split(".")[0] + "Z"; // Remove milliseconds but keep Z for UTC
+    const timestamp = this.getTimestamp();
 
     let section = `## ${title}\n`;
     section += `**Time:** ${timestamp}\n`;
@@ -162,8 +176,8 @@ export class UserMemoryManager {
       let updatedContent: string;
 
       if (fileContent.trim() === "") {
-        // Create new file without header
-        updatedContent = `${newConversationSection}\n`;
+        // Create new file with a single trailing newline
+        updatedContent = `${newConversationSection.trim()}\n`;
       } else {
         // Parse existing conversations and add new one
         const conversations = this.parseExistingConversations(fileContent);
@@ -176,13 +190,15 @@ export class UserMemoryManager {
           conversations.splice(0, conversations.length - maxConversations);
         }
 
-        updatedContent = `${conversations.join("\n")}\n`;
+        // Normalize sections to avoid extra blank lines, then separate with exactly one blank line
+        const normalized = conversations.map((s) => s.trim());
+        updatedContent = `${normalized.join("\n\n")}\n`;
       }
 
       await this.app.vault.modify(existingFile, updatedContent);
     } else {
       // Create new file
-      const initialContent = `${newConversationSection}\n`;
+      const initialContent = `${newConversationSection.trim()}\n`;
       await this.app.vault.create(filePath, initialContent);
     }
   }
@@ -191,33 +207,28 @@ export class UserMemoryManager {
    * Parse existing conversations from file content
    */
   private parseExistingConversations(content: string): string[] {
+    const lines = content.split("\n");
     const conversations: string[] = [];
+    let currentConversation: string[] = [];
 
-    // Remove any old header if it exists
-    const cleanContent = content.replace(/^# Recent Conversations\s*\n\n?/m, "").trim();
-
-    // Split by ## headings to get individual conversations
-    const sections = cleanContent.split(/^## /m);
-
-    if (sections.length === 1 && sections[0].trim()) {
-      // Content doesn't start with ##, but has content
-      if (sections[0].trim().startsWith("##")) {
-        conversations.push(sections[0].trim());
-      } else {
-        // Find any ## sections in the content
-        const matches = cleanContent.match(/^## [\s\S]+?(?=^## |$)/gm);
-        if (matches) {
-          conversations.push(...matches.map((match) => match.trim()));
+    for (const line of lines) {
+      if (line.trim().startsWith("## ")) {
+        // Start of a new conversation - save the previous one if it exists
+        if (currentConversation.length > 0) {
+          conversations.push(currentConversation.join("\n").trim());
         }
+        // Start new conversation with this header
+        currentConversation = [line];
+      } else if (currentConversation.length > 0) {
+        // Add line to current conversation if we're inside one
+        currentConversation.push(line);
       }
-    } else {
-      for (let i = 1; i < sections.length; i++) {
-        // Skip the first section (before first ##)
-        const section = `## ${sections[i]}`.trim();
-        if (section.length > 0) {
-          conversations.push(section);
-        }
-      }
+      // Ignore lines before the first ## header
+    }
+
+    // Add the last conversation if it exists
+    if (currentConversation.length > 0) {
+      conversations.push(currentConversation.join("\n").trim());
     }
 
     return conversations;

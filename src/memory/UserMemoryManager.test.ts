@@ -212,68 +212,6 @@ describe("UserMemoryManager", () => {
         expect.any(Error)
       );
     });
-
-    it("should handle JSON wrapped in code blocks from Gemini", async () => {
-      const messages = [createMockMessage("1", "test message")];
-      const mockMemoryFile = createMockTFile("copilot/memory/Recent Conversations.md");
-
-      (ensureFolderExists as jest.Mock).mockResolvedValue(undefined);
-      mockVault.getAbstractFileByPath.mockReturnValue(mockMemoryFile);
-      mockVault.read.mockResolvedValue("");
-
-      // Mock LLM response with JSON wrapped in code blocks (typical Gemini behavior)
-      const mockResponse = new AIMessageChunk({
-        content: `Here's the title and summary for the conversation:
-
-\`\`\`json
-{
-  "title": "Code Block Test",
-  "summary": "This tests JSON extraction from code blocks."
-}
-\`\`\``,
-      });
-      mockChatModel.invoke.mockResolvedValueOnce(mockResponse);
-
-      await (userMemoryManager as any).updateMemory(messages, mockChatModel);
-
-      // Should successfully extract JSON from code block
-      const modifyCall = mockVault.modify.mock.calls[0];
-      const actualContent = modifyCall[1];
-
-      expect(actualContent).toContain("## Code Block Test");
-      expect(actualContent).toContain("**Summary:** This tests JSON extraction from code blocks.");
-    });
-
-    it("should handle JSON wrapped in unmarked code blocks", async () => {
-      const messages = [createMockMessage("1", "test message")];
-      const mockMemoryFile = createMockTFile("copilot/memory/Recent Conversations.md");
-
-      (ensureFolderExists as jest.Mock).mockResolvedValue(undefined);
-      mockVault.getAbstractFileByPath.mockReturnValue(mockMemoryFile);
-      mockVault.read.mockResolvedValue("");
-
-      // Mock LLM response with JSON in unmarked code blocks
-      const mockResponse = new AIMessageChunk({
-        content: `\`\`\`
-{
-  "title": "Unmarked Block Test",
-  "summary": "This tests JSON extraction from unmarked code blocks."
-}
-\`\`\``,
-      });
-      mockChatModel.invoke.mockResolvedValueOnce(mockResponse);
-
-      await (userMemoryManager as any).updateMemory(messages, mockChatModel);
-
-      // Should successfully extract JSON from unmarked code block
-      const modifyCall = mockVault.modify.mock.calls[0];
-      const actualContent = modifyCall[1];
-
-      expect(actualContent).toContain("## Unmarked Block Test");
-      expect(actualContent).toContain(
-        "**Summary:** This tests JSON extraction from unmarked code blocks."
-      );
-    });
   });
 
   describe("extractJsonFromResponse", () => {
@@ -335,6 +273,149 @@ That's the JSON data.`;
     });
   });
 
+  describe("parseExistingConversations", () => {
+    it("should return empty array for empty string", () => {
+      const result = (userMemoryManager as any).parseExistingConversations("");
+      expect(result).toEqual([]);
+    });
+
+    it("should return empty array for content with no H2 sections", () => {
+      const content = `This is some content without H2 headers.
+It has multiple lines but no conversations.
+# This is H1, not H2
+### This is H3, not H2`;
+
+      const result = (userMemoryManager as any).parseExistingConversations(content);
+      expect(result).toEqual([]);
+    });
+
+    it("should extract single conversation section", () => {
+      const content = `## Daily Note Template Setup
+**Time:** 2024-01-01T10:00:00Z
+**Summary:** User asked about creating daily note templates with automatic date formatting.`;
+
+      const result = (userMemoryManager as any).parseExistingConversations(content);
+      expect(result).toEqual([
+        `## Daily Note Template Setup
+**Time:** 2024-01-01T10:00:00Z
+**Summary:** User asked about creating daily note templates with automatic date formatting.`,
+      ]);
+    });
+
+    it("should extract multiple conversation sections", () => {
+      const content = `## First Conversation
+**Time:** 2024-01-01T09:00:00Z
+**Summary:** User asked about plugin installation.
+
+## Second Conversation
+**Time:** 2024-01-01T10:00:00Z
+**Summary:** User inquired about linking notes.
+
+## Third Conversation
+**Time:** 2024-01-01T11:00:00Z
+**Summary:** User learned about backlinks.`;
+
+      const result = (userMemoryManager as any).parseExistingConversations(content);
+      expect(result).toEqual([
+        `## First Conversation
+**Time:** 2024-01-01T09:00:00Z
+**Summary:** User asked about plugin installation.`,
+        `## Second Conversation
+**Time:** 2024-01-01T10:00:00Z
+**Summary:** User inquired about linking notes.`,
+        `## Third Conversation
+**Time:** 2024-01-01T11:00:00Z
+**Summary:** User learned about backlinks.`,
+      ]);
+    });
+
+    it("should ignore content before the first H2 section", () => {
+      const content = `This is some introductory text that should be ignored.
+It might contain important information, but it's before the first conversation.
+
+## First Conversation
+**Time:** 2024-01-01T09:00:00Z
+**Summary:** This conversation should be included.
+
+## Second Conversation
+**Time:** 2024-01-01T10:00:00Z
+**Summary:** This conversation should also be included.`;
+
+      const result = (userMemoryManager as any).parseExistingConversations(content);
+      expect(result).toEqual([
+        `## First Conversation
+**Time:** 2024-01-01T09:00:00Z
+**Summary:** This conversation should be included.`,
+        `## Second Conversation
+**Time:** 2024-01-01T10:00:00Z
+**Summary:** This conversation should also be included.`,
+      ]);
+    });
+
+    it("should handle conversations with extra whitespace and trim them", () => {
+      const content = `  ## First Conversation  
+**Time:** 2024-01-01T09:00:00Z
+**Summary:** User asked about plugin installation.  
+
+  ## Second Conversation  
+**Time:** 2024-01-01T10:00:00Z
+**Summary:** User inquired about linking notes.  `;
+
+      const result = (userMemoryManager as any).parseExistingConversations(content);
+      expect(result).toEqual([
+        `## First Conversation  
+**Time:** 2024-01-01T09:00:00Z
+**Summary:** User asked about plugin installation.`,
+        `## Second Conversation  
+**Time:** 2024-01-01T10:00:00Z
+**Summary:** User inquired about linking notes.`,
+      ]);
+    });
+
+    it("should handle conversation sections with complex multi-line content", () => {
+      const content = `## Complex Conversation
+**Time:** 2024-01-01T09:00:00Z
+**Summary:** User asked about multiple topics including:
+- How to create templates
+- How to use variables
+- How to set up automation
+
+The conversation covered advanced features and included code examples.
+
+## Another Conversation
+**Time:** 2024-01-01T10:00:00Z
+**Summary:** Short summary.`;
+
+      const result = (userMemoryManager as any).parseExistingConversations(content);
+      expect(result).toEqual([
+        `## Complex Conversation
+**Time:** 2024-01-01T09:00:00Z
+**Summary:** User asked about multiple topics including:
+- How to create templates
+- How to use variables
+- How to set up automation
+
+The conversation covered advanced features and included code examples.`,
+        `## Another Conversation
+**Time:** 2024-01-01T10:00:00Z
+**Summary:** Short summary.`,
+      ]);
+    });
+
+    it("should handle conversation at end of file without trailing newlines", () => {
+      const content = `## Only Conversation
+**Time:** 2024-01-01T09:00:00Z
+**Summary:** This is the only conversation and it's at the end.`;
+
+      const result = (userMemoryManager as any).parseExistingConversations(content);
+      expect(result).toEqual([
+        `## Only Conversation
+**Time:** 2024-01-01T09:00:00Z
+**Summary:** This is the only conversation and it's at the end.`,
+      ]);
+    });
+  });
+
   describe("getUserMemoryPrompt", () => {
     it("should return memory prompt when recent conversations exist", async () => {
       const mockFile = createMockTFile("copilot/memory/Recent Conversations.md");
@@ -346,7 +427,10 @@ That's the JSON data.`;
 
       const result = await userMemoryManager.getUserMemoryPrompt();
 
-      expect(result).toBe(`\n${mockContent}\n`);
+      expect(result).toContain(mockContent);
+      expect(result).toContain("<recent_conversations>");
+      expect(result).toContain("</recent_conversations>");
+      expect(result).toContain("Above is the recent conversations between you and the user");
     });
 
     it("should return null when no memory content exists", async () => {

@@ -384,10 +384,9 @@ export async function getSystemPromptWithMemory(
     return systemPrompt;
   }
 
-  return `${systemPrompt}
-  <user_memory>
-  ${memoryPrompt}
-  </user_memory>`;
+  return `${memoryPrompt}
+  ${systemPrompt}
+  `;
 }
 
 function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {
