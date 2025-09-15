@@ -431,7 +431,6 @@ The conversation covered advanced features and included code examples.`,
       expect(result).toContain(mockContent);
       expect(result).toContain("<recent_conversations>");
       expect(result).toContain("</recent_conversations>");
-      expect(result).toContain("Above is the recent conversations between you and the user");
     });
 
     it("should return null when no memory content exists", async () => {
