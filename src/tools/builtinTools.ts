@@ -304,6 +304,7 @@ export function registerMemoryTool(): void {
       displayName: "Save Memory",
       description: "Save information to user memory when explicitly asked to remember something",
       category: "memory",
+      isAlwaysEnabled: true,
       customPromptInstructions: `For memoryTool:
 - Use ONLY when the user explicitly asks you to remember something (phrases like "remember that", "don't forget", etc.)
 - DO NOT use for general information - only for personal facts, preferences, or specific things the user wants stored

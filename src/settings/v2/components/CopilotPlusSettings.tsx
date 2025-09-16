@@ -120,16 +120,6 @@ export const CopilotPlusSettings: React.FC = () => {
             }}
           />
 
-          <SettingItem
-            type="switch"
-            title="Reference Saved Memories"
-            description="When enabled, Copilot can access memories that you explicitly asked it to remember. Use this to store important facts, preferences, or context for future conversations."
-            checked={settings.enableSavedMemory}
-            onCheckedChange={(checked) => {
-              updateSetting("enableSavedMemory", checked);
-            }}
-          />
-
           {settings.enableRecentConversations && (
             <SettingItem
               type="slider"
@@ -142,6 +132,16 @@ export const CopilotPlusSettings: React.FC = () => {
               onChange={(value) => updateSetting("maxRecentConversations", value)}
             />
           )}
+
+          <SettingItem
+            type="switch"
+            title="Reference Saved Memories"
+            description="When enabled, Copilot can access memories that you explicitly asked it to remember. Use this to store important facts, preferences, or context for future conversations."
+            checked={settings.enableSavedMemory}
+            onCheckedChange={(checked) => {
+              updateSetting("enableSavedMemory", checked);
+            }}
+          />
 
           <div className="tw-pt-4 tw-text-xl tw-font-semibold">Autocomplete</div>
 
