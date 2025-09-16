@@ -374,12 +374,6 @@ export async function getSystemPromptWithMemory(
 ): Promise<string> {
   const systemPrompt = getSystemPrompt();
 
-  // Check if memory is enabled in settings
-  const settings = getSettings();
-  if (!settings.enableRecentConversations) {
-    return systemPrompt;
-  }
-
   if (!userMemoryManager) {
     logInfo("No UserMemoryManager provided to getSystemPromptWithMemory");
     return systemPrompt;
