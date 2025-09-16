@@ -38,6 +38,7 @@ import { FileParserManager } from "@/tools/FileParserManager";
 import { err2String, isPlusChain } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { Notice, TFile } from "obsidian";
+import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 type ChatMode = "default" | "project";
@@ -625,6 +626,19 @@ const Chat: React.FC<ChatProps> = ({
               plugin={plugin}
               setHiddenCard={() => {
                 setProgressCardVisible(false);
+              }}
+              onEditContext={() => {
+                const currentProject = getCurrentProject();
+                if (currentProject) {
+                  // Open the context management modal for editing the project
+                  new ContextManageModal(
+                    app,
+                    (updatedProject) => {
+                      handleEditProject(currentProject, updatedProject);
+                    },
+                    currentProject
+                  ).open();
+                }
               }}
             />
           </div>
