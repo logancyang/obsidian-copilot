@@ -495,9 +495,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       // Enhance with ALL tool outputs including localSearch
       let enhancedUserMessage = this.prepareEnhancedUserMessage(
         questionForEnhancement,
-        toolOutputs,
-        toolCalls,
-        sources
+        toolOutputs
       );
 
       // If localSearch has actual results and no other tools, add QA-style instruction to maintain same behavior
@@ -549,9 +547,9 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     // Add fallback sources if citations are enabled and missing
     const settings = getSettings();
     const fallbackSources =
-      this.lastCitationLines && this.lastCitationLines.length > 0
-        ? this.lastCitationLines.map((l) => ({ title: l.replace(/^\[(\d+)\]\s*/, "") }))
-        : (sources as any[]) || [];
+      this.lastCitationSources && this.lastCitationSources.length > 0
+        ? this.lastCitationSources
+        : ((sources as any[]) || []).map((source) => ({ title: source.title, path: source.path }));
 
     fullAIResponse = addFallbackSources(
       fullAIResponse,
@@ -654,14 +652,9 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
   }
 
   // Persist citation lines built for this turn to reuse in fallback
-  private lastCitationLines: string[] | null = null;
+  private lastCitationSources: { title?: string; path?: string }[] | null = null;
 
-  private prepareEnhancedUserMessage(
-    userMessage: string,
-    toolOutputs: any[],
-    toolCalls?: any[],
-    citationSources?: { title: string; path: string; score: number; explanation?: any }[]
-  ) {
+  private prepareEnhancedUserMessage(userMessage: string, toolOutputs: any[]) {
     let context = "";
     let hasLocalSearchWithResults = false;
 
@@ -772,11 +765,14 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     const catalogLines = formatSourceCatalog(sourceEntries);
 
     // Also keep a numbered mapping for fallback use only (if model emits footnotes but forgets Sources)
-    this.lastCitationLines = withIds
+    this.lastCitationSources = withIds
       .slice(0, Math.min(20, withIds.length))
       .map((d: any, i: number) => {
         const title = d.title || d.path || "Untitled";
-        return `[${i + 1}] [[${title}]]`;
+        return {
+          title,
+          path: d.path || undefined,
+        };
       });
 
     const settings = getSettings();

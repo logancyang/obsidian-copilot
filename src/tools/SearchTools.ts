@@ -6,7 +6,7 @@ import { getSettings } from "@/settings/model";
 import { z } from "zod";
 import { deduplicateSources } from "@/LLMProviders/chainRunner/utils/toolExecution";
 import { createTool, SimpleTool } from "./SimpleTool";
-import { CITATION_RULES } from "@/LLMProviders/chainRunner/utils/citationUtils";
+import { getWebSearchCitationInstructions } from "@/LLMProviders/chainRunner/utils/citationUtils";
 
 // Define Zod schema for localSearch
 const localSearchSchema = z.object({
@@ -285,7 +285,7 @@ const webSearchTool = createTool({
           // Instruct the model to use footnote-style citations and definitions.
           // Chat UI will render [^n] as [n] for readability and show a simple numbered Sources list.
           // When inserted into a note, the original [^n] footnotes will remain valid Markdown footnotes.
-          instruction: getSettings().enableInlineCitations ? CITATION_RULES : "",
+          instruction: getWebSearchCitationInstructions(getSettings().enableInlineCitations),
         },
       ];
 

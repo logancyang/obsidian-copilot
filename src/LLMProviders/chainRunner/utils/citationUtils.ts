@@ -21,6 +21,18 @@ export const CITATION_RULES = `CITATION RULES:
 9. If multiple source chunks come from the same document, cite each relevant chunk separately (e.g., [^1] and [^2] can both be from the same document title)
 10. End with '#### Sources' section containing: [^n]: [[Title]] (one per line, matching citation order)`;
 
+export const WEB_CITATION_RULES = `WEB CITATION RULES:
+1. START with [^1] and increment sequentially ([^1], [^2], [^3], etc.) with NO gaps
+2. Cite ONLY when introducing new factual claims, statistics, or direct quotes from the search results
+3. After every cited claim, place the corresponding footnote immediately after the sentence ("The study found X [^1]")
+4. End with '#### Sources' and provide definitions EXACTLY in this format: [^n]: [Short Title](URL)
+
+IMPORTANT: Each source definition must follow this exact pattern:
+- Start with [^n]: (where n is the citation number)
+- Follow with [Title](URL) where Title is SHORT (2-5 words) and wrapped in square brackets
+- Example: [^1]: [Paul Graham Essay](https://paulgraham.com/wealth.html)
+- DO NOT write long descriptions - keep titles concise`;
+
 // ===== INSTRUCTION GENERATORS =====
 
 /**
@@ -88,7 +100,7 @@ export function getQACitationInstructionsConditional(
  */
 export function addFallbackSources(
   response: string,
-  sources: any[],
+  sources: { title?: string; path?: string }[],
   enableInlineCitations: boolean
 ): string {
   // Input validation
@@ -103,7 +115,10 @@ export function addFallbackSources(
   // Add simple sources section as fallback
   const sourcesList = sources
     .slice(0, MAX_FALLBACK_SOURCES)
-    .map((s, i) => `[^${i + 1}]: [[${s.title || s.path || "Untitled"}]]`)
+    .map((s, i) => {
+      const title = (s.title || s.path || "Untitled").replace(/^\[\[|\]\]$/g, ""); // Strip existing wiki link brackets
+      return `[^${i + 1}]: [[${title}]]`;
+    })
     .join("\n");
 
   return `${response}\n\n#### Sources:\n\n${sourcesList}`;
@@ -133,10 +148,24 @@ export function sanitizeContentForCitations(text: string): string {
  * Detects if response already has sources section or footnote definitions.
  */
 export function hasExistingCitations(response: string): boolean {
-  const hasSourcesSection = /(^|\n)\s*(?:####\s*)?Sources\s*:?\s*\n/i.test(response || "");
+  const content = response || "";
+  const hasMarkdownHeading = /(^|\n)\s*#{1,6}\s*Sources\b/i.test(content);
+  const hasPlainLabel = /(^|\n)\s*Sources\s*(?:[:-]\s*)?(\n|$)/i.test(content);
+  const hasSummaryTag = /<summary>\s*Sources\s*<\/summary>/i.test(content);
   // More robust detection: look for ANY line starting with [^digits]:
-  const hasFootnoteDefinitions = /(^|\n)\s*\[\^\d+\]:\s*/.test(response || "");
-  return hasSourcesSection || hasFootnoteDefinitions;
+  const hasFootnoteDefinitions = /(^|\n)\s*\[\^\d+\]:\s*/.test(content);
+  return hasMarkdownHeading || hasPlainLabel || hasSummaryTag || hasFootnoteDefinitions;
+}
+
+/**
+ * Provides web-search-specific citation instructions using markdown links.
+ */
+export function getWebSearchCitationInstructions(enableInlineCitations: boolean): string {
+  if (!enableInlineCitations) {
+    return "";
+  }
+
+  return `\n\n${WEB_CITATION_RULES}`;
 }
 
 // ===== CITATION PROCESSING UTILITIES =====
@@ -233,10 +262,34 @@ export function normalizeCitations(content: string, map: Map<number, number>): s
   let changed;
   do {
     changed = false;
+
+    // Handle single citations: [^n] -> [n]
     result = result.replace(/\[\^(\d+)\]/g, (match, n) => {
       const oldN = parseInt(n, 10);
       const newN = map.get(oldN) ?? oldN;
       const replacement = `[${newN}]`;
+      if (replacement !== match) {
+        changed = true;
+      }
+      return replacement;
+    });
+
+    // Handle multiple citations: [^n, ^m] -> [n, m]
+    result = result.replace(/\[\^(\d+(?:\s*,\s*\^?\d+)*)\]/g, (match, citationList) => {
+      // Split and process each number in the list
+      const processedNumbers = citationList
+        .split(",")
+        .map((part: string) => {
+          const cleanPart = part.trim().replace(/^\^/, ""); // Remove leading ^
+          const oldN = parseInt(cleanPart, 10);
+          const newN = map.get(oldN) ?? oldN;
+          return newN;
+        })
+        .sort((a: number, b: number) => a - b) // Sort numbers in ascending order
+        .map((n: number) => n.toString())
+        .join(", ");
+
+      const replacement = `[${processedNumbers}]`;
       if (replacement !== match) {
         changed = true;
       }
@@ -263,8 +316,29 @@ export function convertFootnoteDefinitions(
     if (!m) return;
     const oldN = parseInt(m[1], 10);
     const newN = map.get(oldN) ?? oldN;
+    const markdownLink = m[2].match(/\[([^\]]+)\]\(([^)]+)\)/);
     const wl = m[2].match(/\[\[(.*?)\]\]/);
-    const display = wl ? `[[${wl[1]}]]` : m[2].replace(/\s*\([^)]*\)\s*$/, "");
+
+    let display: string;
+    if (markdownLink) {
+      // Proper markdown link format: [Title](URL)
+      display = `<a href="${markdownLink[2]}">${markdownLink[1]}</a>`;
+    } else if (wl) {
+      // Wiki link format: [[Title]]
+      display = `[[${wl[1]}]]`;
+    } else {
+      // Handle malformed web citations like "Description text](URL)"
+      const malformedLink = m[2].match(/^(.*?)\]\s*\(([^)]+)\)\s*$/);
+      if (malformedLink) {
+        // Extract text and URL from malformed pattern
+        const text = malformedLink[1].trim();
+        const url = malformedLink[2].trim();
+        display = `<a href="${url}">${text}</a>`;
+      } else {
+        // Fallback: remove any trailing parenthetical content
+        display = m[2].replace(/\s*\([^)]*\)\s*$/, "");
+      }
+    }
     items[newN - 1] = display;
   });
   return items;

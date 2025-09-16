@@ -1,13 +1,13 @@
 import {
-  sanitizeContentForCitations,
-  formatSourceCatalog,
-  hasExistingCitations,
-  getVaultCitationGuidance,
-  getQACitationInstructions,
-  processInlineCitations,
-  getCitationInstructions,
   addFallbackSources,
+  formatSourceCatalog,
+  getCitationInstructions,
+  getQACitationInstructions,
+  getVaultCitationGuidance,
+  hasExistingCitations,
   normalizeCitations,
+  processInlineCitations,
+  sanitizeContentForCitations,
   type SourceCatalogEntry,
 } from "./citationUtils";
 
@@ -87,6 +87,17 @@ More content
 
       const responseWithSourcesColon = "Some content\nSources:\n[^1]: [[Doc]]";
       expect(hasExistingCitations(responseWithSourcesColon)).toBe(true);
+    });
+
+    it("should detect alternate headings and HTML summaries", () => {
+      const heading = "Content\n## Sources\n[^1]: [[Doc]]";
+      expect(hasExistingCitations(heading)).toBe(true);
+
+      const dashHeading = "Content\nSources -\n[^1]: [[Doc]]";
+      expect(hasExistingCitations(dashHeading)).toBe(true);
+
+      const summary = "<details><summary>Sources</summary>List</details>";
+      expect(hasExistingCitations(summary)).toBe(true);
     });
 
     it("should detect footnote definitions with wikilinks", () => {
@@ -285,6 +296,30 @@ More content
 
       const result = normalizeCitations(content, map);
       expect(result).toBe("Text with [1] More text [2]");
+    });
+
+    it("should handle multiple citations in brackets", () => {
+      const content = "Text with single [^1] and multiple [^2, ^4] citations.";
+      const map = new Map([
+        [1, 1],
+        [2, 2],
+        [4, 3],
+      ]);
+
+      const result = normalizeCitations(content, map);
+      expect(result).toBe("Text with single [1] and multiple [2, 3] citations.");
+    });
+
+    it("should sort multiple citations in ascending order", () => {
+      const content = "Text with unordered [^6, ^1, ^4] citations.";
+      const map = new Map([
+        [1, 1],
+        [4, 2],
+        [6, 3],
+      ]);
+
+      const result = normalizeCitations(content, map);
+      expect(result).toBe("Text with unordered [1, 2, 3] citations.");
     });
   });
 
