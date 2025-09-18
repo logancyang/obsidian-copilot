@@ -8,14 +8,21 @@ import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { SlashCommandPlugin } from "./SlashCommandPlugin";
 import { NoteCommandPlugin } from "./NoteCommandPlugin";
+import { AtMentionCommandPlugin } from "./AtMentionCommandPlugin";
 import { NotePillPlugin, NotePillNode } from "./NotePillPlugin";
 import { URLPillPlugin, URLPillNode } from "./URLPillNode";
+import { ToolPillNode } from "./ToolPillNode";
+import { FolderPillNode } from "./FolderPillNode";
+import { TagPillNode } from "./TagPillNode";
 import { PillDeletionPlugin } from "./PillDeletionPlugin";
 import { KeyboardPlugin } from "./plugins/KeyboardPlugin";
 import { ValueSyncPlugin } from "./plugins/ValueSyncPlugin";
 import { FocusPlugin } from "./plugins/FocusPlugin";
 import { NotePillSyncPlugin } from "./plugins/NotePillSyncPlugin";
 import { URLPillSyncPlugin } from "./plugins/URLPillSyncPlugin";
+import { ToolPillSyncPlugin } from "./plugins/ToolPillSyncPlugin";
+import { FolderPillSyncPlugin } from "./plugins/FolderPillSyncPlugin";
+import { TagPillSyncPlugin } from "./plugins/TagPillSyncPlugin";
 import { PastePlugin } from "./plugins/PastePlugin";
 import { TextInsertionPlugin } from "./plugins/TextInsertionPlugin";
 import { useChatInput } from "@/context/ChatInputContext";
@@ -32,6 +39,12 @@ interface LexicalEditorProps {
   onNotesRemoved?: (removedNotes: { path: string; basename: string }[]) => void;
   onURLsChange?: (urls: string[]) => void;
   onURLsRemoved?: (removedUrls: string[]) => void;
+  onToolsChange?: (tools: string[]) => void;
+  onToolsRemoved?: (removedTools: string[]) => void;
+  onFoldersChange?: (folders: { name: string; path: string }[]) => void;
+  onFoldersRemoved?: (removedFolders: { name: string; path: string }[]) => void;
+  onTagsChange?: (tags: string[]) => void;
+  onTagsRemoved?: (removedTags: string[]) => void;
   onEditorReady?: (editor: any) => void;
 }
 
@@ -46,6 +59,12 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   onNotesRemoved,
   onURLsChange,
   onURLsRemoved,
+  onToolsChange,
+  onToolsRemoved,
+  onFoldersChange,
+  onFoldersRemoved,
+  onTagsChange,
+  onTagsRemoved,
   onEditorReady,
 }) => {
   const [focusFn, setFocusFn] = React.useState<(() => void) | null>(null);
@@ -72,7 +91,13 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
         root: "tw-outline-none",
         paragraph: "tw-m-0",
       },
-      nodes: [NotePillNode, ...(onURLsChange ? [URLPillNode] : [])],
+      nodes: [
+        NotePillNode,
+        ToolPillNode,
+        FolderPillNode,
+        TagPillNode,
+        ...(onURLsChange ? [URLPillNode] : []),
+      ],
       onError: (error: Error) => {
         console.error("Lexical error:", error);
       },
@@ -126,10 +151,17 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
         {onURLsChange && (
           <URLPillSyncPlugin onURLsChange={onURLsChange} onURLsRemoved={onURLsRemoved} />
         )}
+        <ToolPillSyncPlugin onToolsChange={onToolsChange} onToolsRemoved={onToolsRemoved} />
+        <FolderPillSyncPlugin
+          onFoldersChange={onFoldersChange}
+          onFoldersRemoved={onFoldersRemoved}
+        />
+        <TagPillSyncPlugin onTagsChange={onTagsChange} onTagsRemoved={onTagsRemoved} />
         <PillDeletionPlugin />
         <PastePlugin enableURLPills={!!onURLsChange} />
         <SlashCommandPlugin />
         <NoteCommandPlugin />
+        <AtMentionCommandPlugin />
         <NotePillPlugin />
         {onURLsChange && <URLPillPlugin />}
         <TextInsertionPlugin />
