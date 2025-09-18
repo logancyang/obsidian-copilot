@@ -75,6 +75,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isUnmountingRef = useRef<boolean>(false);
   // Use a stable ID for the message to preserve tool call roots across re-renders
   const messageId = useRef(
     message.timestamp?.epoch
@@ -290,7 +291,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   };
 
   useEffect(() => {
-    let isUnmounting = false;
+    // Reset unmounting flag when effect runs
+    isUnmountingRef.current = false;
 
     if (contentRef.current && message.sender !== USER_SENDER) {
       // Create a new Component instance if it doesn't exist
@@ -301,7 +303,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       const processedMessage = preprocess(message.message);
       const parsedMessage = parseToolCallMarkers(processedMessage);
 
-      if (!isUnmounting) {
+      if (!isUnmountingRef.current) {
         // Track existing tool call IDs
         const existingToolCallIds = new Set<string>();
         const existingElements = contentRef.current.querySelectorAll('[id^="tool-call-"]');
@@ -339,7 +341,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             if (existingDiv) {
               // Update existing tool call
               const root = rootsRef.current.get(toolCallId);
-              if (root) {
+              if (root && !isUnmountingRef.current) {
                 root.render(
                   <ToolCallBanner
                     toolName={segment.toolCall.toolName}
@@ -368,16 +370,18 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
               const root = ReactDOM.createRoot(toolDiv);
               rootsRef.current.set(toolCallId, root);
 
-              root.render(
-                <ToolCallBanner
-                  toolName={segment.toolCall.toolName}
-                  displayName={segment.toolCall.displayName}
-                  emoji={segment.toolCall.emoji}
-                  isExecuting={segment.toolCall.isExecuting}
-                  result={segment.toolCall.result || null}
-                  confirmationMessage={segment.toolCall.confirmationMessage}
-                />
-              );
+              if (!isUnmountingRef.current) {
+                root.render(
+                  <ToolCallBanner
+                    toolName={segment.toolCall.toolName}
+                    displayName={segment.toolCall.displayName}
+                    emoji={segment.toolCall.emoji}
+                    isExecuting={segment.toolCall.isExecuting}
+                    result={segment.toolCall.result || null}
+                    confirmationMessage={segment.toolCall.confirmationMessage}
+                  />
+                );
+              }
               currentIndex++;
             }
           }
@@ -415,7 +419,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
     // Cleanup function
     return () => {
-      isUnmounting = true;
+      isUnmountingRef.current = true;
     };
   }, [message, app, componentRef, isStreaming, preprocess]);
 
@@ -452,6 +456,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     cleanupOldRoots();
 
     return () => {
+      // Set unmounting flag immediately
+      isUnmountingRef.current = true;
+
       // Defer cleanup to avoid React rendering conflicts
       setTimeout(() => {
         // Clean up component
