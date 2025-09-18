@@ -1,16 +1,16 @@
 import React from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getSelection, $isRangeSelection, PASTE_COMMAND, COMMAND_PRIORITY_HIGH } from "lexical";
-import { parseTextForNotesAndURLs, createNodesFromSegments } from "../utils/lexicalTextUtils";
+import { parseTextForPills, createNodesFromSegments } from "../utils/lexicalTextUtils";
 
 interface PastePluginProps {
   enableURLPills?: boolean;
 }
 
 /**
- * Lexical plugin that processes pasted text to convert [[note name]] patterns and URLs into pills.
- * Only converts patterns that resolve to actual notes in the vault and valid URLs - invalid references
- * are left as plain text.
+ * Lexical plugin that processes pasted text to convert [[note name]], @tool, #tag patterns and URLs into pills.
+ * Only converts patterns that resolve to actual notes in the vault, valid tools, valid tags, and valid URLs -
+ * invalid references are left as plain text.
  */
 export function PastePlugin({ enableURLPills = false }: PastePluginProps): null {
   const [editor] = useLexicalComposerContext();
@@ -27,19 +27,29 @@ export function PastePlugin({ enableURLPills = false }: PastePluginProps): null 
         const plainText = clipboardData.getData("text/plain");
         const hasNoteLinks = plainText.includes("[[");
         const hasURLs = enableURLPills && plainText.includes("http");
+        const hasTools = plainText.includes("@");
+        const hasTags = plainText.includes("#");
 
-        if (!plainText || (!hasNoteLinks && !hasURLs)) {
-          // No note links or URLs detected, let default paste behavior handle it
+        if (!plainText || (!hasNoteLinks && !hasURLs && !hasTools && !hasTags)) {
+          // No note links, URLs, tools, or tags detected, let default paste behavior handle it
           return false;
         }
 
-        // Parse the text for note links and conditionally URLs
-        const segments = parseTextForNotesAndURLs(plainText, enableURLPills);
+        // Parse the text for all pill types
+        const segments = parseTextForPills(plainText, {
+          includeNotes: true,
+          includeURLs: enableURLPills,
+          includeTools: true,
+          includeTags: true,
+        });
 
         // Check if we found any valid pills
         const hasValidPills = segments.some(
           (segment) =>
-            segment.type === "note-pill" || (enableURLPills && segment.type === "url-pill")
+            segment.type === "note-pill" ||
+            (enableURLPills && segment.type === "url-pill") ||
+            segment.type === "tool-pill" ||
+            segment.type === "tag-pill"
         );
 
         if (!hasValidPills) {

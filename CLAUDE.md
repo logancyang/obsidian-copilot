@@ -278,3 +278,4 @@ The TODO.md should be:
   - Non-project chats stored in default repository
   - Backwards compatible - loads existing messages from ProjectManager cache
   - Zero configuration required - works automatically
+- Check @tailwind.config.js to understand what tailwind css classnames are available
