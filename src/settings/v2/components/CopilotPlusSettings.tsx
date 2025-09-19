@@ -10,11 +10,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SettingItem } from "@/components/ui/setting-item";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { AUTOCOMPLETE_CONFIG } from "@/constants";
 import { cn } from "@/lib/utils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
-import { HelpCircle, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useState } from "react";
 import { ToolSettingsSection } from "./ToolSettingsSection";
@@ -145,19 +145,16 @@ export const CopilotPlusSettings: React.FC = () => {
                 <span className="tw-leading-none">
                   The key used to accept autocomplete suggestions
                 </span>
-                <TooltipProvider delayDuration={0}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="tw-size-4" />
-                    </TooltipTrigger>
-                    <TooltipContent className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
+                <HelpTooltip
+                  content={
+                    <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
                       <div className="tw-text-sm tw-text-muted">
                         Select the key you want to use for accepting suggestions. Default is
                         &quot;Tab&quot;.
                       </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                    </div>
+                  }
+                />
               </div>
             }
           >

@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
 
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import {
   DEFAULT_MODEL_SETTING,
   MODEL_CAPABILITIES,
@@ -17,7 +17,6 @@ import {
 } from "@/constants";
 import { getSettings } from "@/settings/model";
 import { debounce, getProviderInfo, getProviderLabel } from "@/utils";
-import { HelpCircle } from "lucide-react";
 import { App, Modal, Platform } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
@@ -143,25 +142,21 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
           label={
             <div className="tw-flex tw-items-center tw-gap-1.5">
               <span className="tw-leading-none">Display Name</span>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="tw-size-4" />
-                  </TooltipTrigger>
-                  <TooltipContent align="start" className="tw-max-w-96" side="bottom">
-                    <div className="tw-flex tw-flex-col tw-gap-0.5 tw-text-sm tw-text-muted">
-                      <div className="tw-text-[12px] tw-font-bold">Suggested format:</div>
-                      <div className="tw-text-accent">[Source]-[Payment]:[Pretty Model Name]</div>
-                      <div className="tw-text-[12px]">
-                        Example:
-                        <li>Direct-Paid:Ds-r1</li>
-                        <li>OpenRouter-Paid:Ds-r1</li>
-                        <li>Perplexity-Paid:lg</li>
-                      </div>
+              <HelpTooltip
+                content={
+                  <div className="tw-flex tw-flex-col tw-gap-0.5 tw-text-sm tw-text-muted">
+                    <div className="tw-text-[12px] tw-font-bold">Suggested format:</div>
+                    <div className="tw-text-accent">[Source]-[Payment]:[Pretty Model Name]</div>
+                    <div className="tw-text-[12px]">
+                      Example:
+                      <li>Direct-Paid:Ds-r1</li>
+                      <li>OpenRouter-Paid:Ds-r1</li>
+                      <li>Perplexity-Paid:lg</li>
                     </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+                  </div>
+                }
+                contentClassName="tw-max-w-96"
+              />
             </div>
           }
         >
@@ -207,19 +202,14 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
               label={
                 <div className="tw-flex tw-items-center tw-gap-1.5">
                   <span className="tw-leading-none">Model Capabilities</span>
-                  <TooltipProvider delayDuration={0}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <HelpCircle className="tw-size-4" />
-                      </TooltipTrigger>
-                      <TooltipContent align="start" className="tw-max-w-96" side="bottom">
-                        <div className="tw-text-sm tw-text-muted">
-                          Only used to display model capabilities, does not affect model
-                          functionality
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <HelpTooltip
+                    content={
+                      <div className="tw-text-sm tw-text-muted">
+                        Only used to display model capabilities, does not affect model functionality
+                      </div>
+                    }
+                    contentClassName="tw-max-w-96"
+                  />
                 </div>
               }
             >
@@ -237,16 +227,11 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
                         handleLocalUpdate("capabilities", value);
                       }}
                     />
-                    <Label htmlFor={id} className="tw-text-sm">
-                      <TooltipProvider delayDuration={0}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span>{label}</span>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom">{description}</TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </Label>
+                    <HelpTooltip content={description}>
+                      <Label htmlFor={id} className="tw-text-sm">
+                        {label}
+                      </Label>
+                    </HelpTooltip>
                   </div>
                 ))}
               </div>

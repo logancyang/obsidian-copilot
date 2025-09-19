@@ -4,10 +4,9 @@ import { SemanticSearchToggleModal } from "@/components/modals/SemanticSearchTog
 import { Button } from "@/components/ui/button";
 import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { SettingItem } from "@/components/ui/setting-item";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
-import { HelpCircle } from "lucide-react";
 import { Notice } from "obsidian";
 import React from "react";
 
@@ -74,25 +73,20 @@ export const QASettings: React.FC = () => {
                     Powers Semantic Vault Search and Relevant Notes. Enable Semantic Search to use
                     it.
                   </span>
-                  <TooltipProvider delayDuration={0}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <HelpCircle className="tw-size-4" />
-                      </TooltipTrigger>
-                      <TooltipContent className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
-                        <div className="tw-pt-2 tw-text-sm tw-text-muted">
-                          This model converts text into vector representations, essential for
-                          semantic search and Question Answering (QA) functionality. Changing the
-                          embedding model will:
-                        </div>
-                        <ul className="tw-pl-4 tw-text-sm tw-text-muted">
-                          <li>Require rebuilding your vault&#39;s vector index</li>
-                          <li>Affect semantic search quality</li>
-                          <li>Impact Question Answering feature performance</li>
-                        </ul>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <HelpTooltip
+                    content={<div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
+                      <div className="tw-pt-2 tw-text-sm tw-text-muted">
+                        This model converts text into vector representations, essential for
+                        semantic search and Question Answering (QA) functionality. Changing the
+                        embedding model will:
+                      </div>
+                      <ul className="tw-pl-4 tw-text-sm tw-text-muted">
+                        <li>Require rebuilding your vault&#39;s vector index</li>
+                        <li>Affect semantic search quality</li>
+                        <li>Impact Question Answering feature performance</li>
+                      </ul>
+                    </div>}
+                  />
                 </div>
               </div>
             }
@@ -114,51 +108,46 @@ export const QASettings: React.FC = () => {
                 <span className="tw-leading-none">
                   Decide when you want the vault to be indexed.
                 </span>
-                <TooltipProvider delayDuration={0}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="tw-size-4" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <div className="tw-space-y-2 tw-py-2">
-                        <div className="tw-space-y-1">
-                          <div className="tw-text-sm tw-text-muted">
-                            Choose when to index your vault:
-                          </div>
-                          <ul className="tw-list-disc tw-space-y-1 tw-pl-2 tw-text-sm">
-                            <li>
-                              <div className="tw-flex tw-items-center tw-gap-1">
-                                <strong className="tw-inline-block tw-whitespace-nowrap">
-                                  NEVER:
-                                </strong>
-                                <span>Manual indexing via command or refresh only</span>
-                              </div>
-                            </li>
-                            <li>
-                              <div className="tw-flex tw-items-center tw-gap-1">
-                                <strong className="tw-inline-block tw-whitespace-nowrap">
-                                  ON STARTUP:
-                                </strong>
-                                <span>Index updates when plugin loads or reloads</span>
-                              </div>
-                            </li>
-                            <li>
-                              <div className="tw-flex tw-items-center tw-gap-1">
-                                <strong className="tw-inline-block tw-whitespace-nowrap">
-                                  ON MODE SWITCH:
-                                </strong>
-                                <span>Updates when entering QA mode (Recommended)</span>
-                              </div>
-                            </li>
-                          </ul>
+                <HelpTooltip
+                  content={
+                    <div className="tw-space-y-2 tw-py-2">
+                      <div className="tw-space-y-1">
+                        <div className="tw-text-sm tw-text-muted">
+                          Choose when to index your vault:
                         </div>
-                        <p className="tw-text-sm tw-text-callout-warning">
-                          Warning: Cost implications for large vaults with paid models
-                        </p>
+                        <ul className="tw-list-disc tw-space-y-1 tw-pl-2 tw-text-sm">
+                          <li>
+                            <div className="tw-flex tw-items-center tw-gap-1">
+                              <strong className="tw-inline-block tw-whitespace-nowrap">
+                                NEVER:
+                              </strong>
+                              <span>Manual indexing via command or refresh only</span>
+                            </div>
+                          </li>
+                          <li>
+                            <div className="tw-flex tw-items-center tw-gap-1">
+                              <strong className="tw-inline-block tw-whitespace-nowrap">
+                                ON STARTUP:
+                              </strong>
+                              <span>Index updates when plugin loads or reloads</span>
+                            </div>
+                          </li>
+                          <li>
+                            <div className="tw-flex tw-items-center tw-gap-1">
+                              <strong className="tw-inline-block tw-whitespace-nowrap">
+                                ON MODE SWITCH:
+                              </strong>
+                              <span>Updates when entering QA mode (Recommended)</span>
+                            </div>
+                          </li>
+                        </ul>
                       </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                      <p className="tw-text-sm tw-text-callout-warning">
+                        Warning: Cost implications for large vaults with paid models
+                      </p>
+                    </div>
+                  }
+                />
               </div>
             }
             value={settings.indexVaultToVectorStore}

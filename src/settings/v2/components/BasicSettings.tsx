@@ -3,14 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { SettingItem } from "@/components/ui/setting-item";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { DEFAULT_OPEN_AREA, PLUS_UTM_MEDIUMS } from "@/constants";
 import { cn } from "@/lib/utils";
 import { createPlusPageUrl } from "@/plusUtils";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { checkModelApiKey, formatDateTime } from "@/utils";
-import { HelpCircle, Key, Loader2 } from "lucide-react";
+import { Key, Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useState } from "react";
 import { ApiKeyDialog } from "./ApiKeyDialog";
@@ -104,12 +104,9 @@ export const BasicSettings: React.FC = () => {
                   <span className="tw-leading-none">
                     Configure API keys for different AI providers
                   </span>
-                  <TooltipProvider delayDuration={0}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <HelpCircle className="tw-size-4" />
-                      </TooltipTrigger>
-                      <TooltipContent className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
+                  <HelpTooltip
+                    content={
+                      <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
                         <div className="tw-text-sm tw-font-medium tw-text-accent">
                           API key required for chat and QA features
                         </div>
@@ -117,9 +114,9 @@ export const BasicSettings: React.FC = () => {
                           To enable chat and QA functionality, please provide an API key from your
                           selected provider.
                         </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                      </div>
+                    }
+                  />
                 </div>
               }
             >
@@ -141,12 +138,9 @@ export const BasicSettings: React.FC = () => {
             description={
               <div className="tw-flex tw-items-center tw-gap-1.5">
                 <span className="tw-leading-none">Select the Chat model to use</span>
-                <TooltipProvider delayDuration={0}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="tw-size-4" />
-                    </TooltipTrigger>
-                    <TooltipContent className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
+                <HelpTooltip
+                  content={
+                    <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
                       <div className="tw-text-sm tw-font-medium tw-text-accent">
                         Default model is OpenRouter Gemini 2.5 Flash
                       </div>
@@ -154,9 +148,9 @@ export const BasicSettings: React.FC = () => {
                         Set your OpenRouter API key in &apos;API keys&apos; to use this model, or
                         select a different model from another provider.
                       </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                    </div>
+                  }
+                />
               </div>
             }
             value={defaultModelActivated ? settings.defaultModelKey : "Select Model"}
@@ -188,12 +182,9 @@ export const BasicSettings: React.FC = () => {
             description={
               <div className="tw-flex tw-items-center tw-gap-1.5">
                 <span className="tw-leading-none">Select the default chat mode</span>
-                <TooltipProvider delayDuration={0}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="tw-size-4" />
-                    </TooltipTrigger>
-                    <TooltipContent className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
+                <HelpTooltip
+                  content={
+                    <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
                       <ul className="tw-pl-4 tw-text-sm tw-text-muted">
                         <li>
                           <strong>Chat:</strong> Regular chat mode for general conversations and
@@ -218,9 +209,9 @@ export const BasicSettings: React.FC = () => {
                           for more details.
                         </li>
                       </ul>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                    </div>
+                  }
+                />
               </div>
             }
             value={settings.defaultChainType}
@@ -269,12 +260,9 @@ export const BasicSettings: React.FC = () => {
                 <span className="tw-leading-none">
                   Customize the format of saved conversation note names.
                 </span>
-                <TooltipProvider delayDuration={0}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="tw-size-4" />
-                    </TooltipTrigger>
-                    <TooltipContent className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
+                <HelpTooltip
+                  content={
+                    <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
                       <div className="tw-text-sm tw-font-medium tw-text-accent">
                         Note: All the following variables must be included in the template.
                       </div>
@@ -298,9 +286,9 @@ export const BasicSettings: React.FC = () => {
                           20250114_153232__polish_this_article_[[Readme]]
                         </i>
                       </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                    </div>
+                  }
+                />
               </div>
             }
           >

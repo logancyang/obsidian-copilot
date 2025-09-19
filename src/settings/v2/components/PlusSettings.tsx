@@ -31,8 +31,12 @@ export function PlusSettings() {
       <div className="tw-flex tw-flex-col tw-gap-2 tw-text-sm tw-text-muted">
         <div>
           Copilot Plus takes your Obsidian experience to the next level with cutting-edge AI
-          capabilities. This premium tier unlocks advanced features, including chat context, PDF and
-          image support, web search integration, exclusive chat and embedding models, and much more.
+          capabilities. This premium tier unlocks advanced features:{" "}
+          <strong>
+            {" "}
+            including chat context, PDF and image support, web search integration, exclusive chat
+            and embedding models, and much more.
+          </strong>
         </div>
         <div>
           Copilot Plus is evolving fast, with new features and improvements rolling out regularly.
@@ -62,12 +66,16 @@ export function PlusSettings() {
               new CopilotPlusWelcomeModal(app).open();
             }
           }}
-          className="tw-min-w-20"
+          className="tw-min-w-10 tw-text-xs md:tw-text-sm"
         >
-          {isChecking ? <Loader2 className="tw-size-4 tw-animate-spin" /> : "Apply"}
+          {isChecking ? <Loader2 className="tw-size-2 tw-animate-spin md:tw-size-4" /> : "Apply"}
         </Button>
-        <Button variant="secondary" onClick={() => navigateToPlusPage(PLUS_UTM_MEDIUMS.SETTINGS)}>
-          Join Now <ExternalLink className="tw-size-4" />
+        <Button
+          className="tw-text-xs md:tw-text-sm"
+          variant="secondary"
+          onClick={() => navigateToPlusPage(PLUS_UTM_MEDIUMS.SETTINGS)}
+        >
+          Join Now <ExternalLink className="tw-size-2 md:tw-size-4" />
         </Button>
       </div>
       <div className="tw-text-error">{error}</div>

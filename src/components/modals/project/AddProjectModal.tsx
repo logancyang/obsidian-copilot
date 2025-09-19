@@ -8,15 +8,14 @@ import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { ObsidianNativeSelect } from "@/components/ui/obsidian-native-select";
 import { SettingSlider } from "@/components/ui/setting-slider";
 import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DEFAULT_MODEL_SETTING } from "@/constants";
 import { getDecodedPatterns } from "@/search/searchUtils";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { checkModelApiKey, err2String, randomUUID } from "@/utils";
-import { HelpCircle } from "lucide-react";
 import { App, Modal, Notice } from "obsidian";
 import React, { useState } from "react";
 import { createRoot, Root } from "react-dom/client";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 
 interface AddProjectModalContentProps {
   initialProject?: ProjectConfig;
@@ -259,31 +258,27 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
             label={
               <div className="tw-flex tw-items-center tw-gap-2">
                 <span>File Context</span>
-                <TooltipProvider delayDuration={0}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="tw-size-4 tw-text-muted" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <div className="tw-max-w-80">
-                        <strong>Supported File Types:</strong>
-                        <br />
-                        <strong>• Documents:</strong> pdf, doc, docx, ppt, pptx, epub, txt, rtf and
-                        many more
-                        <br />
-                        <strong>• Images:</strong> jpg, png, svg, gif, bmp, webp, tiff
-                        <br />
-                        <strong>• Spreadsheets:</strong> xlsx, xls, csv, numbers
-                        <br />
-                        <br />
-                        Non-markdown files are converted to markdown in the background.
-                        <br />
-                        <strong>Rate limit:</strong> 50 files or 100MB per 3 hours, whichever is
-                        reached first.
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <HelpTooltip
+                  buttonClassName="tw-size-4 tw-text-muted"
+                  content={
+                    <div className="tw-max-w-80">
+                      <strong>Supported File Types:</strong>
+                      <br />
+                      <strong>• Documents:</strong> pdf, doc, docx, ppt, pptx, epub, txt, rtf and
+                      many more
+                      <br />
+                      <strong>• Images:</strong> jpg, png, svg, gif, bmp, webp, tiff
+                      <br />
+                      <strong>• Spreadsheets:</strong> xlsx, xls, csv, numbers
+                      <br />
+                      <br />
+                      Non-markdown files are converted to markdown in the background.
+                      <br />
+                      <strong>Rate limit:</strong> 50 files or 100MB per 3 hours, whichever is
+                      reached first.
+                    </div>
+                  }
+                />
               </div>
             }
             description="Define patterns to include specific files, folders or tags (specified in the note property) in the project context."

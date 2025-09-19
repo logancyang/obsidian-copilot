@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { useActiveFile } from "@/hooks/useActiveFile";
 import { cn } from "@/lib/utils";
 import {
@@ -17,13 +17,13 @@ import {
   ChevronUp,
   FileInput,
   FileOutput,
-  Info,
   PlusCircle,
   RefreshCcw,
   TriangleAlert,
 } from "lucide-react";
 import { Notice, TFile } from "obsidian";
 import React, { memo, useCallback, useEffect, useState } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 function useRelevantNotes(refresher: number) {
   const [relevantNotes, setRelevantNotes] = useState<RelevantNoteEntry[]>([]);
@@ -47,6 +47,7 @@ function useRelevantNotes(refresher: number) {
         setRelevantNotes([]);
       }
     }
+
     fetchNotes();
   }, [activeFile?.path, refresher]);
 
@@ -57,6 +58,7 @@ function useHasIndex(notePath: string, refresher: number) {
   const [hasIndex, setHasIndex] = useState(true);
   useEffect(() => {
     if (!notePath) return;
+
     async function fetchHasIndex() {
       try {
         const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
@@ -66,6 +68,7 @@ function useHasIndex(notePath: string, refresher: number) {
         setHasIndex(false);
       }
     }
+
     fetchHasIndex();
   }, [notePath, refresher]);
   return hasIndex;
@@ -290,22 +293,16 @@ export const RelevantNotes = memo(
           <div className="tw-flex tw-items-center tw-justify-between tw-pb-2 tw-pl-1">
             <div className="tw-flex tw-flex-1 tw-items-center tw-gap-2">
               <span className="tw-font-semibold tw-text-normal">Relevant Notes</span>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Info className="tw-size-4 tw-text-muted" />
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="tw-w-64">
-                  Relevance is a combination of semantic similarity and links.
-                </TooltipContent>
-              </Tooltip>
+              <HelpTooltip
+                content="Relevance is a combination of semantic similarity and links."
+                contentClassName="tw-w-64"
+                buttonClassName="tw-size-4 tw-text-muted"
+              />
 
               {!hasIndex && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <TriangleAlert className="tw-size-4 tw-text-warning" />
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">Note has not been indexed</TooltipContent>
-                </Tooltip>
+                <HelpTooltip content="Note has not been indexed" side="bottom">
+                  <TriangleAlert className="tw-size-4 tw-text-warning" />
+                </HelpTooltip>
               )}
             </div>
             <div className="tw-flex tw-items-center">

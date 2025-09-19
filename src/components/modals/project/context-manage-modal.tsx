@@ -8,7 +8,6 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { Separator } from "@/components/ui/separator";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   createPatternSettingsValue,
@@ -25,15 +24,15 @@ import {
   FileText,
   FileVideo,
   FolderIcon,
-  HelpCircle,
   Plus,
   PlusCircle,
   TagIcon,
   XIcon,
 } from "lucide-react";
-import { App, Modal, Notice, TFile } from "obsidian";
+import { App, Modal, Notice, Platform, TFile } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 
 function FileIcon({ extension, size = "tw-size-4" }: { extension: string; size?: string }) {
   const ext = extension.toLowerCase().replace("*.", "");
@@ -78,18 +77,13 @@ const SectionHeader: React.FC<SectionHeaderProps> = ({
         <IconComponent className={`tw-mr-2 tw-size-4 ${iconColorClassName}`} />
         <h3 className={`tw-text-sm tw-font-semibold ${iconColorClassName}`}>{title}</h3>
         {tooltip && (
-          <TooltipProvider delayDuration={0}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <HelpCircle className="tw-ml-2 tw-size-4 tw-text-muted" />
-              </TooltipTrigger>
-              <TooltipContent>
-                <div className="tw-max-w-80">{tooltip}</div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <HelpTooltip
+            buttonClassName="tw-ml-2 tw-size-4 tw-text-muted"
+            content={<div className="tw-max-w-80">{tooltip}</div>}
+          />
         )}
       </div>
+
       <Button
         variant="ghost"
         size="fit"
@@ -309,6 +303,7 @@ function isCategoryItem(item: DisplayItem): item is CategoryItem {
 }
 
 function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageProps) {
+  const isMobile = Platform.isMobile;
   const { inclusions: inclusionPatterns, exclusions: exclusionPatterns } = useMemo(() => {
     return getMatchingPatterns({
       inclusions: initialProject?.contextSource.inclusions,
@@ -997,7 +992,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
     <div className="tw-flex tw-h-full tw-flex-col">
       <ResizablePanelGroup direction="horizontal" className="tw-flex-1">
         {/* Left Sidebar - Navigation */}
-        <ResizablePanel defaultSize={30} minSize={20} maxSize={40}>
+        <ResizablePanel defaultSize={isMobile ? 35 : 30} minSize={20} maxSize={40}>
           <div className="tw-flex tw-h-full tw-flex-col">
             {/* Header */}
             <div className="tw-border-b tw-p-4">
@@ -1094,7 +1089,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
                     )}
                     onClick={groupHandlers.click.ignoreFiles}
                   >
-                    Ignore Files ({ignoreItems.files.size})
+                    Files ({ignoreItems.files.size})
                   </div>
                 </div>
               </div>
@@ -1105,7 +1100,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
         <ResizableHandle withHandle />
 
         {/* Right Content Area */}
-        <ResizablePanel defaultSize={70}>
+        <ResizablePanel defaultSize={isMobile ? 65 : 70}>
           <div className="tw-flex tw-h-full tw-flex-col">
             {/* Header */}
             <div className="tw-border-b tw-p-4">

@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
@@ -20,7 +20,6 @@ import {
   ChevronUp,
   Edit2,
   Folder,
-  Info,
   MessageSquare,
   Plus,
   Search,
@@ -30,6 +29,7 @@ import {
 import { App, Notice } from "obsidian";
 import React, { memo, useEffect, useMemo, useState } from "react";
 import { filterProjects } from "@/utils/projectUtils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 function ProjectItem({
   project,
@@ -236,7 +236,7 @@ export const ProjectList = memo(
           <div className="tw-flex tw-flex-col">
             {showChatInput && selectedProject ? (
               <div className="tw-flex tw-items-center tw-justify-between tw-px-2 tw-py-3">
-                <div className="tw-flex tw-items-center tw-gap-2">
+                <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
                   <span className="tw-font-semibold tw-text-normal">Projects</span>
                   <Select
                     value={selectedProject.name}
@@ -247,31 +247,31 @@ export const ProjectList = memo(
                       }
                     }}
                   >
-                    <SelectTrigger className="tw-w-[200px]">
+                    <SelectTrigger className="tw-truncate">
                       <SelectValue>
-                        <div className="tw-flex tw-items-center tw-gap-2">
-                          <Folder className="tw-size-4 tw-text-accent/70" />
-                          <span>{selectedProject.name}</span>
+                        <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
+                          <Folder className="tw-size-4 tw-shrink-0 tw-text-accent/70" />
+                          <span className="tw-flex-1 tw-truncate">{selectedProject.name}</span>
                         </div>
                       </SelectValue>
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="tw-truncate">
                       {projects.map((project) => (
                         <SelectItem
                           key={project.name}
                           value={project.name}
                           className="tw-flex tw-items-center tw-gap-2"
                         >
-                          <div className="tw-flex tw-items-center tw-gap-2">
-                            <Folder className="tw-size-4" />
-                            {project.name}
+                          <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
+                            <Folder className="tw-size-4 tw-shrink-0" />
+                            <span className="tw-truncate">{project.name}</span>
                           </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="tw-flex tw-items-center tw-gap-2">
+                <div className="tw-ml-1 tw-flex tw-items-center tw-gap-2">
                   <Button
                     variant="secondary"
                     onClick={() => handleEditProject(selectedProject)}
@@ -307,14 +307,11 @@ export const ProjectList = memo(
                 <div className="tw-flex tw-items-center tw-justify-between tw-px-4 tw-py-3">
                   <div className="tw-flex tw-flex-1 tw-items-center tw-gap-2">
                     <span className="tw-font-semibold tw-text-normal">Projects</span>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Info className="tw-size-4 tw-text-muted" />
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="tw-w-64">
-                        Manage your projects with different contexts and configurations.
-                      </TooltipContent>
-                    </Tooltip>
+                    <HelpTooltip
+                      content="Manage your projects with different contexts and configurations."
+                      contentClassName="tw-w-64"
+                      buttonClassName="tw-size-4 tw-text-muted"
+                    />
                   </div>
                   <div className="tw-flex tw-items-center tw-gap-2">
                     <Button className="tw-px-2" variant="secondary" onClick={handleAddProject}>

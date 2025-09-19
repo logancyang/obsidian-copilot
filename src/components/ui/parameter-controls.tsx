@@ -9,7 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { HelpCircle, Zap, ZapOff } from "lucide-react";
+import { Zap, ZapOff } from "lucide-react";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 
 interface BaseParameterControlProps {
   label: string;
@@ -83,14 +84,10 @@ export function ParameterControl(props: ParameterControlProps) {
               {label}
             </span>
             {helpText && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="tw-size-4 tw-text-muted" />
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <div className="tw-max-w-[300px]">{helpText}</div>
-                </TooltipContent>
-              </Tooltip>
+              <HelpTooltip
+                buttonClassName="tw-size-4 tw-text-muted"
+                content={<div className="tw-max-w-[300px]">{helpText}</div>}
+              />
             )}
           </div>
           <div className={`tw-flex tw-items-center ${optional ? "tw-gap-3" : "tw-gap-0"}`}>

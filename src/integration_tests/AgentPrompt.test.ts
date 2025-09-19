@@ -287,11 +287,11 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
       <title>test.md</title>
       <content>
       New York City, USA - The city that never sleeps, New York buzzes with energy, towering skyscrapers, cultural diversity, and endless ambition. From Broadway to Wall Street, it’s a global symbol of dreams and hustle.
-          
+
       Tokyo, Japan - A dazzling blend of futuristic tech and centuries-old tradition, Tokyo moves fast yet bows deep. Neon lights, tranquil shrines, and sushi perfection coexist in this mesmerizing metropolis.
-          
+
       Paris, France - Romantic and refined, Paris is a living museum of art, fashion, and gastronomy. Every street corner whispers history, and every café terrace invites you to linger.
-          
+
       London, UK - A city of kings and punks, rain and rebellion. London blends royal heritage with cutting-edge creativity, from the Tower of London to Shoreditch street art.
       </content>
       </active_note>
@@ -301,13 +301,9 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
           toolName: "replaceInFile",
           // Check if args.diff contains the correct search text
           argumentValidator: (args) => {
-            expect(args).toEqual(
-              expect.objectContaining({
-                path: "test.md",
-                diff: expect.stringContaining(
-                  `------- SEARCH\nLondon, UK - A city of kings and punks, rain and rebellion. London blends royal heritage with cutting-edge creativity, from the Tower of London to Shoreditch street art.\n=======`
-                ),
-              })
+            expect(args.path).toBe("test.md");
+            expect(args.diff).toContain(
+              `------- SEARCH\nLondon, UK - A city of kings and punks, rain and rebellion. London blends royal heritage with cutting-edge creativity, from the Tower of London to Shoreditch street art.\n=======`
             );
           },
           mockedReturnValue: "File updated successfully",
@@ -323,11 +319,11 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
       <title>test.md</title>
       <content>
       New York City, USA - The city that never sleeps, New York buzzes with energy, towering skyscrapers, cultural diversity, and endless ambition. From Broadway to Wall Street, it’s a global symbol of dreams and hustle.
-          
+
       Tokyo, Japan - A dazzling blend of futuristic tech and centuries-old tradition, Tokyo moves fast yet bows deep. Neon lights, tranquil shrines, and sushi perfection coexist in this mesmerizing metropolis.
-          
+
       Paris, France - Romantic and refined, Paris is a living museum of art, fashion, and gastronomy. Every street corner whispers history, and every café terrace invites you to linger.
-          
+
       London, UK - A city of kings and punks, rain and rebellion. London blends royal heritage with cutting-edge creativity, from the Tower of London to Shoreditch street art.
       </content>
       </active_note>

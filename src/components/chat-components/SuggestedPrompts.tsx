@@ -1,17 +1,18 @@
 import { useChainType } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { Button } from "@/components/ui/button";
-import { Card, CardTitle, CardContent, CardHeader } from "@/components/ui/card";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { useSettingsValue } from "@/settings/model";
 import { PlusCircle, TriangleAlert } from "lucide-react";
 import React, { useMemo } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface NotePrompt {
   title: string;
   prompts: string[];
 }
+
 const SUGGESTED_PROMPTS: Record<string, NotePrompt> = {
   activeNote: {
     title: "Active Note Insights",
