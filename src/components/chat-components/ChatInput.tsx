@@ -7,40 +7,24 @@ import {
   useProjectLoading,
 } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
-import { CustomCommandManager } from "@/commands/customCommandManager";
-import { sortSlashCommands } from "@/commands/customCommandUtils";
-import { getCachedCustomCommands } from "@/commands/state";
-import { AddContextNoteModal } from "@/components/modals/AddContextNoteModal";
 import { AddImageModal } from "@/components/modals/AddImageModal";
-
-import { ListPromptModal } from "@/components/modals/ListPromptModal";
 import { Button } from "@/components/ui/button";
 import { ModelSelector } from "@/components/ui/ModelSelector";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChatToolControls } from "./ChatToolControls";
-import { ContextProcessor } from "@/contextProcessor";
-
-import { COPILOT_TOOL_NAMES } from "@/LLMProviders/intentAnalyzer";
-import { Mention } from "@/mentions/Mention";
 import { isPlusChain } from "@/utils";
 
 import { useSettingsValue } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
-import { getToolDescription } from "@/tools/toolManager";
-import { extractNoteFiles, isAllowedFileForContext, isNoteTitleUnique } from "@/utils";
+import { isAllowedFileForContext } from "@/utils";
 import { CornerDownLeft, Image, Loader2, StopCircle, X } from "lucide-react";
-import { App, Platform, TFile } from "obsidian";
-import React, {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { App, TFile } from "obsidian";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import ContextControl from "./ContextControl";
+import { $removePillsByPath } from "./NotePillPlugin";
+import { $removePillsByURL } from "./URLPillNode";
+import LexicalEditor from "./LexicalEditor";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -57,7 +41,6 @@ interface ChatInputProps {
   setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
   includeActiveNote: boolean;
   setIncludeActiveNote: (include: boolean) => void;
-  mention: Mention;
   selectedImages: File[];
   onAddImage: (files: File[]) => void;
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
@@ -67,135 +50,133 @@ interface ChatInputProps {
   showProgressCard: () => void;
 }
 
-const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
-  (
-    {
-      inputMessage,
-      setInputMessage,
-      handleSendMessage,
-      isGenerating,
-      onStopGenerating,
-      app,
-      contextNotes,
-      setContextNotes,
-      includeActiveNote,
-      setIncludeActiveNote,
-      mention,
-      selectedImages,
-      onAddImage,
-      setSelectedImages,
-      disableModelSwitch,
-      selectedTextContexts,
-      onRemoveSelectedText,
-      showProgressCard,
-    },
-    ref
-  ) => {
-    const [contextUrls, setContextUrls] = useState<string[]>([]);
-    const textAreaRef = useRef<HTMLTextAreaElement>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
-    const [currentModelKey, setCurrentModelKey] = useModelKey();
-    const [currentChain] = useChainType();
-    const [isProjectLoading] = useProjectLoading();
-    const settings = useSettingsValue();
-    const [currentActiveNote, setCurrentActiveNote] = useState<TFile | null>(() => {
-      const activeFile = app.workspace.getActiveFile();
-      return isAllowedFileForContext(activeFile) ? activeFile : null;
-    });
-    const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
-    const isCopilotPlus = isPlusChain(currentChain);
+const ChatInput: React.FC<ChatInputProps> = ({
+  inputMessage,
+  setInputMessage,
+  handleSendMessage,
+  isGenerating,
+  onStopGenerating,
+  app,
+  contextNotes,
+  setContextNotes,
+  includeActiveNote,
+  setIncludeActiveNote,
+  selectedImages,
+  onAddImage,
+  setSelectedImages,
+  disableModelSwitch,
+  selectedTextContexts,
+  onRemoveSelectedText,
+  showProgressCard,
+}) => {
+  const [contextUrls, setContextUrls] = useState<string[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const lexicalEditorRef = useRef<any>(null);
+  const [currentModelKey, setCurrentModelKey] = useModelKey();
+  const [currentChain] = useChainType();
+  const [isProjectLoading] = useProjectLoading();
+  const settings = useSettingsValue();
+  const [currentActiveNote, setCurrentActiveNote] = useState<TFile | null>(() => {
+    const activeFile = app.workspace.getActiveFile();
+    return isAllowedFileForContext(activeFile) ? activeFile : null;
+  });
+  const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
+  const [notesFromPills, setNotesFromPills] = useState<{ path: string; basename: string }[]>([]);
+  const [urlsFromPills, setUrlsFromPills] = useState<string[]>([]);
+  const isCopilotPlus = isPlusChain(currentChain);
 
-    // Toggle states for vault, web search, composer, and autonomous agent
-    const [vaultToggle, setVaultToggle] = useState(false);
-    const [webToggle, setWebToggle] = useState(false);
-    const [composerToggle, setComposerToggle] = useState(false);
-    const [autonomousAgentToggle, setAutonomousAgentToggle] = useState(
-      settings.enableAutonomousAgent
-    );
-    const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
-    const loadingMessages = [
-      "Loading the project context...",
-      "Processing context files...",
-      "If you have many files in context, this can take a while...",
-    ];
+  // Toggle states for vault, web search, composer, and autonomous agent
+  const [vaultToggle, setVaultToggle] = useState(false);
+  const [webToggle, setWebToggle] = useState(false);
+  const [composerToggle, setComposerToggle] = useState(false);
+  const [autonomousAgentToggle, setAutonomousAgentToggle] = useState(
+    settings.enableAutonomousAgent
+  );
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+  const loadingMessages = [
+    "Loading the project context...",
+    "Processing context files...",
+    "If you have many files in context, this can take a while...",
+  ];
 
-    useImperativeHandle(ref, () => ({
-      focus: () => {
-        textAreaRef.current?.focus();
-      },
-    }));
+  // Sync autonomous agent toggle with settings and chain type
+  useEffect(() => {
+    if (currentChain === ChainType.PROJECT_CHAIN) {
+      // Force off in Projects mode
+      setAutonomousAgentToggle(false);
+    } else {
+      // In other modes, use the actual settings value
+      setAutonomousAgentToggle(settings.enableAutonomousAgent);
+    }
+  }, [settings.enableAutonomousAgent, currentChain]);
 
-    // Sync autonomous agent toggle with settings and chain type
-    useEffect(() => {
-      if (currentChain === ChainType.PROJECT_CHAIN) {
-        // Force off in Projects mode
-        setAutonomousAgentToggle(false);
-      } else {
-        // In other modes, use the actual settings value
-        setAutonomousAgentToggle(settings.enableAutonomousAgent);
-      }
-    }, [settings.enableAutonomousAgent, currentChain]);
+  useEffect(() => {
+    if (currentChain === ChainType.PROJECT_CHAIN) {
+      setSelectedProject(getCurrentProject());
 
-    useEffect(() => {
-      if (currentChain === ChainType.PROJECT_CHAIN) {
-        setSelectedProject(getCurrentProject());
-
-        const unsubscribe = subscribeToProjectChange((project) => {
-          setSelectedProject(project);
-        });
-
-        return () => {
-          unsubscribe();
-        };
-      } else {
-        setSelectedProject(null);
-      }
-    }, [currentChain]);
-
-    useEffect(() => {
-      if (!isProjectLoading) return;
-
-      const interval = setInterval(() => {
-        setLoadingMessageIndex((prev) => (prev + 1) % loadingMessages.length);
-      }, 3000);
-
-      return () => clearInterval(interval);
-    }, [isProjectLoading, loadingMessages.length]);
-
-    const getDisplayModelKey = (): string => {
-      if (
-        selectedProject &&
-        currentChain === ChainType.PROJECT_CHAIN &&
-        selectedProject.projectModelKey
-      ) {
-        return selectedProject.projectModelKey;
-      }
-      return currentModelKey;
-    };
-
-    const onSendMessage = () => {
-      if (!isCopilotPlus) {
-        handleSendMessage();
-        return;
-      }
-
-      // Build tool calls based on toggle states
-      const toolCalls: string[] = [];
-      // Only add tool calls when autonomous agent is off
-      // When autonomous agent is on, it handles all tools internally
-      if (!autonomousAgentToggle) {
-        if (vaultToggle) toolCalls.push("@vault");
-        if (webToggle) toolCalls.push("@websearch");
-        if (composerToggle) toolCalls.push("@composer");
-      }
-
-      handleSendMessage({
-        toolCalls,
-        contextNotes,
-        urls: contextUrls,
+      const unsubscribe = subscribeToProjectChange((project) => {
+        setSelectedProject(project);
       });
-    };
 
+      return () => {
+        unsubscribe();
+      };
+    } else {
+      setSelectedProject(null);
+    }
+  }, [currentChain]);
+
+  useEffect(() => {
+    if (!isProjectLoading) return;
+
+    const interval = setInterval(() => {
+      setLoadingMessageIndex((prev) => (prev + 1) % loadingMessages.length);
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [isProjectLoading, loadingMessages.length]);
+
+  const getDisplayModelKey = (): string => {
+    if (
+      selectedProject &&
+      currentChain === ChainType.PROJECT_CHAIN &&
+      selectedProject.projectModelKey
+    ) {
+      return selectedProject.projectModelKey;
+    }
+    return currentModelKey;
+  };
+
+  const onSendMessage = () => {
+    if (!isCopilotPlus) {
+      handleSendMessage();
+      return;
+    }
+
+    // Build tool calls based on toggle states
+    const toolCalls: string[] = [];
+    // Only add tool calls when autonomous agent is off
+    // When autonomous agent is on, it handles all tools internally
+    if (!autonomousAgentToggle) {
+      if (vaultToggle) toolCalls.push("@vault");
+      if (webToggle) toolCalls.push("@web-search");
+      if (composerToggle) toolCalls.push("@composer");
+    }
+
+    handleSendMessage({
+      toolCalls,
+      contextNotes,
+      urls: contextUrls,
+    });
+  };
+
+  // TODO: Re-implement these features for Lexical editor:
+  // - Slash commands (/)
+  // - Note references ([[]])
+  // - Tool mentions (@)
+  // - URL extraction and context updates
+
+  /* LEGACY TEXTAREA HANDLERS - TO BE ADAPTED FOR LEXICAL
     const handleInputChange = async (event: React.ChangeEvent<HTMLTextAreaElement>) => {
       const inputValue = event.target.value;
       const cursorPos = event.target.selectionStart;
@@ -241,10 +222,55 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       }
     };
 
-    useEffect(() => {
-      adjustTextareaHeight();
-    }, [inputMessage]);
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.nativeEvent.isComposing) return;
 
+      if (e.key === "Enter") {
+        // send msg:
+        // 1. non-mobile platforms: only input Enter
+        // 2. mobile platforms: Shift+Enter
+        const shouldSendMessage =
+          (!e.shiftKey && !Platform.isMobile) || (e.shiftKey && Platform.isMobile);
+
+        if (!shouldSendMessage) {
+          // do nothing here, allowing the default newline behavior
+          return;
+        }
+
+        e.preventDefault();
+        onSendMessage();
+      }
+    };
+
+    const handlePaste = useCallback(
+      async (e: React.ClipboardEvent) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+
+        const imageItems = Array.from(items).filter((item) => item.type.indexOf("image") !== -1);
+
+        if (imageItems.length > 0) {
+          e.preventDefault();
+
+          const files = await Promise.all(
+            imageItems.map((item) => {
+              const file = item.getAsFile();
+              if (!file) return null;
+              return file;
+            })
+          );
+
+          const validFiles = files.filter((file) => file !== null);
+          if (validFiles.length > 0) {
+            onAddImage(validFiles);
+          }
+        }
+      },
+      [onAddImage]
+    );
+    */
+
+  /* LEGACY HELPER FUNCTIONS - TO BE ADAPTED FOR LEXICAL
     const showNoteTitleModal = (cursorPos: number) => {
       const fetchNoteTitles = async () => {
         const contextProcessor = ContextProcessor.getInstance();
@@ -346,316 +372,353 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
         optionsWithDescriptions.map((o) => o.description)
       ).open();
     };
+    */
 
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.nativeEvent.isComposing) return;
+  // Handle when pills are removed from the editor
+  const handlePillsRemoved = (removedNotes: { path: string; basename: string }[]) => {
+    const removedPaths = new Set(removedNotes.map((note) => note.path));
 
-      if (e.key === "Enter") {
-        /**
-         * send msg:
-         *         1. non-mobile platforms: only input Enter
-         *         2. mobile platforms: Shift+Enter
-         */
-        const shouldSendMessage =
-          (!e.shiftKey && !Platform.isMobile) || (e.shiftKey && Platform.isMobile);
+    setContextNotes((prev) => {
+      return prev
+        .filter((contextNote) => {
+          // Only remove if the note was removed via pill AND was not added manually
+          if (removedPaths.has(contextNote.path)) {
+            const wasAddedManually = (contextNote as any).wasAddedManually;
+            // If it was added manually, keep it in context
+            // If it was only added via reference, remove it
+            return wasAddedManually;
+          }
+          return true;
+        })
+        .map((contextNote) => {
+          // If the note is being kept but pills were removed, remove the wasAddedViaReference flag
+          if (removedPaths.has(contextNote.path)) {
+            const updatedNote = { ...contextNote };
+            delete (updatedNote as any).wasAddedViaReference;
+            return updatedNote;
+          }
+          return contextNote;
+        });
+    });
+  };
 
-        if (!shouldSendMessage) {
-          // do nothing here, allowing the default newline behavior
-          return;
+  // Handle when URLs are removed from pills (when pills are deleted in editor)
+  const handleURLPillsRemoved = (removedUrls: string[]) => {
+    const removedUrlSet = new Set(removedUrls);
+
+    setContextUrls((prev) => {
+      return prev.filter((url) => {
+        if (removedUrlSet.has(url)) {
+          return false;
+        }
+        return true;
+      });
+    });
+  };
+
+  // Handle when context notes are removed from the context menu
+  // This should remove all corresponding pills from the editor
+  const handleContextRemoved = (notePath: string) => {
+    if (lexicalEditorRef.current) {
+      lexicalEditorRef.current.update(() => {
+        $removePillsByPath(notePath);
+      });
+    }
+
+    // Also immediately update notesFromPills to prevent stale data from re-adding the note
+    setNotesFromPills((prev) => prev.filter((note) => note.path !== notePath));
+  };
+
+  // Handle when context URLs are removed from the context menu
+  // This should remove all corresponding URL pills from the editor
+  const handleURLContextRemoved = (url: string) => {
+    if (lexicalEditorRef.current) {
+      lexicalEditorRef.current.update(() => {
+        $removePillsByURL(url);
+      });
+    }
+
+    // Also immediately update urlsFromPills to prevent stale data from re-adding the URL
+    setUrlsFromPills((prev) => prev.filter((pillUrl) => pillUrl !== url));
+  };
+
+  // Pill-to-context synchronization (when pills are added)
+  useEffect(() => {
+    setContextNotes((prev) => {
+      const contextPaths = new Set(prev.map((note) => note.path));
+      const pillPaths = new Set(notesFromPills.map((note) => note.path));
+
+      // Find notes that need to be added
+      const newNotesFromPills = notesFromPills.filter((pillNote) => {
+        // Don't add if it's the active note and includeActiveNote is already true
+        if (currentActiveNote?.path === pillNote.path && includeActiveNote) return false;
+        // Only add if not already in context
+        return !contextPaths.has(pillNote.path);
+      });
+
+      // Update existing notes to mark them as having pills
+      const updated = prev.map((contextNote) => {
+        // If this note is now represented by pills, mark it as added via reference too
+        if (pillPaths.has(contextNote.path)) {
+          // Preserve existing flags, only add wasAddedViaReference
+          const updatedNote = { ...contextNote };
+          (updatedNote as any).wasAddedViaReference = true;
+          // Preserve wasAddedManually if it exists
+          if ((contextNote as any).wasAddedManually) {
+            (updatedNote as any).wasAddedManually = true;
+          }
+          return updatedNote;
+        }
+        return contextNote;
+      });
+
+      // Add completely new notes from pills
+      const newFiles: TFile[] = [];
+      newNotesFromPills.forEach((pillNote) => {
+        const file = app.vault.getAbstractFileByPath(pillNote.path);
+        if (file instanceof TFile) {
+          newFiles.push(Object.assign(file, { wasAddedViaReference: true }));
+        }
+      });
+
+      return [...updated, ...newFiles];
+    });
+  }, [notesFromPills, currentActiveNote, includeActiveNote, app.vault, setContextNotes]);
+
+  // URL pill-to-context synchronization (when URL pills are added) - only for Plus chains
+  useEffect(() => {
+    if (isPlusChain(currentChain)) {
+      setContextUrls((prev) => {
+        const contextUrlSet = new Set(prev);
+
+        // Find URLs that need to be added
+        const newUrlsFromPills = urlsFromPills.filter((pillUrl) => {
+          // Only add if not already in context
+          return !contextUrlSet.has(pillUrl);
+        });
+
+        // Add completely new URLs from pills
+        if (newUrlsFromPills.length > 0) {
+          return Array.from(new Set([...prev, ...newUrlsFromPills]));
         }
 
-        e.preventDefault();
-        onSendMessage();
-      }
+        return prev;
+      });
+    } else {
+      // Clear URLs for non-Plus chains
+      setContextUrls([]);
+    }
+  }, [urlsFromPills, currentChain]);
+
+  // Update the current active note whenever it changes
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const handleActiveLeafChange = () => {
+      // Clear any existing timeout
+      clearTimeout(timeoutId);
+
+      // Set new timeout
+      timeoutId = setTimeout(() => {
+        const activeNote = app.workspace.getActiveFile();
+        setCurrentActiveNote(isAllowedFileForContext(activeNote) ? activeNote : null);
+      }, 100); // Wait 100ms after the last event because it fires multiple times
     };
 
-    const handlePaste = useCallback(
-      async (e: React.ClipboardEvent) => {
-        const items = e.clipboardData?.items;
-        if (!items) return;
+    const eventRef = app.workspace.on("active-leaf-change", handleActiveLeafChange);
 
-        const imageItems = Array.from(items).filter((item) => item.type.indexOf("image") !== -1);
+    return () => {
+      clearTimeout(timeoutId); // Clean up any pending timeout
+      // cspell:disable-next-line
+      app.workspace.offref(eventRef); // Remove event listener
+    };
+  }, [app.workspace]);
 
-        if (imageItems.length > 0) {
-          e.preventDefault();
+  // Add dropzone configuration
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    accept: {
+      "image/*": [".png", ".gif", ".jpeg", ".jpg", ".webp"],
+    },
+    onDrop: (acceptedFiles) => {
+      onAddImage(acceptedFiles);
+    },
+    noClick: true, // Prevents clicking on textarea from opening file dialog
+    noDragEventsBubbling: true,
+  });
 
-          const files = await Promise.all(
-            imageItems.map((item) => {
-              const file = item.getAsFile();
-              if (!file) return null;
-              return file;
-            })
-          );
+  const excludeNotePaths = useMemo(
+    () =>
+      [
+        ...contextNotes.map((note) => note.path),
+        ...(includeActiveNote && currentActiveNote ? [currentActiveNote.path] : []),
+      ].filter((note) => note != null),
+    [contextNotes, includeActiveNote, currentActiveNote]
+  );
 
-          const validFiles = files.filter((file) => file !== null);
-          if (validFiles.length > 0) {
-            onAddImage(validFiles);
+  const onEditorReady = useCallback((editor: any) => {
+    lexicalEditorRef.current = editor;
+  }, []);
+
+  return (
+    <div
+      className="tw-flex tw-w-full tw-flex-col tw-gap-0.5 tw-rounded-md tw-border tw-border-solid tw-border-border tw-px-1 tw-pb-1 tw-pt-2 tw-@container/chat-input"
+      ref={containerRef}
+    >
+      <ContextControl
+        app={app}
+        excludeNotePaths={excludeNotePaths}
+        contextNotes={contextNotes}
+        setContextNotes={setContextNotes}
+        includeActiveNote={includeActiveNote}
+        setIncludeActiveNote={setIncludeActiveNote}
+        activeNote={currentActiveNote}
+        contextUrls={contextUrls}
+        onRemoveUrl={(url: string) => {
+          setContextUrls((prev) => prev.filter((u) => u !== url));
+          handleURLContextRemoved(url);
+        }}
+        selectedTextContexts={selectedTextContexts}
+        onRemoveSelectedText={onRemoveSelectedText}
+        showProgressCard={showProgressCard}
+        onContextRemoved={handleContextRemoved}
+      />
+
+      {selectedImages.length > 0 && (
+        <div className="selected-images">
+          {selectedImages.map((file, index) => (
+            <div key={index} className="image-preview-container">
+              <img
+                src={URL.createObjectURL(file)}
+                alt={file.name}
+                className="selected-image-preview"
+              />
+              <button
+                className="remove-image-button"
+                onClick={() => setSelectedImages((prev) => prev.filter((_, i) => i !== index))}
+                title="Remove image"
+              >
+                <X className="tw-size-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="tw-relative" {...getRootProps()}>
+        {isProjectLoading && (
+          <div className="tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-bg-primary tw-opacity-80 tw-backdrop-blur-sm">
+            <div className="tw-flex tw-items-center tw-gap-2">
+              <Loader2 className="tw-size-4 tw-animate-spin" />
+              <span className="tw-text-sm">{loadingMessages[loadingMessageIndex]}</span>
+            </div>
+          </div>
+        )}
+        <LexicalEditor
+          value={inputMessage}
+          onChange={(value) => setInputMessage(value)}
+          onSubmit={onSendMessage}
+          onNotesChange={setNotesFromPills}
+          onNotesRemoved={handlePillsRemoved}
+          onURLsChange={isCopilotPlus ? setUrlsFromPills : undefined}
+          onURLsRemoved={isCopilotPlus ? handleURLPillsRemoved : undefined}
+          onEditorReady={onEditorReady}
+          placeholder={
+            "Ask anything. [[ for notes. / for custom prompts. " +
+            (isCopilotPlus ? "@ for tools." : "")
           }
-        }
-      },
-      [onAddImage]
-    );
-
-    useEffect(() => {
-      // Get all note titles that are referenced using [[note]] syntax in the input
-      const currentFiles = new Set(extractNoteFiles(inputMessage, app.vault));
-      // Get all URLs mentioned in the input
-      const currentUrls = mention.extractAllUrls(inputMessage);
-
-      setContextNotes((prev) =>
-        prev.filter((note) => {
-          // Check if this note was added manually via the "+" button
-          const wasAddedManually = (note as any).wasAddedManually === true;
-          // If it was added manually, always keep it
-          if (wasAddedManually) return true;
-
-          // Check if this note was added by typing [[note]] in the input
-          // as opposed to being added via the "Add Note to Context" button
-          const wasAddedViaReference = (note as any).wasAddedViaReference === true;
-
-          // Special handling for the active note
-          if (note.path === currentActiveNote?.path) {
-            if (wasAddedViaReference) {
-              // Case 1: Active note was added by typing [[note]]
-              // Keep it only if its file is still in the input
-              return currentFiles.has(note);
-            } else {
-              // Case 2: Active note was NOT added by [[note]], but by the includeActiveNote toggle
-              // Keep it only if includeActiveNote is true
-              return includeActiveNote;
-            }
-          } else {
-            // Handling for all other notes (not the active note)
-            if (wasAddedViaReference) {
-              // Case 3: Other note was added by typing [[note]]
-              // Keep it only if its file is still in the input
-              return currentFiles.has(note);
-            } else {
-              // Case 4: Other note was added via "Add Note to Context" button
-              // Always keep these notes as they were manually added
-              return true;
-            }
-          }
-        })
-      );
-
-      // Remove any URLs that are no longer present in the input
-      // Only keep URLs if URL processing is supported for the current chain
-      if (isPlusChain(currentChain)) {
-        setContextUrls((prev) => prev.filter((url) => currentUrls.includes(url)));
-      } else {
-        // Clear all URLs for non-Plus chains
-        setContextUrls([]);
-      }
-    }, [
-      inputMessage,
-      includeActiveNote,
-      currentActiveNote,
-      mention,
-      setContextNotes,
-      app.vault,
-      currentChain,
-    ]);
-
-    // Update the current active note whenever it changes
-    useEffect(() => {
-      let timeoutId: ReturnType<typeof setTimeout>;
-
-      const handleActiveLeafChange = () => {
-        // Clear any existing timeout
-        clearTimeout(timeoutId);
-
-        // Set new timeout
-        timeoutId = setTimeout(() => {
-          const activeNote = app.workspace.getActiveFile();
-          setCurrentActiveNote(isAllowedFileForContext(activeNote) ? activeNote : null);
-        }, 100); // Wait 100ms after the last event because it fires multiple times
-      };
-
-      const eventRef = app.workspace.on("active-leaf-change", handleActiveLeafChange);
-
-      return () => {
-        clearTimeout(timeoutId); // Clean up any pending timeout
-        app.workspace.offref(eventRef); // unregister
-      };
-    }, [app.workspace]);
-
-    // Add dropzone configuration
-    const { getRootProps, getInputProps, isDragActive } = useDropzone({
-      accept: {
-        "image/*": [".png", ".gif", ".jpeg", ".jpg", ".webp"],
-      },
-      onDrop: (acceptedFiles) => {
-        onAddImage(acceptedFiles);
-      },
-      noClick: true, // Prevents clicking on textarea from opening file dialog
-      noDragEventsBubbling: true,
-    });
-
-    const excludeNotePaths = useMemo(
-      () =>
-        [
-          ...contextNotes.map((note) => note.path),
-          ...(includeActiveNote && currentActiveNote ? [currentActiveNote.path] : []),
-        ].filter((note) => note != null),
-      [contextNotes, includeActiveNote, currentActiveNote]
-    );
-
-    return (
-      <div
-        className="tw-flex tw-w-full tw-flex-col tw-gap-0.5 tw-rounded-md tw-border tw-border-solid tw-border-border tw-px-1 tw-pb-1 tw-pt-2 tw-@container/chat-input"
-        ref={containerRef}
-      >
-        <ContextControl
-          app={app}
-          excludeNotePaths={excludeNotePaths}
-          contextNotes={contextNotes}
-          setContextNotes={setContextNotes}
-          includeActiveNote={includeActiveNote}
-          setIncludeActiveNote={setIncludeActiveNote}
-          activeNote={currentActiveNote}
-          contextUrls={contextUrls}
-          onRemoveUrl={(url: string) => setContextUrls((prev) => prev.filter((u) => u !== url))}
-          selectedTextContexts={selectedTextContexts}
-          onRemoveSelectedText={onRemoveSelectedText}
-          showProgressCard={showProgressCard}
+          disabled={isProjectLoading}
         />
+        <input {...getInputProps()} />
+        {/* Overlay that appears when dragging */}
+        {isDragActive && (
+          <div className="tw-absolute tw-inset-0 tw-flex tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-dashed tw-bg-primary">
+            <span>Drop images here...</span>
+          </div>
+        )}
+      </div>
 
-        {selectedImages.length > 0 && (
-          <div className="selected-images">
-            {selectedImages.map((file, index) => (
-              <div key={index} className="image-preview-container">
-                <img
-                  src={URL.createObjectURL(file)}
-                  alt={file.name}
-                  className="selected-image-preview"
-                />
-                <button
-                  className="remove-image-button"
-                  onClick={() => setSelectedImages((prev) => prev.filter((_, i) => i !== index))}
-                  title="Remove image"
-                >
-                  <X className="tw-size-4" />
-                </button>
-              </div>
-            ))}
+      <div className="tw-flex tw-h-6 tw-justify-between tw-gap-1 tw-px-1">
+        {isGenerating ? (
+          <div className="tw-flex tw-items-center tw-gap-1 tw-px-1 tw-text-sm tw-text-muted">
+            <Loader2 className="tw-size-3 tw-animate-spin" />
+            <span>Generating...</span>
+          </div>
+        ) : (
+          <div className="tw-min-w-0 tw-flex-1">
+            <ModelSelector
+              variant="ghost2"
+              size="fit"
+              disabled={disableModelSwitch}
+              value={getDisplayModelKey()}
+              onChange={(modelKey) => {
+                // In project mode, we don't update the global model key
+                // as the project model takes precedence
+                if (currentChain !== ChainType.PROJECT_CHAIN) {
+                  setCurrentModelKey(modelKey);
+                }
+              }}
+              className="tw-max-w-full tw-truncate"
+            />
           </div>
         )}
 
-        <div className="tw-relative" {...getRootProps()}>
-          {isProjectLoading && (
-            <div className="tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-bg-primary tw-opacity-80 tw-backdrop-blur-sm">
-              <div className="tw-flex tw-items-center tw-gap-2">
-                <Loader2 className="tw-size-4 tw-animate-spin" />
-                <span className="tw-text-sm">{loadingMessages[loadingMessageIndex]}</span>
-              </div>
-            </div>
-          )}
-          <textarea
-            ref={textAreaRef}
-            className="tw-max-h-40 tw-min-h-[60px] tw-w-full tw-resize-none tw-overflow-y-auto tw-rounded-md tw-border-none tw-bg-transparent tw-px-2 tw-text-sm tw-text-normal placeholder:tw-text-sm placeholder:tw-text-muted/60 focus-visible:tw-ring-0"
-            placeholder={
-              "Ask anything. [[ for notes. / for custom prompts. " +
-              (isCopilotPlus ? "@ for tools." : "")
-            }
-            value={inputMessage}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            disabled={isProjectLoading}
-          />
-          <input {...getInputProps()} />
-          {/* Overlay that appears when dragging */}
-          {isDragActive && (
-            <div className="tw-absolute tw-inset-0 tw-flex tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-dashed tw-bg-primary">
-              <span>Drop images here...</span>
-            </div>
-          )}
-        </div>
-
-        <div className="tw-flex tw-h-6 tw-justify-between tw-gap-1 tw-px-1">
+        <div className="tw-flex tw-items-center tw-gap-1">
           {isGenerating ? (
-            <div className="tw-flex tw-items-center tw-gap-1 tw-px-1 tw-text-sm tw-text-muted">
-              <Loader2 className="tw-size-3 tw-animate-spin" />
-              <span>Generating...</span>
-            </div>
+            <Button
+              variant="ghost2"
+              size="fit"
+              className="tw-text-muted"
+              onClick={() => onStopGenerating()}
+            >
+              <StopCircle className="tw-size-4" />
+              Stop
+            </Button>
           ) : (
-            <div className="tw-min-w-0 tw-flex-1">
-              <ModelSelector
-                variant="ghost2"
-                size="fit"
-                disabled={disableModelSwitch}
-                value={getDisplayModelKey()}
-                onChange={(modelKey) => {
-                  // In project mode, we don't update the global model key
-                  // as the project model takes precedence
-                  if (currentChain !== ChainType.PROJECT_CHAIN) {
-                    setCurrentModelKey(modelKey);
-                  }
-                }}
-                className="tw-max-w-full tw-truncate"
+            <>
+              <ChatToolControls
+                vaultToggle={vaultToggle}
+                setVaultToggle={setVaultToggle}
+                webToggle={webToggle}
+                setWebToggle={setWebToggle}
+                composerToggle={composerToggle}
+                setComposerToggle={setComposerToggle}
+                autonomousAgentToggle={autonomousAgentToggle}
+                setAutonomousAgentToggle={setAutonomousAgentToggle}
+                currentChain={currentChain}
               />
-            </div>
-          )}
-
-          <div className="tw-flex tw-items-center tw-gap-1">
-            {isGenerating ? (
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost2"
+                      size="fit"
+                      className="tw-text-muted hover:tw-text-accent"
+                      onClick={() => {
+                        new AddImageModal(app, onAddImage).open();
+                      }}
+                    >
+                      <Image className="tw-size-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="tw-px-1 tw-py-0.5">Add image(s)</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               <Button
                 variant="ghost2"
                 size="fit"
                 className="tw-text-muted"
-                onClick={() => onStopGenerating()}
+                onClick={() => onSendMessage()}
               >
-                <StopCircle className="tw-size-4" />
-                Stop
+                <CornerDownLeft className="!tw-size-3" />
+                <span>chat</span>
               </Button>
-            ) : (
-              <>
-                <ChatToolControls
-                  vaultToggle={vaultToggle}
-                  setVaultToggle={setVaultToggle}
-                  webToggle={webToggle}
-                  setWebToggle={setWebToggle}
-                  composerToggle={composerToggle}
-                  setComposerToggle={setComposerToggle}
-                  autonomousAgentToggle={autonomousAgentToggle}
-                  setAutonomousAgentToggle={setAutonomousAgentToggle}
-                  currentChain={currentChain}
-                />
-                <TooltipProvider delayDuration={0}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost2"
-                        size="fit"
-                        className="tw-text-muted hover:tw-text-accent"
-                        onClick={() => {
-                          new AddImageModal(app, onAddImage).open();
-                        }}
-                      >
-                        <Image className="tw-size-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent className="tw-px-1 tw-py-0.5">Add image(s)</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                <Button
-                  variant="ghost2"
-                  size="fit"
-                  className="tw-text-muted"
-                  onClick={() => onSendMessage()}
-                >
-                  <CornerDownLeft className="!tw-size-3" />
-                  <span>chat</span>
-                </Button>
-              </>
-            )}
-          </div>
+            </>
+          )}
         </div>
       </div>
-    );
-  }
-);
+    </div>
+  );
+};
 
 ChatInput.displayName = "ChatInput";
 

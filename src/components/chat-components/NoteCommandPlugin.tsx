@@ -1,0 +1,426 @@
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import {
+  $getSelection,
+  $isRangeSelection,
+  TextNode,
+  COMMAND_PRIORITY_HIGH,
+  KEY_ARROW_DOWN_COMMAND,
+  KEY_ARROW_UP_COMMAND,
+  KEY_ENTER_COMMAND,
+  KEY_ESCAPE_COMMAND,
+  KEY_TAB_COMMAND,
+  $createTextNode,
+} from "lexical";
+import fuzzysort from "fuzzysort";
+import { TFile, App } from "obsidian";
+import { TypeaheadMenu, tryToPositionRange, TypeaheadOption } from "./TypeaheadMenu";
+import { $createNotePillNode } from "./NotePillPlugin";
+
+// Get app instance
+declare const app: App;
+
+interface NoteOption extends TypeaheadOption {
+  file: TFile;
+}
+
+export function NoteCommandPlugin(): JSX.Element {
+  const [editor] = useLexicalComposerContext();
+  const [noteCommandState, setNoteCommandState] = useState<{
+    isOpen: boolean;
+    query: string;
+    selectedIndex: number;
+    anchorElement: HTMLElement | null;
+    startOffset: number;
+    range: Range | null;
+  }>({
+    isOpen: false,
+    query: "",
+    selectedIndex: 0,
+    anchorElement: null,
+    startOffset: 0,
+    range: null,
+  });
+
+  // State to track preview content for notes
+  const [notePreviewContent, setNotePreviewContent] = useState<Map<string, string>>(new Map());
+
+  // Function to load note content for preview
+  const loadNoteContent = useCallback(
+    async (file: TFile): Promise<string> => {
+      const cached = notePreviewContent.get(file.path);
+      if (cached !== undefined) {
+        return cached;
+      }
+
+      try {
+        const content = await app.vault.cachedRead(file);
+
+        // Strip frontmatter (YAML front matter) from the content
+        const contentWithoutFrontmatter = content
+          .replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "")
+          .trim();
+
+        const truncatedContent =
+          contentWithoutFrontmatter.length > 500
+            ? contentWithoutFrontmatter.slice(0, 500) + "..."
+            : contentWithoutFrontmatter;
+
+        setNotePreviewContent((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(file.path, truncatedContent);
+          return newMap;
+        });
+
+        return truncatedContent;
+      } catch (error) {
+        console.warn("Failed to read note content:", error);
+        const errorMsg = "Failed to load content";
+        setNotePreviewContent((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(file.path, errorMsg);
+          return newMap;
+        });
+        return errorMsg;
+      }
+    },
+    [notePreviewContent]
+  );
+
+  // Get all available notes from the vault
+  const allNotes = useMemo(() => {
+    if (!app?.vault) {
+      return [];
+    }
+
+    const markdownFiles = app.vault.getMarkdownFiles() as TFile[];
+
+    return markdownFiles.map((file, index) => ({
+      key: `${file.basename}-${index}`,
+      title: file.basename,
+      subtitle: file.path,
+      content: "", // Will be loaded async when needed
+      file,
+    }));
+  }, []);
+
+  // Filter notes based on query using fuzzysort and add preview content
+  const filteredNotes = useMemo(() => {
+    let baseResults: NoteOption[];
+
+    if (!noteCommandState.query) {
+      baseResults = allNotes.slice(0, 10); // Show first 10 notes when no query
+    } else {
+      const query = noteCommandState.query;
+
+      // Use fuzzysort to search through note titles
+      const titleResults = fuzzysort.go(query, allNotes, {
+        key: "title",
+        limit: 10,
+        threshold: -10000, // Allow more lenient matching
+      });
+
+      // If we have good title matches, use those
+      if (titleResults.length > 0) {
+        baseResults = titleResults.map((result) => result.obj);
+      } else {
+        // Fallback to path search if no title matches
+        const pathResults = fuzzysort.go(query, allNotes, {
+          key: "subtitle",
+          limit: 5,
+          threshold: -10000,
+        });
+        baseResults = pathResults.map((result) => result.obj);
+      }
+    }
+
+    // Add preview content from cache to the results
+    return baseResults.map((note) => ({
+      ...note,
+      content: notePreviewContent.get(note.file.path) || "",
+    }));
+  }, [allNotes, noteCommandState.query, notePreviewContent]);
+
+  // Close note command menu
+  const closeNoteCommand = useCallback(() => {
+    setNoteCommandState((prev) => ({
+      ...prev,
+      isOpen: false,
+      query: "",
+      selectedIndex: 0,
+      anchorElement: null,
+      range: null,
+    }));
+  }, []);
+
+  // Select a note
+  const selectNoteCommand = useCallback(
+    (option: NoteOption) => {
+      editor.update(() => {
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection)) return;
+
+        // Replace the [[ and query text with a note pill
+        const anchor = selection.anchor;
+
+        // Find the [[ position
+        const anchorNode = anchor.getNode();
+        if (anchorNode instanceof TextNode) {
+          const textContent = anchorNode.getTextContent();
+          const bracketIndex = textContent.lastIndexOf("[[", anchor.offset);
+
+          if (bracketIndex !== -1) {
+            // Split the text and insert pill
+            const beforeBracket = textContent.slice(0, bracketIndex);
+            const afterQuery = textContent.slice(anchor.offset);
+
+            // Check if this is the active note
+            const activeNote = app?.workspace.getActiveFile();
+            const isActive = activeNote?.path === option.file.path;
+
+            // Create the pill node
+            const pillNode = $createNotePillNode(option.title, option.file.path, isActive);
+
+            // Replace the text with before + pill + space + after
+            if (beforeBracket) {
+              anchorNode.setTextContent(beforeBracket);
+              anchorNode.insertAfter(pillNode);
+              // Add space after the pill
+              const spaceAndAfter = afterQuery ? " " + afterQuery : " ";
+              pillNode.insertAfter($createTextNode(spaceAndAfter));
+            } else {
+              anchorNode.replace(pillNode);
+              // Add space after the pill
+              const spaceAndAfter = afterQuery ? " " + afterQuery : " ";
+              pillNode.insertAfter($createTextNode(spaceAndAfter));
+            }
+
+            // Set cursor after the pill and space
+            pillNode.selectNext();
+          }
+        }
+      });
+
+      closeNoteCommand();
+    },
+    [editor, closeNoteCommand]
+  );
+
+  // Handle highlighting and load content for preview
+  const handleHighlight = useCallback(
+    (index: number) => {
+      setNoteCommandState((prev) => ({ ...prev, selectedIndex: index }));
+
+      // Load content for the highlighted note if not already loaded
+      const selectedNote = filteredNotes[index];
+      if (selectedNote && !notePreviewContent.has(selectedNote.file.path)) {
+        loadNoteContent(selectedNote.file);
+      }
+    },
+    [filteredNotes, notePreviewContent, loadNoteContent]
+  );
+
+  // Handle keyboard navigation in menu
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent | null): boolean => {
+      if (!event || !noteCommandState.isOpen) return false;
+
+      switch (event.key) {
+        case "ArrowDown": {
+          event.preventDefault();
+          const nextIndex = Math.min(noteCommandState.selectedIndex + 1, filteredNotes.length - 1);
+          handleHighlight(nextIndex);
+          return true;
+        }
+
+        case "ArrowUp": {
+          event.preventDefault();
+          const prevIndex = Math.max(noteCommandState.selectedIndex - 1, 0);
+          handleHighlight(prevIndex);
+          return true;
+        }
+
+        case "Enter":
+        case "Tab":
+          event.preventDefault();
+          if (filteredNotes[noteCommandState.selectedIndex]) {
+            selectNoteCommand(filteredNotes[noteCommandState.selectedIndex]);
+          }
+          return true;
+
+        case "Escape":
+          event.preventDefault();
+          closeNoteCommand();
+          return true;
+
+        default:
+          return false;
+      }
+    },
+    [
+      noteCommandState.isOpen,
+      noteCommandState.selectedIndex,
+      filteredNotes,
+      selectNoteCommand,
+      closeNoteCommand,
+      handleHighlight,
+    ]
+  );
+
+  // Register keyboard commands
+  useEffect(() => {
+    const removeKeyDownCommand = editor.registerCommand(
+      KEY_ARROW_DOWN_COMMAND,
+      (event) => handleKeyDown(event),
+      COMMAND_PRIORITY_HIGH
+    );
+
+    const removeKeyUpCommand = editor.registerCommand(
+      KEY_ARROW_UP_COMMAND,
+      (event) => handleKeyDown(event),
+      COMMAND_PRIORITY_HIGH
+    );
+
+    const removeEnterCommand = editor.registerCommand(
+      KEY_ENTER_COMMAND,
+      (event) => handleKeyDown(event),
+      COMMAND_PRIORITY_HIGH
+    );
+
+    const removeTabCommand = editor.registerCommand(
+      KEY_TAB_COMMAND,
+      (event) => handleKeyDown(event),
+      COMMAND_PRIORITY_HIGH
+    );
+
+    const removeEscapeCommand = editor.registerCommand(
+      KEY_ESCAPE_COMMAND,
+      (event) => handleKeyDown(event),
+      COMMAND_PRIORITY_HIGH
+    );
+
+    return () => {
+      removeKeyDownCommand();
+      removeKeyUpCommand();
+      removeEnterCommand();
+      removeTabCommand();
+      removeEscapeCommand();
+    };
+  }, [editor, handleKeyDown]);
+
+  // Monitor text changes to detect [[ commands
+  useEffect(() => {
+    return editor.registerUpdateListener(({ editorState }) => {
+      editorState.read(() => {
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
+          if (noteCommandState.isOpen) {
+            closeNoteCommand();
+          }
+          return;
+        }
+
+        const anchor = selection.anchor;
+        const anchorNode = anchor.getNode();
+
+        if (!(anchorNode instanceof TextNode)) {
+          if (noteCommandState.isOpen) {
+            closeNoteCommand();
+          }
+          return;
+        }
+
+        const textContent = anchorNode.getTextContent();
+        const cursorOffset = anchor.offset;
+
+        // Look for [[ before cursor
+        let bracketIndex = -1;
+        for (let i = cursorOffset - 1; i >= 0; i--) {
+          const char = textContent[i];
+          const prevChar = i > 0 ? textContent[i - 1] : "";
+
+          if (char === "[" && prevChar === "[") {
+            // Check if [[ is at start or preceded by whitespace
+            if (i === 1 || /\s/.test(textContent[i - 2])) {
+              bracketIndex = i - 1; // Start from the first [
+              break;
+            }
+          } else if (/\s/.test(char)) {
+            // Stop if we hit whitespace without finding [[
+            break;
+          }
+        }
+
+        if (bracketIndex !== -1) {
+          // Extract query after [[
+          const query = textContent.slice(bracketIndex + 2, cursorOffset);
+
+          // Use Range for accurate positioning
+          const editorWindow = editor._window ?? window;
+
+          // Create range from bracket position to cursor
+          const range = tryToPositionRange(bracketIndex, editorWindow);
+
+          if (range) {
+            setNoteCommandState({
+              isOpen: true,
+              query,
+              selectedIndex: 0,
+              anchorElement: null,
+              startOffset: bracketIndex,
+              range: range,
+            });
+          }
+        } else if (noteCommandState.isOpen) {
+          closeNoteCommand();
+        }
+      });
+    });
+  }, [editor, noteCommandState.isOpen, closeNoteCommand]);
+
+  // Reset selected index only when query changes
+  useEffect(() => {
+    setNoteCommandState((prev) => ({
+      ...prev,
+      selectedIndex: 0,
+    }));
+  }, [noteCommandState.query]);
+
+  // Load content for the first note when filteredNotes change
+  useEffect(() => {
+    if (filteredNotes.length > 0 && !notePreviewContent.has(filteredNotes[0].file.path)) {
+      loadNoteContent(filteredNotes[0].file);
+    }
+  }, [filteredNotes, notePreviewContent, loadNoteContent]);
+
+  // Ensure selectedIndex stays within bounds when filteredNotes change
+  useEffect(() => {
+    setNoteCommandState((prev) => {
+      if (prev.selectedIndex >= filteredNotes.length && filteredNotes.length > 0) {
+        return {
+          ...prev,
+          selectedIndex: Math.max(0, filteredNotes.length - 1),
+        };
+      }
+      return prev;
+    });
+  }, [filteredNotes.length]);
+
+  return (
+    <>
+      {noteCommandState.isOpen && (
+        <TypeaheadMenu
+          options={filteredNotes}
+          selectedIndex={noteCommandState.selectedIndex}
+          onSelect={selectNoteCommand}
+          onClose={closeNoteCommand}
+          onHighlight={handleHighlight}
+          range={noteCommandState.range}
+          query={noteCommandState.query}
+          showPreview={true}
+          menuLabel="NoteMenu"
+        />
+      )}
+    </>
+  );
+}

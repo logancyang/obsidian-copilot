@@ -2,6 +2,7 @@ import { ProjectConfig, setCurrentProject } from "@/aiParams";
 import { AddProjectModal } from "@/components/modals/project/AddProjectModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
+import { useChatInput } from "@/context/ChatInputContext";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Select,
@@ -130,7 +131,6 @@ export const ProjectList = memo(
     hasMessages = false,
     showChatUI,
     onClose,
-    inputRef,
     onProjectClose,
   }: {
     className?: string;
@@ -142,13 +142,13 @@ export const ProjectList = memo(
     hasMessages?: boolean;
     showChatUI: (v: boolean) => void;
     onClose: () => void;
-    inputRef: React.RefObject<HTMLTextAreaElement>;
     onProjectClose: () => void;
   }): React.ReactElement => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
     const [showChatInput, setShowChatInput] = useState(false);
     const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
+    const chatInput = useChatInput();
 
     // Auto collapse when messages appear
     useEffect(() => {
@@ -224,9 +224,7 @@ export const ProjectList = memo(
       setCurrentProject(p);
 
       setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus();
-        }
+        chatInput.focusInput();
       }, 0);
     };
 
