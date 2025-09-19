@@ -6,6 +6,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
 import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
+import { processInlineCitations } from "@/LLMProviders/chainRunner/utils/citationUtils";
+import { useSettingsValue } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { cleanMessageForCopy, insertIntoEditor } from "@/utils";
 import { Bot, User } from "lucide-react";
@@ -69,6 +71,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   onDelete,
   chatHistory = [],
 }) => {
+  const settings = useSettingsValue();
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [editedMessage, setEditedMessage] = useState<string>(message.message);
@@ -251,7 +254,10 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       const writeToFileSectionProcessed = processWriteToFileSection(thinkSectionProcessed);
 
       // Transform markdown sources section into HTML structure
-      const sourcesSectionProcessed = processSourcesSection(writeToFileSectionProcessed);
+      const sourcesSectionProcessed = processInlineCitations(
+        writeToFileSectionProcessed,
+        settings.enableInlineCitations
+      );
 
       // Transform [[link]] to clickable format but exclude ![[]] image links
       const noteLinksProcessed = replaceLinks(
@@ -263,32 +269,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
       return noteLinksProcessed;
     },
-    [app, isStreaming]
+    [app, isStreaming, settings.enableInlineCitations]
   );
-
-  const processSourcesSection = (content: string): string => {
-    const sections = content.split("\n\n#### Sources:\n\n");
-    if (sections.length !== 2) return content;
-
-    const [mainContent, sources] = sections;
-    const sourceLinks = sources
-      .split("\n")
-      .map((line) => {
-        const match = line.match(/- \[\[(.*?)\]\]/);
-        if (match) {
-          return `<li>[[${match[1]}]]</li>`;
-        }
-        return line;
-      })
-      .join("\n");
-
-    return (
-      mainContent +
-      "\n\n<br/>\n<details><summary>Sources</summary>\n<ul>\n" +
-      sourceLinks +
-      "\n</ul>\n</details>"
-    );
-  };
 
   useEffect(() => {
     // Reset unmounting flag when effect runs
@@ -333,6 +315,28 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             }
 
             MarkdownRenderer.renderMarkdown(segment.content, textDiv, "", componentRef.current!);
+            // Normalize footnotes rendering in chat (hide hr/backrefs and clean ref text)
+            try {
+              // Hide footnotes separator lines
+              textDiv.querySelectorAll("hr, hr.footnotes-sep").forEach((el) => el.remove());
+              // Hide backreference arrows in footnotes
+              textDiv
+                .querySelectorAll("a.footnote-backref, a.footnote-link.footnote-backref")
+                .forEach((el) => el.remove());
+              // Clean reference text to avoid artifacts like "2-1"
+              textDiv
+                .querySelectorAll(
+                  'a.footnote-ref, sup a[href^="#fn"], sup a[href^="#fn-"], a[href^="#fn"], a[href^="#fn-"]'
+                )
+                .forEach((a) => {
+                  const t = (a.textContent || "").trim();
+                  if (!t) return;
+                  const cleaned = t.split("-")[0];
+                  if (cleaned && cleaned !== t) a.textContent = cleaned;
+                });
+            } catch {
+              /* ignore footnote cleanup errors */
+            }
             currentIndex++;
           } else if (segment.type === "toolCall" && segment.toolCall) {
             const toolCallId = segment.toolCall.id;

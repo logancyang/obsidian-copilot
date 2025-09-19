@@ -41,14 +41,11 @@ describe("searchResultUtils", () => {
       ];
 
       const result = formatSearchResultsForLLM(documents);
-      expect(result).toBe(`<document>
-<title>Test Document</title>
-<path>path/to/document.md</path>
-<modified>2024-01-15T10:30:00.000Z</modified>
-<content>
-This is the content
-</content>
-</document>`);
+      expect(result).toContain(
+        `<document>\n<id>1</id>\n<title>Test Document</title>\n<path>path/to/document.md</path>`
+      );
+      expect(result).toContain(`<modified>2024-01-15T10:30:00.000Z</modified>`);
+      expect(result).toContain(`<content>\nThis is the content\n</content>\n</document>`);
     });
 
     it("should handle missing optional fields gracefully", () => {
@@ -61,12 +58,8 @@ This is the content
       ];
 
       const result = formatSearchResultsForLLM(documents);
-      expect(result).toBe(`<document>
-<title>Test Document</title>
-<content>
-This is the content
-</content>
-</document>`);
+      expect(result).toContain(`<document>\n<id>1</id>\n<title>Test Document</title>`);
+      expect(result).toContain(`<content>\nThis is the content\n</content>\n</document>`);
     });
 
     it("should not include path if it equals title", () => {

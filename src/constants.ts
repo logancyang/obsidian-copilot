@@ -754,6 +754,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   ],
   reasoningEffort: DEFAULT_MODEL_SETTING.REASONING_EFFORT,
   verbosity: DEFAULT_MODEL_SETTING.VERBOSITY,
+  enableInlineCitations: true,
 };
 
 export const EVENT_NAMES = {
