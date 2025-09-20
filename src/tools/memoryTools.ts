@@ -27,6 +27,7 @@ export const memoryTool: SimpleTool<typeof memorySchema, { success: boolean; mes
       try {
         const memoryManager = new UserMemoryManager(app);
         await memoryManager.addSavedMemory(memoryContent);
+        const memoryFilePath = memoryManager.getSavedMemoriesFilePath();
 
         logInfo(`[memoryTool] Successfully saved memory: ${memoryContent.substring(0, 100)}...`);
 
@@ -35,7 +36,7 @@ export const memoryTool: SimpleTool<typeof memorySchema, { success: boolean; mes
 
         return {
           success: true,
-          message: `Memory saved successfully: ${memoryContent}`,
+          message: `Memory saved successfully into ${memoryFilePath}: ${memoryContent}`,
         };
       } catch (error) {
         logError("[memoryTool] Error saving memory:", error);
