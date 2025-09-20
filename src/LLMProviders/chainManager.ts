@@ -29,6 +29,7 @@ import { App, Notice } from "obsidian";
 import ChatModelManager from "./chatModelManager";
 import MemoryManager from "./memoryManager";
 import PromptManager from "./promptManager";
+import { UserMemoryManager } from "@/memory/UserMemoryManager";
 
 export default class ChainManager {
   // TODO: These chains are deprecated since we now use direct chat model calls in chain runners
@@ -45,6 +46,7 @@ export default class ChainManager {
   public chatModelManager: ChatModelManager;
   public memoryManager: MemoryManager;
   public promptManager: PromptManager;
+  public userMemoryManager: UserMemoryManager;
 
   constructor(app: App) {
     // Instantiate singletons
@@ -52,6 +54,7 @@ export default class ChainManager {
     this.memoryManager = MemoryManager.getInstance();
     this.chatModelManager = ChatModelManager.getInstance();
     this.promptManager = PromptManager.getInstance();
+    this.userMemoryManager = new UserMemoryManager(app);
 
     // Initialize async operations
     this.initialize();

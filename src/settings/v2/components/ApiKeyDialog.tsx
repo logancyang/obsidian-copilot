@@ -150,7 +150,7 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
       setModelsByProvider((prev) => ({ ...prev, [provider]: standardModels }));
       setLoadingProvider(null);
     } catch (error) {
-      console.error(`Error fetching models for ${provider}:`, error);
+      logError(`Error fetching models for ${provider}:`, error);
       setErrorProvider(provider);
       setLoadingProvider(null);
       new Notice(
@@ -195,7 +195,7 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
         );
       }
     } catch (error) {
-      console.error("Model verification failed:", error);
+      logError("Model verification failed:", error);
       new Notice("Model verification failed: " + err2String(error), 10000);
     } finally {
       setVerifyingModel(false);
