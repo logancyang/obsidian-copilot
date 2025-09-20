@@ -128,11 +128,11 @@ describe("UserMemoryManager", () => {
 
       // Mock existing memory file with previous conversations
       const existingMemoryContent = `## Previous Conversation
-**Time:** 2024-01-01T09:00:00Z
+**Time:** 2024-01-01 09:00
 **Summary:** User asked about plugin installation and learned that plugins enhance Obsidian functionality.
 
 ## Another Conversation
-**Time:** 2024-01-01T10:00:00Z
+**Time:** 2024-01-01 10:00
 **Summary:** User inquired about linking notes and discovered that backlinks create knowledge connections.
 `;
 
@@ -166,7 +166,7 @@ describe("UserMemoryManager", () => {
 
       // Check that the new format is used
       expect(actualContent).toContain("## Daily Note Template Setup");
-      expect(actualContent).toMatch(/\*\*Time:\*\* \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/);
+      expect(actualContent).toMatch(/\*\*Time:\*\* \d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
       expect(actualContent).toContain(
         "**Summary:** User asked about creating daily note templates"
       );
@@ -292,40 +292,40 @@ It has multiple lines but no conversations.
 
     it("should extract single conversation section", () => {
       const content = `## Daily Note Template Setup
-**Time:** 2024-01-01T10:00:00Z
+**Time:** 2024-01-01 10:00
 **Summary:** User asked about creating daily note templates with automatic date formatting.`;
 
       const result = (userMemoryManager as any).parseExistingConversations(content);
       expect(result).toEqual([
         `## Daily Note Template Setup
-**Time:** 2024-01-01T10:00:00Z
+**Time:** 2024-01-01 10:00
 **Summary:** User asked about creating daily note templates with automatic date formatting.`,
       ]);
     });
 
     it("should extract multiple conversation sections", () => {
       const content = `## First Conversation
-**Time:** 2024-01-01T09:00:00Z
+**Time:** 2024-01-01 09:00
 **Summary:** User asked about plugin installation.
 
 ## Second Conversation
-**Time:** 2024-01-01T10:00:00Z
+**Time:** 2024-01-01 10:00
 **Summary:** User inquired about linking notes.
 
 ## Third Conversation
-**Time:** 2024-01-01T11:00:00Z
+**Time:** 2024-01-01 11:00
 **Summary:** User learned about backlinks.`;
 
       const result = (userMemoryManager as any).parseExistingConversations(content);
       expect(result).toEqual([
         `## First Conversation
-**Time:** 2024-01-01T09:00:00Z
+**Time:** 2024-01-01 09:00
 **Summary:** User asked about plugin installation.`,
         `## Second Conversation
-**Time:** 2024-01-01T10:00:00Z
+**Time:** 2024-01-01 10:00
 **Summary:** User inquired about linking notes.`,
         `## Third Conversation
-**Time:** 2024-01-01T11:00:00Z
+**Time:** 2024-01-01 11:00
 **Summary:** User learned about backlinks.`,
       ]);
     });
@@ -335,47 +335,47 @@ It has multiple lines but no conversations.
 It might contain important information, but it's before the first conversation.
 
 ## First Conversation
-**Time:** 2024-01-01T09:00:00Z
+**Time:** 2024-01-01 09:00
 **Summary:** This conversation should be included.
 
 ## Second Conversation
-**Time:** 2024-01-01T10:00:00Z
+**Time:** 2024-01-01 10:00
 **Summary:** This conversation should also be included.`;
 
       const result = (userMemoryManager as any).parseExistingConversations(content);
       expect(result).toEqual([
         `## First Conversation
-**Time:** 2024-01-01T09:00:00Z
+**Time:** 2024-01-01 09:00
 **Summary:** This conversation should be included.`,
         `## Second Conversation
-**Time:** 2024-01-01T10:00:00Z
+**Time:** 2024-01-01 10:00
 **Summary:** This conversation should also be included.`,
       ]);
     });
 
     it("should handle conversations with extra whitespace and trim them", () => {
       const content = `  ## First Conversation  
-**Time:** 2024-01-01T09:00:00Z
+**Time:** 2024-01-01 09:00
 **Summary:** User asked about plugin installation.  
 
   ## Second Conversation  
-**Time:** 2024-01-01T10:00:00Z
+**Time:** 2024-01-01 10:00
 **Summary:** User inquired about linking notes.  `;
 
       const result = (userMemoryManager as any).parseExistingConversations(content);
       expect(result).toEqual([
         `## First Conversation  
-**Time:** 2024-01-01T09:00:00Z
+**Time:** 2024-01-01 09:00
 **Summary:** User asked about plugin installation.`,
         `## Second Conversation  
-**Time:** 2024-01-01T10:00:00Z
+**Time:** 2024-01-01 10:00
 **Summary:** User inquired about linking notes.`,
       ]);
     });
 
     it("should handle conversation sections with complex multi-line content", () => {
       const content = `## Complex Conversation
-**Time:** 2024-01-01T09:00:00Z
+**Time:** 2024-01-01 09:00
 **Summary:** User asked about multiple topics including:
 - How to create templates
 - How to use variables
@@ -384,13 +384,13 @@ It might contain important information, but it's before the first conversation.
 The conversation covered advanced features and included code examples.
 
 ## Another Conversation
-**Time:** 2024-01-01T10:00:00Z
+**Time:** 2024-01-01 10:00
 **Summary:** Short summary.`;
 
       const result = (userMemoryManager as any).parseExistingConversations(content);
       expect(result).toEqual([
         `## Complex Conversation
-**Time:** 2024-01-01T09:00:00Z
+**Time:** 2024-01-01 09:00
 **Summary:** User asked about multiple topics including:
 - How to create templates
 - How to use variables
@@ -398,20 +398,20 @@ The conversation covered advanced features and included code examples.
 
 The conversation covered advanced features and included code examples.`,
         `## Another Conversation
-**Time:** 2024-01-01T10:00:00Z
+**Time:** 2024-01-01 10:00
 **Summary:** Short summary.`,
       ]);
     });
 
     it("should handle conversation at end of file without trailing newlines", () => {
       const content = `## Only Conversation
-**Time:** 2024-01-01T09:00:00Z
+**Time:** 2024-01-01 09:00
 **Summary:** This is the only conversation and it's at the end.`;
 
       const result = (userMemoryManager as any).parseExistingConversations(content);
       expect(result).toEqual([
         `## Only Conversation
-**Time:** 2024-01-01T09:00:00Z
+**Time:** 2024-01-01 09:00
 **Summary:** This is the only conversation and it's at the end.`,
       ]);
     });
@@ -421,7 +421,7 @@ The conversation covered advanced features and included code examples.`,
     it("should return memory prompt when recent conversations exist", async () => {
       const mockFile = createMockTFile("copilot/memory/Recent Conversations.md");
       const mockContent =
-        "## Test Conversation\n**Time:** 2024-01-01T10:00:00Z\n**Summary:** Test summary";
+        "## Test Conversation\n**Time:** 2024-01-01 10:00\n**Summary:** Test summary";
 
       mockVault.getAbstractFileByPath.mockReturnValue(mockFile);
       mockVault.read.mockResolvedValue(mockContent);

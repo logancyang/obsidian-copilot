@@ -93,9 +93,9 @@ export class UserMemoryManager {
     try {
       // Ensure user memory folder exists
       await this.ensureMemoryFolderExists();
-
+      const timestamp = this.getTimestamp();
       // Create memory entry as a bullet point
-      const memoryEntry = `- ${memoryContent.trim()}`;
+      const memoryEntry = `- **${timestamp}** - ${memoryContent.trim()}`;
 
       // Add to saved memories file
       await this.addToSavedMemoryFile(this.getSavedMemoriesFilePath(), memoryEntry);
@@ -151,7 +151,14 @@ export class UserMemoryManager {
   }
 
   private getTimestamp(): string {
-    return new Date().toISOString().split(".")[0] + "Z"; // Remove milliseconds but keep Z for UTC
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const hours = String(now.getHours()).padStart(2, "0");
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
   }
 
   /**
