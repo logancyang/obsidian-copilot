@@ -229,7 +229,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
       } else if (shouldShowSlashModal) {
         // Pass the inputValue directly to ensure we use the current value
         showCustomPromptModal(cursorPos, inputValue);
-      } else if (inputValue.slice(-1) === "@" && isCopilotPlus) {
+      } else if (inputValue.slice(-1) === "@" && isCopilotPlus && !autonomousAgentToggle) {
         showCopilotPlusOptionsModal();
       }
     };
@@ -556,7 +556,7 @@ const ChatInput = forwardRef<{ focus: () => void }, ChatInputProps>(
             className="tw-max-h-40 tw-min-h-[60px] tw-w-full tw-resize-none tw-overflow-y-auto tw-rounded-md tw-border-none tw-bg-transparent tw-px-2 tw-text-sm tw-text-normal placeholder:tw-text-sm placeholder:tw-text-muted/60 focus-visible:tw-ring-0"
             placeholder={
               "Ask anything. [[ for notes. / for custom prompts. " +
-              (isCopilotPlus ? "@ for tools." : "")
+              (isCopilotPlus && !autonomousAgentToggle ? "@ for tools." : "")
             }
             value={inputMessage}
             onChange={handleInputChange}
