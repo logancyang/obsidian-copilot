@@ -67,7 +67,7 @@ graph TD
 - **When**: Updated after every conversation
 - **Retention policy**: Configurable rolling buffer - keeps last `maxRecentConversations` (default: 30, range: 10-50)
 - **Content**:
-  - Timestamp (ISO format with UTC)
+  - Timestamp (human-readable format: YYYY-MM-DD HH:MM in local time)
   - LLM-generated conversation title (2-8 words)
   - LLM-generated summary (2-3 sentences with key details and conclusions)
 - **Format**: Markdown format with `## conversation title` sections containing structured data
@@ -125,3 +125,59 @@ graph TD
 - **Context-aware**: Only saves information when user explicitly requests memory storage
 
 This dual memory design provides both automatic conversation context (recent conversations) and explicit user-controlled memory storage (saved memories), offering flexible memory management while maintaining robust AI-powered content processing and configurable retention policies.
+
+## Memory System Behavior by Mode
+
+The memory system behaves differently depending on which chat mode is active:
+
+### Agent Mode (Autonomous Agent)
+
+- **Memory Retrieval**: ✅ Full access to both Recent Conversations and Saved Memories via system prompt
+- **Memory Saving**: ✅ Direct access to `memoryTool` through XML-based tool calling
+- **Behavior**:
+  - AI autonomously decides when to save memories based on user requests
+  - Uses XML format: `<use_tool><name>memoryTool</name><memoryContent>...</memoryContent></use_tool>`
+  - Can reason step-by-step about whether something should be remembered
+  - Shows user notifications when memories are saved
+  - Access controlled by tool enablement settings (`autonomousAgentEnabledToolIds`)
+
+### Plus Mode (Legacy Tool Calling)
+
+- **Memory Retrieval**: ✅ Full access to both Recent Conversations and Saved Memories via system prompt
+- **Memory Saving**: ✅ Access to `@memory`
+- **Behavior**:
+  - Uses Brevilabs API intent analysis to determine when to call memory tools
+  - Intent analyzer processes user message and decides which tools to execute
+  - Tools are executed before LLM response generation
+  - Memory tool calls are pre-determined rather than AI-reasoned
+  - Same notification system as Agent mode
+
+### Basic Chat Mode (LLM Only)
+
+- **Memory Retrieval**: ✅ Full access to both Recent Conversations and Saved Memories via system prompt
+- **Memory Saving**: ❌ No access to memory tools
+- **Behavior**:
+  - Can reference existing memories for context
+  - Cannot save new memories during conversations
+  - Users must manually add memories outside of chat
+
+### Project Mode
+
+- **Memory Retrieval**: ❌ Currently disabled (memory not enabled for project mode)
+- **Memory Saving**: ❌ Not available
+- **Behavior**:
+  - Project-specific context only
+  - No cross-conversation memory persistence
+  - Note: Future enhancement could add project-scoped memory
+
+### Key Differences Summary
+
+| Feature          | Agent Mode    | Plus Mode          | Basic Chat    | Project Mode |
+| ---------------- | ------------- | ------------------ | ------------- | ------------ |
+| Memory Retrieval | ✅ Dynamic    | ✅ Dynamic         | ✅ Dynamic    | ❌ Disabled  |
+| Memory Saving    | ✅ XML Tools  | ✅ Intent Analysis | ❌ None       | ❌ None      |
+| Tool Decision    | AI Reasoning  | Pre-analysis       | N/A           | N/A          |
+| Memory Context   | System Prompt | System Prompt      | System Prompt | None         |
+| User Control     | AI-driven     | Intent-driven      | Manual only   | None         |
+
+This design ensures that memory capabilities scale appropriately with the sophistication of each chat mode, while maintaining consistent memory retrieval across modes that support it.
