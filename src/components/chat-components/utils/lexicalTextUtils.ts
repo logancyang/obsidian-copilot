@@ -9,14 +9,58 @@ import {
   createCommand,
   LexicalCommand,
 } from "lexical";
-import { TFile, App } from "obsidian";
+import { TFile, TFolder, App } from "obsidian";
 import { $createNotePillNode } from "../NotePillPlugin";
 import { $createURLPillNode } from "../URLPillNode";
 import { $createToolPillNode } from "../ToolPillNode";
 import { $createTagPillNode } from "../TagPillNode";
+import { $createFolderPillNode } from "../FolderPillNode";
 import { logInfo } from "@/logger";
+import { AVAILABLE_TOOLS } from "../constants/tools";
 
 declare const app: App;
+
+export type PillType = "notes" | "tools" | "folders" | "tags";
+
+export interface PillData {
+  type: PillType;
+  title: string;
+  data: TFile | TFolder | string;
+}
+
+/**
+ * Generic function to create pill nodes based on type and data
+ */
+export function $createPillNode(pillData: PillData) {
+  const { type, title, data } = pillData;
+
+  switch (type) {
+    case "notes":
+      if (data instanceof TFile) {
+        const activeNote = app?.workspace.getActiveFile();
+        const isActive = activeNote?.path === data.path;
+        return $createNotePillNode(title, data.path, isActive);
+      }
+      break;
+    case "tools":
+      if (typeof data === "string") {
+        return $createToolPillNode(data);
+      }
+      break;
+    case "folders":
+      if (data instanceof TFolder) {
+        return $createFolderPillNode(data.name, data.path);
+      }
+      break;
+    case "tags":
+      if (typeof data === "string") {
+        return $createTagPillNode(data);
+      }
+      break;
+  }
+
+  throw new Error(`Invalid pill data: ${JSON.stringify(pillData)}`);
+}
 
 export interface ParsedContent {
   type: "text" | "note-pill" | "url-pill" | "tool-pill" | "tag-pill";
@@ -33,6 +77,95 @@ export interface InsertTextOptions {
   enableToolPills?: boolean;
   enableTagPills?: boolean;
   insertAtSelection?: boolean;
+}
+
+/**
+ * Splits text at a given range into before and after segments
+ * @param text The text to split
+ * @param startOffset The start position
+ * @param endOffset The end position
+ * @returns Object with beforeText and afterText
+ */
+function splitTextAtRange(
+  text: string,
+  startOffset: number,
+  endOffset: number
+): { beforeText: string; afterText: string } {
+  return {
+    beforeText: text.slice(0, startOffset),
+    afterText: text.slice(endOffset),
+  };
+}
+
+/**
+ * Replaces a text node with multiple nodes and sets selection appropriately
+ * @param textNode The text node to replace
+ * @param nodes The nodes to replace it with
+ * @param setCursorAfter Whether to set cursor after the replacement
+ */
+function $replaceTextNodeWithNodes(
+  textNode: TextNode,
+  nodes: LexicalNode[],
+  setCursorAfter: boolean = true
+): void {
+  if (nodes.length === 1 && nodes[0].getType() === "text") {
+    // Simple replacement with just text
+    textNode.replace(nodes[0]);
+    if (setCursorAfter) {
+      $setSelectionAfterNode(nodes[0]);
+    }
+  } else {
+    // Complex replacement with multiple nodes
+    for (let i = 0; i < nodes.length; i++) {
+      if (i === 0) {
+        textNode.replace(nodes[i]);
+      } else {
+        nodes[i - 1].insertAfter(nodes[i]);
+      }
+    }
+    // Set selection after the last inserted node
+    if (setCursorAfter && nodes.length > 0) {
+      const lastNode = nodes[nodes.length - 1];
+      $setSelectionAfterNode(lastNode);
+    }
+  }
+}
+
+/**
+ * Inserts a pill node with optional space after, handling both replacement and insertion scenarios
+ * @param anchorNode The anchor text node
+ * @param beforeText Text that comes before the pill
+ * @param pillNode The pill node to insert
+ * @param afterText Text that comes after the pill
+ * @param addSpace Whether to add a space after the pill
+ */
+function $insertPillWithOptionalSpace(
+  anchorNode: TextNode,
+  beforeText: string,
+  pillNode: LexicalNode,
+  afterText: string,
+  addSpace: boolean
+): void {
+  // Calculate the space and after text combination
+  const spaceAndAfter = addSpace ? (afterText ? " " + afterText : " ") : afterText;
+
+  if (beforeText) {
+    // Replace node content with before text, then insert pill and space+after
+    anchorNode.setTextContent(beforeText);
+    anchorNode.insertAfter(pillNode);
+    if (spaceAndAfter) {
+      pillNode.insertAfter($createTextNode(spaceAndAfter));
+    }
+  } else {
+    // Replace entire node with pill, then add space+after
+    anchorNode.replace(pillNode);
+    if (spaceAndAfter) {
+      pillNode.insertAfter($createTextNode(spaceAndAfter));
+    }
+  }
+
+  // Set cursor after the pill (and space if added)
+  pillNode.selectNext();
 }
 
 /**
@@ -78,11 +211,6 @@ function isValidURL(string: string): boolean {
     return false;
   }
 }
-
-/**
- * List of available tools
- */
-const AVAILABLE_TOOLS = ["@vault", "@websearch", "@youtube", "@pomodoro", "@composer"];
 
 /**
  * Attempts to resolve a tool reference
@@ -425,8 +553,7 @@ export function $replaceTextRangeWithPills(
 
   if (segments.length === 1 && segments[0].type === "text") {
     // Simple case: just text, no pills needed
-    const beforeText = textContent.slice(0, startOffset);
-    const afterText = textContent.slice(endOffset);
+    const { beforeText, afterText } = splitTextAtRange(textContent, startOffset, endOffset);
     const finalText = beforeText + segments[0].content + afterText;
     textNode.setTextContent(finalText);
 
@@ -435,8 +562,7 @@ export function $replaceTextRangeWithPills(
     textNode.select(newOffset, newOffset);
   } else {
     // Complex case: we have pills to insert
-    const beforeText = textContent.slice(0, startOffset);
-    const afterText = textContent.slice(endOffset);
+    const { beforeText, afterText } = splitTextAtRange(textContent, startOffset, endOffset);
 
     // Create nodes for the replacement
     const nodes: LexicalNode[] = [];
@@ -455,22 +581,51 @@ export function $replaceTextRangeWithPills(
     }
 
     // Replace the current text node with all new nodes
-    if (nodes.length === 1 && nodes[0].getType() === "text") {
-      // Simple replacement with just text
-      textNode.replace(nodes[0]);
-      $setSelectionAfterNode(nodes[0]);
-    } else {
-      // Complex replacement with multiple nodes
-      for (let i = 0; i < nodes.length; i++) {
-        if (i === 0) {
-          textNode.replace(nodes[i]);
-        } else {
-          nodes[i - 1].insertAfter(nodes[i]);
-        }
-      }
-      // Set selection after the last inserted node
-      const lastNode = nodes[nodes.length - 1];
-      $setSelectionAfterNode(lastNode);
-    }
+    $replaceTextNodeWithNodes(textNode, nodes);
   }
+}
+
+/**
+ * Generic function to replace text from a trigger character to current cursor position with a pill
+ * This can be used by any typeahead plugin that needs to replace triggered text with pills
+ * @param triggerChar The character that triggered the replacement (e.g., '@', '/', '[[')
+ * @param pillData The pill data to insert
+ * @param addSpaceAfter Whether to add a space after the pill (default: true)
+ */
+export function $replaceTriggeredTextWithPill(
+  triggerChar: string,
+  pillData: PillData,
+  addSpaceAfter: boolean = true
+): void {
+  const selection = $getSelection();
+  if (!$isRangeSelection(selection)) return;
+
+  const anchor = selection.anchor;
+  const anchorNode = anchor.getNode();
+
+  if (!(anchorNode instanceof TextNode)) return;
+
+  const textContent = anchorNode.getTextContent();
+  const cursorOffset = anchor.offset;
+
+  // Find the trigger position
+  let triggerIndex = -1;
+
+  if (triggerChar === "[[") {
+    // Special case for double-bracket triggers
+    triggerIndex = textContent.lastIndexOf("[[", cursorOffset);
+  } else {
+    // Single character triggers
+    triggerIndex = textContent.lastIndexOf(triggerChar, cursorOffset);
+  }
+
+  if (triggerIndex === -1) return;
+
+  const { beforeText, afterText } = splitTextAtRange(textContent, triggerIndex, cursorOffset);
+
+  // Create the pill node
+  const pillNode = $createPillNode(pillData);
+
+  // Insert pill with optional space
+  $insertPillWithOptionalSpace(anchorNode, beforeText, pillNode, afterText, addSpaceAfter);
 }

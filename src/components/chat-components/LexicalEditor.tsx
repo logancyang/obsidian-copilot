@@ -8,7 +8,7 @@ import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { SlashCommandPlugin } from "./SlashCommandPlugin";
 import { NoteCommandPlugin } from "./NoteCommandPlugin";
-import { AtMentionCommandPlugin } from "./AtMentionCommandPlugin";
+import { AtMentionCommandPlugin } from "./plugins/AtMentionCommandPlugin";
 import { NotePillPlugin, NotePillNode } from "./NotePillPlugin";
 import { URLPillPlugin, URLPillNode } from "./URLPillNode";
 import { ToolPillNode } from "./ToolPillNode";
