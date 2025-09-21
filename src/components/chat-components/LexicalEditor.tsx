@@ -8,6 +8,7 @@ import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { SlashCommandPlugin } from "./SlashCommandPlugin";
 import { NoteCommandPlugin } from "./NoteCommandPlugin";
+import { TagCommandPlugin } from "./TagCommandPlugin";
 import { AtMentionCommandPlugin } from "./plugins/AtMentionCommandPlugin";
 import { NotePillPlugin, NotePillNode } from "./NotePillPlugin";
 import { URLPillPlugin, URLPillNode } from "./URLPillNode";
@@ -161,6 +162,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
         <PastePlugin enableURLPills={!!onURLsChange} />
         <SlashCommandPlugin />
         <NoteCommandPlugin />
+        <TagCommandPlugin />
         <AtMentionCommandPlugin />
         <NotePillPlugin />
         {onURLsChange && <URLPillPlugin />}
