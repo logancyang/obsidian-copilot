@@ -501,6 +501,9 @@ The conversation covered advanced features and included code examples.`,
         expect.stringContaining("- Important user preference: I prefer dark mode")
       );
 
+      const createdContent = mockVault.create.mock.calls[0][1];
+      expect(createdContent).not.toContain("**");
+
       expect(logInfo).toHaveBeenCalledWith("[UserMemoryManager] Saved memory added successfully");
     });
 
@@ -531,6 +534,9 @@ The conversation covered advanced features and included code examples.`,
         mockMemoryFile,
         expect.stringContaining("- New important information")
       );
+
+      const modifiedContent = mockVault.modify.mock.calls[0][1];
+      expect(modifiedContent).not.toContain("**");
 
       expect(logInfo).toHaveBeenCalledWith("[UserMemoryManager] Saved memory added successfully");
     });

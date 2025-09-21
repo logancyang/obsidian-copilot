@@ -309,6 +309,7 @@ export function registerMemoryTool(): void {
       displayName: "Save Memory",
       description: "Save information to user memory when explicitly asked to remember something",
       category: "memory",
+      copilotCommands: ["@memory"],
       isAlwaysEnabled: true,
       customPromptInstructions: `For memoryTool:
 - Use ONLY when the user explicitly asks you to remember something (phrases like "remember that", "don't forget", etc.)

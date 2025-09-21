@@ -93,9 +93,8 @@ export class UserMemoryManager {
     try {
       // Ensure user memory folder exists
       await this.ensureMemoryFolderExists();
-      const timestamp = this.getTimestamp();
-      // Create memory entry as a bullet point
-      const memoryEntry = `- **${timestamp}** - ${memoryContent.trim()}`;
+      // Create memory entry as a bullet point without timestamp metadata
+      const memoryEntry = `- ${memoryContent.trim()}`;
 
       // Add to saved memories file
       await this.addToSavedMemoryFile(this.getSavedMemoriesFilePath(), memoryEntry);
