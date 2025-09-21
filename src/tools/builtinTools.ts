@@ -24,6 +24,7 @@ export const BUILTIN_TOOLS: ToolDefinition[] = [
       displayName: "Vault Search",
       description: "Search through your vault notes",
       category: "search",
+      copilotCommands: ["@vault"],
       customPromptInstructions: `For localSearch (searching notes in the vault):
 - You MUST always provide both "query" (string) and "salientTerms" (array of strings)
 - salientTerms MUST be extracted from the user's original query - never invent new terms
@@ -85,6 +86,7 @@ For localSearch with non-English query (PRESERVE ORIGINAL LANGUAGE):
       displayName: "Web Search",
       description: "Search the internet for information",
       category: "search",
+      copilotCommands: ["@websearch", "@web"],
       customPromptInstructions: `For webSearch:
 - Only use when the user explicitly requests web/internet search
 - Always provide an empty chatHistory array
@@ -182,6 +184,7 @@ Example - "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9):
       displayName: "Pomodoro Timer",
       description: "Manage time with Pomodoro technique",
       category: "time",
+      copilotCommands: ["@pomodoro"],
     },
   },
 
@@ -194,6 +197,7 @@ Example - "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9):
       description: "Create or modify files in your vault",
       category: "file",
       requiresVault: true,
+      copilotCommands: ["@composer"],
       customPromptInstructions: `For writeToFile:
 - NEVER display the file content directly in your response
 - Always pass the complete file content to the tool
@@ -250,6 +254,7 @@ Example usage:
       displayName: "YouTube Transcription",
       description: "Get transcripts from YouTube videos",
       category: "media",
+      copilotCommands: ["@youtube"],
       customPromptInstructions: `For youtubeTranscription:
 - Use when user provides YouTube URLs
 - No parameters needed - the tool will process URLs from the conversation
