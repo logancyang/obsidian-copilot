@@ -13,7 +13,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { IPillNode } from "./PillDeletionPlugin";
-import { ExternalLink } from "lucide-react";
 
 export interface SerializedURLPillNode extends SerializedLexicalNode {
   url: string;
@@ -169,20 +168,7 @@ interface URLPillComponentProps {
 
 function URLPillComponent({ node }: URLPillComponentProps): JSX.Element {
   const url = node.getURL();
-  const title = node.getTitle();
   const isActive = node.getActive();
-
-  // Extract domain from URL for display
-  const getDomain = (url: string): string => {
-    try {
-      const urlObj = new URL(url);
-      return urlObj.hostname.replace(/^www\./, "");
-    } catch {
-      return url;
-    }
-  };
-
-  const displayText = title || getDomain(url);
 
   return (
     <Badge
@@ -190,8 +176,7 @@ function URLPillComponent({ node }: URLPillComponentProps): JSX.Element {
       className={cn("tw-mx-0.5 tw-items-center tw-px-2 tw-py-0 tw-text-xs")}
     >
       <div className="tw-flex tw-items-center tw-gap-1">
-        <ExternalLink className="tw-size-3" />
-        <span className="tw-max-w-40 tw-truncate">{displayText}</span>
+        <span className="tw-max-w-40 tw-truncate">{url}</span>
         {isActive && <span className="tw-text-xs tw-text-faint">Current</span>}
       </div>
     </Badge>

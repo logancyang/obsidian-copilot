@@ -13,7 +13,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { IPillNode } from "./PillDeletionPlugin";
-import { Folder } from "lucide-react";
 
 export interface SerializedFolderPillNode extends SerializedLexicalNode {
   folderName: string;
@@ -108,7 +107,6 @@ export class FolderPillNode extends DecoratorNode<JSX.Element> implements IPillN
         className={cn("tw-inline-flex tw-items-center tw-gap-1 tw-px-2 tw-py-0.5 tw-text-xs")}
         title={this.__folderPath}
       >
-        <Folder className="tw-size-3" />
         {`{${this.__folderPath}}`}
       </Badge>
     );

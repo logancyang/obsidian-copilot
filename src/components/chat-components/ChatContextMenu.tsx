@@ -1,4 +1,15 @@
-import { AlertCircle, CheckCircle, CircleDashed, Loader2, Plus, X } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle,
+  CircleDashed,
+  Loader2,
+  Plus,
+  X,
+  FileText,
+  Hash,
+  Folder,
+  ExternalLink,
+} from "lucide-react";
 import { TFile } from "obsidian";
 import React from "react";
 import { Button } from "@/components/ui/button";
@@ -37,6 +48,7 @@ function ContextNote({
   return (
     <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
       <div className="tw-flex tw-items-center tw-gap-1">
+        <FileText className="tw-size-3" />
         <span className="tw-max-w-40 tw-truncate">{note.basename}</span>
         {isActive && <span className="tw-text-xs tw-text-faint">Current</span>}
         {note.extension === "pdf" && <span className="tw-text-xs tw-text-faint">pdf</span>}
@@ -55,11 +67,21 @@ function ContextNote({
 }
 
 function ContextUrl({ url, onRemoveUrl }: { url: string; onRemoveUrl: (url: string) => void }) {
+  // Extract domain from URL for display
+  const getDomain = (url: string): string => {
+    try {
+      const urlObj = new URL(url);
+      return urlObj.hostname.replace(/^www\./, "");
+    } catch {
+      return url;
+    }
+  };
+
   return (
     <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
       <div className="tw-flex tw-items-center tw-gap-1">
-        <span className="tw-max-w-40 tw-truncate">{url}</span>
-        <span className="tw-text-xs tw-text-faint">Link</span>
+        <ExternalLink className="tw-size-3" />
+        <span className="tw-max-w-40 tw-truncate">{getDomain(url)}</span>
       </div>
       <Button
         variant="ghost2"
@@ -75,9 +97,15 @@ function ContextUrl({ url, onRemoveUrl }: { url: string; onRemoveUrl: (url: stri
 }
 
 function ContextTag({ tag, onRemoveTag }: { tag: string; onRemoveTag: (tag: string) => void }) {
+  // Remove # symbol for clean display
+  const displayTag = tag.startsWith("#") ? tag.slice(1) : tag;
+
   return (
     <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
-      <span className="tw-max-w-40 tw-truncate">{tag}</span>
+      <div className="tw-flex tw-items-center tw-gap-1">
+        <Hash className="tw-size-3" />
+        <span className="tw-max-w-40 tw-truncate">{displayTag}</span>
+      </div>
       <Button
         variant="ghost2"
         size="fit"
@@ -101,8 +129,8 @@ function ContextFolder({
   return (
     <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
       <div className="tw-flex tw-items-center tw-gap-1">
+        <Folder className="tw-size-3" />
         <span className="tw-max-w-40 tw-truncate">{folder.path}</span>
-        <span className="tw-text-xs tw-text-faint">Folder</span>
       </div>
       <Button
         variant="ghost2"
