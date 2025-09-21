@@ -194,7 +194,7 @@ First, go to https://www.obsidiancopilot.com/en to subscribe to Copilot Plus. Th
 
   > "Please write a short intro of Kiwi birds based on the following information I collected about this animal.
 
-  > @youtube Summarize [](https://www.youtube.com/watch?v=tZ2jm_UPc6c&t=417s)[https://www.youtube.com/watch?v=tZ2jm_UPc6c&t=417s](https://www.youtube.com/watch?v=ABTfc5wUT1U)
+  > Summarize [](https://www.youtube.com/watch?v=tZ2jm_UPc6c&t=417s)[https://www.youtube.com/watch?v=tZ2jm_UPc6c&t=417s](https://www.youtube.com/watch?v=ABTfc5wUT1U)
   > in a short paragraph.
 
   > @websearch where can I find Kiwi birds?

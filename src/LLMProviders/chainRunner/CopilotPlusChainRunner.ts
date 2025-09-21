@@ -26,7 +26,7 @@ import {
   withSuppressedTokenWarnings,
 } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "../intentAnalyzer";
+import { IntentAnalyzer } from "../intentAnalyzer";
 import { BaseChainRunner } from "./BaseChainRunner";
 import {
   formatSourceCatalog,
@@ -49,6 +49,7 @@ import {
 } from "./utils/searchResultUtils";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { deduplicateSources } from "./utils/toolExecution";
+import { AVAILABLE_TOOLS } from "@/components/chat-components/constants/tools";
 
 export class CopilotPlusChainRunner extends BaseChainRunner {
   private isYoutubeOnlyMessage(message: string): boolean {
@@ -457,7 +458,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       // Use the same removeAtCommands logic as IntentAnalyzer
       const cleanedUserMessage = userMessage.message
         .split(" ")
-        .filter((word) => !COPILOT_TOOL_NAMES.includes(word.toLowerCase()))
+        .filter((word) => !AVAILABLE_TOOLS.includes(word.toLowerCase()))
         .join(" ")
         .trim();
 

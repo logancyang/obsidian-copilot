@@ -91,7 +91,7 @@ const youtubeTranscriptionTool = createTool({
 });
 
 // Legacy single-URL tool kept for backward compatibility with IntentAnalyzer
-// IntentAnalyzer still uses this for non-agent based tool calls (e.g., @youtube command)
+// IntentAnalyzer still uses this for non-agent based tool calls
 const simpleYoutubeTranscriptionTool = createTool({
   name: "simpleYoutubeTranscription",
   description: "Get the transcript of a YouTube video",

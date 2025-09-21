@@ -24,6 +24,11 @@ interface ChatToolControlsProps {
   autonomousAgentToggle: boolean;
   setAutonomousAgentToggle: (value: boolean) => void;
 
+  // Toggle-off callbacks for pill removal
+  onVaultToggleOff?: () => void;
+  onWebToggleOff?: () => void;
+  onComposerToggleOff?: () => void;
+
   // Other props
   currentChain: ChainType;
 }
@@ -37,6 +42,9 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
   setComposerToggle,
   autonomousAgentToggle,
   setAutonomousAgentToggle,
+  onVaultToggleOff,
+  onWebToggleOff,
+  onComposerToggleOff,
   currentChain,
 }) => {
   const isCopilotPlus = isPlusChain(currentChain);
@@ -46,6 +54,33 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
     const newValue = !autonomousAgentToggle;
     setAutonomousAgentToggle(newValue);
     updateSetting("enableAutonomousAgent", newValue);
+  };
+
+  const handleVaultToggle = () => {
+    const newValue = !vaultToggle;
+    setVaultToggle(newValue);
+    // If toggling off, remove pills
+    if (!newValue && onVaultToggleOff) {
+      onVaultToggleOff();
+    }
+  };
+
+  const handleWebToggle = () => {
+    const newValue = !webToggle;
+    setWebToggle(newValue);
+    // If toggling off, remove pills
+    if (!newValue && onWebToggleOff) {
+      onWebToggleOff();
+    }
+  };
+
+  const handleComposerToggle = () => {
+    const newValue = !composerToggle;
+    setComposerToggle(newValue);
+    // If toggling off, remove pills
+    if (!newValue && onComposerToggleOff) {
+      onComposerToggleOff();
+    }
   };
 
   // If not Copilot Plus, don't show any tools
@@ -87,7 +122,7 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
                 <Button
                   variant="ghost2"
                   size="fit"
-                  onClick={() => setVaultToggle(!vaultToggle)}
+                  onClick={handleVaultToggle}
                   className={cn(
                     "tw-text-muted hover:tw-text-accent",
                     vaultToggle && "tw-text-accent tw-bg-accent/10"
@@ -103,7 +138,7 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
                 <Button
                   variant="ghost2"
                   size="fit"
-                  onClick={() => setWebToggle(!webToggle)}
+                  onClick={handleWebToggle}
                   className={cn(
                     "tw-text-muted hover:tw-text-accent",
                     webToggle && "tw-text-accent tw-bg-accent/10"
@@ -119,7 +154,7 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
                 <Button
                   variant="ghost2"
                   size="fit"
-                  onClick={() => setComposerToggle(!composerToggle)}
+                  onClick={handleComposerToggle}
                   className={cn(
                     "tw-text-muted hover:tw-text-accent",
                     composerToggle && "tw-text-accent tw-bg-accent/10"
@@ -166,7 +201,7 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
             {!autonomousAgentToggle && (
               <>
                 <DropdownMenuItem
-                  onClick={() => setVaultToggle(!vaultToggle)}
+                  onClick={handleVaultToggle}
                   className="tw-flex tw-items-center tw-justify-between"
                 >
                   <div className="tw-flex tw-items-center tw-gap-2">
@@ -176,7 +211,7 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
                   {vaultToggle && <Check className="tw-size-4" />}
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => setWebToggle(!webToggle)}
+                  onClick={handleWebToggle}
                   className="tw-flex tw-items-center tw-justify-between"
                 >
                   <div className="tw-flex tw-items-center tw-gap-2">
@@ -186,7 +221,7 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
                   {webToggle && <Check className="tw-size-4" />}
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => setComposerToggle(!composerToggle)}
+                  onClick={handleComposerToggle}
                   className="tw-flex tw-items-center tw-justify-between"
                 >
                   <div className="tw-flex tw-items-center tw-gap-2">

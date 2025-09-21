@@ -8,6 +8,7 @@ import {
   LexicalNode,
   NodeKey,
   SerializedLexicalNode,
+  $getRoot,
 } from "lexical";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -119,4 +120,25 @@ export function $createToolPillNode(toolName: string): ToolPillNode {
 
 export function $isToolPillNode(node: LexicalNode | null | undefined): node is ToolPillNode {
   return node instanceof ToolPillNode;
+}
+
+// Utility function to remove pills by tool name
+export function $removePillsByToolName(toolName: string): number {
+  const root = $getRoot();
+  let removedCount = 0;
+
+  function traverse(node: any): void {
+    if ($isToolPillNode(node) && node.getToolName() === toolName) {
+      node.remove();
+      removedCount++;
+    } else if (typeof node.getChildren === "function") {
+      const children = node.getChildren();
+      for (const child of children) {
+        traverse(child);
+      }
+    }
+  }
+
+  traverse(root);
+  return removedCount;
 }

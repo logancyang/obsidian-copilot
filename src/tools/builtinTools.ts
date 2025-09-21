@@ -4,7 +4,6 @@ import {
   getCurrentTimeTool,
   getTimeInfoByEpochTool,
   getTimeRangeMsTool,
-  pomodoroTool,
   convertTimeBetweenTimezonesTool,
 } from "./TimeTools";
 import { youtubeTranscriptionTool } from "./YoutubeTools";
@@ -177,16 +176,6 @@ Example - "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9):
 <fromOffset>-8</fromOffset>
 <toOffset>+9</toOffset>
 </use_tool>`,
-    },
-  },
-  {
-    tool: pomodoroTool,
-    metadata: {
-      id: "pomodoro",
-      displayName: "Pomodoro Timer",
-      description: "Manage time with Pomodoro technique",
-      category: "time",
-      copilotCommands: ["@pomodoro"],
     },
   },
 

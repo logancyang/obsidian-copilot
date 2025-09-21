@@ -26,6 +26,7 @@ import { $removePillsByPath } from "./NotePillPlugin";
 import { $removePillsByURL } from "./URLPillNode";
 import { $removePillsByTag } from "./TagPillNode";
 import { $removePillsByFolder } from "./FolderPillNode";
+import { $removePillsByToolName } from "./ToolPillNode";
 import LexicalEditor from "./LexicalEditor";
 
 interface ChatInputProps {
@@ -90,6 +91,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const [urlsFromPills, setUrlsFromPills] = useState<string[]>([]);
   const [tagsFromPills, setTagsFromPills] = useState<string[]>([]);
   const [foldersFromPills, setFoldersFromPills] = useState<{ name: string; path: string }[]>([]);
+  const [toolsFromPills, setToolsFromPills] = useState<string[]>([]);
   const isCopilotPlus = isPlusChain(currentChain);
 
   // Toggle states for vault, web search, composer, and autonomous agent
@@ -165,9 +167,18 @@ const ChatInput: React.FC<ChatInputProps> = ({
     // Only add tool calls when autonomous agent is off
     // When autonomous agent is on, it handles all tools internally
     if (!autonomousAgentToggle) {
-      if (vaultToggle) toolCalls.push("@vault");
-      if (webToggle) toolCalls.push("@web-search");
-      if (composerToggle) toolCalls.push("@composer");
+      const messageLower = inputMessage.toLowerCase();
+
+      // Only add tools from buttons if they're not already in the message
+      if (vaultToggle && !messageLower.includes("@vault")) {
+        toolCalls.push("@vault");
+      }
+      if (webToggle && !messageLower.includes("@websearch") && !messageLower.includes("@web")) {
+        toolCalls.push("@websearch");
+      }
+      if (composerToggle && !messageLower.includes("@composer")) {
+        toolCalls.push("@composer");
+      }
     }
 
     handleSendMessage({
@@ -303,6 +314,41 @@ const ChatInput: React.FC<ChatInputProps> = ({
       });
     });
   };
+
+  // Handle when tools are removed from pills (when pills are deleted in editor)
+  const handleToolPillsRemoved = (removedTools: string[]) => {
+    if (!isCopilotPlus || autonomousAgentToggle) return;
+
+    // Update tool button states based on removed pills
+    removedTools.forEach((tool) => {
+      switch (tool) {
+        case "@vault":
+          setVaultToggle(false);
+          break;
+        case "@websearch":
+        case "@web":
+          setWebToggle(false);
+          break;
+        case "@composer":
+          setComposerToggle(false);
+          break;
+      }
+    });
+  };
+
+  // Sync tool button states with tool pills
+  useEffect(() => {
+    if (!isCopilotPlus || autonomousAgentToggle) return;
+
+    // Update button states based on current tool pills
+    const hasVault = toolsFromPills.includes("@vault");
+    const hasWeb = toolsFromPills.includes("@websearch") || toolsFromPills.includes("@web");
+    const hasComposer = toolsFromPills.includes("@composer");
+
+    setVaultToggle(hasVault);
+    setWebToggle(hasWeb);
+    setComposerToggle(hasComposer);
+  }, [toolsFromPills, isCopilotPlus, autonomousAgentToggle]);
 
   // Handle when context notes are removed from the context menu
   // This should remove all corresponding pills from the editor
@@ -519,6 +565,32 @@ const ChatInput: React.FC<ChatInputProps> = ({
     lexicalEditorRef.current = editor;
   }, []);
 
+  // Handle tool button toggle-off events - remove corresponding pills
+  const handleVaultToggleOff = useCallback(() => {
+    if (lexicalEditorRef.current && isCopilotPlus) {
+      lexicalEditorRef.current.update(() => {
+        $removePillsByToolName("@vault");
+      });
+    }
+  }, [isCopilotPlus]);
+
+  const handleWebToggleOff = useCallback(() => {
+    if (lexicalEditorRef.current && isCopilotPlus) {
+      lexicalEditorRef.current.update(() => {
+        $removePillsByToolName("@websearch");
+        $removePillsByToolName("@web");
+      });
+    }
+  }, [isCopilotPlus]);
+
+  const handleComposerToggleOff = useCallback(() => {
+    if (lexicalEditorRef.current && isCopilotPlus) {
+      lexicalEditorRef.current.update(() => {
+        $removePillsByToolName("@composer");
+      });
+    }
+  }, [isCopilotPlus]);
+
   return (
     <div
       className="tw-flex tw-w-full tw-flex-col tw-gap-0.5 tw-rounded-md tw-border tw-border-solid tw-border-border tw-px-1 tw-pb-1 tw-pt-2 tw-@container/chat-input"
@@ -591,6 +663,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
           onNotesRemoved={handleNotePillsRemoved}
           onURLsChange={isCopilotPlus ? setUrlsFromPills : undefined}
           onURLsRemoved={isCopilotPlus ? handleURLPillsRemoved : undefined}
+          onToolsChange={isCopilotPlus ? setToolsFromPills : undefined}
+          onToolsRemoved={isCopilotPlus ? handleToolPillsRemoved : undefined}
           onTagsChange={setTagsFromPills}
           onTagsRemoved={handleTagPillsRemoved}
           onFoldersChange={setFoldersFromPills}
@@ -659,6 +733,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
                 autonomousAgentToggle={autonomousAgentToggle}
                 setAutonomousAgentToggle={setAutonomousAgentToggle}
                 currentChain={currentChain}
+                onVaultToggleOff={handleVaultToggleOff}
+                onWebToggleOff={handleWebToggleOff}
+                onComposerToggleOff={handleComposerToggleOff}
               />
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
