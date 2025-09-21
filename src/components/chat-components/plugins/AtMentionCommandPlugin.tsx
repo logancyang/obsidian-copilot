@@ -56,7 +56,13 @@ const CATEGORY_OPTIONS: CategoryOption[] = [
   },
 ];
 
-export function AtMentionCommandPlugin(): JSX.Element {
+interface AtMentionCommandPluginProps {
+  isCopilotPlus?: boolean;
+}
+
+export function AtMentionCommandPlugin({
+  isCopilotPlus = false,
+}: AtMentionCommandPluginProps): JSX.Element {
   const [editor] = useLexicalComposerContext();
   const [extendedState, setExtendedState] = useState<{
     mode: "category" | "search";
@@ -129,12 +135,23 @@ export function AtMentionCommandPlugin(): JSX.Element {
   // Temporary state for query to resolve circular dependency
   const [currentQuery, setCurrentQuery] = useState("");
 
+  // Filter category options based on Copilot Plus status
+  const availableCategoryOptions = useMemo(() => {
+    return CATEGORY_OPTIONS.filter((cat) => {
+      // Show tools category only if Copilot Plus is enabled
+      if (cat.category === "tools") {
+        return isCopilotPlus;
+      }
+      return true;
+    });
+  }, [isCopilotPlus]);
+
   // Get search results based on mode and category
   const searchResults = useMemo(() => {
     if (extendedState.mode === "category") {
       // Show category options when no query
       if (!currentQuery) {
-        return CATEGORY_OPTIONS.map((cat) => ({
+        return availableCategoryOptions.map((cat) => ({
           ...cat,
           content: undefined,
         }));
@@ -152,16 +169,18 @@ export function AtMentionCommandPlugin(): JSX.Element {
           content: "", // Content loaded on demand when highlighted
           icon: <FileText className="tw-size-4" />,
         })),
-        // Tools
-        ...AVAILABLE_TOOLS.map((tool) => ({
-          key: `tool-${tool}`,
-          title: tool,
-          subtitle: getToolDescription(tool),
-          category: "tools" as AtMentionCategory,
-          data: tool,
-          content: getToolDescription(tool),
-          icon: <Wrench className="tw-size-4" />,
-        })),
+        // Tools (only if Copilot Plus is enabled)
+        ...(isCopilotPlus
+          ? AVAILABLE_TOOLS.map((tool) => ({
+              key: `tool-${tool}`,
+              title: tool,
+              subtitle: getToolDescription(tool),
+              category: "tools" as AtMentionCategory,
+              data: tool,
+              content: getToolDescription(tool),
+              icon: <Wrench className="tw-size-4" />,
+            }))
+          : []),
         // Folders
         ...allFolders.map((folder: TFolder) => ({
           key: `folder-${folder.path}`,
@@ -209,15 +228,17 @@ export function AtMentionCommandPlugin(): JSX.Element {
           }));
           break;
         case "tools":
-          items = AVAILABLE_TOOLS.map((tool) => ({
-            key: `tool-${tool}`,
-            title: tool,
-            subtitle: getToolDescription(tool),
-            category: "tools" as AtMentionCategory,
-            data: tool,
-            content: getToolDescription(tool),
-            icon: <Wrench className="tw-size-4" />,
-          }));
+          items = isCopilotPlus
+            ? AVAILABLE_TOOLS.map((tool) => ({
+                key: `tool-${tool}`,
+                title: tool,
+                subtitle: getToolDescription(tool),
+                category: "tools" as AtMentionCategory,
+                data: tool,
+                content: getToolDescription(tool),
+                icon: <Wrench className="tw-size-4" />,
+              }))
+            : [];
           break;
         case "folders":
           items = allFolders.map((folder: TFolder) => ({
@@ -262,6 +283,8 @@ export function AtMentionCommandPlugin(): JSX.Element {
     allNotes,
     allFolders,
     allTags,
+    availableCategoryOptions,
+    isCopilotPlus,
   ]);
 
   // Type guard functions (moved here to avoid circular dependencies)

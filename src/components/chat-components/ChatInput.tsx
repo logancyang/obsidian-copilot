@@ -675,6 +675,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
             (isCopilotPlus ? "@ for tools." : "")
           }
           disabled={isProjectLoading}
+          isCopilotPlus={isCopilotPlus}
         />
         <input {...getInputProps()} />
         {/* Overlay that appears when dragging */}

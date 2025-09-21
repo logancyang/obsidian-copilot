@@ -47,6 +47,7 @@ interface LexicalEditorProps {
   onTagsChange?: (tags: string[]) => void;
   onTagsRemoved?: (removedTags: string[]) => void;
   onEditorReady?: (editor: any) => void;
+  isCopilotPlus?: boolean;
 }
 
 const LexicalEditor: React.FC<LexicalEditorProps> = ({
@@ -67,6 +68,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   onTagsChange,
   onTagsRemoved,
   onEditorReady,
+  isCopilotPlus = false,
 }) => {
   const [focusFn, setFocusFn] = React.useState<(() => void) | null>(null);
   const [editorInstance, setEditorInstance] = React.useState<LexicalEditorType | null>(null);
@@ -163,7 +165,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
         <SlashCommandPlugin />
         <NoteCommandPlugin />
         <TagCommandPlugin />
-        <AtMentionCommandPlugin />
+        <AtMentionCommandPlugin isCopilotPlus={isCopilotPlus} />
         <NotePillPlugin />
         {onURLsChange && <URLPillPlugin />}
         <TextInsertionPlugin />
