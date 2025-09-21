@@ -11,6 +11,7 @@ export interface ToolMetadata {
   isAlwaysEnabled?: boolean; // Tools that are always available (e.g., time tools)
   requiresVault?: boolean; // Tools that need vault access
   customPromptInstructions?: string; // Optional custom instructions for this tool
+  copilotCommands?: string[]; // Optional Copilot slash command aliases (e.g., "@vault")
 }
 
 /**
@@ -110,6 +111,33 @@ export class ToolRegistry {
    */
   getConfigurableTools(): ToolDefinition[] {
     return Array.from(this.tools.values()).filter((def) => !def.metadata.isAlwaysEnabled);
+  }
+
+  /**
+   * Build a map of Copilot command aliases to tool definitions.
+   *
+   * @returns Map keyed by lower-case Copilot command aliases pointing to their tool definitions.
+   */
+  getCopilotCommandMappings(): Map<string, ToolDefinition> {
+    const mappings = new Map<string, ToolDefinition>();
+
+    for (const definition of this.tools.values()) {
+      const commands = definition.metadata.copilotCommands;
+
+      if (!commands) {
+        continue;
+      }
+
+      for (const command of commands) {
+        const normalizedCommand = command.toLowerCase();
+
+        if (!mappings.has(normalizedCommand)) {
+          mappings.set(normalizedCommand, definition);
+        }
+      }
+    }
+
+    return mappings;
   }
 
   /**
