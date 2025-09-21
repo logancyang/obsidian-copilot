@@ -14,11 +14,13 @@ interface ChatContextMenuProps {
   contextNotes: TFile[];
   contextUrls: string[];
   contextTags: string[];
+  contextFolders: { name: string; path: string }[];
   selectedTextContexts?: SelectedTextContext[];
   onAddContext: () => void;
   onRemoveContext: (path: string) => void;
   onRemoveUrl: (url: string) => void;
   onRemoveTag: (tagName: string) => void;
+  onRemoveFolder: (folderPath: string) => void;
   onRemoveSelectedText?: (id: string) => void;
   showProgressCard: () => void;
 }
@@ -89,6 +91,32 @@ function ContextTag({ tag, onRemoveTag }: { tag: string; onRemoveTag: (tag: stri
   );
 }
 
+function ContextFolder({
+  folder,
+  onRemoveFolder,
+}: {
+  folder: { name: string; path: string };
+  onRemoveFolder: (folderPath: string) => void;
+}) {
+  return (
+    <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
+      <div className="tw-flex tw-items-center tw-gap-1">
+        <span className="tw-max-w-40 tw-truncate">{folder.path}</span>
+        <span className="tw-text-xs tw-text-faint">Folder</span>
+      </div>
+      <Button
+        variant="ghost2"
+        size="fit"
+        onClick={() => onRemoveFolder(folder.path)}
+        aria-label="Remove from context"
+        className="tw-text-muted"
+      >
+        <X className="tw-size-4" />
+      </Button>
+    </Badge>
+  );
+}
+
 function ContextSelection({
   selectedText,
   onRemoveSelectedText,
@@ -125,11 +153,13 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   contextNotes,
   contextUrls,
   contextTags,
+  contextFolders,
   selectedTextContexts = [],
   onAddContext,
   onRemoveContext,
   onRemoveUrl,
   onRemoveTag,
+  onRemoveFolder,
   onRemoveSelectedText,
   showProgressCard,
 }) => {
@@ -207,6 +237,9 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
         ))}
         {contextTags.map((tag) => (
           <ContextTag key={tag} tag={tag} onRemoveTag={onRemoveTag} />
+        ))}
+        {contextFolders.map((folder) => (
+          <ContextFolder key={folder.path} folder={folder} onRemoveFolder={onRemoveFolder} />
         ))}
         {selectedTextContexts.map((selectedText) => (
           <ContextSelection

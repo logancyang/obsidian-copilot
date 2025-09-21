@@ -63,12 +63,13 @@ export function $createPillNode(pillData: PillData) {
 }
 
 export interface ParsedContent {
-  type: "text" | "note-pill" | "url-pill" | "tool-pill" | "tag-pill";
+  type: "text" | "note-pill" | "url-pill" | "tool-pill" | "tag-pill" | "folder-pill";
   content: string;
   file?: TFile;
   url?: string;
   toolName?: string;
   tagName?: string;
+  folder?: TFolder;
   isActive?: boolean;
 }
 
@@ -277,6 +278,54 @@ function resolveTagReference(tagName: string): string | null {
 }
 
 /**
+ * Attempts to resolve a folder reference to a TFolder
+ * @param folderName The name of the folder to resolve
+ * @returns TFolder if found, null otherwise
+ */
+function resolveFolderReference(folderName: string): TFolder | null {
+  if (!app?.vault) {
+    return null;
+  }
+
+  try {
+    // Get all folders in the vault
+    const allFolders = app.vault
+      .getAllLoadedFiles()
+      .filter((file): file is TFolder => file instanceof TFolder);
+
+    // First, try exact name match
+    for (const folder of allFolders) {
+      if (folder.name === folderName) {
+        return folder;
+      }
+    }
+
+    // Then, try path match for nested folders
+    for (const folder of allFolders) {
+      if (folder.path === folderName) {
+        return folder;
+      }
+    }
+
+    // Finally, try case-insensitive match
+    const lowerFolderName = folderName.toLowerCase();
+    for (const folder of allFolders) {
+      if (
+        folder.name.toLowerCase() === lowerFolderName ||
+        folder.path.toLowerCase() === lowerFolderName
+      ) {
+        return folder;
+      }
+    }
+
+    return null;
+  } catch (error) {
+    logInfo("Error resolving folder reference:", error);
+    return null;
+  }
+}
+
+/**
  * Attempts to resolve a note reference to a TFile
  * @param noteName The name of the note to resolve
  * @returns TFile if found, null otherwise
@@ -330,6 +379,7 @@ export function parseTextForPills(
     includeURLs?: boolean;
     includeTools?: boolean;
     includeTags?: boolean;
+    includeFolders?: boolean;
   } = {}
 ): ParsedContent[] {
   const {
@@ -337,6 +387,7 @@ export function parseTextForPills(
     includeURLs = false,
     includeTools = false,
     includeTags = false,
+    includeFolders = false,
   } = options;
   const segments: ParsedContent[] = [];
 
@@ -346,6 +397,7 @@ export function parseTextForPills(
   if (includeURLs) patterns.push("(https?:\\/\\/[^\\s\"'<>]+)"); // Group 3: URLs
   if (includeTools) patterns.push("(@[a-zA-Z][a-zA-Z0-9_]*)"); // Group 4: @tool
   if (includeTags) patterns.push("(#[a-zA-Z][a-zA-Z0-9_\\-]*)"); // Group 5: #tag
+  if (includeFolders) patterns.push("(\\{([^}]+)\\})"); // Group 6,7: {folderName}
 
   if (patterns.length === 0) {
     // No patterns to match, return as plain text
@@ -443,6 +495,24 @@ export function parseTextForPills(
           content: match[0],
         });
       }
+    } else if (match[6] && includeFolders) {
+      // This is a folder reference {folderName}
+      const folderName = match[7].trim();
+      const resolvedFolder = resolveFolderReference(folderName);
+
+      if (resolvedFolder) {
+        segments.push({
+          type: "folder-pill",
+          content: resolvedFolder.path,
+          folder: resolvedFolder,
+        });
+      } else {
+        // Invalid folder reference - keep as plain text
+        segments.push({
+          type: "text",
+          content: match[0],
+        });
+      }
     }
 
     lastIndex = regex.lastIndex;
@@ -483,6 +553,8 @@ export function createNodesFromSegments(segments: ParsedContent[]): LexicalNode[
       nodes.push($createToolPillNode(segment.toolName));
     } else if (segment.type === "tag-pill" && segment.tagName) {
       nodes.push($createTagPillNode(segment.tagName));
+    } else if (segment.type === "folder-pill" && segment.folder) {
+      nodes.push($createFolderPillNode(segment.folder.name, segment.folder.path));
     }
   }
 

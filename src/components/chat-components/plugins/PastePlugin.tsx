@@ -8,8 +8,8 @@ interface PastePluginProps {
 }
 
 /**
- * Lexical plugin that processes pasted text to convert [[note name]], @tool, #tag patterns and URLs into pills.
- * Only converts patterns that resolve to actual notes in the vault, valid tools, valid tags, and valid URLs -
+ * Lexical plugin that processes pasted text to convert [[note name]], @tool, #tag, {folder} patterns and URLs into pills.
+ * Only converts patterns that resolve to actual notes in the vault, valid tools, valid tags, valid folders, and valid URLs -
  * invalid references are left as plain text.
  */
 export function PastePlugin({ enableURLPills = false }: PastePluginProps): null {
@@ -29,9 +29,10 @@ export function PastePlugin({ enableURLPills = false }: PastePluginProps): null 
         const hasURLs = enableURLPills && plainText.includes("http");
         const hasTools = plainText.includes("@");
         const hasTags = plainText.includes("#");
+        const hasFolders = plainText.includes("{") && plainText.includes("}");
 
-        if (!plainText || (!hasNoteLinks && !hasURLs && !hasTools && !hasTags)) {
-          // No note links, URLs, tools, or tags detected, let default paste behavior handle it
+        if (!plainText || (!hasNoteLinks && !hasURLs && !hasTools && !hasTags && !hasFolders)) {
+          // No note links, URLs, tools, tags, or folders detected, let default paste behavior handle it
           return false;
         }
 
@@ -41,6 +42,7 @@ export function PastePlugin({ enableURLPills = false }: PastePluginProps): null 
           includeURLs: enableURLPills,
           includeTools: true,
           includeTags: true,
+          includeFolders: true,
         });
 
         // Check if we found any valid pills
@@ -49,7 +51,8 @@ export function PastePlugin({ enableURLPills = false }: PastePluginProps): null 
             segment.type === "note-pill" ||
             (enableURLPills && segment.type === "url-pill") ||
             segment.type === "tool-pill" ||
-            segment.type === "tag-pill"
+            segment.type === "tag-pill" ||
+            segment.type === "folder-pill"
         );
 
         if (!hasValidPills) {

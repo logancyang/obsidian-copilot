@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  $getRoot,
   DecoratorNode,
   DOMConversionMap,
   DOMConversionOutput,
@@ -85,7 +86,7 @@ export class FolderPillNode extends DecoratorNode<JSX.Element> implements IPillN
   }
 
   getTextContent(): string {
-    return this.__folderName;
+    return `{${this.__folderPath}}`;
   }
 
   isPill(): boolean {
@@ -105,9 +106,10 @@ export class FolderPillNode extends DecoratorNode<JSX.Element> implements IPillN
       <Badge
         variant="secondary"
         className={cn("tw-inline-flex tw-items-center tw-gap-1 tw-px-2 tw-py-0.5 tw-text-xs")}
+        title={this.__folderPath}
       >
         <Folder className="tw-size-3" />
-        {this.__folderName}
+        {`{${this.__folderPath}}`}
       </Badge>
     );
   }
@@ -131,4 +133,25 @@ export function $createFolderPillNode(folderName: string, folderPath: string): F
 
 export function $isFolderPillNode(node: LexicalNode | null | undefined): node is FolderPillNode {
   return node instanceof FolderPillNode;
+}
+
+// Add a utility function to remove pills by folder path
+export function $removePillsByFolder(folderPath: string): number {
+  const root = $getRoot();
+  let removedCount = 0;
+
+  function traverse(node: any): void {
+    if ($isFolderPillNode(node) && node.getFolderPath() === folderPath) {
+      node.remove();
+      removedCount++;
+    } else if (typeof node.getChildren === "function") {
+      const children = node.getChildren();
+      for (const child of children) {
+        traverse(child);
+      }
+    }
+  }
+
+  traverse(root);
+  return removedCount;
 }

@@ -136,11 +136,13 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     urls,
     contextNotes: passedContextNotes,
     contextTags,
+    contextFolders,
   }: {
     toolCalls?: string[];
     urls?: string[];
     contextNotes?: TFile[];
     contextTags?: string[];
+    contextFolders?: { name: string; path: string }[];
   } = {}) => {
     if (!inputMessage && selectedImages.length === 0) return;
 
@@ -195,6 +197,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         notes,
         urls: isPlusChain(currentChain) ? urls || [] : [],
         tags: contextTags || [],
+        folders: contextFolders || [],
         selectedTextContexts,
       };
 

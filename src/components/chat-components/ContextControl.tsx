@@ -19,6 +19,8 @@ interface ChatControlsProps {
   onRemoveUrl: (url: string) => void;
   contextTags: string[];
   onRemoveTag: (tagName: string) => void;
+  contextFolders: { name: string; path: string }[];
+  onRemoveFolder: (folderPath: string) => void;
   selectedTextContexts?: SelectedTextContext[];
   onRemoveSelectedText?: (id: string) => void;
   showProgressCard: () => void;
@@ -37,6 +39,8 @@ const ContextControl: React.FC<ChatControlsProps> = ({
   onRemoveUrl,
   contextTags,
   onRemoveTag,
+  contextFolders,
+  onRemoveFolder,
   selectedTextContexts,
   onRemoveSelectedText,
   showProgressCard,
@@ -102,6 +106,8 @@ const ContextControl: React.FC<ChatControlsProps> = ({
       onRemoveUrl={onRemoveUrl}
       contextTags={contextTags}
       onRemoveTag={onRemoveTag}
+      contextFolders={contextFolders}
+      onRemoveFolder={onRemoveFolder}
       selectedTextContexts={selectedTextContexts}
       onRemoveSelectedText={onRemoveSelectedText}
       showProgressCard={showProgressCard}
