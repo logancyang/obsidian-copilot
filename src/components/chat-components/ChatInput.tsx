@@ -24,6 +24,7 @@ import { useDropzone } from "react-dropzone";
 import ContextControl from "./ContextControl";
 import { $removePillsByPath } from "./NotePillPlugin";
 import { $removePillsByURL } from "./URLPillNode";
+import { $removePillsByTag } from "./TagPillNode";
 import LexicalEditor from "./LexicalEditor";
 
 interface ChatInputProps {
@@ -33,6 +34,7 @@ interface ChatInputProps {
     toolCalls?: string[];
     urls?: string[];
     contextNotes?: TFile[];
+    contextTags?: string[];
   }) => void;
   isGenerating: boolean;
   onStopGenerating: () => void;
@@ -70,6 +72,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   showProgressCard,
 }) => {
   const [contextUrls, setContextUrls] = useState<string[]>([]);
+  const [contextTags, setContextTags] = useState<string[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   const lexicalEditorRef = useRef<any>(null);
   const [currentModelKey, setCurrentModelKey] = useModelKey();
@@ -83,6 +86,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
   const [notesFromPills, setNotesFromPills] = useState<{ path: string; basename: string }[]>([]);
   const [urlsFromPills, setUrlsFromPills] = useState<string[]>([]);
+  const [tagsFromPills, setTagsFromPills] = useState<string[]>([]);
   const isCopilotPlus = isPlusChain(currentChain);
 
   // Toggle states for vault, web search, composer, and autonomous agent
@@ -167,6 +171,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
       toolCalls,
       contextNotes,
       urls: contextUrls,
+      contextTags,
     });
   };
 
@@ -175,100 +180,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
   // - Note references ([[]])
   // - Tool mentions (@)
   // - URL extraction and context updates
-
-  /* LEGACY TEXTAREA HANDLERS - TO BE ADAPTED FOR LEXICAL
-    const handleInputChange = async (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const inputValue = event.target.value;
-      const cursorPos = event.target.selectionStart;
-
-      // Check for slash BEFORE updating state
-      // Only show slash modal if:
-      // 1. We just typed a "/" AND
-      // 2. Either the input is empty OR there's a space before the "/"
-      const shouldShowSlashModal =
-        cursorPos > 0 &&
-        inputValue[cursorPos - 1] === "/" &&
-        (cursorPos === 1 || inputValue[cursorPos - 2] === " ");
-
-      setInputMessage(inputValue);
-      adjustTextareaHeight();
-
-      // Extract URLs and update mentions
-      const urls = mention.extractAllUrls(inputValue);
-
-      // Update URLs in context, ensuring uniqueness
-      const newUrls = urls.filter((url) => !contextUrls.includes(url));
-      if (newUrls.length > 0 && isPlusChain(currentChain)) {
-        // Only add URLs to context for Plus chains
-        // Use Set to ensure uniqueness
-        setContextUrls((prev) => Array.from(new Set([...prev, ...newUrls])));
-      }
-
-      // Handle other input triggers
-      if (cursorPos >= 2 && inputValue.slice(cursorPos - 2, cursorPos) === "[[") {
-        showNoteTitleModal(cursorPos);
-      } else if (shouldShowSlashModal) {
-        // Pass the inputValue directly to ensure we use the current value
-        showCustomPromptModal(cursorPos, inputValue);
-      } else if (inputValue.slice(-1) === "@" && isCopilotPlus) {
-        showCopilotPlusOptionsModal();
-      }
-    };
-
-    const adjustTextareaHeight = () => {
-      if (textAreaRef.current) {
-        textAreaRef.current.style.height = "auto"; // Reset height
-        textAreaRef.current.style.height = `${textAreaRef.current.scrollHeight}px`; // Adjust height
-      }
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.nativeEvent.isComposing) return;
-
-      if (e.key === "Enter") {
-        // send msg:
-        // 1. non-mobile platforms: only input Enter
-        // 2. mobile platforms: Shift+Enter
-        const shouldSendMessage =
-          (!e.shiftKey && !Platform.isMobile) || (e.shiftKey && Platform.isMobile);
-
-        if (!shouldSendMessage) {
-          // do nothing here, allowing the default newline behavior
-          return;
-        }
-
-        e.preventDefault();
-        onSendMessage();
-      }
-    };
-
-    const handlePaste = useCallback(
-      async (e: React.ClipboardEvent) => {
-        const items = e.clipboardData?.items;
-        if (!items) return;
-
-        const imageItems = Array.from(items).filter((item) => item.type.indexOf("image") !== -1);
-
-        if (imageItems.length > 0) {
-          e.preventDefault();
-
-          const files = await Promise.all(
-            imageItems.map((item) => {
-              const file = item.getAsFile();
-              if (!file) return null;
-              return file;
-            })
-          );
-
-          const validFiles = files.filter((file) => file !== null);
-          if (validFiles.length > 0) {
-            onAddImage(validFiles);
-          }
-        }
-      },
-      [onAddImage]
-    );
-    */
 
   /* LEGACY HELPER FUNCTIONS - TO BE ADAPTED FOR LEXICAL
     const showNoteTitleModal = (cursorPos: number) => {
@@ -314,46 +225,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
       fetchNoteTitles();
     };
 
-    const showCustomPromptModal = (cursorPos: number, currentInputValue: string) => {
-      const commandManager = CustomCommandManager.getInstance();
-      const commands = getCachedCustomCommands();
-      const slashCommands = sortSlashCommands(
-        commands.filter((command) => command.showInSlashMenu)
-      );
-      const commandTitles = slashCommands.map((command) => command.title);
-
-      // Use the passed input value and cursor position
-      const slashPosition = cursorPos - 1;
-
-      const modal = new ListPromptModal(app, commandTitles, (commandTitle: string) => {
-        const selectedCommand = slashCommands.find((command) => command.title === commandTitle);
-        if (selectedCommand) {
-          commandManager.recordUsage(selectedCommand);
-
-          // Replace the "/" with the command content
-          let before = "";
-          let after = "";
-
-          if (slashPosition >= 0 && currentInputValue[slashPosition] === "/") {
-            before = currentInputValue.slice(0, slashPosition);
-            after = currentInputValue.slice(slashPosition + 1);
-          }
-
-          const newInputMessage = before + selectedCommand.content + after;
-          setInputMessage(newInputMessage);
-
-          // Set cursor position after the inserted command content
-          setTimeout(() => {
-            if (textAreaRef.current) {
-              const newCursorPos = before.length + selectedCommand.content.length;
-              textAreaRef.current.setSelectionRange(newCursorPos, newCursorPos);
-              textAreaRef.current.focus();
-            }
-          }, 0);
-        }
-      });
-      modal.open();
-    };
 
     const showCopilotPlusOptionsModal = () => {
       // Create a map of options with their descriptions
@@ -375,7 +246,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
     */
 
   // Handle when pills are removed from the editor
-  const handlePillsRemoved = (removedNotes: { path: string; basename: string }[]) => {
+  const handleNotePillsRemoved = (removedNotes: { path: string; basename: string }[]) => {
     const removedPaths = new Set(removedNotes.map((note) => note.path));
 
     setContextNotes((prev) => {
@@ -416,9 +287,23 @@ const ChatInput: React.FC<ChatInputProps> = ({
     });
   };
 
+  // Handle when tags are removed from pills (when pills are deleted in editor)
+  const handleTagPillsRemoved = (removedTags: string[]) => {
+    const removedTagSet = new Set(removedTags);
+
+    setContextTags((prev) => {
+      return prev.filter((tag) => {
+        if (removedTagSet.has(tag)) {
+          return false;
+        }
+        return true;
+      });
+    });
+  };
+
   // Handle when context notes are removed from the context menu
   // This should remove all corresponding pills from the editor
-  const handleContextRemoved = (notePath: string) => {
+  const handleContextNoteRemoved = (notePath: string) => {
     if (lexicalEditorRef.current) {
       lexicalEditorRef.current.update(() => {
         $removePillsByPath(notePath);
@@ -440,6 +325,19 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
     // Also immediately update urlsFromPills to prevent stale data from re-adding the URL
     setUrlsFromPills((prev) => prev.filter((pillUrl) => pillUrl !== url));
+  };
+
+  // Handle when context tags are removed from the context menu
+  // This should remove all corresponding tag pills from the editor
+  const handleTagContextRemoved = (tagName: string) => {
+    if (lexicalEditorRef.current) {
+      lexicalEditorRef.current.update(() => {
+        $removePillsByTag(tagName);
+      });
+    }
+
+    // Also immediately update tagsFromPills to prevent stale data from re-adding the tag
+    setTagsFromPills((prev) => prev.filter((pillTag) => pillTag !== tagName));
   };
 
   // Pill-to-context synchronization (when pills are added)
@@ -510,6 +408,22 @@ const ChatInput: React.FC<ChatInputProps> = ({
     }
   }, [urlsFromPills, currentChain]);
 
+  // Tag-to-context synchronization (when tags are added via pills)
+  useEffect(() => {
+    setContextTags((prev) => {
+      const contextTagSet = new Set(prev);
+
+      // Find tags that need to be added
+      const newTagsFromPills = tagsFromPills.filter((pillTag) => {
+        // Only add if not already in context
+        return !contextTagSet.has(pillTag);
+      });
+
+      // Add completely new tags from pills
+      return [...prev, ...newTagsFromPills];
+    });
+  }, [tagsFromPills]);
+
   // Update the current active note whenever it changes
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout>;
@@ -577,10 +491,15 @@ const ChatInput: React.FC<ChatInputProps> = ({
           setContextUrls((prev) => prev.filter((u) => u !== url));
           handleURLContextRemoved(url);
         }}
+        contextTags={contextTags}
+        onRemoveTag={(tagName: string) => {
+          setContextTags((prev) => prev.filter((t) => t !== tagName));
+          handleTagContextRemoved(tagName);
+        }}
         selectedTextContexts={selectedTextContexts}
         onRemoveSelectedText={onRemoveSelectedText}
         showProgressCard={showProgressCard}
-        onContextRemoved={handleContextRemoved}
+        onContextNoteRemoved={handleContextNoteRemoved}
       />
 
       {selectedImages.length > 0 && (
@@ -618,9 +537,11 @@ const ChatInput: React.FC<ChatInputProps> = ({
           onChange={(value) => setInputMessage(value)}
           onSubmit={onSendMessage}
           onNotesChange={setNotesFromPills}
-          onNotesRemoved={handlePillsRemoved}
+          onNotesRemoved={handleNotePillsRemoved}
           onURLsChange={isCopilotPlus ? setUrlsFromPills : undefined}
           onURLsRemoved={isCopilotPlus ? handleURLPillsRemoved : undefined}
+          onTagsChange={setTagsFromPills}
+          onTagsRemoved={handleTagPillsRemoved}
           onEditorReady={onEditorReady}
           placeholder={
             "Ask anything. [[ for notes. / for custom prompts. " +

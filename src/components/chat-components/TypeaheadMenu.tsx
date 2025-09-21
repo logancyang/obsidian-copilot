@@ -227,7 +227,11 @@ export const TypeaheadMenu = <T extends TypeaheadOption = TypeaheadOption>({
                   </div>
                 ) : (
                   <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2">
-                    {option.icon && <div className="tw-shrink-0">{option.icon}</div>}
+                    {option.icon && (
+                      <div className="tw-flex tw-h-full tw-shrink-0 tw-items-center">
+                        {option.icon}
+                      </div>
+                    )}
                     <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-0.5">
                       <div className="tw-truncate tw-font-medium tw-text-normal">
                         {option.title}

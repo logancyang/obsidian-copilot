@@ -242,15 +242,26 @@ function resolveTagReference(tagName: string): string | null {
     // Ensure the tag name has # prefix
     const normalizedTagName = tagName.startsWith("#") ? tagName : `#${tagName}`;
 
-    // Get all tags from the vault
+    // Get all tags from the vault (frontmatter only)
     const allTags = new Set<string>();
     app.vault.getMarkdownFiles().forEach((file) => {
       const metadata = app.metadataCache.getFileCache(file);
-      if (metadata?.tags) {
-        metadata.tags.forEach((tag) => {
-          const tagString = tag.tag.startsWith("#") ? tag.tag : `#${tag.tag}`;
+      const frontmatterTags = metadata?.frontmatter?.tags;
+
+      if (frontmatterTags) {
+        if (Array.isArray(frontmatterTags)) {
+          frontmatterTags.forEach((tag) => {
+            if (typeof tag === "string") {
+              const tagString = tag.startsWith("#") ? tag : `#${tag}`;
+              allTags.add(tagString);
+            }
+          });
+        } else if (typeof frontmatterTags === "string") {
+          const tagString = frontmatterTags.startsWith("#")
+            ? frontmatterTags
+            : `#${frontmatterTags}`;
           allTags.add(tagString);
-        });
+        }
       }
     });
 

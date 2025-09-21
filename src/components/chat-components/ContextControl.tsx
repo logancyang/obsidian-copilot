@@ -17,10 +17,12 @@ interface ChatControlsProps {
   activeNote: TFile | null;
   contextUrls: string[];
   onRemoveUrl: (url: string) => void;
+  contextTags: string[];
+  onRemoveTag: (tagName: string) => void;
   selectedTextContexts?: SelectedTextContext[];
   onRemoveSelectedText?: (id: string) => void;
   showProgressCard: () => void;
-  onContextRemoved?: (notePath: string) => void;
+  onContextNoteRemoved?: (notePath: string) => void;
 }
 
 const ContextControl: React.FC<ChatControlsProps> = ({
@@ -33,10 +35,12 @@ const ContextControl: React.FC<ChatControlsProps> = ({
   activeNote,
   contextUrls,
   onRemoveUrl,
+  contextTags,
+  onRemoveTag,
   selectedTextContexts,
   onRemoveSelectedText,
   showProgressCard,
-  onContextRemoved,
+  onContextNoteRemoved,
 }) => {
   const [selectedChain] = useChainType();
   const handleAddContext = () => {
@@ -81,8 +85,8 @@ const ContextControl: React.FC<ChatControlsProps> = ({
     setContextNotes((prev) => prev.filter((note) => note.path !== path));
 
     // Call the callback to remove pills from the editor
-    if (onContextRemoved) {
-      onContextRemoved(path);
+    if (onContextNoteRemoved) {
+      onContextNoteRemoved(path);
     }
   };
 
@@ -96,6 +100,8 @@ const ContextControl: React.FC<ChatControlsProps> = ({
       onRemoveContext={handleRemoveContext}
       contextUrls={contextUrls}
       onRemoveUrl={onRemoveUrl}
+      contextTags={contextTags}
+      onRemoveTag={onRemoveTag}
       selectedTextContexts={selectedTextContexts}
       onRemoveSelectedText={onRemoveSelectedText}
       showProgressCard={showProgressCard}

@@ -85,13 +85,25 @@ export function AtMentionCommandPlugin(): JSX.Element {
     if (!app?.metadataCache) return [];
     const tags = new Set<string>();
 
-    // Get tags from all files
+    // Get tags from all files (frontmatter only)
     app.vault.getMarkdownFiles().forEach((file) => {
       const metadata = app.metadataCache.getFileCache(file);
-      if (metadata?.tags) {
-        metadata.tags.forEach((tag) => {
-          tags.add(tag.tag.startsWith("#") ? tag.tag : `#${tag.tag}`);
-        });
+      const frontmatterTags = metadata?.frontmatter?.tags;
+
+      if (frontmatterTags) {
+        if (Array.isArray(frontmatterTags)) {
+          frontmatterTags.forEach((tag) => {
+            if (typeof tag === "string") {
+              const tagWithHash = tag.startsWith("#") ? tag : `#${tag}`;
+              tags.add(tagWithHash);
+            }
+          });
+        } else if (typeof frontmatterTags === "string") {
+          const tagWithHash = frontmatterTags.startsWith("#")
+            ? frontmatterTags
+            : `#${frontmatterTags}`;
+          tags.add(tagWithHash);
+        }
       }
     });
 
@@ -163,10 +175,10 @@ export function AtMentionCommandPlugin(): JSX.Element {
         // Tags
         ...allTags.map((tag) => ({
           key: `tag-${tag}`,
-          title: tag,
-          subtitle: "Tag",
+          title: tag.startsWith("#") ? tag.slice(1) : tag, // Remove # for display
+          subtitle: undefined,
           category: "tags" as AtMentionCategory,
-          data: tag,
+          data: tag, // Keep original tag with # for processing
           content: undefined,
           icon: <Hash className="tw-size-4" />,
         })),
@@ -221,10 +233,10 @@ export function AtMentionCommandPlugin(): JSX.Element {
         case "tags":
           items = allTags.map((tag) => ({
             key: `tag-${tag}`,
-            title: tag,
-            subtitle: "Tag",
+            title: tag.startsWith("#") ? tag.slice(1) : tag, // Remove # for display
+            subtitle: undefined,
             category: "tags" as AtMentionCategory,
-            data: tag,
+            data: tag, // Keep original tag with # for processing
             content: undefined,
             icon: <Hash className="tw-size-4" />,
           }));

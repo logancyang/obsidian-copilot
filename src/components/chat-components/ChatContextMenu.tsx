@@ -13,10 +13,12 @@ interface ChatContextMenuProps {
   activeNote: TFile | null;
   contextNotes: TFile[];
   contextUrls: string[];
+  contextTags: string[];
   selectedTextContexts?: SelectedTextContext[];
   onAddContext: () => void;
   onRemoveContext: (path: string) => void;
   onRemoveUrl: (url: string) => void;
+  onRemoveTag: (tagName: string) => void;
   onRemoveSelectedText?: (id: string) => void;
   showProgressCard: () => void;
 }
@@ -70,6 +72,23 @@ function ContextUrl({ url, onRemoveUrl }: { url: string; onRemoveUrl: (url: stri
   );
 }
 
+function ContextTag({ tag, onRemoveTag }: { tag: string; onRemoveTag: (tag: string) => void }) {
+  return (
+    <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
+      <span className="tw-max-w-40 tw-truncate">{tag}</span>
+      <Button
+        variant="ghost2"
+        size="fit"
+        onClick={() => onRemoveTag(tag)}
+        aria-label="Remove from context"
+        className="tw-text-muted"
+      >
+        <X className="tw-size-4" />
+      </Button>
+    </Badge>
+  );
+}
+
 function ContextSelection({
   selectedText,
   onRemoveSelectedText,
@@ -105,10 +124,12 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   activeNote,
   contextNotes,
   contextUrls,
+  contextTags,
   selectedTextContexts = [],
   onAddContext,
   onRemoveContext,
   onRemoveUrl,
+  onRemoveTag,
   onRemoveSelectedText,
   showProgressCard,
 }) => {
@@ -183,6 +204,9 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
         ))}
         {uniqueUrls.map((url) => (
           <ContextUrl key={url} url={url} onRemoveUrl={onRemoveUrl} />
+        ))}
+        {contextTags.map((tag) => (
+          <ContextTag key={tag} tag={tag} onRemoveTag={onRemoveTag} />
         ))}
         {selectedTextContexts.map((selectedText) => (
           <ContextSelection

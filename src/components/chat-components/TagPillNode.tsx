@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  $getRoot,
   DecoratorNode,
   DOMConversionMap,
   DOMConversionOutput,
@@ -119,4 +120,25 @@ export function $createTagPillNode(tagName: string): TagPillNode {
 
 export function $isTagPillNode(node: LexicalNode | null | undefined): node is TagPillNode {
   return node instanceof TagPillNode;
+}
+
+// Add a utility function to remove pills by tag
+export function $removePillsByTag(tagName: string): number {
+  const root = $getRoot();
+  let removedCount = 0;
+
+  function traverse(node: any): void {
+    if ($isTagPillNode(node) && node.getTagName() === tagName) {
+      node.remove();
+      removedCount++;
+    } else if (typeof node.getChildren === "function") {
+      const children = node.getChildren();
+      for (const child of children) {
+        traverse(child);
+      }
+    }
+  }
+
+  traverse(root);
+  return removedCount;
 }

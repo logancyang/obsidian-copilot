@@ -27,6 +27,7 @@ export interface SelectedTextContext {
 export interface MessageContext {
   notes: TFile[];
   urls: string[];
+  tags?: string[];
   selectedTextContexts?: SelectedTextContext[];
 }
 

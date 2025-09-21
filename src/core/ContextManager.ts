@@ -6,7 +6,7 @@ import { logInfo } from "@/logger";
 import { Mention } from "@/mentions/Mention";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { ChatMessage, MessageContext } from "@/types/message";
-import { extractNoteFiles } from "@/utils";
+import { extractNoteFiles, getNotesFromTags } from "@/utils";
 import { TFile, Vault } from "obsidian";
 import { MessageRepository } from "./MessageRepository";
 
@@ -96,14 +96,41 @@ export class ContextManager {
         chainType
       );
 
-      // 4. Process selected text contexts
+      // 4. Process context tags
+      const contextTags = message.context?.tags || [];
+      let tagContextAddition = "";
+
+      if (contextTags.length > 0) {
+        // Get all notes that have any of the specified tags (in frontmatter)
+        const taggedNotes = getNotesFromTags(vault, contextTags);
+
+        // Filter out already processed notes to avoid duplication
+        const filteredTaggedNotes = taggedNotes.filter(
+          (note) => !excludedNotePaths.has(note.path) && !notes.some((n) => n.path === note.path)
+        );
+
+        if (filteredTaggedNotes.length > 0) {
+          tagContextAddition = await this.contextProcessor.processContextNotes(
+            new Set(), // Don't exclude any notes since we already filtered
+            fileParserManager,
+            vault,
+            filteredTaggedNotes,
+            false, // Don't include active note again
+            null,
+            chainType
+          );
+        }
+      }
+
+      // 5. Process selected text contexts
       const selectedTextContextAddition = this.contextProcessor.processSelectedTextContexts();
 
-      // 5. Combine everything
+      // 6. Combine everything
       const finalProcessedMessage =
         processedUserMessage +
         urlContextAddition.urlContext +
         noteContextAddition +
+        tagContextAddition +
         selectedTextContextAddition;
 
       logInfo(`[ContextManager] Successfully processed context for message ${message.id}`);
