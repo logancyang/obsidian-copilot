@@ -15,8 +15,7 @@ import {
 import fuzzysort from "fuzzysort";
 import { TFile, TFolder, App } from "obsidian";
 import { FileText, Wrench, Folder, Hash } from "lucide-react";
-import { tryToPositionRange, TypeaheadOption } from "./TypeaheadMenu";
-import { AtMentionTypeaheadMenu } from "./AtMentionTypeaheadMenu";
+import { TypeaheadMenu, tryToPositionRange, TypeaheadOption } from "./TypeaheadMenu";
 import { $createNotePillNode } from "./NotePillPlugin";
 import { $createToolPillNode } from "./ToolPillNode";
 import { $createFolderPillNode } from "./FolderPillNode";
@@ -615,7 +614,7 @@ export function AtMentionCommandPlugin(): JSX.Element {
   return (
     <>
       {state.isOpen && (
-        <AtMentionTypeaheadMenu
+        <TypeaheadMenu
           options={menuOptions}
           selectedIndex={state.selectedIndex}
           onSelect={selectOption}

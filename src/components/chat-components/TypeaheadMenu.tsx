@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -53,21 +54,24 @@ interface TypeaheadOption {
   title: string;
   subtitle?: string;
   content?: string;
+  category?: string;
+  icon?: React.ReactNode;
 }
 
-interface TypeaheadMenuProps {
-  options: TypeaheadOption[];
+interface TypeaheadMenuProps<T extends TypeaheadOption = TypeaheadOption> {
+  options: T[];
   selectedIndex: number;
-  onSelect: (option: TypeaheadOption) => void;
+  onSelect: (option: T) => void;
   onClose: () => void;
   onHighlight: (index: number) => void;
   range: Range | null;
   query: string;
   showPreview?: boolean;
   menuLabel?: string;
+  mode?: "category" | "search";
 }
 
-export const TypeaheadMenu: React.FC<TypeaheadMenuProps> = ({
+export const TypeaheadMenu = <T extends TypeaheadOption = TypeaheadOption>({
   options,
   selectedIndex,
   onSelect,
@@ -77,7 +81,8 @@ export const TypeaheadMenu: React.FC<TypeaheadMenuProps> = ({
   query,
   showPreview = false,
   menuLabel = "Options",
-}) => {
+  mode = "search",
+}: TypeaheadMenuProps<T>) => {
   const [position, setPosition] = useState<{ top: number; left: number; width: number } | null>(
     null
   );
@@ -199,6 +204,8 @@ export const TypeaheadMenu: React.FC<TypeaheadMenuProps> = ({
         <div className="tw-p-2 tw-text-normal">
           {options.map((option, index) => {
             const isSelected = index === selectedIndex;
+            const isCategory = mode === "category" && !query && option.icon;
+
             return (
               <div
                 key={option.key}
@@ -210,12 +217,29 @@ export const TypeaheadMenu: React.FC<TypeaheadMenuProps> = ({
                 onClick={() => onSelect(option)}
                 onMouseEnter={() => onHighlight(index)}
               >
-                <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-0.5">
-                  <div className="tw-truncate tw-font-medium tw-text-normal">{option.title}</div>
-                  {option.subtitle && (
-                    <div className="tw-truncate tw-text-xs tw-text-muted">{option.subtitle}</div>
-                  )}
-                </div>
+                {isCategory ? (
+                  <div className="tw-flex tw-w-full tw-items-center tw-justify-between">
+                    <div className="tw-flex tw-items-center tw-gap-2">
+                      {option.icon}
+                      <span className="tw-font-medium">{option.title}</span>
+                    </div>
+                    <ChevronRight className="tw-size-4 tw-text-muted" />
+                  </div>
+                ) : (
+                  <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2">
+                    {option.icon && <div className="tw-shrink-0">{option.icon}</div>}
+                    <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-0.5">
+                      <div className="tw-truncate tw-font-medium tw-text-normal">
+                        {option.title}
+                      </div>
+                      {option.subtitle && (
+                        <div className="tw-truncate tw-text-xs tw-text-muted">
+                          {option.subtitle}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
