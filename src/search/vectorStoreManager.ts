@@ -61,6 +61,11 @@ export default class VectorStoreManager {
   }
 
   private async initialize(): Promise<void> {
+    // Do not initialize or show notices if semantic search is disabled
+    const settings = getSettings();
+    if (!settings.enableSemanticSearchV3) {
+      return;
+    }
     try {
       let retries = 3;
       while (retries > 0) {
