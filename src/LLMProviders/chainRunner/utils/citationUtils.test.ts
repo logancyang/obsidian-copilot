@@ -96,7 +96,8 @@ More content
       const dashHeading = "Content\nSources -\n[^1]: [[Doc]]";
       expect(hasExistingCitations(dashHeading)).toBe(true);
 
-      const summary = "<details><summary>Sources</summary>List</details>";
+      const summary =
+        '<details><summary class="copilot-sources__summary">Sources</summary>List</details>';
       expect(hasExistingCitations(summary)).toBe(true);
     });
 
@@ -188,7 +189,8 @@ More content
 [^2]: [[Document 2]]`;
 
       const result = processInlineCitations(content, true);
-      expect(result).toContain("Sources</summary>");
+      expect(result).toContain("copilot-sources__summary");
+      expect(result).toContain("copilot-sources__item");
       expect(result).toContain("Document 1");
       expect(result).toContain("Document 2");
     });
@@ -201,7 +203,8 @@ More content
 - [[Document 2]]`;
 
       const result = processInlineCitations(content, false);
-      expect(result).toContain("Sources</summary>");
+      expect(result).toContain("copilot-sources__summary");
+      expect(result).toContain('copilot-sources__index">[1]');
       expect(result).toContain("Document 1");
       expect(result).toContain("Document 2");
     });
