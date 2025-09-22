@@ -656,6 +656,7 @@ export const COMMAND_IDS = {
   APPLY_CUSTOM_COMMAND: "apply-custom-command",
   OPEN_LOG_FILE: "open-log-file",
   CLEAR_LOG_FILE: "clear-log-file",
+  DOWNLOAD_YOUTUBE_SCRIPT: "download-youtube-script",
 } as const;
 
 export const COMMAND_NAMES: Record<CommandId, string> = {
@@ -683,6 +684,7 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.APPLY_CUSTOM_COMMAND]: "Apply custom command",
   [COMMAND_IDS.OPEN_LOG_FILE]: "Create log file",
   [COMMAND_IDS.CLEAR_LOG_FILE]: "Clear log file",
+  [COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT]: "Download YouTube Script",
 };
 
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];

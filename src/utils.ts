@@ -560,15 +560,86 @@ export function extractJsonFromCodeBlock(content: string): any {
 const YOUTUBE_URL_REGEX =
   /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([^\s&]+)/;
 
-export function isYoutubeUrl(url: string): boolean {
-  return YOUTUBE_URL_REGEX.test(url);
+/**
+ * Validates a YouTube URL and returns detailed validation result
+ */
+export function validateYoutubeUrl(url: string): {
+  isValid: boolean;
+  error?: string;
+  videoId?: string;
+} {
+  if (!url || typeof url !== "string") {
+    return { isValid: false, error: "URL is required" };
+  }
+
+  const trimmedUrl = url.trim();
+  if (!trimmedUrl) {
+    return { isValid: false, error: "URL cannot be empty" };
+  }
+
+  // Extract video ID
+  const videoId = extractYoutubeVideoId(trimmedUrl);
+  if (!videoId) {
+    return { isValid: false, error: "Invalid YouTube URL format" };
+  }
+
+  // Check if video ID is valid (11 characters, alphanumeric with dashes and underscores)
+  if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+    return { isValid: false, error: "Invalid YouTube video ID" };
+  }
+
+  return { isValid: true, videoId };
 }
 
+/**
+ * Extract YouTube video ID from various URL formats
+ */
+export function extractYoutubeVideoId(url: string): string | null {
+  try {
+    // Handle different YouTube URL formats
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/,
+      /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
+    ];
+
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Create a standard YouTube URL from video ID
+ */
+export function formatYoutubeUrl(videoId: string): string {
+  return `https://www.youtube.com/watch?v=${videoId}`;
+}
+
+/**
+ * Check if a string is a valid YouTube URL (legacy function for backward compatibility)
+ */
+export function isYoutubeUrl(url: string): boolean {
+  return validateYoutubeUrl(url).isValid;
+}
+
+/**
+ * Extract first YouTube URL from text (legacy function for backward compatibility)
+ */
 export function extractYoutubeUrl(text: string): string | null {
   const match = text.match(YOUTUBE_URL_REGEX);
   return match ? match[0] : null;
 }
 
+/**
+ * Extract all YouTube URLs from text (legacy function for backward compatibility)
+ */
 export function extractAllYoutubeUrls(text: string): string[] {
   const matches = text.matchAll(new RegExp(YOUTUBE_URL_REGEX, "g"));
   return Array.from(matches, (match) => match[0]);
