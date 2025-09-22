@@ -168,11 +168,16 @@ export function sanitizeQaExclusions(rawValue: unknown): string {
 
   decodedPatterns.forEach((pattern) => {
     const canonical = pattern.replace(/\/+$/, "");
-    if (canonical === COPILOT_FOLDER_ROOT) {
+    const canonicalKey = canonical.length > 0 ? canonical : pattern;
+    if (canonicalKey === COPILOT_FOLDER_ROOT) {
       canonicalToOriginalPattern.set(COPILOT_FOLDER_ROOT, COPILOT_FOLDER_ROOT);
       return;
     }
-    canonicalToOriginalPattern.set(canonical || pattern, pattern);
+    if (!canonicalToOriginalPattern.has(canonicalKey)) {
+      const normalizedValue =
+        canonical.length > 0 && pattern.endsWith("/") ? `${canonical}/` : pattern;
+      canonicalToOriginalPattern.set(canonicalKey, normalizedValue);
+    }
   });
 
   canonicalToOriginalPattern.set(COPILOT_FOLDER_ROOT, COPILOT_FOLDER_ROOT);
