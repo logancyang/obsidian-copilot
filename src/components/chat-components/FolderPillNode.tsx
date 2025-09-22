@@ -1,7 +1,6 @@
 import React from "react";
 import {
   $getRoot,
-  DecoratorNode,
   DOMConversionMap,
   DOMConversionOutput,
   DOMExportOutput,
@@ -12,14 +11,14 @@ import {
 } from "lexical";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { IPillNode } from "./PillDeletionPlugin";
+import { BasePillNode } from "./BasePillNode";
 
 export interface SerializedFolderPillNode extends SerializedLexicalNode {
   folderName: string;
   folderPath: string;
 }
 
-export class FolderPillNode extends DecoratorNode<JSX.Element> implements IPillNode {
+export class FolderPillNode extends BasePillNode {
   __folderName: string;
   __folderPath: string;
 
@@ -41,10 +40,6 @@ export class FolderPillNode extends DecoratorNode<JSX.Element> implements IPillN
     const span = document.createElement("span");
     span.className = "folder-pill-wrapper";
     return span;
-  }
-
-  updateDOM(): false {
-    return false;
   }
 
   static importDOM(): DOMConversionMap | null {
@@ -86,10 +81,6 @@ export class FolderPillNode extends DecoratorNode<JSX.Element> implements IPillN
 
   getTextContent(): string {
     return `{${this.__folderPath}}`;
-  }
-
-  isPill(): boolean {
-    return true;
   }
 
   getFolderName(): string {

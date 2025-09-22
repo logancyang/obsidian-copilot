@@ -1,6 +1,5 @@
 import React from "react";
 import {
-  DecoratorNode,
   DOMConversionMap,
   DOMConversionOutput,
   DOMExportOutput,
@@ -12,13 +11,13 @@ import {
 } from "lexical";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { IPillNode } from "./PillDeletionPlugin";
+import { BasePillNode } from "./BasePillNode";
 
 export interface SerializedToolPillNode extends SerializedLexicalNode {
   toolName: string;
 }
 
-export class ToolPillNode extends DecoratorNode<JSX.Element> implements IPillNode {
+export class ToolPillNode extends BasePillNode {
   __toolName: string;
 
   static getType(): string {
@@ -38,10 +37,6 @@ export class ToolPillNode extends DecoratorNode<JSX.Element> implements IPillNod
     const span = document.createElement("span");
     span.className = "tool-pill-wrapper";
     return span;
-  }
-
-  updateDOM(): false {
-    return false;
   }
 
   static importDOM(): DOMConversionMap | null {
@@ -81,10 +76,6 @@ export class ToolPillNode extends DecoratorNode<JSX.Element> implements IPillNod
 
   getTextContent(): string {
     return this.__toolName;
-  }
-
-  isPill(): boolean {
-    return true;
   }
 
   getToolName(): string {

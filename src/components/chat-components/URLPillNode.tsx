@@ -1,7 +1,6 @@
 import React from "react";
 import {
   $getRoot,
-  DecoratorNode,
   DOMConversionMap,
   DOMConversionOutput,
   DOMExportOutput,
@@ -12,7 +11,7 @@ import {
 } from "lexical";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { IPillNode } from "./PillDeletionPlugin";
+import { BasePillNode } from "./BasePillNode";
 
 export interface SerializedURLPillNode extends SerializedLexicalNode {
   url: string;
@@ -20,7 +19,7 @@ export interface SerializedURLPillNode extends SerializedLexicalNode {
   isActive?: boolean;
 }
 
-export class URLPillNode extends DecoratorNode<JSX.Element> implements IPillNode {
+export class URLPillNode extends BasePillNode {
   __url: string;
   __title?: string;
   __isActive: boolean;
@@ -44,10 +43,6 @@ export class URLPillNode extends DecoratorNode<JSX.Element> implements IPillNode
     const span = document.createElement("span");
     span.className = "url-pill-wrapper";
     return span;
-  }
-
-  updateDOM(): false {
-    return false;
   }
 
   static importDOM(): DOMConversionMap | null {
@@ -113,34 +108,6 @@ export class URLPillNode extends DecoratorNode<JSX.Element> implements IPillNode
 
   decorate(): JSX.Element {
     return <URLPillComponent node={this} />;
-  }
-
-  isInline(): boolean {
-    return true;
-  }
-
-  canInsertTextBefore(): boolean {
-    return true;
-  }
-
-  canInsertTextAfter(): boolean {
-    return true;
-  }
-
-  canBeEmpty(): boolean {
-    return false;
-  }
-
-  isKeyboardSelectable(): boolean {
-    return true;
-  }
-
-  isIsolated(): boolean {
-    return true;
-  }
-
-  isPill(): boolean {
-    return true;
   }
 }
 

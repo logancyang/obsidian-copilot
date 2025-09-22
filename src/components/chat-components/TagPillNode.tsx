@@ -1,7 +1,6 @@
 import React from "react";
 import {
   $getRoot,
-  DecoratorNode,
   DOMConversionMap,
   DOMConversionOutput,
   DOMExportOutput,
@@ -12,13 +11,13 @@ import {
 } from "lexical";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { IPillNode } from "./PillDeletionPlugin";
+import { BasePillNode } from "./BasePillNode";
 
 export interface SerializedTagPillNode extends SerializedLexicalNode {
   tagName: string;
 }
 
-export class TagPillNode extends DecoratorNode<JSX.Element> implements IPillNode {
+export class TagPillNode extends BasePillNode {
   __tagName: string;
 
   static getType(): string {
@@ -38,10 +37,6 @@ export class TagPillNode extends DecoratorNode<JSX.Element> implements IPillNode
     const span = document.createElement("span");
     span.className = "tag-pill-wrapper";
     return span;
-  }
-
-  updateDOM(): false {
-    return false;
   }
 
   static importDOM(): DOMConversionMap | null {
@@ -81,10 +76,6 @@ export class TagPillNode extends DecoratorNode<JSX.Element> implements IPillNode
 
   getTextContent(): string {
     return this.__tagName;
-  }
-
-  isPill(): boolean {
-    return true;
   }
 
   getTagName(): string {
