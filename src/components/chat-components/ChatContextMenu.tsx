@@ -1,18 +1,14 @@
-import {
-  AlertCircle,
-  CheckCircle,
-  CircleDashed,
-  Loader2,
-  X,
-  FileText,
-  Hash,
-  Folder,
-  ExternalLink,
-} from "lucide-react";
+import { AlertCircle, CheckCircle, CircleDashed, Loader2, X } from "lucide-react";
 import { TFile } from "obsidian";
 import React, { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  ContextNoteBadge,
+  ContextUrlBadge,
+  ContextTagBadge,
+  ContextFolderBadge,
+} from "@/components/chat-components/ContextBadges";
 import { SelectedTextContext } from "@/types/message";
 import { ChainType } from "@/chainFactory";
 import { Separator } from "@/components/ui/separator";
@@ -33,127 +29,6 @@ interface ChatContextMenuProps {
   showProgressCard: () => void;
   onTypeaheadSelect: (category: string, data: any) => void;
   lexicalEditorRef?: React.RefObject<any>;
-}
-
-function ContextNote({
-  note,
-  isActive = false,
-  onRemoveContext,
-}: {
-  note: TFile;
-  isActive: boolean;
-  onRemoveContext: (category: string, data: any) => void;
-}) {
-  return (
-    <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
-      <div className="tw-flex tw-items-center tw-gap-1">
-        <FileText className="tw-size-3" />
-        <span className="tw-max-w-40 tw-truncate">{note.basename}</span>
-        {isActive && <span className="tw-text-xs tw-text-faint">Current</span>}
-        {note.extension === "pdf" && <span className="tw-text-xs tw-text-faint">pdf</span>}
-      </div>
-      <Button
-        variant="ghost2"
-        size="fit"
-        onClick={() => onRemoveContext("notes", note.path)}
-        aria-label="Remove from context"
-        className="tw-text-muted"
-      >
-        <X className="tw-size-4" />
-      </Button>
-    </Badge>
-  );
-}
-
-function ContextUrl({
-  url,
-  onRemoveContext,
-}: {
-  url: string;
-  onRemoveContext: (category: string, data: any) => void;
-}) {
-  // Extract domain from URL for display
-  const getDomain = (url: string): string => {
-    try {
-      const urlObj = new URL(url);
-      return urlObj.hostname.replace(/^www\./, "");
-    } catch {
-      return url;
-    }
-  };
-
-  return (
-    <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
-      <div className="tw-flex tw-items-center tw-gap-1">
-        <ExternalLink className="tw-size-3" />
-        <span className="tw-max-w-40 tw-truncate">{getDomain(url)}</span>
-      </div>
-      <Button
-        variant="ghost2"
-        size="fit"
-        onClick={() => onRemoveContext("urls", url)}
-        aria-label="Remove from context"
-        className="tw-text-muted"
-      >
-        <X className="tw-size-4" />
-      </Button>
-    </Badge>
-  );
-}
-
-function ContextTag({
-  tag,
-  onRemoveContext,
-}: {
-  tag: string;
-  onRemoveContext: (category: string, data: any) => void;
-}) {
-  // Remove # symbol for clean display
-  const displayTag = tag.startsWith("#") ? tag.slice(1) : tag;
-
-  return (
-    <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
-      <div className="tw-flex tw-items-center tw-gap-1">
-        <Hash className="tw-size-3" />
-        <span className="tw-max-w-40 tw-truncate">{displayTag}</span>
-      </div>
-      <Button
-        variant="ghost2"
-        size="fit"
-        onClick={() => onRemoveContext("tags", tag)}
-        aria-label="Remove from context"
-        className="tw-text-muted"
-      >
-        <X className="tw-size-4" />
-      </Button>
-    </Badge>
-  );
-}
-
-function ContextFolder({
-  folder,
-  onRemoveContext,
-}: {
-  folder: { name: string; path: string };
-  onRemoveContext: (category: string, data: any) => void;
-}) {
-  return (
-    <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
-      <div className="tw-flex tw-items-center tw-gap-1">
-        <Folder className="tw-size-3" />
-        <span className="tw-max-w-40 tw-truncate">{folder.path}</span>
-      </div>
-      <Button
-        variant="ghost2"
-        size="fit"
-        onClick={() => onRemoveContext("folders", folder.path)}
-        aria-label="Remove from context"
-        className="tw-text-muted"
-      >
-        <X className="tw-size-4" />
-      </Button>
-    </Badge>
-  );
 }
 
 function ContextSelection({
@@ -280,29 +155,46 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
       </div>
       <div className="tw-flex tw-flex-1 tw-flex-wrap tw-gap-1">
         {activeNote && (
-          <ContextNote
+          <ContextNoteBadge
             key={activeNote.path}
             note={activeNote}
             isActive={true}
-            onRemoveContext={onRemoveContext}
+            showRemoveButton={true}
+            onRemove={() => onRemoveContext("notes", activeNote.path)}
           />
         )}
         {uniqueNotes.map((note) => (
-          <ContextNote
+          <ContextNoteBadge
             key={note.path}
             note={note}
             isActive={false}
-            onRemoveContext={onRemoveContext}
+            showRemoveButton={true}
+            onRemove={() => onRemoveContext("notes", note.path)}
           />
         ))}
         {uniqueUrls.map((url) => (
-          <ContextUrl key={url} url={url} onRemoveContext={onRemoveContext} />
+          <ContextUrlBadge
+            key={url}
+            url={url}
+            showRemoveButton={true}
+            onRemove={() => onRemoveContext("urls", url)}
+          />
         ))}
         {contextTags.map((tag) => (
-          <ContextTag key={tag} tag={tag} onRemoveContext={onRemoveContext} />
+          <ContextTagBadge
+            key={tag}
+            tag={tag}
+            showRemoveButton={true}
+            onRemove={() => onRemoveContext("tags", tag)}
+          />
         ))}
         {contextFolders.map((folder) => (
-          <ContextFolder key={folder.path} folder={folder} onRemoveContext={onRemoveContext} />
+          <ContextFolderBadge
+            key={folder.path}
+            folder={folder}
+            showRemoveButton={true}
+            onRemove={() => onRemoveContext("folders", folder.path)}
+          />
         ))}
         {selectedTextContexts.map((selectedText) => (
           <ContextSelection

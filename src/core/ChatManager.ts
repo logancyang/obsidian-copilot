@@ -10,6 +10,7 @@ import { ContextManager } from "./ContextManager";
 import { MessageRepository } from "./MessageRepository";
 import { ChatPersistenceManager } from "./ChatPersistenceManager";
 import { USER_SENDER } from "@/constants";
+import { TFile } from "obsidian";
 
 /**
  * ChatManager - Central business logic coordinator
@@ -431,5 +432,27 @@ export class ChatManager {
     logInfo(
       `[ChatManager] Project switch complete. Messages: ${currentRepo.getDisplayMessages().length}`
     );
+  }
+
+  /**
+   * Load chat history from a file
+   */
+  async loadChatHistory(file: TFile): Promise<void> {
+    // Clear current messages first
+    this.clearMessages();
+
+    // Load messages using ChatPersistenceManager
+    const messages = await this.persistenceManager.loadChat(file);
+
+    // Add messages to the current repository
+    const currentRepo = this.getCurrentMessageRepo();
+    for (const message of messages) {
+      currentRepo.addFullMessage(message);
+    }
+
+    // Update chain memory with loaded messages
+    await this.updateChainMemory();
+
+    logInfo(`[ChatManager] Loaded ${messages.length} messages from chat history`);
   }
 }

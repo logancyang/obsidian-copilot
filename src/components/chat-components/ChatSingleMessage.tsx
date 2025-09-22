@@ -1,8 +1,13 @@
 import { ChatButtons } from "@/components/chat-components/ChatButtons";
 import { ToolCallBanner } from "@/components/chat-components/ToolCallBanner";
 import { SourcesModal } from "@/components/modals/SourcesModal";
-import { Badge } from "@/components/ui/badge";
-import { HelpTooltip } from "@/components/ui/help-tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  ContextNoteBadge,
+  ContextUrlBadge,
+  ContextTagBadge,
+  ContextFolderBadge,
+} from "@/components/chat-components/ContextBadges";
 import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
 import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
@@ -58,25 +63,57 @@ export const normalizeFootnoteRendering = (root: HTMLElement): void => {
 };
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
-  if (!context || (!context.notes?.length && !context.urls?.length)) {
+  if (
+    !context ||
+    (!context.notes?.length &&
+      !context.urls?.length &&
+      !context.tags?.length &&
+      !context.folders?.length)
+  ) {
     return null;
   }
 
   return (
     <div className="tw-flex tw-flex-wrap tw-gap-2">
       {context.notes.map((note, index) => (
-        <HelpTooltip key={`${index}-${note.path}`} content={note.path} side="top">
-          <Badge variant="secondary">
-            <span className="tw-max-w-40 tw-truncate">{note.basename}</span>
-          </Badge>
-        </HelpTooltip>
+        <Tooltip key={`note-${index}-${note.path}`}>
+          <TooltipTrigger asChild>
+            <div>
+              <ContextNoteBadge note={note} showRemoveButton={false} />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>{note.path}</TooltipContent>
+        </Tooltip>
       ))}
       {context.urls.map((url, index) => (
-        <HelpTooltip key={`${index}-${url}`} content={url} side="top">
-          <Badge variant="secondary">
-            <span className="tw-max-w-40 tw-truncate">{url}</span>
-          </Badge>
-        </HelpTooltip>
+        <Tooltip key={`url-${index}-${url}`}>
+          <TooltipTrigger asChild>
+            <div>
+              <ContextUrlBadge url={url} showRemoveButton={false} />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>{url}</TooltipContent>
+        </Tooltip>
+      ))}
+      {context.tags?.map((tag, index) => (
+        <Tooltip key={`tag-${index}-${tag}`}>
+          <TooltipTrigger asChild>
+            <div>
+              <ContextTagBadge tag={tag} showRemoveButton={false} />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>Tag: {tag}</TooltipContent>
+        </Tooltip>
+      ))}
+      {context.folders?.map((folder, index) => (
+        <Tooltip key={`folder-${index}-${folder.path}`}>
+          <TooltipTrigger asChild>
+            <div>
+              <ContextFolderBadge folder={folder} showRemoveButton={false} />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>Folder: {folder.path}</TooltipContent>
+        </Tooltip>
       ))}
     </div>
   );

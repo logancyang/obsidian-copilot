@@ -2,7 +2,6 @@ import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ProjectManager from "@/LLMProviders/projectManager";
 import { CustomModel, getCurrentProject } from "@/aiParams";
 import { AutocompleteService } from "@/autocomplete/autocompleteService";
-import { parseChatContent } from "@/chatUtils";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
@@ -364,9 +363,6 @@ export default class CopilotPlugin extends Plugin {
     // First autosave the current chat if the setting is enabled
     await this.autosaveCurrentChat();
 
-    const content = await this.app.vault.read(file);
-    const messages = parseChatContent(content);
-
     // Check if the Copilot view is already active
     const existingView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0];
     if (!existingView) {
@@ -374,8 +370,8 @@ export default class CopilotPlugin extends Plugin {
       this.activateView();
     }
 
-    // Load messages into ChatUIState (which now handles memory updates)
-    await this.chatUIState.loadMessages(messages);
+    // Load messages using ChatUIState (which now uses ChatPersistenceManager internally)
+    await this.chatUIState.loadChatHistory(file);
 
     // Update the view
     const copilotView = (existingView || this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0])
