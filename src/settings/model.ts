@@ -7,7 +7,9 @@ import { type ChainType } from "@/chainFactory";
 import {
   BUILTIN_CHAT_MODELS,
   BUILTIN_EMBEDDING_MODELS,
+  COPILOT_FOLDER_ROOT,
   DEFAULT_OPEN_AREA,
+  DEFAULT_QA_EXCLUSIONS_SETTING,
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
   EmbeddingModelProviders,
@@ -147,6 +149,37 @@ export const settingsAtom = atom<CopilotSettings>(DEFAULT_SETTINGS);
 export function setSettings(settings: Partial<CopilotSettings>) {
   const newSettings = mergeAllActiveModelsWithCoreModels({ ...getSettings(), ...settings });
   settingsStore.set(settingsAtom, newSettings);
+}
+
+/**
+ * Normalize QA exclusion patterns and guarantee the Copilot folder root is excluded.
+ * @param rawValue - Persisted QA exclusion setting value.
+ * @returns Encoded QA exclusion patterns string.
+ */
+export function sanitizeQaExclusions(rawValue: unknown): string {
+  const rawValueString = typeof rawValue === "string" ? rawValue : DEFAULT_QA_EXCLUSIONS_SETTING;
+
+  const decodedPatterns: string[] = rawValueString
+    .split(",")
+    .map((pattern: string) => decodeURIComponent(pattern.trim()))
+    .filter((pattern: string) => pattern.length > 0);
+
+  const canonicalToOriginalPattern = new Map<string, string>();
+
+  decodedPatterns.forEach((pattern) => {
+    const canonical = pattern.replace(/\/+$/, "");
+    if (canonical === COPILOT_FOLDER_ROOT) {
+      canonicalToOriginalPattern.set(COPILOT_FOLDER_ROOT, COPILOT_FOLDER_ROOT);
+      return;
+    }
+    canonicalToOriginalPattern.set(canonical || pattern, pattern);
+  });
+
+  canonicalToOriginalPattern.set(COPILOT_FOLDER_ROOT, COPILOT_FOLDER_ROOT);
+
+  return Array.from(canonicalToOriginalPattern.values())
+    .map((pattern) => encodeURIComponent(pattern))
+    .join(",");
 }
 
 /**
@@ -323,6 +356,8 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   const promptsFolder = (settingsToSanitize.customPromptsFolder || "").trim();
   sanitizedSettings.customPromptsFolder =
     promptsFolder.length > 0 ? promptsFolder : DEFAULT_SETTINGS.customPromptsFolder;
+
+  sanitizedSettings.qaExclusions = sanitizeQaExclusions(settingsToSanitize.qaExclusions);
 
   return sanitizedSettings;
 }
