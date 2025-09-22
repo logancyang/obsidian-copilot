@@ -13,6 +13,7 @@ import { SettingItem } from "@/components/ui/setting-item";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AUTOCOMPLETE_CONFIG } from "@/constants";
 import { cn } from "@/lib/utils";
+import { logError } from "@/logger";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { HelpCircle, RefreshCw } from "lucide-react";
 import { Notice } from "obsidian";
@@ -62,7 +63,7 @@ export const CopilotPlusSettings: React.FC = () => {
 
       new Notice(`Word index rebuilt successfully! ${result.wordCount} unique words indexed.`);
     } catch (error) {
-      console.error("Failed to refresh word index:", error);
+      logError("Failed to refresh word index:", error);
       new Notice("Failed to refresh word index. Check console for details.");
     } finally {
       setIsRefreshing(false);
@@ -95,6 +96,52 @@ export const CopilotPlusSettings: React.FC = () => {
               <ToolSettingsSection />
             </>
           )}
+
+          <div className="tw-pt-4 tw-text-xl tw-font-semibold">Memory</div>
+
+          <SettingItem
+            type="text"
+            title="Memory Folder Name"
+            description="Specify the folder where memory data is stored."
+            value={settings.memoryFolderName}
+            onChange={(value) => {
+              updateSetting("memoryFolderName", value);
+            }}
+            placeholder="copilot/memory"
+          />
+
+          <SettingItem
+            type="switch"
+            title="Reference Recent Conversation"
+            description="When enabled, Copilot references your recent conversation history to provide more contextually relevant responses. All history data is stored locally in your vault."
+            checked={settings.enableRecentConversations}
+            onCheckedChange={(checked) => {
+              updateSetting("enableRecentConversations", checked);
+            }}
+          />
+
+          {settings.enableRecentConversations && (
+            <SettingItem
+              type="slider"
+              title="Max Recent Conversations"
+              description="Number of recent conversations to remember for context. Higher values provide more context but may slow down responses."
+              min={10}
+              max={50}
+              step={1}
+              value={settings.maxRecentConversations}
+              onChange={(value) => updateSetting("maxRecentConversations", value)}
+            />
+          )}
+
+          <SettingItem
+            type="switch"
+            title="Reference Saved Memories"
+            description="When enabled, Copilot can access memories that you explicitly asked it to remember. Use this to store important facts, preferences, or context for future conversations."
+            checked={settings.enableSavedMemory}
+            onCheckedChange={(checked) => {
+              updateSetting("enableSavedMemory", checked);
+            }}
+          />
 
           <div className="tw-pt-4 tw-text-xl tw-font-semibold">Autocomplete</div>
 
