@@ -190,9 +190,9 @@ More content
 
       const result = processInlineCitations(content, true);
       expect(result).toContain("copilot-sources__summary");
-      expect(result).toContain("copilot-sources__item");
-      expect(result).toContain("Document 1");
-      expect(result).toContain("Document 2");
+      expect(result).toContain('copilot-sources__index">[1]');
+      expect(result).toContain('copilot-sources__text">[[Document 1]]');
+      expect(result).toContain('copilot-sources__text">[[Document 2]]');
     });
 
     it("should use simple expandable list when disabled", () => {
@@ -205,8 +205,8 @@ More content
       const result = processInlineCitations(content, false);
       expect(result).toContain("copilot-sources__summary");
       expect(result).toContain('copilot-sources__index">[1]');
-      expect(result).toContain("Document 1");
-      expect(result).toContain("Document 2");
+      expect(result).toContain('copilot-sources__text">[[Document 1]]');
+      expect(result).toContain('copilot-sources__text">[[Document 2]]');
     });
 
     it("should return unchanged content when no sources section", () => {
@@ -353,10 +353,18 @@ More content
       // [^2] (third mention) -> [3] -> should map to [[2024-03-26]]
       // [^18] (fourth mention) -> [4] -> should map to [[2024-04-08]]
 
-      expect(result).toContain("<strong>[1]</strong> [[2024-03-13]]"); // [^9] -> [1]
-      expect(result).toContain("<strong>[2]</strong> [[2024-03-18]]"); // [^1] -> [2]
-      expect(result).toContain("<strong>[3]</strong> [[2024-03-26]]"); // [^2] -> [3]
-      expect(result).toContain("<strong>[4]</strong> [[2024-04-08]]"); // [^18] -> [4]
+      expect(result).toContain(
+        '<span class="copilot-sources__index">[1]</span><span class="copilot-sources__text">[[2024-03-13]]</span>'
+      );
+      expect(result).toContain(
+        '<span class="copilot-sources__index">[2]</span><span class="copilot-sources__text">[[2024-03-18]]</span>'
+      );
+      expect(result).toContain(
+        '<span class="copilot-sources__index">[3]</span><span class="copilot-sources__text">[[2024-03-26]]</span>'
+      );
+      expect(result).toContain(
+        '<span class="copilot-sources__index">[4]</span><span class="copilot-sources__text">[[2024-04-08]]</span>'
+      );
 
       // Verify the citations in text are renumbered correctly
       expect(result).toContain("Dolce Arts Studio [1]"); // [^9] -> [1]
@@ -383,10 +391,14 @@ More content
       const result = processInlineCitations(content, true);
 
       // Should consolidate the 3 "How to Make Wealth" entries into 1
-      expect(result).toContain("<strong>[1]</strong> [[How to Make Wealth]]");
-      expect(result).toContain("<strong>[2]</strong> [[Superlinear Returns]]");
-      expect(result).not.toContain("<strong>[3]</strong>");
-      expect(result).not.toContain("<strong>[4]</strong>");
+      expect(result).toContain(
+        '<span class="copilot-sources__index">[1]</span><span class="copilot-sources__text">[[How to Make Wealth]]</span>'
+      );
+      expect(result).toContain(
+        '<span class="copilot-sources__index">[2]</span><span class="copilot-sources__text">[[Superlinear Returns]]</span>'
+      );
+      expect(result).not.toContain('copilot-sources__index">[3]');
+      expect(result).not.toContain('copilot-sources__index">[4]');
 
       // Verify periods after citations are removed
       expect(result).not.toContain("[1].");
@@ -422,10 +434,16 @@ More content
       // [^22] (fourth mention) -> [4] -> [[Document B]] (should consolidate with [^14])
 
       // After consolidation, should only have 3 unique sources:
-      expect(result).toContain("<strong>[1]</strong> [[Document B]]"); // [^14] and [^22] consolidated
-      expect(result).toContain("<strong>[2]</strong> [[Document C]]"); // [^17]
-      expect(result).toContain("<strong>[3]</strong> [[Document A]]"); // [^3]
-      expect(result).not.toContain("<strong>[4]</strong>");
+      expect(result).toContain(
+        '<span class="copilot-sources__index">[1]</span><span class="copilot-sources__text">[[Document B]]</span>'
+      );
+      expect(result).toContain(
+        '<span class="copilot-sources__index">[2]</span><span class="copilot-sources__text">[[Document C]]</span>'
+      );
+      expect(result).toContain(
+        '<span class="copilot-sources__index">[3]</span><span class="copilot-sources__text">[[Document A]]</span>'
+      );
+      expect(result).not.toContain('copilot-sources__index">[4]');
 
       // Verify citations in text point to correct consolidated sources
       expect(result).toContain("references [1] and also [2]"); // [^14]->[1], [^17]->[2]
@@ -450,8 +468,12 @@ More content
       // [^7] (first mention) -> [1] -> [[Superlinear Returns]]
       // [^8] (second mention) -> [2] -> [[How to Do Great Work]]
 
-      expect(result).toContain("<strong>[1]</strong> [[Superlinear Returns]]"); // [^7] -> [1]
-      expect(result).toContain("<strong>[2]</strong> [[How to Do Great Work]]"); // [^8] -> [2]
+      expect(result).toContain(
+        '<span class="copilot-sources__index">[1]</span><span class="copilot-sources__text">[[Superlinear Returns]]</span>'
+      );
+      expect(result).toContain(
+        '<span class="copilot-sources__index">[2]</span><span class="copilot-sources__text">[[How to Do Great Work]]</span>'
+      );
 
       // CRITICAL: Both citations in text must be converted (not partial like [4][^8])
       expect(result).toContain("thresholds). [1][2]"); // [^7][^8] -> [1][2]
