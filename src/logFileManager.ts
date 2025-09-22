@@ -7,13 +7,13 @@ type LogLevel = "INFO" | "WARN" | "ERROR";
 /**
  * Manages a rolling log file that keeps the last N entries and works on desktop and mobile.
  * - Writes to <vault>/copilot/copilot-log.md
- * - Maintains an in-memory ring buffer of the last 1000 entries
+ * - Maintains an in-memory ring buffer of the last 500 entries
  * - Debounced flush to reduce I/O; single-line entries to preserve accurate line limits
  */
 class LogFileManager {
   private static instance: LogFileManager;
 
-  private readonly maxLines = 1000;
+  private readonly maxLines = 500;
   private readonly maxLineChars = 8000; // guard against extremely large entries
   private buffer: string[] = [];
   private initialized = false;
@@ -30,7 +30,7 @@ class LogFileManager {
     return "copilot/copilot-log.md"; // under copilot/
   }
 
-  /** Ensure buffer is loaded with up to last 1000 lines from existing file. */
+  /** Ensure buffer is loaded with up to last 500 lines from existing file. */
   private async ensureInitialized() {
     if (this.initialized) return;
     try {
