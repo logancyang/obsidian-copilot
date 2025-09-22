@@ -5,6 +5,7 @@ import ChatSingleMessage, {
 } from "@/components/chat-components/ChatSingleMessage";
 import { ChatMessage } from "@/types/message";
 import type { App } from "obsidian";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 jest.mock("@/settings/model", () => ({
   useSettingsValue: jest.fn(() => ({ enableInlineCitations: true })),
@@ -20,17 +21,34 @@ jest.mock("@/LLMProviders/chainRunner/utils/citationUtils", () => ({
   processInlineCitations: jest.fn((content: string) => content),
 }));
 
-const renderMarkdownMock = jest.fn();
+jest.mock("obsidian", () => {
+  const renderMarkdown = jest.fn();
+  return {
+    MarkdownRenderer: {
+      renderMarkdown,
+    },
+    Component: class {},
+    MarkdownView: class {},
+    TFile: class {},
+    App: class {},
+    Platform: {
+      isMobile: false,
+    },
+    Modal: class {
+      open() {
+        /* noop */
+      }
+      close() {
+        /* noop */
+      }
+    },
+    __renderMarkdownMock: renderMarkdown,
+  };
+});
 
-jest.mock("obsidian", () => ({
-  MarkdownRenderer: {
-    renderMarkdown: renderMarkdownMock,
-  },
-  Component: class {},
-  MarkdownView: class {},
-  TFile: class {},
-  App: class {},
-}));
+const { __renderMarkdownMock: renderMarkdownMock } = jest.requireMock("obsidian") as {
+  __renderMarkdownMock: jest.Mock;
+};
 
 describe("normalizeFootnoteRendering", () => {
   beforeEach(() => {
@@ -101,6 +119,10 @@ describe("ChatSingleMessage", () => {
     renderMarkdownMock.mockReset();
   });
 
+  beforeAll(() => {
+    (globalThis as any).activeDocument = document;
+  });
+
   it("normalizes rendered footnotes for assistant messages", async () => {
     renderMarkdownMock.mockImplementation((_markdown: string, el: HTMLElement) => {
       el.innerHTML = `
@@ -118,12 +140,14 @@ describe("ChatSingleMessage", () => {
     });
 
     const { container } = render(
-      <ChatSingleMessage
-        message={baseMessage}
-        app={createAppStub()}
-        isStreaming={false}
-        onDelete={() => {}}
-      />
+      <TooltipProvider>
+        <ChatSingleMessage
+          message={baseMessage}
+          app={createAppStub()}
+          isStreaming={false}
+          onDelete={() => {}}
+        />
+      </TooltipProvider>
     );
 
     await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
