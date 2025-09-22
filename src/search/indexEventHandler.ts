@@ -1,6 +1,7 @@
 import { getChainType } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
-import { getSettings } from "@/settings/model";
+import { logInfo } from "@/logger";
+import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { App, MarkdownView, Platform, TAbstractFile, TFile } from "obsidian";
 import { DBOperations } from "./dbOperations";
 import { IndexOperations } from "./indexOperations";
@@ -12,24 +13,65 @@ export class IndexEventHandler {
   private debounceTimer: number | null = null;
   private lastActiveFile: TFile | null = null;
   private lastActiveFileMtime: number | null = null;
+  private listenersActive = false;
 
   constructor(
     private app: App,
     private indexOps: IndexOperations,
     private dbOps: DBOperations
   ) {
-    this.initializeEventListeners();
+    this.syncEventListeners();
+    subscribeToSettingsChange(() => {
+      this.syncEventListeners();
+    });
   }
 
-  private initializeEventListeners() {
-    if (getSettings().debug) {
-      console.log("Copilot Plus: Initializing event listeners");
+  /**
+   * Determine whether indexing-related events should be processed based on current settings.
+   *
+   * @returns {boolean} True when semantic search indexing should run.
+   */
+  private shouldHandleEvents(): boolean {
+    return getSettings().enableSemanticSearchV3;
+  }
+
+  /**
+   * Ensure event listeners are registered only when semantic search indexing is enabled.
+   */
+  private syncEventListeners(): void {
+    const shouldListen = this.shouldHandleEvents();
+    if (shouldListen && !this.listenersActive) {
+      logInfo("Copilot Plus: Initializing semantic index event listeners");
+      this.app.workspace.on("active-leaf-change", this.handleActiveLeafChange);
+      this.app.vault.on("delete", this.handleFileDelete);
+      this.listenersActive = true;
+    } else if (!shouldListen && this.listenersActive) {
+      this.teardownEventListeners();
     }
-    this.app.workspace.on("active-leaf-change", this.handleActiveLeafChange);
-    this.app.vault.on("delete", this.handleFileDelete);
+  }
+
+  /**
+   * Remove indexing event listeners and reset any pending timers or cached state.
+   */
+  private teardownEventListeners(): void {
+    if (!this.listenersActive) {
+      return;
+    }
+    this.app.workspace.off("active-leaf-change", this.handleActiveLeafChange);
+    this.app.vault.off("delete", this.handleFileDelete);
+    if (this.debounceTimer !== null) {
+      window.clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+    this.lastActiveFile = null;
+    this.lastActiveFileMtime = null;
+    this.listenersActive = false;
   }
 
   private handleActiveLeafChange = async (leaf: any) => {
+    if (!this.shouldHandleEvents()) {
+      return;
+    }
     if (Platform.isMobile && getSettings().disableIndexOnMobile) {
       return;
     }
@@ -73,6 +115,9 @@ export class IndexEventHandler {
   };
 
   private debouncedReindexFile = (file: TFile) => {
+    if (!this.shouldHandleEvents()) {
+      return;
+    }
     if (this.debounceTimer !== null) {
       window.clearTimeout(this.debounceTimer);
     }
@@ -87,28 +132,19 @@ export class IndexEventHandler {
   };
 
   private handleFileDelete = async (file: TAbstractFile) => {
+    if (!this.shouldHandleEvents()) {
+      return;
+    }
     if (file instanceof TFile) {
       await this.dbOps.removeDocs(file.path);
     }
   };
 
   public cleanup() {
-    if (this.debounceTimer !== null) {
-      window.clearTimeout(this.debounceTimer);
-    }
-    this.app.workspace.off("active-leaf-change", this.handleActiveLeafChange);
-    this.app.vault.off("delete", this.handleFileDelete);
+    this.teardownEventListeners();
   }
 
   public unload() {
-    if (this.debounceTimer !== null) {
-      window.clearTimeout(this.debounceTimer);
-    }
-    // Clean up file tracking
-    this.lastActiveFile = null;
-    this.lastActiveFileMtime = null;
-
-    this.app.workspace.off("active-leaf-change", this.handleActiveLeafChange);
-    this.app.vault.off("delete", this.handleFileDelete);
+    this.teardownEventListeners();
   }
 }
