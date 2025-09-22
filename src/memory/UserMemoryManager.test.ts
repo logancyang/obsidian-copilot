@@ -2,6 +2,7 @@
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logError: jest.fn(),
+  logWarn: jest.fn(),
 }));
 
 jest.mock("@/settings/model", () => ({
@@ -15,7 +16,7 @@ jest.mock("@/utils", () => ({
 import { UserMemoryManager } from "./UserMemoryManager";
 import { App, TFile, Vault } from "obsidian";
 import { ChatMessage } from "@/types/message";
-import { logInfo, logError } from "@/logger";
+import { logInfo, logError, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { ensureFolderExists } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
@@ -94,7 +95,7 @@ describe("UserMemoryManager", () => {
 
       userMemoryManager.addRecentConversation(messages, mockChatModel);
 
-      expect(logInfo).toHaveBeenCalledWith(
+      expect(logWarn).toHaveBeenCalledWith(
         "[UserMemoryManager] Recent history referencing is disabled, skipping analysis"
       );
     });
@@ -102,7 +103,7 @@ describe("UserMemoryManager", () => {
     it("should skip memory update when no messages provided", () => {
       userMemoryManager.addRecentConversation([], mockChatModel);
 
-      expect(logInfo).toHaveBeenCalledWith(
+      expect(logWarn).toHaveBeenCalledWith(
         "[UserMemoryManager] No messages to analyze for user memory"
       );
     });
@@ -460,9 +461,10 @@ The conversation covered advanced features and included code examples.`,
     it("should skip saving when saved memory is disabled", async () => {
       mockSettings.enableSavedMemory = false;
 
-      await userMemoryManager.addSavedMemory("Test memory content");
+      const result = await userMemoryManager.addSavedMemory("Test memory content");
 
-      expect(logInfo).toHaveBeenCalledWith(
+      expect(result).toBe(false);
+      expect(logWarn).toHaveBeenCalledWith(
         "[UserMemoryManager] Saved memory is disabled, skipping save"
       );
     });
@@ -470,9 +472,10 @@ The conversation covered advanced features and included code examples.`,
     it("should skip saving when no content provided", async () => {
       mockSettings.enableSavedMemory = true;
 
-      await userMemoryManager.addSavedMemory("");
+      const result = await userMemoryManager.addSavedMemory("");
 
-      expect(logInfo).toHaveBeenCalledWith(
+      expect(result).toBe(false);
+      expect(logWarn).toHaveBeenCalledWith(
         "[UserMemoryManager] No content provided for saved memory"
       );
     });
@@ -490,7 +493,9 @@ The conversation covered advanced features and included code examples.`,
       const mockNewFile = createMockTFile("copilot/memory/Saved Memories.md");
       mockVault.create.mockResolvedValue(mockNewFile);
 
-      await userMemoryManager.addSavedMemory("Important user preference: I prefer dark mode");
+      const result = await userMemoryManager.addSavedMemory(
+        "Important user preference: I prefer dark mode"
+      );
 
       // Verify folder creation was called
       expect(ensureFolderExists).toHaveBeenCalledWith("copilot/memory");
@@ -504,6 +509,7 @@ The conversation covered advanced features and included code examples.`,
       const createdContent = mockVault.create.mock.calls[0][1];
       expect(createdContent).not.toContain("**");
 
+      expect(result).toBe(true);
       expect(logInfo).toHaveBeenCalledWith("[UserMemoryManager] Saved memory added successfully");
     });
 
@@ -523,7 +529,7 @@ The conversation covered advanced features and included code examples.`,
       mockVault.getAbstractFileByPath.mockReturnValue(mockMemoryFile);
       mockVault.read.mockResolvedValue(existingContent);
 
-      await userMemoryManager.addSavedMemory("New important information");
+      const result = await userMemoryManager.addSavedMemory("New important information");
 
       // Verify file modification was called with appended content
       expect(mockVault.modify).toHaveBeenCalledWith(
@@ -538,6 +544,7 @@ The conversation covered advanced features and included code examples.`,
       const modifiedContent = mockVault.modify.mock.calls[0][1];
       expect(modifiedContent).not.toContain("**");
 
+      expect(result).toBe(true);
       expect(logInfo).toHaveBeenCalledWith("[UserMemoryManager] Saved memory added successfully");
     });
 
@@ -547,10 +554,9 @@ The conversation covered advanced features and included code examples.`,
       // Mock ensureFolderExists to reject
       (ensureFolderExists as jest.Mock).mockRejectedValue(new Error("Folder creation failed"));
 
-      await expect(userMemoryManager.addSavedMemory("Test content")).rejects.toThrow(
-        "Folder creation failed"
-      );
+      const result = await userMemoryManager.addSavedMemory("Test content");
 
+      expect(result).toBe(false);
       expect(logError).toHaveBeenCalledWith(
         "[UserMemoryManager] Error saving memory:",
         expect.any(Error)
