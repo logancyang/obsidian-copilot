@@ -19,9 +19,9 @@ import { SelectedTextContext } from "@/types/message";
 import { isAllowedFileForContext } from "@/utils";
 import { CornerDownLeft, Image, Loader2, StopCircle, X } from "lucide-react";
 import { App, TFile } from "obsidian";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import ContextControl from "./ContextControl";
+import { ContextControl } from "./ContextControl";
 import { $removePillsByPath } from "./NotePillPlugin";
 import { $removePillsByURL } from "./URLPillNode";
 import { $removePillsByTag } from "./TagPillNode";
@@ -189,101 +189,15 @@ const ChatInput: React.FC<ChatInputProps> = ({
     });
   };
 
-  // TODO: Re-implement these features for Lexical editor:
-  // - Slash commands (/)
-  // - Note references ([[]])
-  // - Tool mentions (@)
-  // - URL extraction and context updates
-
-  /* LEGACY HELPER FUNCTIONS - TO BE ADAPTED FOR LEXICAL
-    const showNoteTitleModal = (cursorPos: number) => {
-      const fetchNoteTitles = async () => {
-        const contextProcessor = ContextProcessor.getInstance();
-
-        new AddContextNoteModal({
-          app,
-          onNoteSelect: async (note: TFile) => {
-            const before = inputMessage.slice(0, cursorPos - 2);
-            const after = inputMessage.slice(cursorPos - 1);
-
-            // Check if this note title has duplicates
-            const isUnique = isNoteTitleUnique(note.basename, app.vault);
-            // If the title is unique, just show the title, otherwise show the full path
-            const noteRef = isUnique ? note.basename : note.path;
-            const newInputMessage = `${before}[[${noteRef}]]${after}`;
-            setInputMessage(newInputMessage);
-
-            const activeNote = app.workspace.getActiveFile();
-            if (note) {
-              await contextProcessor.addNoteToContext(
-                note,
-                app.vault,
-                contextNotes,
-                activeNote,
-                setContextNotes,
-                setIncludeActiveNote
-              );
-            }
-
-            // Add a delay to ensure the cursor is set after inputMessage is updated
-            setTimeout(() => {
-              if (textAreaRef.current) {
-                const newCursorPos = cursorPos + noteRef.length + 2;
-                textAreaRef.current.setSelectionRange(newCursorPos, newCursorPos);
-              }
-            }, 0);
-          },
-          excludeNotePaths,
-        }).open();
-      };
-      fetchNoteTitles();
-    };
-
-
-    const showCopilotPlusOptionsModal = () => {
-      // Create a map of options with their descriptions
-      const optionsWithDescriptions = COPILOT_TOOL_NAMES.map((option) => ({
-        title: option,
-        description: getToolDescription(option),
-      }));
-
-      new ListPromptModal(
-        app,
-        optionsWithDescriptions.map((o) => o.title),
-        (selectedOption: string) => {
-          setInputMessage(inputMessage + selectedOption + " ");
-        },
-        // Add descriptions as a separate array
-        optionsWithDescriptions.map((o) => o.description)
-      ).open();
-    };
-    */
-
   // Handle when pills are removed from the editor
   const handleNotePillsRemoved = (removedNotes: { path: string; basename: string }[]) => {
     const removedPaths = new Set(removedNotes.map((note) => note.path));
 
     setContextNotes((prev) => {
-      return prev
-        .filter((contextNote) => {
-          // Only remove if the note was removed via pill AND was not added manually
-          if (removedPaths.has(contextNote.path)) {
-            const wasAddedManually = (contextNote as any).wasAddedManually;
-            // If it was added manually, keep it in context
-            // If it was only added via reference, remove it
-            return wasAddedManually;
-          }
-          return true;
-        })
-        .map((contextNote) => {
-          // If the note is being kept but pills were removed, remove the wasAddedViaReference flag
-          if (removedPaths.has(contextNote.path)) {
-            const updatedNote = { ...contextNote };
-            delete (updatedNote as any).wasAddedViaReference;
-            return updatedNote;
-          }
-          return contextNote;
-        });
+      return prev.filter((contextNote) => {
+        // Remove any note whose pill was removed
+        return !removedPaths.has(contextNote.path);
+      });
     });
   };
 
@@ -402,6 +316,109 @@ const ChatInput: React.FC<ChatInputProps> = ({
     setFoldersFromPills((prev) => prev.filter((pillFolder) => pillFolder.path !== folderPath));
   };
 
+  // Unified handler for adding to context (from popover @ mention)
+  const handleAddToContext = (category: string, data: any) => {
+    switch (category) {
+      case "notes":
+        if (data instanceof TFile) {
+          const activeNote = app.workspace.getActiveFile();
+          if (activeNote && data.path === activeNote.path) {
+            setIncludeActiveNote(true);
+            setContextNotes((prev) => prev.filter((n) => n.path !== data.path));
+          } else {
+            setContextNotes((prev) => {
+              const existingNote = prev.find((n) => n.path === data.path);
+              if (existingNote) {
+                return prev; // Note already exists, no change needed
+              } else {
+                return [...prev, data];
+              }
+            });
+          }
+        }
+        break;
+      case "tools":
+        // Always add tool - popover selection should turn ON, not toggle
+        if (typeof data === "string") {
+          setToolsFromPills((prev) => {
+            if (!prev.includes(data)) {
+              return [...prev, data];
+            }
+            return prev; // Already on, keep it on
+          });
+        }
+        break;
+      case "tags":
+        // Update tagsFromPills - sync will update contextTags
+        if (typeof data === "string") {
+          setTagsFromPills((prev) => {
+            if (!prev.includes(data)) {
+              return [...prev, data];
+            }
+            return prev;
+          });
+        }
+        break;
+      case "folders":
+        // Update foldersFromPills - sync will update contextFolders
+        if (data && typeof data === "object" && "name" in data && "path" in data) {
+          setFoldersFromPills((prev) => {
+            const exists = prev.find((f) => f.path === data.path);
+            if (!exists) {
+              return [...prev, { name: data.name, path: data.path }];
+            }
+            return prev;
+          });
+        }
+        break;
+    }
+  };
+
+  // Unified handler for removing from context (from context menu badges)
+  const handleRemoveFromContext = (category: string, data: any) => {
+    switch (category) {
+      case "notes":
+        if (typeof data === "string") {
+          // data is the path
+          // Check if this is the active note
+          if (currentActiveNote?.path === data && includeActiveNote) {
+            setIncludeActiveNote(false);
+          } else {
+            // Remove from contextNotes
+            setContextNotes((prev) => prev.filter((note) => note.path !== data));
+          }
+          // Also remove corresponding pills from editor
+          handleContextNoteRemoved(data);
+        }
+        break;
+      case "urls":
+        if (typeof data === "string") {
+          setContextUrls((prev) => prev.filter((u) => u !== data));
+          handleURLContextRemoved(data);
+        }
+        break;
+      case "tags":
+        if (typeof data === "string") {
+          setContextTags((prev) => prev.filter((t) => t !== data));
+          handleTagContextRemoved(data);
+        }
+        break;
+      case "folders":
+        if (typeof data === "string") {
+          // data is the path
+          setContextFolders((prev) => prev.filter((f) => f.path !== data));
+          handleFolderContextRemoved(data);
+        }
+        break;
+      case "selectedText":
+        if (typeof data === "string") {
+          // data is the id
+          onRemoveSelectedText?.(data);
+        }
+        break;
+    }
+  };
+
   // Handle when folders are removed from pills (when pills are deleted in editor)
   const handleFolderPillsRemoved = (removedFolders: { name: string; path: string }[]) => {
     const removedFolderPaths = new Set(removedFolders.map((f) => f.path));
@@ -420,7 +437,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
   useEffect(() => {
     setContextNotes((prev) => {
       const contextPaths = new Set(prev.map((note) => note.path));
-      const pillPaths = new Set(notesFromPills.map((note) => note.path));
 
       // Find notes that need to be added
       const newNotesFromPills = notesFromPills.filter((pillNote) => {
@@ -430,32 +446,16 @@ const ChatInput: React.FC<ChatInputProps> = ({
         return !contextPaths.has(pillNote.path);
       });
 
-      // Update existing notes to mark them as having pills
-      const updated = prev.map((contextNote) => {
-        // If this note is now represented by pills, mark it as added via reference too
-        if (pillPaths.has(contextNote.path)) {
-          // Preserve existing flags, only add wasAddedViaReference
-          const updatedNote = { ...contextNote };
-          (updatedNote as any).wasAddedViaReference = true;
-          // Preserve wasAddedManually if it exists
-          if ((contextNote as any).wasAddedManually) {
-            (updatedNote as any).wasAddedManually = true;
-          }
-          return updatedNote;
-        }
-        return contextNote;
-      });
-
       // Add completely new notes from pills
       const newFiles: TFile[] = [];
       newNotesFromPills.forEach((pillNote) => {
         const file = app.vault.getAbstractFileByPath(pillNote.path);
         if (file instanceof TFile) {
-          newFiles.push(Object.assign(file, { wasAddedViaReference: true }));
+          newFiles.push(file);
         }
       });
 
-      return [...updated, ...newFiles];
+      return [...prev, ...newFiles];
     });
   }, [notesFromPills, currentActiveNote, includeActiveNote, app.vault, setContextNotes]);
 
@@ -552,15 +552,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
     noDragEventsBubbling: true,
   });
 
-  const excludeNotePaths = useMemo(
-    () =>
-      [
-        ...contextNotes.map((note) => note.path),
-        ...(includeActiveNote && currentActiveNote ? [currentActiveNote.path] : []),
-      ].filter((note) => note != null),
-    [contextNotes, includeActiveNote, currentActiveNote]
-  );
-
   const onEditorReady = useCallback((editor: any) => {
     lexicalEditorRef.current = editor;
   }, []);
@@ -597,32 +588,17 @@ const ChatInput: React.FC<ChatInputProps> = ({
       ref={containerRef}
     >
       <ContextControl
-        app={app}
-        excludeNotePaths={excludeNotePaths}
         contextNotes={contextNotes}
-        setContextNotes={setContextNotes}
         includeActiveNote={includeActiveNote}
-        setIncludeActiveNote={setIncludeActiveNote}
         activeNote={currentActiveNote}
         contextUrls={contextUrls}
-        onRemoveUrl={(url: string) => {
-          setContextUrls((prev) => prev.filter((u) => u !== url));
-          handleURLContextRemoved(url);
-        }}
         contextTags={contextTags}
-        onRemoveTag={(tagName: string) => {
-          setContextTags((prev) => prev.filter((t) => t !== tagName));
-          handleTagContextRemoved(tagName);
-        }}
         contextFolders={contextFolders}
-        onRemoveFolder={(folderPath: string) => {
-          setContextFolders((prev) => prev.filter((f) => f.path !== folderPath));
-          handleFolderContextRemoved(folderPath);
-        }}
         selectedTextContexts={selectedTextContexts}
-        onRemoveSelectedText={onRemoveSelectedText}
         showProgressCard={showProgressCard}
-        onContextNoteRemoved={handleContextNoteRemoved}
+        lexicalEditorRef={lexicalEditorRef}
+        onAddToContext={handleAddToContext}
+        onRemoveFromContext={handleRemoveFromContext}
       />
 
       {selectedImages.length > 0 && (

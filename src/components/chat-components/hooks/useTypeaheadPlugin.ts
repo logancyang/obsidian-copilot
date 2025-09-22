@@ -11,7 +11,8 @@ import {
   KEY_ESCAPE_COMMAND,
   KEY_TAB_COMMAND,
 } from "lexical";
-import { tryToPositionRange, TypeaheadOption } from "../TypeaheadMenu";
+import { tryToPositionRange } from "../TypeaheadMenuPortal";
+import { TypeaheadOption } from "../TypeaheadMenuContent";
 
 export interface TypeaheadState {
   isOpen: boolean;

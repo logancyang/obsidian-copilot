@@ -2,7 +2,8 @@ import React, { useCallback, useMemo, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import fuzzysort from "fuzzysort";
 import { App } from "obsidian";
-import { TypeaheadMenu, TypeaheadOption } from "./TypeaheadMenu";
+import { TypeaheadMenuPortal } from "./TypeaheadMenuPortal";
+import { TypeaheadOption } from "./TypeaheadMenuContent";
 import { useTypeaheadPlugin } from "./hooks/useTypeaheadPlugin";
 import { $replaceTriggeredTextWithPill, PillData } from "./utils/lexicalTextUtils";
 import { getTagsFromNote } from "@/utils";
@@ -78,7 +79,7 @@ export function TagCommandPlugin(): JSX.Element {
   );
 
   // Use the shared typeahead hook
-  const { state, closeMenu, handleHighlight } = useTypeaheadPlugin({
+  const { state, handleHighlight } = useTypeaheadPlugin({
     triggerConfig: {
       char: "#",
       multiChar: false,
@@ -93,16 +94,14 @@ export function TagCommandPlugin(): JSX.Element {
   return (
     <>
       {state.isOpen && (
-        <TypeaheadMenu
+        <TypeaheadMenuPortal
           options={filteredTags}
           selectedIndex={state.selectedIndex}
           onSelect={handleSelect}
-          onClose={closeMenu}
           onHighlight={handleHighlight}
           range={state.range}
           query={state.query}
           showPreview={false} // Tags don't need preview
-          menuLabel="TagMenu"
         />
       )}
     </>

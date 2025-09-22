@@ -3,7 +3,6 @@ import {
   CheckCircle,
   CircleDashed,
   Loader2,
-  Plus,
   X,
   FileText,
   Hash,
@@ -11,7 +10,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { TFile } from "obsidian";
-import React from "react";
+import React, { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SelectedTextContext } from "@/types/message";
@@ -19,6 +18,9 @@ import { ChainType } from "@/chainFactory";
 import { Separator } from "@/components/ui/separator";
 import { useChainType } from "@/aiParams";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
+import { isPlusChain } from "@/utils";
+import { AtMentionTypeahead } from "./AtMentionTypeahead";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface ChatContextMenuProps {
   activeNote: TFile | null;
@@ -27,13 +29,10 @@ interface ChatContextMenuProps {
   contextTags: string[];
   contextFolders: { name: string; path: string }[];
   selectedTextContexts?: SelectedTextContext[];
-  onAddContext: () => void;
-  onRemoveContext: (path: string) => void;
-  onRemoveUrl: (url: string) => void;
-  onRemoveTag: (tagName: string) => void;
-  onRemoveFolder: (folderPath: string) => void;
-  onRemoveSelectedText?: (id: string) => void;
+  onRemoveContext: (category: string, data: any) => void;
   showProgressCard: () => void;
+  onTypeaheadSelect: (category: string, data: any) => void;
+  lexicalEditorRef?: React.RefObject<any>;
 }
 
 function ContextNote({
@@ -43,7 +42,7 @@ function ContextNote({
 }: {
   note: TFile;
   isActive: boolean;
-  onRemoveContext: (path: string) => void;
+  onRemoveContext: (category: string, data: any) => void;
 }) {
   return (
     <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
@@ -56,7 +55,7 @@ function ContextNote({
       <Button
         variant="ghost2"
         size="fit"
-        onClick={() => onRemoveContext(note.path)}
+        onClick={() => onRemoveContext("notes", note.path)}
         aria-label="Remove from context"
         className="tw-text-muted"
       >
@@ -66,7 +65,13 @@ function ContextNote({
   );
 }
 
-function ContextUrl({ url, onRemoveUrl }: { url: string; onRemoveUrl: (url: string) => void }) {
+function ContextUrl({
+  url,
+  onRemoveContext,
+}: {
+  url: string;
+  onRemoveContext: (category: string, data: any) => void;
+}) {
   // Extract domain from URL for display
   const getDomain = (url: string): string => {
     try {
@@ -86,7 +91,7 @@ function ContextUrl({ url, onRemoveUrl }: { url: string; onRemoveUrl: (url: stri
       <Button
         variant="ghost2"
         size="fit"
-        onClick={() => onRemoveUrl(url)}
+        onClick={() => onRemoveContext("urls", url)}
         aria-label="Remove from context"
         className="tw-text-muted"
       >
@@ -96,7 +101,13 @@ function ContextUrl({ url, onRemoveUrl }: { url: string; onRemoveUrl: (url: stri
   );
 }
 
-function ContextTag({ tag, onRemoveTag }: { tag: string; onRemoveTag: (tag: string) => void }) {
+function ContextTag({
+  tag,
+  onRemoveContext,
+}: {
+  tag: string;
+  onRemoveContext: (category: string, data: any) => void;
+}) {
   // Remove # symbol for clean display
   const displayTag = tag.startsWith("#") ? tag.slice(1) : tag;
 
@@ -109,7 +120,7 @@ function ContextTag({ tag, onRemoveTag }: { tag: string; onRemoveTag: (tag: stri
       <Button
         variant="ghost2"
         size="fit"
-        onClick={() => onRemoveTag(tag)}
+        onClick={() => onRemoveContext("tags", tag)}
         aria-label="Remove from context"
         className="tw-text-muted"
       >
@@ -121,10 +132,10 @@ function ContextTag({ tag, onRemoveTag }: { tag: string; onRemoveTag: (tag: stri
 
 function ContextFolder({
   folder,
-  onRemoveFolder,
+  onRemoveContext,
 }: {
   folder: { name: string; path: string };
-  onRemoveFolder: (folderPath: string) => void;
+  onRemoveContext: (category: string, data: any) => void;
 }) {
   return (
     <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
@@ -135,7 +146,7 @@ function ContextFolder({
       <Button
         variant="ghost2"
         size="fit"
-        onClick={() => onRemoveFolder(folder.path)}
+        onClick={() => onRemoveContext("folders", folder.path)}
         aria-label="Remove from context"
         className="tw-text-muted"
       >
@@ -147,10 +158,10 @@ function ContextFolder({
 
 function ContextSelection({
   selectedText,
-  onRemoveSelectedText,
+  onRemoveContext,
 }: {
   selectedText: SelectedTextContext;
-  onRemoveSelectedText: (id: string) => void;
+  onRemoveContext: (category: string, data: any) => void;
 }) {
   const lineRange =
     selectedText.startLine === selectedText.endLine
@@ -166,7 +177,7 @@ function ContextSelection({
       <Button
         variant="ghost2"
         size="fit"
-        onClick={() => onRemoveSelectedText(selectedText.id)}
+        onClick={() => onRemoveContext("selectedText", selectedText.id)}
         aria-label="Remove from context"
         className="tw-text-muted"
       >
@@ -183,27 +194,39 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   contextTags,
   contextFolders,
   selectedTextContexts = [],
-  onAddContext,
   onRemoveContext,
-  onRemoveUrl,
-  onRemoveTag,
-  onRemoveFolder,
-  onRemoveSelectedText,
   showProgressCard,
+  onTypeaheadSelect,
+  lexicalEditorRef,
 }) => {
   const [currentChain] = useChainType();
   const contextStatus = useProjectContextStatus();
+  const [showTypeahead, setShowTypeahead] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const isCopilotPlus = isPlusChain(currentChain);
+
+  const handleTypeaheadClose = () => {
+    setShowTypeahead(false);
+  };
+
+  // Simple wrapper that adds focus management to the ContextControl handler
+  const handleTypeaheadSelect = (category: string, data: any) => {
+    // Delegate to ContextControl handler
+    onTypeaheadSelect(category, data);
+
+    // Return focus to the editor after selection
+    setTimeout(() => {
+      if (lexicalEditorRef?.current) {
+        lexicalEditorRef.current.focus();
+      }
+    }, 100);
+  };
 
   const uniqueNotes = React.useMemo(() => {
     const notesMap = new Map(contextNotes.map((note) => [note.path, note]));
 
     return Array.from(notesMap.values()).filter((note) => {
-      // If the note was added manually, always show it in the list
-      if ((note as any).wasAddedManually) {
-        return true;
-      }
-
-      // For non-manually added notes, show them if they're not the active note
+      // Show all notes except the active note (when it's already displayed separately)
       return !(activeNote && note.path === activeNote.path);
     });
   }, [contextNotes, activeNote]);
@@ -233,15 +256,27 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   return (
     <div className="tw-flex tw-w-full tw-items-center tw-gap-1">
       <div className="tw-flex tw-h-full tw-items-start">
-        <Button
-          onClick={onAddContext}
-          variant="ghost2"
-          size="fit"
-          className="tw-ml-1 tw-rounded-sm tw-border tw-border-solid tw-border-border tw-text-muted"
-        >
-          <Plus className="tw-size-4" />
-          {!hasContext && <span className="tw-pr-1 tw-text-sm tw-leading-4">Add context</span>}
-        </Button>
+        <Popover open={showTypeahead} onOpenChange={setShowTypeahead}>
+          <PopoverTrigger asChild>
+            <Button
+              ref={buttonRef}
+              variant="ghost2"
+              size="fit"
+              className="tw-ml-1 tw-rounded-sm tw-border tw-border-solid tw-border-border tw-text-muted"
+            >
+              <span className="tw-text-base tw-font-medium tw-leading-none">@</span>
+              {!hasContext && <span className="tw-pr-1 tw-text-sm tw-leading-4">Add context</span>}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="tw-w-80 tw-p-0" align="start" side="top" sideOffset={4}>
+            <AtMentionTypeahead
+              isOpen={showTypeahead}
+              onClose={handleTypeaheadClose}
+              onSelect={handleTypeaheadSelect}
+              isCopilotPlus={isCopilotPlus}
+            />
+          </PopoverContent>
+        </Popover>
       </div>
       <div className="tw-flex tw-flex-1 tw-flex-wrap tw-gap-1">
         {activeNote && (
@@ -261,19 +296,19 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
           />
         ))}
         {uniqueUrls.map((url) => (
-          <ContextUrl key={url} url={url} onRemoveUrl={onRemoveUrl} />
+          <ContextUrl key={url} url={url} onRemoveContext={onRemoveContext} />
         ))}
         {contextTags.map((tag) => (
-          <ContextTag key={tag} tag={tag} onRemoveTag={onRemoveTag} />
+          <ContextTag key={tag} tag={tag} onRemoveContext={onRemoveContext} />
         ))}
         {contextFolders.map((folder) => (
-          <ContextFolder key={folder.path} folder={folder} onRemoveFolder={onRemoveFolder} />
+          <ContextFolder key={folder.path} folder={folder} onRemoveContext={onRemoveContext} />
         ))}
         {selectedTextContexts.map((selectedText) => (
           <ContextSelection
             key={selectedText.id}
             selectedText={selectedText}
-            onRemoveSelectedText={onRemoveSelectedText || (() => {})}
+            onRemoveContext={onRemoveContext}
           />
         ))}
       </div>

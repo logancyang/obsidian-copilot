@@ -5,7 +5,8 @@ import fuzzysort from "fuzzysort";
 import { useCustomCommands } from "@/commands/state";
 import { CustomCommand } from "@/commands/type";
 import { sortSlashCommands } from "@/commands/customCommandUtils";
-import { TypeaheadMenu, TypeaheadOption } from "./TypeaheadMenu";
+import { TypeaheadMenuPortal } from "./TypeaheadMenuPortal";
+import { TypeaheadOption } from "./TypeaheadMenuContent";
 import { $replaceTextRangeWithPills } from "./utils/lexicalTextUtils";
 import { useTypeaheadPlugin } from "./hooks/useTypeaheadPlugin";
 
@@ -88,7 +89,7 @@ export function SlashCommandPlugin(): JSX.Element {
   );
 
   // Use the shared typeahead hook
-  const { state, closeMenu, handleHighlight } = useTypeaheadPlugin({
+  const { state, handleHighlight } = useTypeaheadPlugin({
     triggerConfig: {
       char: "/",
     },
@@ -102,16 +103,14 @@ export function SlashCommandPlugin(): JSX.Element {
   return (
     <>
       {state.isOpen && (
-        <TypeaheadMenu
+        <TypeaheadMenuPortal
           options={filteredCommands}
           selectedIndex={state.selectedIndex}
           onSelect={handleSelect}
-          onClose={closeMenu}
           onHighlight={handleHighlight}
           range={state.range}
           query={state.query}
           showPreview={true}
-          menuLabel="SlashMenu"
         />
       )}
     </>
