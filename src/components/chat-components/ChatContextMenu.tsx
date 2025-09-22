@@ -129,7 +129,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   };
 
   return (
-    <div className="tw-flex tw-w-full tw-items-center tw-gap-1">
+    <div className="tw-flex tw-w-full tw-items-start tw-gap-1">
       <div className="tw-flex tw-h-full tw-items-start">
         <Popover open={showTypeahead} onOpenChange={setShowTypeahead}>
           <PopoverTrigger asChild>

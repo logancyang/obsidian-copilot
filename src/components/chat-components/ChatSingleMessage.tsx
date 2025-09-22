@@ -8,6 +8,7 @@ import {
   ContextTagBadge,
   ContextFolderBadge,
 } from "@/components/chat-components/ContextBadges";
+import { InlineMessageEditor } from "@/components/chat-components/InlineMessageEditor";
 import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
 import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
@@ -141,10 +142,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   const settings = useSettingsValue();
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
-  const [editedMessage, setEditedMessage] = useState<string>(message.message);
   const contentRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isUnmountingRef = useRef<boolean>(false);
   // Use a stable ID for the message to preserve tool call roots across re-renders
   const messageId = useRef(
@@ -539,50 +538,18 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     };
   }, []); // Empty dependency array ensures this only runs on unmount
 
-  useEffect(() => {
-    if (isEditing && textareaRef.current) {
-      adjustTextareaHeight(textareaRef.current);
-    }
-  }, [isEditing]);
-
-  useEffect(() => {
-    setEditedMessage(message.message);
-  }, [message.message]);
-
-  const adjustTextareaHeight = (element: HTMLTextAreaElement) => {
-    element.style.height = "auto";
-    element.style.height = `${element.scrollHeight}px`;
-  };
-
-  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setEditedMessage(e.target.value);
-    adjustTextareaHeight(e.target);
-  };
-
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.nativeEvent.isComposing) return;
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault(); // Prevents adding a newline to the textarea
-      handleSaveEdit();
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      handleCancelEdit();
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setIsEditing(false);
-    setEditedMessage(message.message);
-  };
-
   const handleEdit = () => {
     setIsEditing(true);
   };
 
-  const handleSaveEdit = () => {
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+  };
+
+  const handleSaveEdit = (newText: string, newContext: ChatMessage["context"]) => {
     setIsEditing(false);
     if (onEdit) {
-      onEdit(editedMessage);
+      onEdit(newText);
     }
   };
 
@@ -613,16 +580,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             if (item.type === "text") {
               return (
                 <div key={index}>
-                  {message.sender === USER_SENDER && isEditing ? (
-                    <textarea
-                      ref={textareaRef}
-                      value={editedMessage}
-                      onChange={handleTextareaChange}
-                      onKeyDown={handleKeyDown}
-                      autoFocus
-                      className="edit-textarea"
-                    />
-                  ) : message.sender === USER_SENDER ? (
+                  {message.sender === USER_SENDER ? (
                     <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
                       {message.message}
                     </div>
@@ -652,16 +610,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     }
 
     // Fallback for messages without content array
-    return message.sender === USER_SENDER && isEditing ? (
-      <textarea
-        ref={textareaRef}
-        value={editedMessage}
-        onChange={handleTextareaChange}
-        onKeyDown={handleKeyDown}
-        autoFocus
-        className="edit-textarea"
-      />
-    ) : message.sender === USER_SENDER ? (
+    return message.sender === USER_SENDER ? (
       <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
         {message.message}
       </div>
@@ -669,6 +618,21 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       <div ref={contentRef} className={message.isErrorMessage ? "tw-text-error" : ""}></div>
     );
   };
+
+  // If editing a user message, replace the entire message container with the inline editor
+  if (isEditing && message.sender === USER_SENDER) {
+    return (
+      <div className="tw-my-1 tw-flex tw-w-full tw-flex-col">
+        <InlineMessageEditor
+          initialValue={message.message}
+          initialContext={message.context}
+          onSave={handleSaveEdit}
+          onCancel={handleCancelEdit}
+          app={app}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="tw-my-1 tw-flex tw-w-full tw-flex-col">

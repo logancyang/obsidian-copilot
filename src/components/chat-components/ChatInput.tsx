@@ -52,6 +52,25 @@ interface ChatInputProps {
   selectedTextContexts?: SelectedTextContext[];
   onRemoveSelectedText?: (id: string) => void;
   showProgressCard: () => void;
+
+  // Edit mode props
+  editMode?: boolean;
+  onEditSave?: (
+    text: string,
+    context: {
+      notes: TFile[];
+      urls: string[];
+      tags: string[];
+      folders: { name: string; path: string }[];
+    }
+  ) => void;
+  onEditCancel?: () => void;
+  initialContext?: {
+    notes?: TFile[];
+    urls?: string[];
+    tags?: string[];
+    folders?: { name: string; path: string }[];
+  };
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
@@ -72,10 +91,16 @@ const ChatInput: React.FC<ChatInputProps> = ({
   selectedTextContexts,
   onRemoveSelectedText,
   showProgressCard,
+  editMode = false,
+  onEditSave,
+  onEditCancel,
+  initialContext,
 }) => {
-  const [contextUrls, setContextUrls] = useState<string[]>([]);
-  const [contextTags, setContextTags] = useState<string[]>([]);
-  const [contextFolders, setContextFolders] = useState<{ name: string; path: string }[]>([]);
+  const [contextUrls, setContextUrls] = useState<string[]>(initialContext?.urls || []);
+  const [contextTags, setContextTags] = useState<string[]>(initialContext?.tags || []);
+  const [contextFolders, setContextFolders] = useState<{ name: string; path: string }[]>(
+    initialContext?.folders || []
+  );
   const containerRef = useRef<HTMLDivElement>(null);
   const lexicalEditorRef = useRef<any>(null);
   const [currentModelKey, setCurrentModelKey] = useModelKey();
@@ -157,6 +182,17 @@ const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const onSendMessage = () => {
+    // Handle edit mode
+    if (editMode && onEditSave) {
+      onEditSave(inputMessage, {
+        notes: contextNotes,
+        urls: contextUrls,
+        tags: contextTags,
+        folders: contextFolders,
+      });
+      return;
+    }
+
     if (!isCopilotPlus) {
       handleSendMessage();
       return;
@@ -556,6 +592,21 @@ const ChatInput: React.FC<ChatInputProps> = ({
     lexicalEditorRef.current = editor;
   }, []);
 
+  // Handle Escape key for edit mode
+  useEffect(() => {
+    if (!editMode || !onEditCancel) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onEditCancel();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [editMode, onEditCancel]);
+
   // Handle tool button toggle-off events - remove corresponding pills
   const handleVaultToggleOff = useCallback(() => {
     if (lexicalEditorRef.current && isCopilotPlus) {
@@ -646,10 +697,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
           onFoldersChange={setFoldersFromPills}
           onFoldersRemoved={handleFolderPillsRemoved}
           onEditorReady={onEditorReady}
-          placeholder={
-            "Ask anything. [[ for notes. / for custom prompts. " +
-            (isCopilotPlus ? "@ for tools." : "")
-          }
+          placeholder={"Your AI assistant for Obsidian • @ to add context • / for custom prompts"}
           disabled={isProjectLoading}
           isCopilotPlus={isCopilotPlus}
         />
@@ -731,6 +779,16 @@ const ChatInput: React.FC<ChatInputProps> = ({
                   <TooltipContent className="tw-px-1 tw-py-0.5">Add image(s)</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+              {editMode && onEditCancel && (
+                <Button
+                  variant="ghost2"
+                  size="fit"
+                  className="tw-text-muted"
+                  onClick={onEditCancel}
+                >
+                  <span>cancel</span>
+                </Button>
+              )}
               <Button
                 variant="ghost2"
                 size="fit"
@@ -738,7 +796,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
                 onClick={() => onSendMessage()}
               >
                 <CornerDownLeft className="!tw-size-3" />
-                <span>chat</span>
+                <span>{editMode ? "save" : "chat"}</span>
               </Button>
             </>
           )}
