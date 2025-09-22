@@ -28,6 +28,13 @@ import {
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "../intentAnalyzer";
 import { BaseChainRunner } from "./BaseChainRunner";
+import {
+  formatSourceCatalog,
+  getCitationInstructions,
+  sanitizeContentForCitations,
+  addFallbackSources,
+  type SourceCatalogEntry,
+} from "./utils/citationUtils";
 import { ActionBlockStreamer } from "./utils/ActionBlockStreamer";
 import {
   addChatHistoryToMessages,
@@ -488,8 +495,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       // Enhance with ALL tool outputs including localSearch
       let enhancedUserMessage = this.prepareEnhancedUserMessage(
         questionForEnhancement,
-        toolOutputs,
-        toolCalls
+        toolOutputs
       );
 
       // If localSearch has actual results and no other tools, add QA-style instruction to maintain same behavior
@@ -537,6 +543,19 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     if (abortController.signal.aborted && currentPartialResponse) {
       fullAIResponse = currentPartialResponse;
     }
+
+    // Add fallback sources if citations are enabled and missing
+    const settings = getSettings();
+    const fallbackSources =
+      this.lastCitationSources && this.lastCitationSources.length > 0
+        ? this.lastCitationSources
+        : ((sources as any[]) || []).map((source) => ({ title: source.title, path: source.path }));
+
+    fullAIResponse = addFallbackSources(
+      fullAIResponse,
+      fallbackSources,
+      settings.enableInlineCitations
+    );
 
     return this.handleResponse(
       fullAIResponse,
@@ -632,7 +651,10 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     return { toolOutputs, sources: deduplicateSources(allSources) };
   }
 
-  private prepareEnhancedUserMessage(userMessage: string, toolOutputs: any[], toolCalls?: any[]) {
+  // Persist citation lines built for this turn to reuse in fallback
+  private lastCitationSources: { title?: string; path?: string }[] | null = null;
+
+  private prepareEnhancedUserMessage(userMessage: string, toolOutputs: any[]) {
     let context = "";
     let hasLocalSearchWithResults = false;
 
@@ -642,13 +664,9 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     );
 
     if (localSearchOutput && typeof localSearchOutput.output === "string") {
-      try {
-        const documents = JSON.parse(localSearchOutput.output);
-        if (Array.isArray(documents) && documents.length > 0) {
-          hasLocalSearchWithResults = true;
-        }
-      } catch {
-        // Invalid JSON or parsing error
+      // Detect presence via XML content
+      if (/<document>/.test(localSearchOutput.output)) {
+        hasLocalSearchWithResults = true;
       }
     }
 
@@ -725,13 +743,45 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       }));
     }
 
-    // Format documents with essential metadata
-    const formattedContent = formatSearchResultsForLLM(processedDocs);
+    // Sanitize content to remove any pre-existing citation markers to prevent number leakage
+
+    // Assign stable source ids and sanitize content
+    const withIds = processedDocs.map((doc, idx) => ({
+      ...doc,
+      __sourceId: idx + 1,
+      content: sanitizeContentForCitations(doc.content || ""),
+    }));
+
+    // Format documents with essential metadata including source id
+    const formattedContent = formatSearchResultsForLLM(withIds);
+
+    // Build a compact, unnumbered source catalog to avoid bias
+    const sourceEntries: SourceCatalogEntry[] = withIds
+      .slice(0, Math.min(20, withIds.length))
+      .map((d: any) => ({
+        title: d.title || d.path || "Untitled",
+        path: d.path || d.title || "",
+      }));
+    const catalogLines = formatSourceCatalog(sourceEntries);
+
+    // Also keep a numbered mapping for fallback use only (if model emits footnotes but forgets Sources)
+    this.lastCitationSources = withIds
+      .slice(0, Math.min(20, withIds.length))
+      .map((d: any, i: number) => {
+        const title = d.title || d.path || "Untitled";
+        return {
+          title,
+          path: d.path || undefined,
+        };
+      });
+
+    const settings = getSettings();
+    const guidance = getCitationInstructions(settings.enableInlineCitations, catalogLines);
 
     // Wrap in XML-like tags for better LLM understanding
     return timeExpression
-      ? `<localSearch timeRange="${timeExpression}">\n${formattedContent}\n</localSearch>`
-      : `<localSearch>\n${formattedContent}\n</localSearch>`;
+      ? `<localSearch timeRange="${timeExpression}">\n${formattedContent}${guidance}\n</localSearch>`
+      : `<localSearch>\n${formattedContent}${guidance}\n</localSearch>`;
   }
 
   /**
@@ -756,7 +806,14 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     }
 
     try {
-      const searchResults = JSON.parse(toolResult.result);
+      const parsed = JSON.parse(toolResult.result);
+      const searchResults =
+        parsed &&
+        typeof parsed === "object" &&
+        parsed.type === "local_search" &&
+        Array.isArray(parsed.documents)
+          ? parsed.documents
+          : null;
       if (!Array.isArray(searchResults)) {
         formattedForLLM = "<localSearch>\nInvalid search results format.\n</localSearch>";
         return { formattedForLLM, sources };
@@ -768,7 +825,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       // Extract sources with explanation for UI display
       sources = extractSourcesFromSearchResults(searchResults);
 
-      // Prepare and format results for LLM
+      // Prepare and format results for LLM (include stable ids)
       formattedForLLM = this.prepareLocalSearchResult(searchResults, timeExpression || "");
     } catch (error) {
       logWarn("Failed to parse localSearch results:", error);
