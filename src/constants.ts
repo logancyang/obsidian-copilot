@@ -152,6 +152,8 @@ export enum ChatModels {
   OPENROUTER_GEMINI_2_5_FLASH = "google/gemini-2.5-flash",
   OPENROUTER_GEMINI_2_5_PRO = "google/gemini-2.5-pro",
   OPENROUTER_GEMINI_2_5_FLASH_LITE = "google/gemini-2.5-flash-lite",
+  OPENROUTER_GPT_41 = "openai/gpt-4.1",
+  OPENROUTER_GPT_41_MINI = "openai/gpt-4.1-mini",
 }
 
 // Model Providers
@@ -219,6 +221,24 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     core: true,
+    projectEnabled: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
+    name: ChatModels.OPENROUTER_GPT_41,
+    provider: ChatModelProviders.OPENROUTERAI,
+    enabled: true,
+    isBuiltIn: true,
+    core: false,
+    projectEnabled: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
+    name: ChatModels.OPENROUTER_GPT_41_MINI,
+    provider: ChatModelProviders.OPENROUTERAI,
+    enabled: true,
+    isBuiltIn: true,
+    core: false,
     projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
