@@ -77,18 +77,19 @@ export class ToolResultFormatter {
           return "📚 Found 0 relevant notes\n\nNo matching notes found.";
         }
 
-        // Extract document information for display
+        // Robustly extract document information regardless of tag ordering
         const documents: any[] = [];
-        const docRegex =
-          /<document>\s*<title>([^<]*)<\/title>(?:\s*<path>([^<]*)<\/path>)?(?:\s*<modified>([^<]*)<\/modified>)?[\s\S]*?<\/document>/g;
-        let match;
-
-        while ((match = docRegex.exec(xmlContent)) !== null) {
-          documents.push({
-            title: match[1] || "Untitled",
-            path: match[2] || "",
-            mtime: match[3] || null,
-          });
+        const blockRegex = /<document>([\s\S]*?)<\/document>/g;
+        let blockMatch;
+        while ((blockMatch = blockRegex.exec(xmlContent)) !== null) {
+          const block = blockMatch[1];
+          const titleMatch = block.match(/<title>([\s\S]*?)<\/title>/);
+          const pathMatch = block.match(/<path>([\s\S]*?)<\/path>/);
+          const modifiedMatch = block.match(/<modified>([\s\S]*?)<\/modified>/);
+          const title = (titleMatch?.[1] || "Untitled").trim();
+          const path = (pathMatch?.[1] || "").trim();
+          const mtime = (modifiedMatch?.[1] || "").trim();
+          documents.push({ title, path, mtime: mtime || null });
         }
 
         const topResults = documents.slice(0, 10);
@@ -137,14 +138,24 @@ export class ToolResultFormatter {
   }
 
   private static parseSearchResults(result: any): any[] {
-    if (Array.isArray(result)) return result;
-    if (typeof result === "object" && result !== null) return [result];
-    if (typeof result === "string") {
-      const trimmed = result.trim();
-      if (!trimmed.startsWith("[") && !trimmed.startsWith("{")) {
-        return [];
+    // Only support the new structured format or pre-formatted XML flow
+    if (typeof result === "object" && result !== null) {
+      if ((result as any).type === "local_search" && Array.isArray((result as any).documents)) {
+        return (result as any).documents;
       }
-      return this.tryParseJson(result);
+      return [];
+    }
+    if (typeof result === "string") {
+      // Allow parsing of structured JSON string
+      try {
+        const parsed = JSON.parse(result);
+        if (parsed && parsed.type === "local_search" && Array.isArray(parsed.documents)) {
+          return parsed.documents;
+        }
+      } catch {
+        // ignore JSON parse errors; fall through to empty array
+      }
+      return [];
     }
     return [];
   }

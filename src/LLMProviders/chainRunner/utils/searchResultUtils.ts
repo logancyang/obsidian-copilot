@@ -20,9 +20,11 @@ export function formatSearchResultsForLLM(searchResults: any[]): string {
 
   // Format each document with essential metadata
   const formattedDocs = includedDocs
-    .map((doc: any) => {
+    .map((doc: any, idx: number) => {
       const title = doc.title || "Untitled";
       const path = doc.path || "";
+      // Optional stable source id if provided by caller; fallback to order
+      const sourceId = (doc as any).__sourceId || (doc as any).source_id || idx + 1;
 
       // Safely handle mtime - check validity before converting
       let modified: string | null = null;
@@ -35,6 +37,7 @@ export function formatSearchResultsForLLM(searchResults: any[]): string {
 
       // Use template literal for cleaner XML generation
       return `<document>
+<id>${sourceId}</id>
 <title>${title}</title>${
         path && path !== title
           ? `

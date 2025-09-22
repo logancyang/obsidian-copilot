@@ -759,6 +759,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableRecentConversations: false,
   maxRecentConversations: 30,
   enableSavedMemory: false,
+  enableInlineCitations: true,
 };
 
 export const EVENT_NAMES = {

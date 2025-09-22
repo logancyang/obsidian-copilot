@@ -6,6 +6,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
 import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
+import { processInlineCitations } from "@/LLMProviders/chainRunner/utils/citationUtils";
+import { useSettingsValue } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { cleanMessageForCopy, insertIntoEditor } from "@/utils";
 import { Bot, User } from "lucide-react";
@@ -18,6 +20,43 @@ declare global {
     __copilotToolCallRoots?: Map<string, Map<string, Root>>;
   }
 }
+
+const FOOTNOTE_SUFFIX_PATTERN = /^\d+-\d+$/;
+
+/**
+ * Normalizes rendered markdown footnotes to align with inline citation UX.
+ * Removes separators/backrefs and fixes numbering artifacts (e.g., "2-1").
+ */
+export const normalizeFootnoteRendering = (root: HTMLElement): void => {
+  const footnoteSection = root.querySelector(".footnotes");
+
+  if (footnoteSection) {
+    footnoteSection.querySelectorAll("hr, hr.footnotes-sep").forEach((el) => el.remove());
+    footnoteSection
+      .querySelectorAll("a.footnote-backref, a.footnote-link.footnote-backref")
+      .forEach((el) => el.remove());
+  } else {
+    root
+      .querySelectorAll("a.footnote-backref, a.footnote-link.footnote-backref")
+      .forEach((el) => el.remove());
+  }
+
+  root
+    .querySelectorAll(
+      'a.footnote-ref, sup a[href^="#fn"], sup a[href^="#fn-"], a[href^="#fn"], a[href^="#fn-"]'
+    )
+    .forEach((anchor) => {
+      const text = anchor.textContent?.trim() ?? "";
+      if (!text || !FOOTNOTE_SUFFIX_PATTERN.test(text)) {
+        return;
+      }
+
+      const [primary] = text.split("-");
+      if (primary && primary !== text) {
+        anchor.textContent = primary;
+      }
+    });
+};
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
   if (!context || (!context.notes?.length && !context.urls?.length)) {
@@ -69,6 +108,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   onDelete,
   chatHistory = [],
 }) => {
+  const settings = useSettingsValue();
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [editedMessage, setEditedMessage] = useState<string>(message.message);
@@ -251,7 +291,10 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       const writeToFileSectionProcessed = processWriteToFileSection(thinkSectionProcessed);
 
       // Transform markdown sources section into HTML structure
-      const sourcesSectionProcessed = processSourcesSection(writeToFileSectionProcessed);
+      const sourcesSectionProcessed = processInlineCitations(
+        writeToFileSectionProcessed,
+        settings.enableInlineCitations
+      );
 
       // Transform [[link]] to clickable format but exclude ![[]] image links
       const noteLinksProcessed = replaceLinks(
@@ -263,32 +306,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
       return noteLinksProcessed;
     },
-    [app, isStreaming]
+    [app, isStreaming, settings.enableInlineCitations]
   );
-
-  const processSourcesSection = (content: string): string => {
-    const sections = content.split("\n\n#### Sources:\n\n");
-    if (sections.length !== 2) return content;
-
-    const [mainContent, sources] = sections;
-    const sourceLinks = sources
-      .split("\n")
-      .map((line) => {
-        const match = line.match(/- \[\[(.*?)\]\]/);
-        if (match) {
-          return `<li>[[${match[1]}]]</li>`;
-        }
-        return line;
-      })
-      .join("\n");
-
-    return (
-      mainContent +
-      "\n\n<br/>\n<details><summary>Sources</summary>\n<ul>\n" +
-      sourceLinks +
-      "\n</ul>\n</details>"
-    );
-  };
 
   useEffect(() => {
     // Reset unmounting flag when effect runs
@@ -333,6 +352,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             }
 
             MarkdownRenderer.renderMarkdown(segment.content, textDiv, "", componentRef.current!);
+            normalizeFootnoteRendering(textDiv);
             currentIndex++;
           } else if (segment.type === "toolCall" && segment.toolCall) {
             const toolCallId = segment.toolCall.id;

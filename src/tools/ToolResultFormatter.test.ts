@@ -80,21 +80,22 @@ Recent content.
       expect(formatted).toContain("... and 5 more results");
     });
 
-    it("should fall back to JSON parsing for non-XML results", () => {
-      const jsonResult = JSON.stringify([
-        {
-          title: "JSON Note",
-          path: "json/note.md",
-          score: 0.95,
-          content: "JSON content",
-        },
-      ]);
+    it("should support structured JSON fallback when not XML", () => {
+      const jsonResult = JSON.stringify({
+        type: "local_search",
+        documents: [
+          {
+            title: "JSON Note",
+            path: "json/note.md",
+            score: 0.95,
+            content: "JSON content",
+          },
+        ],
+      });
 
       const formatted = ToolResultFormatter.format("localSearch", jsonResult);
 
       expect(formatted).toContain("📚 Found 1 relevant notes");
-      // The formatSearchItem function uses path.split('/').pop() to get filename
-      // and removes .md extension, so "json/note.md" becomes "note"
       expect(formatted).toContain("1. note");
       expect(formatted).toContain("📊 Relevance: 0.9500");
     });

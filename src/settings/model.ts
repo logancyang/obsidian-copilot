@@ -144,6 +144,8 @@ export interface CopilotSettings {
   maxRecentConversations: number;
   /** Reference saved memories that user explicitly asked to remember */
   enableSavedMemory: boolean;
+  /** Enable inline citations in AI responses with footnote-style references */
+  enableInlineCitations: boolean;
 }
 
 export const settingsStore = createStore();
@@ -283,6 +285,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure passMarkdownImages has a default value
   if (typeof sanitizedSettings.passMarkdownImages !== "boolean") {
     sanitizedSettings.passMarkdownImages = DEFAULT_SETTINGS.passMarkdownImages;
+  }
+
+  // Ensure enableInlineCitations has a default value
+  if (typeof sanitizedSettings.enableInlineCitations !== "boolean") {
+    sanitizedSettings.enableInlineCitations = DEFAULT_SETTINGS.enableInlineCitations;
   }
 
   // Ensure enableCustomPromptTemplating has a default value
