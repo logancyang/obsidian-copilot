@@ -11,8 +11,10 @@ export const USER_SENDER = "user";
 export const AI_SENDER = "ai";
 
 // Default folder names
-export const DEFAULT_CHAT_HISTORY_FOLDER = "copilot/copilot-conversations";
-export const DEFAULT_CUSTOM_PROMPTS_FOLDER = "copilot/copilot-custom-prompts";
+export const COPILOT_FOLDER_ROOT = "copilot";
+export const DEFAULT_CHAT_HISTORY_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-conversations`;
+export const DEFAULT_CUSTOM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-custom-prompts`;
+export const DEFAULT_QA_EXCLUSIONS_SETTING = COPILOT_FOLDER_ROOT;
 export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.
   1. Never mention that you do not have access to something. Always rely on the user provided context.
   2. Always answer to the best of your knowledge. If you are unsure about something, say so and ask the user to provide more context.
@@ -708,7 +710,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   defaultOpenArea: DEFAULT_OPEN_AREA.VIEW,
   customPromptsFolder: DEFAULT_CUSTOM_PROMPTS_FOLDER,
   indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH,
-  qaExclusions: `${DEFAULT_CHAT_HISTORY_FOLDER},${DEFAULT_CUSTOM_PROMPTS_FOLDER}`,
+  qaExclusions: DEFAULT_QA_EXCLUSIONS_SETTING,
   qaInclusions: "",
   chatNoteContextPath: "",
   chatNoteContextTags: [],

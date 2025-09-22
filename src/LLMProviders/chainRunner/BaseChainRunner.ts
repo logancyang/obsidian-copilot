@@ -83,8 +83,8 @@ export abstract class BaseChainRunner implements ChainRunner {
       turns: Array.isArray(historyMessages) ? historyMessages.length : 0,
     });
 
+    const MAX_LOG_LENGTH = 2000;
     try {
-      const MAX = 300;
       const { parseToolCallMarkers } = await import("./utils/toolCallParser");
       const parsed = parseToolCallMarkers(fullAIResponse);
       let textOnly = parsed.segments
@@ -92,13 +92,16 @@ export abstract class BaseChainRunner implements ChainRunner {
         .join("")
         .trim();
       if (!textOnly) textOnly = fullAIResponse || "";
-      const snippet = textOnly.length > MAX ? textOnly.slice(0, MAX) + "... (truncated)" : textOnly;
+      const snippet =
+        textOnly.length > MAX_LOG_LENGTH
+          ? textOnly.slice(0, MAX_LOG_LENGTH) + "... (truncated)"
+          : textOnly;
       logInfo("Final AI response (truncated):\n", snippet);
     } catch {
       // Fallback: truncate raw response without parsing
-      const MAX = 300;
       const s = typeof fullAIResponse === "string" ? fullAIResponse : String(fullAIResponse ?? "");
-      const clipped = s.length > MAX ? s.slice(0, MAX) + "... (truncated)" : s;
+      const clipped =
+        s.length > MAX_LOG_LENGTH ? s.slice(0, MAX_LOG_LENGTH) + "... (truncated)" : s;
       logInfo("Final AI response (truncated):\n", clipped);
     }
     return fullAIResponse;
