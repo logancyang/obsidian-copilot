@@ -21,6 +21,43 @@ declare global {
   }
 }
 
+const FOOTNOTE_SUFFIX_PATTERN = /^\d+-\d+$/;
+
+/**
+ * Normalizes rendered markdown footnotes to align with inline citation UX.
+ * Removes separators/backrefs and fixes numbering artifacts (e.g., "2-1").
+ */
+export const normalizeFootnoteRendering = (root: HTMLElement): void => {
+  const footnoteSection = root.querySelector(".footnotes");
+
+  if (footnoteSection) {
+    footnoteSection.querySelectorAll("hr, hr.footnotes-sep").forEach((el) => el.remove());
+    footnoteSection
+      .querySelectorAll("a.footnote-backref, a.footnote-link.footnote-backref")
+      .forEach((el) => el.remove());
+  } else {
+    root
+      .querySelectorAll("a.footnote-backref, a.footnote-link.footnote-backref")
+      .forEach((el) => el.remove());
+  }
+
+  root
+    .querySelectorAll(
+      'a.footnote-ref, sup a[href^="#fn"], sup a[href^="#fn-"], a[href^="#fn"], a[href^="#fn-"]'
+    )
+    .forEach((anchor) => {
+      const text = anchor.textContent?.trim() ?? "";
+      if (!text || !FOOTNOTE_SUFFIX_PATTERN.test(text)) {
+        return;
+      }
+
+      const [primary] = text.split("-");
+      if (primary && primary !== text) {
+        anchor.textContent = primary;
+      }
+    });
+};
+
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
   if (!context || (!context.notes?.length && !context.urls?.length)) {
     return null;
@@ -313,28 +350,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             }
 
             MarkdownRenderer.renderMarkdown(segment.content, textDiv, "", componentRef.current!);
-            // Normalize footnotes rendering in chat (hide hr/backrefs and clean ref text)
-            try {
-              // Hide footnotes separator lines
-              textDiv.querySelectorAll("hr, hr.footnotes-sep").forEach((el) => el.remove());
-              // Hide backreference arrows in footnotes
-              textDiv
-                .querySelectorAll("a.footnote-backref, a.footnote-link.footnote-backref")
-                .forEach((el) => el.remove());
-              // Clean reference text to avoid artifacts like "2-1"
-              textDiv
-                .querySelectorAll(
-                  'a.footnote-ref, sup a[href^="#fn"], sup a[href^="#fn-"], a[href^="#fn"], a[href^="#fn-"]'
-                )
-                .forEach((a) => {
-                  const t = (a.textContent || "").trim();
-                  if (!t) return;
-                  const cleaned = t.split("-")[0];
-                  if (cleaned && cleaned !== t) a.textContent = cleaned;
-                });
-            } catch {
-              /* ignore footnote cleanup errors */
-            }
+            normalizeFootnoteRendering(textDiv);
             currentIndex++;
           } else if (segment.type === "toolCall" && segment.toolCall) {
             const toolCallId = segment.toolCall.id;

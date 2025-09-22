@@ -105,8 +105,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
       const qaInstructions =
         "\n\nAnswer the question based only on the following context:\n" +
         context +
-        getQACitationInstructionsConditional(settings.enableInlineCitations, sourceCatalog) +
-        (settings.enableInlineCitations ? sourceCatalog : "");
+        getQACitationInstructionsConditional(settings.enableInlineCitations, sourceCatalog);
       const fullSystemMessage = systemPrompt + qaInstructions;
 
       const chatModel = this.chainManager.chatModelManager.getChatModel();
