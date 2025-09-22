@@ -1,6 +1,6 @@
 import { App, TFile } from "obsidian";
 import { ChatMessage } from "@/types/message";
-import { logInfo, logError } from "@/logger";
+import { logInfo, logError, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { ensureFolderExists } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
@@ -33,7 +33,8 @@ export class UserMemoryManager {
       if (recentConversationsFile instanceof TFile) {
         this.recentConversationsContent = await this.app.vault.read(recentConversationsFile);
       } else {
-        logInfo("[UserMemoryManager] Recent Conversations file not found, skipping memory load");
+        this.recentConversationsContent = "";
+        logWarn("[UserMemoryManager] Recent Conversations file not found, skipping memory load");
       }
 
       // Load saved memories
@@ -43,10 +44,13 @@ export class UserMemoryManager {
       if (savedMemoriesFile instanceof TFile) {
         this.savedMemoriesContent = await this.app.vault.read(savedMemoriesFile);
       } else {
-        logInfo("[UserMemoryManager] Saved Memories file not found, skipping saved memory load");
+        this.savedMemoriesContent = "";
+        logWarn("[UserMemoryManager] Saved Memories file not found, skipping saved memory load");
       }
     } catch (error) {
       logError("[UserMemoryManager] Error reading memory files:", error);
+      this.recentConversationsContent = "";
+      this.savedMemoriesContent = "";
     }
   }
 
@@ -58,12 +62,12 @@ export class UserMemoryManager {
 
     // Only proceed if memory is enabled
     if (!settings.enableRecentConversations) {
-      logInfo("[UserMemoryManager] Recent history referencing is disabled, skipping analysis");
+      logWarn("[UserMemoryManager] Recent history referencing is disabled, skipping analysis");
       return;
     }
 
     if (messages.length === 0) {
-      logInfo("[UserMemoryManager] No messages to analyze for user memory");
+      logWarn("[UserMemoryManager] No messages to analyze for user memory");
       return;
     }
 
@@ -76,18 +80,18 @@ export class UserMemoryManager {
   /**
    * Adds a saved memory that the user explicitly asked to remember
    */
-  async addSavedMemory(memoryContent: string): Promise<void> {
+  async addSavedMemory(memoryContent: string): Promise<boolean> {
     const settings = getSettings();
 
     // Only proceed if saved memory is enabled
     if (!settings.enableSavedMemory) {
-      logInfo("[UserMemoryManager] Saved memory is disabled, skipping save");
-      return;
+      logWarn("[UserMemoryManager] Saved memory is disabled, skipping save");
+      return false;
     }
 
     if (!memoryContent || memoryContent.trim() === "") {
-      logInfo("[UserMemoryManager] No content provided for saved memory");
-      return;
+      logWarn("[UserMemoryManager] No content provided for saved memory");
+      return false;
     }
 
     try {
@@ -100,9 +104,10 @@ export class UserMemoryManager {
       await this.addToSavedMemoryFile(this.getSavedMemoriesFilePath(), memoryEntry);
 
       logInfo("[UserMemoryManager] Saved memory added successfully");
+      return true;
     } catch (error) {
       logError("[UserMemoryManager] Error saving memory:", error);
-      throw error;
+      return false;
     }
   }
 
@@ -118,28 +123,24 @@ export class UserMemoryManager {
 
       // Add recent conversations if enabled
       if (settings.enableRecentConversations && this.recentConversationsContent) {
-        memoryPrompt += `
-        <recent_conversations>
+        memoryPrompt += `<recent_conversations>
         ${this.recentConversationsContent}
         </recent_conversations>
 
         The current time is ${this.getTimestamp()}.
         <recent_conversations> are the recent conversations between you and the user. 
         You can use it to provide more context for your responses. 
-        Only use the recent conversations if they are relevant to the current conversation.
-        `;
+        Only use the recent conversations if they are relevant to the current conversation.`;
       }
 
       // Add saved memories if enabled
       if (settings.enableSavedMemory && this.savedMemoriesContent) {
-        memoryPrompt += `
-        <saved_memories>
+        memoryPrompt += `<saved_memories>
         ${this.savedMemoriesContent}
         </saved_memories>
 
         <saved_memories> are important memories that the user explicitly asked you to remember. 
-        Use these memories to provide more personalized and contextually relevant responses.
-        `;
+        Use these memories to provide more personalized and contextually relevant responses.`;
       }
 
       return memoryPrompt.length > 0 ? memoryPrompt : null;

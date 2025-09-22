@@ -1,8 +1,7 @@
 import { z } from "zod";
 import { createTool, SimpleTool } from "./SimpleTool";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
-import { logInfo, logError } from "@/logger";
-import { Notice } from "obsidian";
+import { logError } from "@/logger";
 
 // Define Zod schema for memoryTool
 const memorySchema = z.object({
@@ -26,13 +25,14 @@ export const memoryTool: SimpleTool<typeof memorySchema, { success: boolean; mes
     handler: async ({ memoryContent }) => {
       try {
         const memoryManager = new UserMemoryManager(app);
-        await memoryManager.addSavedMemory(memoryContent);
+        const success = await memoryManager.addSavedMemory(memoryContent);
+        if (!success) {
+          return {
+            success: false,
+            message: `Failed to save memory: ${memoryContent}`,
+          };
+        }
         const memoryFilePath = memoryManager.getSavedMemoriesFilePath();
-
-        logInfo(`[memoryTool] Successfully saved memory: ${memoryContent.substring(0, 100)}...`);
-
-        // Notice the user that the memory has been saved
-        new Notice(`Memory saved successfully!`);
 
         return {
           success: true,
