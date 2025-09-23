@@ -1,14 +1,10 @@
-// cSpell:ignore fuzzysort
 import React, { useMemo } from "react";
-import { TFile, TFolder, App } from "obsidian";
+import { TFile, TFolder } from "obsidian";
 import { FileText, Wrench, Folder, Hash } from "lucide-react";
 import fuzzysort from "fuzzysort";
 import { getToolDescription } from "@/tools/toolManager";
 import { AVAILABLE_TOOLS } from "../constants/tools";
 import { TypeaheadOption } from "../TypeaheadMenuContent";
-
-// Get app instance
-declare const app: App;
 
 export type AtMentionCategory = "notes" | "tools" | "folders" | "tags";
 
