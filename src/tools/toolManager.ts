@@ -12,6 +12,8 @@ export const getToolDescription = (tool: string): string => {
       return "Start a pomodoro timer. Example: @pomodoro 25m";
     case "@composer":
       return "Edit existing notes or create new notes.";
+    case "@memory":
+      return "Save information to user memory. Example: @memory <information to remember>";
     default:
       return "";
   }

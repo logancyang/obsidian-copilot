@@ -12,6 +12,7 @@ import {
   SettingKeyProviders,
 } from "@/constants";
 import { CustomModel } from "@/aiParams";
+import { logError } from "@/logger";
 import { err2String, getProviderInfo, getProviderLabel, omit } from "@/utils";
 import { Notice } from "obsidian";
 import { Label } from "@/components/ui/label";
@@ -234,7 +235,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
       await ping(cleanedModel);
       new Notice("Model verification successful!");
     } catch (err) {
-      console.error(err);
+      logError(err);
       const errStr = err2String(err);
       new Notice("Model verification failed: " + errStr);
     } finally {
