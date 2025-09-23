@@ -2,7 +2,7 @@ import { ChatButtons } from "@/components/chat-components/ChatButtons";
 import { ToolCallBanner } from "@/components/chat-components/ToolCallBanner";
 import { SourcesModal } from "@/components/modals/SourcesModal";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
 import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
@@ -65,24 +65,18 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
   return (
     <div className="tw-flex tw-flex-wrap tw-gap-2">
       {context.notes.map((note, index) => (
-        <Tooltip key={`${index}-${note.path}`}>
-          <TooltipTrigger asChild>
-            <Badge variant="secondary">
-              <span className="tw-max-w-40 tw-truncate">{note.basename}</span>
-            </Badge>
-          </TooltipTrigger>
-          <TooltipContent>{note.path}</TooltipContent>
-        </Tooltip>
+        <HelpTooltip key={`${index}-${note.path}`} content={note.path} side="top">
+          <Badge variant="secondary">
+            <span className="tw-max-w-40 tw-truncate">{note.basename}</span>
+          </Badge>
+        </HelpTooltip>
       ))}
       {context.urls.map((url, index) => (
-        <Tooltip key={`${index}-${url}`}>
-          <TooltipTrigger asChild>
-            <Badge variant="secondary">
-              <span className="tw-max-w-40 tw-truncate">{url}</span>
-            </Badge>
-          </TooltipTrigger>
-          <TooltipContent>{url}</TooltipContent>
-        </Tooltip>
+        <HelpTooltip key={`${index}-${url}`} content={url} side="top">
+          <Badge variant="secondary">
+            <span className="tw-max-w-40 tw-truncate">{url}</span>
+          </Badge>
+        </HelpTooltip>
       ))}
     </div>
   );
