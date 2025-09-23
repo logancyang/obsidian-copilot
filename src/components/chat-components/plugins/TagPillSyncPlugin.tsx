@@ -1,60 +1,36 @@
 import React from "react";
-import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { $getRoot } from "lexical";
 import { $isTagPillNode } from "../pills/TagPillNode";
+import { GenericPillSyncPlugin, PillSyncConfig } from "./GenericPillSyncPlugin";
 
+/**
+ * Props for the TagPillSyncPlugin component
+ */
 interface TagPillSyncPluginProps {
+  /** Callback triggered when the list of tag pills changes */
   onTagsChange?: (tags: string[]) => void;
+  /** Callback triggered when tag pills are removed from the editor */
   onTagsRemoved?: (removedTags: string[]) => void;
 }
 
-export function TagPillSyncPlugin({ onTagsChange, onTagsRemoved }: TagPillSyncPluginProps): null {
-  const [editor] = useLexicalComposerContext();
-  const [previousTags, setPreviousTags] = React.useState<string[]>([]);
+/**
+ * Configuration for tag pill synchronization
+ */
+const tagPillConfig: PillSyncConfig<string> = {
+  isPillNode: $isTagPillNode,
+  extractData: (node: any) => node.getTagName(),
+};
 
-  React.useEffect(() => {
-    return editor.registerUpdateListener(({ editorState }) => {
-      editorState.read(() => {
-        const root = $getRoot();
-        const currentTags: string[] = [];
-
-        // Traverse all nodes to find tag pills
-        function traverse(node: any): void {
-          if ($isTagPillNode(node)) {
-            const tagName = node.getTagName();
-            if (!currentTags.includes(tagName)) {
-              currentTags.push(tagName);
-            }
-          }
-
-          if (node.getChildren) {
-            const children = node.getChildren();
-            children.forEach(traverse);
-          }
-        }
-
-        traverse(root);
-
-        // Check for changes
-        const added = currentTags.filter((tag) => !previousTags.includes(tag));
-        const removed = previousTags.filter((tag) => !currentTags.includes(tag));
-
-        if (added.length > 0 || removed.length > 0) {
-          // Update callbacks
-          if (onTagsChange && currentTags.length > 0) {
-            onTagsChange(currentTags);
-          }
-
-          if (onTagsRemoved && removed.length > 0) {
-            onTagsRemoved(removed);
-          }
-
-          // Update previous state
-          setPreviousTags(currentTags);
-        }
-      });
-    });
-  }, [editor, onTagsChange, onTagsRemoved, previousTags]);
-
-  return null;
+/**
+ * Lexical plugin that monitors tag pill nodes in the editor and syncs
+ * their state with parent components. Tracks additions, removals, and
+ * changes to tag pills to keep external state in sync with editor content.
+ */
+export function TagPillSyncPlugin({ onTagsChange, onTagsRemoved }: TagPillSyncPluginProps) {
+  return (
+    <GenericPillSyncPlugin
+      config={tagPillConfig}
+      onChange={onTagsChange}
+      onRemoved={onTagsRemoved}
+    />
+  );
 }

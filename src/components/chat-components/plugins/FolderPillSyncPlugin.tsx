@@ -1,69 +1,39 @@
 import React from "react";
-import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { $getRoot } from "lexical";
 import { $isFolderPillNode } from "../pills/FolderPillNode";
+import { GenericPillSyncPlugin, PillSyncConfig } from "./GenericPillSyncPlugin";
 
+/**
+ * Props for the FolderPillSyncPlugin component
+ */
 interface FolderPillSyncPluginProps {
+  /** Callback triggered when the list of folder pills changes */
   onFoldersChange?: (folders: string[]) => void;
+  /** Callback triggered when folder pills are removed from the editor */
   onFoldersRemoved?: (removedFolders: string[]) => void;
 }
 
+/**
+ * Configuration for folder pill synchronization
+ */
+const folderPillConfig: PillSyncConfig<string> = {
+  isPillNode: $isFolderPillNode,
+  extractData: (node: any) => node.getFolderPath(),
+};
+
+/**
+ * Lexical plugin that monitors folder pill nodes in the editor and syncs
+ * their state with parent components. Tracks additions, removals, and
+ * changes to folder pills to keep external state in sync with editor content.
+ */
 export function FolderPillSyncPlugin({
   onFoldersChange,
   onFoldersRemoved,
-}: FolderPillSyncPluginProps): null {
-  const [editor] = useLexicalComposerContext();
-  const [previousFolders, setPreviousFolders] = React.useState<string[]>([]);
-
-  React.useEffect(() => {
-    return editor.registerUpdateListener(({ editorState }) => {
-      editorState.read(() => {
-        const root = $getRoot();
-        const currentFolders: string[] = [];
-
-        // Traverse all nodes to find folder pills
-        function traverse(node: any): void {
-          if ($isFolderPillNode(node)) {
-            const folderPath = node.getFolderPath();
-
-            // Check if this folder is already in the list
-            if (!currentFolders.some((f) => f === folderPath)) {
-              currentFolders.push(folderPath);
-            }
-          }
-
-          if (node.getChildren) {
-            const children = node.getChildren();
-            children.forEach(traverse);
-          }
-        }
-
-        traverse(root);
-
-        // Check for changes
-        const added = currentFolders.filter(
-          (folder) => !previousFolders.some((pf) => pf === folder)
-        );
-        const removed = previousFolders.filter(
-          (folder) => !currentFolders.some((cf) => cf === folder)
-        );
-
-        if (added.length > 0 || removed.length > 0) {
-          // Update callbacks
-          if (onFoldersChange && currentFolders.length > 0) {
-            onFoldersChange(currentFolders);
-          }
-
-          if (onFoldersRemoved && removed.length > 0) {
-            onFoldersRemoved(removed);
-          }
-
-          // Update previous state
-          setPreviousFolders(currentFolders);
-        }
-      });
-    });
-  }, [editor, onFoldersChange, onFoldersRemoved, previousFolders]);
-
-  return null;
+}: FolderPillSyncPluginProps) {
+  return (
+    <GenericPillSyncPlugin
+      config={folderPillConfig}
+      onChange={onFoldersChange}
+      onRemoved={onFoldersRemoved}
+    />
+  );
 }

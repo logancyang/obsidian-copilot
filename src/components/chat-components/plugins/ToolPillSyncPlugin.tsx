@@ -1,63 +1,36 @@
 import React from "react";
-import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { $getRoot } from "lexical";
 import { $isToolPillNode } from "../pills/ToolPillNode";
+import { GenericPillSyncPlugin, PillSyncConfig } from "./GenericPillSyncPlugin";
 
+/**
+ * Props for the ToolPillSyncPlugin component
+ */
 interface ToolPillSyncPluginProps {
+  /** Callback triggered when the list of tool pills changes */
   onToolsChange?: (tools: string[]) => void;
+  /** Callback triggered when tool pills are removed from the editor */
   onToolsRemoved?: (removedTools: string[]) => void;
 }
 
-export function ToolPillSyncPlugin({
-  onToolsChange,
-  onToolsRemoved,
-}: ToolPillSyncPluginProps): null {
-  const [editor] = useLexicalComposerContext();
-  const [previousTools, setPreviousTools] = React.useState<string[]>([]);
+/**
+ * Configuration for tool pill synchronization
+ */
+const toolPillConfig: PillSyncConfig<string> = {
+  isPillNode: $isToolPillNode,
+  extractData: (node: any) => node.getToolName(),
+};
 
-  React.useEffect(() => {
-    return editor.registerUpdateListener(({ editorState }) => {
-      editorState.read(() => {
-        const root = $getRoot();
-        const currentTools: string[] = [];
-
-        // Traverse all nodes to find tool pills
-        function traverse(node: any): void {
-          if ($isToolPillNode(node)) {
-            const toolName = node.getToolName();
-            if (!currentTools.includes(toolName)) {
-              currentTools.push(toolName);
-            }
-          }
-
-          if (node.getChildren) {
-            const children = node.getChildren();
-            children.forEach(traverse);
-          }
-        }
-
-        traverse(root);
-
-        // Check for changes
-        const added = currentTools.filter((tool) => !previousTools.includes(tool));
-        const removed = previousTools.filter((tool) => !currentTools.includes(tool));
-
-        if (added.length > 0 || removed.length > 0) {
-          // Update callbacks
-          if (onToolsChange && currentTools.length > 0) {
-            onToolsChange(currentTools);
-          }
-
-          if (onToolsRemoved && removed.length > 0) {
-            onToolsRemoved(removed);
-          }
-
-          // Update previous state
-          setPreviousTools(currentTools);
-        }
-      });
-    });
-  }, [editor, onToolsChange, onToolsRemoved, previousTools]);
-
-  return null;
+/**
+ * Lexical plugin that monitors tool pill nodes in the editor and syncs
+ * their state with parent components. Tracks additions, removals, and
+ * changes to tool pills to keep external state in sync with editor content.
+ */
+export function ToolPillSyncPlugin({ onToolsChange, onToolsRemoved }: ToolPillSyncPluginProps) {
+  return (
+    <GenericPillSyncPlugin
+      config={toolPillConfig}
+      onChange={onToolsChange}
+      onRemoved={onToolsRemoved}
+    />
+  );
 }
