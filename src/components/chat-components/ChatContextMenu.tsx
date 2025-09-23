@@ -143,7 +143,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
               {!hasContext && <span className="tw-pr-1 tw-text-sm tw-leading-4">Add context</span>}
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="tw-w-80 tw-p-0" align="start" side="top" sideOffset={4}>
+          <PopoverContent className="tw-w-[400px] tw-p-0" align="start" side="top" sideOffset={4}>
             <AtMentionTypeahead
               isOpen={showTypeahead}
               onClose={handleTypeaheadClose}
