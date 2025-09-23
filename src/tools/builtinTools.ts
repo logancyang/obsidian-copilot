@@ -245,7 +245,6 @@ Example usage:
       displayName: "YouTube Transcription",
       description: "Get transcripts from YouTube videos",
       category: "media",
-      copilotCommands: ["@youtube"],
       customPromptInstructions: `For youtubeTranscription:
 - Use when user provides YouTube URLs
 - No parameters needed - the tool will process URLs from the conversation

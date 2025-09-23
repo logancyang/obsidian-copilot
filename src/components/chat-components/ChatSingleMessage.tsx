@@ -83,7 +83,7 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
               <ContextNoteBadge note={note} showRemoveButton={false} />
             </div>
           </TooltipTrigger>
-          <TooltipContent>{note.path}</TooltipContent>
+          <TooltipContent className="tw-max-w-sm tw-break-words">{note.path}</TooltipContent>
         </Tooltip>
       ))}
       {context.urls.map((url, index) => (
@@ -93,7 +93,7 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
               <ContextUrlBadge url={url} showRemoveButton={false} />
             </div>
           </TooltipTrigger>
-          <TooltipContent>{url}</TooltipContent>
+          <TooltipContent className="tw-max-w-sm tw-break-words">{url}</TooltipContent>
         </Tooltip>
       ))}
       {context.tags?.map((tag, index) => (
@@ -103,7 +103,7 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
               <ContextTagBadge tag={tag} showRemoveButton={false} />
             </div>
           </TooltipTrigger>
-          <TooltipContent>Tag: {tag}</TooltipContent>
+          <TooltipContent className="tw-max-w-sm tw-break-words">Tag: {tag}</TooltipContent>
         </Tooltip>
       ))}
       {context.folders?.map((folder, index) => (
@@ -113,7 +113,9 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
               <ContextFolderBadge folder={folder} showRemoveButton={false} />
             </div>
           </TooltipTrigger>
-          <TooltipContent>Folder: {folder.path}</TooltipContent>
+          <TooltipContent className="tw-max-w-sm tw-break-words">
+            Folder: {folder.path}
+          </TooltipContent>
         </Tooltip>
       ))}
     </div>

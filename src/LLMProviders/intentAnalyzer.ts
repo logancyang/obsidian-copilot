@@ -145,7 +145,7 @@ export class IntentAnalyzer {
       });
     }
 
-    // Auto-detect YouTube URLs (handles both @youtube command and auto-detection)
+    // Auto-detect YouTube URLs
     const youtubeUrls = extractAllYoutubeUrls(originalMessage);
     for (const url of youtubeUrls) {
       // Check if we already have a YouTube tool call for this URL
