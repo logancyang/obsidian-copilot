@@ -142,7 +142,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     urls?: string[];
     contextNotes?: TFile[];
     contextTags?: string[];
-    contextFolders?: { name: string; path: string }[];
+    contextFolders?: string[];
   } = {}) => {
     if (!inputMessage && selectedImages.length === 0) return;
 

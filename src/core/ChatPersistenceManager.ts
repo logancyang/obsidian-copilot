@@ -151,9 +151,7 @@ export class ChatPersistenceManager {
           }
 
           if (message.context.folders?.length) {
-            contextParts.push(
-              `Folders: ${message.context.folders.map((folder) => folder.name).join(", ")}`
-            );
+            contextParts.push(`Folders: ${message.context.folders.join(", ")}`);
           }
 
           if (contextParts.length > 0) {
@@ -288,10 +286,7 @@ export class ChatPersistenceManager {
       } else if (trimmed.startsWith("Folders: ")) {
         const foldersStr = trimmed.substring(9); // Remove "Folders: "
         if (foldersStr) {
-          context.folders = foldersStr.split(", ").map((name) => ({
-            name: name.trim(),
-            path: name.trim(), // Use name as path since we don't have the full path
-          }));
+          context.folders = foldersStr.split(", ").map((folder) => folder.trim());
         }
       }
     }

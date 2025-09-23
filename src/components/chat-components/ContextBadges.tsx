@@ -23,7 +23,7 @@ interface ContextTagBadgeProps extends BaseContextBadgeProps {
 }
 
 interface ContextFolderBadgeProps extends BaseContextBadgeProps {
-  folder: { name: string; path: string };
+  folder: string;
 }
 
 export function ContextNoteBadge({
@@ -129,7 +129,7 @@ export function ContextFolderBadge({
     >
       <div className="tw-flex tw-items-center tw-gap-1">
         <Folder className="tw-size-3" />
-        <span className="tw-max-w-40 tw-truncate">{folder.path}</span>
+        <span className="tw-max-w-40 tw-truncate">{folder}</span>
       </div>
       {showRemoveButton && onRemove && (
         <Button

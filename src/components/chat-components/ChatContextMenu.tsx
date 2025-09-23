@@ -23,7 +23,7 @@ interface ChatContextMenuProps {
   contextNotes: TFile[];
   contextUrls: string[];
   contextTags: string[];
-  contextFolders: { name: string; path: string }[];
+  contextFolders: string[];
   selectedTextContexts?: SelectedTextContext[];
   onRemoveContext: (category: string, data: any) => void;
   showProgressCard: () => void;
@@ -190,10 +190,10 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
         ))}
         {contextFolders.map((folder) => (
           <ContextFolderBadge
-            key={folder.path}
+            key={folder}
             folder={folder}
             showRemoveButton={true}
-            onRemove={() => onRemoveContext("folders", folder.path)}
+            onRemove={() => onRemoveContext("folders", folder)}
           />
         ))}
         {selectedTextContexts.map((selectedText) => (

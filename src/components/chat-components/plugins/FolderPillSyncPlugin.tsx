@@ -4,8 +4,8 @@ import { $getRoot } from "lexical";
 import { $isFolderPillNode } from "../pills/FolderPillNode";
 
 interface FolderPillSyncPluginProps {
-  onFoldersChange?: (folders: { name: string; path: string }[]) => void;
-  onFoldersRemoved?: (removedFolders: { name: string; path: string }[]) => void;
+  onFoldersChange?: (folders: string[]) => void;
+  onFoldersRemoved?: (removedFolders: string[]) => void;
 }
 
 export function FolderPillSyncPlugin({
@@ -13,26 +13,22 @@ export function FolderPillSyncPlugin({
   onFoldersRemoved,
 }: FolderPillSyncPluginProps): null {
   const [editor] = useLexicalComposerContext();
-  const [previousFolders, setPreviousFolders] = React.useState<{ name: string; path: string }[]>(
-    []
-  );
+  const [previousFolders, setPreviousFolders] = React.useState<string[]>([]);
 
   React.useEffect(() => {
     return editor.registerUpdateListener(({ editorState }) => {
       editorState.read(() => {
         const root = $getRoot();
-        const currentFolders: { name: string; path: string }[] = [];
+        const currentFolders: string[] = [];
 
         // Traverse all nodes to find folder pills
         function traverse(node: any): void {
           if ($isFolderPillNode(node)) {
-            const folderName = node.getFolderName();
             const folderPath = node.getFolderPath();
-            const folderData = { name: folderName, path: folderPath };
 
             // Check if this folder is already in the list
-            if (!currentFolders.some((f) => f.path === folderPath)) {
-              currentFolders.push(folderData);
+            if (!currentFolders.some((f) => f === folderPath)) {
+              currentFolders.push(folderPath);
             }
           }
 
@@ -46,10 +42,10 @@ export function FolderPillSyncPlugin({
 
         // Check for changes
         const added = currentFolders.filter(
-          (folder) => !previousFolders.some((pf) => pf.path === folder.path)
+          (folder) => !previousFolders.some((pf) => pf === folder)
         );
         const removed = previousFolders.filter(
-          (folder) => !currentFolders.some((cf) => cf.path === folder.path)
+          (folder) => !currentFolders.some((cf) => cf === folder)
         );
 
         if (added.length > 0 || removed.length > 0) {

@@ -68,13 +68,12 @@ export class FolderPillNode extends BasePillNode {
    * Override to display folder name wrapped in curly braces
    */
   decorate(): JSX.Element {
-    const folderName = this.getFolderName();
     return (
       <Badge
         variant="secondary"
         className="tw-inline-flex tw-items-center tw-gap-1 tw-whitespace-nowrap tw-text-xs"
       >
-        {`{${folderName}}`}
+        {`{${this.getFolderPath()}}`}
       </Badge>
     );
   }
@@ -83,7 +82,7 @@ export class FolderPillNode extends BasePillNode {
    * Override to return text content with curly braces
    */
   getTextContent(): string {
-    return `{${this.getFolderName()}}`;
+    return `{${this.getFolderPath()}}`;
   }
 
   /**
@@ -93,13 +92,8 @@ export class FolderPillNode extends BasePillNode {
     const element = document.createElement("span");
     element.setAttribute(this.getDataAttribute(), "");
     element.setAttribute("data-pill-value", this.__value);
-    element.textContent = `{${this.getFolderName()}}`;
+    element.textContent = `{${this.getFolderPath()}}`;
     return { element };
-  }
-
-  // Convenience getters for backward compatibility
-  getFolderName(): string {
-    return this.getValue().split("/").pop() || this.getValue();
   }
 
   getFolderPath(): string {

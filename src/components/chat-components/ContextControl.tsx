@@ -10,7 +10,7 @@ interface ChatControlsProps {
   activeNote: TFile | null;
   contextUrls: string[];
   contextTags: string[];
-  contextFolders: { name: string; path: string }[];
+  contextFolders: string[];
   selectedTextContexts?: SelectedTextContext[];
   showProgressCard: () => void;
   lexicalEditorRef?: React.RefObject<any>;

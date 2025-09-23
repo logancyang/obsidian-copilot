@@ -37,6 +37,7 @@ interface ChatInputProps {
     urls?: string[];
     contextNotes?: TFile[];
     contextTags?: string[];
+    contextFolders?: string[];
   }) => void;
   isGenerating: boolean;
   onStopGenerating: () => void;
@@ -61,7 +62,7 @@ interface ChatInputProps {
       notes: TFile[];
       urls: string[];
       tags: string[];
-      folders: { name: string; path: string }[];
+      folders: string[];
     }
   ) => void;
   onEditCancel?: () => void;
@@ -69,7 +70,7 @@ interface ChatInputProps {
     notes?: TFile[];
     urls?: string[];
     tags?: string[];
-    folders?: { name: string; path: string }[];
+    folders?: string[];
   };
 }
 
@@ -98,9 +99,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
 }) => {
   const [contextUrls, setContextUrls] = useState<string[]>(initialContext?.urls || []);
   const [contextTags, setContextTags] = useState<string[]>(initialContext?.tags || []);
-  const [contextFolders, setContextFolders] = useState<{ name: string; path: string }[]>(
-    initialContext?.folders || []
-  );
+  const [contextFolders, setContextFolders] = useState<string[]>(initialContext?.folders || []);
   const containerRef = useRef<HTMLDivElement>(null);
   const lexicalEditorRef = useRef<any>(null);
   const [currentModelKey, setCurrentModelKey] = useModelKey();
@@ -115,7 +114,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const [notesFromPills, setNotesFromPills] = useState<{ path: string; basename: string }[]>([]);
   const [urlsFromPills, setUrlsFromPills] = useState<string[]>([]);
   const [tagsFromPills, setTagsFromPills] = useState<string[]>([]);
-  const [foldersFromPills, setFoldersFromPills] = useState<{ name: string; path: string }[]>([]);
+  const [foldersFromPills, setFoldersFromPills] = useState<string[]>([]);
   const [toolsFromPills, setToolsFromPills] = useState<string[]>([]);
   const isCopilotPlus = isPlusChain(currentChain);
 
@@ -222,6 +221,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
       contextNotes,
       urls: contextUrls,
       contextTags,
+      contextFolders,
     });
   };
 
@@ -349,7 +349,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
     }
 
     // Also immediately update foldersFromPills to prevent stale data from re-adding the folder
-    setFoldersFromPills((prev) => prev.filter((pillFolder) => pillFolder.path !== folderPath));
+    setFoldersFromPills((prev) => prev.filter((pillFolder) => pillFolder !== folderPath));
   };
 
   // Unified handler for adding to context (from popover @ mention)
@@ -397,11 +397,11 @@ const ChatInput: React.FC<ChatInputProps> = ({
         break;
       case "folders":
         // Update foldersFromPills - sync will update contextFolders
-        if (data && typeof data === "object" && "name" in data && "path" in data) {
+        if (data && typeof data === "string") {
           setFoldersFromPills((prev) => {
-            const exists = prev.find((f) => f.path === data.path);
+            const exists = prev.find((f) => f === data);
             if (!exists) {
-              return [...prev, { name: data.name, path: data.path }];
+              return [...prev, data];
             }
             return prev;
           });
@@ -442,7 +442,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
       case "folders":
         if (typeof data === "string") {
           // data is the path
-          setContextFolders((prev) => prev.filter((f) => f.path !== data));
+          setContextFolders((prev) => prev.filter((f) => f !== data));
           handleFolderContextRemoved(data);
         }
         break;
@@ -456,12 +456,12 @@ const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   // Handle when folders are removed from pills (when pills are deleted in editor)
-  const handleFolderPillsRemoved = (removedFolders: { name: string; path: string }[]) => {
-    const removedFolderPaths = new Set(removedFolders.map((f) => f.path));
+  const handleFolderPillsRemoved = (removedFolders: string[]) => {
+    const removedFolderPaths = new Set(removedFolders);
 
     setContextFolders((prev) => {
       return prev.filter((folder) => {
-        if (removedFolderPaths.has(folder.path)) {
+        if (removedFolderPaths.has(folder)) {
           return false; // Remove this folder
         }
         return true; // Keep this folder
@@ -539,12 +539,12 @@ const ChatInput: React.FC<ChatInputProps> = ({
   // Folder-to-context synchronization (when folders are added via pills)
   useEffect(() => {
     setContextFolders((prev) => {
-      const contextFolderPaths = new Set(prev.map((f) => f.path));
+      const contextFolderPaths = new Set(prev);
 
       // Find folders that need to be added
       const newFoldersFromPills = foldersFromPills.filter((pillFolder) => {
         // Only add if not already in context
-        return !contextFolderPaths.has(pillFolder.path);
+        return !contextFolderPaths.has(pillFolder);
       });
 
       // Add completely new folders from pills

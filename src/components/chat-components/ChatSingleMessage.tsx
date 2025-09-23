@@ -103,19 +103,17 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
               <ContextTagBadge tag={tag} showRemoveButton={false} />
             </div>
           </TooltipTrigger>
-          <TooltipContent className="tw-max-w-sm tw-break-words">Tag: {tag}</TooltipContent>
+          <TooltipContent className="tw-max-w-sm tw-break-words">{tag}</TooltipContent>
         </Tooltip>
       ))}
       {context.folders?.map((folder, index) => (
-        <Tooltip key={`folder-${index}-${folder.path}`}>
+        <Tooltip key={`folder-${index}-${folder}`}>
           <TooltipTrigger asChild>
             <div>
               <ContextFolderBadge folder={folder} showRemoveButton={false} />
             </div>
           </TooltipTrigger>
-          <TooltipContent className="tw-max-w-sm tw-break-words">
-            Folder: {folder.path}
-          </TooltipContent>
+          <TooltipContent className="tw-max-w-sm tw-break-words">{folder}</TooltipContent>
         </Tooltip>
       ))}
     </div>

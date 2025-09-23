@@ -377,7 +377,7 @@ ${formattedContent}`;
             notes: [{ basename: "typescript-guide.md", path: "docs/typescript-guide.md" } as any],
             urls: ["https://typescriptlang.org"],
             tags: ["programming", "typescript"],
-            folders: [{ name: "docs", path: "docs/" }],
+            folders: ["docs/"],
           },
         },
         {
@@ -421,7 +421,7 @@ ${formattedContent}`;
       expect(parsedMessages[0].context.urls).toEqual(["https://typescriptlang.org"]);
       expect(parsedMessages[0].context.tags).toEqual(["programming", "typescript"]);
       expect(parsedMessages[0].context.folders).toHaveLength(1);
-      expect(parsedMessages[0].context.folders[0].name).toBe("docs");
+      expect(parsedMessages[0].context.folders[0]).toBe("docs/");
 
       // Second message should not have context
       expect(parsedMessages[1].context).toBeUndefined();

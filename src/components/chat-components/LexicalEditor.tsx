@@ -43,8 +43,8 @@ interface LexicalEditorProps {
   onURLsRemoved?: (removedUrls: string[]) => void;
   onToolsChange?: (tools: string[]) => void;
   onToolsRemoved?: (removedTools: string[]) => void;
-  onFoldersChange?: (folders: { name: string; path: string }[]) => void;
-  onFoldersRemoved?: (removedFolders: { name: string; path: string }[]) => void;
+  onFoldersChange?: (folders: string[]) => void;
+  onFoldersRemoved?: (removedFolders: string[]) => void;
   onTagsChange?: (tags: string[]) => void;
   onTagsRemoved?: (removedTags: string[]) => void;
   onEditorReady?: (editor: any) => void;

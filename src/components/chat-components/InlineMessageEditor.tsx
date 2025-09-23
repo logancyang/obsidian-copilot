@@ -44,7 +44,7 @@ export const InlineMessageEditor: React.FC<InlineMessageEditorProps> = ({
         notes: TFile[];
         urls: string[];
         tags: string[];
-        folders: { name: string; path: string }[];
+        folders: string[];
       }
     ) => {
       // Convert back to ChatMessage context format
