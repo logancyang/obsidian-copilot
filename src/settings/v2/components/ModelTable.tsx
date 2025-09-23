@@ -86,6 +86,37 @@ const CAPABILITY_ORDER = [
   ModelCapability.WEB_SEARCH,
 ] as const;
 
+interface ModelTableHeaderProps {
+  title: string;
+  onRefresh?: () => void;
+  onAdd: () => void;
+}
+
+/**
+ * Renders the model table header with a title and aligned action buttons.
+ */
+const ModelTableHeader: React.FC<ModelTableHeaderProps> = ({ title, onRefresh, onAdd }) => (
+  <div className="tw-mb-3 tw-flex tw-flex-col tw-gap-2 md:tw-flex-row md:tw-items-center md:tw-justify-between">
+    <h3 className="tw-text-xl tw-font-bold">{title}</h3>
+    <div className="tw-flex tw-flex-col tw-gap-2 sm:tw-flex-row sm:tw-items-center sm:tw-justify-end">
+      {onRefresh && (
+        <Button
+          onClick={onRefresh}
+          variant="secondary"
+          className="tw-flex tw-items-center tw-gap-2"
+        >
+          <RefreshCw className="tw-size-2 md:tw-size-4" />
+          Refresh Built-ins
+        </Button>
+      )}
+      <Button onClick={onAdd} variant="default" className="tw-flex tw-items-center tw-gap-2">
+        <Plus className="tw-size-2 md:tw-size-4" />
+        Add Model
+      </Button>
+    </div>
+  </div>
+);
+
 const renderCapabilities = (model: CustomModel) => {
   return (
     <div className="tw-mx-auto tw-grid tw-w-16 tw-grid-cols-3 tw-gap-1">
@@ -471,22 +502,7 @@ export const ModelTable: React.FC<ModelTableProps> = ({
 
   return (
     <div ref={containerRef} className="tw-mb-4">
-      <div className="tw-mt-4 tw-flex tw-justify-between tw-gap-2 md:tw-justify-end">
-        {onRefresh && (
-          <Button
-            onClick={onRefresh}
-            variant="secondary"
-            className="tw-flex tw-items-center tw-gap-2"
-          >
-            <RefreshCw className="tw-size-2 md:tw-size-4" />
-            Refresh Built-ins
-          </Button>
-        )}
-        <Button onClick={onAdd} variant="default" className="tw-flex tw-items-center tw-gap-2">
-          <Plus className="tw-size-2 md:tw-size-4" />
-          Add Model
-        </Button>
-      </div>
+      <ModelTableHeader title={title} onRefresh={onRefresh} onAdd={onAdd} />
       {/* Desktop view */}
       <div className="tw-hidden md:tw-block">
         <DndContext
