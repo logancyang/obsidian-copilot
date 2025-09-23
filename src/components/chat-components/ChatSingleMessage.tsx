@@ -80,7 +80,7 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
         <Tooltip key={`note-${index}-${note.path}`}>
           <TooltipTrigger asChild>
             <div>
-              <ContextNoteBadge note={note} showRemoveButton={false} />
+              <ContextNoteBadge note={note} />
             </div>
           </TooltipTrigger>
           <TooltipContent className="tw-max-w-sm tw-break-words">{note.path}</TooltipContent>
@@ -90,7 +90,7 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
         <Tooltip key={`url-${index}-${url}`}>
           <TooltipTrigger asChild>
             <div>
-              <ContextUrlBadge url={url} showRemoveButton={false} />
+              <ContextUrlBadge url={url} />
             </div>
           </TooltipTrigger>
           <TooltipContent className="tw-max-w-sm tw-break-words">{url}</TooltipContent>
@@ -100,7 +100,7 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
         <Tooltip key={`tag-${index}-${tag}`}>
           <TooltipTrigger asChild>
             <div>
-              <ContextTagBadge tag={tag} showRemoveButton={false} />
+              <ContextTagBadge tag={tag} />
             </div>
           </TooltipTrigger>
           <TooltipContent className="tw-max-w-sm tw-break-words">{tag}</TooltipContent>
@@ -110,7 +110,7 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
         <Tooltip key={`folder-${index}-${folder}`}>
           <TooltipTrigger asChild>
             <div>
-              <ContextFolderBadge folder={folder} showRemoveButton={false} />
+              <ContextFolderBadge folder={folder} />
             </div>
           </TooltipTrigger>
           <TooltipContent className="tw-max-w-sm tw-break-words">{folder}</TooltipContent>

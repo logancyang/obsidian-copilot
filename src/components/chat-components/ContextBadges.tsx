@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 interface BaseContextBadgeProps {
-  showRemoveButton?: boolean;
   onRemove?: () => void;
 }
 
@@ -26,15 +25,10 @@ interface ContextFolderBadgeProps extends BaseContextBadgeProps {
   folder: string;
 }
 
-export function ContextNoteBadge({
-  note,
-  isActive = false,
-  showRemoveButton = false,
-  onRemove,
-}: ContextNoteBadgeProps) {
+export function ContextNoteBadge({ note, isActive = false, onRemove }: ContextNoteBadgeProps) {
   return (
     <Badge
-      className={`tw-items-center tw-py-0 tw-pl-2 tw-text-xs ${showRemoveButton ? "tw-pr-0.5" : "tw-pr-2"}`}
+      className={`tw-items-center tw-py-0 tw-pl-2 tw-text-xs ${onRemove ? "tw-pr-0.5" : "tw-pr-2"}`}
     >
       <div className="tw-flex tw-items-center tw-gap-1">
         <FileText className="tw-size-3" />
@@ -42,7 +36,7 @@ export function ContextNoteBadge({
         {isActive && <span className="tw-text-xs tw-text-faint">Current</span>}
         {note.extension === "pdf" && <span className="tw-text-xs tw-text-faint">pdf</span>}
       </div>
-      {showRemoveButton && onRemove && (
+      {onRemove && (
         <Button
           variant="ghost2"
           size="fit"
@@ -57,7 +51,7 @@ export function ContextNoteBadge({
   );
 }
 
-export function ContextUrlBadge({ url, showRemoveButton = false, onRemove }: ContextUrlBadgeProps) {
+export function ContextUrlBadge({ url, onRemove }: ContextUrlBadgeProps) {
   // Extract domain from URL for display
   const getDomain = (url: string): string => {
     try {
@@ -70,13 +64,13 @@ export function ContextUrlBadge({ url, showRemoveButton = false, onRemove }: Con
 
   return (
     <Badge
-      className={`tw-items-center tw-py-0 tw-pl-2 tw-text-xs ${showRemoveButton ? "tw-pr-0.5" : "tw-pr-2"}`}
+      className={`tw-items-center tw-py-0 tw-pl-2 tw-text-xs ${onRemove ? "tw-pr-0.5" : "tw-pr-2"}`}
     >
       <div className="tw-flex tw-items-center tw-gap-1">
         <ExternalLink className="tw-size-3" />
         <span className="tw-max-w-40 tw-truncate">{getDomain(url)}</span>
       </div>
-      {showRemoveButton && onRemove && (
+      {onRemove && (
         <Button
           variant="ghost2"
           size="fit"
@@ -91,19 +85,19 @@ export function ContextUrlBadge({ url, showRemoveButton = false, onRemove }: Con
   );
 }
 
-export function ContextTagBadge({ tag, showRemoveButton = false, onRemove }: ContextTagBadgeProps) {
+export function ContextTagBadge({ tag, onRemove }: ContextTagBadgeProps) {
   // Remove # symbol for clean display
   const displayTag = tag.startsWith("#") ? tag.slice(1) : tag;
 
   return (
     <Badge
-      className={`tw-items-center tw-py-0 tw-pl-2 tw-text-xs ${showRemoveButton ? "tw-pr-0.5" : "tw-pr-2"}`}
+      className={`tw-items-center tw-py-0 tw-pl-2 tw-text-xs ${onRemove ? "tw-pr-0.5" : "tw-pr-2"}`}
     >
       <div className="tw-flex tw-items-center tw-gap-1">
         <Hash className="tw-size-3" />
         <span className="tw-max-w-40 tw-truncate">{displayTag}</span>
       </div>
-      {showRemoveButton && onRemove && (
+      {onRemove && (
         <Button
           variant="ghost2"
           size="fit"
@@ -118,20 +112,16 @@ export function ContextTagBadge({ tag, showRemoveButton = false, onRemove }: Con
   );
 }
 
-export function ContextFolderBadge({
-  folder,
-  showRemoveButton = false,
-  onRemove,
-}: ContextFolderBadgeProps) {
+export function ContextFolderBadge({ folder, onRemove }: ContextFolderBadgeProps) {
   return (
     <Badge
-      className={`tw-items-center tw-py-0 tw-pl-2 tw-text-xs ${showRemoveButton ? "tw-pr-0.5" : "tw-pr-2"}`}
+      className={`tw-items-center tw-py-0 tw-pl-2 tw-text-xs ${onRemove ? "tw-pr-0.5" : "tw-pr-2"}`}
     >
       <div className="tw-flex tw-items-center tw-gap-1">
         <Folder className="tw-size-3" />
         <span className="tw-max-w-40 tw-truncate">{folder}</span>
       </div>
-      {showRemoveButton && onRemove && (
+      {onRemove && (
         <Button
           variant="ghost2"
           size="fit"

@@ -159,7 +159,6 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
             key={activeNote.path}
             note={activeNote}
             isActive={true}
-            showRemoveButton={true}
             onRemove={() => onRemoveContext("notes", activeNote.path)}
           />
         )}
@@ -168,31 +167,19 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
             key={note.path}
             note={note}
             isActive={false}
-            showRemoveButton={true}
             onRemove={() => onRemoveContext("notes", note.path)}
           />
         ))}
         {uniqueUrls.map((url) => (
-          <ContextUrlBadge
-            key={url}
-            url={url}
-            showRemoveButton={true}
-            onRemove={() => onRemoveContext("urls", url)}
-          />
+          <ContextUrlBadge key={url} url={url} onRemove={() => onRemoveContext("urls", url)} />
         ))}
         {contextTags.map((tag) => (
-          <ContextTagBadge
-            key={tag}
-            tag={tag}
-            showRemoveButton={true}
-            onRemove={() => onRemoveContext("tags", tag)}
-          />
+          <ContextTagBadge key={tag} tag={tag} onRemove={() => onRemoveContext("tags", tag)} />
         ))}
         {contextFolders.map((folder) => (
           <ContextFolderBadge
             key={folder}
             folder={folder}
-            showRemoveButton={true}
             onRemove={() => onRemoveContext("folders", folder)}
           />
         ))}
