@@ -391,7 +391,7 @@ export const ModelTable: React.FC<ModelTableProps> = ({
         return {
           ...transform,
           x: 0,
-          y: currentIndex * rowHeight,
+          y: 0,
         };
       }
     }
