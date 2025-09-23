@@ -22,11 +22,11 @@ import { App, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { ContextControl } from "./ContextControl";
-import { $removePillsByPath } from "./NotePillPlugin";
-import { $removePillsByURL } from "./URLPillNode";
-import { $removePillsByTag } from "./TagPillNode";
-import { $removePillsByFolder } from "./FolderPillNode";
-import { $removePillsByToolName } from "./ToolPillNode";
+import { $removePillsByPath } from "./pills/NotePillNode";
+import { $removePillsByURL } from "./pills/URLPillNode";
+import { $removePillsByTag } from "./pills/TagPillNode";
+import { $removePillsByFolder } from "./pills/FolderPillNode";
+import { $removePillsByToolName } from "./pills/ToolPillNode";
 import LexicalEditor from "./LexicalEditor";
 
 interface ChatInputProps {

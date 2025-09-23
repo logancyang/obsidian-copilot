@@ -6,16 +6,17 @@ import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
-import { SlashCommandPlugin } from "./SlashCommandPlugin";
-import { NoteCommandPlugin } from "./NoteCommandPlugin";
-import { TagCommandPlugin } from "./TagCommandPlugin";
+import { SlashCommandPlugin } from "./plugins/SlashCommandPlugin";
+import { NoteCommandPlugin } from "./plugins/NoteCommandPlugin";
+import { TagCommandPlugin } from "./plugins/TagCommandPlugin";
 import { AtMentionCommandPlugin } from "./plugins/AtMentionCommandPlugin";
-import { NotePillPlugin, NotePillNode } from "./NotePillPlugin";
-import { URLPillPlugin, URLPillNode } from "./URLPillNode";
-import { ToolPillNode } from "./ToolPillNode";
-import { FolderPillNode } from "./FolderPillNode";
-import { TagPillNode } from "./TagPillNode";
-import { PillDeletionPlugin } from "./PillDeletionPlugin";
+import { NotePillPlugin } from "./plugins/NotePillPlugin";
+import { NotePillNode } from "./pills/NotePillNode";
+import { URLPillNode } from "./pills/URLPillNode";
+import { ToolPillNode } from "./pills/ToolPillNode";
+import { FolderPillNode } from "./pills/FolderPillNode";
+import { TagPillNode } from "./pills/TagPillNode";
+import { PillDeletionPlugin } from "./plugins/PillDeletionPlugin";
 import { KeyboardPlugin } from "./plugins/KeyboardPlugin";
 import { ValueSyncPlugin } from "./plugins/ValueSyncPlugin";
 import { FocusPlugin } from "./plugins/FocusPlugin";
@@ -167,7 +168,6 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
         <TagCommandPlugin />
         <AtMentionCommandPlugin isCopilotPlus={isCopilotPlus} />
         <NotePillPlugin />
-        {onURLsChange && <URLPillPlugin />}
         <TextInsertionPlugin />
       </div>
     </LexicalComposer>

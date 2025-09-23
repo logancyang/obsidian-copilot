@@ -7,13 +7,12 @@ import {
   EditorConfig,
   LexicalNode,
   NodeKey,
-  SerializedLexicalNode,
 } from "lexical";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { BasePillNode } from "./BasePillNode";
+import { BasePillNode, SerializedBasePillNode } from "./BasePillNode";
 
-export interface SerializedNotePillNode extends SerializedLexicalNode {
+export interface SerializedNotePillNode extends SerializedBasePillNode {
   noteTitle: string;
   notePath: string;
   isActive?: boolean;
@@ -33,10 +32,18 @@ export class NotePillNode extends BasePillNode {
   }
 
   constructor(noteTitle: string, notePath: string, isActive = false, key?: NodeKey) {
-    super(key);
+    super(noteTitle, key);
     this.__noteTitle = noteTitle;
     this.__notePath = notePath;
     this.__isActive = isActive;
+  }
+
+  getClassName(): string {
+    return "note-pill-wrapper";
+  }
+
+  getDataAttribute(): string {
+    return "data-lexical-note-pill";
   }
 
   createDOM(_config: EditorConfig): HTMLElement {
@@ -66,6 +73,7 @@ export class NotePillNode extends BasePillNode {
 
   exportJSON(): SerializedNotePillNode {
     return {
+      ...super.exportJSON(),
       noteTitle: this.__noteTitle,
       notePath: this.__notePath,
       isActive: this.__isActive,
@@ -119,18 +127,6 @@ function convertNotePillElement(domNode: HTMLElement): DOMConversionOutput | nul
   return null;
 }
 
-export function $createNotePillNode(
-  noteTitle: string,
-  notePath: string,
-  isActive = false
-): NotePillNode {
-  return new NotePillNode(noteTitle, notePath, isActive);
-}
-
-export function $isNotePillNode(node: LexicalNode | null | undefined): node is NotePillNode {
-  return node instanceof NotePillNode;
-}
-
 interface NotePillComponentProps {
   node: NotePillNode;
 }
@@ -152,17 +148,40 @@ function NotePillComponent({ node }: NotePillComponentProps): JSX.Element {
   );
 }
 
-/**
- * Plugin to register NotePillNode with the editor.
- * Deletion logic has been moved to PillDeletionPlugin for better scalability.
- */
-export function NotePillPlugin(): null {
-  // This plugin now only handles node registration
-  // All deletion logic is handled by the centralized PillDeletionPlugin
-  return null;
+// Utility functions
+export function $createNotePillNode(
+  noteTitle: string,
+  notePath: string,
+  isActive = false
+): NotePillNode {
+  return new NotePillNode(noteTitle, notePath, isActive);
 }
 
-// Add a utility function to remove pills by path
+export function $isNotePillNode(node: LexicalNode | null | undefined): node is NotePillNode {
+  return node instanceof NotePillNode;
+}
+
+export function $findNotePills(): NotePillNode[] {
+  const root = $getRoot();
+  const pills: NotePillNode[] = [];
+
+  function traverse(node: LexicalNode) {
+    if (node instanceof NotePillNode) {
+      pills.push(node);
+    }
+
+    if ("getChildren" in node && typeof node.getChildren === "function") {
+      const children = node.getChildren();
+      for (const child of children) {
+        traverse(child);
+      }
+    }
+  }
+
+  traverse(root);
+  return pills;
+}
+
 export function $removePillsByPath(notePath: string): number {
   const root = $getRoot();
   let removedCount = 0;

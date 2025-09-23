@@ -105,7 +105,6 @@ const ChatMessages = memo(
                     onRegenerate={() => onRegenerate(index)}
                     onEdit={(newMessage) => onEdit(index, newMessage)}
                     onDelete={() => onDelete(index)}
-                    chatHistory={chatHistory}
                   />
                 </div>
               )
@@ -129,7 +128,6 @@ const ChatMessages = memo(
                 app={app}
                 isStreaming={true}
                 onDelete={() => {}}
-                chatHistory={chatHistory}
               />
             </div>
           )}

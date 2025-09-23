@@ -5,10 +5,13 @@ import fuzzysort from "fuzzysort";
 import { useCustomCommands } from "@/commands/state";
 import { CustomCommand } from "@/commands/type";
 import { sortSlashCommands } from "@/commands/customCommandUtils";
-import { TypeaheadMenuPortal } from "./TypeaheadMenuPortal";
-import { TypeaheadOption } from "./TypeaheadMenuContent";
-import { $replaceTextRangeWithPills } from "./utils/lexicalTextUtils";
-import { useTypeaheadPlugin } from "./hooks/useTypeaheadPlugin";
+import { TypeaheadMenuPortal } from "@/components/chat-components/TypeaheadMenuPortal";
+import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuContent";
+import { $replaceTextRangeWithPills } from "@/components/chat-components/utils/lexicalTextUtils";
+import {
+  useTypeaheadPlugin,
+  TypeaheadState,
+} from "@/components/chat-components/hooks/useTypeaheadPlugin";
 
 interface SlashCommandOption extends TypeaheadOption {
   command: CustomCommand;
@@ -95,7 +98,7 @@ export function SlashCommandPlugin(): JSX.Element {
     },
     options: filteredCommands,
     onSelect: handleSelect,
-    onStateChange: (newState) => {
+    onStateChange: (newState: TypeaheadState) => {
       setCurrentQuery(newState.query);
     },
   });

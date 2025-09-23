@@ -1,7 +1,7 @@
 import React from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getRoot } from "lexical";
-import { $isFolderPillNode } from "../FolderPillNode";
+import { $isFolderPillNode } from "../pills/FolderPillNode";
 
 interface FolderPillSyncPluginProps {
   onFoldersChange?: (folders: { name: string; path: string }[]) => void;

@@ -1,7 +1,7 @@
 import React from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getRoot } from "lexical";
-import { $isToolPillNode } from "../ToolPillNode";
+import { $isToolPillNode } from "../pills/ToolPillNode";
 
 interface ToolPillSyncPluginProps {
   onToolsChange?: (tools: string[]) => void;

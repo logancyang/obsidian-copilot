@@ -1,15 +1,17 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import fuzzysort from "fuzzysort";
-import { App } from "obsidian";
-import { TypeaheadMenuPortal } from "./TypeaheadMenuPortal";
-import { TypeaheadOption } from "./TypeaheadMenuContent";
-import { useTypeaheadPlugin } from "./hooks/useTypeaheadPlugin";
-import { $replaceTriggeredTextWithPill, PillData } from "./utils/lexicalTextUtils";
+import { TypeaheadMenuPortal } from "@/components/chat-components/TypeaheadMenuPortal";
+import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuContent";
+import {
+  useTypeaheadPlugin,
+  TypeaheadState,
+} from "@/components/chat-components/hooks/useTypeaheadPlugin";
+import {
+  $replaceTriggeredTextWithPill,
+  PillData,
+} from "@/components/chat-components/utils/lexicalTextUtils";
 import { getTagsFromNote } from "@/utils";
-
-// Get app instance
-declare const app: App;
 
 interface TagOption extends TypeaheadOption {
   tag: string;
@@ -86,7 +88,7 @@ export function TagCommandPlugin(): JSX.Element {
     },
     options: filteredTags,
     onSelect: handleSelect,
-    onStateChange: (newState) => {
+    onStateChange: (newState: TypeaheadState) => {
       setCurrentQuery(newState.query);
     },
   });

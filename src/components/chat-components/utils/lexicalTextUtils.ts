@@ -10,11 +10,11 @@ import {
   LexicalCommand,
 } from "lexical";
 import { TFile, TFolder, App } from "obsidian";
-import { $createNotePillNode } from "../NotePillPlugin";
-import { $createURLPillNode } from "../URLPillNode";
-import { $createToolPillNode } from "../ToolPillNode";
-import { $createTagPillNode } from "../TagPillNode";
-import { $createFolderPillNode } from "../FolderPillNode";
+import { $createNotePillNode } from "../pills/NotePillNode";
+import { $createURLPillNode } from "../pills/URLPillNode";
+import { $createToolPillNode } from "../pills/ToolPillNode";
+import { $createTagPillNode } from "../pills/TagPillNode";
+import { $createFolderPillNode } from "../pills/FolderPillNode";
 import { logInfo } from "@/logger";
 import { AVAILABLE_TOOLS } from "../constants/tools";
 
@@ -49,7 +49,7 @@ export function $createPillNode(pillData: PillData) {
       break;
     case "folders":
       if (data instanceof TFolder) {
-        return $createFolderPillNode(data.name, data.path);
+        return $createFolderPillNode(data.path);
       }
       break;
     case "tags":
@@ -554,7 +554,7 @@ export function createNodesFromSegments(segments: ParsedContent[]): LexicalNode[
     } else if (segment.type === "tag-pill" && segment.tagName) {
       nodes.push($createTagPillNode(segment.tagName));
     } else if (segment.type === "folder-pill" && segment.folder) {
-      nodes.push($createFolderPillNode(segment.folder.name, segment.folder.path));
+      nodes.push($createFolderPillNode(segment.folder.path));
     }
   }
 

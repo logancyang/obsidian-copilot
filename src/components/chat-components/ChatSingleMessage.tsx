@@ -129,7 +129,6 @@ interface ChatSingleMessageProps {
   onRegenerate?: () => void;
   onEdit?: (newMessage: string) => void;
   onDelete: () => void;
-  chatHistory?: ChatMessage[];
 }
 
 const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
@@ -139,7 +138,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   onRegenerate,
   onEdit,
   onDelete,
-  chatHistory = [],
 }) => {
   const settings = useSettingsValue();
   const [isCopied, setIsCopied] = useState<boolean>(false);
@@ -209,7 +207,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         if (isStreaming && content.includes(openTag)) {
           // Replace any complete sections first
           const completeRegex = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "g");
-          content = content.replace(completeRegex, (match, sectionContent) => {
+          content = content.replace(completeRegex, (_match, sectionContent) => {
             return `<details style="${detailsStyle}">
               <summary style="${summaryStyle}">${summaryText}</summary>
               <div class="tw-text-muted" style="${contentStyle}">${sectionContent.trim()}</div>
@@ -220,7 +218,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           const unClosedRegex = new RegExp(`<${tagName}>([\\s\\S]*)$`);
           content = content.replace(
             unClosedRegex,
-            (match, partialContent) => `<div style="${detailsStyle}">
+            (_match, partialContent) => `<div style="${detailsStyle}">
               <div style="${summaryStyle}">${streamingSummaryText}</div>
               <div class="tw-text-muted" style="${contentStyle}">${partialContent.trim()}</div>
             </div>`
@@ -230,7 +228,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
         // Not streaming, process all sections normally
         const regex = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "g");
-        return content.replace(regex, (match, sectionContent) => {
+        return content.replace(regex, (_match, sectionContent) => {
           return `<details style="${detailsStyle}">
             <summary style="${summaryStyle}">${summaryText}</summary>
             <div class="tw-text-muted" style="${contentStyle}">${sectionContent.trim()}</div>
@@ -249,7 +247,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           const xmlCodeblockRegex =
             /```(?:xml)?\s*([\s\S]*?<writeToFile>[\s\S]*?<\/writeToFile>[\s\S]*?)\s*```/g;
 
-          return text.replace(xmlCodeblockRegex, (match, xmlContent) => {
+          return text.replace(xmlCodeblockRegex, (_match, xmlContent) => {
             // Extract just the content inside the codeblock and return it without the codeblock wrapper
             return xmlContent.trim();
           });
@@ -262,7 +260,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           // Pattern to match XML codeblocks that contain unclosed writeToFile tags
           const streamingXmlCodeblockRegex = /```xml\s*([\s\S]*?<writeToFile>[\s\S]*?)$/g;
 
-          return text.replace(streamingXmlCodeblockRegex, (match, xmlContent) => {
+          return text.replace(streamingXmlCodeblockRegex, (_match, xmlContent) => {
             // Extract the content and return it without the codeblock wrapper
             return xmlContent.trim();
           });
@@ -368,7 +366,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
         // Process segments and only update what's needed
         let currentIndex = 0;
-        parsedMessage.segments.forEach((segment, index) => {
+        parsedMessage.segments.forEach((segment) => {
           if (segment.type === "text" && segment.content.trim()) {
             // Find where to insert this text segment
             const insertBefore = contentRef.current!.children[currentIndex];
@@ -548,7 +546,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     setIsEditing(false);
   };
 
-  const handleSaveEdit = (newText: string, newContext: ChatMessage["context"]) => {
+  const handleSaveEdit = (newText: string) => {
     setIsEditing(false);
     if (onEdit) {
       onEdit(newText);

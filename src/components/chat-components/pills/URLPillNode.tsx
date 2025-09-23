@@ -7,18 +7,21 @@ import {
   EditorConfig,
   LexicalNode,
   NodeKey,
-  SerializedLexicalNode,
 } from "lexical";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { BasePillNode } from "./BasePillNode";
+import { BasePillNode, SerializedBasePillNode } from "./BasePillNode";
 
-export interface SerializedURLPillNode extends SerializedLexicalNode {
+export interface SerializedURLPillNode extends SerializedBasePillNode {
   url: string;
   title?: string;
   isActive?: boolean;
 }
 
+/**
+ * URL pill node with special handling for titles and active state.
+ * Uses a custom implementation due to additional complexity.
+ */
 export class URLPillNode extends BasePillNode {
   __url: string;
   __title?: string;
@@ -33,10 +36,18 @@ export class URLPillNode extends BasePillNode {
   }
 
   constructor(url: string, title?: string, isActive = false, key?: NodeKey) {
-    super(key);
+    super(url, key);
     this.__url = url;
     this.__title = title;
     this.__isActive = isActive;
+  }
+
+  getClassName(): string {
+    return "url-pill-wrapper";
+  }
+
+  getDataAttribute(): string {
+    return "data-lexical-url-pill";
   }
 
   createDOM(_config: EditorConfig): HTMLElement {
@@ -66,6 +77,7 @@ export class URLPillNode extends BasePillNode {
 
   exportJSON(): SerializedURLPillNode {
     return {
+      ...super.exportJSON(),
       url: this.__url,
       title: this.__title,
       isActive: this.__isActive,
@@ -89,6 +101,24 @@ export class URLPillNode extends BasePillNode {
     return this.__url;
   }
 
+  getURL(): string {
+    return this.__url;
+  }
+
+  setURL(url: string): void {
+    const writable = this.getWritable();
+    writable.__url = url;
+  }
+
+  getTitle(): string | undefined {
+    return this.__title;
+  }
+
+  setTitle(title: string | undefined): void {
+    const writable = this.getWritable();
+    writable.__title = title;
+  }
+
   setActive(isActive: boolean): void {
     const writable = this.getWritable();
     writable.__isActive = isActive;
@@ -98,78 +128,48 @@ export class URLPillNode extends BasePillNode {
     return this.__isActive;
   }
 
-  getURL(): string {
-    return this.__url;
-  }
-
-  getTitle(): string | undefined {
-    return this.__title;
-  }
-
   decorate(): JSX.Element {
-    return <URLPillComponent node={this} />;
+    const displayText = this.__title || this.__url;
+
+    return (
+      <Badge
+        variant="secondary"
+        className={cn("tw-inline-flex tw-items-center tw-gap-1 tw-whitespace-nowrap tw-text-xs")}
+      >
+        <div className="tw-flex tw-items-center tw-gap-1">
+          <span className="tw-max-w-40 tw-truncate">{displayText}</span>
+          {this.__isActive && <span className="tw-text-xs tw-text-faint">Active</span>}
+        </div>
+      </Badge>
+    );
   }
 }
 
 function convertURLPillElement(domNode: HTMLElement): DOMConversionOutput | null {
   const url = domNode.getAttribute("data-url");
   const title = domNode.getAttribute("data-title");
-  if (url) {
+  if (url !== null) {
     const node = $createURLPillNode(url, title || undefined);
     return { node };
   }
   return null;
 }
 
+// Utility functions
 export function $createURLPillNode(url: string, title?: string, isActive = false): URLPillNode {
   return new URLPillNode(url, title, isActive);
 }
 
-export function $isURLPillNode(node: LexicalNode | null | undefined): node is URLPillNode {
-  return node instanceof URLPillNode;
-}
-
-interface URLPillComponentProps {
-  node: URLPillNode;
-}
-
-function URLPillComponent({ node }: URLPillComponentProps): JSX.Element {
-  const url = node.getURL();
-  const isActive = node.getActive();
-
-  return (
-    <Badge
-      variant="secondary"
-      className={cn("tw-mx-0.5 tw-items-center tw-px-2 tw-py-0 tw-text-xs")}
-    >
-      <div className="tw-flex tw-items-center tw-gap-1">
-        <span className="tw-max-w-40 tw-truncate">{url}</span>
-        {isActive && <span className="tw-text-xs tw-text-faint">Current</span>}
-      </div>
-    </Badge>
-  );
-}
-
-/**
- * Plugin to register URLPillNode with the editor.
- * Deletion logic is handled by the centralized PillDeletionPlugin.
- */
-export function URLPillPlugin(): null {
-  // This plugin only handles node registration
-  // All deletion logic is handled by the centralized PillDeletionPlugin
-  return null;
-}
-
-// Add a utility function to remove pills by URL
-export function $removePillsByURL(url: string): number {
+export function $findURLPills(): URLPillNode[] {
   const root = $getRoot();
-  let removedCount = 0;
+  const pills: URLPillNode[] = [];
 
-  function traverse(node: any): void {
-    if ($isURLPillNode(node) && node.getURL() === url) {
-      node.remove();
-      removedCount++;
-    } else if (typeof node.getChildren === "function") {
+  function traverse(node: LexicalNode) {
+    if (node instanceof URLPillNode) {
+      pills.push(node);
+    }
+
+    if ("getChildren" in node && typeof node.getChildren === "function") {
       const children = node.getChildren();
       for (const child of children) {
         traverse(child);
@@ -178,5 +178,18 @@ export function $removePillsByURL(url: string): number {
   }
 
   traverse(root);
-  return removedCount;
+  return pills;
+}
+
+export function $removePillsByURL(url: string): void {
+  const pills = $findURLPills();
+  for (const pill of pills) {
+    if (pill.getURL() === url) {
+      pill.remove();
+    }
+  }
+}
+
+export function $isURLPillNode(node: any): node is URLPillNode {
+  return node instanceof URLPillNode;
 }

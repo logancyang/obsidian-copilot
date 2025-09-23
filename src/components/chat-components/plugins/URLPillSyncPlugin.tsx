@@ -1,7 +1,7 @@
 import React from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getRoot } from "lexical";
-import { $isURLPillNode } from "../URLPillNode";
+import { $isURLPillNode } from "../pills/URLPillNode";
 
 /**
  * Props for the URLPillSyncPlugin component

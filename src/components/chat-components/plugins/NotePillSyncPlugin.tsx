@@ -1,7 +1,7 @@
 import React from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getRoot } from "lexical";
-import { $isNotePillNode } from "../NotePillPlugin";
+import { $isNotePillNode } from "../pills/NotePillNode";
 
 /**
  * Props for the NotePillSyncPlugin component

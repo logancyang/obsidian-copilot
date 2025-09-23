@@ -1,7 +1,7 @@
 import React from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getRoot } from "lexical";
-import { $isTagPillNode } from "../TagPillNode";
+import { $isTagPillNode } from "../pills/TagPillNode";
 
 interface TagPillSyncPluginProps {
   onTagsChange?: (tags: string[]) => void;
