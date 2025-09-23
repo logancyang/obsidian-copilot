@@ -143,7 +143,6 @@ export const ModelSettings: React.FC = () => {
   return (
     <div className="tw-space-y-4">
       <section>
-        <div className="tw-mb-3 tw-text-xl tw-font-bold">Chat Models</div>
         <ModelTable
           models={settings.activeModels}
           onEdit={(model) => handleEditModel(model)}
@@ -153,7 +152,7 @@ export const ModelSettings: React.FC = () => {
           onUpdateModel={handleTableUpdate}
           onReorderModels={(newModels) => handleModelReorder(newModels)}
           onRefresh={handleRefreshChatModels}
-          title="Chat Model"
+          title="Chat Models"
         />
 
         {/* model add dialog */}
@@ -184,7 +183,6 @@ export const ModelSettings: React.FC = () => {
       </section>
 
       <section>
-        <div className="tw-mb-3 tw-text-xl tw-font-bold">Embedding Models</div>
         <ModelTable
           models={settings.activeEmbeddingModels}
           onEdit={(model) => handleEditModel(model, true)}
@@ -194,7 +192,7 @@ export const ModelSettings: React.FC = () => {
           onUpdateModel={handleEmbeddingModelUpdate}
           onReorderModels={(newModels) => handleModelReorder(newModels, true)}
           onRefresh={handleRefreshEmbeddingModels}
-          title="Embedding Model"
+          title="Embedding Models"
         />
 
         {/* Embedding model add dialog */}
