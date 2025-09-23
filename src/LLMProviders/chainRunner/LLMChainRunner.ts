@@ -1,6 +1,6 @@
 import { ABORT_REASON } from "@/constants";
 import { logInfo } from "@/logger";
-import { getSystemPromptWithMemory } from "@/settings/model";
+import { getSystemPrompt } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { extractChatHistory, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { BaseChainRunner } from "./BaseChainRunner";
@@ -30,7 +30,7 @@ export class LLMChainRunner extends BaseChainRunner {
       const messages: any[] = [];
 
       // Add system message if available
-      const systemPrompt = await getSystemPromptWithMemory(this.chainManager.userMemoryManager);
+      const systemPrompt = getSystemPrompt();
       const chatModel = this.chainManager.chatModelManager.getChatModel();
 
       if (systemPrompt) {

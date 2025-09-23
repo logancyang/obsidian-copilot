@@ -15,17 +15,9 @@ import { ToolManager } from "@/tools/toolManager";
 import { extractAllYoutubeUrls, extractChatHistory } from "@/utils";
 import { Vault } from "obsidian";
 import { BrevilabsClient } from "./brevilabsClient";
-import { memoryTool } from "@/tools/memoryTools";
 
 // TODO: Add @index with explicit pdf files in chat context menu
-export const COPILOT_TOOL_NAMES = [
-  "@vault",
-  "@composer",
-  "@websearch",
-  "@youtube",
-  "@memory",
-  "@pomodoro",
-];
+export const COPILOT_TOOL_NAMES = ["@vault", "@composer", "@websearch", "@youtube", "@pomodoro"];
 
 type ToolCall = {
   tool: any;
@@ -140,18 +132,6 @@ export class IntentAnalyzer {
         args: {
           query: cleanQuery,
           chatHistory,
-        },
-      });
-    }
-
-    // Handle @websearch command and also support @web for backward compatibility
-    if (message.includes("@memory")) {
-      const cleanQuery = this.removeAtCommands(originalMessage);
-
-      processedToolCalls.push({
-        tool: memoryTool,
-        args: {
-          memoryContent: cleanQuery,
         },
       });
     }

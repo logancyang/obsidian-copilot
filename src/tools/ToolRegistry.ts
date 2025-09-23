@@ -7,7 +7,7 @@ export interface ToolMetadata {
   id: string;
   displayName: string;
   description: string;
-  category: "search" | "time" | "file" | "media" | "mcp" | "memory" | "custom";
+  category: "search" | "time" | "file" | "media" | "mcp" | "custom";
   isAlwaysEnabled?: boolean; // Tools that are always available (e.g., time tools)
   requiresVault?: boolean; // Tools that need vault access
   customPromptInstructions?: string; // Optional custom instructions for this tool

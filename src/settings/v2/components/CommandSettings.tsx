@@ -13,7 +13,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { logError } from "@/logger";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { PromptSortStrategy } from "@/types";
 import {
@@ -194,7 +193,7 @@ export const CommandSettings: React.FC = () => {
 
       new Notice(`Command "${command.title}" deleted successfully!`);
     } catch (error) {
-      logError("Failed to delete command:", error);
+      console.error("Failed to delete command:", error);
       new Notice("Failed to delete command. Please try again.");
       throw error;
     }
@@ -214,7 +213,7 @@ export const CommandSettings: React.FC = () => {
         autoOrder: false,
       });
     } catch (error) {
-      logError("Failed to copy command:", error);
+      console.error("Failed to copy command:", error);
       new Notice("Failed to copy command. Please try again.");
     }
   };
